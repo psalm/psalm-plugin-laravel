@@ -462,6 +462,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
+        // Copies taint sinks from each mapped facade's forwarding target onto the facade's
+        // `@method` pseudo-methods, so `Storage::get($userInput)` is a sink like the
+        // `Storage::disk()->get($userInput)` chain already is. Order-independent.
+        require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
+
         // CacheManager::store()/driver()/memo() narrowed to the concrete Repository, on
         // both the real-manager and `Cache` facade paths (#1230). getClassLikeNames()
         // reads FacadeMapProvider for the `\Cache` alias, so it relies on init() above.

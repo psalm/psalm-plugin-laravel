@@ -1,22 +1,46 @@
 <?php
 
-namespace Illuminate\Routing;
+namespace Illuminate\Contracts\Routing;
 
-use Illuminate\Contracts\Routing\ResponseFactory as FactoryContract;
-
-class ResponseFactory implements FactoryContract
+// Taint annotations for the contract interface, duplicated from the concrete
+// Routing/ResponseFactory.phpstub. Psalm does not propagate taint sinks between an
+// interface and its implementation, and the zero-argument `response()` helper is typed
+// as this contract (see Foundation/helpers.phpstub), so `response()->make($input)` reaches
+// only this declaration. Keep the two files in sync — the concrete stub is the source of truth.
+//
+// Only sink-carrying methods are restated. Everything else on the interface keeps its
+// real signature from Laravel's source.
+interface ResponseFactory
 {
     /**
      * Create a new response instance.
      *
-     * @param  mixed  $content
+     * @param  array|string  $content
      * @param  int  $status
      * @param  array  $headers
      * @return \Illuminate\Http\Response
      *
      * @psalm-taint-sink html $content
      */
-    public function make($content = '', $status = 200, array $headers = []) {}
+    public function make($content = '', $status = 200, array $headers = []);
+
+    /**
+     * Create a new response for a given view.
+     *
+     * Forwards the view name to `Factory::make()` (or `Factory::first()` for the array
+     * form), so it resolves to an arbitrary blade path. `$data` stays un-sunk: Blade
+     * auto-escapes `{{ }}`.
+     *
+     * @param  string|array  $view
+     * @param  array  $data
+     * @param  int  $status
+     * @param  array  $headers
+     * @return \Illuminate\Http\Response
+     *
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
+     */
+    public function view($view, $data = [], $status = 200, array $headers = []);
 
     // $data is intentionally NOT an html sink: it is JSON-encoded and served as
     // application/json, which browsers do not render as HTML. Reaching XSS from here needs
@@ -31,7 +55,7 @@ class ResponseFactory implements FactoryContract
      * @param  int  $options
      * @return \Illuminate\Http\JsonResponse
      */
-    public function json($data = [], $status = 200, array $headers = [], $options = 0) {}
+    public function json($data = [], $status = 200, array $headers = [], $options = 0);
 
     /**
      * Create a new JSONP response instance.
@@ -46,25 +70,7 @@ class ResponseFactory implements FactoryContract
      * @psalm-taint-sink html $callback
      * @psalm-taint-sink html $data
      */
-    public function jsonp($callback, $data = [], $status = 200, array $headers = [], $options = 0) {}
-
-    // View data ($data) is intentionally NOT marked as @psalm-taint-sink html.
-    // Blade auto-escapes all {{ $var }} output — see Factory.phpstub for full rationale.
-    // The view NAME is a different matter: this forwards it to Factory::make() (or
-    // Factory::first() for the array form), so it resolves to an arbitrary blade path.
-    /**
-     * Create a new response for a given view.
-     *
-     * @param  string|\Illuminate\Contracts\View\View  $view
-     * @param  array  $data
-     * @param  int  $status
-     * @param  array  $headers
-     * @return \Illuminate\Http\Response
-     *
-     * @psalm-taint-sink file $view
-     * @psalm-taint-sink include $view
-     */
-    public function view($view, $data = [], $status = 200, array $headers = []) {}
+    public function jsonp($callback, $data = [], $status = 200, array $headers = [], $options = 0);
 
     /**
      * Create a new file download response.
@@ -77,7 +83,7 @@ class ResponseFactory implements FactoryContract
      *
      * @psalm-taint-sink file $file
      */
-    public function download($file, $name = null, array $headers = [], $disposition = 'attachment') {}
+    public function download($file, $name = null, array $headers = [], $disposition = 'attachment');
 
     /**
      * Return the raw contents of a binary file.
@@ -88,7 +94,7 @@ class ResponseFactory implements FactoryContract
      *
      * @psalm-taint-sink file $file
      */
-    public function file($file, array $headers = []) {}
+    public function file($file, array $headers = []);
 
     /**
      * Create a new redirect response to the given path.
@@ -101,7 +107,7 @@ class ResponseFactory implements FactoryContract
      *
      * @psalm-taint-sink header $path
      */
-    public function redirectTo($path, $status = 302, $headers = [], $secure = null) {}
+    public function redirectTo($path, $status = 302, $headers = [], $secure = null);
 
     /**
      * Create a new redirect response, while putting the current URL in the session.
@@ -114,7 +120,7 @@ class ResponseFactory implements FactoryContract
      *
      * @psalm-taint-sink header $path
      */
-    public function redirectGuest($path, $status = 302, $headers = [], $secure = null) {}
+    public function redirectGuest($path, $status = 302, $headers = [], $secure = null);
 
     /**
      * Create a new redirect response to the previously intended location.
@@ -127,5 +133,5 @@ class ResponseFactory implements FactoryContract
      *
      * @psalm-taint-sink header $default
      */
-    public function redirectToIntended($default = '/', $status = 302, $headers = [], $secure = null) {}
+    public function redirectToIntended($default = '/', $status = 302, $headers = [], $secure = null);
 }
