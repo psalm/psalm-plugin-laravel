@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784919197922,
+  "lastUpdate": 1785008353407,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9375,6 +9375,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c8d38539a41ad847b423e497eb0fe5b15b0a5e4",
+          "message": "Merge pull request #1320 from psalm/docs/agent-guide-and-code-patterns\n\nAdd agent guide, contributor code-pattern docs, and a docs path lint",
+          "timestamp": "2026-07-25T21:35:54+02:00",
+          "tree_id": "5b28353dc2aedbf47af05d4b37507c794981f301",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8c8d38539a41ad847b423e497eb0fe5b15b0a5e4"
+        },
+        "date": 1785008352009,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.99,
+            "range": "± 0.3",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
