@@ -13,15 +13,18 @@ use Illuminate\Support\Facades\View;
  * View *data* remains deliberately un-sunk — Blade escapes `{{ }}` (see
  * SafeViewFactoryUserInput.phpt).
  *
- * Three call shapes: the `view()` helper, the `View` facade static, and a
- * contract-typed receiver. Only the third exercises
- * `stubs/common/Contracts/View/Factory.phpstub`; the other two resolve against the
- * concrete `Illuminate\View\Factory` stub.
+ * Three call shapes, each with its own sink source. Verified by deleting each in turn:
+ * every one is load-bearing for exactly one case, and none covers another.
+ *   1. `view($name)` — the sink on the `view()` function itself, in
+ *      `stubs/common/Foundation/helpers.phpstub`. It never reaches `Factory::make()`.
+ *   2. `View::make($name)` — `stubs/common/View/Factory.phpstub`, copied onto the
+ *      facade's `@method` pseudo-method by FacadeTaintForwardingHandler.
+ *   3. contract-typed receiver — `stubs/common/Contracts/View/Factory.phpstub`.
  *
- * Note the contract case must be reached by DI, not by the zero-argument helper:
- * MissingViewHandler narrows `view()` to the app's resolved *concrete* factory, so
- * `view()->make(...)` would assert nothing about the contract stub and still pass
- * with that stub deleted.
+ * Case 3 must be reached by DI, not by the zero-argument helper. MissingViewHandler
+ * narrows `view()` to the app's resolved *concrete* factory, and it is a return-type
+ * provider only (no taint involvement), so `view()->make(...)` would assert nothing
+ * about the contract stub and would still pass with that stub deleted.
  */
 
 function viewHelperNameIsTainted(Request $request): void
