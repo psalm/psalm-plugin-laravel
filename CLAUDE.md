@@ -6,7 +6,7 @@ Active majors:
 - `master` is 4.x (PHP 8.2+, Laravel `^12.14 || ^13.3`, Psalm 7 beta)
 - `3.x` is the Psalm 6 line (Laravel `^11.35+`), backports only
 
-Taint: Psalm 6 reports it only in a separate `--taint-analysis` run (type issues suppressed there); Psalm 7 emits both in one run when enabled (`runTaintAnalysis="true"` or `--taint-analysis`, default off, including self-analysis here) on a rewritten engine with different internals.
+Taint: Psalm 6 reports it only in a separate `--taint-analysis` run (type issues suppressed there); Psalm 7 emits type and taint issues together in one run, on a rewritten engine with different internals. Psalm core defaults taint off, but `psalm-laravel init` writes `runTaintAnalysis="true"`, so initialized user projects run it by default; this repo's own self-analysis keeps it off.
 
 ## Read before re-deriving
 
