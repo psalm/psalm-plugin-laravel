@@ -39,39 +39,35 @@ final class ContractStubSinkParityTest extends TestCase
     #[DataProvider('contractConcretePairs')]
     public function contract_stub_mirrors_the_concrete_sinks(string $contractPath, string $concretePath): void
     {
-        $contractSinks = self::parseSinksByMethod($contractPath);
-        $concreteSinks = self::parseSinksByMethod($concretePath);
+        $contractSinks = $this->parseSinksByMethod($contractPath);
+        $concreteSinks = $this->parseSinksByMethod($concretePath);
 
         $shared = \array_intersect_key($contractSinks, $concreteSinks);
 
         // Without this the test would pass vacuously if the parser silently matched nothing.
-        self::assertNotSame([], $shared, "No method names overlap between {$contractPath} and {$concretePath}; the parser or the paths are wrong.");
+        $this->assertNotSame([], $shared, "No method names overlap between {$contractPath} and {$concretePath}; the parser or the paths are wrong.");
 
         foreach ($shared as $method => $expected) {
-            self::assertSame(
-                $concreteSinks[$method],
-                $expected,
-                \sprintf(
-                    "Taint sinks drifted on %s(). Keep the contract stub in sync with the concrete one.\n  %s: %s\n  %s: %s",
-                    $method,
-                    $concretePath,
-                    $concreteSinks[$method] === [] ? '(none)' : \implode(', ', $concreteSinks[$method]),
-                    $contractPath,
-                    $expected === [] ? '(none)' : \implode(', ', $expected),
-                ),
-            );
+            $this->assertSame($concreteSinks[$method], $expected, \sprintf(
+                "Taint sinks drifted on %s(). Keep the contract stub in sync with the concrete one.\n  %s: %s\n  %s: %s",
+                $method,
+                $concretePath,
+                $concreteSinks[$method] === [] ? '(none)' : \implode(', ', $concreteSinks[$method]),
+                $contractPath,
+                $expected === [] ? '(none)' : \implode(', ', $expected),
+            ));
         }
     }
 
     #[Test]
     public function parser_finds_the_sinks_it_is_asked_to_compare(): void
     {
-        $sinks = self::parseSinksByMethod('Routing/ResponseFactory.phpstub');
+        $sinks = $this->parseSinksByMethod('Routing/ResponseFactory.phpstub');
 
         // Guards the regex itself: a parser that returned empty sets everywhere would make
         // every parity assertion above trivially true.
-        self::assertSame(['@psalm-taint-sink html $content'], $sinks['make'] ?? []);
-        self::assertSame([], $sinks['view'] ?? ['unparsed'], 'view() must stay un-sunk: Blade escapes view data.');
+        $this->assertSame(['@psalm-taint-sink html $content'], $sinks['make'] ?? []);
+        $this->assertSame([], $sinks['view'] ?? ['unparsed'], 'view() must stay un-sunk: Blade escapes view data.');
     }
 
     /**
@@ -83,14 +79,14 @@ final class ContractStubSinkParityTest extends TestCase
      *
      * @return array<string, list<string>>
      */
-    private static function parseSinksByMethod(string $relativePath): array
+    private function parseSinksByMethod(string $relativePath): array
     {
         $path = \dirname(__DIR__, 3) . '/stubs/common/' . $relativePath;
 
-        self::assertFileExists($path);
+        $this->assertFileExists($path);
 
         $source = \file_get_contents($path);
-        self::assertIsString($source);
+        $this->assertIsString($source);
 
         // Modifiers are part of the match so the offset lands before them: otherwise the
         // `public ` between a docblock and `function` hides the docblock from extractSinks().
@@ -100,17 +96,17 @@ final class ContractStubSinkParityTest extends TestCase
             $matches,
             \PREG_OFFSET_CAPTURE,
         );
-        self::assertNotFalse($matched);
+        $this->assertNotFalse($matched);
 
         $sinksByMethod = [];
         $previousEnd = 0;
 
         foreach ($matches[1] as $index => $nameMatch) {
-            $declarationStart = (int) $matches[0][$index][1];
+            $declarationStart = $matches[0][$index][1];
             $preceding = \substr($source, $previousEnd, $declarationStart - $previousEnd);
             $previousEnd = $declarationStart;
 
-            $sinksByMethod[(string) $nameMatch[0]] = self::extractSinks($preceding);
+            $sinksByMethod[$nameMatch[0]] = $this->extractSinks($preceding);
         }
 
         return $sinksByMethod;
@@ -123,7 +119,7 @@ final class ContractStubSinkParityTest extends TestCase
      *
      * @return list<string>
      */
-    private static function extractSinks(string $preceding): array
+    private function extractSinks(string $preceding): array
     {
         $trimmed = \rtrim($preceding);
 
