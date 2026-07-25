@@ -376,8 +376,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * (Psalm's SimpleNameResolver stores it as a string via `.toString()`) and falls
      * back to the source spelling.
      *
-     * `@psalm-var` (not `@var`) so Rector preserves it (CLAUDE.md). Declaring the local
-     * as `string|null` rather than letting it default to mixed avoids the coverage hit
+     * `@psalm-var` (not `@var`) so Rector preserves it (Rector ignores `@psalm-` prefixed annotations).
+     * Declaring the local as `string|null` rather than letting it default to mixed avoids the coverage hit
      * that a bare `mixed` assignment would cause.
      */
     private static function resolveClassName(Name $name): string
