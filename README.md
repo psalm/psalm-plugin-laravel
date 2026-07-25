@@ -147,14 +147,14 @@ It never handles an HTTP request, never boots a model, never opens a database co
 - **Larastan** excels at Laravel-specific type rules: `model-property` validation, `view-string` checks, and 17+ custom rules.
 - **Psalm-Laravel** in addition to type checks, it provides taint-based security analysis that PHPStan structurally [cannot offer](https://github.com/phpstan/phpstan/issues/8038), plus deep type support for Request data, Eloquent attributes, scopes, attributes, etc.
 
-| Tool              | PHP types         | Laravel-aware types     | Taint analysis               | Free               |
-|-------------------|-------------------|-------------------------|------------------------------|--------------------|
-| **Psalm-Laravel** | Yes (Psalm)       | Yes                     | Yes (dataflow)               | Yes                |
-| Larastan          | Yes (PHPStan)     | Yes                     | No (PHPStan can't)           | Yes                |
-| Mago              | Yes (own engine)  | No, lint rules only     | Syntactic, superglobals only | Yes                |
-| SonarQube         | Partial           | Not Laravel-specific    | Yes (generic)                | Paid editions only |
-| Semgrep           | No                | Not Laravel-specific    | Yes (interfile is paid)      | Limited free tier  |
-| Snyk Code         | No                | Vendor-stated           | Yes (generic)                | Freemium           |
+| Tool              | PHP types | Laravel types | Taint analysis      | Free      |
+|-------------------|-----------|---------------|---------------------|-----------|
+| **Psalm-Laravel** | Yes       | Yes           | Yes, dataflow       | Yes       |
+| Larastan          | Yes       | Yes           | No                  | Yes       |
+| Mago              | Yes       | No            | Superglobals only   | Yes       |
+| SonarQube         | Partial   | No            | Yes, generic        | Paid only |
+| Semgrep           | No        | No            | Yes, interfile paid | Free tier |
+| Snyk Code         | No        | Claimed       | Yes, generic        | Freemium  |
 
 The first three rows are from our own testing. The commercial rows summarize vendor documentation, so check their current tiers before relying on them.
 
