@@ -1,0 +1,26 @@
+<?php
+
+namespace Illuminate\Contracts\View;
+
+// Taint annotations for the contract interface, duplicated from the concrete
+// View/Factory.phpstub. Psalm does not propagate taint sinks between an interface and its
+// implementation, and the zero-argument `view()` helper is typed as this contract
+// (see Foundation/helpers.phpstub), so `view()->make($input)` reaches only this declaration.
+interface Factory
+{
+    /**
+     * Get the evaluated view contents for the given view.
+     *
+     * A user-controlled view name resolves to an arbitrary blade path, same as
+     * `Factory::file()`.
+     *
+     * @param  string  $view
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return \Illuminate\Contracts\View\View
+     *
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
+     */
+    public function make($view, $data = [], $mergeData = []);
+}

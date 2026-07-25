@@ -12,6 +12,12 @@ class Factory implements \Illuminate\Contracts\View\Factory
     // false positives with no corresponding detection benefit.
     // See: https://github.com/psalm/psalm-plugin-laravel/issues/684
 
+    /**
+     * A user-controlled view name resolves to an arbitrary blade path, same as `file()`.
+     *
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
+     */
     public function make($view, $data = [], $mergeData = []) {}
 
     /**
