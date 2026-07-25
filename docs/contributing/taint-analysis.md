@@ -558,4 +558,13 @@ cd /tmp/taint-test && /path/to/vendor/bin/psalm --no-cache
 
 ### Known limitation: Facade static calls
 
-Facade static calls (`DB::unprepared(...)`) may not propagate taint because `__callStatic` loses taint context. The generated alias stubs (`class X extends Y {}`) don't carry taint annotations. Calling the underlying class directly (`DB::connection()->unprepared(...)`) works correctly.
+A facade declares its forwarded surface as class-level `@method` tags resolved through `__callStatic`. Psalm models those as *pseudo* methods, and a pseudo parameter cannot carry `@psalm-taint-sink`: a sink is a per-parameter bitmask populated only from a real docblock, and a `@method` tag has no per-parameter docblock. The annotated methods live on the class the facade forwards to, which the static-call path never consults.
+
+Two mechanisms close this:
+
+- `FacadeTaintForwardingHandler` copies the target class's parameter sinks onto the facade's pseudo-methods once the codebase is populated. It covers `Storage`, `File`, `Artisan`, `Redirect`, `Response`, `Http`, `Process`, and `View`, and the generated root aliases (`\Storage::get(...)`) inherit the same pseudo-method storage, so they are covered too.
+- A hand-written facade stub declaring the forwarded methods as real statics, as in `stubs/common/Support/Facades/DB.phpstub`. Heavier to maintain (every signature is restated and can drift from Laravel), so prefer the handler unless the facade also needs type overrides.
+
+The limitation still applies to any facade covered by neither: user-defined facades, and core facades outside the map (`App::make(...)` is the notable one). Calling the underlying class directly always works, because the receiver is the real annotated class: `DB::connection()->unprepared(...)`, `Storage::disk()->get(...)`.
+
+To cover another core facade, add `Facade::class => [TargetClass::class]` to `FacadeTaintForwardingHandler::FACADE_TARGETS`, confirm against `vendor/laravel/framework` that the facade's `@method` tags mirror the target's real signatures (the copy matches on both parameter offset and parameter name, so a drifted tag is skipped rather than mis-assigned), and add a `.phpt` under `tests/Type/tests/TaintAnalysis/`.
