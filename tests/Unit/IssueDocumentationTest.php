@@ -14,18 +14,18 @@ final class IssueDocumentationTest extends TestCase
     /**
      * @return list<string>
      */
-    private static function issueClassNames(): array
+    private function issueClassNames(): array
     {
         $root = \dirname(__DIR__, 2);
         $files = \glob($root . '/src/Issues/*.php');
-        self::assertNotFalse($files);
+        $this->assertNotFalse($files);
 
         $names = [];
         foreach ($files as $file) {
             $names[] = \basename($file, '.php');
         }
 
-        self::assertNotEmpty($names, 'src/Issues/*.php discovery found nothing; the source shape changed');
+        $this->assertNotEmpty($names, 'src/Issues/*.php discovery found nothing; the source shape changed');
 
         \sort($names);
 
@@ -38,7 +38,7 @@ final class IssueDocumentationTest extends TestCase
         $root = \dirname(__DIR__, 2);
 
         $docFiles = \glob($root . '/docs/issues/*.md');
-        self::assertNotFalse($docFiles);
+        $this->assertNotFalse($docFiles);
 
         $docNames = [];
         foreach ($docFiles as $file) {
@@ -46,28 +46,21 @@ final class IssueDocumentationTest extends TestCase
             if ($name === 'index') {
                 continue;
             }
+
             $docNames[] = $name;
         }
 
-        self::assertEqualsCanonicalizing(
-            self::issueClassNames(),
-            $docNames,
-            'src/Issues/*.php and docs/issues/*.md must name the same set of issues (an orphan page has no source class, a missing page has no docs)',
-        );
+        $this->assertEqualsCanonicalizing($this->issueClassNames(), $docNames, 'src/Issues/*.php and docs/issues/*.md must name the same set of issues (an orphan page has no source class, a missing page has no docs)');
     }
 
     #[Test]
     public function every_issue_class_documentation_url_points_to_its_own_page(): void
     {
-        foreach (self::issueClassNames() as $name) {
+        foreach ($this->issueClassNames() as $name) {
             $fqcn = "Psalm\\LaravelPlugin\\Issues\\{$name}";
             $expected = "https://psalm.github.io/psalm-plugin-laravel/issues/{$name}/";
 
-            self::assertSame(
-                $expected,
-                \constant("{$fqcn}::DOCUMENTATION_URL"),
-                "{$fqcn}::DOCUMENTATION_URL does not match its own issue page",
-            );
+            $this->assertSame($expected, \constant("{$fqcn}::DOCUMENTATION_URL"), "{$fqcn}::DOCUMENTATION_URL does not match its own issue page");
         }
     }
 
@@ -76,14 +69,10 @@ final class IssueDocumentationTest extends TestCase
     {
         $root = \dirname(__DIR__, 2);
         $index = \file_get_contents($root . '/docs/issues/index.md');
-        self::assertIsString($index);
+        $this->assertIsString($index);
 
-        foreach (self::issueClassNames() as $name) {
-            self::assertStringContainsString(
-                "[{$name}]({$name}.md)",
-                $index,
-                "docs/issues/index.md has no entry for {$name}",
-            );
+        foreach ($this->issueClassNames() as $name) {
+            $this->assertStringContainsString("[{$name}]({$name}.md)", $index, "docs/issues/index.md has no entry for {$name}");
         }
     }
 
@@ -92,7 +81,7 @@ final class IssueDocumentationTest extends TestCase
     {
         $root = \dirname(__DIR__, 2);
         $source = \file_get_contents($root . '/src/Config/PluginConfig.php');
-        self::assertIsString($source);
+        $this->assertIsString($source);
 
         \preg_match_all(
             "/xml(?:Bool|OptionalBool|String)Attr\(\\\$config\?->\w+,\s*'(\w+)'/",
@@ -100,7 +89,7 @@ final class IssueDocumentationTest extends TestCase
             $attrMatches,
         );
         $attrElements = $attrMatches[1];
-        self::assertNotEmpty($attrElements, 'the PluginConfig.php source shape changed; xml*Attr regex captured nothing');
+        $this->assertNotEmpty($attrElements, 'the PluginConfig.php source shape changed; xml*Attr regex captured nothing');
 
         \preg_match_all(
             "/xmlNameList\(\\\$config,\s*'(\w+)'/",
@@ -108,7 +97,7 @@ final class IssueDocumentationTest extends TestCase
             $listMatches,
         );
         $listElements = $listMatches[1];
-        self::assertNotEmpty($listElements, 'the PluginConfig.php source shape changed; xmlNameList regex captured nothing');
+        $this->assertNotEmpty($listElements, 'the PluginConfig.php source shape changed; xmlNameList regex captured nothing');
 
         $elements = [...$attrElements, ...$listElements];
         // modelProperties is the element for xmlStringAttr($config?->modelProperties, 'columnFallback', ...):
@@ -116,14 +105,10 @@ final class IssueDocumentationTest extends TestCase
         $elements[] = 'modelProperties';
 
         $configDocs = \file_get_contents($root . '/docs/config.md');
-        self::assertIsString($configDocs);
+        $this->assertIsString($configDocs);
 
         foreach (\array_unique($elements) as $element) {
-            self::assertStringContainsString(
-                $element,
-                $configDocs,
-                "docs/config.md does not mention the '{$element}' config element",
-            );
+            $this->assertStringContainsString($element, $configDocs, "docs/config.md does not mention the '{$element}' config element");
         }
     }
 }
