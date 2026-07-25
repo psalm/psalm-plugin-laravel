@@ -18,7 +18,7 @@ The same typo in a model default is evaluated when Laravel builds or hydrates a 
 final class Post extends Model
 {
     protected $with = ['authr'];
-    protected $withCount = ['coments'];
+    protected $withCount = ['nmae'];
 }
 ```
 
