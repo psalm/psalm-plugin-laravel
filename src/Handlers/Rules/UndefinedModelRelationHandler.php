@@ -27,6 +27,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\PropertyStorage;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TKeyedArray;
@@ -164,9 +165,15 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             }
 
             foreach (['with' => $metadata->with, 'withCount' => $metadata->withCount] as $property => $relations) {
-                $location = self::defaultRelationLocation($storage, $modelFqcn, $property);
+                $propertyStorage = self::ownDefaultProperty($storage, $modelFqcn, $property);
+                $location = $propertyStorage?->location ?? $storage->location;
                 if (!$location instanceof CodeLocation) {
                     continue;
+                }
+
+                $suppressedIssues = $storage->suppressed_issues;
+                if ($propertyStorage instanceof \Psalm\Storage\PropertyStorage) {
+                    $suppressedIssues = [...$suppressedIssues, ...$propertyStorage->suppressed_issues];
                 }
 
                 foreach ($relations as $relation) {
@@ -175,7 +182,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
                         $modelFqcn,
                         $relation,
                         $location,
-                        $storage->suppressed_issues,
+                        $suppressedIssues,
                         allowsAlias: $property === 'withCount',
                         allowsPaths: $property === 'with',
                         allowsColumns: $property === 'with',
@@ -499,7 +506,10 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             // relation maps to a PHP method, which never contains a space, so this can
             // only ever remove alias syntax, never mask a typo.
             if ($allowsAlias) {
-                $name = \preg_replace('/\s+as\s+.+$/i', '', $name) ?? $name;
+                $aliasParts = \explode(' ', $name);
+                if (\count($aliasParts) === 3 && \strtolower($aliasParts[1]) === 'as') {
+                    $name = $aliasParts[0];
+                }
             }
 
             if ($name === '') {
@@ -540,12 +550,12 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
     }
 
     /**
-     * Use the property's own location only when the concrete model declares it. A parent or trait
-     * default is evaluated in the child context, so its diagnostic belongs on that affected child.
+     * A parent or trait default is evaluated in the child context, so only a property declared by the
+     * concrete model supplies a property-local location or suppression; inherited defaults stay on the child.
      *
      * @psalm-mutation-free
      */
-    private static function defaultRelationLocation(ClassLikeStorage $storage, string $modelFqcn, string $property): ?CodeLocation
+    private static function ownDefaultProperty(ClassLikeStorage $storage, string $modelFqcn, string $property): ?PropertyStorage
     {
         $declaringClass = $storage->declaring_property_ids[$property] ?? null;
         $propertyStorage = $storage->properties[$property] ?? null;
@@ -556,9 +566,9 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             && $propertyStorage !== null
             && $propertyStorage->location instanceof CodeLocation
         ) {
-            return $propertyStorage->location;
+            return $propertyStorage;
         }
 
-        return $storage->location;
+        return null;
     }
 }

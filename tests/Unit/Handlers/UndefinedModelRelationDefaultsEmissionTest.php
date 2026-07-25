@@ -23,7 +23,7 @@ final class UndefinedModelRelationDefaultsEmissionTest extends TestCase
         $findings = $this->runPsalmAndCollectFindings();
         $messages = \array_column($findings, 'message');
 
-        $this->assertCount(3, $findings, \implode("\n", $messages));
+        $this->assertCount(5, $findings, \implode("\n", $messages));
         $this->assertContains(
             "Relation 'misspelledRelation' from " . \RelationDefaultsFixture\Models\BadDefaultsModel::class . '::$with is not defined on ' . \RelationDefaultsFixture\Models\BadDefaultsModel::class . '.',
             $messages,
@@ -34,6 +34,14 @@ final class UndefinedModelRelationDefaultsEmissionTest extends TestCase
         );
         $this->assertContains(
             "Relation 'childRelation' from " . \RelationDefaultsFixture\Models\SiblingWithoutInheritedRelation::class . '::$with is not defined on ' . \RelationDefaultsFixture\Models\SiblingWithoutInheritedRelation::class . '.',
+            $messages,
+        );
+        $this->assertContains(
+            "Relation 'numericMissing' from " . \RelationDefaultsFixture\Models\NumericKeyedDefaultsModel::class . '::$with is not defined on ' . \RelationDefaultsFixture\Models\NumericKeyedDefaultsModel::class . '.',
+            $messages,
+        );
+        $this->assertContains(
+            "Relation 'comments  AS  total' from " . \RelationDefaultsFixture\Models\MalformedAliasModel::class . '::$withCount is not defined on ' . \RelationDefaultsFixture\Models\MalformedAliasModel::class . '.',
             $messages,
         );
     }

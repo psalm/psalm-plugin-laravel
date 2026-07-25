@@ -1662,8 +1662,14 @@ final class ModelMetadataRegistryBuilder
             return [];
         }
 
-        if (!\is_array($value) || !\array_is_list($value)) {
+        if (!\is_array($value)) {
             return [];
+        }
+
+        foreach (\array_keys($value) as $key) {
+            if (\is_string($key)) {
+                return [];
+            }
         }
 
         return self::filterStringList($value);
