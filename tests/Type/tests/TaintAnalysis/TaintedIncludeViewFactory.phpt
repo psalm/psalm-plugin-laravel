@@ -7,7 +7,16 @@ function renderCustomTemplate(\Illuminate\Http\Request $request, \Illuminate\Vie
     $template = $request->input('template');
     $factory->file($template);
 }
+
+// Same call on a contract-typed receiver. Sinks do not cross the interface boundary, so
+// this reaches only Contracts/View/Factory.phpstub; it was silent until that stub
+// restated file().
+function renderCustomTemplateViaContract(\Illuminate\Http\Request $request, \Illuminate\Contracts\View\Factory $factory): void {
+    $factory->file((string) $request->input('template'));
+}
 ?>
 --EXPECTF--
+%ATaintedFile on line %d: Detected tainted file handling
+%ATaintedInclude on line %d: Detected tainted code passed to include or similar
 %ATaintedFile on line %d: Detected tainted file handling
 %ATaintedInclude on line %d: Detected tainted code passed to include or similar

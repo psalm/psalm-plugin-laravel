@@ -9,6 +9,19 @@ namespace Illuminate\Contracts\View;
 interface Factory
 {
     /**
+     * Get the evaluated view contents for the given path.
+     *
+     * @param  string  $path
+     * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
+     * @param  array  $mergeData
+     * @return \Illuminate\Contracts\View\View
+     *
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink include $path
+     */
+    public function file($path, $data = [], $mergeData = []);
+
+    /**
      * Get the evaluated view contents for the given view.
      *
      * A user-controlled view name resolves to an arbitrary blade path, same as

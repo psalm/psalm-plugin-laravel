@@ -26,12 +26,36 @@ class Factory implements \Illuminate\Contracts\View\Factory
      */
     public function file($path, $data = [], $mergeData = []) {}
 
+    // Everything below forwards its view name to make(), so each name param carries the
+    // same file + include sinks. Verified against Illuminate\View\Factory.
+
+    /**
+     * @psalm-taint-sink file $views
+     * @psalm-taint-sink include $views
+     */
     public function first(array $views, $data = [], $mergeData = []) {}
 
+    /**
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
+     */
     public function renderWhen($condition, $view, $data = [], $mergeData = []) {}
 
+    /**
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
+     */
     public function renderUnless($condition, $view, $data = [], $mergeData = []) {}
 
+    /**
+     * $empty is a view name too, unless it is the `raw|` literal form: the else-branch
+     * calls make($empty).
+     *
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
+     * @psalm-taint-sink file $empty
+     * @psalm-taint-sink include $empty
+     */
     public function renderEach($view, $data, $iterator, $empty = 'raw|') {}
 
     public function share($key, $value = null) {}
