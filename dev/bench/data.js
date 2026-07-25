@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785008353407,
+  "lastUpdate": 1785014514046,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9405,6 +9405,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.99,
             "range": "± 0.3",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2c11acc93d6e7bc592ee5f1140df2914fb63d063",
+          "message": "Report taint sinks on facade static calls, `response()` contract methods, and `view()` names (#1318)\n\n* feat(taint): forward target-class sinks onto facade @method pseudo-methods\n\nFacade static calls (`Storage::get($input)`, `Artisan::call($input)`, ...)\nresolve through `__callStatic` plus a class-level `@method` tag. Psalm models\nthose as pseudo-methods, and a pseudo parameter cannot carry\n`@psalm-taint-sink`: sinks are a per-parameter bitmask populated only from a\nreal docblock. The annotated methods live on the class the facade forwards to,\nwhich the static-call path never consults, so every such flow was silent.\n\nFacadeTaintForwardingHandler copies the target's parameter sinks onto the\nfacade's pseudo-methods at AfterCodebasePopulated, for Storage, File, Artisan,\nRedirect, Response, Http, Process and View. Detection only: no type, return\ntype or resolution behaviour changes, and no sink is ever removed.\n\nThe copy matches on both parameter offset and parameter name, so a future\ndrift between a facade tag and its target degrades to the pre-existing miss\ninstead of moving a sink onto an unrelated argument.\n\n* feat(taint): sink user-controlled view names and mirror sinks onto contracts\n\nTwo gaps the facade forwarding does not reach:\n\n- Zero-argument `response()` is typed as the\n  `Illuminate\\Contracts\\Routing\\ResponseFactory` contract, but the sinks live\n  only on the concrete `Illuminate\\Routing\\ResponseFactory` stub, and Psalm does\n  not propagate sinks between an interface and its implementation. Mirror the\n  sink-carrying methods onto a contract stub so `response()->make($input)` and\n  `response()->json($input)` are visible.\n- Nothing sank the view *name*. A user-controlled name resolves to an arbitrary\n  blade path, the same exposure `Factory::file()` already carries, so `make()`\n  and the `view()` helper get `file` + `include` sinks on `$view`, on the\n  concrete factory and on the contract. View *data* stays deliberately un-sunk\n  (Blade escapes `{{ }}`).\n\nSignatures are copied verbatim from the vendor interfaces; neither contract has\nan extends clause to preserve.\n\n* test(taint): cover facade static, response contract and view-name sinks\n\nOne file per flow. The Storage file also pins `Storage::disk()->get()`, so a\nregression in the receiver-narrowing path cannot hide behind the new static one.\n\n* docs(taint): document facade sink forwarding\n\nThe old text claimed `DB::unprepared()` was affected; it is not, because the DB\nfacade declares real statics in its own stub. Replace it with the actual\nmechanism, the two ways the plugin closes it, what remains uncovered, and how to\nmap another facade.\n\n* docs(taint): note that variadic sinks cover only the first argument\n\n`Filesystem::delete()` / `FilesystemAdapter::delete()` are `@psalm-variadic`\nalongside their sink. That tag relaxes the arity check but does not spread the\nsink, so extra positional arguments are unreported on the `disk()->delete(...)`\nchain as well as on the facade static form. The static form is at least loud\nabout it, since a flat `@method` tag cannot express variadic and Psalm reports\nTooManyArguments. Point readers at the array form, which is fully covered.\n\n* test(taint): pin the view contract stub with a contract-typed receiver\n\n`stubs/common/Contracts/View/Factory.phpstub` had no teeth: deleting it left the\nsuite green. Add a DI-injected `Contracts\\View\\Factory` receiver, which is the\nonly shape that reaches it.\n\nThe zero-argument `view()` helper does NOT reach it. MissingViewHandler narrows\n`view()` to the app's resolved concrete factory, so `view()->make(...)` resolves\nagainst `View/Factory.phpstub` and asserts nothing about the contract. Verified:\nwith the contract stub removed this test now fails and restores to green.\n\n* test(stubs): assert sink parity between contract and concrete stubs\n\nThe contract stubs restate sinks their concrete counterparts declare, because\nPsalm does not propagate sinks across the interface boundary. That contract was\nenforced by a comment. Compare the two files directly instead, for every method\nname they share, and name the drifted method on failure.\n\nPlain text parse, no Psalm APIs: the point is to diff what the files literally\nsay, before stub merging can paper over a gap. Two guards keep the test honest,\none asserting the method sets actually overlap and one pinning known sinks, the\nsecond of which caught the parser skipping every docblock (the `public ` between\nthe docblock and `function` hid it), which would have made the comparison pass\nvacuously with empty sets on both sides.\n\n* test(taint): fix sink-provenance note on the view-name test\n\nThe docblock claimed the `view()` helper case resolves against\nView/Factory.phpstub. It does not: the helper's sink is on the `view()` function\nitself in Foundation/helpers.phpstub, and the call never reaches Factory::make().\nMissingViewHandler is a return-type provider with no taint involvement.\n\nState the true source per case. Each of the three is load-bearing for exactly one\ncase, confirmed by deleting them one at a time: dropping the helpers.phpstub sink\nsilences only the helper case and leaves View::make() firing, and dropping the\nView/Factory.phpstub sink does the reverse.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(taint): drop the html sink on ResponseFactory::json()\n\n`json()` encodes its data and serves it as application/json, which browsers do not\nrender as HTML. Reaching XSS from there needs legacy content-sniffing AND the app\ndropping nosniff, too weak a chain to justify a default-on sink, and it fired on\nordinary API controllers returning user data.\n\n`jsonp()` keeps both sinks: that response is served as, and executed as, script.\n\nThe clean behaviour is pinned in a new SafeResponseFactoryJsonNoHtmlTaint.phpt with\nan empty EXPECTF (covering the contract and concrete receivers), so re-adding the\nsink fails loudly. A negative cannot be asserted from the positive files, whose\n`%A` segments are only a lower bound.\n\n* feat(taint): sink view names on every method that forwards to make()\n\nOnly `make()` itself carried the view-name sinks, so the methods that resolve a\nname and hand it to `make()` were silent. Each forwarding path was read in\nIlluminate\\View\\Factory and Illuminate\\Routing\\ResponseFactory before annotating:\n\n- ResponseFactory::view() calls Factory::make(), or Factory::first() for the array\n  form. Added on the concrete stub and on the contract, which the vendor interface\n  declares and which is what the zero-argument response() helper is typed as.\n- Factory::first() picks from $views and calls make().\n- Factory::renderWhen() calls make(); renderUnless() delegates to renderWhen().\n- Factory::renderEach() calls make($view) per row, and calls make($empty) in the\n  no-rows branch unless $empty uses the literal `raw|` form, so both are sunk.\n\nContracts/View/Factory.phpstub also gains file(), which the vendor interface\ndeclares: a contract-typed `->file($input)` reached no sink at all.\n\nfirst/renderWhen/renderUnless/renderEach are deliberately NOT mirrored onto the\nView contract; the vendor interface does not declare them.\n\nView data stays un-sunk throughout (Blade escapes it).\n\n* test(stubs): fail when a contract stub omits a sink the interface exposes\n\nThe existing parity check only compared methods both stubs already declared, so a\nsink the contract stub never restated was invisible to it. That is exactly how\nContracts/View/Factory.phpstub came to omit file().\n\nAdd the reverse direction: for every sink-bearing concrete method, if the real\ninterface declares it (interface_exists + method_exists at runtime), the contract\nstub must restate it. Methods the interface does not declare are skipped, since a\ncontract-typed receiver can never reach them.\n\nAlso refresh the parser guard for the round-3 sink changes: view() now pins the two\nview-name sinks and json() pins as un-sunk.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-07-25T23:19:20+02:00",
+          "tree_id": "0b118231993ec734f73d6483b5bf0e327d2355df",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2c11acc93d6e7bc592ee5f1140df2914fb63d063"
+        },
+        "date": 1785014512585,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.23,
+            "range": "± 0.02",
             "unit": "s"
           },
           {
