@@ -21,23 +21,26 @@ use PHPUnit\Framework\TestCase;
 #[CoversNothing]
 final class ContractStubSinkParityTest extends TestCase
 {
-    /** @return iterable<string, array{string, string}> */
+    /** @return iterable<string, array{string, string, class-string}> */
     public static function contractConcretePairs(): iterable
     {
         yield 'ResponseFactory' => [
             'Contracts/Routing/ResponseFactory.phpstub',
             'Routing/ResponseFactory.phpstub',
+            \Illuminate\Contracts\Routing\ResponseFactory::class,
         ];
 
         yield 'View factory' => [
             'Contracts/View/Factory.phpstub',
             'View/Factory.phpstub',
+            \Illuminate\Contracts\View\Factory::class,
         ];
     }
 
+    /** @param class-string $interface */
     #[Test]
     #[DataProvider('contractConcretePairs')]
-    public function contract_stub_mirrors_the_concrete_sinks(string $contractPath, string $concretePath): void
+    public function contract_stub_mirrors_the_concrete_sinks(string $contractPath, string $concretePath, string $interface): void
     {
         $contractSinks = $this->parseSinksByMethod($contractPath);
         $concreteSinks = $this->parseSinksByMethod($concretePath);
@@ -59,6 +62,46 @@ final class ContractStubSinkParityTest extends TestCase
         }
     }
 
+    /**
+     * Parity above only compares methods both stubs already declare, so a sink the contract
+     * stub simply never restated is invisible to it. Close that: every sink-bearing concrete
+     * method the real interface also declares must appear in the contract stub, because a
+     * contract-typed receiver reaches nothing else.
+     *
+     * @param class-string $interface
+     */
+    #[Test]
+    #[DataProvider('contractConcretePairs')]
+    public function contract_stub_restates_every_sink_the_interface_exposes(string $contractPath, string $concretePath, string $interface): void
+    {
+        $this->assertTrue(\interface_exists($interface), "{$interface} is not autoloadable; the pair is misconfigured.");
+
+        $contractSinks = $this->parseSinksByMethod($contractPath);
+        $covered = 0;
+
+        foreach ($this->parseSinksByMethod($concretePath) as $method => $sinks) {
+            // Methods the interface does not declare (View's first/renderWhen/...) can only
+            // ever be called on the concrete class, so the contract stub must not grow them.
+            if ($sinks === [] || !\method_exists($interface, $method)) {
+                continue;
+            }
+
+            ++$covered;
+
+            $this->assertArrayHasKey($method, $contractSinks, \sprintf(
+                "%s::%s() carries sinks (%s) and is declared on %s, but %s does not restate it. "
+                . 'A contract-typed receiver would reach no sink at all.',
+                $concretePath,
+                $method,
+                \implode(', ', $sinks),
+                $interface,
+                $contractPath,
+            ));
+        }
+
+        $this->assertGreaterThan(0, $covered, "No sink-bearing interface method found for {$interface}; the parser or the pair is wrong.");
+    }
+
     #[Test]
     public function parser_finds_the_sinks_it_is_asked_to_compare(): void
     {
@@ -67,7 +110,18 @@ final class ContractStubSinkParityTest extends TestCase
         // Guards the regex itself: a parser that returned empty sets everywhere would make
         // every parity assertion above trivially true.
         $this->assertSame(['@psalm-taint-sink html $content'], $sinks['make'] ?? []);
-        $this->assertSame([], $sinks['view'] ?? ['unparsed'], 'view() must stay un-sunk: Blade escapes view data.');
+
+        // The view NAME is sunk (it resolves to a blade path); the view DATA is not.
+        $this->assertSame(
+            ['@psalm-taint-sink file $view', '@psalm-taint-sink include $view'],
+            $sinks['view'] ?? [],
+        );
+
+        $this->assertSame(
+            [],
+            $sinks['json'] ?? ['unparsed'],
+            'json() must stay un-sunk: it is served as application/json, not rendered as HTML.',
+        );
     }
 
     /**
