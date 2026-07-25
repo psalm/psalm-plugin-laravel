@@ -6,7 +6,7 @@ Active majors:
 - `master` is 4.x (PHP 8.2+, Laravel `^12.14 || ^13.3`, Psalm 7 beta)
 - `3.x` is the Psalm 6 line (Laravel `^11.35+`), backports only
 
-Taint: Psalm 6 reports it only in a separate `--taint-analysis` run (type issues suppressed there); Psalm 7 emits type and taint issues together in one run, on a rewritten engine with different internals. Psalm core defaults taint off, but `psalm-laravel init` writes `runTaintAnalysis="true"`, so initialized user projects run it by default; this repo's own self-analysis keeps it off.
+Taint: Psalm 6 keeps taint off by default and reports it only in a separate `--taint-analysis` run (type issues suppressed there). Psalm 7 runs taint BY DEFAULT and emits type and taint issues together in one run, on a rewritten engine with different internals; `psalm-laravel init` additionally writes `runTaintAnalysis="true"` to make that explicit.
 
 ## Read before re-deriving
 
@@ -49,8 +49,8 @@ composer rector -- --no-progress-bar --no-ansi                         # rector 
 Gotchas:
 
 - The final pre-commit psalm gate must DROP `--no-suggestions` to match CI, which runs bare `psalm` (`.github/workflows/psalm.yml`) and reports what the flag hides locally. Keep the flag for iteration only.
-- Full local `composer test:type` can flake with mass class-not-found fatals (parallel batch runner). An isolated `--filter` run passing is the local signal; CI validates the full suite.
 - `composer test:type` runs a phpt convention check BEFORE PHPUnit and aborts the whole suite on any `--EXPECT--` section or hardcoded `on line N` under `tests/Type/tests`. Use `--EXPECTF--` with `on line %d`.
+- Before citing Psalm source or defaults, confirm `vendor/composer/installed.json` carries the Psalm major that composer.json requires: a stale vendor from an interrupted install answers every source read and probe with the PREVIOUS major's behavior, convincingly.
 
 ## Git and PRs
 
