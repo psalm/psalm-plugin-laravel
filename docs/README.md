@@ -14,6 +14,7 @@ There are 2 main ways how it does it:
 ## Documentation
 
 - [Configuration](config.md) — plugin XML config options and environment variables
+- [Adopting on an Existing Codebase](adoption.md) — first-run triage order, baselines, and turning down noise
 - [GitHub Actions](github-actions.md) — running Psalm in CI with GitHub Actions
 - [Custom Issues](issues/index.md) — Laravel-aware checks the plugin adds on top of Psalm's built-ins
 - [Security (Taint) Checks](security.md) — what the security analysis detects

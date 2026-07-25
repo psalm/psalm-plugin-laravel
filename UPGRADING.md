@@ -1,6 +1,6 @@
 # Upgrade guide
 
-The `2.x` line is end-of-life (no more fixes, security or otherwise).
+The `1.x` and `2.x` lines are end-of-life (no more fixes, security or otherwise).
 Active development happens on `3.x` and `4.x`, which add taint-based security scanning and modern Laravel/Psalm support.
 
 Compatibility matrix: [README](https://github.com/psalm/psalm-plugin-laravel/blob/master/README.md#versions--dependencies).
@@ -38,6 +38,26 @@ composer update psalm/plugin-laravel --with-dependencies
 Project minimums: PHP `^8.2`, Laravel 11/12/13, Psalm 6.
 
 Full diff: https://github.com/psalm/psalm-plugin-laravel/compare/v2.11.1...v3.0.0
+
+## 1.x → 2.x
+
+No breaking API changes, the jump is in platform minimums. Bump the constraint:
+
+```json
+"require-dev": {
+  "psalm/plugin-laravel": "^2.0"
+}
+```
+
+```bash
+composer update psalm/plugin-laravel --with-dependencies
+```
+
+Project minimums: PHP `^8.0`, Laravel 8/9, Psalm 4. Laravel 6 and 7 are no longer supported.
+
+Since 2.x is end-of-life, treat this as a stepping stone: unless you are pinned to Laravel 8 or 9, carry on to [3.x](#2x--3x) and 4.x in the same sitting.
+
+Full diff: https://github.com/psalm/psalm-plugin-laravel/compare/v1.6.3...v2.0.0
 
 ## Clear the cache after upgrading
 
