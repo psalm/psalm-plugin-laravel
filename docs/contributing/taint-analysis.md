@@ -698,15 +698,21 @@ Psalm honors `@psalm-taint-source` on **method return types** but not on **prope
 
 The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the list. `TranscriptionResponse` is named explicitly because it sits in its own hierarchy (it does not extend `TextResponse`), so no walk reaches it.
 
-### Array-access source pattern: `$response['field']` (handler required too)
+### Array-access sources do not work: `$response['field']` (upstream gap)
 
 `@psalm-taint-source` on `offsetGet()` sources an explicit `$response->offsetGet('field')` call and nothing else. Psalm's `ArrayFetchAnalyzer` handles the `$response['field']` sugar by synthesizing a `VirtualMethodCall` to `offsetGet()` inside a **cloned** node-data set, then copying back only the resulting type. The taint edge lives in the clone and is discarded (same upstream gap as `#1304`).
 
-So the sugar goes through the same handler, on the `ArrayDimFetch` branch, for `Laravel\Ai\Tools\Request` (the arguments the model chose for a tool call) and for `Laravel\Ai\Responses\{StructuredAgentResponse, StructuredTextResponse}` (the decoded structured payload). The stubs keep the `offsetGet()` annotation anyway, so the explicit call form stays covered without a second mechanism.
+This is a Psalm core soundness bug, not a Laravel one. It silently breaks every `ArrayAccess`-based taint source in any codebase, so it belongs upstream rather than in a plugin workaround. Do not add an annotation and assume the sugar is covered.
 
-This is what makes the sub-agent chain work: `Tools\AgentTool::handle()` forwards `(string) $request['task']` straight into the sub-agent's `prompt()`, so without the `ArrayDimFetch` branch the whole delegation path is silent. `SubAgentToolDelegation.phpt` pins it.
+An `ArrayDimFetch` branch on `LlmOutputTaintHandler` would close it, and was prototyped, but is deliberately not shipped: `ArrayDimFetch` is among the hottest node types in any codebase, so the branch charges a per-expression cost on every analysis, and it becomes dead code the moment upstream lands. Keep the `offsetGet()` annotations anyway, since the explicit call form is genuinely covered by them.
 
-One gap remains, recorded in `StructuredArrayReturnKnownLimitation.phpt`: `toArray()` carries a source annotation, but consuming the returned array element-wise loses the edge under whole-project analysis. The same fixture reports the flow when Psalm analyzes the file alone, so it is the upstream hop-loss rather than a missing annotation.
+What that costs, pinned by fixtures rather than left implicit:
+
+- `SubAgentToolDelegationKnownLimitation.phpt`: `Tools\AgentTool::handle()` forwards `(string) $request['task']` straight into a sub-agent's `prompt()`, so the whole delegation chain is silent.
+- `StructuredResponseArrayAccessKnownLimitation.phpt`: `$response['field']` on the structured responses.
+- `StructuredArrayReturnKnownLimitation.phpt` is a *different* gap with the same shape of consequence: `toArray()` carries a source annotation, but consuming the returned array element-wise loses the edge under whole-project analysis. The same fixture reports the flow when Psalm analyzes the file alone, so it is the hop-loss bug rather than a missing annotation.
+
+All three assert the current (wrong) behavior with empty expectations, so an upstream fix turns them red and names itself.
 
 The handler is registered in `Plugin::registerHandlers()` behind the same version gate as the stubs, and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
 

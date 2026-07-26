@@ -30,8 +30,16 @@ function castStructuredPayload(\Laravel\Ai\Responses\StructuredAgentResponse $re
     // $structured, which drops the parent stub's source annotation.
     \Illuminate\Support\Facades\DB::select('SELECT * FROM notes WHERE body = ' . (string) $response);
 }
+
+function offsetGetStructuredPayload(\Laravel\Ai\Responses\StructuredAgentResponse $response): void {
+    // The explicit call is the covered counterpart to `$response['body']`, which
+    // Psalm's array-access desugaring silently strips of taint. See
+    // StructuredResponseArrayAccessKnownLimitation.phpt.
+    \Illuminate\Support\Facades\DB::select('SELECT * FROM notes WHERE body = ' . (string) $response->offsetGet('body'));
+}
 ?>
 --EXPECTF--
+TaintedSql on line %d: Detected tainted SQL
 TaintedSql on line %d: Detected tainted SQL
 TaintedSql on line %d: Detected tainted SQL
 TaintedSql on line %d: Detected tainted SQL

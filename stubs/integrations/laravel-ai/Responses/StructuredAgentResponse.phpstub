@@ -19,6 +19,9 @@ use Laravel\Ai\Responses\Data\Usage;
  * (`AgentResponse::__toString()`), or have no parent at all (`toArray()`),
  * so the annotations must be repeated here.
  *
+ * `$response['field']` is not analysed; see the ProvidesStructuredResponse stub
+ * for why, and use `toArray()` or an explicit `offsetGet()` call instead.
+ *
  * Hierarchy and member list copied from
  * `vendor/laravel/ai/src/Responses/StructuredAgentResponse.php` so the stub
  * re-declaration keeps the four interfaces Psalm resets on re-declaration.

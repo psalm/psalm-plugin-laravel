@@ -8,6 +8,7 @@ use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Scalar\String_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -92,28 +93,18 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_lists_the_array_access_surfaces(): void
+    public function it_does_not_source_array_access_reads(): void
     {
-        $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
-        /** @var list<string> $taintedClasses */
-        $taintedClasses = $reflection->getReflectionConstant('ARRAY_ACCESS_TAINTED_CLASSES')?->getValue() ?? [];
-
-        $this->assertSame([
-            'Laravel\\Ai\\Tools\\Request',
-            'Laravel\\Ai\\Responses\\StructuredAgentResponse',
-            'Laravel\\Ai\\Responses\\StructuredTextResponse',
-        ], $taintedClasses);
-    }
-
-    #[Test]
-    public function it_returns_null_for_an_append_write_target(): void
-    {
+        // Psalm's ArrayFetchAnalyzer discards the taint edge when it desugars
+        // `$response['field']`, so an ArrayDimFetch branch here would be a
+        // workaround for a core gap on one of the hottest node types. Pinned so
+        // the deferral is a decision rather than an oversight; the flows it
+        // leaves uncovered are in the *KnownLimitation.phpt fixtures.
         $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
         $event = $this->createEvent(
-            // `$request[] = ...`: a null dim is always a write, never a read.
-            expr: new ArrayDimFetch(new Variable('request')),
+            expr: new ArrayDimFetch(new Variable('response'), new String_('summary')),
             codebase: $codebase,
-            varType: $this->namedObjectType('Laravel\\Ai\\Tools\\Request'),
+            varType: $this->namedObjectType('Laravel\\Ai\\Responses\\StructuredAgentResponse'),
         );
 
         $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));

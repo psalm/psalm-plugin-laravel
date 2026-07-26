@@ -4,60 +4,56 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Ai;
 
-use PhpParser\Node\Expr;
-use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
-use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
-use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
-use Psalm\Type\Union;
 
 /**
- * Marks reads of LLM-controlled data on Laravel AI objects as an `input` taint
- * source. The model's output is downstream of every untrusted source that
- * reached its prompt (indirect prompt injection — attacker content in a web
- * page, RAG corpus, tool output, or email), so passing it unsanitized to SQL,
- * shell, HTML, header, or filesystem sinks should fire the matching `Tainted*`
- * issue.
+ * Marks the `$text` property on Laravel AI response objects as an `input`
+ * taint source. The model's output is downstream of every untrusted source
+ * that reached its prompt (indirect prompt injection — attacker content in
+ * a web page, RAG corpus, tool output, or email), so passing it unsanitized
+ * to SQL, shell, HTML, header, or filesystem sinks should fire the matching
+ * `Tainted*` issue.
  *
- * Two read shapes need a handler because a docblock annotation cannot express
- * either of them:
+ * Psalm's `@psalm-taint-source` docblock annotation is not honored on
+ * properties, only on method return types. This handler bridges that gap by
+ * intercepting reads of the property and adding the taint via
+ * `Codebase::addTaintSource()`. The stub at
+ * `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub`
+ * complements this with `@psalm-taint-source` on `__toString()`.
  *
- * 1. `$response->text` — Psalm's `@psalm-taint-source` is not honored on
- *    properties, only on method return types.
- * 2. `$response['field']` / `$request['task']` — `ArrayFetchAnalyzer`
- *    synthesizes the `offsetGet()` call in a cloned node-data set and copies
- *    back only the return type, so the taint edge from the stub's annotation on
- *    `offsetGet()` is discarded (same upstream gap as #1304). An explicit
- *    `$response->offsetGet('field')` call does carry the stub annotation.
- *
- * Both are handled by re-sourcing at the read site, which also sidesteps the
- * upstream "property taint never flows" bug. The stubs complement this with
- * `@psalm-taint-source` on `__toString()`, `toArray()` and friends.
- *
- * Property-read coverage:
+ * Covered:
  * - `Laravel\Ai\Responses\TextResponse` (and subclasses, including
- *   `AgentResponse`, `StructuredAgentResponse`, `StructuredTextResponse` and
- *   `StreamedAgentResponse` — the snapshot returned to
+ *   `AgentResponse` and `StreamedAgentResponse` — the snapshot returned to
  *   `Promptable::stream()->then()` callbacks).
  * - `Laravel\Ai\Responses\StreamableAgentResponse` (separate hierarchy in
  *   the real package — `$text` is populated after the stream completes).
- * - `Laravel\Ai\Responses\TranscriptionResponse` (own hierarchy; a transcript
- *   of user-supplied audio is attacker-authored text a speech model re-typed).
+ * - `Laravel\Ai\Responses\TranscriptionResponse` (also its own hierarchy; a
+ *   transcript of user-supplied audio is attacker-authored text that a speech
+ *   model merely re-typed).
  *
- * Array-read coverage:
- * - `Laravel\Ai\Tools\Request` — the arguments the model chose for a tool call.
- *   This is the shape `Tools\AgentTool::handle()` itself uses to forward a task
- *   into a sub-agent's prompt.
- * - `Laravel\Ai\Responses\StructuredAgentResponse` /
- *   `StructuredTextResponse` — the decoded structured payload. The keys come
- *   from the application's schema, the values do not.
+ * `StructuredAgentResponse` and `StructuredTextResponse` are absent from the
+ * list but still covered: both inherit `$text` from `TextResponse`, so the
+ * subclass walk below reaches them.
+ *
+ * Array-access reads (`$response['field']`, `$request['task']`) are covered by
+ * nothing, here or in the stubs. Psalm's `ArrayFetchAnalyzer` handles the `[]`
+ * sugar by synthesizing a `VirtualMethodCall` to `offsetGet()` in a cloned
+ * node-data set and copying back only the resulting type, so the taint edge
+ * from the stub annotation on `offsetGet()` is discarded. That is a Psalm core
+ * soundness gap affecting every `ArrayAccess`-based taint source rather than
+ * anything Laravel-specific, so it belongs upstream. An `ArrayDimFetch` branch
+ * here would close it, but that node type is among the hottest in any codebase
+ * and the branch turns into dead code the moment upstream lands, so the gap is
+ * accepted and pinned by the `*KnownLimitation.phpt` fixtures instead. The
+ * covered paths for structured output are an explicit
+ * `$response->offsetGet('field')` call and `toArray()`.
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  * @see https://github.com/laravel/ai Laravel AI SDK
@@ -90,17 +86,6 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
      */
     private const TAINTED_PROPERTIES = ['text'];
 
-    /**
-     * Classes whose array-access reads return LLM-controlled data.
-     *
-     * @var list<string>
-     */
-    private const ARRAY_ACCESS_TAINTED_CLASSES = [
-        'Laravel\\Ai\\Tools\\Request',
-        'Laravel\\Ai\\Responses\\StructuredAgentResponse',
-        'Laravel\\Ai\\Responses\\StructuredTextResponse',
-    ];
-
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -115,112 +100,70 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
 
         $expr = $event->getExpr();
 
-        if ($expr instanceof PropertyFetch) {
-            if (!$expr->name instanceof Identifier) {
-                return null;
-            }
-
-            if (!\in_array($expr->name->name, self::TAINTED_PROPERTIES, true)) {
-                return null;
-            }
-
-            self::taintRead($event, $expr, $expr->var, self::TAINTED_CLASSES, 'llm-output-' . $expr->name->name);
-
+        if (!$expr instanceof PropertyFetch) {
             return null;
         }
 
-        if ($expr instanceof ArrayDimFetch) {
-            // A null dim is `$x[] = ...`, always a write target.
-            if (!$expr->dim instanceof Expr) {
-                return null;
-            }
-
-            self::taintRead($event, $expr, $expr->var, self::ARRAY_ACCESS_TAINTED_CLASSES, 'llm-output-offset');
+        if (!$expr->name instanceof Identifier) {
+            return null;
         }
 
-        return null;
-    }
+        if (!\in_array($expr->name->name, self::TAINTED_PROPERTIES, true)) {
+            return null;
+        }
 
-    /**
-     * @param list<string> $taintedClasses
-     */
-    private static function taintRead(
-        AfterExpressionAnalysisEvent $event,
-        Expr $expr,
-        Expr $receiver,
-        array $taintedClasses,
-        string $taintIdPrefix,
-    ): void {
         $source = $event->getStatementsSource();
         $nodeTypeProvider = $source->getNodeTypeProvider();
 
-        $receiverType = $nodeTypeProvider->getType($receiver);
+        $varType = $nodeTypeProvider->getType($expr->var);
 
-        if (!$receiverType instanceof Union) {
-            return;
+        if (!$varType instanceof \Psalm\Type\Union) {
+            return null;
         }
 
-        if (!self::isLlmSurface($receiverType, $taintedClasses, $event->getCodebase())) {
-            return;
-        }
+        $isLlmResponse = false;
 
-        self::addSource($event, $expr, $source, $taintIdPrefix);
-    }
-
-    /**
-     * @param list<string> $taintedClasses
-     *
-     * @psalm-external-mutation-free
-     */
-    private static function isLlmSurface(Union $receiverType, array $taintedClasses, Codebase $codebase): bool
-    {
-        foreach ($receiverType->getAtomicTypes() as $atomic) {
+        foreach ($varType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject) {
                 continue;
             }
 
-            if (\in_array($atomic->value, $taintedClasses, true)) {
-                return true;
+            if (\in_array($atomic->value, self::TAINTED_CLASSES, true)) {
+                $isLlmResponse = true;
+                break;
             }
 
             // Cover user-defined subclasses (e.g. a project's own response
             // wrapper extending AgentResponse).
-            if (!$codebase->classExists($atomic->value)) {
-                continue;
-            }
+            if ($codebase->classExists($atomic->value)) {
+                foreach (self::TAINTED_CLASSES as $taintedClass) {
+                    if (!$codebase->classExists($taintedClass)) {
+                        continue;
+                    }
 
-            foreach ($taintedClasses as $taintedClass) {
-                if (!$codebase->classExists($taintedClass)) {
-                    continue;
-                }
+                    if ($codebase->classExtendsOrImplements($atomic->value, $taintedClass)) {
+                        $isLlmResponse = true;
 
-                if ($codebase->classExtendsOrImplements($atomic->value, $taintedClass)) {
-                    return true;
+                        break 2;
+                    }
                 }
             }
         }
 
-        return false;
-    }
+        if (!$isLlmResponse) {
+            return null;
+        }
 
-    private static function addSource(
-        AfterExpressionAnalysisEvent $event,
-        Expr $expr,
-        StatementsSource $source,
-        string $taintIdPrefix,
-    ): void {
-        $nodeTypeProvider = $source->getNodeTypeProvider();
-
-        // The expression type may be unset when Psalm couldn't resolve the member —
-        // fall back to `string`, the type every covered read ultimately carries into
-        // a sink, so the taint annotation survives.
+        // The expression type may be unset when Psalm couldn't resolve the property —
+        // fall back to `string` so the taint annotation survives. `$text` is always
+        // a string in the laravel/ai package.
         $exprType = $nodeTypeProvider->getType($expr) ?? Type::getString();
 
-        $taintId = $taintIdPrefix
+        $taintId = 'llm-output-' . $expr->name->name
             . '-' . $source->getFileName()
             . ':' . $expr->getStartFilePos();
 
-        $taintedType = $event->getCodebase()->addTaintSource(
+        $taintedType = $codebase->addTaintSource(
             $exprType,
             $taintId,
             TaintKind::ALL_INPUT,
@@ -228,5 +171,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         );
 
         $nodeTypeProvider->setType($expr, $taintedType);
+
+        return null;
     }
 }

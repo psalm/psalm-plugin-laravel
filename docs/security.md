@@ -75,18 +75,26 @@ Two directions are covered:
   model read. Transcripts (`TranscriptionResponse::$text`) count: the audio was
   supplied by a user, so the transcript is attacker-authored text a speech model
   merely re-typed.
-* Structured output is covered on the same footing. `$response['field']` on
-  `StructuredAgentResponse` / `StructuredTextResponse`, plus `toArray()`,
-  `toJson()`, `jsonSerialize()` and the string cast, all yield tainted values. The
-  keys come from the application's schema, the values come from the model.
-* Tool arguments are a source, including the `$request['task']` array form the
-  framework's own `Tools\AgentTool` uses to hand a task to a sub-agent. That makes
-  the sub-agent delegation chain (parent model picks the task text, sub-agent
-  receives it as a prompt) report `TaintedLlmPrompt`.
+* Structured output is a source on the same footing. On
+  `StructuredAgentResponse` / `StructuredTextResponse`, the covered reads are
+  `toArray()`, `toJson()`, `jsonSerialize()`, the string cast, and an explicit
+  `offsetGet()` call. The keys come from the application's schema, the values come
+  from the model.
+
+Two shapes are deliberately not covered.
 
 Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
 yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in
 [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
+
+Array-access reads (`$response['field']`, `$request['task']`) are not covered
+either, on any class. Psalm resolves the `[]` sugar through a synthesized
+`offsetGet()` call in a cloned node-data set and copies back only the resulting
+type, so the taint edge is dropped. That affects every `ArrayAccess`-based taint
+source, so it is left for an upstream fix rather than worked around. It is worth
+knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to
+a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit
+`offsetGet()` call, all of which are covered.
 
 ### How it compares
 
