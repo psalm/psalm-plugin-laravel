@@ -72,7 +72,17 @@ Two directions are covered:
   response to string) yields tainted data, so an answer echoed into HTML, SQL, or a
   shell command is reported like any other user input. That models indirect prompt
   injection, where the payload arrives through a page, document, or tool result the
-  model read.
+  model read. Transcripts (`TranscriptionResponse::$text`) count: the audio was
+  supplied by a user, so the transcript is attacker-authored text a speech model
+  merely re-typed.
+* Structured output is covered on the same footing. `$response['field']` on
+  `StructuredAgentResponse` / `StructuredTextResponse`, plus `toArray()`,
+  `toJson()`, `jsonSerialize()` and the string cast, all yield tainted values. The
+  keys come from the application's schema, the values come from the model.
+* Tool arguments are a source, including the `$request['task']` array form the
+  framework's own `Tools\AgentTool` uses to hand a task to a sub-agent. That makes
+  the sub-agent delegation chain (parent model picks the task text, sub-agent
+  receives it as a prompt) report `TaintedLlmPrompt`.
 
 Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
 yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in

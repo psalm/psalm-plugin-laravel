@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Ai;
 
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
@@ -85,6 +86,37 @@ final class LlmOutputTaintHandlerTest extends TestCase
         // only after the stream completes — has to be listed explicitly because
         // it does not extend TextResponse upstream.
         $this->assertContains('Laravel\\Ai\\Responses\\StreamableAgentResponse', $taintedClasses);
+        // TranscriptionResponse is a third hierarchy: a transcript of user-supplied
+        // audio is attacker-authored text that a speech model re-typed.
+        $this->assertContains('Laravel\\Ai\\Responses\\TranscriptionResponse', $taintedClasses);
+    }
+
+    #[Test]
+    public function it_lists_the_array_access_surfaces(): void
+    {
+        $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
+        /** @var list<string> $taintedClasses */
+        $taintedClasses = $reflection->getReflectionConstant('ARRAY_ACCESS_TAINTED_CLASSES')?->getValue() ?? [];
+
+        $this->assertSame([
+            'Laravel\\Ai\\Tools\\Request',
+            'Laravel\\Ai\\Responses\\StructuredAgentResponse',
+            'Laravel\\Ai\\Responses\\StructuredTextResponse',
+        ], $taintedClasses);
+    }
+
+    #[Test]
+    public function it_returns_null_for_an_append_write_target(): void
+    {
+        $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
+        $event = $this->createEvent(
+            // `$request[] = ...`: a null dim is always a write, never a read.
+            expr: new ArrayDimFetch(new Variable('request')),
+            codebase: $codebase,
+            varType: $this->namedObjectType('Laravel\\Ai\\Tools\\Request'),
+        );
+
+        $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
     }
 
     #[Test]

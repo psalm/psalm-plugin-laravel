@@ -1,0 +1,60 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+use ArrayAccess;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use JsonSerializable;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+
+/**
+ * Structured-output sibling of AgentResponse. `$text` is already covered by
+ * LlmOutputTaintHandler through the subclass walk; the four accessors below
+ * hand back the decoded `$structured` payload, which is the same model output
+ * in another shape and was untainted until now.
+ *
+ * All four override a parent whose annotation would otherwise apply
+ * (`AgentResponse::__toString()`), or have no parent at all (`toArray()`),
+ * so the annotations must be repeated here.
+ *
+ * Hierarchy and member list copied from
+ * `vendor/laravel/ai/src/Responses/StructuredAgentResponse.php` so the stub
+ * re-declaration keeps the four interfaces Psalm resets on re-declaration.
+ *
+ * @template-implements ArrayAccess<array-key, mixed>
+ */
+class StructuredAgentResponse extends AgentResponse implements Arrayable, ArrayAccess, Jsonable, JsonSerializable
+{
+    use ProvidesStructuredResponse;
+
+    /**
+     * @param array<array-key, mixed> $structured
+     */
+    public function __construct(string $invocationId, array $structured, string $text, Usage $usage, Meta $meta) {}
+
+    /**
+     * @return array<array-key, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+
+    /**
+     * @param int $options
+     *
+     * @psalm-taint-source input
+     */
+    public function toJson($options = 0): string {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function jsonSerialize(): mixed {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function __toString(): string {}
+}

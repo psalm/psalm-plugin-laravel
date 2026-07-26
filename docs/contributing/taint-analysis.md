@@ -694,11 +694,19 @@ Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\L
 
 Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**: `PropertyStorage` carries no taint fields at all, so the annotation is dropped at scan time rather than misapplied. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
 
-`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches reads of `$x->text` where `$x` is or extends one of `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse}`, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. The stub at `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub` additionally annotates `__toString()` so the same taint flows through string casts.
+`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches reads of `$x->text` where `$x` is or extends one of `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse, TranscriptionResponse}`, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. The stub at `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub` additionally annotates `__toString()` so the same taint flows through string casts.
 
-The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the list. What is genuinely uncovered is `StructuredAgentResponse`'s array-access surface (`$response['field']`), which needs a stub on `offsetGet()`/`toArray()`.
+The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the list. `TranscriptionResponse` is named explicitly because it sits in its own hierarchy (it does not extend `TextResponse`), so no walk reaches it.
 
-`TranscriptionResponse::$text` is a known gap. It carries model output too (transcribed audio) but sits in its own hierarchy, so no subclass walk reaches it.
+### Array-access source pattern: `$response['field']` (handler required too)
+
+`@psalm-taint-source` on `offsetGet()` sources an explicit `$response->offsetGet('field')` call and nothing else. Psalm's `ArrayFetchAnalyzer` handles the `$response['field']` sugar by synthesizing a `VirtualMethodCall` to `offsetGet()` inside a **cloned** node-data set, then copying back only the resulting type. The taint edge lives in the clone and is discarded (same upstream gap as `#1304`).
+
+So the sugar goes through the same handler, on the `ArrayDimFetch` branch, for `Laravel\Ai\Tools\Request` (the arguments the model chose for a tool call) and for `Laravel\Ai\Responses\{StructuredAgentResponse, StructuredTextResponse}` (the decoded structured payload). The stubs keep the `offsetGet()` annotation anyway, so the explicit call form stays covered without a second mechanism.
+
+This is what makes the sub-agent chain work: `Tools\AgentTool::handle()` forwards `(string) $request['task']` straight into the sub-agent's `prompt()`, so without the `ArrayDimFetch` branch the whole delegation path is silent. `SubAgentToolDelegation.phpt` pins it.
+
+One gap remains, recorded in `StructuredArrayReturnKnownLimitation.phpt`: `toArray()` carries a source annotation, but consuming the returned array element-wise loses the edge under whole-project analysis. The same fixture reports the flow when Psalm analyzes the file alone, so it is the upstream hop-loss rather than a missing annotation.
 
 The handler is registered in `Plugin::registerHandlers()` behind the same version gate as the stubs, and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
 
