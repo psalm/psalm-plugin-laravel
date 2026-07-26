@@ -35,9 +35,14 @@ use Psalm\Type\TaintKind;
  * - `Laravel\Ai\Responses\StreamableAgentResponse` (separate hierarchy in
  *   the real package — `$text` is populated after the stream completes).
  *
- * `StructuredAgentResponse` is intentionally left out: its primary surface
- * is array access (`$response['field']`), not the `$text` property — that
- * belongs in a stub for `offsetGet()`/`toArray()`.
+ * `StructuredAgentResponse` and `StructuredTextResponse` are absent from the
+ * list but still covered: both inherit `$text` from `TextResponse`, so the
+ * subclass walk below reaches them. Their array-access surface
+ * (`$response['field']`) is the part that stays uncovered — that belongs in a
+ * stub for `offsetGet()`/`toArray()`.
+ *
+ * `TranscriptionResponse` also exposes `$text` but sits in its own hierarchy,
+ * so nothing reaches it today.
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  * @see https://github.com/laravel/ai Laravel AI SDK

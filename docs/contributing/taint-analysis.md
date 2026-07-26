@@ -609,11 +609,17 @@ Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\L
 
 ### Property-source pattern: `$response->text` (handler required)
 
-Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
+Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**: `PropertyStorage` carries no taint fields at all, so the annotation is dropped at scan time rather than misapplied. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
 
-`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches reads of `$x->text` where `$x` extends or implements one of `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse}`, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. The stub at `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub` additionally annotates `__toString()` so the same taint flows through string casts.
+`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches reads of `$x->text` where `$x` is or extends one of `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse}`, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. The stub at `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub` additionally annotates `__toString()` so the same taint flows through string casts.
 
-The handler is registered alongside the integration stubs (`Plugin::__invoke`) and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
+The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the list. What is genuinely uncovered is `StructuredAgentResponse`'s array-access surface (`$response['field']`), which needs a stub on `offsetGet()`/`toArray()`.
+
+`TranscriptionResponse::$text` is a known gap. It carries model output too (transcribed audio) but sits in its own hierarchy, so no subclass walk reaches it.
+
+The handler is registered in `Plugin::registerHandlers()` behind the same version gate as the stubs, and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
+
+Note the mechanism split: this handler re-sources from `AfterExpressionAnalysisEvent`, while the plugin's other property-read taint path (`ValidationTaintHandler`) implements `AddTaintsInterface`, which Psalm dispatches from `AtomicPropertyFetchAnalyzer` for every property fetch. Prefer `AddTaintsInterface` for new property-taint work: it hooks the taint bitmask Psalm already threads through the data-flow edge, instead of rewriting the expression type afterwards. `AddTaintsInterface` also fires twice per node (property-read pass and argument-binding pass), so it needs per-node dedupe that the `AfterExpressionAnalysis` route avoids.
 
 ### Return-value sinks are not yet expressible
 
