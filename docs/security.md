@@ -22,6 +22,12 @@ nav_order: 6
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
 slash-, backslash-, and dot-free extension, which cannot form a traversal segment.
 
+`UploadedFile::clientExtension()` is deliberately not a taint source. The client
+chooses the MIME lookup key, but Symfony returns a value from the application's
+configured MIME registry. This avoids false positives for generated upload
+filenames; applications that populate that registry from untrusted data must model
+that boundary separately.
+
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
 ### Timing-unsafe secret comparison (CWE-208)
