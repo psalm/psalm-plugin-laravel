@@ -159,10 +159,11 @@ jobs:
       - name: Run Psalm/Type tests
         run: composer test:type
 
-  # This job doubles as the Phase 1 "drift canary" for the laravel/ai integration
-  # (design: .alies/docs/design-laravel-ai-taint.md, mechanism M1). The version range
-  # in Plugin::optionalIntegrationStubs() has no upper ceiling below 1.0, so every run
-  # here installs whatever laravel/ai release is newest, and the weekly schedule plus
+  # This job doubles as the Phase 1 "drift canary" for the laravel/ai integration.
+  # The version range in Plugin::optionalIntegrationStubs() has no upper ceiling
+  # below 1.0 (a future minor's coverage must never be silently dropped just to
+  # dodge a rare drift-caused false positive), so every run here installs
+  # whatever laravel/ai release is newest, and the weekly schedule plus
   # workflow_dispatch trigger (inherited from the workflow-level `on:` block above)
   # already exercise that install on a cadence independent of PHP-file changes.
   type_tests_laravel_ai:
@@ -196,8 +197,18 @@ jobs:
       - name: Install optional laravel/ai integration
         run: composer require --dev "laravel/ai:>=0.10.0 <1.0.0" --no-interaction --no-progress
 
+      - name: Check laravel/ai stub-vs-vendor signature parity
+        # Psalm's registered stubs win over the real vendor class during analysis
+        # (redeclaration is the declarative default for these stubs), so a stub whose
+        # native parameter/return types drift from a newer laravel/ai release passes
+        # every phpt and app-leg check below silently: Psalm never notices, because it
+        # never looks at the vendor source once a stub claims the class. This step is
+        # the missing check: it reflects the installed classes directly and diffs
+        # native types against the stub source, independent of Psalm.
+        run: php bin/ci/check-laravel-ai-stub-parity.php
+
       - name: Run Psalm/Type tests
-        run: composer test:type
+        run: composer test:type -- --log-junit=/tmp/type-tests-junit.xml --no-progress
 
       - name: Report laravel/ai signature drift
         # composer test:type already fails loudly here: a stub/handler mismatch surfaces
@@ -212,33 +223,13 @@ jobs:
             "composer require --dev 'laravel/ai:>=0.10.0 <1.0.0' && composer test:type"
 
       - name: Verify the PromptInjection phpt suite actually ran
-        # M6/M5 (design: .alies/docs/design-laravel-ai-taint.md): every PromptInjection phpt
-        # carries a --taint-analysis ARGS section and a SKIPIF gate on laravel/ai class
-        # presence, so a run where the package failed to install, or where the SKIPIF check
-        # itself drifted, SKIPs every phpt and composer test:type still exits 0. A canary
-        # that goes silently green is worse than no canary, so assert real execution
-        # instead of trusting the exit code alone.
-        run: |
-          vendor/bin/phpunit --testsuite=type --filter=PromptInjection --no-progress \
-            --log-junit=/tmp/prompt-injection-junit.xml
-
-          SUMMARY=$(grep -m1 '<testsuite ' /tmp/prompt-injection-junit.xml)
-          TESTS=$(echo "$SUMMARY" | grep -oP 'tests="\K[0-9]+')
-          SKIPPED=$(echo "$SUMMARY" | grep -oP 'skipped="\K[0-9]+')
-          echo "PromptInjection suite: ${TESTS} tests, ${SKIPPED} skipped"
-
-          if [ -z "$TESTS" ] || [ "$TESTS" -eq 0 ]; then
-            echo "::error::No PromptInjection phpt tests were collected. The --filter pattern or" \
-              "tests/Type/tests/PromptInjection/ layout may have changed."
-            exit 1
-          fi
-          if [ "$SKIPPED" -ge "$TESTS" ]; then
-            echo "::error::Every PromptInjection phpt was skipped (${SKIPPED}/${TESTS}). laravel/ai" \
-              "likely failed to install, or every SKIPIF class-presence guard is stale. This run is" \
-              "NOT exercising taint coverage."
-            exit 1
-          fi
-          if [ "$SKIPPED" -gt 0 ]; then
-            echo "::warning::${SKIPPED}/${TESTS} PromptInjection phpts skipped. Check their SKIPIF" \
-              "conditions against the installed laravel/ai version."
-          fi
+        # Every PromptInjection phpt carries a --taint-analysis ARGS section and a
+        # SKIPIF gate on laravel/ai class presence, so a run where the package failed
+        # to install, or where the SKIPIF check itself drifted, SKIPs every phpt and
+        # composer test:type still exits 0. A canary that goes silently green is worse
+        # than no canary, so assert real execution instead of trusting the exit code
+        # alone. Reads the JUnit log the previous step already produced rather than
+        # running phpunit a second time: this repo's phpt runner batches every
+        # discovered phpt through Psalm in setUpBeforeClass() regardless of PHPUnit's
+        # --filter, so a filtered re-run pays the same ~1 minute for no benefit.
+        run: php bin/ci/assert-tests-ran.php /tmp/type-tests-junit.xml PromptInjection
