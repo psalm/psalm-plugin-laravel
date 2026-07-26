@@ -4,6 +4,7 @@ namespace Laravel\Ai;
 
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Queue\SerializesModels;
+use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\QueuedAgentResponse;
@@ -20,7 +21,7 @@ use Laravel\Ai\Responses\StreamableAgentResponse;
  * `use SerializesModels` and the `make()` factory are restated verbatim from
  * `vendor/laravel/ai/src/Promptable.php` because re-declaring this trait to
  * add taint annotations would otherwise erase them from every user agent
- * class (CLAUDE.local.md "Class declarations wipe reflected metadata"). The
+ * class (see "Stub merging" in `docs/contributing/README.md`). The
  * remaining provider/failover internals (`getTimeout`, `withModelFailover`,
  * `iterateProvidersWithFailover`, …) are intentionally left to the
  * reflected source — they take no taint annotations, are framework-private,
@@ -38,7 +39,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function prompt(
-        string $prompt,
+        Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -49,7 +50,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function stream(
-        string $prompt,
+        Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -60,7 +61,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function queue(
-        string $prompt,
+        Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -70,7 +71,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcast(
-        string $prompt,
+        Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         bool $now = false,
@@ -82,7 +83,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcastNow(
-        string $prompt,
+        Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         Lab|array|string|null $provider = null,
@@ -93,7 +94,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcastOnQueue(
-        string $prompt,
+        Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         Lab|array|string|null $provider = null,

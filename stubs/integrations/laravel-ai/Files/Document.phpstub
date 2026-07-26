@@ -12,7 +12,7 @@ namespace Laravel\Ai\Files;
  * The stub re-declares the full abstract surface from
  * `vendor/laravel/ai/src/Files/Document.php` because re-declaring the class
  * to add a taint annotation would otherwise strip the other factories
- * (CLAUDE.local.md "Class declarations wipe reflected metadata"). Bodies are
+ * (see "Stub merging" in `docs/contributing/README.md`). Bodies are
  * empty — Psalm only needs the signatures.
  */
 abstract class Document extends File

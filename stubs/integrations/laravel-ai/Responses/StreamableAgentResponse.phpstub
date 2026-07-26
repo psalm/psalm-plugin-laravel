@@ -49,7 +49,7 @@ class StreamableAgentResponse implements IteratorAggregate, Responsable
 
     public function adoptStateFrom(StreamedAgentResponse $response): self {}
 
-    public function usingVercelDataProtocol(bool $value = true): self {}
+    public function usingVercelDataProtocol(bool $value = true, ?string $messageId = null): self {}
 
     public function toResponse($request): Response {}
 

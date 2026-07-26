@@ -7,8 +7,8 @@ use Illuminate\Support\Collection;
 /**
  * Re-declared with the same parent class to preserve `extends Message` so
  * Psalm doesn't strip the parent relationship while we layer the taint sink
- * on the constructor. See CLAUDE.md "Class declarations wipe reflected
- * metadata".
+ * on the constructor. See "Stub merging" in
+ * `docs/contributing/README.md`.
  */
 class UserMessage extends Message
 {

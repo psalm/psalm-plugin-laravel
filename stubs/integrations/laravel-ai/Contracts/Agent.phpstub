@@ -3,6 +3,7 @@
 namespace Laravel\Ai\Contracts;
 
 use Illuminate\Broadcasting\Channel;
+use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\QueuedAgentResponse;
@@ -30,7 +31,7 @@ interface Agent
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function prompt(
-        string $prompt,
+        Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -41,7 +42,7 @@ interface Agent
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function stream(
-        string $prompt,
+        Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -52,7 +53,7 @@ interface Agent
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function queue(
-        string $prompt,
+        Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -62,7 +63,7 @@ interface Agent
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcast(
-        string $prompt,
+        Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         bool $now = false,
@@ -74,7 +75,7 @@ interface Agent
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcastNow(
-        string $prompt,
+        Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         Lab|array|string|null $provider = null,
@@ -85,7 +86,7 @@ interface Agent
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcastOnQueue(
-        string $prompt,
+        Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         Lab|array|string|null $provider = null,

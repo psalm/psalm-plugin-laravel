@@ -10,8 +10,8 @@ use Laravel\Ai\Contracts\Tool;
  * Full member set copied from `vendor/laravel/ai/src/Tools/SimilaritySearch.php`
  * because re-declaring `class SimilaritySearch implements Tool` here wipes the
  * reflected method list — without these three Tool members, every user-defined
- * SimilaritySearch usage would fire `UnimplementedInterfaceMethod`. See
- * `CLAUDE.local.md` "Class declarations wipe reflected metadata".
+ * SimilaritySearch usage would fire `UnimplementedInterfaceMethod`.
+ * See "Stub merging" in `docs/contributing/README.md`.
  *
  * The only behavior we layer on top of the real signatures is the
  * `@psalm-taint-sink llm_prompt $description` annotation: a SimilaritySearch

@@ -39,7 +39,7 @@ class Request implements Arrayable, ArrayAccess
 {
     use Conditionable, InteractsWithData, Macroable;
 
-    public function __construct(protected array $arguments = []) {}
+    public function __construct(protected array $arguments = [], protected ?string $toolCallId = null) {}
 
     /**
      * @return array<string, mixed>

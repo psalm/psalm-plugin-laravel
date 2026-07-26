@@ -21,7 +21,7 @@ use Laravel\Ai\Responses\Data\Usage;
  * Member list mirrors `vendor/laravel/ai/src/Responses/TextResponse.php`
  * verbatim because re-declaring the class to add the taint annotation
  * would strip every property and method that lives on the real class
- * (CLAUDE.local.md "Class declarations wipe reflected metadata").
+ * (see "Stub merging" in `docs/contributing/README.md`).
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  *

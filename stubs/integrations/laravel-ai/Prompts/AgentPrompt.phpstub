@@ -3,6 +3,7 @@
 namespace Laravel\Ai\Prompts;
 
 use Illuminate\Support\Collection;
+use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 
@@ -34,6 +35,7 @@ class AgentPrompt extends Prompt
         string $model,
         ?int $timeout = null,
         ?string $invocationId = null,
+        ?Decisions $approvalDecisions = null,
     ) {}
 
     /**
