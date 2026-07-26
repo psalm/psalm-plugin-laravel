@@ -47,13 +47,15 @@ Two reasons for the version range:
 
 When adding a new integration, gate it on both `isInstalled()` (cheap presence check) and `satisfies()` (range guard), then drop the stubs into a new directory under `stubs/integrations/`.
 
-**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from signature drift. Three checks compensate, all running weekly (Friday 06:00 UTC) and via `workflow_dispatch` regardless of which files changed, all against the newest installed `laravel/ai` release:
+**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from drift. Two CI legs compensate, both running weekly (Friday 06:00 UTC) and via `workflow_dispatch` regardless of which files changed, both against the newest installed `laravel/ai` release: `type_tests_laravel_ai` (`.github/workflows/tests.yml`) and the PHP >= 8.3 cells of `test-laravel-app.yml`.
 
-- `bin/ci/check-laravel-ai-stub-parity.php`, run from `type_tests_laravel_ai` (`.github/workflows/tests.yml`), reflects every class the stubs re-declare and diffs native parameter/return types against the installed package. This is the one check that matters for redeclaration stubs specifically: once a stub claims a class's file slot, Psalm type-checks against the stub only and never notices the real signature moving underneath it, so a plain phpt run stays green through drift on a method Psalm actually resolves through the stub. A small `KNOWN_GAPS` allowlist in that script tracks pre-existing gaps found while building it, so the check fails only on *new* drift, never silently.
-- The same job also asserts the PromptInjection phpt suite actually executed (not silently SKIPIF'd): every phpt SKIPIFs on `laravel/ai` class presence, so a failed install would otherwise SKIP every one of them and still exit 0.
-- The PHP >= 8.3 cells of `test-laravel-app.yml` install the newest `laravel/ai` release against real reflection (`tests/Application/laravel-test.sh`), catching a renamed or removed class the other two cannot see.
+What they catch:
 
-A drifted signature fails one of these with the exact class/method naming the mismatch, not a bare "tests failed."
+- `laravel/ai` failing to install. Every PromptInjection phpt carries a SKIPIF gated on `laravel/ai` class presence, so a failed install SKIPs every phpt; `type_tests_laravel_ai` asserts the suite actually executed rather than trusting a green exit code on an all-skipped run.
+- A stubbed class being renamed, moved, or removed, via the same SKIPIF/all-skipped guard.
+- The plugin's own regressions, via the normal test suite.
+
+What they do NOT catch: a stubbed method's native signature drifting on a `laravel/ai` release. For a method a stub redeclares, Psalm resolves calls against the stub's signature, not the vendor's, and registered stubs are never diffed against the real class they redeclare. A vendor method can change its parameter or return type while the stub stays stale, and every check above still passes, because Psalm never looks at the real signature once a stub claims the class. Confirmed empirically: mutating an installed `laravel/ai` method's native signature while leaving its stub untouched left the PromptInjection suite green. Tracked in [psalm/psalm-plugin-laravel#1331](https://github.com/psalm/psalm-plugin-laravel/issues/1331); a reflection-based stub-versus-vendor parity check is the proposed fix.
 
 ## Annotations quick reference
 
