@@ -17,6 +17,10 @@ For Psalm's upstream taint analysis documentation, see:
 - [Custom taint sinks](https://psalm.dev/docs/security_analysis/custom_taint_sinks/): `@psalm-taint-sink` annotation
 - [Taint flow](https://psalm.dev/docs/security_analysis/taint_flow/): `@psalm-flow` proxy and return hints
 
+The upstream reference does not cover the conditional form of `@psalm-taint-escape`, nor `@psalm-assert-untainted`. Both are documented below from source, along with which analyzers actually consume them.
+
+Every claim in this document is also verified against Psalm 6 (the `3.x` line), not just Psalm 7, since the two majors diverge internally on this surface. Differences are called out at the point of use; where nothing is called out, the behavior is identical. Psalm 7 citations are pinned to 7.0.0-beta19 and Psalm 6 citations to 6.16.1; both will drift across releases.
+
 ## Stub location
 
 Taint annotations live in `stubs/common/` alongside type stubs, organized by Laravel namespace.
@@ -26,16 +30,59 @@ Taint analysis is opt-in (`runTaintAnalysis="true"` in `psalm.xml`, or `--taint-
 
 ## Annotations quick reference
 
-There are six taint-related annotations. The first four are the ones you'll use most in stubs:
+Psalm parses eight taint-related tags, identically in the Psalm 6 and Psalm 7 lines covered by this repo (see [Version support](#version-support-psalm-6-vs-psalm-7) below). The first four are the ones you'll use most in stubs.
 
-| Annotation                          | Purpose                                              | Needs `@psalm-flow`?                                                                                |
-|-------------------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| `@psalm-taint-source <kind>`        | Marks return value as producing tainted data         | No. Sources create new taint.                                                                       |
-| `@psalm-taint-sink <kind> <$param>` | Marks a parameter as dangerous if tainted            | No. Sinks are endpoints.                                                                            |
-| `@psalm-taint-escape <kind>`        | Removes a specific taint kind from the return value  | **Yes**. See [critical rule](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow) below.  |
-| `@psalm-flow (<$params>) -> return` | Declares that taint propagates from params to return | N/A (this IS the flow declaration)                                                                  |
-| `@psalm-taint-unescape <kind>`      | Re-adds a taint kind (reverses an earlier escape)    | Yes (same pattern as escape)                                                                        |
-| `@psalm-taint-specialize`           | Tracks taints per call-site instead of globally      | No                                                                                                  |
+| Annotation                             | Scope                | Purpose                                                        | Needs `@psalm-flow`?                                                                               |
+|----------------------------------------|----------------------|----------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `@psalm-taint-source <kind>`           | function-like        | Marks return value as producing tainted data                   | No. Sources create new taint.                                                                       |
+| `@psalm-taint-sink <kind> <$param>`    | function-like        | Marks a parameter as dangerous if tainted                      | No. Sinks are endpoints.                                                                            |
+| `@psalm-taint-escape <kind>`           | function-like        | Removes a taint kind from the return value, unconditionally    | **Yes**. See [critical rule](#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow) below.  |
+| `@psalm-flow (<$params>) -> return`    | function-like        | Declares that taint propagates from params to return           | N/A (this IS the flow declaration)                                                                  |
+| `@psalm-taint-escape (<conditional>)`  | function-like        | Removes a taint kind only when an argument matches a type      | **Yes**. See [Conditional escapes](#conditional-escapes-psalm-taint-escape-conditional).            |
+| `@psalm-taint-unescape <kind>`         | function-like        | Re-adds a taint kind (reverses an earlier escape)              | Yes (same pattern as escape). No conditional form exists.                                           |
+| `@psalm-taint-specialize`              | function-like, class | Tracks taints per call-site instead of globally                | No                                                                                                  |
+| `@psalm-assert-untainted <$param>`     | function-like        | Severs ALL taint on the caller's variable after the call       | No. See [caveat](#psalm-assert-untainted) below.                                                    |
+
+Scope matters. A tag on the wrong scope is silently ignored rather than reported:
+
+- `@psalm-taint-source`, `@psalm-taint-sink`, `@psalm-flow`, and `@psalm-assert-untainted` are function-like only. Psalm's class docblock parser does not read them.
+- `@psalm-taint-specialize` is read on both. On a class it sets `ClassLikeStorage::$specialize_instance` (`ClassLikeNodeScanner:715`; Psalm 6: same field, `ClassLikeNodeScanner:707`), isolating taint per instance rather than per call-site.
+- `@psalm-taint-escape` is function-like in Psalm core. This plugin additionally honours the **bare** form on a class docblock, but only for validation Rule classes, and only through its own reader. See [Per-rule escape on Rule objects](#per-rule-escape-on-rule-objects).
+
+### Aliases from the MediaWiki taint plugin
+
+Psalm also accepts `@param-taint <$param> exec_<kind>` (parsed as a sink) and `@return-taint <kind>` (parsed as a source, with `none` as a no-op). They exist for cross-tool compatibility only. Do not use them in this repo; the `@psalm-`prefixed forms are the house style and `@return-taint` is skipped entirely when `@psalm-taint-source` is present on the same docblock. Identical in Psalm 6: `FunctionLikeDocblockParser:262-263` for `@param-taint`, `:308` for the `@return-taint` `elseif` that is skipped when a `@psalm-taint-source` tag already parsed.
+
+### `@psalm-assert-untainted`
+
+`@psalm-assert-untainted $param` does not remove a taint *kind*. `ArgumentAnalyzer:985` calls `$input_type->setParentNodes([])`, which detaches the argument's entire dataflow ancestry, so the caller's variable is treated as clean for **every** kind from that point on. Identical in Psalm 6: the same call sits at `ArgumentAnalyzer:989`, guarded by the same `assert_untainted` check one line above.
+
+```php
+/**
+ * @psalm-assert-untainted $value
+ */
+function assertIsSafeIdentifier(string $value): void {}
+```
+
+That is far blunter than `@psalm-taint-escape` and has no `@psalm-flow` counterpart to narrow it. The plugin does not use it in any stub, and new stubs should not: a validator that genuinely constrains a value should escape the specific kinds it constrains. Reach for it only when a function's whole contract is "throws unless the argument is provably safe".
+
+### Version support (Psalm 6 vs Psalm 7)
+
+Everything on this page was checked against both majors: Psalm 7.0.0-beta19 (`master`) and Psalm 6.16.1 (the version line backing `3.x`). The short version: nothing here is Psalm-7-only for a stub author. The two majors implement this surface with different internal classes and, in one spot, a different API, but every annotation behaves the same way from the outside.
+
+| Behavior | Psalm 6 | Psalm 7 | Verified |
+|---|---|---|---|
+| Conditional escape selected by a leading `(` | Same outcome, split across `FunctionLikeDocblockParser` and `FunctionLikeDocblockScanner` | Same outcome, in `FunctionLikeDocblockParser` | Executed, source |
+| Condition binds to a synthetic per-parameter template | Same, `getConditionalSanitizedTypeTokens()` | Same | Source |
+| Non-conditional body rejected with `InvalidDocblock` | Same | Same | Source |
+| Literal-string kind resolution in the true branch | Same effect. No `getOrRegisterTaint()`; the literal value is used directly | Same effect via `$codebase->getOrRegisterTaint()` | Executed, source |
+| Custom taint kind names (`html_url`, `llm_prompt`) inside a conditional | Works | Works | Executed, source |
+| Conditional escape ignored on instance methods and `new` | Same gap | Same gap | Executed, source |
+| `@psalm-assert-untainted` severs every taint kind via `setParentNodes([])` | Same | Same | Source |
+| `@psalm-taint-specialize` read on a class docblock | Same | Same | Source |
+| MediaWiki aliases (`@param-taint`, `@return-taint`), `@return-taint` skipped when `@psalm-taint-source` is present | Same | Same | Source |
+
+Practical takeaway for `3.x` backports: port the annotation as written. The only Psalm-6-vs-7 difference found is that `getOrRegisterTaint()` does not exist in Psalm 6, and that is an internal analyzer detail, not something a stub author calls or depends on.
 
 ## Critical rule: always pair `@psalm-taint-escape` with `@psalm-flow`
 
@@ -87,6 +134,73 @@ public function input($key = null, $default = null) {}
 ```
 
 **Exception (sink-only escapes)**: If a function's return value is never used for taint-sensitive operations (e.g., `Hash::make()` returns a hash that's safe by nature), `@psalm-taint-escape` without `@psalm-flow` is acceptable because there's no meaningful taint to preserve on the return value.
+
+## Conditional escapes (`@psalm-taint-escape (<conditional>)`)
+
+Some functions sanitize only for certain argument values. `filter_var($v, FILTER_VALIDATE_INT)` constrains its output to a digit string; `filter_var($v, FILTER_DEFAULT)` does nothing. A bare `@psalm-taint-escape` cannot express that split: it would escape on every call, including the ones that sanitize nothing.
+
+Psalm's answer is the conditional form. `FunctionLikeDocblockParser:354` selects it purely on a leading `(`:
+
+```php
+} elseif ($param[0] === '(') {
+    $info->conditionally_removed_taints[] = CommentAnalyzer::sanitizeDocblockType($line_parts[0]);
+}
+```
+
+Psalm 6 selects it the same way but the leading-paren check and the conditional-vs-bare split are in different classes than in Psalm 7: `FunctionLikeDocblockParser:359` does the leading-paren check and stores the raw string into the same `removed_taints` array as a bare escape; `FunctionLikeDocblockScanner:381` re-checks the leading paren when building storage and, only then, routes to a dedicated `handleRemovedTaint()` that populates `conditionally_removed_taints` (`FunctionLikeStorage:170`, same field name as Psalm 7). The externally observable behavior is identical; only the split between "parse the tag" and "decide it's conditional" moved between classes.
+
+The canonical use is Psalm's own `filter_var()` stub (`vendor/vimeo/psalm/stubs/CoreGenericFunctions.phpstub:831`):
+
+```php
+/**
+ * @psalm-pure
+ *
+ * 257 is FILTER_VALIDATE_INT
+ * @psalm-taint-escape ($filter is 257 ? 'input_except_sleep' : null)
+ *
+ * 258 is FILTER_VALIDATE_BOOLEAN
+ * @psalm-taint-escape ($filter is 258 ? 'input' : null)
+ *
+ * @psalm-flow ($value, $filter, $options) -> return
+ */
+function filter_var(mixed $value, int $filter = FILTER_DEFAULT, array|int $options = 0): mixed {}
+```
+
+### Semantics
+
+- **The condition names a parameter of the annotated function**, not a class template. `getConditionalSanitizedTypeTokens()` rewrites each `$paramName` token into a synthetic `TGeneratedFromParam<offset>` template bounded by that parameter's declared type. This is the exact machinery behind conditional return types (`@return ($flag is true ? A : B)`), which calls the same helper. At each call site the template binds to the argument's *inferred* type, so the branch resolves from a literal argument and stays unresolved for a non-literal one. Identical in Psalm 6: same method name and same dual use, `FunctionLikeDocblockScanner:448` (definition), called from both the conditional-return path (`:978`) and the conditional-escape path (`:1175`).
+- **The body must parse to a `TConditional`.** `FunctionLikeDocblockScanner:1191` throws `Escaped taint must be a conditional` otherwise, surfaced as `InvalidDocblock` on the stub. Identical in Psalm 6, same message, `FunctionLikeDocblockScanner:1199`.
+- **The true branch is a taint kind as a literal string; the false branch is `null`.** Evaluation (`FunctionCallReturnTypeFetcher:568-592`) expands the resolved type and bails on `if (!$expanded_type->isNullable())`, then feeds every literal string through `$codebase->getOrRegisterTaint()`. So `null` means "no escape", and an unresolved branch (a non-literal argument leaves the conditional collapsed to a union containing `null`) also means no escape. **The failure direction is a false positive, not a false negative**, the same posture the rest of this guide asks for.
+  **Psalm 6 divergence (internal API only):** `getOrRegisterTaint()` does not exist in Psalm 6 at all. The equivalent code (`FunctionCallReturnTypeFetcher:595-599`) runs the identical `isNullable()` bail, then reads `$expanded_type->getLiteralStrings()` and pushes each literal's `->value` straight into the taint list, with no registration step. There is no version where a stub author needs to call this API directly, so the divergence has no effect on how you write annotations; it only means "Psalm 7 registers taint kind strings through a codebase method, Psalm 6 uses them as bare strings" if you ever read the analyzer source itself.
+- **Custom kind names work.** `getOrRegisterTaint()` accepts arbitrary strings, so `html_url` or `llm_prompt` slot into a conditional exactly like a built-in kind. Same outcome in Psalm 6 despite the missing API: a conditional escaping a custom kind (verified with `html_url` against a matching `@psalm-taint-sink html_url` in a fresh fixture) suppresses `TaintedCustom` on the escaped branch and still reports it on the unescaped one.
+- **Multiple tags accumulate.** Each `@psalm-taint-escape (...)` line is evaluated independently and the resulting masks are OR-ed, which is why `filter_var()` lists one per `FILTER_*` constant instead of nesting one large conditional.
+- **`@psalm-flow` is still mandatory**, for the same reason as the bare form: the escape node replaces the return node, so without a declared flow every other kind is dropped too. Note that `filter_var()`'s flow lists `$filter` and `$options` alongside `$value`.
+
+Verified against Psalm 7.0.0-beta19 with a three-case fixture on `filter_var()`, plain Psalm, no plugin:
+
+```php
+$v = filter_var(taintSource(), FILTER_VALIDATE_INT);  // clean: literal 257 selects the escape
+$v = filter_var(taintSource(), $runtimeFilter);       // TaintedHtml: condition unresolved, no escape
+$v = filter_var(taintSource());                       // TaintedHtml: FILTER_DEFAULT sanitizes nothing
+```
+
+The middle case is the one worth remembering: an argument Psalm cannot resolve to a literal produces a report, never a silent pass.
+
+The same fixture run against Psalm 6.16.1 (plain `psalm`, no `--taint-analysis` flag needed because `psalm.xml` sets `runTaintAnalysis="true"`, which puts a Psalm 6 run into taint-only mode) reproduces the same three-way split: clean on the literal-257 call, tainted on the runtime-variable call, tainted on the no-filter call.
+
+### Limitation: instance method calls ignore the conditional form
+
+Only two analyzers read `conditionally_removed_taints`: `FunctionCallReturnTypeFetcher` (plain function calls) and `StaticCallAnalyzer` (static calls). `MethodCallReturnTypeFetcher` reads `$method_storage->removed_taints` (`:536`) but contains **zero** references to `conditionally_removed_taints`, and `NewAnalyzer` does not read it either, even though it already consumes `if_true_assertions` (`:484`), so the hook point exists.
+
+**This gap is not Psalm-7-specific; it is identical in Psalm 6**, confirmed both by source and by an executed fixture. Source: `MethodCallReturnTypeFetcher:543` reads `removed_taints` with the same zero references to `conditionally_removed_taints`; `NewAnalyzer` reads `if_true_assertions` at `:492` and `removed_taints` at `:743`, again with no read of the conditional field. Fixture: an instance method and a static method on the same class, both carrying `@psalm-taint-escape ($filter is 257 ? 'html' : null)` plus a matching `@psalm-flow`, called with the literal that should escape. Under Psalm 6.16.1 the static call comes back clean and the instance call still reports `TaintedHtml`, exactly mirroring the Psalm 7 behavior described above. A stub backported to `3.x` inherits this limitation unchanged; do not expect the port to "just work" on `3.x` where it silently fails on `master`, or vice versa.
+
+The practical consequence for this plugin: a conditional escape on an *instance method* stub is parsed, stored, and then silently never applied. Since nearly every Laravel stub here is an instance method (`Builder::where()`, `Connection::escape()`, `Encrypter::encrypt()`), the conditional form is currently usable only in `stubs/common/**/helpers.phpstub` free functions and on static methods. Do not reach for it on an instance method and assume it works. Write the type test first and watch it fail.
+
+When you need argument-dependent escaping on an instance method today, use a handler instead: `RemoveTaintsInterface` receives an `AddRemoveTaintsEvent` and `MethodCallReturnTypeFetcher:303` dispatches it on the return node of every method call, so the argument inspection happens in PHP where you can gate it however you like. `WhereColumnTaintHandler` is the worked example of argument-shape-dependent stripping (see [PDO parameterized queries](#pdo-parameterized-queries)). Extending Psalm core to consume `conditionally_removed_taints` in `MethodCallReturnTypeFetcher` and `NewAnalyzer` (mirroring `StaticCallAnalyzer:300-351`; Psalm 6: `StaticCallAnalyzer:312-333`) is a small upstream change and the right long-term fix; per the repo's upstream-first policy, propose it there before growing a handler that only exists to work around the gap. Since the gap exists identically in both majors, an upstream fix would need to land on both, or a `3.x` backport of a handler-based workaround stays necessary even after `master` is fixed.
+
+### Where a conditional escape is the wrong tool
+
+A conditional escape ties the escape to an argument of **the call being annotated**. It cannot express "this value is safe because some *other* object, constructed elsewhere, guarantees it". Runtime-guard packages have that shape: the guard is instantiated in one place, registered in a middleware array, and the protected call happens somewhere else entirely with no dataflow edge between them. No annotation closes that gap. The edge has to be synthesized by a handler first, and only then does an annotation on the guard's own method become meaningful.
 
 ## Taint kinds
 
@@ -461,7 +575,7 @@ final class EmailWithDnsRule implements ValidationRule
 **What is honoured:**
 
 - Only `@psalm-taint-escape` at class level. `@psalm-taint-source`, `@psalm-taint-sink`, and `@psalm-flow` are ignored on a class (they have no meaning outside a function-like scope).
-- The bare form (`@psalm-taint-escape header`). The conditional form (`@psalm-taint-escape (...)`) is parameter-scoped and ignored on a class.
+- The bare form (`@psalm-taint-escape header`). The conditional form (`@psalm-taint-escape (...)`) names parameters of a function-like and has nothing to bind to on a class, so it is ignored here. See [Conditional escapes](#conditional-escapes-psalm-taint-escape-conditional).
 - Any `TaintKind` name from the [All available kinds](#all-available-kinds) table (including `input` as a shortcut for all input taints).
 - Rule objects constructed via `new X()` or a static factory `X::method(...)`. Dynamic class names (`new $class()`) and runtime-built rule arrays are out of scope, matching the parser limits elsewhere in `ValidationRuleAnalyzer`.
 - **The annotation is read from the class that appears literally in `rules()`.** Subclassing an annotated rule does NOT inherit its escape. Re-declare the annotation on the subclass if you need it. This keeps the taint contract explicit and reviewable from the Rule class alone.
@@ -522,12 +636,13 @@ These are tracked as follow-ups. Until they are covered, treat the handler as a 
 
 1. **Verify the function's actual behavior** against Laravel source in `vendor/laravel/framework/`
 2. **For database methods, check whether values are PDO-bound or raw SQL**. See [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
-3. **Choose the correct annotation type**: source, sink, escape, or flow
+3. **Choose the correct annotation type and confirm it applies at that scope**: source, sink, escape, or flow. See [Annotations quick reference](#annotations-quick-reference). A tag on the wrong scope is ignored silently, never reported.
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
-5. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7 — see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
-6. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
-7. **Place in `stubs/common/`** under a path matching the Laravel namespace
-8. **Keep taint and type annotations together**. If a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
+5. **If the escape depends on an argument value**: use the conditional form, and check first that the stub is a free function or a static method. Instance methods parse it and silently never apply it. See [Conditional escapes](#conditional-escapes-psalm-taint-escape-conditional)
+6. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7 — see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
+7. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
+8. **Place in `stubs/common/`** under a path matching the Laravel namespace
+9. **Keep taint and type annotations together**. If a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
 
 ## Testing taint stubs
 
