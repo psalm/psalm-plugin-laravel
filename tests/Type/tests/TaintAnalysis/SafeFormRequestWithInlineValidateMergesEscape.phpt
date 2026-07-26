@@ -13,7 +13,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * Here rules() supplies the 'email' string rule (header + cookie escape)
  * and the inline validate() adds a class-level rule that also escapes
  * 'sql'. A subsequent $request->input('email') passes through both paths;
- * redirect()->to() reports only TaintedSSRF, confirming the header/cookie
+ * only the http-client sink's TaintedSSRF fires, confirming the header/cookie
  * escape from rules() survived the OR-merge with the inline path.
  *
  * @psalm-taint-escape sql
@@ -39,6 +39,7 @@ function storeMerge(MergeRequest $request): \Illuminate\Http\RedirectResponse {
         'email' => ['required', new InlineSqlEscapeRule()],
     ]);
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('email'));
     return redirect()->to($request->input('email'));
 }
 ?>

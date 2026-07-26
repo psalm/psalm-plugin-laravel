@@ -329,9 +329,25 @@ public function where($column, $operator = null, $value = null, $boolean = 'and'
 
 Both `$operator` and `$value` appear in `@psalm-flow` because in the **2-argument form** (`where('col', $userValue)`), Laravel's `prepareValueAndOperator()` moves the second argument into the `$value` position (the original `$value = null` is discarded), so user input may arrive via `$operator` at the call site, even though it is always PDO-bound.
 
-The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`.
+The same pattern applies to `orWhere()`, `whereNot()`, `orWhereNot()`, `having()`, and `orHaving()`. `whereLike()`, `orWhereLike()`, `whereNotLike()`, and `orWhereNotLike()` follow it too, minus the `$operator` arm.
 
-The keyed-**map** array form `where(['col' => $value])` is a false positive under the plain sink: `Builder::addArrayOfWheres()` binds each value and uses only the (literal) key as the column, so a tainted value is never interpolated (#734/#733). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint for exactly that shape (a sealed `TKeyedArray` with all-string keys), CALL-SITE-SCOPED: a `BeforeExpressionAnalysis` hook records the first-argument nodes of where-family calls, and only those exact nodes are stripped (so a map that merely happens to have that shape elsewhere, in an assignment, a return, or an element read, keeps its taint). The strip covers `where`, `orWhere`, `whereNot`, `orWhereNot`, and `firstWhere` (exactly the methods whose array form routes through `addArrayOfWheres()`). It does **not** cover `having`/`orHaving`: despite sharing the flow pattern above, their array form never reaches `addArrayOfWheres()` (there is no `is_array($column)` branch), so an array column compiles raw and the sink must stand (issue #734 wrongly proposed including them). See the handler docblock. Do **not** "fix" it by dropping the sink (the string form is a real vector) or by adding `@psalm-taint-specialize` to these stubs, which silently breaks the non-SQL `@psalm-flow` on the value positions (see the specialize note below).
+Most of the **array** form is a false positive under the plain sink, because `Builder::addArrayOfWheres()` re-dispatches each element:
+
+```php
+if (is_numeric($key) && is_array($value)) {
+    $query->{$method}(...array_values($value), boolean: $boolean);  // nested condition
+} else {
+    $query->{$method}($key, '=', $value, $boolean);                 // the key is the column
+}
+```
+
+So only two positions still reach SQL as a raw identifier: the array KEY on the `else` branch, and — on the nested branch — `array_values()` ordinal 0 (`$column`). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint from ordinals 1 and 2 and from the `else`-branch value (#734/#733, #1300), CALL-SITE-SCOPED: a `BeforeExpressionAnalysis` hook records the nodes of where-family first arguments, and only those exact nodes are stripped (so an array that merely happens to have that shape elsewhere, in an assignment, a return, or an element read, keeps its taint). An array LITERAL is walked element-wise; any other argument falls back to a coarse type check that accepts only a sealed `TKeyedArray` with all-string keys.
+
+Both the element-wise and whole-argument strips gate on the receiver being Laravel's own — a project's own class can name a `where()` method without going through `addArrayOfWheres()`. For a `MethodCall`/`NullsafeMethodCall` receiver this is a type check (`isLaravelBuilder`) run at strip time, once the receiver's type exists. A `StaticCall` receiver (`Model::where(...)`) is a class NAME, not a typed expression, and — despite an earlier assumption to the contrary — DOES route through the same stub sink via the pseudo-method (`__callStatic`) path, so it needs the same gate: resolved eagerly at record time (`isStaticReceiverLaravelBound`), accepting only a class that is or extends `Illuminate\Database\Eloquent\Model` or one of the builder classes, and recording nothing at all for an unresolved dynamic class (`$class::where(...)`) or a non-Laravel one (#1300).
+
+Ancestry alone is not enough for a `StaticCall`, though: a Model subclass can declare its OWN concrete static `where()`, which PHP dispatches to directly, never reaching `__callStatic`/`addArrayOfWheres` — so its own sink, if any, must survive. `isStaticReceiverLaravelBound` additionally requires `Codebase::getDeclaringMethodId()` (default `with_pseudo: false`, so the plugin's own `@mixin`-injected forwarding is invisible to it) to find no REAL declaration outside `Illuminate\` for the called method name. Because the `StaticCall` gate is resolved eagerly at record time rather than at strip time from a re-inferred type, a trait method's `static::where([...])` — reanalysed once per class using the trait, reusing the SAME AST nodes each time — needs one more safeguard: a failed gate actively clears any ids an earlier pass (under a different `$context->self`) recorded for those same nodes, rather than merely skipping the record, so a later non-Model pass can never inherit a stale strip (#1300).
+
+The strip covers `where`, `orWhere`, `whereNot`, `orWhereNot`, and `firstWhere` (exactly the methods whose array form routes through `addArrayOfWheres()`). It does **not** cover `having`/`orHaving`: despite sharing the flow pattern above, their array form never reaches `addArrayOfWheres()` (there is no `is_array($column)` branch), so an array column compiles raw and the sink must stand (issue #734 wrongly proposed including them). See the handler docblock. Do **not** "fix" it by dropping the sink (the string form is a real vector) or by adding `@psalm-taint-specialize` to these stubs, which silently breaks the non-SQL `@psalm-flow` on the value positions (see the specialize note below).
 
 ### Pattern for find-family methods
 
@@ -558,7 +574,18 @@ cd /tmp/taint-test && /path/to/vendor/bin/psalm --no-cache
 
 ### Known limitation: Facade static calls
 
-Facade static calls (`DB::unprepared(...)`) may not propagate taint because `__callStatic` loses taint context. The generated alias stubs (`class X extends Y {}`) don't carry taint annotations. Calling the underlying class directly (`DB::connection()->unprepared(...)`) works correctly.
+A facade declares its forwarded surface as class-level `@method` tags resolved through `__callStatic`. Psalm models those as *pseudo* methods, and a pseudo parameter cannot carry `@psalm-taint-sink`: a sink is a per-parameter bitmask populated only from a real docblock, and a `@method` tag has no per-parameter docblock. The annotated methods live on the class the facade forwards to, which the static-call path never consults.
+
+Two mechanisms close this:
+
+- `FacadeTaintForwardingHandler` copies the target class's parameter sinks onto the facade's pseudo-methods once the codebase is populated. It covers `Storage`, `File`, `Artisan`, `Redirect`, `Response`, `Http`, `Process`, and `View`, and the generated root aliases (`\Storage::get(...)`) inherit the same pseudo-method storage, so they are covered too.
+- A hand-written facade stub declaring the forwarded methods as real statics, as in `stubs/common/Support/Facades/DB.phpstub`. Heavier to maintain (every signature is restated and can drift from Laravel), so prefer the handler unless the facade also needs type overrides.
+
+The limitation still applies to any facade covered by neither: user-defined facades, and core facades outside the map (`App::make(...)` is the notable one). Calling the underlying class directly always works, because the receiver is the real annotated class: `DB::connection()->unprepared(...)`, `Storage::disk()->get(...)`.
+
+A variadic sink covers only its first argument, on either call form. `Filesystem::delete()` and `FilesystemAdapter::delete()` accept an array or variadic string arguments (`func_get_args()` at runtime), so their stubs carry `@psalm-variadic` next to the sink. That tag only relaxes the arity check and does not spread the sink across the extra arguments, so `Storage::disk('local')->delete($safe, $tainted)` goes unreported. The static facade form misses it too, because a flat `@method` tag cannot express variadic at all, though there the call is at least loud (Psalm reports `TooManyArguments`). Prefer the array form, `delete([$safe, $tainted])`, which is fully covered on both paths.
+
+To cover another core facade, add `Facade::class => [TargetClass::class]` to `FacadeTaintForwardingHandler::FACADE_TARGETS`, confirm against `vendor/laravel/framework` that the facade's `@method` tags mirror the target's real signatures (the copy matches on both parameter offset and parameter name, so a drifted tag is skipped rather than mis-assigned), and add a `.phpt` under `tests/Type/tests/TaintAnalysis/`.
 
 ## LLM prompt-injection sinks (`laravel/ai`)
 

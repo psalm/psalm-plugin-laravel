@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Enforce PHPT authoring conventions for the type-test suite (tests/Type/tests).
-# See tests/Type/CLAUDE.local.md for the rationale.
+# See the Conventions section of tests/Type/README.md for the rationale.
 #
 # Rules:
 #   1. Use the `--EXPECTF--` section, never `--EXPECT--`. EXPECTF supports the

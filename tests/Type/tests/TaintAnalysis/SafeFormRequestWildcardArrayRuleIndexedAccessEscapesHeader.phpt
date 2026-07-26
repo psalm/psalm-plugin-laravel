@@ -32,6 +32,7 @@ final class WildcardEmailRequest extends FormRequest
 
 /** @psalm-suppress MixedArgument */
 function storeWildcardFormRequest(WildcardEmailRequest $request): \Illuminate\Http\RedirectResponse {
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('emails.0'));
     return redirect()->to($request->input('emails.0'));
 }
 ?>

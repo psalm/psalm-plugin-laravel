@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
  * pair above) would silently strip header/cookie taint from the raw
  * `$_GET` element on the loop-variable edge.
  *
- * Both TaintedHeader and TaintedSSRF must fire for the redirect — that
+ * TaintedHeader must fire for the redirect — that
  * proves the loop-variable cache was correctly evicted before
  * `AssignmentAnalyzer` dispatched the LHS taint event for the binding.
  *
@@ -43,4 +43,3 @@ function foreachReassignProbe(Request $request): RedirectResponse {
 ?>
 --EXPECTF--
 TaintedHeader on line %d: Detected tainted header
-TaintedSSRF on line %d: Detected tainted network request

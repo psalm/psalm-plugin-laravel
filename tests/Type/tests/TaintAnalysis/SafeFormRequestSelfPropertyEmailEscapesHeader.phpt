@@ -12,9 +12,12 @@ use Illuminate\Foundation\Http\FormRequest;
  * a FormRequest narrow via FormRequestPropertyHandler, and the paired taint
  * paths in ValidationTaintHandler must:
  *
- *   1. Re-source ALL_INPUT (no stub `@psalm-taint-source` exists on `__get`,
- *      so the property handler returning a Union would otherwise leak the
- *      input pool with no taint at all).
+ *   1. Re-source ALL_INPUT. FormRequestPropertyHandler's `doesPropertyExist()`
+ *      claims the fetch before Psalm ever reaches `Request::__get`, so that
+ *      stub's own `@psalm-taint-source` (added for bare Request reads in
+ *      #1301) never applies here. Without the manual re-source, the
+ *      property handler's Union would leak the input pool with no taint
+ *      at all.
  *   2. Apply the rule's `removedTaints` mask so the same per-rule escape
  *      that fires on `$this->input('email')` also fires on `$this->email`.
  *

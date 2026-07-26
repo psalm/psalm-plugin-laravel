@@ -18,6 +18,10 @@ class ResponseFactory implements FactoryContract
      */
     public function make($content = '', $status = 200, array $headers = []) {}
 
+    // $data is intentionally NOT an html sink: it is JSON-encoded and served as
+    // application/json, which browsers do not render as HTML. Reaching XSS from here needs
+    // legacy content-sniffing AND the app dropping nosniff, too weak a chain to justify a
+    // default-on sink. `jsonp()` below is different: that response IS executed as script.
     /**
      * Create a new JSON response instance.
      *
@@ -26,8 +30,6 @@ class ResponseFactory implements FactoryContract
      * @param  array  $headers
      * @param  int  $options
      * @return \Illuminate\Http\JsonResponse
-     *
-     * @psalm-taint-sink html $data
      */
     public function json($data = [], $status = 200, array $headers = [], $options = 0) {}
 
@@ -48,6 +50,8 @@ class ResponseFactory implements FactoryContract
 
     // View data ($data) is intentionally NOT marked as @psalm-taint-sink html.
     // Blade auto-escapes all {{ $var }} output — see Factory.phpstub for full rationale.
+    // The view NAME is a different matter: this forwards it to Factory::make() (or
+    // Factory::first() for the array form), so it resolves to an arbitrary blade path.
     /**
      * Create a new response for a given view.
      *
@@ -56,6 +60,9 @@ class ResponseFactory implements FactoryContract
      * @param  int  $status
      * @param  array  $headers
      * @return \Illuminate\Http\Response
+     *
+     * @psalm-taint-sink file $view
+     * @psalm-taint-sink include $view
      */
     public function view($view, $data = [], $status = 200, array $headers = []) {}
 
@@ -92,7 +99,6 @@ class ResponseFactory implements FactoryContract
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink ssrf $path
      * @psalm-taint-sink header $path
      */
     public function redirectTo($path, $status = 302, $headers = [], $secure = null) {}
@@ -106,7 +112,6 @@ class ResponseFactory implements FactoryContract
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink ssrf $path
      * @psalm-taint-sink header $path
      */
     public function redirectGuest($path, $status = 302, $headers = [], $secure = null) {}
@@ -120,7 +125,6 @@ class ResponseFactory implements FactoryContract
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink ssrf $default
      * @psalm-taint-sink header $default
      */
     public function redirectToIntended($default = '/', $status = 302, $headers = [], $secure = null) {}

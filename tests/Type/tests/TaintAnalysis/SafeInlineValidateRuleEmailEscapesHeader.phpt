@@ -18,6 +18,7 @@ function store(Request $request): RedirectResponse {
         'reply_to' => ['required', Rule::email()],
     ]);
 
+    (new \Illuminate\Http\Client\PendingRequest())->get($request->input('reply_to'));
     return redirect()->to($request->input('reply_to'));
 }
 ?>
