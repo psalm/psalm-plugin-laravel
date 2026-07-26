@@ -95,11 +95,11 @@ final class LlmOutputTaintHandlerTest extends TestCase
     #[Test]
     public function it_does_not_source_array_access_reads(): void
     {
-        // Psalm's ArrayFetchAnalyzer discards the taint edge when it desugars
-        // `$response['field']`, so an ArrayDimFetch branch here would be a
-        // workaround for a core gap on one of the hottest node types. Pinned so
-        // the deferral is a decision rather than an oversight; the flows it
-        // leaves uncovered are in the *KnownLimitation.phpt fixtures.
+        // Psalm discards the taint edge when it resolves `$response['field']`
+        // (https://github.com/vimeo/psalm/issues/11912), so an ArrayDimFetch
+        // branch here would work around a core gap on one of the hottest node
+        // types. Pinned so the deferral is a decision rather than an oversight;
+        // the flows it leaves uncovered are in the *KnownLimitation.phpt fixtures.
         $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
         $event = $this->createEvent(
             expr: new ArrayDimFetch(new Variable('response'), new String_('summary')),

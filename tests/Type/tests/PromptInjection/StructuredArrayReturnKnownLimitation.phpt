@@ -22,9 +22,9 @@ namespace App\StructuredArrayLimit;
  * real project run. The same fixture reports TaintedSql when Psalm analyzes the
  * file on its own, so this is the upstream hop-loss, not a missing annotation.
  *
- * Direct array access on the response object (`$response['body']`) is unaffected
- * and is covered by StructuredResponseArrayAccess.phpt: LlmOutputTaintHandler
- * sources it at the read site rather than through a dataflow hop.
+ * Direct array access on the response object (`$response['body']`) is uncovered
+ * for a different upstream reason (https://github.com/vimeo/psalm/issues/11912),
+ * pinned separately by StructuredResponseArrayAccessKnownLimitation.phpt.
  *
  * Empty expectations make this a canary: it turns red once the hop survives, at
  * which point the accompanying caveat should be deleted.

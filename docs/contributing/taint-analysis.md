@@ -700,9 +700,9 @@ The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and
 
 ### Array-access sources do not work: `$response['field']` (upstream gap)
 
-`@psalm-taint-source` on `offsetGet()` sources an explicit `$response->offsetGet('field')` call and nothing else. Psalm's `ArrayFetchAnalyzer` handles the `$response['field']` sugar by synthesizing a `VirtualMethodCall` to `offsetGet()` inside a **cloned** node-data set, then copying back only the resulting type. The taint edge lives in the clone and is discarded (same upstream gap as `#1304`).
+`@psalm-taint-source` on `offsetGet()` sources an explicit `$response->offsetGet('field')` call and nothing else. Psalm's `ArrayFetchAnalyzer` resolves the `$response['field']` sugar by synthesizing a `VirtualMethodCall` to `offsetGet()`, analyzing it against a **cloned** node-data set, then copying back only the resulting type. Everything that call recorded about data flow stays in the clone and is discarded, so no edge reaches the outer expression. Type inference is unaffected, which is why the gap is invisible without a taint test.
 
-This is a Psalm core soundness bug, not a Laravel one. It silently breaks every `ArrayAccess`-based taint source in any codebase, so it belongs upstream rather than in a plugin workaround. Do not add an annotation and assume the sugar is covered.
+The loss is not specific to source annotations: any taint edge crossing the sugar is dropped, including a plain argument-to-return pass through `offsetGet()`. This is a Psalm core soundness bug, not a Laravel one, and it silently breaks every `ArrayAccess`-based taint source in any codebase. Filed upstream as [vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912); `#1304` here was closed for the same reason. Do not add an annotation and assume the sugar is covered.
 
 An `ArrayDimFetch` branch on `LlmOutputTaintHandler` would close it, and was prototyped, but is deliberately not shipped: `ArrayDimFetch` is among the hottest node types in any codebase, so the branch charges a per-expression cost on every analysis, and it becomes dead code the moment upstream lands. Keep the `offsetGet()` annotations anyway, since the explicit call form is genuinely covered by them.
 

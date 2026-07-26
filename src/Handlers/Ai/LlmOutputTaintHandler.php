@@ -43,17 +43,13 @@ use Psalm\Type\TaintKind;
  * subclass walk below reaches them.
  *
  * Array-access reads (`$response['field']`, `$request['task']`) are covered by
- * nothing, here or in the stubs. Psalm's `ArrayFetchAnalyzer` handles the `[]`
- * sugar by synthesizing a `VirtualMethodCall` to `offsetGet()` in a cloned
- * node-data set and copying back only the resulting type, so the taint edge
- * from the stub annotation on `offsetGet()` is discarded. That is a Psalm core
- * soundness gap affecting every `ArrayAccess`-based taint source rather than
- * anything Laravel-specific, so it belongs upstream. An `ArrayDimFetch` branch
- * here would close it, but that node type is among the hottest in any codebase
- * and the branch turns into dead code the moment upstream lands, so the gap is
- * accepted and pinned by the `*KnownLimitation.phpt` fixtures instead. The
- * covered paths for structured output are an explicit
- * `$response->offsetGet('field')` call and `toArray()`.
+ * nothing, here or in the stubs: Psalm discards the taint edge when it resolves
+ * the `[]` sugar, so an `ArrayDimFetch` branch here would work around a core gap
+ * on one of the hottest node types. Deferred to upstream
+ * (https://github.com/vimeo/psalm/issues/11912) and pinned by the
+ * `*KnownLimitation.phpt` fixtures. The covered paths for structured output are
+ * an explicit `$response->offsetGet('field')` call and `toArray()`. Mechanism
+ * and rationale: `docs/contributing/taint-analysis.md`.
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  * @see https://github.com/laravel/ai Laravel AI SDK

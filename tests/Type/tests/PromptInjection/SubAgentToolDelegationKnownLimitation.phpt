@@ -30,12 +30,10 @@ final class ResearchSubAgent
  * `@psalm-taint-source input` and Promptable::prompt() is an `llm_prompt` sink,
  * so the composition should report TaintedLlmPrompt.
  *
- * It does not, because Psalm's ArrayFetchAnalyzer resolves the `$request['task']`
- * sugar by synthesizing a VirtualMethodCall to offsetGet() in a cloned node-data
- * set and copying back only the resulting type. The taint edge lives in the clone
- * and is discarded. That breaks every ArrayAccess-based taint source, so it is a
- * Psalm core gap rather than a Laravel one, and it is left for an upstream fix.
- * Writing the same call as `$request->offsetGet('task')` does report.
+ * It does not, because Psalm discards the taint edge when it resolves the
+ * `$request['task']` sugar into an offsetGet() call
+ * (https://github.com/vimeo/psalm/issues/11912). Writing the same call as
+ * `$request->offsetGet('task')` does report.
  *
  * When upstream lands, this test fails loudly. Replace it then with the positive
  * assertion (`%ATaintedLlmPrompt on line %d: Detected tainted LLM prompt`) and

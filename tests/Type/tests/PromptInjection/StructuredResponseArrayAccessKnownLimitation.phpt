@@ -17,8 +17,9 @@ namespace App\StructuredOutput;
 
 /**
  * Known limitation, same upstream cause as SubAgentToolDelegationKnownLimitation.phpt:
- * Psalm's ArrayFetchAnalyzer drops the taint edge when it desugars `$x['k']` into a
- * synthesized offsetGet() call. Empty expectations assert the current behavior.
+ * Psalm drops the taint edge when it resolves the `$x['k']` sugar
+ * (https://github.com/vimeo/psalm/issues/11912). Empty expectations assert the
+ * current behavior.
  *
  * Structured output is still model output, so both reads below should report
  * TaintedHtml. The covered alternatives today are the explicit

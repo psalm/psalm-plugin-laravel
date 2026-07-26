@@ -9,14 +9,12 @@ namespace Laravel\Ai\Responses;
  * is the same trust boundary as reading `$response->text`.
  *
  * IMPORTANT: `$response['k']` is NOT analysed. The annotation below reaches only
- * an explicit `$response->offsetGet('k')` call. Psalm's ArrayFetchAnalyzer
- * desugars the array-access form into a synthesized offsetGet() call inside a
- * cloned node-data set and copies back only the resulting type, so the taint
- * edge is discarded. Nothing in this plugin compensates: the gap affects every
- * ArrayAccess-based taint source, so it is left for an upstream Psalm fix. The
- * covered paths for structured output are `offsetGet()` called explicitly and
- * `toArray()`; `StructuredResponseArrayAccessKnownLimitation.phpt` pins the
- * uncovered one.
+ * an explicit `$response->offsetGet('k')` call, because Psalm discards the taint
+ * edge when it resolves the array-access sugar
+ * (https://github.com/vimeo/psalm/issues/11912). Nothing in this plugin
+ * compensates. The covered paths for structured output are `offsetGet()` called
+ * explicitly and `toArray()`; `StructuredResponseArrayAccessKnownLimitation.phpt`
+ * pins the uncovered one.
  *
  * Member list mirrors
  * `vendor/laravel/ai/src/Responses/ProvidesStructuredResponse.php`.

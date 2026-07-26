@@ -88,10 +88,9 @@ yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in
 [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
 
 Array-access reads (`$response['field']`, `$request['task']`) are not covered
-either, on any class. Psalm resolves the `[]` sugar through a synthesized
-`offsetGet()` call in a cloned node-data set and copies back only the resulting
-type, so the taint edge is dropped. That affects every `ArrayAccess`-based taint
-source, so it is left for an upstream fix rather than worked around. It is worth
+either, on any class: Psalm drops the taint edge when it resolves the `[]` sugar,
+which affects every `ArrayAccess`-based taint source and is left for an upstream
+fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)). It is worth
 knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to
 a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit
 `offsetGet()` call, all of which are covered.
