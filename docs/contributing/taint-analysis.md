@@ -47,6 +47,13 @@ Two reasons for the version range:
 
 When adding a new integration, gate it on both `isInstalled()` (cheap presence check) and `satisfies()` (range guard), then drop the stubs into a new directory under `stubs/integrations/`.
 
+**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from signature drift. Two CI legs compensate, both running weekly (Friday 06:00 UTC) and via `workflow_dispatch` regardless of which files changed:
+
+- `type_tests_laravel_ai` (`.github/workflows/tests.yml`) installs the newest `laravel/ai` release and runs the PromptInjection phpt suite, then asserts the suite actually executed rather than trusting a green exit code. Every PromptInjection phpt carries a SKIPIF gated on `laravel/ai` class presence (M5/M6), so a failed install SKIPs every phpt and would otherwise report a silent pass.
+- The PHP >= 8.3 cells of `test-laravel-app.yml` install the newest `laravel/ai` release against real reflection (`tests/Application/laravel-test.sh`), catching drift a stub-only test cannot see.
+
+A drifted signature fails one of these legs with the exact class/method/line from the psalm-tester diff or the compact psalm output, not a bare "tests failed."
+
 ## Annotations quick reference
 
 Psalm parses eight taint-related tags. The first four are the ones you'll use most in stubs.

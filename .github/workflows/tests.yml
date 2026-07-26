@@ -159,6 +159,12 @@ jobs:
       - name: Run Psalm/Type tests
         run: composer test:type
 
+  # This job doubles as the Phase 1 "drift canary" for the laravel/ai integration
+  # (design: .alies/docs/design-laravel-ai-taint.md, mechanism M1). The version range
+  # in Plugin::optionalIntegrationStubs() has no upper ceiling below 1.0, so every run
+  # here installs whatever laravel/ai release is newest, and the weekly schedule plus
+  # workflow_dispatch trigger (inherited from the workflow-level `on:` block above)
+  # already exercise that install on a cadence independent of PHP-file changes.
   type_tests_laravel_ai:
     name: Type test (laravel/ai)
     runs-on: ubuntu-latest
@@ -192,3 +198,47 @@ jobs:
 
       - name: Run Psalm/Type tests
         run: composer test:type
+
+      - name: Report laravel/ai signature drift
+        # composer test:type already fails loudly here: a stub/handler mismatch surfaces
+        # as a psalm-tester unified diff naming the exact issue, class, method, and line
+        # (see the "Failed asserting that string matches format description" block above).
+        # This banner just makes that alarm impossible to miss among the rest of CI.
+        if: failure()
+        run: |
+          echo "::error::laravel/ai signature drift suspected. The 'Run Psalm/Type tests' step above failed" \
+            "while running against the newest installed laravel/ai release. Scroll up to the psalm-tester" \
+            "diff for the exact drifted class/method/issue, or reproduce locally with:" \
+            "composer require --dev 'laravel/ai:>=0.10.0 <1.0.0' && composer test:type"
+
+      - name: Verify the PromptInjection phpt suite actually ran
+        # M6/M5 (design: .alies/docs/design-laravel-ai-taint.md): every PromptInjection phpt
+        # carries a --taint-analysis ARGS section and a SKIPIF gate on laravel/ai class
+        # presence, so a run where the package failed to install, or where the SKIPIF check
+        # itself drifted, SKIPs every phpt and composer test:type still exits 0. A canary
+        # that goes silently green is worse than no canary, so assert real execution
+        # instead of trusting the exit code alone.
+        run: |
+          vendor/bin/phpunit --testsuite=type --filter=PromptInjection --no-progress \
+            --log-junit=/tmp/prompt-injection-junit.xml
+
+          SUMMARY=$(grep -m1 '<testsuite ' /tmp/prompt-injection-junit.xml)
+          TESTS=$(echo "$SUMMARY" | grep -oP 'tests="\K[0-9]+')
+          SKIPPED=$(echo "$SUMMARY" | grep -oP 'skipped="\K[0-9]+')
+          echo "PromptInjection suite: ${TESTS} tests, ${SKIPPED} skipped"
+
+          if [ -z "$TESTS" ] || [ "$TESTS" -eq 0 ]; then
+            echo "::error::No PromptInjection phpt tests were collected. The --filter pattern or" \
+              "tests/Type/tests/PromptInjection/ layout may have changed."
+            exit 1
+          fi
+          if [ "$SKIPPED" -ge "$TESTS" ]; then
+            echo "::error::Every PromptInjection phpt was skipped (${SKIPPED}/${TESTS}). laravel/ai" \
+              "likely failed to install, or every SKIPIF class-presence guard is stale. This run is" \
+              "NOT exercising taint coverage."
+            exit 1
+          fi
+          if [ "$SKIPPED" -gt 0 ]; then
+            echo "::warning::${SKIPPED}/${TESTS} PromptInjection phpts skipped. Check their SKIPIF" \
+              "conditions against the installed laravel/ai version."
+          fi
