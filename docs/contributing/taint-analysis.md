@@ -701,7 +701,9 @@ Psalm honors `@psalm-taint-source` on **method return types** but not on **prope
 
 The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the `$text` list. `TranscriptionResponse` is named explicitly because it sits in its own hierarchy (it does not extend `TextResponse`), so no walk reaches it.
 
-Casts are a separate path, and missing one is easy: `__toString()` is a method return, so it takes a plain stub annotation, but a subclass that overrides `__toString()` drops the parent's. Each of `TextResponse`, `AgentResponse`, `StreamableAgentResponse`, `TranscriptionResponse`, `StructuredAgentResponse` and `StructuredTextResponse` therefore carries its own. Adding a class to `TAINTED_PROPERTIES` covers the property read only; check whether the class also declares `__toString()` and needs the stub.
+Casts are a separate path, and missing one is easy: `__toString()` is a method return, so it takes a plain stub annotation, but a subclass that overrides `__toString()` drops the parent's. Each of `TextResponse`, `AgentResponse`, `TranscriptionResponse`, `StructuredAgentResponse` and `StructuredTextResponse` therefore carries its own. Adding a class to `TAINTED_PROPERTIES` covers the property read only; check whether the class also declares `__toString()` and needs the stub.
+
+Check that it really declares one. `StreamableAgentResponse` is the exception in this package: it has no `__toString()`, and the stub declared one anyway to hang the annotation off. The annotation was inert, and worse, the declaration told Psalm that `(string) $response` type-checks when it fatals at runtime, suppressing an `InvalidCast` the user should have seen. A stub that invents API is worse than a missing stub, because the invented member silences real errors instead of merely missing them. `StreamableResponseHasNoStringCast.phpt` pins the corrected behavior.
 
 ### Array-access sources do not work: `$response['field']` (upstream gap)
 
