@@ -16,24 +16,34 @@ if (!trait_exists(\Laravel\Ai\Promptable::class)) {
 namespace App\StructuredArrayLimit;
 
 /**
- * Known limitation, not a design choice. `toArray()` carries
- * `@psalm-taint-source input`, but consuming the returned array element-wise
- * loses the edge under whole-project analysis, which is how this suite and a
- * real project run. The same fixture reports TaintedSql when Psalm analyzes the
- * file on its own, so this is the upstream hop-loss, not a missing annotation.
+ * Known limitation, not a design choice. Both the `toArray()` return and the
+ * `$structured` property carry the `input` taint, but reading a single element
+ * out of the resulting array loses the edge under whole-project analysis, which
+ * is how this suite and a real project run. Both fixtures below report
+ * TaintedSql when Psalm analyzes the file on its own, so this is the upstream
+ * hop-loss, not a missing source.
+ *
+ * What survives is a zero-hop consumption of the whole payload, which is why the
+ * positive coverage in StructuredPayloadProperty.phpt sinks the array itself.
  *
  * Direct array access on the response object (`$response['body']`) is uncovered
  * for a different upstream reason (https://github.com/vimeo/psalm/issues/11912),
  * pinned separately by StructuredResponseArrayAccessKnownLimitation.phpt.
  *
  * Empty expectations make this a canary: it turns red once the hop survives, at
- * which point the accompanying caveat should be deleted.
+ * which point the accompanying caveats should be deleted.
  */
 function readStructuredElement(\Laravel\Ai\Responses\StructuredAgentResponse $response): void {
     $payload = $response->toArray();
 
     if (isset($payload['body'])) {
         \Illuminate\Support\Facades\DB::select('SELECT * FROM notes WHERE body = ' . (string) $payload['body']);
+    }
+}
+
+function readStructuredPropertyElement(\Laravel\Ai\Responses\StructuredAgentResponse $response): void {
+    if (isset($response->structured['body'])) {
+        \Illuminate\Support\Facades\DB::select('SELECT * FROM notes WHERE body = ' . (string) $response->structured['body']);
     }
 }
 ?>

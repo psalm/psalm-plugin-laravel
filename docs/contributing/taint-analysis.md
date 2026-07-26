@@ -694,9 +694,14 @@ Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\L
 
 Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**: `PropertyStorage` carries no taint fields at all, so the annotation is dropped at scan time rather than misapplied. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
 
-`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches reads of `$x->text` where `$x` is or extends one of `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse, TranscriptionResponse}`, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. The stub at `stubs/integrations/laravel-ai/Responses/TextResponse.phpstub` additionally annotates `__toString()` so the same taint flows through string casts.
+`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches the read, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. `TAINTED_PROPERTIES` maps each property name to the classes that declare it, rather than crossing one class list with one property list, because the two properties sit on different parts of the hierarchy:
 
-The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the list. `TranscriptionResponse` is named explicitly because it sits in its own hierarchy (it does not extend `TextResponse`), so no walk reaches it.
+- `$text` on `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse, TranscriptionResponse}`.
+- `$structured` on `Laravel\Ai\Responses\{StructuredAgentResponse, StructuredTextResponse}`, the decoded payload the `ProvidesStructuredResponse` trait declares as a public array. laravel/ai's own `ChatCommand` reads it, so it is a first-class access path rather than an internal.
+
+The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the `$text` list. `TranscriptionResponse` is named explicitly because it sits in its own hierarchy (it does not extend `TextResponse`), so no walk reaches it.
+
+Casts are a separate path, and missing one is easy: `__toString()` is a method return, so it takes a plain stub annotation, but a subclass that overrides `__toString()` drops the parent's. Each of `TextResponse`, `AgentResponse`, `StreamableAgentResponse`, `TranscriptionResponse`, `StructuredAgentResponse` and `StructuredTextResponse` therefore carries its own. Adding a class to `TAINTED_PROPERTIES` covers the property read only; check whether the class also declares `__toString()` and needs the stub.
 
 ### Array-access sources do not work: `$response['field']` (upstream gap)
 
@@ -710,9 +715,11 @@ What that costs, pinned by fixtures rather than left implicit:
 
 - `SubAgentToolDelegationKnownLimitation.phpt`: `Tools\AgentTool::handle()` forwards `(string) $request['task']` straight into a sub-agent's `prompt()`, so the whole delegation chain is silent.
 - `StructuredResponseArrayAccessKnownLimitation.phpt`: `$response['field']` on the structured responses.
-- `StructuredArrayReturnKnownLimitation.phpt` is a *different* gap with the same shape of consequence: `toArray()` carries a source annotation, but consuming the returned array element-wise loses the edge under whole-project analysis. The same fixture reports the flow when Psalm analyzes the file alone, so it is the hop-loss bug rather than a missing annotation.
+- `StructuredArrayReturnKnownLimitation.phpt` is a *different* gap with the same shape of consequence. Both the `toArray()` return and the `$structured` property are sourced, but reading one element back out of the resulting array loses the edge under whole-project analysis. The same fixtures report the flow when Psalm analyzes the file alone, so it is the hop-loss bug rather than a missing source.
 
 All three assert the current (wrong) behavior with empty expectations, so an upstream fix turns them red and names itself.
+
+The practical consequence for writing positive coverage: a source whose type is an array needs a zero-hop sink in the fixture, or the test passes vacuously in the batch while looking like it proves something. `StructuredPayloadProperty.phpt` passes the whole payload to `extract()` for exactly that reason.
 
 The handler is registered in `Plugin::registerHandlers()` behind the same version gate as the stubs, and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
 

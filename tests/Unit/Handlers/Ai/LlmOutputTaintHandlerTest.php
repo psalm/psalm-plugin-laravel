@@ -74,9 +74,7 @@ final class LlmOutputTaintHandlerTest extends TestCase
     #[Test]
     public function it_lists_all_known_response_classes(): void
     {
-        $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
-        /** @var list<string> $taintedClasses */
-        $taintedClasses = $reflection->getReflectionConstant('TAINTED_CLASSES')?->getValue() ?? [];
+        $taintedClasses = $this->taintedProperties()['text'] ?? [];
 
         $this->assertContains('Laravel\\Ai\\Responses\\TextResponse', $taintedClasses);
         $this->assertContains('Laravel\\Ai\\Responses\\AgentResponse', $taintedClasses);
@@ -111,13 +109,29 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_only_taints_the_text_property(): void
+    public function it_scopes_the_structured_payload_to_the_structured_responses(): void
+    {
+        // Not a cross-product with the $text class list: only these two declare
+        // $structured, and tainting the property on a class that does not have it
+        // would source whatever a user subclass happens to name the same way.
+        $this->assertSame([
+            'Laravel\\Ai\\Responses\\StructuredAgentResponse',
+            'Laravel\\Ai\\Responses\\StructuredTextResponse',
+        ], $this->taintedProperties()['structured'] ?? []);
+    }
+
+    #[Test]
+    public function it_only_taints_the_known_payload_properties(): void
+    {
+        $this->assertSame(['text', 'structured'], array_keys($this->taintedProperties()));
+    }
+
+    /** @return array<string, list<string>> */
+    private function taintedProperties(): array
     {
         $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
-        /** @var list<string> $taintedProperties */
-        $taintedProperties = $reflection->getReflectionConstant('TAINTED_PROPERTIES')?->getValue() ?? [];
 
-        $this->assertSame(['text'], $taintedProperties);
+        return $reflection->getReflectionConstant('TAINTED_PROPERTIES')?->getValue() ?? [];
     }
 
     private function propertyFetch(string $propertyName): PropertyFetch
