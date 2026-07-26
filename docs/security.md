@@ -18,6 +18,10 @@ nav_order: 6
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
 
+`UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
+Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
+slash-, backslash-, and dot-free extension, which cannot form a traversal segment.
+
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
 ### Timing-unsafe secret comparison (CWE-208)

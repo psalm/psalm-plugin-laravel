@@ -34,10 +34,28 @@ class UploadedFile
 
     /**
      * Returns the original file extension supplied by the client.
+     * Symfony File::getName() makes the original name a basename and
+     * UploadedFile::getClientOriginalExtension() returns its dot-free extension.
+     * The result has no /, \\, or . and cannot form a traversal segment.
      *
      * @return string
      *
-     * @psalm-taint-source input
+     * @psalm-taint-source callable
+     * @psalm-taint-source unserialize
+     * @psalm-taint-source include
+     * @psalm-taint-source eval
+     * @psalm-taint-source ldap
+     * @psalm-taint-source sql
+     * @psalm-taint-source html
+     * @psalm-taint-source has_quotes
+     * @psalm-taint-source shell
+     * @psalm-taint-source ssrf
+     * @psalm-taint-source cookie
+     * @psalm-taint-source header
+     * @psalm-taint-source xpath
+     * @psalm-taint-source sleep
+     * @psalm-taint-source extract
+     * @psalm-taint-source llm_prompt
      */
     public function getClientOriginalExtension(): string {}
 
