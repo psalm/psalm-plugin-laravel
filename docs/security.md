@@ -17,6 +17,7 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
+| Prompt injection | LLM01:2025 | `laravel/ai` agents: `Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, `Embeddings::for()` |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
@@ -53,6 +54,29 @@ flagged location is the comparison itself. The message text is the generic
 Psalm hardcodes taint messages per kind ([vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762)).
 Treat any such finding from this plugin as a timing issue and fix it with
 `hash_equals()`.
+
+### LLM prompt injection (OWASP LLM01:2025)
+
+Applies to projects using `laravel/ai`. The stubs and the LLM-output handler load
+only when that package is installed and satisfies `>=0.10.0 <1.0.0`, so projects
+without it pay nothing.
+
+Two directions are covered:
+
+* Untrusted input reaching a prompt is reported as `TaintedLlmPrompt`. Sinks are
+  `Promptable::prompt()` / `stream()` / `queue()` / `broadcast*()`, the
+  `Laravel\Ai\agent()` helper, `AgentPrompt::prepend()` / `append()` / `revise()`,
+  `Embeddings::for()`, `Tools\Document::fromString()` / `fromBase64()`, and the
+  `Messages\UserMessage` / `Messages\Message` constructors.
+* Model output is itself a taint source. Reading `$response->text` (or casting the
+  response to string) yields tainted data, so an answer echoed into HTML, SQL, or a
+  shell command is reported like any other user input. That models indirect prompt
+  injection, where the payload arrives through a page, document, or tool result the
+  model read.
+
+Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
+yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in
+[#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
 
 ### How it compares
 
