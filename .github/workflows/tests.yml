@@ -188,7 +188,7 @@ jobs:
       # ^8.3, so it is installed here rather than in composer.json to keep it off the PHP 8.2
       # lanes. This is the only leg where the PromptInjection PHPT suite actually runs.
       - name: Install optional laravel/ai integration
-        run: composer require --dev "laravel/ai:>=0.9.0 <1.0.0" --no-interaction --no-progress
+        run: composer require --dev "laravel/ai:>=0.10.0 <1.0.0" --no-interaction --no-progress
 
       - name: Run Psalm/Type tests
         run: composer test:type

@@ -245,7 +245,7 @@ quiet_run "composer require psalm/plugin-laravel" \
         "psalm/plugin-laravel:*" --update-with-all-dependencies
 
 # Install laravel/ai so the integration stubs are loaded under real reflection.
-# The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=0.9.0 <1.0.0')`,
+# The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=0.10.0 <1.0.0')`,
 # so without this install the application-level integration tests would silently
 # skip the entire laravel/ai surface — including the next-release drift detector
 # (a stub method signature that no longer matches the real source surfaces as a
@@ -255,7 +255,7 @@ quiet_run "composer require psalm/plugin-laravel" \
 if php -r 'exit(version_compare(PHP_VERSION, "8.3.0", "<") ? 1 : 0);'; then
     quiet_run "composer require laravel/ai" \
         composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n \
-            "laravel/ai:>=0.9.0 <1.0.0"
+            "laravel/ai:>=0.10.0 <1.0.0"
 else
     info "Skipping laravel/ai install: requires PHP >=8.3, running $(php -r 'echo PHP_VERSION;')"
 fi
