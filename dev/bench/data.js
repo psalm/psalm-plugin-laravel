@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785047810958,
+  "lastUpdate": 1785082275502,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9510,6 +9510,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.28,
             "range": "± 0.54",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c468e88de78bb86192b4e278929fd47da8399f80",
+          "message": "fix(taint): trust mapped client extensions (#1325)",
+          "timestamp": "2026-07-26T18:08:26+02:00",
+          "tree_id": "3ba1adbcc442cb6b33e7e0cc0d3cfee88c05e045",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c468e88de78bb86192b4e278929fd47da8399f80"
+        },
+        "date": 1785082274876,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.69,
+            "range": "± 0.21",
             "unit": "s"
           },
           {
