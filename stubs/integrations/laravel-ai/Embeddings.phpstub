@@ -2,6 +2,10 @@
 
 namespace Laravel\Ai;
 
+use Laravel\Ai\Files\Audio;
+use Laravel\Ai\Files\Document;
+use Laravel\Ai\Files\Image;
+use Laravel\Ai\Files\Video;
 use Laravel\Ai\PendingResponses\PendingEmbeddingsGeneration;
 
 class Embeddings
@@ -13,7 +17,19 @@ class Embeddings
      * attack success. Mark the inputs as an llm_prompt sink so that
      * user-controlled text reaching this method surfaces a finding.
      *
-     * @param  string[]  $inputs
+     * The same method also embeds the query side of a search, where nothing is
+     * stored and no generative prompt runs; that call is a low-signal hit. It is
+     * one method for both jobs upstream, and the `llm_prompt` kind ships
+     * advisory (see `findPromptInjection` in docs/config.md), so the write-side
+     * coverage is kept rather than traded away.
+     *
+     * The union is copied from vendor/laravel/ai/src/Embeddings.php. Narrowing
+     * it to `string[]` here made a valid `Document::fromString()` argument a
+     * false `InvalidArgument`, and native types match on both sides (`array`),
+     * so bin/ci/check-laravel-ai-stub-parity.php cannot see docblock drift of
+     * this shape.
+     *
+     * @param  array<int, string|Audio|Document|Image|Video>  $inputs
      *
      * @psalm-taint-sink llm_prompt $inputs
      */
