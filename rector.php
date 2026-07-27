@@ -5,6 +5,7 @@ use Rector\CodingStyle\Rector\Assign\SplitDoubleAssignRector;
 use Rector\CodingStyle\Rector\Encapsed\EncapsedStringsToSprintfRector;
 use Rector\CodingStyle\Rector\If_\NullableCompareToNullRector;
 use Rector\Config\RectorConfig;
+use Rector\DeadCode\Rector\ClassMethod\RemoveParentDelegatingClassMethodRector;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector;
 use Rector\Php55\Rector\String_\StringClassNameToClassConstantRector;
 use Rector\PHPUnit\CodeQuality\Rector\FuncCall\AssertFuncCallToPHPUnitAssertRector;
@@ -50,4 +51,11 @@ return RectorConfig::configure()
         // `assertX()` call is part of the test's observable expectations — it counts towards the
         // assertion tally and turns a broken fixture into a plain test failure instead of an error.
         AssertFuncCallToPHPUnitAssertRector::class,
+        // GetKeyOverrideModel's getKey() is a trivial parent delegation ON PURPOSE:
+        // GetKeyReturnTypeTest.phpt asserts the plugin stops narrowing getKey() past a
+        // user override of the method it narrows. Removing the "redundant" delegation
+        // removes the override itself, so the test would stop exercising that path.
+        RemoveParentDelegatingClassMethodRector::class => [
+            __DIR__ . '/tests/Application/app/Models/GetKeyOverrideModel.php',
+        ],
     ]);
