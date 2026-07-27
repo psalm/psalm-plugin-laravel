@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785082275502,
+  "lastUpdate": 1785138542876,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9545,6 +9545,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.69,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "50dbd6247d3c81e131f51d11aa864c327431d930",
+          "message": "Fix: bump rector to 2.5.8 for phpstan 2.2.6 compatibility (#1332)\n\n* fix(deps): pin phpstan below 2.2.6 to unblock rector #0\n\nRector 2.5.7 reaches into PHPStan\\Parser\\RichParser's private\ncontainer property via reflection; phpstan 2.2.6 removed that\nproperty, so every fresh composer install fatals at rector's\ncontainer bootstrap before any file is parsed.\n\ncomposer.lock is gitignored, so every CI run resolves dependencies\nfresh and picks up the newest allowed phpstan, breaking all branches\nat once. Rector's own constraint (^2.2.2) permits the broken release\nand has no upper bound, so pin here until rector ships a conflict\nentry for 2.2.6.\n\n* fix(deps): bump rector to 2.5.8 for phpstan 2.2.6 compat #0\n\nRector 2.5.7 reached into PHPStan\\Parser\\RichParser's private\ncontainer property via reflection; phpstan 2.2.6 removed that\nproperty, fataling rector's container bootstrap on every fresh\nresolve (composer.lock is gitignored, so this hit all branches\nat once).\n\nRector 2.5.8 fixes the incompatibility upstream and now requires\nphpstan ^2.2.6 itself, so raise the floor to pull in the fix\ninstead of holding phpstan back. Supersedes the previous pin,\nwhich would otherwise conflict with rector's own constraint.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(deps): skip RemoveParentDelegatingClassMethodRector on getKey fixture #0\n\nRector 2.5.8 pulled RemoveParentDelegatingClassMethodRector into scope\nand it flags GetKeyOverrideModel::getKey() as redundant. The style\nauto-fix workflow already ran on this branch and deleted the method,\nwhich would have silently broken GetKeyReturnTypeTest.phpt: the\nfixture exists specifically to be a trivial parent-delegating\noverride, proving the plugin stops narrowing getKey() past a user\noverride of the method it narrows. Restore the method and skip the\nrule for just that file.\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-07-27T09:46:10+02:00",
+          "tree_id": "83cd14d62de7e26e35e44254bfb124080b5e65e6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/50dbd6247d3c81e131f51d11aa864c327431d930"
+        },
+        "date": 1785138541686,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.43,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
