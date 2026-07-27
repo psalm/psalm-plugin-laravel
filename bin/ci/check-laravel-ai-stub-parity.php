@@ -256,6 +256,12 @@ function diffSignature(
     array &$knownGaps,
     array &$consumedGapKeys,
 ): void {
+    // Plain functions have no `self`, and ReflectionFunction has no
+    // getDeclaringClass(), so the resolution context is class-only.
+    $declaringFqcn = $reflected instanceof \ReflectionMethod
+        ? $reflected->getDeclaringClass()->getName()
+        : null;
+
     $reflectedParams = $reflected->getParameters();
 
     foreach ($stubParams as $position => $stubParam) {
@@ -269,7 +275,7 @@ function diffSignature(
         }
 
         $stubType = stubTypeToString($stubParam->type, $stubParam->default, $enclosingFqcn);
-        $vendorType = reflectionTypeToString($vendorParamType);
+        $vendorType = reflectionTypeToString($vendorParamType, $declaringFqcn);
 
         if ($stubType !== $vendorType) {
             $paramName = $stubParam->var instanceof Node\Expr\Variable && \is_string($stubParam->var->name)
@@ -286,7 +292,7 @@ function diffSignature(
         }
 
         $stubReturn = stubTypeToString($stubReturnType, null, $enclosingFqcn);
-        $vendorReturn = reflectionTypeToString($vendorReturnType);
+        $vendorReturn = reflectionTypeToString($vendorReturnType, $declaringFqcn);
 
         if ($stubReturn !== $vendorReturn) {
             report($label, "{$label}(): return type stub says \"{$stubReturn}\", installed laravel/ai says \"{$vendorReturn}\"", $mismatches, $knownGaps, $consumedGapKeys);
@@ -344,21 +350,35 @@ function stubTypeToString(Node\Identifier|Node\Name|Node\ComplexType $type, ?Nod
     return ($impliedNullable ? '?' : '') . $name;
 }
 
-function reflectionTypeToString(?\ReflectionType $type): string
+/**
+ * Whether `getName()` resolves `self` to the declaring class is PHP-version
+ * dependent, so both sides must be normalized explicitly. Resolving only the
+ * stub side reported every fluent `self`-returning method as drift on the CI
+ * runtime while staying clean locally.
+ *
+ * @param ?string $declaringFqcn declaring class, for `self`/`parent`
+ */
+function reflectionTypeToString(?\ReflectionType $type, ?string $declaringFqcn = null): string
 {
     if ($type === null) {
         return 'NOTYPE';
     }
 
     if ($type instanceof \ReflectionUnionType) {
-        $parts = \array_map(reflectionTypeToString(...), $type->getTypes());
+        $parts = \array_map(
+            static fn(\ReflectionType $t): string => reflectionTypeToString($t, $declaringFqcn),
+            $type->getTypes(),
+        );
         \sort($parts);
 
         return \implode('|', $parts);
     }
 
     if ($type instanceof \ReflectionIntersectionType) {
-        $parts = \array_map(reflectionTypeToString(...), $type->getTypes());
+        $parts = \array_map(
+            static fn(\ReflectionType $t): string => reflectionTypeToString($t, $declaringFqcn),
+            $type->getTypes(),
+        );
         \sort($parts);
 
         return \implode('&', $parts);
@@ -366,6 +386,16 @@ function reflectionTypeToString(?\ReflectionType $type): string
 
     // ReflectionNamedType from here on.
     $name = $type->getName();
+
+    if ($declaringFqcn !== null) {
+        if (\strtolower($name) === 'self') {
+            $name = $declaringFqcn;
+        } elseif (\strtolower($name) === 'parent') {
+            $parentClass = (new \ReflectionClass($declaringFqcn))->getParentClass();
+            $name = $parentClass !== false ? $parentClass->getName() : $name;
+        }
+    }
+
     $nullable = $type->allowsNull() && !\in_array(\strtolower($name), ['mixed', 'null'], true);
 
     return ($nullable ? '?' : '') . $name;
