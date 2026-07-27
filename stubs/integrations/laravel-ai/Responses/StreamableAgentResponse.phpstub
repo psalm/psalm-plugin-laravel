@@ -23,6 +23,13 @@ use Traversable;
  * and the `CanStreamUsingVercelProtocol` trait surface intact. `$text` is
  * `?string` because it is populated only after the stream is drained.
  *
+ * No `__toString()` here, deliberately. Unlike every other response class this
+ * one does not define it, so declaring it in the stub taught Psalm that
+ * `(string) $response` was valid when it fatals at runtime, suppressing a real
+ * `InvalidCast`. A stub that invents API is worse than no stub. Read `$text`
+ * instead, which the handler sources. Pinned by
+ * `StreamableResponseHasNoStringCast.phpt`.
+ *
  * @template-implements IteratorAggregate<int, \Laravel\Ai\Streaming\Events\StreamEvent>
  */
 class StreamableAgentResponse implements IteratorAggregate, Responsable
@@ -54,7 +61,4 @@ class StreamableAgentResponse implements IteratorAggregate, Responsable
     public function toResponse($request): Response {}
 
     public function getIterator(): Traversable {}
-
-    /** @psalm-taint-source input */
-    public function __toString(): string {}
 }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Ai;
 
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Scalar\String_;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -72,9 +74,7 @@ final class LlmOutputTaintHandlerTest extends TestCase
     #[Test]
     public function it_lists_all_known_response_classes(): void
     {
-        $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
-        /** @var list<string> $taintedClasses */
-        $taintedClasses = $reflection->getReflectionConstant('TAINTED_CLASSES')?->getValue() ?? [];
+        $taintedClasses = $this->taintedProperties()['text'] ?? [];
 
         $this->assertContains('Laravel\\Ai\\Responses\\TextResponse', $taintedClasses);
         $this->assertContains('Laravel\\Ai\\Responses\\AgentResponse', $taintedClasses);
@@ -85,16 +85,53 @@ final class LlmOutputTaintHandlerTest extends TestCase
         // only after the stream completes — has to be listed explicitly because
         // it does not extend TextResponse upstream.
         $this->assertContains('Laravel\\Ai\\Responses\\StreamableAgentResponse', $taintedClasses);
+        // TranscriptionResponse is a third hierarchy: a transcript of user-supplied
+        // audio is attacker-authored text that a speech model re-typed.
+        $this->assertContains('Laravel\\Ai\\Responses\\TranscriptionResponse', $taintedClasses);
     }
 
     #[Test]
-    public function it_only_taints_the_text_property(): void
+    public function it_does_not_source_array_access_reads(): void
+    {
+        // Psalm discards the taint edge when it resolves `$response['field']`
+        // (https://github.com/vimeo/psalm/issues/11912), so an ArrayDimFetch
+        // branch here would work around a core gap on one of the hottest node
+        // types. Pinned so the deferral is a decision rather than an oversight;
+        // the flows it leaves uncovered are in the *KnownLimitation.phpt fixtures.
+        $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
+        $event = $this->createEvent(
+            expr: new ArrayDimFetch(new Variable('response'), new String_('summary')),
+            codebase: $codebase,
+            varType: $this->namedObjectType('Laravel\\Ai\\Responses\\StructuredAgentResponse'),
+        );
+
+        $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
+    }
+
+    #[Test]
+    public function it_scopes_the_structured_payload_to_the_structured_responses(): void
+    {
+        // Not a cross-product with the $text class list: only these two declare
+        // $structured, and tainting the property on a class that does not have it
+        // would source whatever a user subclass happens to name the same way.
+        $this->assertSame([
+            'Laravel\\Ai\\Responses\\StructuredAgentResponse',
+            'Laravel\\Ai\\Responses\\StructuredTextResponse',
+        ], $this->taintedProperties()['structured'] ?? []);
+    }
+
+    #[Test]
+    public function it_only_taints_the_known_payload_properties(): void
+    {
+        $this->assertSame(['text', 'structured'], array_keys($this->taintedProperties()));
+    }
+
+    /** @return array<string, list<string>> */
+    private function taintedProperties(): array
     {
         $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
-        /** @var list<string> $taintedProperties */
-        $taintedProperties = $reflection->getReflectionConstant('TAINTED_PROPERTIES')?->getValue() ?? [];
 
-        $this->assertSame(['text'], $taintedProperties);
+        return $reflection->getReflectionConstant('TAINTED_PROPERTIES')?->getValue() ?? [];
     }
 
     private function propertyFetch(string $propertyName): PropertyFetch

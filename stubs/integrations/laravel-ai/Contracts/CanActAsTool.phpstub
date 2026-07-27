@@ -2,6 +2,8 @@
 
 namespace Laravel\Ai\Contracts;
 
+use Stringable;
+
 /**
  * Allows an Agent to be exposed as a tool to another agent (sub-agent pattern).
  * Same tool-poisoning concern as Tool::description() — a dynamically built
@@ -13,5 +15,5 @@ interface CanActAsTool
 {
     public function name(): string;
 
-    public function description(): string;
+    public function description(): Stringable|string;
 }
