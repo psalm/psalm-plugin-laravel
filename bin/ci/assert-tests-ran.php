@@ -40,7 +40,7 @@ $matching = \array_values(\array_filter(
 ));
 
 $total = \count($matching);
-$skipped = \count(\array_filter($matching, static fn(\SimpleXMLElement $testcase): bool => isset($testcase->skipped)));
+$skipped = \count(\array_filter($matching, static fn(\SimpleXMLElement $testcase): bool => property_exists($testcase, 'skipped') && $testcase->skipped !== null));
 
 echo "{$needle}: {$total} tests, {$skipped} skipped\n";
 

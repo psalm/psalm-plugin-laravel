@@ -75,7 +75,7 @@ $parser = (new ParserFactory())->createForNewestSupportedVersion();
 foreach (findStubFiles($stubsDir) as $file) {
     $ast = $parser->parse(\file_get_contents($file) ?: '');
     if ($ast === null) {
-        report($file, "{$file}: php-parser could not parse this stub", $mismatches, $knownGaps, $consumedGapKeys);
+        report($file);
         continue;
     }
 
@@ -90,7 +90,7 @@ foreach (findStubFiles($stubsDir) as $file) {
         }
 
         if (!\class_exists($fqcn) && !\interface_exists($fqcn) && !\trait_exists($fqcn)) {
-            report($fqcn, "{$fqcn}: declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
+            report($fqcn);
             continue;
         }
 
@@ -102,7 +102,7 @@ foreach (findStubFiles($stubsDir) as $file) {
             $key = "{$fqcn}::{$methodName}";
 
             if (!$reflectionClass->hasMethod($methodName)) {
-                report($key, "{$key}(): declared in the stub but not found on the installed class (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
+                report($key);
                 continue;
             }
 
@@ -124,8 +124,9 @@ foreach (findStubFiles($stubsDir) as $file) {
         $fqcn = $function->namespacedName?->toString();
         if ($fqcn === null || !\function_exists($fqcn)) {
             if ($fqcn !== null) {
-                report($fqcn, "{$fqcn}(): declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
+                report($fqcn);
             }
+
             continue;
         }
 
@@ -163,6 +164,7 @@ if ($mismatches !== []) {
     foreach ($mismatches as $mismatch) {
         echo " - {$mismatch}\n";
     }
+
     exit(1);
 }
 
@@ -209,7 +211,8 @@ function findClassLikes(array $nodes): array
         if ($node instanceof Node\Stmt\ClassLike) {
             $found[] = $node;
         }
-        if (isset($node->stmts) && \is_array($node->stmts)) {
+
+        if (property_exists($node, 'stmts') && $node->stmts !== null && \is_array($node->stmts)) {
             /** @var list<Node\Stmt> $childStmts */
             $childStmts = $node->stmts;
             $found = [...$found, ...findClassLikes($childStmts)];
@@ -230,7 +233,8 @@ function findFunctions(array $nodes): array
         if ($node instanceof Node\Stmt\Function_) {
             $found[] = $node;
         }
-        if (isset($node->stmts) && \is_array($node->stmts)) {
+
+        if (property_exists($node, 'stmts') && $node->stmts !== null && \is_array($node->stmts)) {
             /** @var list<Node\Stmt> $childStmts */
             $childStmts = $node->stmts;
             $found = [...$found, ...findFunctions($childStmts)];
@@ -281,7 +285,7 @@ function diffSignature(
             $paramName = $stubParam->var instanceof Node\Expr\Variable && \is_string($stubParam->var->name)
                 ? '$' . $stubParam->var->name
                 : "position {$position}";
-            report($label, "{$label}({$paramName}): stub says \"{$stubType}\", installed laravel/ai says \"{$vendorType}\"", $mismatches, $knownGaps, $consumedGapKeys);
+            report($label);
         }
     }
 
@@ -295,7 +299,7 @@ function diffSignature(
         $vendorReturn = reflectionTypeToString($vendorReturnType, $declaringFqcn);
 
         if ($stubReturn !== $vendorReturn) {
-            report($label, "{$label}(): return type stub says \"{$stubReturn}\", installed laravel/ai says \"{$vendorReturn}\"", $mismatches, $knownGaps, $consumedGapKeys);
+            report($label);
         }
     }
 }
@@ -360,7 +364,7 @@ function stubTypeToString(Node\Identifier|Node\Name|Node\ComplexType $type, ?Nod
  */
 function reflectionTypeToString(?\ReflectionType $type, ?string $declaringFqcn = null): string
 {
-    if ($type === null) {
+    if (!$type instanceof \ReflectionType) {
         return 'NOTYPE';
     }
 
