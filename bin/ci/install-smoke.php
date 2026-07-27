@@ -152,10 +152,10 @@ function runStep(string $label, array $command, string $cwd, array $extraEnv, bo
 
     try {
         $process->run();
-    } catch (ProcessTimedOutException $timedOut) {
+    } catch (ProcessTimedOutException $processTimedOutException) {
         // The process is still killed by Symfony before the exception is thrown;
         // its buffered output up to that point remains readable.
-        $timedOutProcess = $timedOut->getProcess();
+        $timedOutProcess = $processTimedOutException->getProcess();
         logOutput($label, $timedOutProcess->getOutput(), $timedOutProcess->getErrorOutput(), $verbose);
         reportFailure(
             $label . ' (timed out)',
@@ -295,6 +295,7 @@ if ($projectKind === 'package') {
     if ($laravelVersion !== '') {
         $createProjectCommand[] = $laravelVersion;
     }
+
     runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbose, $appDir);
 }
 
@@ -347,7 +348,7 @@ if ($psalmXmlContents === false || !\str_contains($psalmXmlContents, 'Psalm\\Lar
 // Whitespace in the generated markup is fixed by InitCommand's template, so
 // exact-substring matching is safe here.
 if ($projectKind === 'package') {
-    $contents = (string) $psalmXmlContents;
+    $contents = $psalmXmlContents;
     foreach ($expectedRoots as $root) {
         $marker = \sprintf('<directory name="%s"/>', $root);
         if (!\str_contains($contents, $marker)) {
@@ -423,6 +424,7 @@ if ($keepApp) {
             /** @var SplFileInfo $fileInfo */
             $fileInfo->isDir() ? @\rmdir($fileInfo->getPathname()) : @\unlink($fileInfo->getPathname());
         }
+
         @\rmdir($dir);
     })($appDir);
 }
