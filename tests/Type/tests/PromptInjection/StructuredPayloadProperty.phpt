@@ -20,9 +20,8 @@ function spreadAgentPayload(\Laravel\Ai\Responses\StructuredAgentResponse $respo
     // laravel/ai's own ChatCommand reads. Psalm honors no taint annotation on a
     // property, so LlmOutputTaintHandler sources the read site.
     //
-    // The sink takes the whole array on purpose. Pulling one element back out
-    // loses the edge under whole-project analysis: see
-    // StructuredArrayReturnKnownLimitation.phpt.
+    // The sink takes the whole array on purpose; the element-read path is
+    // covered separately by StructuredArrayElementRead.phpt.
     extract($response->structured);
 }
 

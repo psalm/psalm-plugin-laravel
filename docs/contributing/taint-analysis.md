@@ -301,6 +301,10 @@ A value passed only through `e()` (which escapes `html` and `has_quotes`) is sti
 
 When two PHPT tests in the same suite source the same taint kind into the **same stubbed sink** (e.g. both flow `html_url` into `MailMessage::action()`), only one of the two will emit `TaintedCustom`. `TaintFlowGraph::connectSinksAndSources()` keeps a `visited_source_ids[$sink_node][$taint_mask]` set and skips repeated visits, so the first `(sink, mask)` pair reached during BFS wins the report and any subsequent source path to that same pair is silently dropped. The Tainted case using `e()` (`TaintedHtmlUrlEDoesNotEscape.phpt`) therefore routes through a per-file local sink instead of `MailMessage::action()`. The Safe test is unaffected: the sanitizer drops `html_url`, so the taint mask reaching the shared sink is `0`, which is a distinct dedupe key from any concurrent Tainted test's `html_url` mask. Use a local `@psalm-taint-sink html_url $url` helper whenever you need a second Tainted test against an already-covered sink.
 
+The pruning is by node id, not by sink id, so it also swallows intermediate hops: two flows through the same stubbed sink from different sources can both be lost, not just the later one.
+
+**A negative assertion against a shared sink is unfalsifiable.** This is the sharper edge of the same behavior, and it has already produced one fixture that asserted the exact opposite of the truth. An empty `--EXPECTF--` reads as "the plugin does not detect this flow", but a flow reaching an already-visited node is dropped whether or not the edge exists, so the fixture stays green in both worlds. Any phpt whose point is that nothing is reported must route through a per-file local sink AND carry a positive control in the same file that does report, otherwise it proves nothing. `StructuredResponseArrayAccessKnownLimitation.phpt` and `SubAgentToolDelegationKnownLimitation.phpt` are the worked examples.
+
 ## Stub patterns by annotation type
 
 ### Source stubs
@@ -728,11 +732,12 @@ What that costs, pinned by fixtures rather than left implicit:
 
 - `SubAgentToolDelegationKnownLimitation.phpt`: `Tools\AgentTool::handle()` forwards `(string) $request['task']` straight into a sub-agent's `prompt()`, so the whole delegation chain is silent.
 - `StructuredResponseArrayAccessKnownLimitation.phpt`: `$response['field']` on the structured responses.
-- `StructuredArrayReturnKnownLimitation.phpt` is a *different* gap with the same shape of consequence. Both the `toArray()` return and the `$structured` property are sourced, but reading one element back out of the resulting array loses the edge under whole-project analysis. The same fixtures report the flow when Psalm analyzes the file alone, so it is the hop-loss bug rather than a missing source.
 
-All three assert the current (wrong) behavior with empty expectations, so an upstream fix turns them red and names itself.
+Both assert the current (wrong) behavior, so an upstream fix turns them red and names itself.
 
-The practical consequence for writing positive coverage: a source whose type is an array needs a zero-hop sink in the fixture, or the test passes vacuously in the batch while looking like it proves something. `StructuredPayloadProperty.phpt` passes the whole payload to `extract()` for exactly that reason.
+Neither fixture may state that silence with a bare empty expectation. A "should not report" assertion routed through a sink the rest of the batch also reaches is unfalsifiable: the BFS de-duplication described under [Testing-time pitfall](#testing-time-pitfall-psalms-per-sink-node-taint-de-duplication) would keep it silent even if the edge survived. Both files therefore use per-file local sinks and carry an explicit `offsetGet()` control that DOES report, which pins the source and the sink as live and leaves the sugar as the only difference.
+
+That trap is not hypothetical. A third fixture, `StructuredArrayReturnKnownLimitation.phpt`, claimed that reading one element back out of an array-typed source (`$payload['body']` after `toArray()`, or after `$structured`) lost the edge. It was routed through `DB::select()` and asserted nothing. Against per-file local sinks the same two flows report `TaintedSql`, so there was never a limitation. It is now positive coverage, `StructuredArrayElementRead.phpt`.
 
 The handler is registered in `Plugin::registerHandlers()` behind the same version gate as the stubs, and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
 

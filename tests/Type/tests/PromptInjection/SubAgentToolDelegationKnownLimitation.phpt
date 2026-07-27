@@ -21,19 +21,22 @@ final class ResearchSubAgent
 }
 
 /**
- * Known limitation. Empty expectations assert the CURRENT behavior: nothing is
- * reported, even though the flow is real.
- *
- * This mirrors Laravel\Ai\Tools\AgentTool::handle(): a parent agent exposes
- * another agent as a tool, and the task text the parent model chose is forwarded
- * verbatim into the sub-agent's prompt. Tools\Request::offsetGet() carries
- * `@psalm-taint-source input` and Promptable::prompt() is an `llm_prompt` sink,
- * so the composition should report TaintedLlmPrompt.
+ * Known limitation. This mirrors `Laravel\Ai\Tools\AgentTool::handle()`: a parent
+ * agent exposes another agent as a tool, and the task text the parent model chose
+ * is forwarded verbatim into the sub-agent's prompt. `Tools\Request::offsetGet()`
+ * carries `@psalm-taint-source input` and `Promptable::prompt()` is an
+ * `llm_prompt` sink, so the composition should report `TaintedLlmPrompt`.
  *
  * It does not, because Psalm discards the taint edge when it resolves the
- * `$request['task']` sugar into an offsetGet() call
- * (https://github.com/vimeo/psalm/issues/11912). Writing the same call as
- * `$request->offsetGet('task')` does report.
+ * `$request['task']` sugar into an `offsetGet()` call
+ * ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)).
+ *
+ * The `delegateExplicitly()` control below is what makes the silence meaningful.
+ * `TaintFlowGraph::connectSinksAndSources()` prunes any node already visited with
+ * the same taint mask, so an empty expectation against a sink shared with the
+ * rest of the batch would hold even if the edge survived. Routing the control
+ * through a per-file local sink proves the source is live and the sugar is the
+ * only difference.
  *
  * When upstream lands, this test fails loudly. Replace it then with the positive
  * assertion (`%ATaintedLlmPrompt on line %d: Detected tainted LLM prompt`) and
@@ -59,5 +62,14 @@ final class ResearchDelegationTool implements \Laravel\Ai\Contracts\Tool
         return ['task' => $schema->string()->required()];
     }
 }
+
+/** @psalm-taint-sink llm_prompt $prompt */
+function subAgentPromptSink(string $prompt): int { return \strlen($prompt); }
+
+function delegateExplicitly(\Laravel\Ai\Tools\Request $request): void {
+    // Control: the desugared form of the `$request['task']` read above.
+    subAgentPromptSink((string) $request->offsetGet('task'));
+}
 ?>
 --EXPECTF--
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt

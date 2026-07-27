@@ -82,7 +82,7 @@ Two directions are covered:
   cast, and an explicit `offsetGet()` call. The keys come from the application's
   schema, the values come from the model.
 
-Three shapes are not covered. Each is an upstream limitation rather than a
+Two shapes are not covered. Each is an upstream limitation rather than a
 judgement that the flow is safe, so treat them as blind spots when reviewing.
 
 Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
@@ -97,12 +97,9 @@ knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task 
 a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit
 `offsetGet()` call, all of which are covered.
 
-Reading a single element back out of an array-typed source is the third gap. The
-`$structured` property and the `toArray()` return are both sourced, but
-`$payload['body']` after either of them loses the taint under whole-project
-analysis, which is how a real run works. The same code reports when Psalm analyzes
-the file on its own, so the source is right and the hop is what is lost. Passing
-the whole payload to a sink is unaffected.
+Reading a single element back out of an array-typed source is covered. Both the
+`$structured` property and the `toArray()` return keep the taint through
+`$payload['body']`, so a sink reached that way reports like any other flow.
 
 ### How it compares
 
