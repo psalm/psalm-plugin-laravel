@@ -17,11 +17,20 @@ declare(strict_types=1);
  * class the vendor autoloader already provides would fatal) and reflects the
  * real installed class, then diffs native types position-by-position.
  *
- * Only the pieces the type system can compare are checked: native parameter
- * and return types. Docblock-only precision (`@param non-empty-string`) is
- * unaffected and deliberately out of scope (see docs/contributing/README.md,
- * "Stub merging": Psalm-level narrowing beyond native types is expected and
- * is not drift).
+ * Four things are compared per signature: parameter count, parameter names
+ * position-by-position, native parameter types, and the native return type.
+ * Count and names are not cosmetic. A stub missing a trailing parameter makes
+ * Psalm reject a call that is valid at runtime, and a parameter renamed
+ * upstream silently disarms every `@psalm-taint-sink <kind> $name` hung off
+ * the old name while every existing test stays green.
+ *
+ * Docblock-only precision (`@param non-empty-string`) is unaffected and
+ * deliberately out of scope (see docs/contributing/README.md, "Stub merging":
+ * Psalm-level narrowing beyond native types is expected and is not drift).
+ * That exemption has a cost worth knowing: a docblock that NARROWS a native
+ * `array` to `string[]` when upstream documents a union is real drift this
+ * script is blind to, because both sides are natively `array`. Fixtures cover
+ * those, e.g. tests/Type/tests/PromptInjection/EmbeddingsAcceptsFileInputs.phpt.
  *
  * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]
  * Exit codes: 0 = no drift found (beyond KNOWN_GAPS below), 1 = new drift
@@ -38,21 +47,22 @@ use PhpParser\ParserFactory;
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 /**
- * Pre-existing gaps found while building this checker, tracked separately
- * rather than fixed here: this script owns detection, not the stub files
- * themselves. Printed as findings either way, never silently hidden, they
- * just don't fail the job. An entry that stops reproducing (the stub was
- * fixed, or the finding no longer matches for any other reason) is reported
- * as stale rather than silently ignored or silently kept: see the
- * "Stale KNOWN_GAPS entries" check at the end of this script. Remove a
- * stale entry once you see that warning, so the checker starts enforcing
- * it like everything else.
+ * Escape hatch for a known mismatch that is tracked separately rather than
+ * fixed here: this script owns detection, not the stub files themselves. An
+ * entry is keyed by the reported label (`Fqcn::method`, or the function FQN)
+ * and is printed as a finding either way, never silently hidden, it just does
+ * not fail the job. An entry that stops reproducing is reported as stale
+ * rather than silently kept: see the "Stale KNOWN_GAPS entries" check at the
+ * end of this script. Remove a stale entry once you see that warning, so the
+ * checker starts enforcing it like everything else.
+ *
+ * Empty is the desired steady state. It got there the intended way: the one
+ * original entry (`Contracts\CanActAsTool::description`) was fixed in #1330 and
+ * the stale warning named it on the next run.
  *
  * @var array<string, string>
  */
-const KNOWN_GAPS = [
-    'Laravel\Ai\Contracts\CanActAsTool::description' => 'stub return type is "string"; the installed package has widened it to "Stringable|string".',
-];
+const KNOWN_GAPS = [];
 
 if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
     echo "laravel/ai is not installed; nothing to compare.\n";
@@ -264,7 +274,36 @@ function diffSignature(
 
     $reflectedParams = $reflected->getParameters();
 
+    if (\count($stubParams) !== \count($reflectedParams)) {
+        report(
+            $label,
+            "{$label}(): stub declares " . \count($stubParams) . ' parameter(s) (' . paramNameList($stubParams)
+                . '), installed laravel/ai declares ' . \count($reflectedParams) . ' (' . reflectedParamNameList($reflectedParams) . ')',
+            $mismatches,
+            $knownGaps,
+            $consumedGapKeys,
+        );
+    }
+
     foreach ($stubParams as $position => $stubParam) {
+        if (isset($reflectedParams[$position])) {
+            $stubParamName = paramName($stubParam);
+            $vendorParamName = $reflectedParams[$position]->getName();
+
+            // Names are API: `@psalm-taint-sink llm_prompt $prompt` matches by
+            // name, and named arguments bind by name, so a rename that keeps
+            // the type is a silent break in both directions.
+            if ($stubParamName !== null && $stubParamName !== $vendorParamName) {
+                report(
+                    $label,
+                    "{$label}(): parameter at position {$position} is named \"\${$stubParamName}\" in the stub, \"\${$vendorParamName}\" in the installed laravel/ai",
+                    $mismatches,
+                    $knownGaps,
+                    $consumedGapKeys,
+                );
+            }
+        }
+
         $vendorParamType = isset($reflectedParams[$position]) ? $reflectedParams[$position]->getType() : null;
 
         // Skip when either side is untyped: nothing to compare, and a stub
@@ -278,10 +317,9 @@ function diffSignature(
         $vendorType = reflectionTypeToString($vendorParamType, $declaringFqcn);
 
         if ($stubType !== $vendorType) {
-            $paramName = $stubParam->var instanceof Node\Expr\Variable && \is_string($stubParam->var->name)
-                ? '$' . $stubParam->var->name
-                : "position {$position}";
-            report($label, "{$label}({$paramName}): stub says \"{$stubType}\", installed laravel/ai says \"{$vendorType}\"", $mismatches, $knownGaps, $consumedGapKeys);
+            $stubParamName = paramName($stubParam);
+            $described = $stubParamName !== null ? '$' . $stubParamName : "position {$position}";
+            report($label, "{$label}({$described}): stub says \"{$stubType}\", installed laravel/ai says \"{$vendorType}\"", $mismatches, $knownGaps, $consumedGapKeys);
         }
     }
 
@@ -298,6 +336,43 @@ function diffSignature(
             report($label, "{$label}(): return type stub says \"{$stubReturn}\", installed laravel/ai says \"{$vendorReturn}\"", $mismatches, $knownGaps, $consumedGapKeys);
         }
     }
+}
+
+/**
+ * Null for a destructuring or otherwise non-plain parameter variable, which
+ * php-parser models as an arbitrary expression.
+ */
+function paramName(Node\Param $param): ?string
+{
+    return $param->var instanceof Node\Expr\Variable && \is_string($param->var->name)
+        ? $param->var->name
+        : null;
+}
+
+/** @param list<Node\Param> $params */
+function paramNameList(array $params): string
+{
+    if ($params === []) {
+        return 'none';
+    }
+
+    return \implode(', ', \array_map(
+        static fn(Node\Param $param): string => '$' . (paramName($param) ?? '?'),
+        $params,
+    ));
+}
+
+/** @param list<\ReflectionParameter> $params */
+function reflectedParamNameList(array $params): string
+{
+    if ($params === []) {
+        return 'none';
+    }
+
+    return \implode(', ', \array_map(
+        static fn(\ReflectionParameter $param): string => '$' . $param->getName(),
+        $params,
+    ));
 }
 
 /**
