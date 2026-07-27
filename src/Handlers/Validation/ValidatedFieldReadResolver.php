@@ -163,9 +163,7 @@ final class ValidatedFieldReadResolver
             $removed |= self::ruleEscape(ValidationRuleAnalyzer::getRulesForFormRequest($accessorClass), $key);
         }
 
-        $removed |= self::ruleEscape(self::lookupInlineValidateRules($event, $expr), $key);
-
-        return $removed;
+        return $removed | self::ruleEscape(self::lookupInlineValidateRules($event, $expr), $key);
     }
 
     /**

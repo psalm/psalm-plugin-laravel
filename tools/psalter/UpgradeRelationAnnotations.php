@@ -115,7 +115,7 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
         $stmt = $event->getStmt();
         $docComment = $stmt->getDocComment();
 
-        if ($docComment === null) {
+        if (!$docComment instanceof \PhpParser\Comment\Doc) {
             return null;
         }
 
@@ -242,6 +242,7 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
                 break;
             }
         }
+
         if (!$hasThrough) {
             return $docblock;
         }
@@ -311,6 +312,7 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
             if (!$throughArg instanceof ClassConstFetch) {
                 continue;
             }
+
             // Only handle ClassName::class — skip $variable::class or static::class.
             if (!$throughArg->name instanceof Identifier || $throughArg->name->name !== 'class') {
                 continue;
@@ -320,6 +322,7 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
             if ($class instanceof Name\FullyQualified) {
                 return '\\' . $class->toString();
             }
+
             if ($class instanceof Name) {
                 return self::resolveClassName($class, $event);
             }
@@ -403,6 +406,7 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
         if (isset(self::$warned[$location])) {
             return;
         }
+
         self::$warned[$location] = true;
 
         \fwrite(
