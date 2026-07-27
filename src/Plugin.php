@@ -13,6 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
+use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
@@ -31,10 +32,20 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $pluginConfig = PluginConfig::fromXml($config);
+        require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
+
+        // Third gated laravel/ai call site, alongside the stubs and the handler.
+        // Restricted to projects that actually have the package so a project
+        // carrying its own `llm_prompt` annotations keeps Psalm's own default.
+        if ($this->laravelAiIntegrationEnabled()) {
+            require_once __DIR__ . '/Internal/PromptInjectionIssuePolicy.php';
+            PromptInjectionIssuePolicy::apply($pluginConfig->findPromptInjection);
+        }
+
         $output = $this->getProgress($registration);
         $this->loadInitializationHandlers();
         $this->resetInvocationState();
@@ -229,11 +240,24 @@ final class Plugin implements PluginEntryPointInterface
     {
         $stubs = [];
 
-        if ($this->isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0')) {
+        if ($this->laravelAiIntegrationEnabled()) {
             \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
         }
 
         return $stubs;
+    }
+
+    /**
+     * Single gate for every laravel/ai call site (stubs, LlmOutputTaintHandler,
+     * PromptInjectionIssuePolicy). They must move in lockstep: a stub loaded
+     * without its handler, or an issue policy applied without the stubs that
+     * feed it, is a silent half-integration. The version range has no ceiling
+     * below 1.0 because disabling coverage on every minor is worse than the
+     * rare drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
+     */
+    private function laravelAiIntegrationEnabled(): bool
+    {
+        return $this->isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0');
     }
 
     /**
@@ -521,7 +545,7 @@ final class Plugin implements PluginEntryPointInterface
         // sinks declaratively; this handler covers the property-level `$response->text`
         // source because Psalm doesn't honor `@psalm-taint-source` on properties.
         // Guarded the same way as the matching stubs in optionalIntegrationStubs().
-        if ($this->isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0')) {
+        if ($this->laravelAiIntegrationEnabled()) {
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }

@@ -88,6 +88,7 @@ final class IssueUrlGenerator
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
+            '- findPromptInjection: ' . self::formatBool($pluginConfig->findPromptInjection),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- experimental: ' . self::formatBool($pluginConfig->experimental),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),

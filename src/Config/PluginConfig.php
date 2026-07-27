@@ -37,6 +37,13 @@ final readonly class PluginConfig
          *  - false → force disabled (override even when laravel/octane is installed)
          */
         public ?bool $findOctaneIncompatibleBinding,
+        /**
+         * Enforce `TaintedLlmPrompt` (untrusted input reaching a `laravel/ai`
+         * prompt) as an error rather than advisory info. Off by default because
+         * prompt injection has no escape to point users at; see
+         * {@see \Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy}.
+         */
+        public bool $findPromptInjection,
         public string $cachePath,
         public bool $experimental,
         public bool $failOnInternalError,
@@ -64,6 +71,7 @@ final readonly class PluginConfig
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
+        $findPromptInjection = self::xmlBoolAttr($config?->findPromptInjection, 'findPromptInjection');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
@@ -77,6 +85,7 @@ final readonly class PluginConfig
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
+            findPromptInjection: $findPromptInjection,
             cachePath: self::resolveCachePath(),
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
