@@ -17,6 +17,8 @@ namespace Laravel\Ai\Files;
  */
 abstract class Document extends File
 {
+    abstract public function content(): string;
+
     /**
      * @psalm-taint-sink llm_prompt $content
      */

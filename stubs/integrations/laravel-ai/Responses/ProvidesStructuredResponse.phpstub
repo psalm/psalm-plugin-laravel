@@ -1,0 +1,37 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+/**
+ * Array-access surface shared by StructuredAgentResponse and
+ * StructuredTextResponse. `$structured` holds the decoded model output: the
+ * keys come from the application's schema, the values do not, so reading one
+ * is the same trust boundary as reading `$response->text`.
+ *
+ * IMPORTANT: `$response['k']` is NOT analysed. The annotation below reaches only
+ * an explicit `$response->offsetGet('k')` call, because Psalm discards the taint
+ * edge when it resolves the array-access sugar
+ * (https://github.com/vimeo/psalm/issues/11912). Nothing in this plugin
+ * compensates. The covered paths for structured output are `offsetGet()` called
+ * explicitly and `toArray()`; `StructuredResponseArrayAccessKnownLimitation.phpt`
+ * pins the uncovered one.
+ *
+ * Member list mirrors
+ * `vendor/laravel/ai/src/Responses/ProvidesStructuredResponse.php`.
+ */
+trait ProvidesStructuredResponse
+{
+    /** @var array<array-key, mixed> */
+    public array $structured;
+
+    public function offsetExists(mixed $offset): bool {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function offsetGet(mixed $offset): mixed {}
+
+    public function offsetSet(mixed $offset, mixed $value): void {}
+
+    public function offsetUnset(mixed $offset): void {}
+}

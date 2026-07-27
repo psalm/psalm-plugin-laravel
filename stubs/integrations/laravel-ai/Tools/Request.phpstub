@@ -58,6 +58,15 @@ class Request implements Arrayable, ArrayAccess
     public function offsetExists(mixed $offset): bool {}
 
     /**
+     * IMPORTANT: `$request['key']` is NOT analysed, only an explicit
+     * `$request->offsetGet('key')` call is, because Psalm discards the taint edge
+     * when it resolves the array-access sugar
+     * (https://github.com/vimeo/psalm/issues/11912). It costs real coverage here,
+     * because the framework's own Tools\AgentTool::handle() forwards
+     * `(string) $request['task']` into a sub-agent prompt: see
+     * SubAgentToolDelegationKnownLimitation.phpt. Prefer `str()`, `string()` or
+     * `array()` in project code, all of which are covered.
+     *
      * @psalm-taint-source input
      */
     public function offsetGet(mixed $offset): mixed {}

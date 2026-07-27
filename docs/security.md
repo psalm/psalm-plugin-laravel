@@ -18,6 +18,7 @@ nav_order: 6
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
 | Prompt injection | LLM01:2025 | `laravel/ai` agents: `Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, `Embeddings::for()` |
+| LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
@@ -72,11 +73,36 @@ Two directions are covered:
   response to string) yields tainted data, so an answer echoed into HTML, SQL, or a
   shell command is reported like any other user input. That models indirect prompt
   injection, where the payload arrives through a page, document, or tool result the
-  model read.
+  model read. Transcripts count on both paths (`TranscriptionResponse::$text` and
+  the string cast): the audio was supplied by a user, so the transcript is
+  attacker-authored text a speech model merely re-typed.
+* Structured output is a source on the same footing. On
+  `StructuredAgentResponse` / `StructuredTextResponse`, the covered reads are the
+  `$structured` property, `toArray()`, `toJson()`, `jsonSerialize()`, the string
+  cast, and an explicit `offsetGet()` call. The keys come from the application's
+  schema, the values come from the model.
+
+Three shapes are not covered. Each is an upstream limitation rather than a
+judgement that the flow is safe, so treat them as blind spots when reviewing.
 
 Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
 yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in
 [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
+
+Array-access reads (`$response['field']`, `$request['task']`) are not covered
+either, on any class: Psalm drops the taint edge when it resolves the `[]` sugar,
+which affects every `ArrayAccess`-based taint source and is left for an upstream
+fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)). It is worth
+knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to
+a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit
+`offsetGet()` call, all of which are covered.
+
+Reading a single element back out of an array-typed source is the third gap. The
+`$structured` property and the `toArray()` return are both sourced, but
+`$payload['body']` after either of them loses the taint under whole-project
+analysis, which is how a real run works. The same code reports when Psalm analyzes
+the file on its own, so the source is right and the hop is what is lost. Passing
+the whole payload to a sink is unaffected.
 
 ### How it compares
 
