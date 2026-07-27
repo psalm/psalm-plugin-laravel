@@ -64,9 +64,7 @@ final class IssueUrlGenerator
 
         $body .= "\n";
 
-        $body .= "```\n{$trace}\n```";
-
-        return $body;
+        return $body . "```\n{$trace}\n```";
     }
 
     /**

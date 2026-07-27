@@ -14,6 +14,7 @@ final class GetKeyOverrideModel extends Model
 {
     public function getKey()
     {
+        // duplicate on purpose, RemoveParentDelegatingClassMethodRector may cleanup it
         return parent::getKey();
     }
 }
