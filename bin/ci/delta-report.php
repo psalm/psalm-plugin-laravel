@@ -43,6 +43,7 @@ $parseBytes = static function (string $value): int {
     if ($value === '' || $value === '-1') {
         return -1;
     }
+
     $unit = strtolower($value[strlen($value) - 1]);
     $number = (int) $value;
     return match ($unit) {
@@ -52,7 +53,7 @@ $parseBytes = static function (string $value): int {
         default => (int) $value,
     };
 };
-$currentLimit = $parseBytes((string) ini_get('memory_limit'));
+$currentLimit = $parseBytes(ini_get('memory_limit'));
 if ($currentLimit !== -1 && $currentLimit < 1024 * 1024 * 1024) {
     ini_set('memory_limit', '1G');
 }
@@ -107,15 +108,17 @@ $dateMarker = $options['date-marker'] ?? 'cache';
  */
 $latest = static function (string $outputDir, string $app, string $label, string $suffix, string $dateMarker): ?string {
     if ($dateMarker === 'yyyy-mm-dd') {
-        $dateGlob = '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]';
+        $dateGlob = '\d\d\d\d-\d\d-\d\d';
     } else {
         $dateGlob = $dateMarker;
     }
+
     $pattern = "{$outputDir}/{$app}/{$app}-{$label}-{$dateGlob}--{$suffix}";
     $matches = glob($pattern);
     if ($matches === false || $matches === []) {
         return null;
     }
+
     sort($matches);
 
     return $matches[array_key_last($matches)];
@@ -128,6 +131,7 @@ $loadJson = static function (?string $path): ?array {
     if ($path === null || !is_file($path)) {
         return null;
     }
+
     try {
         /** @psalm-var mixed $decoded */
         $decoded = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
@@ -156,10 +160,12 @@ $crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLab
         if ($path === null || !is_file($path)) {
             continue;
         }
+
         $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if ($lines === false) {
             continue;
         }
+
         $inStderr = false;
         foreach ($lines as $line) {
             $text = trim($line);
@@ -167,9 +173,11 @@ $crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLab
                 $inStderr = true;
                 continue;
             }
+
             if ($text === '--- stdout ---') {
                 break;
             }
+
             if ($inStderr && $text !== '') {
                 $cut = strpos($text, ' in /');
                 if ($cut !== false) {
@@ -242,6 +250,7 @@ foreach ($apps as $app) {
             $typeLevel[$type] = (int) $i['error_level'];
         }
     }
+
     $headByKey = [];
     /** @var array<string, mixed> $i */
     foreach ($headIssues as $i) {
@@ -251,6 +260,7 @@ foreach ($apps as $app) {
             $typeLevel[$type] = (int) $i['error_level'];
         }
     }
+
     unset($baseIssues, $headIssues);
 
     $added = count(array_diff_key($headByKey, $baseByKey));
@@ -269,6 +279,7 @@ foreach ($apps as $app) {
     foreach (array_diff_key($headByKey, $baseByKey) as $type) {
         $addedByType[$type] = ($addedByType[$type] ?? 0) + 1;
     }
+
     $removedByType = [];
     foreach (array_diff_key($baseByKey, $headByKey) as $type) {
         $removedByType[$type] = ($removedByType[$type] ?? 0) + 1;
@@ -281,6 +292,7 @@ foreach ($apps as $app) {
         if ($a === 0 && $r === 0) {
             continue; // identical identities on both sides — nothing moved
         }
+
         $movements[] = [
             'type' => $type,
             'level' => $typeLevel[$type] ?? null,
@@ -291,6 +303,7 @@ foreach ($apps as $app) {
             'delta' => ($headTypeCount[$type] ?? 0) - ($baseTypeCount[$type] ?? 0),
         ];
     }
+
     // Signed net delta ascending (biggest reductions first, regressions last);
     // tie-break by churn volume so pure churn sorts by size, then by type name.
     usort(
@@ -396,6 +409,7 @@ if ($changed === []) {
         $tRemoved += $r['removed'];
         $tNet += $r['net'];
     }
+
     $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tNet);
 
     // Per-app issue-type movements, all under ONE collapsible block so the
@@ -424,6 +438,7 @@ if ($changed === []) {
             );
         }
     }
+
     $out[] = '';
     $out[] = '</details>';
 }
@@ -453,10 +468,12 @@ foreach ($perfRows as $p) {
     if ($p['baseWall'] === null || $p['headWall'] === null) {
         continue;
     }
+
     $timeDelta = $p['headWall'] - $p['baseWall'];
     if (abs($timeDelta) < $timeNoiseFloor) {
         continue;
     }
+
     $timeLines[] = sprintf('| %s | %.2f | %.2f | %+.2f |', $p['app'], $p['baseWall'], $p['headWall'], $timeDelta);
 }
 
@@ -471,6 +488,7 @@ if ($timeLines === []) {
     foreach ($timeLines as $timeLine) {
         $out[] = $timeLine;
     }
+
     $out[] = '';
     $out[] = sprintf(
         '_Wall time on shared CI runners is noisy (±1–2s run-to-run); deltas under ±%.0fs are hidden as jitter, not PR impact._',
@@ -491,10 +509,12 @@ foreach ($perfRows as $p) {
     if ($p['baseCov'] === null || $p['headCov'] === null) {
         continue; // not comparable — surfaced in its own bucket, not here
     }
+
     $delta = sprintf('%+.2f', $p['headCov'] - $p['baseCov']);
     if ($delta === '+0.00' || $delta === '-0.00') {
         continue; // coverage unchanged
     }
+
     $covLines[] = sprintf('| %s | %.2f | %.2f | %s |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
 }
 
@@ -523,9 +543,11 @@ foreach ($perfRows as $p) {
     if ($p['baseCov'] === null || $p['headCov'] === null || $p['baseWall'] === null || $p['baseWall'] <= 0) {
         continue;
     }
+
     $weightNum += ($p['headCov'] - $p['baseCov']) * (float) $p['baseWall'];
     $weightDen += (float) $p['baseWall'];
 }
+
 // Only as a footer row of the coverage table, and only when something moved —
 // otherwise it would dangle as a header-less table row under "No changes".
 if ($covLines !== [] && $weightDen > 0.0) {
