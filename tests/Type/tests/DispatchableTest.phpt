@@ -139,6 +139,12 @@ function test_events_dispatchable(User $user): void
     // Error — missing $orderId (condition excluded)
     OrderShipped::dispatchIf(true, $user);
 
+    // OK — condition + correct args
+    OrderShipped::dispatchUnless(false, $user, 1);
+
+    // Error — missing $orderId (condition excluded)
+    OrderShipped::dispatchUnless(false, $user);
+
     // OK — broadcast all args
     OrderShipped::broadcast($user, 1);
 
@@ -156,6 +162,7 @@ TooManyArguments on line %d: Too many arguments for App\Jobs\SendEmail::__constr
 TooFewArguments on line %d: Too few arguments for App\Jobs\SendEmail::__construct - expecting subject to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\SendEmail::__construct - expecting subject to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\SendEmail::__construct - expecting subject to be passed
+TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
