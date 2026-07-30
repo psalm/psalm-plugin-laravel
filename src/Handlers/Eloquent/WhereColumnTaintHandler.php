@@ -28,6 +28,7 @@ use Psalm\Type\Atomic\Scalar;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
@@ -512,6 +513,14 @@ final class WhereColumnTaintHandler implements
      * True when the call's receiver is one of Laravel's query builders, which is what makes
      * `addArrayOfWheres()` the runtime dispatch. Anything else — a project's own class that happens
      * to expose a `where()` method — keeps the sink, as does an unresolved or widened receiver type.
+     *
+     * Delegates the atomic-level walk to {@see isBuilderUnion}, which additionally tolerates a
+     * `TNull` atomic (a null receiver never reaches `addArrayOfWheres()`: a plain `->` fatals
+     * before any SQL exists, and `?->` skips the call outright — see `MethodCallAnalyzer`, which
+     * emits `PossiblyNullReference` for a nullable receiver but never removes the `TNull` atomic
+     * before dispatching this handler) and recurses into a `TTemplateParam`'s `as` bound (a
+     * receiver typed `@template T of Builder` is one; an unbounded template, whose `as` widens to
+     * `mixed`, is not). #1336
      */
     private static function isLaravelBuilder(
         Expr $receiver,
@@ -524,9 +533,41 @@ final class WhereColumnTaintHandler implements
             return false;
         }
 
-        $codebase = $event->getCodebase();
+        return self::isBuilderUnion($type, $event->getCodebase());
+    }
+
+    /**
+     * True when every atomic of `$type` is either a `TNull` (skipped, never disqualifying on its
+     * own) or a Laravel builder — a `TTemplateParam` counts by recursing into its `as` bound — AND
+     * at least one atomic actually matched, so an all-null union (unreachable in practice, since
+     * the call itself could not have resolved) still returns false instead of vacuously true.
+     *
+     * (Not independently phpt-covered for the unbounded-template branch: an unconstrained
+     * `@template T`'s `as` widens to `mixed`, and Psalm cannot resolve which method's stub to
+     * consult on a `mixed` receiver — `MixedMethodCall` fires instead of dispatching any sink at
+     * all, with or without this method. The `false` return there is by-construction and manually
+     * verified rather than pinned by a regression test.)
+     *
+     * @psalm-mutation-free
+     */
+    private static function isBuilderUnion(Union $type, \Psalm\Codebase $codebase): bool
+    {
+        $has_builder = false;
 
         foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if ($atomic instanceof TTemplateParam) {
+                if (!self::isBuilderUnion($atomic->as, $codebase)) {
+                    return false;
+                }
+
+                $has_builder = true;
+                continue;
+            }
+
             if (!$atomic instanceof TNamedObject) {
                 return false;
             }
@@ -545,9 +586,11 @@ final class WhereColumnTaintHandler implements
             if (!$matches) {
                 return false;
             }
+
+            $has_builder = true;
         }
 
-        return true;
+        return $has_builder;
     }
 
     /**
