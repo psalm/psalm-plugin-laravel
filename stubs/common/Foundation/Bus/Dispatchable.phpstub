@@ -1,0 +1,19 @@
+<?php
+
+namespace Illuminate\Foundation\Bus;
+
+use Closure;
+use Illuminate\Support\Fluent;
+
+trait Dispatchable
+{
+    public static function dispatch(mixed ...$arguments): PendingDispatch {}
+
+    public static function dispatchIf(bool|Closure $boolean, mixed ...$arguments): PendingDispatch|Fluent {}
+
+    public static function dispatchUnless(bool|Closure $boolean, mixed ...$arguments): PendingDispatch|Fluent {}
+
+    public static function dispatchSync(mixed ...$arguments): mixed {}
+
+    public static function dispatchAfterResponse(mixed ...$arguments): mixed {}
+}
