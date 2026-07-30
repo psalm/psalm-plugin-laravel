@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785140354062,
+  "lastUpdate": 1785404220211,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9620,6 +9620,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f98ee0cb953499691dfea109c2f114df4f19d270",
+          "message": "Fix `TaintedSql` false positive on `where()` array values for nullable and template-bounded builder receivers (#1338)\n\n* fix(taint): tolerate null and builder-bounded template atomics in where() receiver gate #1336\n\nisLaravelBuilder() rejected any non-TNamedObject atomic outright, so a\nBuilder|null receiver or a @template T of Builder receiver kept the sql\nsink on the where-family array argument even though neither shape can\nreach addArrayOfWheres() as anything but a real builder: a null\nreceiver never gets there (-> fatals before any SQL exists, ?-> skips\nthe call outright), and a template bounded to Builder resolves to one\nat every call site.\n\nisBuilderUnion() now skips TNull atoms and recurses into a\nTTemplateParam's `as` bound, requiring at least one atom to actually\nmatch so an all-null union still declines rather than passing\nvacuously. An unbounded template (`as` widens to mixed) keeps failing,\nsince Psalm cannot resolve a method call on mixed in the first place.\n\n* docs(taint): correct canary docblocks now proven load-bearing for where() nullsafe/variable forms\n\nSafeSqlWhereNullsafeArrayValues.phpt and SafeSqlWhereArrayVariable.phpt\neach claimed Psalm doesn't dispatch the sql sink through their shape\n(a nullsafe call, a local-variable argument), so they stayed green\n\"even with the handler disabled.\" Probing both shapes through a sink\nthe handler never touches (whereAll()'s array sink, and a non-where\nuserland sink) shows the sql sink DOES flow through both paths; the\ntests only pass because the strip fires, making them load-bearing\npins rather than canaries. #1336\n\n* test(taint): add negative pin for the TTemplateParam receiver bound #1336\n\nisBuilderUnion()'s TTemplateParam branch had only a positive pin\n(SafeSqlWhereTemplateBoundedReceiverArrayValues.phpt); nothing proved\nit still rejects a template bounded to a non-builder class rather than\nwaving any TTemplateParam through. Mirrors\nTaintedSqlWhereNullableNonBuilderReceiver.phpt's DB::unprepared sink\nshape in the same --threads=1 ARGS group.\n\nVerified with a temporary local edit that skipped the recursive\nas-bound check: the new test goes silent under that regression and\nfires correctly against the real implementation.",
+          "timestamp": "2026-07-30T11:33:56+02:00",
+          "tree_id": "5187de35623649e13f760fc9280d8bd1eed38fb6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f98ee0cb953499691dfea109c2f114df4f19d270"
+        },
+        "date": 1785404219245,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.24,
+            "range": "± 0.35",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
