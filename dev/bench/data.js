@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785767849056,
+  "lastUpdate": 1785771383731,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9685,6 +9685,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.54,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11131bd2c645f5a27f0491bd36f7302d09c31752",
+          "message": "chore(deps): bump actions/checkout from 6.0.2 to 7.0.1 (#1341)\n\nBumps [actions/checkout](https://github.com/actions/checkout) from 6.0.2 to 7.0.1.\n- [Release notes](https://github.com/actions/checkout/releases)\n- [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/actions/checkout/compare/v6.0.2...3d3c42e5aac5ba805825da76410c181273ba90b1)\n\n---\nupdated-dependencies:\n- dependency-name: actions/checkout\n  dependency-version: 7.0.1\n  dependency-type: direct:production\n  update-type: version-update:semver-major\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-08-03T17:33:25+02:00",
+          "tree_id": "9cb252da44250c86fb41ec66335e64c26659d627",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/11131bd2c645f5a27f0491bd36f7302d09c31752"
+        },
+        "date": 1785771382849,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.05,
+            "range": "± 0.4",
             "unit": "s"
           },
           {
