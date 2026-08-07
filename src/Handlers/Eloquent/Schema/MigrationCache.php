@@ -127,6 +127,7 @@ final class MigrationCache
      * An unreadable file yields the same value as an empty one, which is
      * acceptable: the file list itself is part of the fingerprint, so an
      * appearing or disappearing file still invalidates the cache.
+     * @psalm-pure
      */
     private function hashFileContents(string $file): string
     {
