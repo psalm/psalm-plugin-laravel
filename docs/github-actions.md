@@ -39,7 +39,20 @@ The generated file carries inline comments for each knob. The common edits:
 
 ### Performance
 
-Psalm defaults to a single thread in CI (it detects the `CI` variable). Standard `ubuntu-latest` runners have 4 cores, so add `--threads=4` to the Psalm step on larger codebases. Persisting `~/.cache/psalm` between runs (with `git-restore-mtime-action`, since `git checkout` resets file mtimes) and installing the `igbinary` extension further speed up repeated runs.
+The generated workflow already passes `--threads="$(nproc)"` and installs `igbinary`, because both matter more than they look.
+
+**Threads.** Psalm forces a single thread whenever it detects CI, for the scan phase as well as the analysis phase, unless `--threads` is given. On a 7,600-file Laravel codebase, single-threaded measured 177s against 47s multi-threaded. On runners with many cores the optimum sits slightly below the core count, since the per-worker merge grows as the analysis shrinks: on a 16-core runner, 12 threads beat 16 (47s against 50s). Sweep it if your runner is large.
+
+**igbinary.** Psalm's `ForkContext` uses it to serialise each worker's results back to the parent, falling back to PHP's native serializer when absent. On the same codebase that was roughly 6s of thread-merge with it against 50s without.
+
+**Persisting the cache** is the largest win, worth about 80s on that codebase (a whole run went 158s to 78s), but it is left out of the generated workflow deliberately: `actions/cache` needs endpoints that the template's `egress-policy: block` allowlist does not include, and the exact hosts vary. Add it with `egress-policy: audit` first to discover them, then extend `allowed-endpoints`.
+
+If you do add it, two details are easy to get wrong:
+
+* **Split restore and save.** `actions/cache` skips the save on a key hit, so a single `actions/cache` step freezes its snapshot the first time it matches and never rolls forward. Use `actions/cache/restore` plus `actions/cache/save`, and put something per-commit in the save key.
+* **Do not add a catch-all `restore-keys` fallback.** Psalm partitions its cache directory by a hash covering `composer.lock`'s contents and your config, so an entry built from a different lock file misses internally in every subcache. A bare fallback therefore fires exactly when the restored archive is unusable, and on the default branch it is worse than useless: Psalm writes the new generation alongside the restored dead one, never collects stale sibling directories, and the save then archives both. Key the fallback on the same hash as the primary key.
+
+Earlier versions of this page suggested pairing the cache with `git-restore-mtime-action`, on the grounds that `git checkout` resets mtimes. That is no longer needed and was never quite right. Psalm core keys its file, parser and class-like caches on `hash('xxh128', $file_contents)`, not on mtimes. The one component that did use `filemtime()` was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore is expensive, roughly 70s on a repository with real history, and buys nothing.
 
 ## Troubleshooting
 

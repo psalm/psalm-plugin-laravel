@@ -46,14 +46,29 @@ jobs:
         with:
           php-version: '8.4'
           coverage: none
+          # igbinary is worth installing purely for Psalm: its ForkContext serialises each
+          # worker's results back to the parent with it when present, and falls back to
+          # PHP's native serializer when it is not. On a large codebase that difference
+          # measured as roughly 50s versus 6s in the thread-merge phase.
+          extensions: igbinary
 
       - uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
 
       # One pass = type + taint. Psalm 7 runs taint analysis by default (no --taint-analysis flag needed),
       # so a plain run emits both type and taint findings: GitHub annotations on stdout + a SARIF report.
       # Exits 0 even on findings; a real crash exits non-zero, fails this step, and skips the rest.
+      # --threads is not optional here. Psalm forces a single thread whenever it detects
+      # CI (Cli\Psalm::getThreads()), for both the scan and the analysis phase, unless the
+      # flag is given explicitly. That default dates from 2019 (vimeo/psalm#2795) and is
+      # being reconsidered upstream (vimeo/psalm#11761). On a 7.6k-file Laravel codebase a
+      # single-threaded run measured 177s against 47s multi-threaded.
+      #
+      # $(nproc) suits the hosted runners. On machines with many cores the optimum tends to
+      # sit slightly below the core count, because the per-worker merge grows as the
+      # analysis shrinks: on a 16-core runner, 12 threads beat 16. Worth a sweep if your
+      # runner is large.
       - name: Run Psalm
-        run: ./vendor/bin/psalm --report=psalm.sarif --report-show-info=false
+        run: ./vendor/bin/psalm --threads="$(nproc)" --report=psalm.sarif --report-show-info=false
 
       # Skipped on fork and Dependabot PRs: GitHub caps their GITHUB_TOKEN at read-only, so the upload
       # would fail with "Resource not accessible by integration" despite `security-events: write` above.
