@@ -102,11 +102,11 @@ final class MigrationCache
         $entries = [];
 
         foreach ($migrationFiles as $file) {
-            $entries[] = 'M:' . $file . ':' . self::hashFileContents($file);
+            $entries[] = 'M:' . $file . ':' . $this->hashFileContents($file);
         }
 
         foreach ($sqlDumpFiles as $file) {
-            $entries[] = 'S:' . $file . ':' . self::hashFileContents($file);
+            $entries[] = 'S:' . $file . ':' . $this->hashFileContents($file);
         }
 
         \sort($entries);
@@ -128,7 +128,7 @@ final class MigrationCache
      * acceptable: the file list itself is part of the fingerprint, so an
      * appearing or disappearing file still invalidates the cache.
      */
-    private static function hashFileContents(string $file): string
+    private function hashFileContents(string $file): string
     {
         $hash = @\hash_file('xxh128', $file);
 
