@@ -27,6 +27,7 @@ Full config example:
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
+        <findPromptInjection value="true" />
         <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
@@ -186,6 +187,27 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 ```xml
 <findOctaneIncompatibleBinding value="true" />
+```
+
+## `findPromptInjection`
+
+**default**: `false`
+
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, `Embeddings::for()`, and the other sinks listed in [Security checks](security.md)). Only relevant to projects that install `laravel/ai`; the plugin leaves the level alone otherwise.
+
+- default (element omitted, or `value="false"`): advisory. The finding is computed and visible with `--show-info=true`, and never fails the build.
+- `value="true"`: enforced. `TaintedLlmPrompt` is reported as an error like every other taint finding.
+
+Advisory is the default because prompt injection has no escape. Every other taint kind names its own fix (parameterize the query, escape the output), whereas passing the user's message straight to an agent is what a chatbot is for, and no reliable prompt-injection sanitizer exists to point a developer at. Reported as an error out of the box, the rule fires on the product's primary use case with suppression as the only remedy, which teaches people to suppress it everywhere.
+
+Enforcement is worth turning on where prompts are assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). Note that an explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
+
+This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.
+
+### Example
+
+```xml
+<findPromptInjection value="true" />
 ```
 
 ## Cache directory
