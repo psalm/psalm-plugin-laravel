@@ -39,7 +39,26 @@ The generated file carries inline comments for each knob. The common edits:
 
 ### Performance
 
-Psalm defaults to a single thread in CI (it detects the `CI` variable). Standard `ubuntu-latest` runners have 4 cores, so add `--threads=4` to the Psalm step on larger codebases. Persisting `~/.cache/psalm` between runs (with `git-restore-mtime-action`, since `git checkout` resets file mtimes) and installing the `igbinary` extension further speed up repeated runs.
+The generated workflow sets `PSALM_THREADS` and `PSALM_SCAN_THREADS` and installs `igbinary`, because both matter more than they look.
+
+**Threads.** Psalm forces a single thread whenever it detects CI, and it decides the two phases independently: `--threads` covers analysis, `--scan-threads` covers scanning (`Cli\Psalm::getThreads()`). Setting only `--threads` leaves the whole scan phase serial. On a 7,600-file Laravel codebase a fully single-threaded run measured 177s against 47s.
+
+The template uses plain numbers rather than `$(nproc)`, defaulting to 4 for `ubuntu-latest`. `nproc` is absent on macOS runners, Windows runners default to PowerShell, and inside a container coreutils older than 9.8 reports the host's cores rather than the cgroup quota, which over-subscribes and can end in an OOM kill. Raise both to your runner's core count.
+
+`--scan-threads` is worth setting here because this template runs without a persisted cache, so every run scans cold. With a warm cache it is neutral to slightly negative, since the parse work it parallelises has already been done. On runners with many cores the optimum sits slightly below the core count, since the per-worker merge grows as the analysis shrinks: on a 16-core runner, 12 threads beat 16 (47s against 50s). Sweep it if your runner is large.
+
+**igbinary.** Psalm's `ForkContext` uses it to serialise each worker's results back to the parent, falling back to PHP's native serializer when absent. On the same codebase that was roughly 6s of thread-merge with it against 50s without.
+
+**Persisting the cache** is the largest win, worth about 80s on that codebase (a whole run went 158s to 78s), but it is left out of the generated workflow deliberately: `actions/cache` needs endpoints that the template's `egress-policy: block` allowlist does not include, and the exact hosts vary. Add it with `egress-policy: audit` first to discover them, then extend `allowed-endpoints`.
+
+If you do add it, two details are easy to get wrong:
+
+* **Make the key roll forward.** `actions/cache` skips the save on an exact key hit, so a combined step whose key does not change never refreshes its snapshot. Either put something per-commit in the key (a commit SHA) and keep the combined step, or split into `actions/cache/restore` plus `actions/cache/save`. The split is the easier of the two to get right, not the only option.
+* **Qualify the `restore-keys` fallback.** Psalm partitions its cache directory by a hash covering `composer.lock`'s contents and your config, so an entry built from a different lock file misses internally in every subcache. A bare catch-all prefix therefore tends to fire precisely when the restored archive is unusable, and on the default branch that is worse than a plain miss: Psalm writes the new generation alongside the restored dead one, never collects stale sibling directories, and the save then archives both. Qualify the fallback with the same lock and config hash as the primary key, and vary only the per-commit part.
+
+Earlier versions of this page suggested pairing the cache with `git-restore-mtime-action`, on the grounds that `git checkout` resets mtimes. Drop it. Psalm validates its file and class-like storage caches against a content hash of each file, and its parser cache against the file's contents directly, so **your project's** source mtimes do not enter into it. The one component that did key on `filemtime()` of project files was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore costs roughly 70s on a repository with real history and buys nothing.
+
+Psalm's cache-generation directories do still fold in `filemtime()` of Psalm's own files and of any plugin paths, but those come from `vendor/`, not from your checkout, and Composer preserves their timestamps on extraction.
 
 ## Troubleshooting
 
