@@ -198,7 +198,7 @@ The plugin stores generated files (alias stubs) and cached migration schemas in 
 
 When `columnFallback="migrations"` is active, the plugin caches the parsed migration schema to disk so subsequent Psalm runs skip re-parsing unchanged migrations.
 
-The cache key is a fingerprint of sorted migration and SQL dump file paths, their modification times, and the plugin version. Any file change or plugin upgrade automatically invalidates the cache.
+The cache key is a fingerprint of sorted migration and SQL dump file paths, hashes of their contents, and the plugin version. Any file change or plugin upgrade automatically invalidates the cache. Content hashes (rather than modification times) keep the cache usable on CI, where a fresh checkout stamps every file with the checkout time.
 
 **Cache invalidation**: run `--clear-cache` to remove all plugin caches (including migration schema). The plugin also cleans up stale cache files automatically on each cache miss.
 

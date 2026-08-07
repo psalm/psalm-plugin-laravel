@@ -90,8 +90,6 @@ final class MigrationCacheTest extends TestCase
     {
         $migrationFile = $this->cacheDir . '/migration.php';
         \file_put_contents($migrationFile, '<?php // v1');
-        // Ensure mtime is older for reliable invalidation
-        \touch($migrationFile, \time() - 10);
 
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
@@ -106,15 +104,41 @@ final class MigrationCacheTest extends TestCase
         $cache->remember([$migrationFile], [], $compute);
         $this->assertSame(1, $callCount);
 
-        // Same file, same mtime — hit
+        // Same file, same contents — hit
         $cache->remember([$migrationFile], [], $compute);
         $this->assertSame(1, $callCount);
 
-        // Touch the file to change mtime — miss
-        \touch($migrationFile, \time());
+        // Different contents — miss
+        \file_put_contents($migrationFile, '<?php // v2');
         \clearstatcache(true, $migrationFile);
         $cache->remember([$migrationFile], [], $compute);
         $this->assertSame(2, $callCount);
+    }
+
+    #[Test]
+    public function cache_survives_modification_time_changes(): void
+    {
+        $migrationFile = $this->cacheDir . '/migration.php';
+        \file_put_contents($migrationFile, '<?php // v1');
+        \touch($migrationFile, \time() - 3600);
+
+        $cache = new MigrationCache($this->cacheDir);
+        $callCount = 0;
+
+        $compute = function () use (&$callCount): array {
+            $callCount++;
+
+            return ['users' => new SchemaTable()];
+        };
+
+        $cache->remember([$migrationFile], [], $compute);
+        $this->assertSame(1, $callCount);
+
+        // A fresh checkout rewrites mtimes without changing contents — still a hit
+        \touch($migrationFile, \time());
+        \clearstatcache(true, $migrationFile);
+        $cache->remember([$migrationFile], [], $compute);
+        $this->assertSame(1, $callCount);
     }
 
     #[Test]
