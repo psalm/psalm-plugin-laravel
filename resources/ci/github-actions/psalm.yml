@@ -14,6 +14,22 @@ permissions:
   contents: read
   security-events: write
 
+env:
+  # Psalm forces a single thread whenever it detects CI, and it decides the scan phase and
+  # the analysis phase separately: --threads covers analysis only, --scan-threads covers
+  # scanning (Cli\Psalm::getThreads()). Both must be set or half the run stays serial.
+  # On a 7,600-file Laravel codebase a fully single-threaded run measured 177s against 47s.
+  #
+  # Plain numbers rather than $(nproc): nproc does not exist on macOS runners, Windows
+  # runners default to PowerShell, and inside a container coreutils older than 9.8 reports
+  # the host's cores rather than the cgroup quota, which over-subscribes and can OOM.
+  # 4 matches ubuntu-latest. Raise both to your runner's core count.
+  #
+  # On many-core runners the analysis optimum sits slightly below the core count, because
+  # the per-worker merge grows as the analysis shrinks: on 16 cores, 12 beat 16.
+  PSALM_THREADS: 4
+  PSALM_SCAN_THREADS: 4
+
 concurrency:
   group: psalm-${{ github.ref }}
   cancel-in-progress: true
@@ -57,18 +73,15 @@ jobs:
       # One pass = type + taint. Psalm 7 runs taint analysis by default (no --taint-analysis flag needed),
       # so a plain run emits both type and taint findings: GitHub annotations on stdout + a SARIF report.
       # Exits 0 even on findings; a real crash exits non-zero, fails this step, and skips the rest.
-      # --threads is not optional here. Psalm forces a single thread whenever it detects
-      # CI (Cli\Psalm::getThreads()), for both the scan and the analysis phase, unless the
-      # flag is given explicitly. That default dates from 2019 (vimeo/psalm#2795) and is
-      # being reconsidered upstream (vimeo/psalm#11761). On a 7.6k-file Laravel codebase a
-      # single-threaded run measured 177s against 47s multi-threaded.
-      #
-      # $(nproc) suits the hosted runners. On machines with many cores the optimum tends to
-      # sit slightly below the core count, because the per-worker merge grows as the
-      # analysis shrinks: on a 16-core runner, 12 threads beat 16. Worth a sweep if your
-      # runner is large.
+      # The CI single-thread default dates from 2019 (vimeo/psalm#2795) and is being
+      # reconsidered upstream (vimeo/psalm#11761). Until then both flags are needed; see
+      # the env block at the top of this file.
       - name: Run Psalm
-        run: ./vendor/bin/psalm --threads="$(nproc)" --report=psalm.sarif --report-show-info=false
+        run: >-
+          ./vendor/bin/psalm
+          --threads=${{ env.PSALM_THREADS }}
+          --scan-threads=${{ env.PSALM_SCAN_THREADS }}
+          --report=psalm.sarif --report-show-info=false
 
       # Skipped on fork and Dependabot PRs: GitHub caps their GITHUB_TOKEN at read-only, so the upload
       # would fail with "Resource not accessible by integration" despite `security-events: write` above.

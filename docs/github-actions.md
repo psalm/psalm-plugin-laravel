@@ -39,9 +39,13 @@ The generated file carries inline comments for each knob. The common edits:
 
 ### Performance
 
-The generated workflow already passes `--threads="$(nproc)"` and installs `igbinary`, because both matter more than they look.
+The generated workflow sets `PSALM_THREADS` and `PSALM_SCAN_THREADS` and installs `igbinary`, because both matter more than they look.
 
-**Threads.** Psalm forces a single thread whenever it detects CI, for the scan phase as well as the analysis phase, unless `--threads` is given. On a 7,600-file Laravel codebase, single-threaded measured 177s against 47s multi-threaded. On runners with many cores the optimum sits slightly below the core count, since the per-worker merge grows as the analysis shrinks: on a 16-core runner, 12 threads beat 16 (47s against 50s). Sweep it if your runner is large.
+**Threads.** Psalm forces a single thread whenever it detects CI, and it decides the two phases independently: `--threads` covers analysis, `--scan-threads` covers scanning (`Cli\Psalm::getThreads()`). Setting only `--threads` leaves the whole scan phase serial. On a 7,600-file Laravel codebase a fully single-threaded run measured 177s against 47s.
+
+The template uses plain numbers rather than `$(nproc)`, defaulting to 4 for `ubuntu-latest`. `nproc` is absent on macOS runners, Windows runners default to PowerShell, and inside a container coreutils older than 9.8 reports the host's cores rather than the cgroup quota, which over-subscribes and can end in an OOM kill. Raise both to your runner's core count.
+
+`--scan-threads` is worth setting here because this template runs without a persisted cache, so every run scans cold. With a warm cache it is neutral to slightly negative, since the parse work it parallelises has already been done. On runners with many cores the optimum sits slightly below the core count, since the per-worker merge grows as the analysis shrinks: on a 16-core runner, 12 threads beat 16 (47s against 50s). Sweep it if your runner is large.
 
 **igbinary.** Psalm's `ForkContext` uses it to serialise each worker's results back to the parent, falling back to PHP's native serializer when absent. On the same codebase that was roughly 6s of thread-merge with it against 50s without.
 
@@ -49,10 +53,12 @@ The generated workflow already passes `--threads="$(nproc)"` and installs `igbin
 
 If you do add it, two details are easy to get wrong:
 
-* **Split restore and save.** `actions/cache` skips the save on a key hit, so a single `actions/cache` step freezes its snapshot the first time it matches and never rolls forward. Use `actions/cache/restore` plus `actions/cache/save`, and put something per-commit in the save key.
-* **Do not add a catch-all `restore-keys` fallback.** Psalm partitions its cache directory by a hash covering `composer.lock`'s contents and your config, so an entry built from a different lock file misses internally in every subcache. A bare fallback therefore fires exactly when the restored archive is unusable, and on the default branch it is worse than useless: Psalm writes the new generation alongside the restored dead one, never collects stale sibling directories, and the save then archives both. Key the fallback on the same hash as the primary key.
+* **Make the key roll forward.** `actions/cache` skips the save on an exact key hit, so a combined step whose key does not change never refreshes its snapshot. Either put something per-commit in the key (a commit SHA) and keep the combined step, or split into `actions/cache/restore` plus `actions/cache/save`. The split is the easier of the two to get right, not the only option.
+* **Qualify the `restore-keys` fallback.** Psalm partitions its cache directory by a hash covering `composer.lock`'s contents and your config, so an entry built from a different lock file misses internally in every subcache. A bare catch-all prefix therefore tends to fire precisely when the restored archive is unusable, and on the default branch that is worse than a plain miss: Psalm writes the new generation alongside the restored dead one, never collects stale sibling directories, and the save then archives both. Qualify the fallback with the same lock and config hash as the primary key, and vary only the per-commit part.
 
-Earlier versions of this page suggested pairing the cache with `git-restore-mtime-action`, on the grounds that `git checkout` resets mtimes. That is no longer needed and was never quite right. Psalm core keys its file, parser and class-like caches on `hash('xxh128', $file_contents)`, not on mtimes. The one component that did use `filemtime()` was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore is expensive, roughly 70s on a repository with real history, and buys nothing.
+Earlier versions of this page suggested pairing the cache with `git-restore-mtime-action`, on the grounds that `git checkout` resets mtimes. Drop it. Psalm validates its file and class-like storage caches against a content hash of each file, and its parser cache against the file's contents directly, so **your project's** source mtimes do not enter into it. The one component that did key on `filemtime()` of project files was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore costs roughly 70s on a repository with real history and buys nothing.
+
+Psalm's cache-generation directories do still fold in `filemtime()` of Psalm's own files and of any plugin paths, but those come from `vendor/`, not from your checkout, and Composer preserves their timestamps on extraction.
 
 ## Troubleshooting
 
