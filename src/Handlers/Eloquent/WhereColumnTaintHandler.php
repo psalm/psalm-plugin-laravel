@@ -518,9 +518,10 @@ final class WhereColumnTaintHandler implements
      * `TNull` atomic (a null receiver never reaches `addArrayOfWheres()`: a plain `->` fatals
      * before any SQL exists, and `?->` skips the call outright — see `MethodCallAnalyzer`, which
      * emits `PossiblyNullReference` for a nullable receiver but never removes the `TNull` atomic
-     * before dispatching this handler) and recurses into a `TTemplateParam`'s `as` bound (a
-     * receiver typed `@template T of Builder` is one; an unbounded template, whose `as` widens to
-     * `mixed`, is not). #1336
+     * before dispatching this handler). A `TNamedObject` or `TTemplateParam` may prove Builder
+     * ancestry through its base or any intersection `extra_types`: intersection conjuncts refine
+     * the same receiver, so one proven Builder component is sufficient. A template first checks its
+     * `as` bound; an unbounded or otherwise non-Builder base may still have a Builder extra type. #1339
      */
     private static function isLaravelBuilder(
         Expr $receiver,
@@ -538,15 +539,15 @@ final class WhereColumnTaintHandler implements
 
     /**
      * True when every atomic of `$type` is either a `TNull` (skipped, never disqualifying on its
-     * own) or a Laravel builder — a `TTemplateParam` counts by recursing into its `as` bound — AND
-     * at least one atomic actually matched, so an all-null union (unreachable in practice, since
-     * the call itself could not have resolved) still returns false instead of vacuously true.
+     * own) or a Laravel builder. A named or template atomic proves that through its base or local
+     * intersection `extra_types`; a template base recurses into its `as` bound. At least one atomic
+     * must actually match, so an all-null union (unreachable in practice, since the call itself could
+     * not have resolved) still returns false instead of vacuously true.
      *
-     * (Not independently phpt-covered for the unbounded-template branch: an unconstrained
-     * `@template T`'s `as` widens to `mixed`, and Psalm cannot resolve which method's stub to
-     * consult on a `mixed` receiver — `MixedMethodCall` fires instead of dispatching any sink at
-     * all, with or without this method. The `false` return there is by-construction and manually
-     * verified rather than pinned by a regression test.)
+     * An unbounded template's `as` widens to `mixed`, which cannot prove the receiver dispatch.
+     * But it may have an independently proven Builder intersection component. No extra type is
+     * treated as a Union branch or required alongside the others: all are AND-conjunct refinements
+     * of the same runtime receiver.
      *
      * @psalm-mutation-free
      */
@@ -559,31 +560,11 @@ final class WhereColumnTaintHandler implements
                 continue;
             }
 
-            if ($atomic instanceof TTemplateParam) {
-                if (!self::isBuilderUnion($atomic->as, $codebase)) {
-                    return false;
-                }
-
-                $has_builder = true;
-                continue;
-            }
-
-            if (!$atomic instanceof TNamedObject) {
+            if (!$atomic instanceof TNamedObject && !$atomic instanceof TTemplateParam) {
                 return false;
             }
 
-            $matches = false;
-
-            foreach (self::BUILDER_CLASSES as $builder) {
-                if (\strtolower($atomic->value) === $builder
-                    || $codebase->classExtendsOrImplements($atomic->value, $builder)
-                ) {
-                    $matches = true;
-                    break;
-                }
-            }
-
-            if (!$matches) {
+            if (!self::isBuilderAtomic($atomic, $codebase)) {
                 return false;
             }
 
@@ -591,6 +572,41 @@ final class WhereColumnTaintHandler implements
         }
 
         return $has_builder;
+    }
+
+    /**
+     * Proves Laravel Builder ancestry for one named or template receiver component. First checks
+     * the component's own named base or template bound, then its local intersection extras. Extras
+     * are conjuncts of this same receiver, so any one Builder component establishes the dispatch.
+     * Recursion stays inside local extras and template bounds; it does not normalize unions.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isBuilderAtomic(TNamedObject|TTemplateParam $atomic, \Psalm\Codebase $codebase): bool
+    {
+        if ($atomic instanceof TTemplateParam) {
+            if (self::isBuilderUnion($atomic->as, $codebase)) {
+                return true;
+            }
+        } else {
+            foreach (self::BUILDER_CLASSES as $builder) {
+                if (\strtolower($atomic->value) === $builder
+                    || $codebase->classExtendsOrImplements($atomic->value, $builder)
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        foreach ($atomic->extra_types as $extra_type) {
+            if (($extra_type instanceof TNamedObject || $extra_type instanceof TTemplateParam)
+                && self::isBuilderAtomic($extra_type, $codebase)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
