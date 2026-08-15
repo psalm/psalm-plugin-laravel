@@ -30,6 +30,24 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+### `ResponseFactory::make()` HTML responses
+
+`ResponseFactory::make()` reports XSS for unescaped content because its default
+response is HTML. The finding is removed only when the third argument is a
+literal headers array that proves a non HTML response. Header values can be
+strings or one-value literal string lists. A literal `Content-Disposition:
+attachment` qualifies. So do these literal `Content-Type` values:
+`application/csv`, `application/icalendar`, `application/json`,
+`application/octet-stream`, `application/pdf`, `application/xml`, `image/avif`,
+`image/bmp`, `image/gif`, `image/jpeg`, `image/png`, `image/tiff`, `image/webp`,
+`text/calendar`, `text/csv`, `text/plain`, and `text/xml`.
+
+Dynamic headers, HTML, unrecognised types, and SVG continue to report. Header
+keys are case insensitive, underscores normalize to hyphens, and later literal
+entries replace earlier values, as Symfony does. This applies to the concrete
+factory, its contract, and the `Response` facade only. A custom class with a
+`make()` method is not assumed to share Laravel's response semantics.
+
 ### Timing-unsafe secret comparison (CWE-208)
 
 Comparing a secret (a password hash, remember-token, or decrypted value) with a
