@@ -180,7 +180,7 @@ final class WhereColumnTaintHandler implements
      * the class docblock). A stale cross-file id would wrongly STRIP taint, so the file flush is
      * load-bearing.
      *
-     * @var array<int, Expr|null>
+     * @var array<int, array{method: lowercase-string, receiver: Expr}|null>
      */
     private static array $whereColumnArgumentIds = [];
 
@@ -198,7 +198,7 @@ final class WhereColumnTaintHandler implements
      * {@see isStaticReceiverLaravelBound}, which skips that check. Flushed with
      * {@see $whereColumnArgumentIds}.
      *
-     * @var array<int, array{scalar_gated: bool, receiver: Expr|null}>
+     * @var array<int, array{scalar_gated: bool, receiver: array{method: lowercase-string, receiver: Expr}|null}>
      */
     private static array $boundValuePositionIds = [];
 
@@ -226,7 +226,9 @@ final class WhereColumnTaintHandler implements
             return null;
         }
 
-        if (!isset(self::WHERE_MAP_METHODS[\strtolower($expr->name->name)])) {
+        $method_name = \strtolower($expr->name->name);
+
+        if (!isset(self::WHERE_MAP_METHODS[$method_name])) {
             return null;
         }
 
@@ -288,10 +290,11 @@ final class WhereColumnTaintHandler implements
         // string-key map is not `addArrayOfWheres()`. The receiver's type is not resolved yet here
         // (this hook fires before MethodCallAnalyzer descends `$stmt->var`), so it is stored and
         // checked at strip time by {@see isLaravelBuilder}.
-        self::$whereColumnArgumentIds[\spl_object_id($argument)] = $expr->var;
+        $receiver = ['method' => $method_name, 'receiver' => $expr->var];
+        self::$whereColumnArgumentIds[\spl_object_id($argument)] = $receiver;
 
         if ($argument instanceof Array_) {
-            self::recordBoundValuePositions($argument, $expr->var);
+            self::recordBoundValuePositions($argument, $receiver);
         }
 
         return null;
@@ -336,11 +339,7 @@ final class WhereColumnTaintHandler implements
             // method declaration counts. A method genuinely declared inside `Illuminate\` itself (a
             // real, non-magic method on one of the builder classes) is exempt: that IS
             // `addArrayOfWheres()`.
-            $declaringId = $codebase->getDeclaringMethodId($className . '::' . \strtolower($expr->name->name));
-
-            if ($declaringId !== null
-                && !\str_starts_with(\strtolower(\explode('::', $declaringId, 2)[0]), 'illuminate\\')
-            ) {
+            if (!self::hasNoConcreteUserlandDeclaration($className, $expr->name->name, $codebase)) {
                 return false;
             }
         } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
@@ -348,6 +347,27 @@ final class WhereColumnTaintHandler implements
         }
 
         return true;
+    }
+
+    /**
+     * True when `$className::$methodName` has no concrete declaration outside Laravel. Psalm's
+     * pseudo-methods are intentionally excluded from this lookup.
+     *
+     * @psalm-mutation-free
+     */
+    private static function hasNoConcreteUserlandDeclaration(
+        string $className,
+        string $methodName,
+        \Psalm\Codebase $codebase,
+    ): bool {
+        try {
+            $declaringId = $codebase->getDeclaringMethodId($className . '::' . \strtolower($methodName));
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return false;
+        }
+
+        return $declaringId === null
+            || \str_starts_with(\strtolower(\explode('::', $declaringId, 2)[0]), 'illuminate\\');
     }
 
     /**
@@ -472,7 +492,9 @@ final class WhereColumnTaintHandler implements
 
         // #1306: gate the strip on the receiver, same as removeElementTaints. `null` (StaticCall)
         // was already verified Model/builder-bound at record time — see the property docblock.
-        if ($receiver instanceof \PhpParser\Node\Expr && !self::isLaravelBuilder($receiver, $statements_source, $event)) {
+        if ($receiver !== null
+            && !self::isLaravelBuilder($receiver['receiver'], $statements_source, $event, $receiver['method'])
+        ) {
             return 0;
         }
 
@@ -498,7 +520,14 @@ final class WhereColumnTaintHandler implements
 
         // `null` means a StaticCall already verified Model/builder-bound at record time — see
         // {@see isStaticReceiverLaravelBound}; nothing left to check here.
-        if ($position['receiver'] !== null && !self::isLaravelBuilder($position['receiver'], $statements_source, $event)) {
+        if ($position['receiver'] !== null
+            && !self::isLaravelBuilder(
+                $position['receiver']['receiver'],
+                $statements_source,
+                $event,
+                $position['receiver']['method'],
+            )
+        ) {
             return 0;
         }
 
@@ -526,6 +555,7 @@ final class WhereColumnTaintHandler implements
         Expr $receiver,
         StatementsAnalyzer $statements_source,
         AddRemoveTaintsEvent $event,
+        string $methodName,
     ): bool {
         $type = $statements_source->node_data->getType($receiver);
 
@@ -533,7 +563,7 @@ final class WhereColumnTaintHandler implements
             return false;
         }
 
-        return self::isBuilderUnion($type, $event->getCodebase());
+        return self::isBuilderUnion($type, $event->getCodebase(), $methodName);
     }
 
     /**
@@ -550,7 +580,7 @@ final class WhereColumnTaintHandler implements
      *
      * @psalm-mutation-free
      */
-    private static function isBuilderUnion(Union $type, \Psalm\Codebase $codebase): bool
+    private static function isBuilderUnion(Union $type, \Psalm\Codebase $codebase, string $methodName): bool
     {
         $has_builder = false;
 
@@ -560,7 +590,7 @@ final class WhereColumnTaintHandler implements
             }
 
             if ($atomic instanceof TTemplateParam) {
-                if (!self::isBuilderUnion($atomic->as, $codebase)) {
+                if (!self::isBuilderUnion($atomic->as, $codebase, $methodName)) {
                     return false;
                 }
 
@@ -583,7 +613,7 @@ final class WhereColumnTaintHandler implements
                 }
             }
 
-            if (!$matches) {
+            if (!$matches || !self::hasNoConcreteUserlandDeclaration($atomic->value, $methodName, $codebase)) {
                 return false;
             }
 
@@ -597,10 +627,14 @@ final class WhereColumnTaintHandler implements
      * Record the elements of a where-family array literal that `addArrayOfWheres` binds. Everything
      * not recorded keeps the sink, so every uncertain shape simply falls through.
      *
+     * @param array{method: lowercase-string, receiver: Expr}|null $receiver
+     *
      * @psalm-external-mutation-free
      */
-    private static function recordBoundValuePositions(Array_ $literal, ?Expr $receiver): void
-    {
+    private static function recordBoundValuePositions(
+        Array_ $literal,
+        ?array $receiver,
+    ): void {
         foreach (self::positionalItems($literal) ?? [] as $item) {
             $key = $item->key;
 
@@ -636,10 +670,14 @@ final class WhereColumnTaintHandler implements
      * Record the bound positions of a nested condition `[[$column, $operator, $value]]`, which
      * `addArrayOfWheres` forwards as `where(...array_values($value), boolean: $boolean)`.
      *
+     * @param array{method: lowercase-string, receiver: Expr}|null $receiver
+     *
      * @psalm-external-mutation-free
      */
-    private static function recordNestedConditionPositions(Array_ $condition, ?Expr $receiver): void
-    {
+    private static function recordNestedConditionPositions(
+        Array_ $condition,
+        ?array $receiver,
+    ): void {
         $items = self::positionalItems($condition) ?? [];
 
         foreach ($items as $item) {
