@@ -2,11 +2,9 @@
 
 declare(strict_types=1);
 
-use Rector\CodingStyle\Rector\Encapsed\EncapsedStringsToSprintfRector;
 use Rector\CodingStyle\Rector\String_\UseClassKeywordForClassNameResolutionRector;
 use Rector\Config\RectorConfig;
 use Rector\Php55\Rector\String_\StringClassNameToClassConstantRector;
-use Rector\PHPUnit\Set\PHPUnitSetList;
 use Rector\ValueObject\PhpVersion;
 
 return RectorConfig::configure()
@@ -21,10 +19,8 @@ return RectorConfig::configure()
     ])
     ->withPhpVersion(PhpVersion::PHP_82)
     ->withDowngradeSets(php82: true)
-    ->withSets([PHPUnitSetList::PHPUNIT_120])
     ->withPreparedSets(deadCode: true, codeQuality: true, codingStyle: true, typeDeclarations: true, phpunitCodeQuality: true)
     ->withSkip([
-        EncapsedStringsToSprintfRector::class,
         StringClassNameToClassConstantRector::class, // analyzed classes are not always auto-loaded
         UseClassKeywordForClassNameResolutionRector::class, // analyzed classes are not always auto-loaded
     ]);

@@ -781,14 +781,12 @@ final class Plugin implements PluginEntryPointInterface
     /** @psalm-mutation-free */
     private function getProgress(RegistrationInterface $registration): \Psalm\Progress\Progress
     {
-        $output = new \Psalm\Progress\DefaultProgress();
-
         // $registration->codebase is available/public from Psalm v6.7
         // see https://github.com/vimeo/psalm/pull/11297 and https://github.com/vimeo/psalm/releases/tag/6.7.0
         if ($registration instanceof \Psalm\PluginRegistrationSocket) {
-            $output = $registration->codebase->progress;
+            return $registration->codebase->progress;
         }
 
-        return $output;
+        return new \Psalm\Progress\DefaultProgress();
     }
 }
