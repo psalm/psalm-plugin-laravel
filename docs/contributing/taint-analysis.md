@@ -555,6 +555,30 @@ final class EmailWithDnsRule implements ValidationRule
 
 **Trust model.** The plugin trusts the developer's assertion, just like any `@psalm-taint-escape`. A mis-annotated rule becomes a **false negative**: the escape removes taint kinds the value still actually carries. Only annotate kinds the rule genuinely prevents, and prefer narrow escapes (such as `header`, `cookie`) over the broad `input` alias unless the rule truly constrains the value to a digit-like or date-like form.
 
+### Closure rules
+
+A closure rule carries the same escape when the docblock sits directly on the closure literal in the rules array. Arrow functions work too, and so do both entry points (inline `$request->validate([...])` and a FormRequest `rules()` array).
+
+```php
+$request->validate([
+    'dataTable' => ['required', 'string',
+        /** @psalm-taint-escape callable */
+        function (string $attribute, mixed $value, Closure $fail): void {
+            if (! is_subclass_of($value, DataTable::class)) {
+                $fail('The selected data table is invalid.');
+            }
+        },
+    ],
+]);
+
+$class = $request->input('dataTable');
+$dataTable = new $class(); // no TaintedCallable
+```
+
+The closure may also be the field's whole rule (`'dataTable' => /** @psalm-taint-escape callable */ function (…) {}`), without the wrapping array.
+
+Tag semantics and the trust model are the class-level ones described above: bare form only (the conditional form is parameter-scoped and is ignored), any `TaintKind` name including the `input` alias, and no annotation means no escape. Placement is what scopes the escape, so a docblock on a neighbouring string rule in the same array does not carry it.
+
 ## Plugin-emitted taint sinks (handler-driven)
 
 Some taint sinks are not expressible as `@psalm-taint-sink` docblocks because they target language constructs (comparison operators) or call shapes that the stub parser cannot annotate. These sinks are registered programmatically by handlers in `src/Handlers/Rules/`.
