@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786883720714,
+  "lastUpdate": 1786883934472,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9830,6 +9830,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7e7f7d774b90ea89727a15ee0cfe3ad6e4cc0183",
+          "message": "feat(validation): honour @psalm-taint-escape on closure rules (#1352)\n\nA closure or arrow-function rule in a rules array can now carry a\n`@psalm-taint-escape <kind>` docblock, mirroring the class-level\nannotation already supported on custom Rule classes. Applies to both\ninline `validate()` arrays and FormRequest `rules()` arrays, and to both\nplacements Laravel accepts: inside the rule array, and as the field's\nwhole rule without a wrapping array.\n\nPhpParser attaches a docblock to whichever node starts at the comment's\noffset, so the comment lands on the array item in list position\n(`['rule', /** doc */ fn () => ...]`) but on the closure node in keyed\nposition (`'field' => /** doc */ fn () => ...`) and when the value is\nparenthesized. Both halves are read. Psalm's own ReflectorVisitor plus\nFunctionLikeNodeScanner cover the same two positions.\n\nBits are resolved at extraction time and carried to\n`resolveRuleSegments()` as a synthetic `escape-bits:` segment, since a\nclosure has no name to look up later. The segment is honoured only for a\nbare non-negative integer payload; anything else falls through to the\nnormal rule path, so a userland rule named `escape-bits` degrades to a\nno-op instead of a taint mask (`-1` would otherwise erase every kind via\n`taints & ~removedTaints`).\n\nTag parsing shared with the class-level path via `escapeBitsFromDoc()`.\nSame semantics: bare form only, conditional form ignored, unknown kinds\ncontribute nothing.\n\nCloses #1351",
+          "timestamp": "2026-08-16T14:35:39+02:00",
+          "tree_id": "9f7e271739c408751af89d0a32399c6e6a9be731",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7e7f7d774b90ea89727a15ee0cfe3ad6e4cc0183"
+        },
+        "date": 1786883933557,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.86,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
