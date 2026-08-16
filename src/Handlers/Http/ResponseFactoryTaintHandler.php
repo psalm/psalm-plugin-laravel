@@ -94,7 +94,7 @@ final class ResponseFactoryTaintHandler implements
 
         $receiver = self::$recordedContentIds[\spl_object_id($content)];
 
-        if ($receiver === null) {
+        if (!$receiver instanceof \PhpParser\Node\Expr) {
             return TaintKind::INPUT_HTML;
         }
 
