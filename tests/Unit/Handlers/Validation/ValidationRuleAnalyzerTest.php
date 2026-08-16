@@ -620,7 +620,7 @@ final class ValidationRuleAnalyzerTest extends TestCase
     {
         yield 'psalm 7 bitmask' => ['escape-kinds:8'];
         yield 'negative' => ['escape-kinds:-1'];
-        yield 'unknown kind' => ['escape-kinds:heder'];
+        yield 'unknown kind' => ['escape-kinds:not-a-taint-kind'];
         yield 'trailing junk' => ['escape-kinds:callablejunk'];
         yield 'empty payload' => ['escape-kinds:'];
         yield 'whitespace payload' => ['escape-kinds: callable'];
