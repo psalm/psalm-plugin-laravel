@@ -43,7 +43,7 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
     $custom->make((string) $request->input('custom'), 200, ['Content-Disposition' => 'attachment']);
 }
 
-function makeWithIntersectedReceiver(Request $request, ResponseFactory&ResponseFactoryMarker $response): void
+function makeWithIntersectedReceiver(Request $request, ResponseFactoryMarker&ResponseFactory $response): void
 {
     $response->make($request->input('intersected'), 200, ['Content-Disposition' => 'attachment']);
 }
