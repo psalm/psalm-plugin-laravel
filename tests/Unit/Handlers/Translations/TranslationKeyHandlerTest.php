@@ -22,6 +22,7 @@ use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
 #[CoversClass(TranslationKeyHandler::class)]
+#[\PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations]
 final class TranslationKeyHandlerTest extends TestCase
 {
     /** @var array<string, string|array<string, string>> Translation values used by the stub translator */

@@ -139,11 +139,44 @@ function test_events_dispatchable(User $user): void
     // Error — missing $orderId (condition excluded)
     OrderShipped::dispatchIf(true, $user);
 
+    // OK — condition + correct args
+    OrderShipped::dispatchUnless(false, $user, 1);
+
+    // Error — missing $orderId (condition excluded)
+    OrderShipped::dispatchUnless(false, $user);
+
     // OK — broadcast all args
     OrderShipped::broadcast($user, 1);
 
     // Error — missing $orderId
     OrderShipped::broadcast($user);
+}
+
+/** self/static receivers carry no `resolvedName` — they resolve against the enclosing class */
+class SelfDispatchJob
+{
+    use BusDispatchable;
+
+    public function __construct(private User $user, private string $subject) {}
+
+    public static function requeue(User $user): void
+    {
+        // OK
+        self::dispatch($user, 'Hello');
+
+        // Error — missing $subject
+        static::dispatch($user);
+    }
+}
+
+/** `parent::dispatch()` still builds `new static(...)`, so it validates against the child */
+final class ChildDispatchJob extends SelfDispatchJob
+{
+    public static function requeueFromChild(User $user): void
+    {
+        // Error — missing $subject
+        parent::dispatch($user);
+    }
 }
 ?>
 --EXPECTF--
@@ -159,3 +192,6 @@ TooFewArguments on line %d: Too few arguments for App\Jobs\SendEmail::__construc
 TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
 TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
+TooFewArguments on line %d: Too few arguments for App\Jobs\OrderShipped::__construct - expecting orderId to be passed
+TooFewArguments on line %d: Too few arguments for App\Jobs\SelfDispatchJob::__construct - expecting subject to be passed
+TooFewArguments on line %d: Too few arguments for App\Jobs\ChildDispatchJob::__construct - expecting subject to be passed

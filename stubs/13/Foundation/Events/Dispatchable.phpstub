@@ -1,0 +1,16 @@
+<?php
+
+namespace Illuminate\Foundation\Events;
+
+use Illuminate\Broadcasting\PendingBroadcast;
+
+trait Dispatchable
+{
+    public static function dispatch(mixed ...$arguments): mixed {}
+
+    public static function dispatchIf(bool $boolean, mixed ...$arguments): mixed {}
+
+    public static function dispatchUnless(bool $boolean, mixed ...$arguments): mixed {}
+
+    public static function broadcast(mixed ...$arguments): PendingBroadcast {}
+}

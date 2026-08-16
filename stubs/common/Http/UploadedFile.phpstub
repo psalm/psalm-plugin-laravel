@@ -5,10 +5,9 @@ namespace Illuminate\Http;
 /**
  * Taint annotations for UploadedFile methods that return user-controlled data.
  *
- * These methods extract metadata from the multipart upload request, which is
- * entirely attacker-controlled: the filename, extension, and MIME type are sent
- * by the client and can contain path-traversal sequences, XSS payloads, or
- * spoofed values. The file contents are likewise user-supplied.
+ * Raw multipart metadata and file contents are attacker-controlled. Methods
+ * that normalize or map those values are annotated according to the guarantees
+ * provided by that transformation.
  *
  * @see \Symfony\Component\HttpFoundation\File\UploadedFile (parent)
  */
@@ -34,10 +33,28 @@ class UploadedFile
 
     /**
      * Returns the original file extension supplied by the client.
+     * Symfony File::getName() makes the original name a basename and
+     * UploadedFile::getClientOriginalExtension() returns its dot-free extension.
+     * The result has no /, \\, or . and cannot form a traversal segment.
      *
      * @return string
      *
-     * @psalm-taint-source input
+     * @psalm-taint-source callable
+     * @psalm-taint-source unserialize
+     * @psalm-taint-source include
+     * @psalm-taint-source eval
+     * @psalm-taint-source ldap
+     * @psalm-taint-source sql
+     * @psalm-taint-source html
+     * @psalm-taint-source has_quotes
+     * @psalm-taint-source shell
+     * @psalm-taint-source ssrf
+     * @psalm-taint-source cookie
+     * @psalm-taint-source header
+     * @psalm-taint-source xpath
+     * @psalm-taint-source sleep
+     * @psalm-taint-source extract
+     * @psalm-taint-source llm_prompt
      */
     public function getClientOriginalExtension(): string {}
 
@@ -51,9 +68,10 @@ class UploadedFile
     public function getClientMimeType(): string {}
 
     /**
-     * Returns the file extension guessed from the client-supplied MIME type.
+     * Returns an extension from the configured MIME registry, selected using
+     * the client-supplied MIME type.
      *
-     * @psalm-taint-source input
+     * Registry values are intentionally trusted as application configuration.
      */
     public function clientExtension() {}
 

@@ -18,6 +18,16 @@ nav_order: 6
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
 
+`UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
+Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
+slash-, backslash-, and dot-free extension, which cannot form a traversal segment.
+
+`UploadedFile::clientExtension()` is deliberately not a taint source. The client
+chooses the MIME lookup key, but Symfony returns a value from the application's
+configured MIME registry. This avoids false positives for generated upload
+filenames; applications that populate that registry from untrusted data must model
+that boundary separately.
+
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
 ### Timing-unsafe secret comparison (CWE-208)

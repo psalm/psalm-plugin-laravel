@@ -16,12 +16,18 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\StatementsSource;
+use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\PropertyStorage;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TKeyedArray;
@@ -74,7 +80,7 @@ use Psalm\Type\Union;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/643
  * @see https://github.com/larastan/larastan RelationExistenceRule — Larastan's analogue
  */
-final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInterface
+final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInterface, AfterExpressionAnalysisInterface
 {
     /**
      * Methods whose relation name(s) come from the FIRST argument. That is the
@@ -133,6 +139,60 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
         'loadexists' => true,
     ];
 
+    /**
+     * Validate effective `$with` / `$withCount` defaults after ModelRegistrationHandler has warmed
+     * ModelMetadataRegistry. Metadata is intentionally read from the concrete model: a child can
+     * supply a relation that makes an inherited default valid, while a sibling cannot.
+     */
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
+    {
+        $codebase = $event->getCodebase();
+        $provider = $codebase->classlike_storage_provider;
+
+        foreach (ModelMetadataRegistry::all() as $modelFqcn => $metadata) {
+            if (
+                ($metadata->with === [] && $metadata->withCount === [])
+                || !$metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION)
+                || !$provider->has($modelFqcn)
+            ) {
+                continue;
+            }
+
+            $storage = $provider->get($modelFqcn);
+            if (!$storage->user_defined || $storage->abstract) {
+                continue;
+            }
+
+            foreach (['with' => $metadata->with, 'withCount' => $metadata->withCount] as $property => $relations) {
+                $propertyStorage = self::ownDefaultProperty($storage, $modelFqcn, $property);
+                $location = $propertyStorage?->location ?? $storage->location;
+                if (!$location instanceof CodeLocation) {
+                    continue;
+                }
+
+                $suppressedIssues = $storage->suppressed_issues;
+                if ($propertyStorage instanceof \Psalm\Storage\PropertyStorage) {
+                    $suppressedIssues = [...$suppressedIssues, ...$propertyStorage->suppressed_issues];
+                }
+
+                foreach ($relations as $relation) {
+                    self::validateRelationPath(
+                        $codebase,
+                        $modelFqcn,
+                        $relation,
+                        $location,
+                        $suppressedIssues,
+                        allowsAlias: $property === 'withCount',
+                        allowsPaths: $property === 'with',
+                        allowsColumns: $property === 'with',
+                        property: $property,
+                    );
+                }
+            }
+        }
+    }
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -175,7 +235,16 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
         $allowsAlias = isset(self::AGGREGATE_METHODS[$methodNameLc]);
 
         foreach (self::extractRelationNames($source, $args[0]) as $relationName) {
-            self::validateRelationPath($codebase, $source, $modelFqcn, $relationName, $args[0], $allowsAlias);
+            self::validateRelationPath(
+                $codebase,
+                $modelFqcn,
+                $relationName,
+                new CodeLocation($source, $args[0]->value),
+                $source->getSuppressedIssues(),
+                allowsAlias: $allowsAlias,
+                allowsPaths: true,
+                allowsColumns: true,
+            );
         }
 
         return null;
@@ -410,29 +479,38 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
      * @param bool $allowsAlias whether the calling method accepts a `relation as alias`
      *                          clause (the aggregate `load*` family) that must be
      *                          stripped before the relation lookup
+     * @param bool $allowsPaths whether dot notation is meaningful for this declaration surface
+     * @param bool $allowsColumns whether eager-load `:columns` syntax is meaningful
+     * @param array<array-key, string> $suppressedIssues
      */
     private static function validateRelationPath(
         Codebase $codebase,
-        StatementsSource $source,
         string $modelFqcn,
         string $relationName,
-        Arg $arg,
+        CodeLocation $location,
+        array $suppressedIssues,
         bool $allowsAlias,
+        bool $allowsPaths,
+        bool $allowsColumns,
+        ?string $property = null,
     ): void {
-        $segments = \explode('.', $relationName);
+        $segments = $allowsPaths ? \explode('.', $relationName) : [$relationName];
         $lastIndex = \count($segments) - 1;
         $current = $modelFqcn;
 
         foreach ($segments as $index => $segment) {
             // Strip the `:col1,col2` select syntax (with()/load() eager-load columns).
-            $name = \trim(\explode(':', $segment, 2)[0]);
+            $name = \trim($allowsColumns ? \explode(':', $segment, 2)[0] : $segment);
 
             // Strip the ` as <alias>` aggregate clause (loadCount/loadSum/...): the
             // alias names the sub-select column, not part of the relation name. A real
             // relation maps to a PHP method, which never contains a space, so this can
             // only ever remove alias syntax, never mask a typo.
             if ($allowsAlias) {
-                $name = \explode(' ', $name, 2)[0];
+                $aliasParts = \explode(' ', $name);
+                if (\count($aliasParts) === 3 && \strtolower($aliasParts[1]) === 'as') {
+                    $name = $aliasParts[0];
+                }
             }
 
             if ($name === '') {
@@ -440,12 +518,13 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
             }
 
             if (!RelationResolver::relationMethodExists($codebase, $current, $name)) {
+                $context = $property === null ? '' : " from {$modelFqcn}::\${$property}";
                 IssueBuffer::accepts(
                     new UndefinedModelRelation(
-                        "Relation '{$name}' is not defined on {$current}.",
-                        new CodeLocation($source, $arg->value),
+                        "Relation '{$name}'{$context} is not defined on {$current}.",
+                        $location,
                     ),
-                    $source->getSuppressedIssues(),
+                    $suppressedIssues,
                 );
 
                 return;
@@ -469,5 +548,28 @@ final class UndefinedModelRelationHandler implements AfterExpressionAnalysisInte
                 return;
             }
         }
+    }
+
+    /**
+     * A parent or trait default is evaluated in the child context, so only a property declared by the
+     * concrete model supplies a property-local location or suppression; inherited defaults stay on the child.
+     *
+     * @psalm-mutation-free
+     */
+    private static function ownDefaultProperty(ClassLikeStorage $storage, string $modelFqcn, string $property): ?PropertyStorage
+    {
+        $declaringClass = $storage->declaring_property_ids[$property] ?? null;
+        $propertyStorage = $storage->properties[$property] ?? null;
+
+        if (
+            $declaringClass !== null
+            && \strtolower($declaringClass) === \strtolower($modelFqcn)
+            && $propertyStorage !== null
+            && $propertyStorage->location instanceof CodeLocation
+        ) {
+            return $propertyStorage;
+        }
+
+        return null;
     }
 }

@@ -43,6 +43,17 @@ final class ValidationRuleAnalyzer
     private const CLASS_SEGMENT_PREFIX = 'class:';
 
     /**
+     * Synthetic segment prefix carrying an already-resolved taint-escape kind
+     * list (comma-separated), used for closure rules whose
+     * `@psalm-taint-escape` docblock has no addressable class name to look up
+     * later. Psalm 6 taints are `list<string>`, so the payload is the kind
+     * names themselves rather than Psalm 7's OR-ed bitmask. Same collision
+     * argument as {@see CLASS_SEGMENT_PREFIX}: no Laravel rule is named
+     * `escape-kinds`.
+     */
+    private const ESCAPE_SEGMENT_PREFIX = 'escape-kinds:';
+
+    /**
      * Authoritative taint-escape table for first-party Laravel rule classes
      * whose object form carries the same safety guarantees as their string-rule
      * equivalent in {@see ruleToRemovedTaints()}. Consulted before any class
@@ -311,6 +322,27 @@ final class ValidationRuleAnalyzer
                 )));
 
                 continue;
+            }
+
+            // Synthetic segment for an annotated closure rule. The kind list was
+            // already resolved at extraction time — a closure has no name to
+            // look up here.
+            if (\str_starts_with($segment, self::ESCAPE_SEGMENT_PREFIX)) {
+                // Only names from the built-in kind set are ours. A malformed
+                // payload yields nothing and falls through to the normal rule
+                // path, so a userland rule that happens to be named
+                // `escape-kinds` degrades to an unknown (no-op) rule instead of
+                // silently erasing taint kinds.
+                $kinds = \array_values(\array_intersect(
+                    \explode(',', \substr($segment, \strlen(self::ESCAPE_SEGMENT_PREFIX))),
+                    self::knownTaintKinds(),
+                ));
+
+                if ($kinds !== []) {
+                    $removedTaints = \array_values(\array_unique(\array_merge($removedTaints, $kinds)));
+
+                    continue;
+                }
             }
 
             [$ruleName, $ruleParam] = self::splitRule($segment);
@@ -1250,6 +1282,19 @@ final class ValidationRuleAnalyzer
                         continue;
                     }
 
+                    // Closure rule — the body is opaque, so the only escape it
+                    // can contribute is the one the developer asserts in a
+                    // docblock on the literal.
+                    if (self::isClosureLike($ruleItem->value)) {
+                        $escapeKinds = self::closureRuleRemovedTaints($ruleItem);
+
+                        if ($escapeKinds !== []) {
+                            $segments[] = self::ESCAPE_SEGMENT_PREFIX . \implode(',', $escapeKinds);
+                        }
+
+                        continue;
+                    }
+
                     // Rule::in(...) / Rule::notIn(...) / `new In([...])` / `new NotIn([...])`
                     // with statically-extractable string literals — emit the equivalent
                     // 'in:a,b,c' / 'not_in:a,b,c' segment so resolveRuleSegments narrows
@@ -1288,6 +1333,19 @@ final class ValidationRuleAnalyzer
 
                 if ($segments !== []) {
                     $rules[$fieldName] = $segments;
+                }
+
+                continue;
+            }
+
+            // Value: a bare closure as the whole field rule. Laravel accepts
+            // this alongside the array form, so the annotation has to be read
+            // here too; the escape is then the field's only rule segment.
+            if (self::isClosureLike($item->value)) {
+                $escapeKinds = self::closureRuleRemovedTaints($item);
+
+                if ($escapeKinds !== []) {
+                    $rules[$fieldName] = [self::ESCAPE_SEGMENT_PREFIX . \implode(',', $escapeKinds)];
                 }
 
                 continue;
@@ -1726,18 +1784,7 @@ final class ValidationRuleAnalyzer
      *
      * Psalm stores `removed_taints` on FunctionLikeStorage only — class-level
      * escapes are not part of ClassLikeStorage — so we parse the class's raw
-     * docblock here. Only the bare form (`@psalm-taint-escape header`) is
-     * honoured; the conditional form (`@psalm-taint-escape (...)`) is ignored
-     * because it is defined per-parameter and has no meaning at class scope.
-     *
-     * Unknown kinds are silently dropped. Unlike Psalm's own
-     * `Codebase::getOrRegisterTaint()` (used in FunctionLikeDocblockScanner),
-     * which registers unfamiliar names as custom taint kinds, this lookup
-     * honours only the built-in INPUT_* kind set. A mistyped kind
-     * (e.g. `heder` instead of `header`) contributes no escape and therefore
-     * leaves taint intact, which produces extra reports (the false-positive
-     * direction) — double-check spellings against the kind table in
-     * `docs/contributing/taint-analysis.md`.
+     * docblock here. Tag semantics live in {@see escapeKindsFromDoc()}.
      *
      * The FQN is treated as an opaque string — if the class does not exist in
      * the codebase, the storage lookup below fails and we return [].
@@ -1798,10 +1845,77 @@ final class ValidationRuleAnalyzer
             return self::$classTaintCache[$cacheKey] = [];
         }
 
+        return self::$classTaintCache[$cacheKey] = self::escapeKindsFromDoc($docComment);
+    }
+
+    /**
+     * A closure literal usable as a validation rule.
+     *
+     * @psalm-assert-if-true Node\Expr\ArrowFunction|Node\Expr\Closure $expr
+     * @psalm-pure
+     */
+    private static function isClosureLike(Node\Expr $expr): bool
+    {
+        return $expr instanceof Node\Expr\Closure || $expr instanceof Node\Expr\ArrowFunction;
+    }
+
+    /**
+     * Read `@psalm-taint-escape <kind>` annotations from a closure rule literal
+     * in a rules array. Same trust model and tag semantics as
+     * {@see classRuleRemovedTaints()}: the closure body is opaque to static
+     * analysis, so the developer's assertion is all there is.
+     *
+     * PhpParser attaches a comment to whichever node STARTS at the comment's
+     * offset, so the docblock lands on either half of the array item depending
+     * on shape, and both have to be read:
+     *
+     *   - `['rule', /** doc *\/ fn () => …]` — item and value start together,
+     *     so the item carries it.
+     *   - `'field' => /** doc *\/ fn () => …` — the item starts back at the key
+     *     token, so the value carries it. Same for a parenthesized value.
+     *
+     * Psalm's own `ReflectorVisitor` reads the item and `FunctionLikeNodeScanner`
+     * then prefers the closure node's own comment, covering the same two halves.
+     *
+     * @return list<string>
+     */
+    private static function closureRuleRemovedTaints(Node\ArrayItem $ruleItem): array
+    {
+        $docComment = $ruleItem->getDocComment() ?? $ruleItem->value->getDocComment();
+
+        if (!$docComment instanceof \PhpParser\Comment\Doc) {
+            return [];
+        }
+
+        return self::escapeKindsFromDoc($docComment);
+    }
+
+    /**
+     * Collect the taint kinds named by every bare `@psalm-taint-escape` tag in
+     * a docblock, deduplicated.
+     *
+     * Only the bare form (`@psalm-taint-escape header`) is honoured; the
+     * conditional form (`@psalm-taint-escape (...)`) is parameter-scoped and
+     * has nothing to bind to on a rule, whose contribution is to a single
+     * validated field rather than to a return value.
+     *
+     * Unknown kinds are silently dropped. Unlike Psalm's own
+     * `Codebase::getOrRegisterTaint()` (used in FunctionLikeDocblockScanner),
+     * which registers unfamiliar names as custom taint kinds, this lookup
+     * honours only the built-in INPUT_* / *_SECRET kind set. A mistyped kind
+     * (e.g. `heder` instead of `header`) contributes no escape and therefore
+     * leaves taint intact, which produces extra reports (the false-positive
+     * direction) — double-check spellings against the kind table in
+     * `docs/contributing/taint-analysis.md`.
+     *
+     * @return list<string>
+     */
+    private static function escapeKindsFromDoc(\PhpParser\Comment\Doc $docComment): array
+    {
         try {
             $parsed = DocComment::parsePreservingLength($docComment, true);
         } catch (DocblockParseException) {
-            return self::$classTaintCache[$cacheKey] = [];
+            return [];
         }
 
         $escapeTags = $parsed->tags['psalm-taint-escape'] ?? [];
@@ -1814,7 +1928,6 @@ final class ValidationRuleAnalyzer
             $kind = \trim($tagLine);
 
             if ($kind === '' || $kind[0] === '(') {
-                // Conditional form is parameter-scoped; has no meaning on a class.
                 continue;
             }
 
@@ -1838,7 +1951,7 @@ final class ValidationRuleAnalyzer
             }
         }
 
-        return self::$classTaintCache[$cacheKey] = $kinds;
+        return $kinds;
     }
 
     /**

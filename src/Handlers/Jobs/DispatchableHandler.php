@@ -94,8 +94,8 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
-        $className = $expr->class->getAttribute('resolvedName');
-        if (!\is_string($className)) {
+        $className = self::resolveClassName($expr->class, $event);
+        if ($className === null) {
             return null;
         }
 
@@ -156,6 +156,33 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
         );
 
         return null;
+    }
+
+    /**
+     * Resolve a `StaticCall`'s class `Name` to an FQCN, or `null` when it cannot be pinned to one class.
+     *
+     * `resolvedName` is only set for ordinary names — PhpParser's name resolver deliberately leaves
+     * `self`/`static`/`parent` alone because they are context-sensitive. Without this substitution the
+     * handler declines, and since the Dispatchable stubs are bodyless it is the only producer of the
+     * constructor argument and taint edges, so declining silently drops both.
+     *
+     * All three keywords map to the enclosing class: the trait bodies build `new static(...$arguments)`,
+     * so late static binding sends even `parent::dispatch()` to the caller's own class — never
+     * `$context->parent`.
+     */
+    private static function resolveClassName(Name $class, AfterExpressionAnalysisEvent $event): ?string
+    {
+        if ($class->isSpecialClassName()) {
+            return match ($class->toLowerString()) {
+                'self', 'static', 'parent' => $event->getContext()->self,
+                default => null,
+            };
+        }
+
+        /** @psalm-var ?string $resolved */
+        $resolved = $class->getAttribute('resolvedName');
+
+        return \is_string($resolved) ? $resolved : null;
     }
 
     /**

@@ -28,6 +28,7 @@ use Psalm\Type\Atomic\Scalar;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
@@ -522,6 +523,15 @@ final class WhereColumnTaintHandler implements
      * True when the call's receiver is one of Laravel's query builders, which is what makes
      * `addArrayOfWheres()` the runtime dispatch. Anything else — a project's own class that happens
      * to expose a `where()` method — keeps the sink, as does an unresolved or widened receiver type.
+     *
+     * Delegates the atomic-level walk to {@see isBuilderUnion}, which additionally tolerates a
+     * `TNull` atomic (a null receiver never reaches `addArrayOfWheres()`: a plain `->` fatals
+     * before any SQL exists, and `?->` skips the call outright — see `MethodCallAnalyzer`, which
+     * emits `PossiblyNullReference` for a nullable receiver but never removes the `TNull` atomic
+     * before dispatching this handler). A `TNamedObject` or `TTemplateParam` may prove Builder
+     * ancestry through its base or any intersection `extra_types`: intersection conjuncts refine
+     * the same receiver, so one proven Builder component is sufficient. A template first checks its
+     * `as` bound; an unbounded or otherwise non-Builder base may still have a Builder extra type. #1339
      */
     private static function isLaravelBuilder(
         Expr $receiver,
@@ -534,30 +544,79 @@ final class WhereColumnTaintHandler implements
             return false;
         }
 
-        $codebase = $event->getCodebase();
+        return self::isBuilderUnion($type, $event->getCodebase());
+    }
+
+    /**
+     * True when every atomic of `$type` is either a `TNull` (skipped, never disqualifying on its
+     * own) or a Laravel builder. A named or template atomic proves that through its base or local
+     * intersection `extra_types`; a template base recurses into its `as` bound. At least one atomic
+     * must actually match, so an all-null union (unreachable in practice, since the call itself could
+     * not have resolved) still returns false instead of vacuously true.
+     *
+     * An unbounded template's `as` widens to `mixed`, which cannot prove the receiver dispatch.
+     * But it may have an independently proven Builder intersection component. No extra type is
+     * treated as a Union branch or required alongside the others: all are AND-conjunct refinements
+     * of the same runtime receiver.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isBuilderUnion(Union $type, \Psalm\Codebase $codebase): bool
+    {
+        $has_builder = false;
 
         foreach ($type->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if (!$atomic instanceof TNamedObject && !$atomic instanceof TTemplateParam) {
                 return false;
             }
 
-            $matches = false;
+            if (!self::isBuilderAtomic($atomic, $codebase)) {
+                return false;
+            }
 
+            $has_builder = true;
+        }
+
+        return $has_builder;
+    }
+
+    /**
+     * Proves Laravel Builder ancestry for one named or template receiver component. First checks
+     * the component's own named base or template bound, then its local intersection extras. Extras
+     * are conjuncts of this same receiver, so any one Builder component establishes the dispatch.
+     * Recursion stays inside local extras and template bounds; it does not normalize unions.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isBuilderAtomic(TNamedObject|TTemplateParam $atomic, \Psalm\Codebase $codebase): bool
+    {
+        if ($atomic instanceof TTemplateParam) {
+            if (self::isBuilderUnion($atomic->as, $codebase)) {
+                return true;
+            }
+        } else {
             foreach (self::BUILDER_CLASSES as $builder) {
                 if (\strtolower($atomic->value) === $builder
                     || $codebase->classExtendsOrImplements($atomic->value, $builder)
                 ) {
-                    $matches = true;
-                    break;
+                    return true;
                 }
-            }
-
-            if (!$matches) {
-                return false;
             }
         }
 
-        return true;
+        foreach ($atomic->extra_types as $extra_type) {
+            if (($extra_type instanceof TNamedObject || $extra_type instanceof TTemplateParam)
+                && self::isBuilderAtomic($extra_type, $codebase)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

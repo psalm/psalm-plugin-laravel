@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Foundation\Events;
+
+use Illuminate\Broadcasting\PendingBroadcast;
+
+trait Dispatchable
+{
+    /** @psalm-variadic */
+    public static function dispatch(): mixed {}
+
+    public static function dispatchIf(bool $boolean, mixed ...$arguments): mixed {}
+
+    public static function dispatchUnless(bool $boolean, mixed ...$arguments): mixed {}
+
+    /** @psalm-variadic */
+    public static function broadcast(): PendingBroadcast {}
+}

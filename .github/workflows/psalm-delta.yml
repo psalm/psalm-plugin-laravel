@@ -64,7 +64,7 @@ jobs:
       is_fork: ${{ steps.refs.outputs.is_fork }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
 
@@ -110,7 +110,7 @@ jobs:
       # point, so harness fixes never reach in-flight PRs. issue_comment runs from
       # the default branch, so a ref-less checkout is master HEAD.
       - name: Checkout harness (default branch, for the registry)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -135,7 +135,7 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
 
@@ -143,7 +143,7 @@ jobs:
       # path repo (requires resolve into the per-app vendor), so no vendor needed.
       # persist-credentials:false — executed PR code never gets git creds.
       - name: Checkout base plugin
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: plugin-base
@@ -153,7 +153,7 @@ jobs:
       # with no creds, and the head code's only effect is issue JSON consumed as
       # data downstream. See the header security posture.
       - name: Checkout head plugin
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.head_sha }}
           path: plugin-pr
@@ -162,7 +162,7 @@ jobs:
       # Measurement harness: default branch, not base/head. PR head can't alter
       # it; harness fixes reach in-flight PRs immediately.
       - name: Checkout harness (default branch)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: harness
           persist-credentials: false
@@ -262,14 +262,14 @@ jobs:
       pull-requests: write   # post / update the sticky delta comment
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
 
       # Default-branch harness: this job runs only trusted code (delta-report.php)
       # over the per-app JSON, never the PR's plugin code.
       - name: Checkout harness (default branch, for the comparator + registry)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 

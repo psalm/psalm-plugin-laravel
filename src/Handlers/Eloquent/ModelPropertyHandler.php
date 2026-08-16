@@ -241,7 +241,7 @@ final class ModelPropertyHandler
         $type = ColumnTypeMapper::mapBaseType($column);
 
         if ($column->nullable) {
-            $type = Type::combineUnionTypes($type, Type::getNull());
+            return Type::combineUnionTypes($type, Type::getNull());
         }
 
         return $type;

@@ -385,7 +385,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      * Extra arguments (parameters for makeWith) are not relevant to this rule.
      *
      * @param array<array-key, Arg> $args
-     * @return class-string|string|null
+     * @psalm-return class-string|string|null
      */
     private static function extractAbstract(array $args): ?string
     {
@@ -402,7 +402,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
      * deliberately restricted to Laravel's alias keys; arbitrary strings do not
      * match.
      *
-     * @return class-string|string|null
+     * @psalm-return class-string|string|null
      */
     private static function literalAbstractFrom(?Node $node): ?string
     {

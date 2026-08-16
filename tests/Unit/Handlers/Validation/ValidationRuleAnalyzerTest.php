@@ -578,6 +578,84 @@ final class ValidationRuleAnalyzerTest extends TestCase
         );
     }
 
+    // --- Closure rule escape segments (#1351) ---
+
+    #[Test]
+    public function escape_kinds_segment_merges_its_kinds_into_removed_taints(): void
+    {
+        // The closure branch of extractRulePairsFromArrayNode resolves the
+        // docblock to a kind list up front, so the segment carries the kind
+        // names literally rather than a rule name to look up here.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'string', 'escape-kinds:' . TaintKind::INPUT_CALLABLE],
+        );
+
+        $this->assertSame([TaintKind::INPUT_CALLABLE], $rule->removedTaints);
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function escape_kinds_segment_unions_with_string_rule_escapes(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'email', 'escape-kinds:' . TaintKind::INPUT_CALLABLE],
+        );
+
+        $this->assertSame(
+            [TaintKind::INPUT_HEADER, TaintKind::INPUT_COOKIE, TaintKind::INPUT_CALLABLE],
+            $rule->removedTaints,
+        );
+    }
+
+    /**
+     * Only names from the built-in kind set are honoured. Anything else
+     * reaching here came from a userland rule string and must degrade to a
+     * no-op rule rather than silently erasing taint kinds. Psalm 7's numeric
+     * bitmask payloads are covered here too: on Psalm 6 they name no kind.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function provideMalformedEscapeKindsPayloads(): iterable
+    {
+        yield 'psalm 7 bitmask' => ['escape-kinds:8'];
+        yield 'negative' => ['escape-kinds:-1'];
+        yield 'unknown kind' => ['escape-kinds:heder'];
+        yield 'trailing junk' => ['escape-kinds:callablejunk'];
+        yield 'empty payload' => ['escape-kinds:'];
+        yield 'whitespace payload' => ['escape-kinds: callable'];
+        yield 'group alias' => ['escape-kinds:input'];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('provideMalformedEscapeKindsPayloads')]
+    public function malformed_escape_kinds_segment_contributes_no_taint_escape(string $segment): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'string', $segment]);
+
+        $this->assertSame([], $rule->removedTaints);
+        // Falling through to the normal path must leave the other segments alone.
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function escape_kinds_segment_is_not_a_type_bearing_rule(): void
+    {
+        // Guards the segment against the other consumers of a rule name
+        // (splitRule, ruleToType, presence narrowing): a closure's runtime
+        // behavior is opaque, so the segment may only contribute taint kinds.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['escape-kinds:' . TaintKind::INPUT_HTML],
+        );
+
+        $this->assertTrue($rule->type->isMixed());
+        $this->assertFalse($rule->required);
+        $this->assertFalse($rule->nullable);
+        $this->assertFalse($rule->sometimes);
+        $this->assertSame([TaintKind::INPUT_HTML], $rule->removedTaints);
+    }
+
     // --- lookupRuleByKey (#838 wildcard-suffix fallback) ---
 
     #[Test]
