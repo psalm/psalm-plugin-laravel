@@ -14,9 +14,14 @@ use Illuminate\Support\Facades\Response;
  */
 function makeAttachmentResponses(Request $request, ResponseFactory $concrete, ResponseFactoryContract $contract): void
 {
-    $concrete->make($request->input('concrete-download'), 200, ['Content-Disposition' => 'attachment']);
-    $contract->make((string) $request->input('contract-download'), 200, ['Content-Disposition' => 'attachment']);
-    Response::make($request->input('facade-download'), 200, ['Content-Disposition' => 'attachment']);
+    $concrete->make($request->input('concrete-download'), 200, ['Content-Disposition' => 'attachment; filename="members.csv"']);
+    $contract->make((string) $request->input('contract-download'), 200, ['Content-Disposition' => 'attachment; filename="members.csv"']);
+    Response::make($request->input('facade-download'), 200, ['Content-Disposition' => 'attachment; filename="members.csv"']);
+}
+
+function makeCaseInsensitiveAttachment(ResponseFactory $response, Request $request): void
+{
+    $response->make($request->input('case-insensitive-download'), 200, ['Content-Disposition' => " \tATTACHMENT ; filename=members.csv\t "]);
 }
 ?>
 --EXPECTF--

@@ -127,14 +127,11 @@ final class ResponseFactoryTaintHandler implements
 
             $header = \strtolower($item->key->value);
 
-            if (\str_replace('_', '-', $header) !== 'content-disposition') {
+            if ($header !== 'content-disposition') {
                 continue;
             }
 
-            if ($header !== 'content-disposition'
-                || $hasAttachment
-                || $item->value->value !== 'attachment'
-            ) {
+            if ($hasAttachment || !self::isAttachmentDisposition($item->value->value)) {
                 return false;
             }
 
@@ -142,6 +139,12 @@ final class ResponseFactoryTaintHandler implements
         }
 
         return $hasAttachment;
+    }
+
+    /** @psalm-pure */
+    private static function isAttachmentDisposition(string $disposition): bool
+    {
+        return \preg_match('/^attachment(?:\s*;.*)?$/i', \trim($disposition)) === 1;
     }
 
     private static function isExactResponseFacade(StaticCall $call): bool
