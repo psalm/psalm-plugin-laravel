@@ -576,6 +576,84 @@ final class ValidationRuleAnalyzerTest extends TestCase
         );
     }
 
+    // --- Closure rule escape segments (#1351) ---
+
+    #[Test]
+    public function escape_bits_segment_ors_its_mask_into_removed_taints(): void
+    {
+        // The closure branch of extractRulePairsFromArrayNode resolves the
+        // docblock to a bitmask up front, so the segment carries the bits
+        // literally rather than a name to look up here.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'string', 'escape-bits:' . TaintKind::INPUT_CALLABLE],
+        );
+
+        $this->assertSame(TaintKind::INPUT_CALLABLE, $rule->removedTaints);
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function escape_bits_segment_unions_with_string_rule_escapes(): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['required', 'email', 'escape-bits:' . TaintKind::INPUT_CALLABLE],
+        );
+
+        $this->assertSame(
+            TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE | TaintKind::INPUT_CALLABLE,
+            $rule->removedTaints,
+        );
+    }
+
+    /**
+     * A negative payload must never be honoured: `removedTaints` is applied as
+     * `taints & ~removedTaints`, so `-1` would erase every kind at once. The
+     * analyzer only ever emits non-negative bitmasks, so anything else reaching
+     * here came from a userland rule string and must degrade to a no-op rule.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function provideMalformedEscapeBitsPayloads(): iterable
+    {
+        yield 'negative' => ['escape-bits:-1'];
+        yield 'signed positive' => ['escape-bits:+8'];
+        yield 'trailing junk' => ['escape-bits:123junk'];
+        yield 'leading junk' => ['escape-bits:junk123'];
+        yield 'empty payload' => ['escape-bits:'];
+        yield 'whitespace payload' => ['escape-bits: 8'];
+        yield 'hex' => ['escape-bits:0x10'];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('provideMalformedEscapeBitsPayloads')]
+    public function malformed_escape_bits_segment_contributes_no_taint_escape(string $segment): void
+    {
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(['required', 'string', $segment]);
+
+        $this->assertSame(0, $rule->removedTaints);
+        // Falling through to the normal path must leave the other segments alone.
+        $this->assertSame('string', $rule->type->getId());
+        $this->assertTrue($rule->required);
+    }
+
+    #[Test]
+    public function escape_bits_segment_is_not_a_type_bearing_rule(): void
+    {
+        // Guards the segment against the other consumers of a rule name
+        // (splitRule, ruleToType, presence narrowing): a closure's runtime
+        // behavior is opaque, so the segment may only contribute taint bits.
+        $rule = ValidationRuleAnalyzer::resolveRuleSegments(
+            ['escape-bits:' . TaintKind::INPUT_HTML],
+        );
+
+        $this->assertTrue($rule->type->isMixed());
+        $this->assertFalse($rule->required);
+        $this->assertFalse($rule->nullable);
+        $this->assertFalse($rule->sometimes);
+        $this->assertSame(TaintKind::INPUT_HTML, $rule->removedTaints);
+    }
+
     // --- lookupRuleByKey (#838 wildcard-suffix fallback) ---
 
     #[Test]
