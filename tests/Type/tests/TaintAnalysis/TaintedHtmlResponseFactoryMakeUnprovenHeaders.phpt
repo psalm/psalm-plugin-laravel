@@ -42,6 +42,8 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
     $response->make($request->input('list-disposition'), 200, ['Content-Disposition' => ['attachment']]);
     $response->make($request->input('attachment-suffix'), 200, ['Content-Disposition' => 'attachmentx']);
     $response->make($request->input('malformed-disposition'), 200, ['Content-Disposition' => 'attachment filename=members.csv']);
+    $response->make($request->input('empty-parameter'), 200, ['Content-Disposition' => 'attachment;']);
+    $response->make($request->input('whitespace-parameter'), 200, ['Content-Disposition' => "attachment; \t"]);
     $response->make($request->input('inline-disposition'), 200, ['Content-Disposition' => 'inline; filename="members.csv"']);
     $response->make($request->input('underscore-disposition'), 200, ['Content_Disposition' => 'attachment']);
     $response->make($request->input('duplicate-disposition'), 200, [
@@ -59,6 +61,8 @@ function makeWithIntersectedReceiver(Request $request, ResponseFactoryMarker&Res
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

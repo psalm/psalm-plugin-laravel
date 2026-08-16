@@ -144,7 +144,7 @@ final class ResponseFactoryTaintHandler implements
     /** @psalm-pure */
     private static function isAttachmentDisposition(string $disposition): bool
     {
-        return \preg_match('/^attachment(?:\s*;.*)?$/i', \trim($disposition)) === 1;
+        return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', \trim($disposition)) === 1;
     }
 
     private static function isExactResponseFacade(StaticCall $call): bool
