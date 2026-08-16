@@ -9,23 +9,13 @@ use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\Response;
 
 /**
- * Literal headers prove these `make()` responses are never parsed as HTML: CSV, XML, and JSON
- * are non-HTML MIME responses, while `attachment` is downloaded. Symfony's one-value string lists
- * and underscore-normalized header keys are equivalent to their scalar hyphenated forms. Both
- * gates are pinned through each receiver route because all three carry the same sink by default.
+ * A literal attachment disposition makes the browser download the response rather than render
+ * it as HTML. The exception is pinned through every receiver route carrying the default sink.
  */
-function makeNonHtmlResponses(Request $request, ResponseFactory $concrete, ResponseFactoryContract $contract): void
+function makeAttachmentResponses(Request $request, ResponseFactory $concrete, ResponseFactoryContract $contract): void
 {
-    $concrete->make($request->input('csv'), 200, ['Content-Type' => 'text/csv']);
-    $concrete->make($request->input('csv-list'), 200, ['Content-Type' => ['text/csv']]);
-    $concrete->make($request->input('underscore-type'), 200, ['Content_Type' => 'text/csv']);
-    $concrete->make($request->input('concrete-download'), 200, ['Content-Disposition' => 'attachment; filename="export.csv"']);
-    $contract->make((string) $request->input('download'), 200, ['Content-Disposition' => 'attachment; filename="export.csv"']);
-    $contract->make((string) $request->input('xml'), 200, ['Content-Type' => 'application/xml']);
+    $concrete->make($request->input('concrete-download'), 200, ['Content-Disposition' => 'attachment']);
     $contract->make((string) $request->input('contract-download'), 200, ['Content-Disposition' => 'attachment']);
-    $contract->make((string) $request->input('download-list'), 200, ['Content-Disposition' => ['attachment']]);
-    $contract->make((string) $request->input('underscore-download'), 200, ['Content_Disposition' => 'attachment']);
-    Response::make($request->input('json'), 200, ['Content-Type' => 'application/json']);
     Response::make($request->input('facade-download'), 200, ['Content-Disposition' => 'attachment']);
 }
 ?>

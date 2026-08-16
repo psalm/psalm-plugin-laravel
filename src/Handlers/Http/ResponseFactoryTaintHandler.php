@@ -26,58 +26,17 @@ use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Removes the html taint from `ResponseFactory::make()` content only when a literal headers
- * argument proves Symfony will not render the response as HTML (#1345).
+ * Removes html taint from `ResponseFactory::make()` content only for literal attachment responses.
  *
- * The `make()` stubs deliberately retain their html sinks: an omitted, dynamic, HTML, or unknown
- * header response defaults to HTML. `AddRemoveTaintsEvent` carries only the expression, not the
- * method id or argument offset, so this handler records the exact `$content` node during the
- * preceding whole-call hook and consumes only that node during taint removal. A global strip for
- * safe-looking literals would remove html taint from unrelated array and argument flows.
- *
- * `beforeAnalyzeFile()` clears the node-id set at file start. Psalm releases each file's AST after
- * analysis, allowing `spl_object_id()` reuse; clearing at the start also survives a previous file's
- * analysis exception. This is required until Psalm exposes the call method and argument offset on
- * `AddRemoveTaintsEvent`.
+ * `AddRemoveTaintsEvent` exposes neither call nor argument offset, so the preceding call hook
+ * records only its exact content node. The file hook prevents AST object-id reuse across files.
  */
 final class ResponseFactoryTaintHandler implements
     BeforeExpressionAnalysisInterface,
     RemoveTaintsInterface,
     BeforeFileAnalysisInterface
 {
-    /**
-     * MIME types whose browser handling does not parse the body as HTML. SVG is intentionally
-     * excluded: it is image media that can contain active markup.
-     *
-     * @var array<string, true>
-     */
-    private const SAFE_CONTENT_TYPES = [
-        'application/csv' => true,
-        'application/icalendar' => true,
-        'application/json' => true,
-        'application/octet-stream' => true,
-        'application/pdf' => true,
-        'application/xml' => true,
-        'image/avif' => true,
-        'image/bmp' => true,
-        'image/gif' => true,
-        'image/jpeg' => true,
-        'image/png' => true,
-        'image/tiff' => true,
-        'image/webp' => true,
-        'text/calendar' => true,
-        'text/csv' => true,
-        'text/plain' => true,
-        'text/xml' => true,
-    ];
-
-    /**
-     * Exact content-node ids awaiting `removeTaints`. A method receiver is rechecked at removal
-     * time, after Psalm has inferred it; `null` records an exact `Response` facade static call that
-     * was checked while the whole call was available.
-     *
-     * @var array<int, Expr|null>
-     */
+    /** @var array<int, Expr|null> */
     private static array $recordedContentIds = [];
 
     #[\Override]
@@ -85,11 +44,8 @@ final class ResponseFactoryTaintHandler implements
     {
         $call = $event->getExpr();
 
-        if (!$call instanceof MethodCall && !$call instanceof StaticCall) {
-            return null;
-        }
-
-        if (!$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph
+        if ((!$call instanceof MethodCall && !$call instanceof StaticCall)
+            || !$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph
             || !$call->name instanceof Identifier
             || \strtolower($call->name->name) !== 'make'
             || $call->isFirstClassCallable()
@@ -99,9 +55,7 @@ final class ResponseFactoryTaintHandler implements
 
         $args = $call->getArgs();
 
-        // Only a positional `$content, $status, $headers` call is modelled. Any named, unpacked,
-        // or otherwise dynamic argument binding keeps the stub sink.
-        if (!isset($args[0], $args[1], $args[2])
+        if (\count($args) !== 3
             || $args[0]->name !== null
             || $args[1]->name !== null
             || $args[2]->name !== null
@@ -109,7 +63,7 @@ final class ResponseFactoryTaintHandler implements
             || $args[1]->unpack
             || $args[2]->unpack
             || !$args[2]->value instanceof Array_
-            || !self::provesNonHtmlResponse($args[2]->value)
+            || !self::provesAttachment($args[2]->value)
         ) {
             return null;
         }
@@ -157,87 +111,37 @@ final class ResponseFactoryTaintHandler implements
             : 0;
     }
 
-    /**
-     * Simulates Symfony HeaderBag's case-insensitive, underscore-normalizing replacement semantics
-     * in literal insertion order. A later literal `content-type` or `content-disposition` therefore
-     * overrides an earlier safe declaration, while a dynamic key/value leaves the response unproven.
-     *
-     * @psalm-mutation-free
-     */
-    private static function provesNonHtmlResponse(Array_ $headers): bool
+    /** @psalm-mutation-free */
+    private static function provesAttachment(Array_ $headers): bool
     {
-        /** @var array<string, string> $resolvedHeaders */
-        $resolvedHeaders = [];
+        $hasAttachment = false;
 
         foreach ($headers->items as $item) {
-            if ($item === null || $item->unpack) {
+            if ($item === null
+                || $item->unpack
+                || !$item->key instanceof String_
+                || !$item->value instanceof String_
+            ) {
                 return false;
             }
 
-            if ($item->key === null) {
+            $header = \strtolower($item->key->value);
+
+            if (\str_replace('_', '-', $header) !== 'content-disposition') {
                 continue;
             }
 
-            if (!$item->key instanceof String_) {
+            if ($header !== 'content-disposition'
+                || $hasAttachment
+                || $item->value->value !== 'attachment'
+            ) {
                 return false;
             }
 
-            $header = \strtr($item->key->value, '_ABCDEFGHIJKLMNOPQRSTUVWXYZ', '-abcdefghijklmnopqrstuvwxyz');
-
-            if ($header !== 'content-type' && $header !== 'content-disposition') {
-                continue;
-            }
-
-            $value = self::literalHeaderValue($item->value);
-
-            if ($value === null) {
-                return false;
-            }
-
-            $resolvedHeaders[$header] = $value;
+            $hasAttachment = true;
         }
 
-        return isset($resolvedHeaders['content-type']) && self::isSafeContentType($resolvedHeaders['content-type'])
-            || isset($resolvedHeaders['content-disposition']) && self::isAttachment($resolvedHeaders['content-disposition']);
-    }
-
-    /**
-     * HeaderBag accepts a string or a list of strings. A one-value list is equally determinate;
-     * multi-value, keyed, unpacked, and dynamic lists keep the response unproven.
-     *
-     * @psalm-mutation-free
-     */
-    private static function literalHeaderValue(Expr $value): ?string
-    {
-        if ($value instanceof String_) {
-            return $value->value;
-        }
-
-        if (!$value instanceof Array_ || \count($value->items) !== 1) {
-            return null;
-        }
-
-        $item = $value->items[0];
-
-        if ($item === null || $item->key !== null || $item->unpack || !$item->value instanceof String_) {
-            return null;
-        }
-
-        return $item->value->value;
-    }
-
-    /** @psalm-pure */
-    private static function isSafeContentType(string $contentType): bool
-    {
-        $mime = \strtolower(\trim(\explode(';', $contentType, 2)[0]));
-
-        return isset(self::SAFE_CONTENT_TYPES[$mime]);
-    }
-
-    /** @psalm-pure */
-    private static function isAttachment(string $contentDisposition): bool
-    {
-        return \preg_match('/^attachment(?:\s*;|\s*$)/i', \trim($contentDisposition)) === 1;
+        return $hasAttachment;
     }
 
     private static function isExactResponseFacade(StaticCall $call): bool
@@ -253,12 +157,7 @@ final class ResponseFactoryTaintHandler implements
         return \strtolower($class) === \strtolower(Response::class);
     }
 
-    /**
-     * An exact class or interface type is required. Subclasses, intersections, templates, and
-     * unions can replace `make()` with application-defined behavior, so they keep the stub sink.
-     *
-     * @psalm-mutation-free
-     */
+    /** @psalm-mutation-free */
     private static function isExactFactoryReceiver(Union $receiverType): bool
     {
         if (!$receiverType->isSingle()) {
@@ -277,12 +176,7 @@ final class ResponseFactoryTaintHandler implements
             || $class === \strtolower(ResponseFactoryContract::class);
     }
 
-    /**
-     * Clear scoped node ids before every file. See the class docblock for why the boundary is a
-     * file, rather than a function-like or end-of-file hook.
-     *
-     * @psalm-external-mutation-free
-     */
+    /** @psalm-external-mutation-free */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
     {
