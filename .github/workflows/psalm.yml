@@ -43,12 +43,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden the runner (Block all outbound calls except allowlist)
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          # No Actions cache hosts here on purpose: harden-runner resolves the cache blob host
-          # itself in block mode and appends it, and its agent allows the cache endpoints
-          # implicitly when that lookup fails. Listing them by hand would not work anyway, the
-          # blob host comes from a numbered pool that rotates per run.
+          # No Actions cache hosts here on purpose: in block mode harden-runner resolves the cache
+          # blob host itself and appends it. Listing it by hand would mean a broad
+          # *.blob.core.windows.net wildcard, since the host rotates per run.
+          #
+          # v2.21.0 is a floor, not a routine bump: up to and including v2.20.0 a failed lookup
+          # downgraded egress-policy from block to audit for the WHOLE job, so a transient
+          # cache-service blip silently disabled egress enforcement for every later step.
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
@@ -99,6 +102,8 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/psalm
+          # Only psalm.xml is hashed because only psalm.xml exists here. Psalm also accepts
+          # psalm.xml.dist and psalm.dist.xml; a project using either must add it to hashFiles.
           key: psalm-cache-php${{ env.PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-${{ github.sha }}
           restore-keys: |
             psalm-cache-php${{ env.PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-
@@ -119,15 +124,21 @@ jobs:
 
       # Split from the restore rather than one combined actions/cache step: a combined step
       # skips its save on a key hit, so a snapshot whose key does not move never rolls forward.
-      # Only master writes, so pull request runs do not each store a copy under
+      # Only the default branch writes, tested by name rather than by event: the push trigger
+      # above happens to list master alone, but adding 3.x there would otherwise give it a full
+      # second copy per commit. Pull request runs do not store anything under
       # refs/pull/<n>/merge that nothing else can read; restore-keys already lets them fall
       # back to the newest master snapshot.
       #
-      # !cancelled() rather than the implicit success(): Psalm validates every entry against a
-      # per-file content hash on read, so a run that reported issues still leaves a correct
-      # cache, and a red master must not stop refreshing what pull requests restore from.
+      # The implicit success() is load-bearing, do not relax it to !cancelled(). Cache::saveItem()
+      # writes an entry's hash sidecar before the value it describes, and getItem() reads that
+      # value back through an assertion rather than treating a short read as a miss, so a run
+      # killed mid-write (OOM, fatal) leaves an entry that throws on every later read. Keys are
+      # immutable and the cache-hit guard refuses to overwrite, so a re-run at that commit cannot
+      # repair it. Skipping the save on a red master costs a stale snapshot until the next green
+      # one; taking it can cost a wedged snapshot that every pull request then restores.
       - name: Save Psalm's cache
-        if: ${{ !cancelled() && github.event_name == 'push' && steps.psalm-cache.outputs.cache-hit != 'true' }}
+        if: ${{ github.ref_name == github.event.repository.default_branch && steps.psalm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/psalm
