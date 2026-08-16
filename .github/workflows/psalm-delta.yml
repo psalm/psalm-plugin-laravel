@@ -191,7 +191,7 @@ jobs:
       # RESTORE-ONLY; matching save is a separate non-fork-gated step (see below).
       - name: Restore app source cache
         id: cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/app-cache/${{ matrix.name }}
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
@@ -236,7 +236,7 @@ jobs:
       # redundant same-key save.
       - name: Save app source cache
         if: needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/app-cache/${{ matrix.name }}
           key: ${{ steps.cache.outputs.cache-primary-key }}

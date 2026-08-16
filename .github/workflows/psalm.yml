@@ -15,19 +15,40 @@ on:
       - 'composer.json'
       - '.github/workflows/psalm.yml'
 
-# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests supersede freely, to save CI minutes on fast pushes. Pushes to master do
+  # not: cancelling one loses the Psalm cache generation every later pull request restores.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PHP_VERSION: '8.4'
+  # Psalm forces a single thread whenever it detects CI, and decides the two phases
+  # separately: --threads covers analysis, --scan-threads covers scanning
+  # (Cli\Psalm::getThreads()). Setting only --threads leaves the whole scan phase serial,
+  # and scanning is the bulk of this job: 187 analysed files against ~13k scanned in vendor.
+  # psalm.xml's threads/scanThreads attributes cannot do this, getThreads() tests for CI
+  # before it reads either. 4 matches ubuntu-latest's core count.
+  PSALM_THREADS: 4
+  PSALM_SCAN_THREADS: 4
 
 jobs:
   psalm:
     name: Psalm
     runs-on: ubuntu-latest
+    # A wedged analysis should fail loudly, not bill six hours against the default limit.
+    timeout-minutes: 15
     steps:
       - name: Harden the runner (Block all outbound calls except allowlist)
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
+          # No Actions cache hosts here on purpose: harden-runner resolves the cache blob host
+          # itself in block mode and appends it, and its agent allows the cache endpoints
+          # implicitly when that lookup fails. Listing them by hand would not work anyway, the
+          # blob host comes from a numbered pool that rotates per run.
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
@@ -47,11 +68,67 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
         with:
-          php-version: 8.4
+          php-version: ${{ env.PHP_VERSION }}
           coverage: none
+          # Psalm's ForkContext serialises each worker's results back to the parent with
+          # igbinary when present and falls back to PHP's native serializer when absent.
+          # It also selects the cache serializer, which Psalm folds into the hash naming each
+          # cache generation directory, so adding it invalidates existing caches once.
+          extensions: igbinary
 
+      # Left as a plain install on purpose. ramsey/composer-install was measured here and came
+      # out median-neutral (14s either way over five baseline and three cached runs): this
+      # repository does not commit composer.lock, so every run still resolves against Packagist
+      # and the download cache has little left to save.
       - name: Install composer dependencies
         run: composer install -n --prefer-dist
 
+      # Restores the parsed statements and file/class-like storage for vendor, which is where
+      # this job spends most of its time. Deliberately after the install: the key hashes
+      # composer.lock, hashFiles is evaluated when the step runs, and this repository does not
+      # commit a lock file, so the lock only exists once Composer has resolved.
+      #
+      # ~/.cache/psalm is Psalm's default on Linux (XDG home cache); psalm.xml sets no
+      # cacheDirectory. Psalm names each generation directory with a hash covering
+      # composer.lock's contents and psalm.xml, so an entry built from a different lock misses
+      # internally in every subcache while still costing the download. The restore-keys
+      # fallback repeats that hash verbatim and varies only the per-commit part; a bare
+      # 'psalm-cache-' catch-all would fire precisely when the archive is unusable.
+      - name: Restore Psalm's cache
+        id: psalm-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/psalm
+          key: psalm-cache-php${{ env.PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-${{ github.sha }}
+          restore-keys: |
+            psalm-cache-php${{ env.PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-
+
+      # --shepherd only on push: the type-coverage history it feeds is a master-branch series,
+      # and a pull request run posting into it adds nothing a reviewer reads.
+      #
+      # The thread counts are read as shell variables rather than interpolated as
+      # ${{ env.* }}: octoscan cannot tell a literal workflow-level env from an
+      # attacker-reachable one and flags every ${{ env.* }} reaching a run: block.
       - name: Run Psalm
-        run: ./vendor/bin/psalm --threads=2 --output-format=github --shepherd
+        run: >-
+          ./vendor/bin/psalm
+          --threads="$PSALM_THREADS"
+          --scan-threads="$PSALM_SCAN_THREADS"
+          --output-format=github
+          ${{ github.event_name == 'push' && '--shepherd' || '' }}
+
+      # Split from the restore rather than one combined actions/cache step: a combined step
+      # skips its save on a key hit, so a snapshot whose key does not move never rolls forward.
+      # Only master writes, so pull request runs do not each store a copy under
+      # refs/pull/<n>/merge that nothing else can read; restore-keys already lets them fall
+      # back to the newest master snapshot.
+      #
+      # !cancelled() rather than the implicit success(): Psalm validates every entry against a
+      # per-file content hash on read, so a run that reported issues still leaves a correct
+      # cache, and a red master must not stop refreshing what pull requests restore from.
+      - name: Save Psalm's cache
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.psalm-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/psalm
+          key: ${{ steps.psalm-cache.outputs.cache-primary-key }}
