@@ -14,9 +14,23 @@ final class CustomResponseFactory
     }
 }
 
+interface ResponseFactoryMarker
+{
+}
+
+final class IntersectedResponseFactory extends ResponseFactory implements ResponseFactoryMarker
+{
+    #[\Override]
+    public function make($content = '', $status = 200, array $headers = [])
+    {
+        return new \Illuminate\Http\Response($content, $status, $headers);
+    }
+}
+
 /**
- * Only a direct, literal attachment disposition is exempt. Default, content-type-only, dynamic
- * or list-valued dispositions, and custom receivers retain the default HTML sink.
+ * Only a direct, literal attachment disposition on an exact factory is exempt. Default,
+ * content-type-only, dynamic or list-valued dispositions, custom receivers, and intersections
+ * retain the default HTML sink.
  */
 function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $response, CustomResponseFactory $custom): void
 {
@@ -28,10 +42,16 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
     $response->make($request->input('list-disposition'), 200, ['Content-Disposition' => ['attachment']]);
     $custom->make((string) $request->input('custom'), 200, ['Content-Disposition' => 'attachment']);
 }
+
+function makeWithIntersectedReceiver(Request $request, ResponseFactory&ResponseFactoryMarker $response): void
+{
+    $response->make($request->input('intersected'), 200, ['Content-Disposition' => 'attachment']);
+}
 ?>
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

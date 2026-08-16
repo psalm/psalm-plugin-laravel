@@ -166,7 +166,7 @@ final class ResponseFactoryTaintHandler implements
 
         $atomic = $receiverType->getSingleAtomic();
 
-        if (!$atomic instanceof TNamedObject) {
+        if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
             return false;
         }
 
