@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786130013302,
+  "lastUpdate": 1786875994126,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9755,6 +9755,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.06,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "553657369b1c4e6337d8dde78b2ab64d51e1b20f",
+          "message": "fix(taint): support builder intersections #1339 (#1350)",
+          "timestamp": "2026-08-16T12:23:41+02:00",
+          "tree_id": "e51d2c5bfcf0285856faf0163b3e773b0405b045",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/553657369b1c4e6337d8dde78b2ab64d51e1b20f"
+        },
+        "date": 1786875992936,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.23,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
