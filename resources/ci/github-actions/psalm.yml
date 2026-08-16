@@ -56,15 +56,20 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Block unexpected egress
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           # Covers checkout, setup-php, Composer (public Packagist) and the SARIF upload. Extend for other hosts
           # (private registry, VCS repos, extra plugins). Use egress-policy: audit to discover them.
           #
-          # The Actions cache hosts are deliberately absent: harden-runner resolves the cache blob
-          # host itself in block mode and appends it, and its agent allows the cache endpoints
-          # implicitly when that lookup fails. Listing them here is neither needed nor sufficient
-          # (the blob host is drawn from a numbered pool that rotates per run).
+          # The Actions cache hosts are deliberately absent: in block mode harden-runner resolves
+          # the cache blob host itself and appends it, and that host is drawn from a numbered pool
+          # that rotates per run, so a hand-written entry would have to be a broad
+          # *.blob.core.windows.net wildcard covering every Azure storage account.
+          #
+          # v2.21.0 is the floor for this, not a routine bump. Up to and including v2.20.0, a
+          # failed lookup downgraded egress-policy from block to audit for the WHOLE job, so a
+          # transient cache-service blip silently disabled egress enforcement. Since v2.21.0 the
+          # policy stays block and only the cache misses.
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
@@ -112,9 +117,9 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/psalm
-          key: psalm-${{ runner.os }}-php${{ env.PSALM_PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-${{ github.sha }}
+          key: psalm-${{ runner.os }}-php${{ env.PSALM_PHP_VERSION }}-${{ hashFiles('psalm.xml', 'psalm.xml.dist', 'psalm.dist.xml', 'composer.lock') }}-${{ github.sha }}
           restore-keys: |
-            psalm-${{ runner.os }}-php${{ env.PSALM_PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-
+            psalm-${{ runner.os }}-php${{ env.PSALM_PHP_VERSION }}-${{ hashFiles('psalm.xml', 'psalm.xml.dist', 'psalm.dist.xml', 'composer.lock') }}-
 
       # One pass = type + taint. Psalm 7 runs taint analysis by default (no --taint-analysis flag needed),
       # so a plain run emits both type and taint findings: GitHub annotations on stdout + a SARIF report.
@@ -137,15 +142,20 @@ jobs:
       # its save on a key hit, so a snapshot whose key does not move never rolls forward. The key
       # carries github.sha, so every default-branch commit writes a fresh generation.
       #
-      # Only the default branch writes. Pull request entries land under refs/pull/<n>/merge, which
-      # nothing else can read, and would spend the repository's cache budget for one run's benefit;
-      # restore-keys already lets a pull request fall back to the newest default-branch snapshot.
+      # Only the default branch writes, tested by name rather than by `github.event_name == 'push'`:
+      # any branch you add under `push:` above would otherwise store its own full copy on every
+      # commit. Pull request entries land under refs/pull/<n>/merge, which nothing else can read,
+      # and would spend the repository's cache budget for one run's benefit; restore-keys already
+      # lets a pull request fall back to the newest default-branch snapshot.
       #
-      # !cancelled() rather than the implicit success(): Psalm validates every entry against a
-      # per-file content hash on read, so a run that reported findings still leaves a correct cache,
-      # and a red default branch must not stop refreshing what pull requests restore from.
+      # The implicit success() is load-bearing, do not relax it to !cancelled(). Psalm writes a
+      # cache entry's hash sidecar before the value it describes, and reads it back through an
+      # assertion rather than a graceful miss, so a run killed mid-write (OOM, fatal) leaves an
+      # entry that throws on every later read. Cache keys are immutable, and the cache-hit guard
+      # below then refuses to replace it, so a re-run at that SHA cannot repair it. Skipping the
+      # save on a failed run costs a stale snapshot; taking it can cost a wedged one.
       - name: Save Psalm's cache
-        if: ${{ !cancelled() && github.event_name == 'push' && steps.psalm-cache.outputs.cache-hit != 'true' }}
+        if: ${{ github.ref_name == github.event.repository.default_branch && steps.psalm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/psalm
