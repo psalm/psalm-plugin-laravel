@@ -30,7 +30,7 @@ Both jobs pin every action to a commit SHA and harden the runner with a blocking
 
 The generated file carries inline comments for each knob. The common edits:
 
-* **PHP version.** Pin `php-version` in the `setup-php` step to match your project (8.2+ is supported by the plugin).
+* **PHP version.** Set `PSALM_PHP_VERSION` in the `env:` block at the top (8.2+ is supported by the plugin). The `setup-php` step and the cache key both read it, so a bump starts a fresh cache instead of reusing entries serialized by another runtime.
 * **Default-branch baseline.** Add your release branches under `push:` so Code Scanning builds the baseline it diffs PRs against.
 * **Egress allowlist.** Extend `allowed-endpoints` if your build reaches other hosts (private Composer registry, VCS or path repos, extra Psalm plugins). A blocked call shows in the step log. Switch to `egress-policy: audit` to discover endpoints without failing the build.
 

@@ -39,6 +39,10 @@ env:
   #
   # On many-core runners the analysis optimum sits slightly below the core count, because
   # the per-worker merge grows as the analysis shrinks: on 16 cores, 12 beat 16.
+  #
+  # Scan threads pay off on a cold cache and are neutral to slightly negative on a warm one,
+  # where the parse work they parallelise is already done. At 4 the warm-run cost is noise;
+  # if you raise the analysis count on a large runner, sweep this one separately.
   PSALM_THREADS: 4
   PSALM_SCAN_THREADS: 4
 
