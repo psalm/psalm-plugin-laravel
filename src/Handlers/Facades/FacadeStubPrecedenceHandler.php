@@ -27,6 +27,7 @@ use Psalm\Storage\MethodStorage;
  * {@see FacadeTaintForwardingHandler} deliberately has no pseudo target to decorate.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1368
+ * @see https://github.com/vimeo/psalm/issues/3937
  */
 final class FacadeStubPrecedenceHandler implements AfterCodebasePopulatedInterface
 {
