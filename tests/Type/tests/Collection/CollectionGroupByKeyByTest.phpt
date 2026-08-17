@@ -16,6 +16,13 @@ function group_by_on_support_collection(Collection $items): void
     $_preserved = $items->groupBy('foreign_id', true);
     /** @psalm-check-type-exact $_preserved = Collection<int, Collection<string, CollectionGroupingModel>&static>&static */
 
+    $_false = $items->groupBy('foreign_id', false);
+    /** @psalm-check-type-exact $_false = Collection<int, Collection<int, CollectionGroupingModel>&static>&static */
+
+    $preserveKeys = \rand(0, 1) === 1;
+    $_dynamic = $items->groupBy('foreign_id', $preserveKeys);
+    /** @psalm-check-type-exact $_dynamic = Collection<int, Collection<int|string, CollectionGroupingModel>&static>&static */
+
     $_bool = $items->groupBy('active');
     /** @psalm-check-type-exact $_bool = Collection<int, Collection<int, CollectionGroupingModel>&static>&static */
 

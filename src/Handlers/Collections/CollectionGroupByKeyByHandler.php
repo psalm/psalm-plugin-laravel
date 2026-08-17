@@ -38,7 +38,6 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             || ($method === 'keyby' && \count($args) !== 1) || \count($args) > 2) {
             return null;
         }
-
         $source = $event->getSource();
         $column = $source->getNodeTypeProvider()->getType($args[0]->value);
         if (!$column instanceof Union || !$column->isSingleStringLiteral()) {
@@ -63,7 +62,6 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         if ($model === null || $key === null) {
             return null;
         }
-
         $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $value = $event->getTemplateTypeParameters()[1] ?? new Union([new TNamedObject($model)]);
 
@@ -71,11 +69,13 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return new Union([new TGenericObject($class, [$key, $value], is_static: true)]);
         }
 
-        $preserve = isset($args[1]) && ($source->getNodeTypeProvider()->getType($args[1]->value)?->isTrue() ?? false);
-        $innerKey = $preserve ? $event->getTemplateTypeParameters()[0] ?? null : Type::getInt();
+        $preserve = isset($args[1]) ? $source->getNodeTypeProvider()->getType($args[1]->value) : null;
+        $innerKey = $event->getTemplateTypeParameters()[0] ?? null;
         if (!$innerKey instanceof Union) {
             return null;
         }
+        $innerKey = !($preserve instanceof Union) || $preserve->isFalse() ? Type::getInt()
+            : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
 
         return new Union([new TGenericObject($class, [$key,
             new Union([new TGenericObject($class, [$innerKey, $value], is_static: true)]),
