@@ -111,9 +111,10 @@ final class ContractStubSinkParityTest extends TestCase
         // every parity assertion above trivially true.
         $this->assertSame(['@psalm-taint-sink html $content'], $sinks['make'] ?? []);
 
-        // The view NAME is sunk (it resolves to a blade path); the view DATA is not.
+        // The view NAME is sunk (it selects which blade template executes); the view DATA
+        // is not.
         $this->assertSame(
-            ['@psalm-taint-sink file $view', '@psalm-taint-sink include $view'],
+            ['@psalm-taint-sink include $view'],
             $sinks['view'] ?? [],
         );
 
