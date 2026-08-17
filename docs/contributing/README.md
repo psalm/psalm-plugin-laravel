@@ -139,6 +139,7 @@ require getcwd() . '/vendor/autoload.php';
 
 Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
+`CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 
 ### Experimental issue lifecycle
 
