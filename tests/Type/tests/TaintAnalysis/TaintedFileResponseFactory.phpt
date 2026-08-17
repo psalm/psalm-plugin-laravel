@@ -17,5 +17,5 @@ function responseFile(\Illuminate\Http\Request $request, \Illuminate\Routing\Res
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
+TaintedFile on line %d: Detected tainted file handling
+TaintedFile on line %d: Detected tainted file handling

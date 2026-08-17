@@ -24,6 +24,6 @@ function responseJsonp(\Illuminate\Http\Request $request, \Illuminate\Routing\Re
 
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML

@@ -20,9 +20,9 @@ function renderDecryptedInput(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedSystemSecret on line %d: Detected tainted system secret leaking
-%ATaintedSystemSecret on line %d: Detected tainted system secret leaking
-%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-%ATaintedUserSecret on line %d: Detected tainted user secret leaking
-%ATaintedUserSecret on line %d: Detected tainted user secret leaking
+TaintedHtml on line %d: Detected tainted HTML
+TaintedSystemSecret on line %d: Detected tainted system secret leaking
+TaintedSystemSecret on line %d: Detected tainted system secret leaking
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedUserSecret on line %d: Detected tainted user secret leaking
+TaintedUserSecret on line %d: Detected tainted user secret leaking

@@ -11,4 +11,4 @@ function runUserScript(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedEval on line %d: Detected tainted code passed to eval or similar
+TaintedEval on line %d: Detected tainted code passed to eval or similar

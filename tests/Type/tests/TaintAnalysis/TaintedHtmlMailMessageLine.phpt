@@ -9,4 +9,4 @@ function notifyWithContent(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML

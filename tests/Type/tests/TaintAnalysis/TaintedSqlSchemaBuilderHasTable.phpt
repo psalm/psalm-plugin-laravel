@@ -19,4 +19,4 @@ function unsafeSchemaBuilderHasTable(\Illuminate\Http\Request $request): bool {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL

@@ -10,4 +10,4 @@ function getPostStats(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL

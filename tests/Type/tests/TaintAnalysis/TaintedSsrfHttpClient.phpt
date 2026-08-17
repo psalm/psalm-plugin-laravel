@@ -10,4 +10,4 @@ function fetchEmbed(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedSSRF on line %d: Detected tainted network request
+TaintedSSRF on line %d: Detected tainted network request

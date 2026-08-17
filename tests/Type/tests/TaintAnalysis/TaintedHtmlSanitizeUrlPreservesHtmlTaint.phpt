@@ -59,4 +59,4 @@ function flowsThroughSanitizer(): void {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml%a: Detected tainted HTML%A
+TaintedHtml on line %d: Detected tainted HTML

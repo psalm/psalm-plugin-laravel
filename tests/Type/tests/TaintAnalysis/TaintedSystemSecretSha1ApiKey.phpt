@@ -19,4 +19,4 @@ function legacySha1ApiKey(): string {
 }
 ?>
 --EXPECTF--
-%ATaintedSystemSecret on line %d: Detected tainted system secret leaking%A
+TaintedSystemSecret on line %d: Detected tainted system secret leaking

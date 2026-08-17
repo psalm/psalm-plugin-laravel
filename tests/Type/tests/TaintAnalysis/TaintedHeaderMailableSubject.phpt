@@ -9,4 +9,4 @@ function sendFeedback(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header

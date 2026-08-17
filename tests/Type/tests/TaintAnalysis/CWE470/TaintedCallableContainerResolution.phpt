@@ -43,4 +43,7 @@ function unsafeConcreteMakeWith(\Illuminate\Http\Request $request, \Illuminate\C
 }
 ?>
 --EXPECTF--
-%ATaintedCallable on line %d: Detected tainted text%ATaintedCallable on line %d: Detected tainted text%ATaintedCallable on line %d: Detected tainted text%ATaintedCallable on line %d: Detected tainted text%A
+TaintedCallable on line %d: Detected tainted text
+TaintedCallable on line %d: Detected tainted text
+TaintedCallable on line %d: Detected tainted text
+TaintedCallable on line %d: Detected tainted text

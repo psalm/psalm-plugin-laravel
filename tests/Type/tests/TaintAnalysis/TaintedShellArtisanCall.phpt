@@ -11,4 +11,4 @@ function runArtisanCommand(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedShell on line %d: Detected tainted shell code
+TaintedShell on line %d: Detected tainted shell code
