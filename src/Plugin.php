@@ -451,7 +451,9 @@ final class Plugin implements PluginEntryPointInterface
         // never sees. See https://github.com/psalm/psalm-plugin-laravel/issues/787.
         require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/FacadeStubPrecedenceHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Facades\FacadeStubPrecedenceHandler::class);
 
         // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
