@@ -11,7 +11,4 @@ function unsafeSessionHelperQuery() {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method unsafeSessionHelperQuery does not have a return type, expecting void
-TooFewArguments on line %d: Too few arguments for Illuminate\Database\Query\Builder::__construct - expecting connection to be passed
-MixedAssignment on line %d: Unable to determine the type that $searchTerm is being assigned to
 TaintedSql on line %d: Detected tainted SQL

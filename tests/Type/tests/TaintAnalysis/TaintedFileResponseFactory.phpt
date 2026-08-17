@@ -17,7 +17,5 @@ function responseFile(\Illuminate\Http\Request $request, \Illuminate\Routing\Res
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of Illuminate\Routing\ResponseFactory::download cannot be mixed, expecting SplFileInfo|string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Routing\ResponseFactory::file cannot be mixed, expecting SplFileInfo|string
 TaintedFile on line %d: Detected tainted file handling

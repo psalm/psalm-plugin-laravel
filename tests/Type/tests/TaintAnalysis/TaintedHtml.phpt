@@ -10,6 +10,4 @@ function renderComment(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method renderComment does not have a return type, expecting Illuminate\Http\Response
-MixedAssignment on line %d: Unable to determine the type that $comment is being assigned to
 TaintedHtml on line %d: Detected tainted HTML

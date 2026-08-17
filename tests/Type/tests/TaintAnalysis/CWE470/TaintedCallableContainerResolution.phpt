@@ -43,11 +43,7 @@ function unsafeConcreteMakeWith(\Illuminate\Http\Request $request, \Illuminate\C
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of app cannot be mixed, expecting null|string
 TaintedCallable on line %d: Detected tainted text
-MixedArgument on line %d: Argument 1 of resolve cannot be mixed, expecting string
 TaintedCallable on line %d: Detected tainted text
-MixedArgument on line %d: Argument 1 of Illuminate\Contracts\Foundation\Application::make cannot be mixed, expecting string
 TaintedCallable on line %d: Detected tainted text
-MixedArgument on line %d: Argument 1 of Illuminate\Container\Container::makeWith cannot be mixed, expecting string
 TaintedCallable on line %d: Detected tainted text

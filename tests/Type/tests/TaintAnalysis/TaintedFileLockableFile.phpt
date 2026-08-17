@@ -8,5 +8,4 @@ function openLockableFile(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\LockableFile::__construct cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling

@@ -59,7 +59,4 @@ function flowsThroughSanitizer(): void {
 }
 ?>
 --EXPECTF--
-UnusedParam on line %d: Param url is never referenced in this method
-InvalidReturnType on line %d: Not all code paths of appSafeUrl_DualSrc end in a return statement, return type string expected
 TaintedHtml on line %d: Detected tainted HTML
-UnusedParam on line %d: Param val is never referenced in this method

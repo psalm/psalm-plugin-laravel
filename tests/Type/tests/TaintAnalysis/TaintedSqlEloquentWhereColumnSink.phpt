@@ -12,6 +12,4 @@ function unsafeEloquentColumnWhere(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-MixedAssignment on line %d: Unable to determine the type that $column is being assigned to
-MixedArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::where cannot be mixed, expecting Illuminate\Contracts\Database\Query\Expression|array<array-key, mixed>|impure-Closure(Illuminate\Database\Eloquent\Builder<EloquentColumnSinkPost&static>):mixed|string
 TaintedSql on line %d: Detected tainted SQL

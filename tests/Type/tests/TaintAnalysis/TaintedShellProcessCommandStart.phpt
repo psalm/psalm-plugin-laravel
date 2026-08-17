@@ -20,9 +20,5 @@ function processStart(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-TooFewArguments on line %d: Too few arguments for Illuminate\Process\PendingProcess::__construct - expecting factory to be passed
-MixedArgument on line %d: Argument 1 of Illuminate\Process\PendingProcess::command cannot be mixed, expecting array<array-key, mixed>|string
 TaintedShell on line %d: Detected tainted shell code
-TooFewArguments on line %d: Too few arguments for Illuminate\Process\PendingProcess::__construct - expecting factory to be passed
-MixedArgument on line %d: Argument 1 of Illuminate\Process\PendingProcess::start cannot be mixed, expecting array<array-key, mixed>|null|string
 TaintedShell on line %d: Detected tainted shell code

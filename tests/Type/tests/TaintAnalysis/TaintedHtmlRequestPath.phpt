@@ -8,6 +8,5 @@ function renderBreadcrumb(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method renderBreadcrumb does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

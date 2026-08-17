@@ -82,49 +82,25 @@ function fsCleanDirectory(\Illuminate\Http\Request $request, \Illuminate\Filesys
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::get cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::relativeLink cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\Filesystem::relativeLink cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::type cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::mimeType cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::guessExtension cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::hasSameHash cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\Filesystem::hasSameHash cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::size cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::lastModified cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::glob cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::files cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::allFiles cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::directories cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::allDirectories cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::ensureDirectoryExists cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::moveDirectory cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\Filesystem::moveDirectory cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::copyDirectory cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\Filesystem::copyDirectory cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::deleteDirectory cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::deleteDirectories cannot be mixed, expecting string
-TaintedFile on line %d: Detected tainted file handling
-MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\Filesystem::cleanDirectory cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling

@@ -10,6 +10,4 @@ function unsafeDbTableAlias(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-MixedAssignment on line %d: Unable to determine the type that $alias is being assigned to
-MixedArgument on line %d: Argument 2 of Illuminate\Support\Facades\DB::table cannot be mixed, expecting null|string
 TaintedSql on line %d: Detected tainted SQL

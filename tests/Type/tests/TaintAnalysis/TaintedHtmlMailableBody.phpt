@@ -9,6 +9,4 @@ function sendCustomHtml(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method sendCustomHtml does not have a return type, expecting void
-MixedArgument on line %d: Argument 1 of Illuminate\Mail\Mailable::html cannot be mixed, expecting string
 TaintedHtml on line %d: Detected tainted HTML

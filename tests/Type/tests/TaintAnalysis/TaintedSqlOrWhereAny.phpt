@@ -12,5 +12,4 @@ function unsafeOrWhereAny(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-TooFewArguments on line %d: Too few arguments for Illuminate\Database\Query\Builder::__construct - expecting connection to be passed
 TaintedSql on line %d: Detected tainted SQL

@@ -10,7 +10,4 @@ function exportPosts(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method exportPosts does not have a return type, expecting void
-MixedAssignment on line %d: Unable to determine the type that $sql is being assigned to
-MixedArgument on line %d: Argument 1 of Illuminate\Database\Connection::unprepared cannot be mixed, expecting string
 TaintedSql on line %d: Detected tainted SQL

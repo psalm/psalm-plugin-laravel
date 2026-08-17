@@ -8,7 +8,5 @@ function showRouteParam(\Illuminate\Routing\Route $route) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method showRouteParam does not have a return type, expecting void
-PossiblyInvalidCast on line %d: object cannot be cast to string
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

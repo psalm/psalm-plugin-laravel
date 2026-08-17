@@ -21,5 +21,4 @@ function responseHelperMakeIsTainted(Request $request): void
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of Illuminate\Contracts\Routing\ResponseFactory::make cannot be mixed, expecting array<array-key, mixed>|string
 TaintedHtml on line %d: Detected tainted HTML

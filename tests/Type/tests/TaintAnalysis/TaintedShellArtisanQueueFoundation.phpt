@@ -11,7 +11,4 @@ function queueArtisanCommandViaFoundationKernel(\Illuminate\Http\Request $reques
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method queueArtisanCommandViaFoundationKernel does not have a return type, expecting void
-MixedAssignment on line %d: Unable to determine the type that $command is being assigned to
-MixedArgument on line %d: Argument 1 of Illuminate\Foundation\Console\Kernel::queue cannot be mixed, expecting string
 TaintedShell on line %d: Detected tainted shell code

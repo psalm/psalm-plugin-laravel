@@ -10,7 +10,4 @@ function fetchEmbed(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method fetchEmbed does not have a return type, expecting void
-MixedAssignment on line %d: Unable to determine the type that $embedUrl is being assigned to
-MixedArgument on line %d: Argument 1 of Illuminate\Http\Client\PendingRequest::get cannot be mixed, expecting string
 TaintedSSRF on line %d: Detected tainted network request

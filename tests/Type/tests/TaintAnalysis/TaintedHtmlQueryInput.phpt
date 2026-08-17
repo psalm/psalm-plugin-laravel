@@ -8,7 +8,5 @@ function showSearchResults(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method showSearchResults does not have a return type, expecting void
-PossiblyInvalidArgument on line %d: Argument 1 of echo expects string, but possibly different type array<array-key, mixed>|null|string provided
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
