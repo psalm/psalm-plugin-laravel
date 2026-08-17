@@ -41,17 +41,20 @@ if line_hits="$(grep -rnE 'on line [0-9]' "${TESTS_DIR}")"; then
     status=1
 fi
 
-# Rule 3: `%A` leading an issue line, either "%AFooIssue on line ..." or the
-# bare "%AFooIssue%A" form (no "on line" text at all). Anchor on `%A` directly
-# followed by an issue-type identifier, not `^%A`: a single physical
-# --EXPECTF-- line can pack multiple issues, so the leading `%A` is not
-# always at the start of the line.
+# Rule 3: `%A` leading an issue line, in any of the forms "%AFooIssue on
+# line ...", "%AFooIssue%A", or "%AFooIssue%a". `%A` (`.*?`) and `%a` (`.+?`)
+# both compile to a lazy dotall match (PHPUnit's StringMatchesFormatDescription
+# uses the `/s` modifier), so both can absorb unasserted ISSUE lines across
+# newlines; only they pose the swallowing risk this rule guards against.
+# Anchor on `%A` directly followed by an issue-type identifier, not `^%A`: a
+# single physical --EXPECTF-- line can pack multiple issues, so the leading
+# `%A` is not always at the start of the line.
 wildcard_hits=""
 while IFS= read -r hit; do
     file="${hit%%:*}"
     rel="${file#"${TESTS_DIR}"/}"
     grep -qxF "${rel}" "${WILDCARD_ALLOWLIST}" 2>/dev/null || wildcard_hits="${wildcard_hits}${hit}"$'\n'
-done < <(grep -rnE '%A[A-Za-z]+(%A| on line)' "${TESTS_DIR}" --include='*.phpt' || true)
+done < <(grep -rnE '%A[A-Za-z]+(%A|%a| on line)' "${TESTS_DIR}" --include='*.phpt' || true)
 if [ -n "${wildcard_hits}" ]; then
     echo "ERROR: PHPT expectations must not lead an issue line with '%A':"
     printf '%s' "${wildcard_hits}"

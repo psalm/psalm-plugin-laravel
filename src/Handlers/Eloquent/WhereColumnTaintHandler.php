@@ -124,8 +124,15 @@ use Psalm\Type\Union;
  * return. (Contrast {@see \Psalm\LaravelPlugin\Handlers\Validation\ValidationTaintHandler}, whose dedup
  * set has a record→read gap within a single expression and so flushes per function-like safely.)
  * Flushing at file START ({@see beforeAnalyzeFile}) instead survives a mid-file analysis throw (an
- * end-of-file flush would leave stale ids) and prevents cross-file `spl_object_id` reuse; within one
- * file the AST stays alive, so an id cannot be reused mid-file.
+ * end-of-file flush would leave stale records). It does NOT bound a record's lifetime on its own,
+ * which is why both maps are keyed weakly on the node object rather than on its `spl_object_id`:
+ * Psalm parses, analyses and frees whole foreign ASTs while the current file is still being analysed
+ * (`ProjectAnalyzer::getMethodMutations()`, reached from `CallAnalyzer::collectSpecialInformation()`
+ * whenever a context collects mutations or initialisations, and `ClassLikes::getTraitNode()`, which
+ * keeps only the `Trait_` node of the file it parsed) and dispatches no `BeforeFileAnalysisEvent` for
+ * them. Those bodies do reach {@see beforeExpressionAnalysis}, so an id-keyed record could outlive
+ * its node; PHP then reissues the freed handle and an unrelated later node hits the stale record. A
+ * stale hit STRIPS `sql` taint, so that collision is a missed injection, not a false positive.
  *
  * Retirement: the method id and argument offset already exist at `ArgumentAnalyzer::processTaintedness()`
  * where the event is built; if an upstream PR adds them to {@see AddRemoveTaintsEvent}, the
@@ -170,22 +177,26 @@ final class WhereColumnTaintHandler implements
     ];
 
     /**
-     * `spl_object_id` of each recorded where-family first-argument node, consumed by
+     * Each recorded where-family first-argument node, consumed by
      * {@see removeTaints}. The value is the call's receiver node for a `MethodCall`/
      * `NullsafeMethodCall` — checked against {@see isLaravelBuilder} at strip time, once its type
      * exists, since it is unresolved at record time (see {@see beforeExpressionAnalysis}) — or `null`
      * for a `StaticCall` already verified Model/builder-bound at record time by
      * {@see isStaticReceiverLaravelBound} (#1306, #1300). Flushed per file at {@see beforeAnalyzeFile}
      * (NOT per function-like — the record→read gap spans a closure-bearing call's whole analysis; see
-     * the class docblock). A stale cross-file id would wrongly STRIP taint, so the file flush is
-     * load-bearing.
+     * the class docblock). A stale record would wrongly STRIP taint, so the weak keying described in
+     * the class docblock is load-bearing; the per-file flush only caps the footprint.
      *
-     * @var array<int, Expr|null>
+     * The receiver is wrapped in a shape rather than stored bare, because `WeakMap::offsetExists()`
+     * is `isset`-shaped: a bare `null` value (the already-verified `StaticCall` path) would read back
+     * as absent.
+     *
+     * @psalm-var \WeakMap<object, array{receiver: Expr|null}>|null
      */
-    private static array $whereColumnArgumentIds = [];
+    private static ?\WeakMap $whereColumnArguments = null;
 
     /**
-     * `spl_object_id` of each `ArrayItem` of a where-family array LITERAL that `addArrayOfWheres`
+     * Each `ArrayItem` of a where-family array LITERAL that `addArrayOfWheres`
      * maps onto a PDO-bound position, against the two things {@see removeTaints} still has to check
      * once types exist: `scalar_gated` demands the element cannot hold an array at runtime — only the
      * OUTER numeric-key element ({@see recordBoundValuePositions}) sets this true, since only there
@@ -195,12 +206,41 @@ final class WhereColumnTaintHandler implements
      * from `DB::raw()`, is already flagged at its own construction sink, not here — see that method's
      * docblock) — and `receiver` is the call's receiver node, whose type must resolve to a Laravel
      * builder, or `null` for a `StaticCall` already verified Model/builder-bound at record time by
-     * {@see isStaticReceiverLaravelBound}, which skips that check. Flushed with
-     * {@see $whereColumnArgumentIds}.
+     * {@see isStaticReceiverLaravelBound}, which skips that check. Keyed and flushed with
+     * {@see $whereColumnArguments}; the value is always a shape here, so it needs no `null` wrapper.
      *
-     * @var array<int, array{scalar_gated: bool, receiver: Expr|null}>
+     * @psalm-var \WeakMap<object, array{scalar_gated: bool, receiver: Expr|null}>|null
      */
-    private static array $boundValuePositionIds = [];
+    private static ?\WeakMap $boundValuePositions = null;
+
+    /**
+     * `new \WeakMap()` alone infers `WeakMap<object, mixed>`, so each value shape is pinned in its
+     * own factory rather than at every construction site.
+     *
+     * @return \WeakMap<object, array{receiver: Expr|null}>
+     *
+     * @psalm-pure
+     */
+    private static function newArgumentMap(): \WeakMap
+    {
+        /** @psalm-var \WeakMap<object, array{receiver: Expr|null}> $map */
+        $map = new \WeakMap();
+
+        return $map;
+    }
+
+    /**
+     * @return \WeakMap<object, array{scalar_gated: bool, receiver: Expr|null}>
+     *
+     * @psalm-pure
+     */
+    private static function newPositionMap(): \WeakMap
+    {
+        /** @psalm-var \WeakMap<object, array{scalar_gated: bool, receiver: Expr|null}> $map */
+        $map = new \WeakMap();
+
+        return $map;
+    }
 
     /**
      * Record the first-argument node id of a where-family call before its arguments are descended
@@ -274,7 +314,8 @@ final class WhereColumnTaintHandler implements
                 return null;
             }
 
-            self::$whereColumnArgumentIds[\spl_object_id($argument)] = null;
+            (self::$whereColumnArguments ??= self::newArgumentMap())
+                ->offsetSet($argument, ['receiver' => null]);
 
             if ($argument instanceof Array_) {
                 self::recordBoundValuePositions($argument, null);
@@ -288,7 +329,8 @@ final class WhereColumnTaintHandler implements
         // string-key map is not `addArrayOfWheres()`. The receiver's type is not resolved yet here
         // (this hook fires before MethodCallAnalyzer descends `$stmt->var`), so it is stored and
         // checked at strip time by {@see isLaravelBuilder}.
-        self::$whereColumnArgumentIds[\spl_object_id($argument)] = $expr->var;
+        (self::$whereColumnArguments ??= self::newArgumentMap())
+            ->offsetSet($argument, ['receiver' => $expr->var]);
 
         if ($argument instanceof Array_) {
             self::recordBoundValuePositions($argument, $expr->var);
@@ -403,12 +445,10 @@ final class WhereColumnTaintHandler implements
      * that was never recorded is a safe no-op, so a plain structural walk is enough. Called only
      * when a `StaticCall`'s receiver just failed {@see isStaticReceiverLaravelBound}, to heal the
      * trait-reanalysis corridor documented there.
-     *
-     * @psalm-external-mutation-free
      */
     private static function clearRecordedPositions(Expr $argument): void
     {
-        unset(self::$whereColumnArgumentIds[\spl_object_id($argument)]);
+        self::$whereColumnArguments?->offsetUnset($argument);
 
         if (!$argument instanceof Array_) {
             return;
@@ -419,7 +459,7 @@ final class WhereColumnTaintHandler implements
                 continue;
             }
 
-            unset(self::$boundValuePositionIds[\spl_object_id($item)]);
+            self::$boundValuePositions?->offsetUnset($item);
 
             if (!$item->value instanceof Array_) {
                 continue;
@@ -427,7 +467,7 @@ final class WhereColumnTaintHandler implements
 
             foreach ($item->value->items as $nested_item) {
                 if ($nested_item !== null) {
-                    unset(self::$boundValuePositionIds[\spl_object_id($nested_item)]);
+                    self::$boundValuePositions?->offsetUnset($nested_item);
                 }
             }
         }
@@ -450,9 +490,12 @@ final class WhereColumnTaintHandler implements
             return self::removeElementTaints($expr, $event);
         }
 
-        // The load-bearing scoping check #1218 lacked. array_key_exists, not isset: a recorded
-        // StaticCall argument stores `null`, which isset() would treat as absent.
-        if (!\array_key_exists(\spl_object_id($expr), self::$whereColumnArgumentIds)) {
+        // The load-bearing scoping check #1218 lacked. The recorded value is a shape rather than a
+        // bare `Expr|null` because `WeakMap::offsetExists()` is isset-shaped, and a recorded
+        // StaticCall argument carries a `null` receiver — see the property docblock.
+        $recorded = self::$whereColumnArguments;
+
+        if (!$recorded instanceof \WeakMap || !$recorded->offsetExists($expr)) {
             return 0;
         }
 
@@ -468,7 +511,13 @@ final class WhereColumnTaintHandler implements
             return 0;
         }
 
-        $receiver = self::$whereColumnArgumentIds[\spl_object_id($expr)];
+        $recordedArgument = $recorded->offsetGet($expr);
+
+        if ($recordedArgument === null) {
+            return 0;
+        }
+
+        $receiver = $recordedArgument['receiver'];
 
         // #1306: gate the strip on the receiver, same as removeElementTaints. `null` (StaticCall)
         // was already verified Model/builder-bound at record time — see the property docblock.
@@ -484,7 +533,14 @@ final class WhereColumnTaintHandler implements
      */
     private static function removeElementTaints(ArrayItem $item, AddRemoveTaintsEvent $event): int
     {
-        $position = self::$boundValuePositionIds[\spl_object_id($item)] ?? null;
+        // offsetGet throws on an absent key, so presence is checked before the read.
+        $positions = self::$boundValuePositions;
+
+        if (!$positions instanceof \WeakMap || !$positions->offsetExists($item)) {
+            return 0;
+        }
+
+        $position = $positions->offsetGet($item);
 
         if ($position === null) {
             return 0;
@@ -612,8 +668,6 @@ final class WhereColumnTaintHandler implements
     /**
      * Record the elements of a where-family array literal that `addArrayOfWheres` binds. Everything
      * not recorded keeps the sink, so every uncertain shape simply falls through.
-     *
-     * @psalm-external-mutation-free
      */
     private static function recordBoundValuePositions(Array_ $literal, ?Expr $receiver): void
     {
@@ -641,18 +695,16 @@ final class WhereColumnTaintHandler implements
                 continue;
             }
 
-            self::$boundValuePositionIds[\spl_object_id($item)] = [
+            (self::$boundValuePositions ??= self::newPositionMap())->offsetSet($item, [
                 'scalar_gated' => $numeric_key,
                 'receiver' => $receiver,
-            ];
+            ]);
         }
     }
 
     /**
      * Record the bound positions of a nested condition `[[$column, $operator, $value]]`, which
      * `addArrayOfWheres` forwards as `where(...array_values($value), boolean: $boolean)`.
-     *
-     * @psalm-external-mutation-free
      */
     private static function recordNestedConditionPositions(Array_ $condition, ?Expr $receiver): void
     {
@@ -693,10 +745,10 @@ final class WhereColumnTaintHandler implements
             // `DB::raw()`'s `ExpressionContract` (its `getValue()` the grammar emits verbatim), is
             // already `@psalm-taint-sink sql`-flagged at its OWN construction call, so it does not
             // need a check here too. #1300
-            self::$boundValuePositionIds[\spl_object_id($item)] = [
+            (self::$boundValuePositions ??= self::newPositionMap())->offsetSet($item, [
                 'scalar_gated' => false,
                 'receiver' => $receiver,
-            ];
+            ]);
         }
     }
 
@@ -752,17 +804,18 @@ final class WhereColumnTaintHandler implements
 
     /**
      * Flush the recorded argument ids at file START. This bounds the footprint, prevents cross-file
-     * `spl_object_id` reuse (ASTs are GC'd per file) from colliding a stale record with a fresh node,
-     * and — unlike an end-of-file flush — survives a mid-file analysis throw. See the class docblock
-     * for why this is per-file rather than per-function-like.
+     * unbounded growth across a run, and — unlike an end-of-file flush — survives a mid-file analysis
+     * throw. Collision safety comes from the weak keying, not from this flush: see the class docblock
+     * for why an id-keyed record could outlive its node, and why this is per-file rather than
+     * per-function-like.
      *
      * @psalm-external-mutation-free
      */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
     {
-        self::$whereColumnArgumentIds = [];
-        self::$boundValuePositionIds = [];
+        self::$whereColumnArguments = self::newArgumentMap();
+        self::$boundValuePositions = self::newPositionMap();
     }
 
     /**
