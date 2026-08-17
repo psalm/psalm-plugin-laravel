@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786993914849,
+  "lastUpdate": 1787001203571,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9965,6 +9965,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 25.74,
             "range": "± 0.01",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a750a144a108e9aa9795c4ffc0776d99d88c9a0",
+          "message": "Merge pull request #1369 from alies-dev/1367-collection-group-key-type\n\nNarrow `groupBy()` and `keyBy()` keys for model columns",
+          "timestamp": "2026-08-17T23:10:16+02:00",
+          "tree_id": "3bd93bb150f3d09932b533658ba7b0eef59a9a0e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3a750a144a108e9aa9795c4ffc0776d99d88c9a0"
+        },
+        "date": 1787001201990,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.33,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
