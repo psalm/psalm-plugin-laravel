@@ -9,4 +9,6 @@ function filterPosts(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+MissingReturnType on line %d: Method filterPosts does not have a return type, expecting void
+TooFewArguments on line %d: Too few arguments for Illuminate\Database\Query\Builder::__construct - expecting connection to be passed
+TaintedSql on line %d: Detected tainted SQL

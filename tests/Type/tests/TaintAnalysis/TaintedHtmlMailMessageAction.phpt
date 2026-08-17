@@ -9,4 +9,8 @@ function notifyWithAction(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
+MissingReturnType on line %d: Method notifyWithAction does not have a return type, expecting void
+MixedArgument on line %d: Argument 1 of Illuminate\Notifications\Messages\MailMessage::action cannot be mixed, expecting string
+TaintedHtml on line %d: Detected tainted HTML
+MixedArgument on line %d: Argument 2 of Illuminate\Notifications\Messages\MailMessage::action cannot be mixed, expecting string
+TaintedHtml on line %d: Detected tainted HTML

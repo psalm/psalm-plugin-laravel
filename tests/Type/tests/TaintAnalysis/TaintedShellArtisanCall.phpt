@@ -11,4 +11,7 @@ function runArtisanCommand(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedShell on line %d: Detected tainted shell code
+MissingReturnType on line %d: Method runArtisanCommand does not have a return type, expecting void
+MixedAssignment on line %d: Unable to determine the type that $command is being assigned to
+MixedArgument on line %d: Argument 1 of Illuminate\Contracts\Console\Kernel::call cannot be mixed, expecting string
+TaintedShell on line %d: Detected tainted shell code

@@ -24,9 +24,7 @@ use Illuminate\Support\Facades\Storage;
  *
  * The safe counterpart — `url()` must NOT taint through the same facade path —
  * lives in `SafeStorageFacadeUrlNoTaint.phpt`, which uses an empty `--EXPECTF--`
- * so any spurious finding fails. (A negative cannot be asserted here: the
- * `%A`-prefixed positive lines below are a lower bound — an extra `TaintedFile`
- * would be absorbed by a `%A` segment, not rejected.)
+ * so any spurious finding fails.
  */
 
 function facadeDiskPutIsTainted(Request $request): void
@@ -51,6 +49,6 @@ function managerDiskDeleteIsTainted(Request $request, FilesystemManager $manager
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
+TaintedFile on line %d: Detected tainted file handling
+TaintedFile on line %d: Detected tainted file handling
+TaintedFile on line %d: Detected tainted file handling

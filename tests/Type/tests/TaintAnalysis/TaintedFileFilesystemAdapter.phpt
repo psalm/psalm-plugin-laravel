@@ -124,33 +124,65 @@ function storageAllDirectories(\Illuminate\Http\Request $request, \Illuminate\Fi
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::get cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::put cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::download cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::delete cannot be mixed, expecting array<array-key, mixed>|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::copy cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\FilesystemAdapter::copy cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::move cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\FilesystemAdapter::move cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::makeDirectory cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::deleteDirectory cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::json cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::response cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 2 of Illuminate\Filesystem\FilesystemAdapter::serve cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::putFile cannot be mixed, expecting Illuminate\Http\File|Illuminate\Http\UploadedFile|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::putFileAs cannot be mixed, expecting Illuminate\Http\File|Illuminate\Http\UploadedFile|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 3 of Illuminate\Filesystem\FilesystemAdapter::putFileAs cannot be mixed, expecting array<array-key, mixed>|null|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::prepend cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::append cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::readStream cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::writeStream cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::temporaryUploadUrl cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::getVisibility cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::setVisibility cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::size cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::checksum cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::mimeType cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::lastModified cannot be mixed, expecting string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::files cannot be mixed, expecting null|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::allFiles cannot be mixed, expecting null|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::directories cannot be mixed, expecting null|string
+TaintedFile on line %d: Detected tainted file handling
+MixedArgument on line %d: Argument 1 of Illuminate\Filesystem\FilesystemAdapter::allDirectories cannot be mixed, expecting null|string
+TaintedFile on line %d: Detected tainted file handling

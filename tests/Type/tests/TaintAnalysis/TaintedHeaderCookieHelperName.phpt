@@ -10,4 +10,5 @@ function taintedCookieHelperName(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+ArgumentTypeCoercion on line %d: Argument 1 of cookie expects non-empty-string|null, but parent type string provided
+TaintedHeader on line %d: Detected tainted header
