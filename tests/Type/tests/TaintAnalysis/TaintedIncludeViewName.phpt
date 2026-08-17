@@ -8,10 +8,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
 
 /**
- * A user-controlled view *name* resolves to an arbitrary blade path, so it carries the
- * same file + include sinks as `Factory::file()` (see TaintedIncludeViewFactory.phpt).
- * View *data* remains deliberately un-sunk — Blade escapes `{{ }}` (see
- * SafeViewFactoryUserInput.phpt).
+ * A user-controlled view *name* selects which blade template gets compiled and executed,
+ * but FileViewFinder normalizes it before joining a configured view path, so it cannot
+ * escape to an arbitrary file the way `Factory::file()`'s path argument can (see
+ * TaintedIncludeViewFactory.phpt) — include only, no TaintedFile. View *data* remains
+ * deliberately un-sunk — Blade escapes `{{ }}` (see SafeViewFactoryUserInput.phpt).
  *
  * Three call shapes, each with its own sink source. Verified by deleting each in turn:
  * every one is load-bearing for exactly one case, and none covers another.
@@ -43,9 +44,6 @@ function viewContractNameIsTainted(Request $request, ViewFactoryContract $factor
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar

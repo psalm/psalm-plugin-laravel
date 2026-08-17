@@ -8,7 +8,8 @@ use Illuminate\Routing\ResponseFactory;
 
 /**
  * `ResponseFactory::view()` forwards its view name to `Factory::make()` (or `first()` for
- * the array form), so a user-controlled name resolves to an arbitrary blade path.
+ * the array form), so a user-controlled name selects which blade template executes —
+ * include only, it cannot escape to an arbitrary file.
  *
  * Both receivers are pinned: the zero-argument `response()` helper, typed as the
  * `Illuminate\Contracts\Routing\ResponseFactory` contract, and the concrete class. Sinks do
@@ -28,7 +29,5 @@ function responseConcreteViewNameIsTainted(Request $request, ResponseFactory $re
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar

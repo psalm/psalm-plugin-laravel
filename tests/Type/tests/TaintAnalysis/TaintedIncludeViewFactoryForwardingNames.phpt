@@ -8,9 +8,10 @@ use Illuminate\View\Factory;
 
 /**
  * Every `Factory` method that resolves a view name forwards it to `make()`, so each name
- * param carries the same file + include sinks. Verified against Illuminate\View\Factory:
- * `first()` picks from `$views`, `renderWhen()` calls `make()`, `renderUnless()` delegates
- * to `renderWhen()`, and `renderEach()` calls `make($view)` per row.
+ * param carries the same include sink — no TaintedFile, the finder cannot be steered to an
+ * arbitrary file. Verified against Illuminate\View\Factory: `first()` picks from `$views`,
+ * `renderWhen()` calls `make()`, `renderUnless()` delegates to `renderWhen()`, and
+ * `renderEach()` calls `make($view)` per row.
  *
  * `renderEach()`'s `$empty` is a view name too: the no-rows branch calls `make($empty)`
  * unless the value uses the literal `raw|` form.
@@ -45,13 +46,8 @@ function renderEachEmptyViewIsTainted(Request $request, Factory $factory): void
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
-%ATaintedFile on line %d: Detected tainted file handling
-%ATaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
+TaintedInclude on line %d: Detected tainted code passed to include or similar
