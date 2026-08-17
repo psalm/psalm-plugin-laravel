@@ -29,15 +29,50 @@ use Psalm\Type\Union;
  * Removes html taint from `ResponseFactory::make()` content only for literal attachment responses.
  *
  * `AddRemoveTaintsEvent` exposes neither call nor argument offset, so the preceding call hook
- * records only its exact content node. The file hook prevents AST object-id reuse across files.
+ * records only its exact content node, keyed by object identity.
  */
 final class ResponseFactoryTaintHandler implements
     BeforeExpressionAnalysisInterface,
     RemoveTaintsInterface,
     BeforeFileAnalysisInterface
 {
-    /** @var array<int, Expr|null> */
-    private static array $recordedContentIds = [];
+    /**
+     * Content nodes exempted from the html sink, mapped to the receiver node whose type
+     * {@see removeTaints} still has to resolve, or `null` for a `StaticCall` already verified at
+     * record time by {@see isExactResponseFacade}, which skips that check.
+     *
+     * Keyed WEAKLY, on the node object rather than its `spl_object_id`. Psalm frees whole ASTs
+     * other than the analysed file's while that file is still being analysed —
+     * `ProjectAnalyzer::getMethodMutations()` parses, analyses and releases a foreign file on the
+     * constructor-initialisation path, and `ClassLikes::getTraitNode()` keeps only the `Trait_` node
+     * of the file it parsed — and neither dispatches `BeforeFileAnalysisEvent`. Those bodies do reach
+     * {@see beforeExpressionAnalysis}, so an id-keyed record can outlive its node, and PHP then hands
+     * the freed handle to an unrelated fresh node. A stale hit STRIPS taint, so that collision is a
+     * missed vulnerability, not a false positive. A weak key cannot survive its node.
+     *
+     * The receiver is wrapped in a shape rather than stored bare, because `WeakMap::offsetExists()`
+     * is `isset`-shaped: a bare `null` value reads back as absent, which would silently disable the
+     * facade path.
+     *
+     * @psalm-var \WeakMap<object, array{receiver: Expr|null}>|null
+     */
+    private static ?\WeakMap $recordedContent = null;
+
+    /**
+     * `new \WeakMap()` alone infers `WeakMap<object, mixed>`, so the value shape is pinned here
+     * rather than at each of the two construction sites.
+     *
+     * @return \WeakMap<object, array{receiver: Expr|null}>
+     *
+     * @psalm-pure
+     */
+    private static function newRecordMap(): \WeakMap
+    {
+        /** @psalm-var \WeakMap<object, array{receiver: Expr|null}> $map */
+        $map = new \WeakMap();
+
+        return $map;
+    }
 
     #[\Override]
     public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
@@ -73,12 +108,14 @@ final class ResponseFactoryTaintHandler implements
                 return null;
             }
 
-            self::$recordedContentIds[\spl_object_id($args[0]->value)] = null;
+            (self::$recordedContent ??= self::newRecordMap())
+                ->offsetSet($args[0]->value, ['receiver' => null]);
 
             return null;
         }
 
-        self::$recordedContentIds[\spl_object_id($args[0]->value)] = $call->var;
+        (self::$recordedContent ??= self::newRecordMap())
+            ->offsetSet($args[0]->value, ['receiver' => $call->var]);
 
         return null;
     }
@@ -87,14 +124,21 @@ final class ResponseFactoryTaintHandler implements
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
         $content = $event->getExpr();
+        $recorded = self::$recordedContent;
 
-        if (!\array_key_exists(\spl_object_id($content), self::$recordedContentIds)) {
+        if (!$recorded instanceof \WeakMap || !$recorded->offsetExists($content)) {
             return 0;
         }
 
-        $receiver = self::$recordedContentIds[\spl_object_id($content)];
+        $entry = $recorded->offsetGet($content);
 
-        if (!$receiver instanceof \PhpParser\Node\Expr) {
+        if ($entry === null) {
+            return 0;
+        }
+
+        $receiver = $entry['receiver'];
+
+        if (!$receiver instanceof Expr) {
             return TaintKind::INPUT_HTML;
         }
 
@@ -179,10 +223,16 @@ final class ResponseFactoryTaintHandler implements
             || $class === \strtolower(ResponseFactoryContract::class);
     }
 
-    /** @psalm-external-mutation-free */
+    /**
+     * Drop the recorded nodes at file START. Correctness no longer rests on this — the weak keys
+     * bound each entry to its own node's lifetime — but it caps the footprint at one file's exempted
+     * calls and, unlike an end-of-file flush, survives a mid-file analysis throw.
+     *
+     * @psalm-external-mutation-free
+     */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
     {
-        self::$recordedContentIds = [];
+        self::$recordedContent = self::newRecordMap();
     }
 }
