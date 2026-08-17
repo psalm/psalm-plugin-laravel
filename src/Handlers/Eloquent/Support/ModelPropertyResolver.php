@@ -53,6 +53,56 @@ final class ModelPropertyResolver
     }
 
     /**
+     * @param non-empty-list<Union>|null $templateParams
+     * @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    public static function resolveExactlyOneModelClass(
+        ?array $templateParams,
+        int $modelTemplateIndex,
+        ?Union $lhsType,
+        Codebase $codebase,
+    ): ?string {
+        $template = $templateParams[$modelTemplateIndex] ?? null;
+        $modelClass = self::extractExactlyOneModelFromUnion($template);
+        if ($modelClass !== null || !$lhsType instanceof Union
+            || $template !== null && self::extractModelFromUnion($template) !== null) {
+            return $modelClass;
+        }
+
+        foreach ($lhsType->getAtomicTypes() as $atomic) {
+            $atomicType = new Union([$atomic]);
+            $resolved = self::extractModelFromLhsType($atomicType, $modelTemplateIndex)
+                ?? self::extractModelFromLhsBuilderExtends($atomicType, $codebase)
+                ?? self::extractModelFromLhsCollectionExtends($atomicType, $codebase);
+
+            if ($resolved === null || ($modelClass !== null && $modelClass !== $resolved)) {
+                return null;
+            }
+
+            $modelClass = $resolved;
+        }
+
+        return $modelClass;
+    }
+    /** @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    private static function extractExactlyOneModelFromUnion(?Union $type): ?string
+    {
+        $modelClass = null;
+        foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
+            if (!$atomic instanceof TNamedObject || !\is_a($atomic->value, Model::class, true)
+                || ($modelClass !== null && $modelClass !== $atomic->value)) {
+                return null;
+            }
+
+            $modelClass = $atomic->value;
+        }
+        return $modelClass;
+    }
+
+    /**
      * Build a typed Collection return type for pluck().
      *
      * Resolves the model property type from @property annotations and determines
@@ -203,23 +253,13 @@ final class ModelPropertyResolver
             return null;
         }
 
-        // First resolved model wins. A union LHS spanning builders/collections over
-        // DIFFERENT models (e.g. `FooBuilder<Foo>|BarBuilder<Bar>`) resolves to
-        // whichever atomic happens to match first, not a validated agreement across
-        // the whole union — a real type error in the caller's code could silently
-        // narrow pluck() against the wrong model instead of surfacing. Deliberate:
-        // this shape is vanishingly rare in practice (same pattern in
-        // extractModelFromLhsBuilderExtends() and extractModelFromLhsCollectionExtends()
-        // below). If ever tightened, the correct semantics are "every atomic that
-        // resolves to a model must resolve to the SAME model, else null" rather than
-        // first-match.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject) {
                 continue;
             }
 
             $modelType = $atomic->type_params[$modelTemplateIndex] ?? null;
-            $modelClass = self::extractModelFromUnion($modelType);
+            $modelClass = self::extractExactlyOneModelFromUnion($modelType);
             if ($modelClass !== null) {
                 return $modelClass;
             }
@@ -259,8 +299,6 @@ final class ModelPropertyResolver
             return null;
         }
 
-        // First resolved model wins — same deliberate first-match limitation as
-        // extractModelFromLhsType() above.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject) {
                 continue;
@@ -272,7 +310,7 @@ final class ModelPropertyResolver
                 continue;
             }
 
-            $modelClass = self::extractModelFromUnion(
+            $modelClass = self::extractExactlyOneModelFromUnion(
                 $classStorage->template_extended_params[Builder::class]['TModel'] ?? null,
             );
             if ($modelClass !== null) {
@@ -314,8 +352,6 @@ final class ModelPropertyResolver
             return null;
         }
 
-        // First resolved model wins — same deliberate first-match limitation as
-        // extractModelFromLhsType() above.
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject) {
                 continue;
@@ -327,9 +363,9 @@ final class ModelPropertyResolver
                 continue;
             }
 
-            $modelClass = self::extractModelFromUnion(
+            $modelClass = self::extractExactlyOneModelFromUnion(
                 $classStorage->template_extended_params[EloquentCollection::class]['TModel'] ?? null,
-            ) ?? self::extractModelFromUnion(
+            ) ?? self::extractExactlyOneModelFromUnion(
                 $classStorage->template_extended_params[Collection::class]['TValue'] ?? null,
             );
             if ($modelClass !== null) {
