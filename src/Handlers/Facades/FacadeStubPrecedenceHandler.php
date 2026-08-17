@@ -15,9 +15,16 @@ use Psalm\Storage\MethodStorage;
  * `@method` catalogue by removing only the conflicting pseudo-static entries after Psalm's
  * populator has finished copying them into the facade hierarchy.
  *
- * Scoped to `stubs/common/Support/Facades/*`: userland app facades keep their declared
- * `@method` intent, and the fix rides Psalm's native real-method/template inference instead
- * of adding a parallel provider path just for first-party facades.
+ * Scoped to plugin-owned `stubs/<layer>/Support/Facades/` methods. Application facades outside those
+ * first-party facade hierarchies keep their declared `@method` intent. Descendants of a
+ * normalised first-party facade are normalised with their parent because Psalm has already
+ * copied the parent's pseudo-method storage into them; same-name child pseudo-method intent
+ * is not recoverable at this lifecycle point.
+ *
+ * The fix rides Psalm's native real-method/template inference instead of adding a parallel
+ * provider path just for first-party facades. A real facade stub that needs taint metadata
+ * must carry that metadata itself: once its pseudo-method is removed,
+ * {@see FacadeTaintForwardingHandler} deliberately has no pseudo target to decorate.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1368
  */
@@ -27,7 +34,7 @@ final class FacadeStubPrecedenceHandler implements AfterCodebasePopulatedInterfa
 
     private const FACADE_BASE_LOWER = 'illuminate\\support\\facades\\facade';
 
-    private const STUB_PATH_FRAGMENT = '/stubs/common/Support/Facades/';
+    private const STUB_PATH_PATTERN = '~/stubs/[^/]+/Support/Facades/~';
 
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
@@ -101,6 +108,6 @@ final class FacadeStubPrecedenceHandler implements AfterCodebasePopulatedInterfa
             return false;
         }
 
-        return \str_contains(\str_replace('\\', '/', $filePath), self::STUB_PATH_FRAGMENT);
+        return \preg_match(self::STUB_PATH_PATTERN, \str_replace('\\', '/', $filePath)) === 1;
     }
 }

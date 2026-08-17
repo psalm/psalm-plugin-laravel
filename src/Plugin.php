@@ -466,9 +466,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
-        // Copies taint sinks from each mapped facade's forwarding target onto the facade's
+        // Copies taint sinks from each mapped facade's forwarding target onto the surviving
         // `@method` pseudo-methods, so `Storage::get($userInput)` is a sink like the
-        // `Storage::disk()->get($userInput)` chain already is. Order-independent.
+        // `Storage::disk()->get($userInput)` chain already is. FacadeStubPrecedenceHandler
+        // intentionally runs first; real facade stubs carry their own sink metadata.
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
