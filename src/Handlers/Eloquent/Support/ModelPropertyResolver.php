@@ -85,6 +85,7 @@ final class ModelPropertyResolver
 
         return $modelClass;
     }
+
     /** @return class-string<Model>|null
      * @psalm-mutation-free
      */
@@ -99,6 +100,7 @@ final class ModelPropertyResolver
 
             $modelClass = $atomic->value;
         }
+
         return $modelClass;
     }
 

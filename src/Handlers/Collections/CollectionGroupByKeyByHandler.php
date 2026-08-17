@@ -38,6 +38,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             || ($method === 'keyby' && \count($args) !== 1) || \count($args) > 2) {
             return null;
         }
+
         $source = $event->getSource();
         $column = $source->getNodeTypeProvider()->getType($args[0]->value);
         if (!$column instanceof Union || !$column->isSingleStringLiteral()) {
@@ -59,9 +60,10 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             $source->getCodebase(),
             $method === 'groupby',
         );
-        if ($model === null || $key === null) {
+        if ($model === null || !$key instanceof \Psalm\Type\Union) {
             return null;
         }
+
         $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $value = $event->getTemplateTypeParameters()[1] ?? new Union([new TNamedObject($model)]);
 
@@ -74,6 +76,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         if (!$innerKey instanceof Union) {
             return null;
         }
+
         $innerKey = !($preserve instanceof Union) || $preserve->isFalse() ? Type::getInt()
             : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
 
