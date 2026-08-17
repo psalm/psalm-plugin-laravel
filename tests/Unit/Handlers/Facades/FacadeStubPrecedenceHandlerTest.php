@@ -75,6 +75,7 @@ final class FacadeStubPrecedenceHandlerTest extends TestCase
         $location = (new \ReflectionClass(CodeLocation::class))->newInstanceWithoutConstructor();
         /** @psalm-suppress InaccessibleProperty Synthetic location for storage-provenance testing. */
         $location->file_path = $filePath;
+
         $method->location = $location;
 
         return $method;
