@@ -12,4 +12,5 @@ function unsafeInsertUsingColumns(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TooFewArguments on line %d: Too few arguments for Illuminate\Database\Query\Builder::__construct - expecting connection to be passed
+TaintedSql on line %d: Detected tainted SQL

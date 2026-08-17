@@ -28,4 +28,4 @@ function sendActionWithUntrustedUrl(\Illuminate\Notifications\Messages\MailMessa
 }
 ?>
 --EXPECTF--
-%ATaintedCustom%a: Detected tainted html_url%A
+TaintedCustom on line %d: Detected tainted html_url

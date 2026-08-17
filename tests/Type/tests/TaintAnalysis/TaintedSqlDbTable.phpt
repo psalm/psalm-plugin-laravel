@@ -10,4 +10,6 @@ function unsafeDbTable(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+MixedAssignment on line %d: Unable to determine the type that $table is being assigned to
+MixedArgument on line %d: Argument 1 of Illuminate\Support\Facades\DB::table cannot be mixed, expecting Illuminate\Contracts\Database\Query\Expression|Illuminate\Database\Query\Builder|UnitEnum|impure-Closure|string
+TaintedSql on line %d: Detected tainted SQL

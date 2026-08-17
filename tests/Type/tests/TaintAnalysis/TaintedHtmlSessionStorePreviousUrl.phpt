@@ -8,5 +8,6 @@ function renderPreviousUrl(\Illuminate\Session\Store $session) {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+MissingReturnType on line %d: Method renderPreviousUrl does not have a return type, expecting void
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

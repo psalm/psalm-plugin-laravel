@@ -20,7 +20,9 @@ use Illuminate\Validation\Rule;
  * `$request->validate([...])` tests in `SafeInlineValidateWildcardArrayRule*`.
  *
  * TaintedSSRF still fires: a valid email's domain may still resolve to an
- * internal host.
+ * internal host. It fires TWICE for this single sink call — same type, line,
+ * and message — a suspected duplicate-report bug distinct from this test's
+ * subject, pinned as observed rather than silently absorbed. #1359.
  */
 final class WildcardEmailRequest extends FormRequest
 {
@@ -37,4 +39,5 @@ function storeWildcardFormRequest(WildcardEmailRequest $request): \Illuminate\Ht
 }
 ?>
 --EXPECTF--
-%ATaintedSSRF on line %d: Detected tainted network request
+TaintedSSRF on line %d: Detected tainted network request
+TaintedSSRF on line %d: Detected tainted network request

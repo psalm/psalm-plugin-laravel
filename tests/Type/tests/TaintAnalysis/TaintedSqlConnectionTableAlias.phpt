@@ -12,4 +12,6 @@ function unsafeConnectionTableAlias(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+MixedAssignment on line %d: Unable to determine the type that $alias is being assigned to
+MixedArgument on line %d: Argument 2 of Illuminate\Database\Connection::table cannot be mixed, expecting null|string
+TaintedSql on line %d: Detected tainted SQL

@@ -10,4 +10,4 @@ function taintedQueueCookie(\Illuminate\Http\Request $request, \Illuminate\Cooki
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header

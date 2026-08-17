@@ -10,4 +10,7 @@ function renderBio(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
+MissingReturnType on line %d: Method renderBio does not have a return type, expecting Illuminate\Support\HtmlString
+MixedAssignment on line %d: Unable to determine the type that $bio is being assigned to
+MixedArgument on line %d: Argument 1 of Illuminate\Support\HtmlString::__construct cannot be mixed, expecting string
+TaintedHtml on line %d: Detected tainted HTML

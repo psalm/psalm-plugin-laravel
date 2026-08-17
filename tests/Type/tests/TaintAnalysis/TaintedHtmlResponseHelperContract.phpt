@@ -12,8 +12,7 @@ use Illuminate\Http\Request;
  * mirrored onto the contract stub (Contracts/Routing/ResponseFactory.phpstub).
  *
  * `json()` deliberately does NOT sink through this path; its clean counterpart is pinned
- * in SafeResponseFactoryJsonNoHtmlTaint.phpt (a negative cannot be asserted here, since
- * the `%A` segments below are a lower bound).
+ * in SafeResponseFactoryJsonNoHtmlTaint.phpt.
  */
 
 function responseHelperMakeIsTainted(Request $request): void
@@ -22,4 +21,5 @@ function responseHelperMakeIsTainted(Request $request): void
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
+MixedArgument on line %d: Argument 1 of Illuminate\Contracts\Routing\ResponseFactory::make cannot be mixed, expecting array<array-key, mixed>|string
+TaintedHtml on line %d: Detected tainted HTML

@@ -14,4 +14,4 @@ function dispatchCallback(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedSSRF on line %d: Detected tainted network request
+TaintedSSRF on line %d: Detected tainted network request

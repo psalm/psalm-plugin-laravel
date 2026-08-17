@@ -14,4 +14,7 @@ function compareDecryptedSecretWithIdentical(\Illuminate\Encryption\Encrypter $e
 }
 ?>
 --EXPECTF--
-%ATaintedSystemSecret%A
+TaintedSystemSecret on line %d: Detected tainted system secret leaking
+TaintedSystemSecret on line %d: Detected tainted system secret leaking
+TaintedUserSecret on line %d: Detected tainted user secret leaking
+TaintedUserSecret on line %d: Detected tainted user secret leaking

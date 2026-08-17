@@ -24,4 +24,4 @@ function readByClientName(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedFile on line %d: Detected tainted file handling
+TaintedFile on line %d: Detected tainted file handling

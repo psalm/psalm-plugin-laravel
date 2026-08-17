@@ -18,4 +18,4 @@ function facadeStaticMakeIsTainted(Request $request): void
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
