@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786883934472,
+  "lastUpdate": 1786954421071,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9865,6 +9865,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1736903a9f31e390c17cef85ace3c32b745e268b",
+          "message": "Cache Psalm between CI runs and parallelise the scan phase (#1354)\n\n* perf(ci): cache Psalm and parallelise both phases in this repo's own job\n\n`--threads=2` covered analysis only. Psalm decides the two phases\nseparately and forces a single thread for each whenever it detects CI, so\nthe scan phase has been serial on every run, and scanning dominates here:\n187 analysed files against roughly 13k scanned in vendor. `psalm.xml`'s\n`threads` and `scanThreads` attributes cannot fix it either, since\n`getThreads()` tests for CI before it reads them.\n\nSet both flags to the runner's core count, install igbinary for the\nthread-merge phase, and persist `~/.cache/psalm` between runs with split\nrestore and save steps. The restore sits after Composer because the key\nhashes `composer.lock` and this repository does not commit one; only\npushes to master write, and pull requests fall back through\n`restore-keys`.\n\nMeasured on real runners: the Psalm step goes from a median 19s over five\nmaster runs to 13s cold and 8-9s with the cache restored.\n\nAlso:\n- `permissions: contents: read`, previously unset;\n- `timeout-minutes`, after a run once billed 115 minutes;\n- `--shepherd` on push only, the coverage series it feeds is a\n  master-branch one;\n- the `actions/cache` pin comments in benchmark.yml and psalm-delta.yml\n  said `# v5` for a SHA that is `v6.1.0`.\n\n* fix(ci): correct the cache save gating and the harden-runner claim\n\nThree corrections from review, each verified against source.\n\nharden-runner v2.20.0 and earlier do NOT allow the Actions cache endpoints\nimplicitly when host discovery fails: `setup.ts` sets\n`confg.egress_policy = \"audit\"`, dropping egress enforcement for the whole\njob on a transient cache-service blip. That fail-open predates this branch\nbut the comment added here asserted the opposite. v2.21.0 carries the fix\n(`93b58ee4`, \"never downgrade egress policy\"), so pin to it.\n\nKeep the implicit `success()` on the save instead of `!cancelled()`.\n`Cache::saveItem()` writes an entry's hash sidecar before the value it\ndescribes, and `getItem()` reads the value through `Assert::notFalse()`\nrather than treating a short read as a miss, so a run killed mid-write\nleaves an entry that throws on every later read. Keys are immutable and\nthe cache-hit guard refuses to overwrite it, so a re-run at the same\ncommit cannot repair it. A red master now costs a stale snapshot rather\nthan risking a wedged one.\n\nTest the default branch by name rather than `github.event_name == 'push'`,\nso adding 3.x under `push:` later cannot give it a second full archive per\ncommit.\n\nAlso note that only psalm.xml is hashed because only psalm.xml exists\nhere, while Psalm equally accepts psalm.xml.dist and psalm.dist.xml.",
+          "timestamp": "2026-08-17T10:11:11+02:00",
+          "tree_id": "669cd4a325c9399aed54eee9d54f9f8b1ca76618",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1736903a9f31e390c17cef85ace3c32b745e268b"
+        },
+        "date": 1786954419550,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.22,
+            "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
