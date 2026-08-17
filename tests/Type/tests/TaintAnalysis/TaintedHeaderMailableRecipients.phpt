@@ -50,11 +50,19 @@ function mailableReplyToName(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 1 of Illuminate\Mail\Mailable::from cannot be mixed, expecting array<array-key, mixed>|object|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 1 of Illuminate\Mail\Mailable::cc cannot be mixed, expecting array<array-key, mixed>|object|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 1 of Illuminate\Mail\Mailable::bcc cannot be mixed, expecting array<array-key, mixed>|object|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 1 of Illuminate\Mail\Mailable::replyTo cannot be mixed, expecting array<array-key, mixed>|object|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 2 of Illuminate\Mail\Mailable::from cannot be mixed, expecting null|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 2 of Illuminate\Mail\Mailable::cc cannot be mixed, expecting null|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 2 of Illuminate\Mail\Mailable::bcc cannot be mixed, expecting null|string
+TaintedHeader on line %d: Detected tainted header
+MixedArgument on line %d: Argument 2 of Illuminate\Mail\Mailable::replyTo cannot be mixed, expecting null|string
+TaintedHeader on line %d: Detected tainted header

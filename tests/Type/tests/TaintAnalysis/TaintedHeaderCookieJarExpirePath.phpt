@@ -10,4 +10,4 @@ function taintedExpirePath(\Illuminate\Http\Request $request, \Illuminate\Cookie
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header

@@ -24,4 +24,4 @@ function unsafeNullableNonBuilderWhereReceiver(\Illuminate\Http\Request $request
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL

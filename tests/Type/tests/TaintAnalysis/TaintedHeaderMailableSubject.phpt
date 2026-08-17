@@ -9,4 +9,6 @@ function sendFeedback(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+MissingReturnType on line %d: Method sendFeedback does not have a return type, expecting void
+MixedArgument on line %d: Argument 1 of Illuminate\Mail\Mailable::subject cannot be mixed, expecting string
+TaintedHeader on line %d: Detected tainted header

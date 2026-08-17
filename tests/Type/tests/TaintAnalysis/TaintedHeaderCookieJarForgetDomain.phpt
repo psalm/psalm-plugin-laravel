@@ -10,4 +10,4 @@ function taintedForgetDomain(\Illuminate\Http\Request $request, \Illuminate\Cook
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header
