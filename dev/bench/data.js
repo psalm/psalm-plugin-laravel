@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786954421071,
+  "lastUpdate": 1786969714024,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9895,6 +9895,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.22,
             "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "efb072c32e828b21f801587fd34f3f5e964efe81",
+          "message": "fix(taint): view name sinks should be include-only, not file #1353 (#1358)\n\nFileViewFinder normalizes the name (dots -> slashes, forced extension)\nbefore joining it onto a configured view path, so a view name cannot\nescape to an arbitrary file the way a real path can. Drop the\n@psalm-taint-sink file line on the view-name parameter for view(),\nFactory::make()/first()/renderWhen()/renderUnless()/renderEach(), and\nResponseFactory::view() (concrete + contract stubs), keeping include.\nFactory::file() and the response download()/file() methods are\nuntouched: those take real paths.",
+          "timestamp": "2026-08-17T14:25:34+02:00",
+          "tree_id": "9916fb37d8b79504cfbac41374ba6caf540cd433",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/efb072c32e828b21f801587fd34f3f5e964efe81"
+        },
+        "date": 1786969712698,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.39,
+            "range": "± 0.23",
             "unit": "s"
           },
           {
