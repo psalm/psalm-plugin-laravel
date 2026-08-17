@@ -81,7 +81,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
 
         return new Union([new TGenericObject($class, [$key,
-            new Union([new TGenericObject($class, [$innerKey, $value], is_static: true)]),
+            new Union([(new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true)]),
         ], is_static: true)]);
     }
 

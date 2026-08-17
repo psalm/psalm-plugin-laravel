@@ -3,6 +3,7 @@
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use App\Collections\AmbiguousCollectionGroupingCollection;
 use App\Collections\CollectionGroupingCollection;
 use App\Models\CollectionGroupingModel;
 use App\Models\Customer;
@@ -44,6 +45,22 @@ function key_by_on_eloquent_collection(EloquentCollection $items): void
     /** @psalm-check-type-exact $_enum = EloquentCollection<array-key, CollectionGroupingModel>&static */
 }
 
+function group_by_on_eloquent_collection(): void
+{
+    $_result = CollectionGroupingModel::all()->groupBy('foreign_id');
+    /** @psalm-check-type-exact $_result = EloquentCollection<int, EloquentCollection<int, CollectionGroupingModel>&static>&static */
+
+    // EloquentCollection constrains TValue to Model even though groupBy() necessarily
+    // nests collections. The one InvalidTemplateParam below is Laravel's known contract
+    // conflict (#1229); this chained shape guards against accidentally emitting it twice.
+    CollectionGroupingModel::with([])->get()->groupBy('foreign_id')->each(
+        static function ($_group, $_foreignId): void {
+            /** @psalm-check-type-exact $_group = EloquentCollection<int, CollectionGroupingModel>&static */
+            /** @psalm-check-type-exact $_foreignId = int */
+        },
+    );
+}
+
 function key_by_on_custom_collection(CollectionGroupingCollection $items): void
 {
     $_result = $items->keyBy('foreign_id');
@@ -58,6 +75,15 @@ function union_models_and_nullable_columns_defer(Collection $items): void
 
     $_nullable = $items->keyBy('nullable_id');
     /** @psalm-check-type-exact $_nullable = Collection<array-key, CollectionGroupingModel|Customer>&static */
+
+}
+
+/** An ambiguous model binding must defer instead of narrowing pluck() from the first model. */
+function ambiguous_custom_collection_pluck_defers(AmbiguousCollectionGroupingCollection $items): void
+{
+    $_result = $items->pluck('foreign_id');
+    /** @psalm-check-type-exact $_result = Collection<array-key, mixed> */
 }
 ?>
 --EXPECTF--
+InvalidTemplateParam on line %d: Extended template param TModel of Illuminate\Database\Eloquent\Collection<int, Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>&static>&static expects type Illuminate\Database\Eloquent\Model, type Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>&static given

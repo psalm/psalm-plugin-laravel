@@ -245,7 +245,7 @@ final class ModelPropertyResolver
      * The LHS type (e.g. HasMany<Vehicle, Customer>) carries concrete generic arguments
      * even when the event's template parameters do not, because @mixin forwarding can
      * leave the template unsubstituted by the time the return-type provider runs.
-     *
+     * Inner model unions must agree; outer LHS atomics retain first-match behavior.
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
@@ -285,13 +285,13 @@ final class ModelPropertyResolver
      * used as `TaskBuilder<Task>`, is a TGenericObject and already handled by
      * {@see self::extractModelFromLhsType()}; when reached from here instead, its
      * own TModel binding resolves to the unsubstituted template `T`, which
-     * {@see self::extractModelFromUnion()} does not recognize as a Model, so this
+     * {@see self::extractExactlyOneModelFromUnion()} does not recognize as a Model, so this
      * method correctly yields null for that case rather than a wrong binding.
      *
      * Public: shared with {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderAggregateHandler},
      * which has the identical non-generic-custom-builder gap for sum()/avg()/min()/max()
-     * (issue #1294), the same way {@see self::extractModelFromUnion()} already is.
-     *
+     * (issue #1294).
+     * Outer LHS atomics retain the same first-match limitation.
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
@@ -344,7 +344,7 @@ final class ModelPropertyResolver
      *    (`Eloquent\Collection<TKey, TModel> extends Support\Collection<TKey,
      *    TModel>`, so it flattens through): `template_extended_params
      *    ['Illuminate\Support\Collection'] = ['TKey' => int, 'TValue' => Invoice]`.
-     *
+     * Outer LHS atomics retain the same first-match limitation.
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */

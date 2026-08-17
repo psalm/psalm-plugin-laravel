@@ -6,11 +6,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-enum CollectionGroupingIntEnum: int
-{
-    case One = 1;
-}
-
 /**
  * @property int                       $foreign_id
  * @property bool                      $active
