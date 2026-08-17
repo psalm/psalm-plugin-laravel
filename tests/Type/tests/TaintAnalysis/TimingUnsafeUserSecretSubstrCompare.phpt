@@ -14,4 +14,4 @@ function compareWithSubstrCompare(\Illuminate\Foundation\Auth\User $user, string
 }
 ?>
 --EXPECTF--
-%ATaintedUserSecret%A
+TaintedUserSecret on line %d: Detected tainted user secret leaking

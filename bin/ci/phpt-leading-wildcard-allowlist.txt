@@ -1,0 +1,4 @@
+# Files exempted from rule 3 in check-phpt-conventions.sh (no %A leading an
+# issue line — it silently absorbs unasserted findings). One path per line,
+# relative to tests/Type/tests. Entries only for provably version-variable
+# output; keep this list as small as possible. See #1359.

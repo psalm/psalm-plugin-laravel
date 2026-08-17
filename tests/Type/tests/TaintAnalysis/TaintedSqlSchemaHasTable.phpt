@@ -19,4 +19,6 @@ function unsafeSchemaHasTable(\Illuminate\Http\Request $request): bool {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+MixedAssignment on line %d: Unable to determine the type that $table is being assigned to
+MixedArgument on line %d: Argument 1 of Illuminate\Support\Facades\Schema::hasTable cannot be mixed, expecting Stringable|string
+TaintedSql on line %d: Detected tainted SQL

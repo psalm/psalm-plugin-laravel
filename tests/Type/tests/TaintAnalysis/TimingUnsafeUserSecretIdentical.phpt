@@ -14,4 +14,4 @@ function compareSecretWithIdentical(\Illuminate\Foundation\Auth\User $user, stri
 }
 ?>
 --EXPECTF--
-%ATaintedUserSecret%A
+TaintedUserSecret on line %d: Detected tainted user secret leaking

@@ -18,4 +18,4 @@ function legacyMd5ApiKey(): string {
 }
 ?>
 --EXPECTF--
-%ATaintedSystemSecret on line %d: Detected tainted system secret leaking%A
+TaintedSystemSecret on line %d: Detected tainted system secret leaking

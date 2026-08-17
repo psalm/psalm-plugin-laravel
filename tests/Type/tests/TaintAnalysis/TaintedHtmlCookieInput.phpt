@@ -8,5 +8,7 @@ function showGreeting(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+MissingReturnType on line %d: Method showGreeting does not have a return type, expecting void
+MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

@@ -12,12 +12,14 @@ on:
   pull_request:
     paths:
       - '.github/**'
+      - 'resources/ci/**'
   push:
     branches:
       - master
       - "3.x"
     paths:
       - '.github/**'
+      - 'resources/ci/**'
 
 permissions: {}
 
@@ -52,6 +54,10 @@ jobs:
           echo "::add-matcher::.github/actionlint-matcher.json"
           bash <(curl -sSfL "https://raw.githubusercontent.com/rhysd/actionlint/${ACTIONLINT_INSTALL_SHA}/scripts/download-actionlint.bash") "${ACTIONLINT_VERSION}"
           ./actionlint -color
+          # A bare run only finds .github/workflows. The bundled CI template is a real workflow
+          # that `psalm-laravel add github` copies verbatim into users' repositories, so a syntax
+          # or expression error in it ships to them; lint it by explicit path.
+          ./actionlint -color resources/ci/github-actions/psalm.yml
         shell: bash
 
   octoscan:

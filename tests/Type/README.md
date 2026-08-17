@@ -45,7 +45,11 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
 2. **`%A` in `--EXPECTF--` is a lower bound, not an exact match.** It expands to a lazy `.*` (with `/s`),
    so it absorbs any extra findings. A test using `%A` cannot pin an exact error count and cannot assert
    that something is NOT reported. To assert the absence of errors, write a separate test with an empty
-   `--EXPECTF--` block (empty means "no Psalm output at all").
+   `--EXPECTF--` block (empty means "no Psalm output at all"). `PsalmTester::formatErrors()` produces no
+   preamble or trailer — the whole matched string is issue lines, nothing else — so a `%A` leading an
+   issue line only ever absorbs unasserted findings, never structural noise. `bin/ci/check-phpt-conventions.sh`
+   rejects this (allowlist: `bin/ci/phpt-leading-wildcard-allowlist.txt`, for provably version-variable
+   output only); enumerate every emitted line instead (#1359).
 
 3. **Version-gated stubs need `--SKIPIF--`.** A test asserting a `stubs/<version>/` override fails on
    the lower cells of the CI matrix, where the override does not load. Gate it:

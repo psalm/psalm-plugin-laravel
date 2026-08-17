@@ -9,4 +9,5 @@ function notifyWithContent(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
+MissingReturnType on line %d: Method notifyWithContent does not have a return type, expecting void
+TaintedHtml on line %d: Detected tainted HTML

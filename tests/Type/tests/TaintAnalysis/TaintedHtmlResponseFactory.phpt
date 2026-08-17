@@ -24,6 +24,7 @@ function responseJsonp(\Illuminate\Http\Request $request, \Illuminate\Routing\Re
 
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+MixedArgument on line %d: Argument 1 of Illuminate\Routing\ResponseFactory::jsonp cannot be mixed, expecting string
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML

@@ -9,4 +9,5 @@ function setHeaders(\Illuminate\Http\Request $request) {
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
+MissingReturnType on line %d: Method setHeaders does not have a return type, expecting Illuminate\Http\Response&static
+TaintedHeader on line %d: Detected tainted header

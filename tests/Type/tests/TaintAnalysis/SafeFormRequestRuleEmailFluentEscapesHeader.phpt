@@ -28,4 +28,4 @@ function direct(FluentEmailRequest $request): \Illuminate\Http\RedirectResponse 
 }
 ?>
 --EXPECTF--
-%ATaintedSSRF on line %d: Detected tainted network request
+TaintedSSRF on line %d: Detected tainted network request

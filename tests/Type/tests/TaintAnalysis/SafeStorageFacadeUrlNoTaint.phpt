@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Storage;
  * even though `Storage::disk()` now returns the concrete `FilesystemAdapter`.
  *
  * The empty `--EXPECTF--` makes this load-bearing: ANY finding fails the match
- * (unlike the `%A`-prefixed positive sinks in `TaintedFileStorageFacade.phpt`,
- * which only assert a lower bound). The sibling `SafeStorageUrlNoTaint.phpt`
+ * (unlike the exact-pinned positive sinks in `TaintedFileStorageFacade.phpt`).
+ * The sibling `SafeStorageUrlNoTaint.phpt`
  * proves the same on a directly-typed adapter; this proves it through the facade
  * routing that `StorageHandler` introduces.
  */

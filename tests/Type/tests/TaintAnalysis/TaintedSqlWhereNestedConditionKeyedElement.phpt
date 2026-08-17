@@ -42,5 +42,5 @@ function unsafeNestedConditionDuplicateStringKey(\Illuminate\Http\Request $reque
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL
