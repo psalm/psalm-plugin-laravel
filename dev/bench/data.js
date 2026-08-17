@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786969714024,
+  "lastUpdate": 1786993914849,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -9930,6 +9930,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.39,
             "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "161d443a9749032c56dba7b0935ffc1c27f80443",
+          "message": "Key `WhereColumnTaintHandler`'s removal bridge on the node, not `spl_object_id` (#1366)\n\n`AddRemoveTaintsEvent` carries neither a method id nor an argument offset, so the\nhandler bridges `beforeExpressionAnalysis` to `removeTaints` through the recorded\nnode. Both maps keyed that record on `spl_object_id` and relied on the per-file\nflush to bound its lifetime. The class docblock stated the invariant outright:\n\"within one file the AST stays alive, so an id cannot be reused mid-file\".\n\nThat does not hold. Psalm parses, analyses and frees whole foreign ASTs while the\ncurrent file is still being analysed, and dispatches no `BeforeFileAnalysisEvent`\nfor them:\n\n  - `ProjectAnalyzer::getMethodMutations()` builds an uncached `FileAnalyzer` for\n    another file, analyses a method body, then releases it. Reached from\n    `CallAnalyzer::collectSpecialInformation()` whenever a context collects\n    mutations or initialisations, i.e. constructor property-initialisation\n    checking on most classes.\n  - `ClassLikes::getTraitNode()` parses a whole file and keeps only its `Trait_`\n    node.\n  - `StatementsProvider::getStatementsForFile()` caches no nodes, so every call\n    returns a fresh object graph.\n\nThose bodies do reach `beforeExpressionAnalysis`, so a record outlives its node,\nPHP reissues the freed handle, and an unrelated later node hits the stale record.\nA hit STRIPS `sql` taint, so the failure is a missed injection rather than a\nfalse positive.\n\nKey both maps weakly on the node object: an entry cannot outlive its key. Three\nconsequences of the WeakMap API, each load-bearing here:\n\n  - `offsetExists()` is isset-shaped, so `$whereColumnArguments` wraps its value\n    in a shape; a bare `null` receiver (the verified StaticCall path) would read\n    back as absent.\n  - `offsetGet()` throws on an absent key, so both read paths check presence\n    first rather than leaning on `?? null`.\n  - `offsetUnset()` on an absent key is a no-op, which `clearRecordedPositions`\n    relies on when it over-clears structurally.\n\nDrop `@psalm-external-mutation-free` from the three recording methods. It was\nalready inaccurate (they mutate static state); writing through a WeakMap makes\nthat visible to Psalm rather than introducing it.\n\n`beforeAnalyzeFile` stays, demoted from collision safety to a footprint cap that\nalso survives a mid-file analysis throw.\n\nRefs #734, #1300, #1306, PR #1218.\n\nClaude-Session: https://claude.ai/code/session_015sG5mhEqmhCbfG5XrbgBmq",
+          "timestamp": "2026-08-17T21:09:12+02:00",
+          "tree_id": "ff73cb8e23b661df5328e60d652e9eb4b636c9e1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/161d443a9749032c56dba7b0935ffc1c27f80443"
+        },
+        "date": 1786993913133,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.74,
+            "range": "± 0.01",
             "unit": "s"
           },
           {
