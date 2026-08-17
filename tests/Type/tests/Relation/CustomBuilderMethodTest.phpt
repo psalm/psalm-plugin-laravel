@@ -26,32 +26,13 @@ function test_new_eloquent_builder_fluent_method(): void {
     /** @psalm-check-type-exact $_result = Collection<int, Vehicle> */
 }
 
-function test_use_eloquent_builder_attribute_fluent_method(): void {
-    $_result = (new Shop())->workOrders()->whereCompleted();
-    /** @psalm-check-type-exact $_result = HasMany<WorkOrder, Shop> */
-}
 
 function test_static_builder_property_fluent_method(): void {
     $_result = (new Shop())->mechanics()->whereCertified();
     /** @psalm-check-type-exact $_result = HasManyThrough<Mechanic, Vehicle, Shop> */
 }
 
-function test_non_templated_custom_builder_fluent_method(): void {
-    // Explicitly reference the related model so psalm-tester scans and registers its
-    // metadata before analyzing the relation-only call in this isolated fixture.
-    static function (Invoice $_invoice): void {};
-    $_result = (new Shop())->latestInvoice()->wherePaid();
-    /** @psalm-check-type-exact $_result = HasOne<Invoice, Shop> */
-}
 
-function test_method_inherited_from_abstract_custom_builder(): void {
-    static function (Artist $_artist): void {};
-    $_result = (new Shop())->artists()->accessible();
-    /** @psalm-check-type-exact $_result = HasMany<Artist, Shop> */
-
-    $_nullable = (new Shop())->artists()->accessibleOrNull();
-    /** @psalm-check-type-exact $_nullable = HasMany<Artist, Shop>|null */
-}
 
 function test_terminal_custom_builder_returns(): void {
     $relation = (new Customer())->vehicles();

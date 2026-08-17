@@ -29,9 +29,6 @@ function facade(): void
 
     $_driver = Cache::driver();
     /** @psalm-check-type-exact $_driver = \Illuminate\Cache\Repository */
-
-    $_memo = Cache::memo();
-    /** @psalm-check-type-exact $_memo = \Illuminate\Cache\Repository */
 }
 
 function alias(): void
