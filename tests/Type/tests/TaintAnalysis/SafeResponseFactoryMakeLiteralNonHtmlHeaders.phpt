@@ -23,5 +23,14 @@ function makeCaseInsensitiveAttachment(ResponseFactory $response, Request $reque
 {
     $response->make($request->input('case-insensitive-download'), 200, ['Content-Disposition' => " \tATTACHMENT ; filename=members.csv\t "]);
 }
+
+/**
+ * The reported shape in #1345. `response()` resolves to the contract, so this is the route the
+ * receiver check has to accept for the issue to be fixed at all.
+ */
+function makeAttachmentThroughHelper(Request $request): void
+{
+    response()->make((string) $request->input('helper-download'), 200, ['Content-Disposition' => 'attachment; filename="members.csv"']);
+}
 ?>
 --EXPECTF--
