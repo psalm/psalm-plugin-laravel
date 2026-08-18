@@ -44,7 +44,6 @@ class Connection implements ConnectionInterface
      * @param  array  $bindings
      * @param  bool  $useReadPdo
      * @param  array  $fetchUsing
-     * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
      * @psalm-return ($fetchUsing is array{} ? \Generator<int, \stdClass> : \Generator<int, mixed>)
@@ -58,7 +57,6 @@ class Connection implements ConnectionInterface
      * @param  array  $bindings
      * @param  bool  $useReadPdo
      * @param  array  $fetchUsing
-     * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
      * @psalm-return ($fetchUsing is array{} ? list<list<\stdClass>> : list<list<mixed>>)

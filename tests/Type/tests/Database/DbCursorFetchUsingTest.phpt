@@ -50,6 +50,12 @@ function db_select_family_accepts_fetch_using(): void
 
     $_connectionSelectRows = $connection->select('select * from users', [], true, [\PDO::FETCH_ASSOC]);
     /** @psalm-check-type-exact $_connectionSelectRows = array */
+
+    $_defaultConnectionResultSets = $connection->selectResultSets('select 1');
+    /** @psalm-check-type-exact $_defaultConnectionResultSets = list<list<stdClass>> */
+
+    $_connectionResultSets = $connection->selectResultSets('select 1; select 2', [], true, [\PDO::FETCH_ASSOC]);
+    /** @psalm-check-type-exact $_connectionResultSets = list<list<mixed>> */
 }
 ?>
 --EXPECTF--
