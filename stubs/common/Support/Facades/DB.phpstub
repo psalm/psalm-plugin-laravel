@@ -90,11 +90,12 @@ class DB extends Facade
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @return \Generator
+     * @param  array  $fetchUsing
+     * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
      */
-    public static function cursor($query, $bindings = [], $useReadPdo = true) {}
+    public static function cursor($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
     /**
      * Run an insert statement against the database.

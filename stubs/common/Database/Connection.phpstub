@@ -35,11 +35,12 @@ class Connection implements ConnectionInterface
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
      * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
      */
-    public function cursor($query, $bindings = [], $useReadPdo = true) {}
+    public function cursor($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
     /**
      * Run an insert statement against the database.
