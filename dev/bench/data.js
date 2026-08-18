@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787042841043,
+  "lastUpdate": 1787061703653,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10075,6 +10075,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a64cf4752100ec4c1626197c0ac4b5f82f6027e2",
+          "message": "Version-gate the Laravel 13 `$fetchUsing` database signatures (#1374)\n\n* fix(stubs): accept Laravel 13 $fetchUsing on DB::cursor() #1372\n\nDB facade and Connection cursor() stubs were missing the 4th\n$fetchUsing param Laravel 13 added (laravel/framework#55394). Since\nthe concrete DB facade stub is authoritative over the generated\npseudo-method (#1370), a valid 4-arg call was rejected as\nTooManyArguments.\n\nWiden unconditionally in the common stubs, matching the existing\npolicy for select()/selectResultSets() which already carry\n$fetchUsing without a version gate. Laravel 12 callers passing 4 args\nget no plugin error; that imprecision is the accepted tradeoff.\n\nAlso pin DB::cursor()'s return to Generator<int, stdClass> (previously\nbare Generator), matching Connection::cursor()'s already-correct\nannotation and Laravel's own PHPDoc.\n\n* fix(stubs): version-gate the Laravel 13 $fetchUsing select family\n\nReconciles #1375: the select family's $fetchUsing param (Laravel 13.0,\nlaravel/framework#55394) was widened unconditionally in the common\nstubs, so a Laravel 12 project passing a 4th argument got no plugin\nerror where the runtime raises ArgumentCountError.\n\nCommon stubs revert DB::select()/selectResultSets()/cursor() and\nConnection::select()/selectResultSets()/cursor() to the Laravel 12\n(3-arg) shape. New stubs/13/ overlays re-declare the same six methods\nat 4-arg, class headers copied verbatim (hard rule 2). Confirmed via\nDbSelectFamilyArityL12Test.phpt that Connection also declares\nselectResultSets() (the prior #1374 report missed it).\n\nEach overlay method restates its own @psalm-taint-sink even though\nthe common 3-arg declaration also carries one for the same param:\nverified via TaintedSqlDbCursor.phpt (full suite run) that this does\nnot double-report TaintedSql, unlike the unrelated upstream doubling\npinned in e0500091.\n\nCloses #1372, closes #1375.\n\n* fix(stubs): stop claiming stdClass under a custom $fetchUsing #1372\n\nThe stubs/13/ overlay's stdClass return was unconditional, but\nPDOStatement::fetch()/fetchAll() (what $fetchUsing forwards to) only\nyield stdClass under PDO's default fetch mode. A non-default mode\n(e.g. PDO::FETCH_ASSOC) yields arrays, and the stub stated a false\ntype — the exact case #1372's acceptance criteria calls out.\n\nConditional @psalm-return keys off `$fetchUsing is array{}`:\ndefault/empty-literal calls keep the precise stdClass shape, a\nnon-empty literal degrades to mixed, and a non-literal array unions\nboth branches (Psalm can't prove emptiness statically). Applied to\nDB::cursor()/select()/selectResultSets() and\nConnection::cursor()/selectResultSets(); Connection::select() already\nreturns untyped `array` and makes no stdClass claim.\n\nCommon (Laravel 12, 3-arg) declarations are untouched: no $fetchUsing\nargument exists there, so their unconditional stdClass stays sound.\n\n* fix(stubs): drop stale @return, pin Connection::selectResultSets() #1372\n\nDropped the plain @return on every stubs/13/ overlay method that now\ncarries a conditional @psalm-return: it re-stated the precise stdClass\nclaim the conditional exists to correct, and Psalm ignores it once\nthe conditional is present. Codebase precedent (blank(), Request::\nheader()/file()/route()) never carries both tags on one method.\nConfirmed no inferred-type regression before/after the deletion.\nConnection::select() untouched (plain array, no conditional).\n\nAdded Connection::selectResultSets() coverage to\nDbCursorFetchUsingTest.phpt, the only overlay method with no Laravel\n13 side pin; confirmed RED (arity + type fallback) by deleting it from\nthe overlay, then restored.",
+          "timestamp": "2026-08-18T15:58:02+02:00",
+          "tree_id": "457c4cf1f09bc609ccb3042d50f97f62c7701702",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a64cf4752100ec4c1626197c0ac4b5f82f6027e2"
+        },
+        "date": 1787061701360,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.51,
+            "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1108,
             "unit": "MB"
           }
         ]
