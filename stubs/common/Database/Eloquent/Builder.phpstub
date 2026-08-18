@@ -501,8 +501,8 @@ class Builder implements BuilderContract
     public function cursor() {}
 
     /**
-     * @param  int  $count
-     * @param  callable  $callback
+     * @param  positive-int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TModel>, int): mixed  $callback
      * @param  string|null  $column
      * @param  string|null  $alias
      * @return bool
