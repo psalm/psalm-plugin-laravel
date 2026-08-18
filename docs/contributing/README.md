@@ -88,7 +88,7 @@ composer rector # run rector refactoring
 Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
-- `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work; currently `stubs/12.42.0/`, `stubs/13.5.0/`, and `stubs/13.8.0/` exist
+- `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work; currently `stubs/12.42.0/`, `stubs/13/`, `stubs/13.5.0/`, and `stubs/13.8.0/` exist
 - `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed (currently `carbon/`, with a `pre-3.12/` subdir loaded only for older Carbon; see `src/Stubs/CarbonStubProvider.php`)
 
 Rules:
