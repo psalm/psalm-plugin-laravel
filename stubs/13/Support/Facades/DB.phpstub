@@ -13,6 +13,13 @@ namespace Illuminate\Support\Facades;
  * declaration for its own Laravel line (common for 12, this override for 13+), so both need
  * the sink. Taint annotations accumulate across stub files (hard rule 4), but this does not
  * double-report — verified via TaintedSqlDbCursor.phpt, which asserts exactly one TaintedSql.
+ *
+ * stdClass is only true for PDO's DEFAULT fetch mode. $fetchUsing forwards straight to
+ * PDOStatement::fetch(...$fetchUsing) (Connection::cursor()) / fetchAll(...$fetchUsing)
+ * (select()/selectResultSets()), so a non-default mode (e.g. PDO::FETCH_ASSOC) yields arrays,
+ * not stdClass objects. Each @psalm-return keys off whether $fetchUsing is the empty-array
+ * default; a non-empty literal degrades to mixed, and a non-literal array unions both branches
+ * (Psalm can't prove emptiness statically), matching what the runtime can actually produce.
  */
 class DB extends Facade
 {
@@ -26,6 +33,7 @@ class DB extends Facade
      * @return list<\stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? list<\stdClass> : list<mixed>)
      */
     public static function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
@@ -39,6 +47,7 @@ class DB extends Facade
      * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? \Generator<int, \stdClass> : \Generator<int, mixed>)
      */
     public static function cursor($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
@@ -52,6 +61,7 @@ class DB extends Facade
      * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? list<list<\stdClass>> : list<list<mixed>>)
      */
     public static function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 }

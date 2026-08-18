@@ -13,6 +13,14 @@ namespace Illuminate\Database;
  * declaration for its own Laravel line (common for 12, this override for 13+), so both need
  * the sink. Taint annotations accumulate across stub files (hard rule 4), but this does not
  * double-report — verified via TaintedSqlDbCursor.phpt, which asserts exactly one TaintedSql.
+ *
+ * stdClass is only true for PDO's DEFAULT fetch mode. $fetchUsing forwards straight to
+ * PDOStatement::fetch(...$fetchUsing) (cursor()) / fetchAll(...$fetchUsing) (selectResultSets()),
+ * so a non-default mode (e.g. PDO::FETCH_ASSOC) yields arrays, not stdClass objects. Each
+ * @psalm-return keys off whether $fetchUsing is the empty-array default; a non-empty literal
+ * degrades to mixed, and a non-literal array unions both branches (Psalm can't prove emptiness
+ * statically), matching what the runtime can actually produce. select() already returns the
+ * untyped `array`, so it makes no stdClass claim and needs no conditional.
  */
 class Connection implements ConnectionInterface
 {
@@ -39,6 +47,7 @@ class Connection implements ConnectionInterface
      * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? \Generator<int, \stdClass> : \Generator<int, mixed>)
      */
     public function cursor($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 
@@ -52,6 +61,7 @@ class Connection implements ConnectionInterface
      * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? list<list<\stdClass>> : list<list<mixed>>)
      */
     public function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
 }
