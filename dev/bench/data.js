@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787001203571,
+  "lastUpdate": 1787037604295,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10005,6 +10005,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cf04f87af5e5aef882d9c4c621cb09e9e6ec2a14",
+          "message": "Restore facade stub method precedence (#1370)\n\n* fix(facades): restore stub precedence #1368\n\n* test(facades): cover stub precedence boundaries #1368\n\n* style(tests): satisfy Rector facade test layout #1368\n\n* docs(facades): align Route and Schema precedence #1368\n\n* docs(facades): link upstream Psalm precedence issue #1368",
+          "timestamp": "2026-08-18T09:17:08+02:00",
+          "tree_id": "9b35e2d8c47cb779e4a3beca6a47d283d5888536",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cf04f87af5e5aef882d9c4c621cb09e9e6ec2a14"
+        },
+        "date": 1787037603336,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.2,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
