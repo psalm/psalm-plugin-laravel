@@ -6,9 +6,9 @@
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Facade path: Schema::hasTable() resolves via Facade::__callStatic. Verifies the
- * dual-mechanism stub in stubs/common/Support/Facades/Schema.phpstub (pseudo-method
- * for type widening + concrete method for the @psalm-taint-sink sql annotation).
+ * Facade path: Schema::hasTable() resolves via the concrete facade stub after
+ * FacadeStubPrecedenceHandler removes Laravel's shadowing pseudo-method. Verifies that
+ * the concrete method supplies both the widened type and @psalm-taint-sink annotation.
  *
  * Builder variant lives in TaintedSqlSchemaBuilderHasTable.phpt.
  */

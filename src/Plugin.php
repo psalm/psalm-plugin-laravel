@@ -360,6 +360,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Collections\CollectionMakeHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionGroupByKeyByHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionGroupByKeyByHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionReindexAllHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionReindexAllHandler::class);
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
@@ -447,7 +449,9 @@ final class Plugin implements PluginEntryPointInterface
         // never sees. See https://github.com/psalm/psalm-plugin-laravel/issues/787.
         require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/FacadeStubPrecedenceHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Facades\FacadeStubPrecedenceHandler::class);
 
         // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
@@ -460,9 +464,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
-        // Copies taint sinks from each mapped facade's forwarding target onto the facade's
+        // Copies taint sinks from each mapped facade's forwarding target onto the surviving
         // `@method` pseudo-methods, so `Storage::get($userInput)` is a sink like the
-        // `Storage::disk()->get($userInput)` chain already is. Order-independent.
+        // `Storage::disk()->get($userInput)` chain already is. FacadeStubPrecedenceHandler
+        // intentionally runs first; real facade stubs carry their own sink metadata.
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
