@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787037604295,
+  "lastUpdate": 1787042841043,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10035,6 +10035,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.2,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d03e78a93e705a503a6ffbac102bfa9b66a958bf",
+          "message": "fix(stubs): type the chunkById() callback like chunk() (#1373)\n\nThe Eloquent Builder stub declared `@param callable $callback` for\n`chunkById()`, which shadows the framework's own\n`callable(\\Illuminate\\Support\\Collection<int, TValue>, int): mixed` and\nleaves the callback parameter untyped. `chunk()` in the same stub already\ncarries the templated signature.\n\nAn unhinted callback parameter therefore resolved to `mixed`, and a\nparameter hinted as `Collection` fell back to the collection's own default\n`<array-key, Model>`, so calls such as\n`$chunk->each(static fn(Article $article) => ...)` reported\nMixedArgumentTypeCoercion. On one application this accounted for 17\nmixed-type issues, all in commands iterating with `chunkById()`.",
+          "timestamp": "2026-08-18T10:44:01+02:00",
+          "tree_id": "e84346154229c80f33abef124af23574514ad495",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d03e78a93e705a503a6ffbac102bfa9b66a958bf"
+        },
+        "date": 1787042839689,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.78,
+            "range": "± 0.44",
             "unit": "s"
           },
           {
