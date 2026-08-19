@@ -24,15 +24,15 @@ interface Factory
     /**
      * Get the evaluated view contents for the given view.
      *
-     * A user-controlled view name resolves to an arbitrary blade path, same as
-     * `Factory::file()`.
+     * A user-controlled view name selects which blade template gets compiled and executed;
+     * unlike `Factory::file()`'s path argument, it cannot escape to an arbitrary file —
+     * include only.
      *
      * @param  string  $view
      * @param  \Illuminate\Contracts\Support\Arrayable|array  $data
      * @param  array  $mergeData
      * @return \Illuminate\Contracts\View\View
      *
-     * @psalm-taint-sink file $view
      * @psalm-taint-sink include $view
      */
     public function make($view, $data = [], $mergeData = []);

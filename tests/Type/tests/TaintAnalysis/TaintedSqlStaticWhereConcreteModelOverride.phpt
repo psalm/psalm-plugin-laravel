@@ -26,4 +26,4 @@ function unsafeStaticConcreteModelOverride(\Illuminate\Http\Request $request): v
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL

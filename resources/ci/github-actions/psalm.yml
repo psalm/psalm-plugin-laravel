@@ -10,24 +10,66 @@ on:
     branches: [ main ]
   pull_request:
 
-permissions:
-  contents: read
-  security-events: write
+# Nothing is granted workflow-wide; the one job below asks for what it needs.
+permissions: {}
+
+env:
+  # Pin your project's PHP version here, not in the setup-php step: the cache key below
+  # carries it too, so a version bump starts a fresh cache instead of reusing entries
+  # serialised by another runtime.
+  PSALM_PHP_VERSION: '8.4'
+
+  # Psalm forces a single thread whenever it detects CI, and it decides the scan phase and
+  # the analysis phase separately: --threads covers analysis only, --scan-threads covers
+  # scanning (Cli\Psalm::getThreads()). Both must be set or half the run stays serial.
+  # On a 7,600-file Laravel codebase a fully single-threaded run measured 177s against 47s.
+  #
+  # Plain numbers rather than $(nproc): nproc does not exist on macOS runners, Windows
+  # runners default to PowerShell, and inside a container coreutils older than 9.8 reports
+  # the host's cores rather than the cgroup quota, which over-subscribes and can OOM.
+  # 4 matches ubuntu-latest. Raise both to your runner's core count.
+  #
+  # On many-core runners the analysis optimum sits slightly below the core count, because
+  # the per-worker merge grows as the analysis shrinks: on 16 cores, 12 beat 16.
+  #
+  # Scan threads pay off on a cold cache and are neutral to slightly negative on a warm one,
+  # where the parse work they parallelise is already done. At 4 the warm-run cost is noise;
+  # if you raise the analysis count on a large runner, sweep this one separately.
+  PSALM_THREADS: 4
+  PSALM_SCAN_THREADS: 4
 
 concurrency:
   group: psalm-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests supersede freely. Default-branch runs do not: cancelling one loses the
+  # cache generation every later pull request restores from (see the save step below).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   psalm:
     name: Psalm static analysis (types + taint)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Drop this (and the upload-sarif step) if the repository has no Code Scanning.
+      security-events: write
+    # A wedged analysis should fail loudly, not bill six hours against the default limit.
+    timeout-minutes: 15
     steps:
       - name: Block unexpected egress
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           # Covers checkout, setup-php, Composer (public Packagist) and the SARIF upload. Extend for other hosts
           # (private registry, VCS repos, extra plugins). Use egress-policy: audit to discover them.
+          #
+          # The Actions cache hosts are deliberately absent: in block mode harden-runner resolves
+          # the cache blob host itself and appends it, and that host is drawn from a numbered pool
+          # that rotates per run, so a hand-written entry would have to be a broad
+          # *.blob.core.windows.net wildcard covering every Azure storage account.
+          #
+          # v2.21.0 is the floor for this, not a routine bump. Up to and including v2.20.0, a
+          # failed lookup downgraded egress-policy from block to audit for the WHOLE job, so a
+          # transient cache-service blip silently disabled egress enforcement. Since v2.21.0 the
+          # policy stays block and only the cache misses.
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
@@ -44,16 +86,80 @@ jobs:
 
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
-          php-version: '8.4'
+          php-version: ${{ env.PSALM_PHP_VERSION }}
           coverage: none
+          # igbinary is worth installing purely for Psalm: its ForkContext serialises each
+          # worker's results back to the parent with it when present, and falls back to
+          # PHP's native serializer when it is not. On a large codebase that difference
+          # measured as roughly 50s versus 6s in the thread-merge phase.
+          #
+          # It also selects the cache serializer, which Psalm folds into the hash naming each
+          # cache generation directory. Adding or removing it invalidates existing caches once.
+          extensions: igbinary
 
       - uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # 4.0.0
+
+      # Psalm's cache holds parsed statements plus file and class-like storage. Restoring it
+      # removes most of the scan phase, the largest single win available here: measured on a
+      # 7,600-file Laravel codebase, scan went 90.9s to 18.7s and the whole run 158s to 78s.
+      #
+      # Restored after Composer so the key can hash the installed composer.lock. Psalm folds
+      # that file's contents, your psalm.xml and the mtimes of its own vendor sources into the
+      # hash naming each cache generation directory, so an entry built from a different lock
+      # misses internally in every subcache while still costing the download. The restore-keys
+      # fallback therefore repeats that hash verbatim and varies only the per-commit part; a
+      # bare `psalm-` catch-all would fire precisely when the archive is unusable.
+      #
+      # ~/.cache/psalm is Psalm's default on Linux (XDG home cache). Point this at your own
+      # path if psalm.xml sets cacheDirectory.
+      - name: Restore Psalm's cache
+        id: psalm-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/psalm
+          key: psalm-${{ runner.os }}-php${{ env.PSALM_PHP_VERSION }}-${{ hashFiles('psalm.xml', 'psalm.xml.dist', 'psalm.dist.xml', 'composer.lock') }}-${{ github.sha }}
+          restore-keys: |
+            psalm-${{ runner.os }}-php${{ env.PSALM_PHP_VERSION }}-${{ hashFiles('psalm.xml', 'psalm.xml.dist', 'psalm.dist.xml', 'composer.lock') }}-
 
       # One pass = type + taint. Psalm 7 runs taint analysis by default (no --taint-analysis flag needed),
       # so a plain run emits both type and taint findings: GitHub annotations on stdout + a SARIF report.
       # Exits 0 even on findings; a real crash exits non-zero, fails this step, and skips the rest.
+      # The CI single-thread default dates from 2019 (vimeo/psalm#2795) and is being
+      # reconsidered upstream (vimeo/psalm#11761). Until then both flags are needed; see
+      # the env block at the top of this file.
+      #
+      # Read as shell variables rather than interpolated as ${{ env.* }}: workflow scanners
+      # (octoscan) cannot tell a literal workflow-level env from an attacker-reachable one and
+      # flag every ${{ env.* }} that reaches a run: block as an expression-injection sink.
       - name: Run Psalm
-        run: ./vendor/bin/psalm --report=psalm.sarif --report-show-info=false
+        run: >-
+          ./vendor/bin/psalm
+          --threads="$PSALM_THREADS"
+          --scan-threads="$PSALM_SCAN_THREADS"
+          --report=psalm.sarif --report-show-info=false
+
+      # Split from the restore rather than one combined actions/cache step: a combined step skips
+      # its save on a key hit, so a snapshot whose key does not move never rolls forward. The key
+      # carries github.sha, so every default-branch commit writes a fresh generation.
+      #
+      # Only the default branch writes, tested by name rather than by `github.event_name == 'push'`:
+      # any branch you add under `push:` above would otherwise store its own full copy on every
+      # commit. Pull request entries land under refs/pull/<n>/merge, which nothing else can read,
+      # and would spend the repository's cache budget for one run's benefit; restore-keys already
+      # lets a pull request fall back to the newest default-branch snapshot.
+      #
+      # The implicit success() is load-bearing, do not relax it to !cancelled(). Psalm writes a
+      # cache entry's hash sidecar before the value it describes, and reads it back through an
+      # assertion rather than a graceful miss, so a run killed mid-write (OOM, fatal) leaves an
+      # entry that throws on every later read. Cache keys are immutable, and the cache-hit guard
+      # below then refuses to replace it, so a re-run at that SHA cannot repair it. Skipping the
+      # save on a failed run costs a stale snapshot; taking it can cost a wedged one.
+      - name: Save Psalm's cache
+        if: ${{ github.ref_name == github.event.repository.default_branch && steps.psalm-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/psalm
+          key: ${{ steps.psalm-cache.outputs.cache-primary-key }}
 
       # Skipped on fork and Dependabot PRs: GitHub caps their GITHUB_TOKEN at read-only, so the upload
       # would fail with "Resource not accessible by integration" despite `security-events: write` above.

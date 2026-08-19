@@ -13,5 +13,7 @@ function showData(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+MixedAssignment on line %d: Unable to determine the type that $item is being assigned to
+MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

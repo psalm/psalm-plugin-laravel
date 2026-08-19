@@ -10,7 +10,7 @@ use Composer\InstalledVersions;
  * Fingerprint-based disk cache for parsed migration schema.
  *
  * Avoids re-parsing all migration files on every Psalm run when they haven't changed.
- * The cache key is a hash of sorted file paths + modification times + plugin version,
+ * The cache key is a hash of sorted file paths + file content hashes + plugin version,
  * so any file change or plugin upgrade automatically invalidates the cache.
  *
  * Inspired by Larastan's MigrationCache (src/Properties/MigrationCache.php).
@@ -84,12 +84,15 @@ final class MigrationCache
     }
 
     /**
-     * Generate a fingerprint from file metadata and plugin version.
+     * Generate a fingerprint from file contents and plugin version.
      *
-     * Uses sorted file paths + modification times so file discovery order
-     * does not affect the fingerprint. The plugin version is included so
-     * a plugin upgrade (which may change schema parsing logic) automatically
-     * invalidates the cache.
+     * Uses sorted file paths + content hashes so file discovery order does not
+     * affect the fingerprint. Content hashing (rather than modification times)
+     * keeps the cache usable on machines that do not preserve mtimes, most
+     * notably CI runners, where a fresh checkout stamps every file with the
+     * checkout time. Psalm core fingerprints its own caches the same way.
+     * The plugin version is included so a plugin upgrade (which may change
+     * schema parsing logic) automatically invalidates the cache.
      *
      * @param list<string> $migrationFiles
      * @param list<string> $sqlDumpFiles
@@ -99,13 +102,11 @@ final class MigrationCache
         $entries = [];
 
         foreach ($migrationFiles as $file) {
-            $mtime = @\filemtime($file);
-            $entries[] = 'M:' . $file . ':' . ($mtime !== false ? $mtime : '0');
+            $entries[] = 'M:' . $file . ':' . $this->hashFileContents($file);
         }
 
         foreach ($sqlDumpFiles as $file) {
-            $mtime = @\filemtime($file);
-            $entries[] = 'S:' . $file . ':' . ($mtime !== false ? $mtime : '0');
+            $entries[] = 'S:' . $file . ':' . $this->hashFileContents($file);
         }
 
         \sort($entries);
@@ -118,6 +119,21 @@ final class MigrationCache
         $data .= '|V:' . $pluginVersion;
 
         return \hash('xxh128', $data);
+    }
+
+    /**
+     * Hash a file's contents, falling back to a constant when it cannot be read.
+     *
+     * An unreadable file yields the same value as an empty one, which is
+     * acceptable: the file list itself is part of the fingerprint, so an
+     * appearing or disappearing file still invalidates the cache.
+     * @psalm-pure
+     */
+    private function hashFileContents(string $file): string
+    {
+        $hash = @\hash_file('xxh128', $file);
+
+        return $hash !== false ? $hash : '0';
     }
 
     /** @psalm-mutation-free */

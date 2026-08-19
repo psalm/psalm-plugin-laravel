@@ -31,7 +31,7 @@ The template also pins every action to a commit SHA and hardens the runner with 
 
 The generated file carries inline comments for each knob. The common edits:
 
-* **PHP version.** Pin `php-version` in the `setup-php` step to match your project (8.2+ is supported by the plugin).
+* **PHP version.** Set `PSALM_PHP_VERSION` in the `env:` block at the top (8.2+ is supported by the plugin). The `setup-php` step and the cache key both read it, so a bump starts a fresh cache instead of reusing entries serialized by another runtime.
 * **Default-branch baseline.** Add your release branches under `push:` so Code Scanning builds the baseline it diffs PRs against.
 * **Egress allowlist.** Extend `allowed-endpoints` if your build reaches other hosts (private Composer registry, VCS or path repos, extra Psalm plugins). A blocked call shows in the step log. Switch to `egress-policy: audit` to discover endpoints without failing the build.
 
@@ -39,7 +39,20 @@ The generated file carries inline comments for each knob. The common edits:
 
 ### Performance
 
-Psalm defaults to a single thread in CI (it detects the `CI` variable). Standard `ubuntu-latest` runners have 4 cores, so add `--threads=4` to the Psalm step on larger codebases. Persisting `~/.cache/psalm` between runs (with `git-restore-mtime-action`, since `git checkout` resets file mtimes) and installing the `igbinary` extension further speed up repeated runs.
+The generated workflow does three things a hand-written Psalm job usually misses, all measured on a 7,600-file Laravel codebase:
+
+* **Persists Psalm's cache** between runs, which removes most of the scan phase. A whole run went 158s to 78s. This is the largest of the three.
+* **Sets both thread counts.** Psalm forces a single thread whenever it detects CI, and decides scanning and analysis separately, so passing only `--threads` leaves the scan phase serial. Fully single-threaded measured 177s against 47s. Note that `psalm.xml`'s `threads` and `scanThreads` attributes cannot do this: `getThreads()` tests for CI before it reads them.
+* **Installs `igbinary`**, which Psalm's `ForkContext` uses to serialise worker results back to the parent. Roughly 6s of thread-merge with it against 50s without.
+
+Each of these is a small number of steps in the generated file, and every non-obvious detail (why the cache restore sits after Composer, why restore and save are separate steps, why the `restore-keys` fallback is qualified, why the save keeps `success()`) is explained in an inline comment at the step it belongs to. Read the file before changing any of them.
+
+Two knobs are worth turning for your project: raise `PSALM_THREADS` and `PSALM_SCAN_THREADS` to your runner's core count, and point the cache `path` at your own directory if `psalm.xml` sets `cacheDirectory`. Neither fails loudly when left wrong; they just run slower or cache nothing.
+
+Two things not to add, both of which look like speedups and are not:
+
+* **An OPcache or JIT `ini-values` block.** The one that circulates (originally from the `ghcr.io/danog/psalm` image) does nothing: Psalm restarts PHP through `PsalmRestarter`, which re-injects its own value for every `opcache.*` setting that block passes, and JIT stays off unless you pass `--force-jit`. Forcing it on measured slower.
+* **`git-restore-mtime-action`.** Earlier versions of this page suggested pairing it with the cache, on the grounds that `git checkout` resets mtimes. Psalm validates its caches against a content hash of each file, so your project's source mtimes never enter into it. The one component that did key on `filemtime()` of project files was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore costs roughly 70s on a repository with real history and buys nothing.
 
 ## Troubleshooting
 

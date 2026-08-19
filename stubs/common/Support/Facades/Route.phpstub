@@ -9,12 +9,9 @@ namespace Illuminate\Support\Facades;
  * argument list as variadic strings — `Route::middleware('a', 'b', 'c')` is a valid
  * Laravel idiom (e.g. invoiceninja `routes/contact.php`).
  *
- * Following the Schema facade pattern, we override the narrower vendor `@method static`
- * with a variadic pseudo-method and pair it with a concrete static method. The pseudo
- * entry is what Psalm consults during `__callStatic` resolution; the concrete method
- * keeps the stub self-consistent if Psalm ever switches to native lookup.
- *
- * @method static \Illuminate\Routing\RouteRegistrar middleware(string|array<array-key, string|null>|null ...$middleware)
+ * The concrete facade method below widens the value type and marks the call as variadic.
+ * FacadeStubPrecedenceHandler removes Laravel's shadowing pseudo-method after population,
+ * so Psalm resolves this native stub signature instead of the narrower vendor annotation.
  */
 class Route extends Facade
 {

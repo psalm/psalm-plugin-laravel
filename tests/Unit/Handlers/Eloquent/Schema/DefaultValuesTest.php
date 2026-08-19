@@ -7,7 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 
-/** @covers \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator */
+#[\PHPUnit\Framework\Attributes\CoversClass(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator::class)]
 final class DefaultValuesTest extends AbstractSchemaAggregatorTestCase
 {
     private SchemaAggregator $schemaAggregator;

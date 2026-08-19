@@ -13,7 +13,7 @@ use Illuminate\Contracts\Foundation\Application;
  *
  * Psalm double-reports TooFewArguments for any interface call (contract receiver +
  * resolved declarer) — native behaviour, not a bridge artifact (setLocale() does
- * the same). %A absorbs the contract-named line; we pin only the concrete one. #1108.
+ * the same). Both lines are pinned below. #1108.
  */
 function param_check(Application $app): void
 {
@@ -21,4 +21,5 @@ function param_check(Application $app): void
 }
 ?>
 --EXPECTF--
-%ATooFewArguments on line %d: Too few arguments for method Illuminate\Foundation\Application::useenvironmentpath saw 0%A
+TooFewArguments on line %d: Too few arguments for Illuminate\Contracts\Foundation\Application::useEnvironmentPath - expecting path to be passed
+TooFewArguments on line %d: Too few arguments for method Illuminate\Foundation\Application::useenvironmentpath saw 0

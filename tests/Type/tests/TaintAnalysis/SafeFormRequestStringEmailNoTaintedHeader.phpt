@@ -26,4 +26,4 @@ function direct(EmailContactRequest $request): \Illuminate\Http\RedirectResponse
 }
 ?>
 --EXPECTF--
-%ATaintedSSRF on line %d: Detected tainted network request
+TaintedSSRF on line %d: Detected tainted network request

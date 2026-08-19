@@ -14,4 +14,4 @@ function comparePrefixCaseInsensitively(\Illuminate\Foundation\Auth\User $user, 
 }
 ?>
 --EXPECTF--
-%ATaintedUserSecret%A
+TaintedUserSecret on line %d: Detected tainted user secret leaking

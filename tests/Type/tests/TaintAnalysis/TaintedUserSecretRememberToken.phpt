@@ -10,4 +10,4 @@ function leakRememberToken(\Illuminate\Foundation\Auth\User $user): void {
 }
 ?>
 --EXPECTF--
-%ATaintedUserSecret on line %d: Detected tainted user secret%A
+TaintedUserSecret on line %d: Detected tainted user secret leaking

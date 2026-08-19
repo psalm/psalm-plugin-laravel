@@ -15,6 +15,10 @@ use Illuminate\Foundation\Http\FormRequest;
  * Here 'age' is constrained to integer (would normally escape ALL_INPUT), but
  * the tainted $default comes from an unvalidated source ('fallback'), so the
  * echo sink must still fire TaintedHtml.
+ *
+ * Each finding fires TWICE for this single echo — same type, line, and
+ * message — a suspected duplicate-report bug distinct from this test's
+ * subject, pinned as observed rather than silently absorbed. #1359.
  */
 final class InputWithDefaultRequest extends FormRequest
 {
@@ -30,5 +34,7 @@ function render(InputWithDefaultRequest $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedHtml on line %d: Detected tainted HTML
-%ATaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

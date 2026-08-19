@@ -31,4 +31,4 @@ function hashViaHelper(\Illuminate\Foundation\Auth\User $user): string {
 }
 ?>
 --EXPECTF--
-%ATaintedUserSecret on line %d: Detected tainted user secret leaking%A
+TaintedUserSecret on line %d: Detected tainted user secret leaking

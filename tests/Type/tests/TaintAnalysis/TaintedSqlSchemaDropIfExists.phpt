@@ -12,4 +12,6 @@ function unsafeSchemaDropIfExists(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+MixedAssignment on line %d: Unable to determine the type that $table is being assigned to
+MixedArgument on line %d: Argument 1 of Illuminate\Database\Schema\Builder::dropIfExists cannot be mixed, expecting string
+TaintedSql on line %d: Detected tainted SQL

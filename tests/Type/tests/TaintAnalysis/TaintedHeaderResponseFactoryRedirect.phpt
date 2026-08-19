@@ -23,6 +23,6 @@ function responseRedirectToIntended(\Illuminate\Http\Request $request, \Illumina
 }
 ?>
 --EXPECTF--
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
-%ATaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header
+TaintedHeader on line %d: Detected tainted header

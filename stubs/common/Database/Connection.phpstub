@@ -10,12 +10,11 @@ class Connection implements ConnectionInterface
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @param  array  $fetchUsing
      * @return array
      *
      * @psalm-taint-sink sql $query
      */
-    public function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
+    public function select($query, $bindings = [], $useReadPdo = true) {}
 
     /**
      * Run a select statement and return a single result.
@@ -145,12 +144,11 @@ class Connection implements ConnectionInterface
      * @param  string  $query
      * @param  array  $bindings
      * @param  bool  $useReadPdo
-     * @param  array  $fetchUsing
      * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
      */
-    public function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
+    public function selectResultSets($query, $bindings = [], $useReadPdo = true) {}
 
     /**
      * Begin a fluent query against a database table.

@@ -31,4 +31,4 @@ function test_order_by(): void {
 }
 ?>
 --EXPECTF--
-%AInvalidArgument on line %d: Argument 2 of Illuminate\Database\Query\Builder::orderBy expects 'asc'|'desc'|SortDirection, but 'DESC' provided%A
+InvalidArgument on line %d: Argument 2 of Illuminate\Database\Query\Builder::orderBy expects 'asc'|'desc'|SortDirection, but 'DESC' provided
