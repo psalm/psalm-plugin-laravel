@@ -36,6 +36,9 @@ class AgentPrompt extends Prompt
         ?int $timeout = null,
         ?string $invocationId = null,
         ?Decisions $approvalDecisions = null,
+        ?string $parentInvocationId = null,
+        ?string $parentToolInvocationId = null,
+        bool $isFinalAttempt = true,
     ) {}
 
     /**
