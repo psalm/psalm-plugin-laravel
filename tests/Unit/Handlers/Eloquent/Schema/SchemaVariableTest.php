@@ -282,4 +282,113 @@ final class SchemaVariableTest extends AbstractSchemaAggregatorTestCase
         $this->assertArrayHasKey('telescope_entries', $schema->tables);
         $this->assertArrayNotHasKey('telescope_monitoring', $schema->tables);
     }
+
+    #[Test]
+    public function it_untracks_a_variable_mutated_by_compound_assignment(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    $schema = Schema::connection($this->getConnection());
+                    $schema .= 'x';
+
+                    $schema->create('telescope_entries', function (Blueprint $table): void {
+                        $table->id();
+                    });
+                }
+
+                public function getConnection(): ?string
+                {
+                    return null;
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('telescope_entries', $schema->tables);
+    }
+
+    #[Test]
+    public function it_untracks_a_variable_rebound_by_reference(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    $schema = Schema::connection($this->getConnection());
+                    $other = new \stdClass();
+                    $schema = &$other;
+
+                    $schema->create('telescope_entries', function (Blueprint $table): void {
+                        $table->id();
+                    });
+                }
+
+                public function getConnection(): ?string
+                {
+                    return null;
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('telescope_entries', $schema->tables);
+    }
+
+    #[Test]
+    public function it_ignores_filament_schema_make_variable(): void
+    {
+        // Filament\Schemas\Schema::make() is an unrelated builder that also uses the
+        // `Schema` class name; `Schema::make(...)` (no `connection()`) must never be
+        // mistaken for Illuminate\Support\Facades\Schema::connection(...).
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    $schema = Schema::make('x');
+                    $schema->create('should_not_exist', function (Blueprint $table): void {
+                        $table->id();
+                    });
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('should_not_exist', $schema->tables);
+    }
+
+    #[Test]
+    public function it_ignores_connection_call_on_a_non_schema_class(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    $schema = \Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\NotASchemaFacade::connection('x');
+                    $schema->create('telescope_entries', function (Blueprint $table): void {
+                        $table->id();
+                    });
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('telescope_entries', $schema->tables);
+    }
 }
