@@ -6,6 +6,11 @@ namespace App;
 use Illuminate\Pipeline\Pipeline;
 use Illuminate\Support\Facades\Pipeline as PipelineFacade;
 
+function pipeline_payload_length(mixed $passable): int
+{
+    return \is_string($passable) ? \mb_strlen($passable) : 0;
+}
+
 /**
  * Pipeline::then() returns the value produced by the destination closure, so the return
  * type follows that closure rather than Laravel's declared `mixed`.
@@ -15,7 +20,7 @@ function pipeline_then_follows_the_destination_closure(Pipeline $pipeline): void
     $_string = $pipeline->send('payload')->through([])->then(static fn (mixed $passable): string => (string) $passable);
     /** @psalm-check-type-exact $_string = string */
 
-    $_int = $pipeline->send('payload')->through([])->then(static fn (mixed $passable): int => 42);
+    $_int = $pipeline->send('payload')->through([])->then(static fn (mixed $passable): int => pipeline_payload_length($passable));
     /** @psalm-check-type-exact $_int = int */
 }
 
