@@ -39,7 +39,7 @@ final class ResearchSubAgent
  * only difference.
  *
  * When upstream lands, this test fails loudly. Replace it then with the positive
- * assertion (`%ATaintedLlmPrompt on line %d: Detected tainted LLM prompt`) and
+ * assertion (`TaintedLlmPrompt on line %d: Detected tainted LLM prompt`) and
  * delete the caveat in LlmOutputTaintHandler's docblock.
  */
 final class ResearchDelegationTool implements \Laravel\Ai\Contracts\Tool

@@ -17,7 +17,9 @@ function runToolNumericLookup(\Laravel\Ai\Tools\Request $request): void {
     // The model picked these values, same trust model as Request::input(). integer()/float()
     // are annotated untainted on the stub: an (int)/(float) cast cannot carry SQL syntax.
     $id = $request->integer('id');
-    $score = $request->float('score');
+    // Cast keeps the concatenation well-typed without touching taint: a (string) cast
+    // preserves taint edges, so the assertion below still has teeth.
+    $score = (string) $request->float('score');
 
     \Illuminate\Support\Facades\DB::delete('DELETE FROM users WHERE id = ' . $id . ' AND score = ' . $score);
 }
@@ -30,4 +32,4 @@ function runToolStringLookup(\Laravel\Ai\Tools\Request $request): void {
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL

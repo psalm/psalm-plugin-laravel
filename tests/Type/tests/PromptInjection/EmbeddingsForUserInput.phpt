@@ -20,4 +20,4 @@ function indexUserText(\Illuminate\Http\Request $request): \Laravel\Ai\PendingRe
 }
 ?>
 --EXPECTF--
-%ATaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt

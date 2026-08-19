@@ -20,4 +20,4 @@ function executeLlmCommand(\Laravel\Ai\Responses\AgentResponse $response): void 
 }
 ?>
 --EXPECTF--
-%ATaintedSql on line %d: Detected tainted SQL
+TaintedSql on line %d: Detected tainted SQL

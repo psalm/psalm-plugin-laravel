@@ -20,4 +20,5 @@ function runLlmSuggestedCommand(\Laravel\Ai\Responses\AgentResponse $response): 
 }
 ?>
 --EXPECTF--
-%ATaintedShell on line %d: Detected tainted shell code
+TooFewArguments on line %d: Too few arguments for Illuminate\Process\PendingProcess::__construct - expecting factory to be passed
+TaintedShell on line %d: Detected tainted shell code

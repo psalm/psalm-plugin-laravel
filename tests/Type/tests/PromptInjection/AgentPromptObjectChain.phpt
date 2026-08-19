@@ -24,4 +24,4 @@ function buildAttackerControlledPrompt(
 }
 ?>
 --EXPECTF--
-%ATaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt

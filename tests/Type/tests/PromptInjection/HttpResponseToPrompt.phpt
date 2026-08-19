@@ -27,4 +27,4 @@ function summarizeRemoteDocument(\Illuminate\Http\Client\Response $response): \L
 }
 ?>
 --EXPECTF--
-%ATaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt
