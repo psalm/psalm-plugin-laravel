@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787061703653,
+  "lastUpdate": 1787178639086,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10110,6 +10110,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1108,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ced0af82d364ce502828595f63365d5780d356c8",
+          "message": "Type `Pipeline::then()` from its destination closure (#1376)\n\n* fix(stubs): type Pipeline::then() from its destination closure\n\n`then()` returns whatever the destination closure returns, but Laravel\ndeclares it as `@return mixed`, so every caller receives `mixed` even when\nthe closure has an explicit return type:\n\n    $html = Pipeline::send($html)\n        ->through([self::img(...)])\n        ->then(static fn(string $purified): string => $purified);  // mixed\n\nTemplating the destination parameter makes the return type follow the\nclosure. The stub already re-declares this class for `through()` and\n`pipe()`, so this is one more docblock in the same place.\n\n`thenReturn()` is deliberately left alone: expressing it needs a class-level\ntemplate on `Illuminate\\Pipeline\\Pipeline`, which a stub cannot add to a\nreflected class, and pipes are free to change the payload type, so any\n`@return TPassable` would be a guess rather than a fact.\n\n* test(pipeline): assert a non-literal int and use the closure parameter\n\nCI caught two flaws in the fixture: the second destination closure ignored\nits parameter (UnusedClosureParam), and returning `42` made Psalm infer that\nliteral rather than `int`, so the check-type assertion did not match.\n\nThe closure now derives its value from the parameter through a helper with a\ndeclared `int` return, which keeps the assertion on plain `int` without\ndepending on the return type of a stubbed internal function.",
+          "timestamp": "2026-08-20T00:27:24+02:00",
+          "tree_id": "fe8aa28f52852321561a38f3b9eedf5367ef2153",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ced0af82d364ce502828595f63365d5780d356c8"
+        },
+        "date": 1787178637582,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.02,
+            "range": "± 0.47",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
