@@ -11,10 +11,8 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures;
  */
 final class NotASchemaFacade
 {
-    public static function connection(string $name): self
+    public static function connection(): self
     {
         return new self();
     }
-
-    public function create(string $table, \Closure $callback): void {}
 }
