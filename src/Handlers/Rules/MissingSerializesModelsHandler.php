@@ -96,13 +96,11 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
                 continue;
             }
 
-            $modelClass = self::findModelClass($property->type, $codebase);
-
-            if ($modelClass === null) {
+            if (!self::carriesModel($property->type, $codebase)) {
                 continue;
             }
 
-            $offenders[] = "\${$propertyName} ({$modelClass})";
+            $offenders[] = "\${$propertyName}";
         }
 
         if ($offenders === []) {
@@ -113,11 +111,10 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
         // `use SerializesModels;`, so a per-property report would be N findings for one edit.
         IssueBuffer::accepts(
             new MissingSerializesModels(
-                "{$storage->name} implements ShouldQueue but does not use "
-                . 'Illuminate\Queue\SerializesModels, so every attribute and loaded relation of '
+                "{$storage->name} implements ShouldQueue without "
+                . 'Illuminate\Queue\SerializesModels, so '
                 . self::listOffenders($offenders)
-                . ' is written into the queue payload. Add `use SerializesModels;` to serialize '
-                . 'identifiers instead and reload from the database in the worker.',
+                . ' will be serialized whole into the queue payload',
                 $location,
             ),
             // The class docblock is where a deliberate exception is written, and its
@@ -143,26 +140,23 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
     }
 
     /**
-     * The declared type of a property, reduced to the first Eloquent model it carries: a model
-     * or an Eloquent collection, the two shapes `getSerializedPropertyValue()` converts.
+     * Whether the declared type carries a model or an Eloquent collection, the two shapes
+     * `getSerializedPropertyValue()` converts.
      *
      * @psalm-external-mutation-free
      */
-    private static function findModelClass(?Union $type, Codebase $codebase): ?string
+    private static function carriesModel(?Union $type, Codebase $codebase): bool
     {
         foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                continue;
-            }
-
-            if (self::isOrExtends($atomic->value, Model::class, $codebase)
-                || self::isOrExtends($atomic->value, EloquentCollection::class, $codebase)
+            if ($atomic instanceof TNamedObject
+                && (self::isOrExtends($atomic->value, Model::class, $codebase)
+                    || self::isOrExtends($atomic->value, EloquentCollection::class, $codebase))
             ) {
-                return $atomic->value;
+                return true;
             }
         }
 
-        return null;
+        return false;
     }
 
     /** @psalm-external-mutation-free */
