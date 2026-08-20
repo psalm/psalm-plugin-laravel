@@ -8,4 +8,24 @@ trait HasAttributes
      * @return array<string, string>
      */
     public function getCasts() {}
+
+    /**
+     * `append()` and `mergeAppends()` wrap `$appends` in `array_values(array_unique(...))`, and
+     * `getArrayableAppends()` feeds it into `array_combine($appends, $appends)`, which already
+     * requires a `list<string>` at runtime. `setAppends(array $appends)` assigns unfiltered and
+     * can defeat this, but that input is already broken by the `array_combine()` call, so this
+     * follows framework intent rather than the widest possible input.
+     *
+     * @return list<string>
+     */
+    public function getAppends() {}
+
+    /**
+     * `cacheMutatedAttributes()` populates the cache from `preg_match_all(...)[1]` merged with
+     * `getAttributeMarkedMutatorMethods()` (`->values()->all()`), both lists, then
+     * `->map(lcfirst(...))->all()`, preserving list-ness.
+     *
+     * @return list<string>
+     */
+    public function getMutatedAttributes() {}
 }
