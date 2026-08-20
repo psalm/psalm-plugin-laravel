@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787213533230,
+  "lastUpdate": 1787213977999,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10180,6 +10180,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f81ad084ea77c4465c948c2845a8ec91ba105bad",
+          "message": "feat(support): infer Arr::pluck() value/key types from model @property (#1383)\n\nArr::pluck() previously fell back to reflection's plain `array` return.\nArrPluckHandler resolves the element Model from the first argument's\ninferred type (Collection/array/iterable of a single Model class) and\nreuses the existing Builder/Collection pluck column-resolution core,\nnow factored out as ModelPropertyResolver::resolvePluckColumnTypes().\n\nCloses #1379",
+          "timestamp": "2026-08-20T10:16:21+02:00",
+          "tree_id": "2de4546b5c324793de98ce5157647da3b5978c96",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f81ad084ea77c4465c948c2845a8ec91ba105bad"
+        },
+        "date": 1787213977106,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.13,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
