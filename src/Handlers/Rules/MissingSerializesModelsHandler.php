@@ -45,6 +45,9 @@ use Psalm\Type\Union;
  * Only concrete classes are inspected: an abstract queued base may legitimately leave the
  * trait to its children.
  *
+ * The report is per class, not per property: the fix is one `use SerializesModels;`, and no
+ * per-property decision exists, so the offending properties are named in the message instead.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1380
  * @internal
  */
@@ -53,6 +56,8 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
     private const SERIALIZES_MODELS = 'illuminate\queue\serializesmodels';
 
     private const SHOULD_QUEUE = 'illuminate\contracts\queue\shouldqueue';
+
+    private const MAX_LISTED_PROPERTIES = 3;
 
     /** @inheritDoc */
     #[\Override]
@@ -76,7 +81,13 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
             return null;
         }
 
-        $source = $event->getStatementsSource();
+        $location = $storage->location ?? $storage->stmt_location;
+
+        if (!$location instanceof \Psalm\CodeLocation) {
+            return null;
+        }
+
+        $offenders = [];
 
         foreach ($storage->properties as $propertyName => $property) {
             // Static properties are skipped by SerializesModels::__serialize() itself.
@@ -84,15 +95,8 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
                 continue;
             }
 
-            // Report where the property is written, not where it is inherited from: a
-            // parent's property is the parent's to fix.
+            // An inherited property is the declaring parent's to fix, not every subclass's.
             if (($storage->declaring_property_ids[$propertyName] ?? null) !== $storage->name) {
-                continue;
-            }
-
-            $location = $property->stmt_location ?? $property->location;
-
-            if ($location === null) {
                 continue;
             }
 
@@ -102,19 +106,44 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
                 continue;
             }
 
-            IssueBuffer::accepts(
-                new MissingSerializesModels(
-                    "{$storage->name} implements ShouldQueue and holds {$modelClass} in \${$propertyName}, "
-                    . 'but does not use Illuminate\Queue\SerializesModels, so the entire model is serialized '
-                    . 'into the queue payload. Add `use SerializesModels;` to serialize an identifier and '
-                    . 'reload the model in the worker.',
-                    $location,
-                ),
-                $source->getSuppressedIssues(),
-            );
+            $offenders[] = "\${$propertyName} ({$modelClass})";
         }
 
+        if ($offenders === []) {
+            return null;
+        }
+
+        // One report per class, anchored at the class name: the fix is a single
+        // `use SerializesModels;`, so a per-property report would be N findings for one edit.
+        IssueBuffer::accepts(
+            new MissingSerializesModels(
+                "{$storage->name} implements ShouldQueue but does not use "
+                . 'Illuminate\Queue\SerializesModels, so every attribute and loaded relation of '
+                . self::listOffenders($offenders)
+                . ' is written into the queue payload. Add `use SerializesModels;` to serialize '
+                . 'identifiers instead and reload from the database in the worker.',
+                $location,
+            ),
+            // The class docblock is where a deliberate exception is written, and its
+            // suppressions do not reach the statements source at this point.
+            $storage->suppressed_issues + $event->getStatementsSource()->getSuppressedIssues(),
+        );
+
         return null;
+    }
+
+    /**
+     * @param non-empty-list<string> $offenders
+     *
+     * @psalm-pure
+     */
+    private static function listOffenders(array $offenders): string
+    {
+        // A job holding many models would otherwise turn the message into a paragraph.
+        $shown = \array_slice($offenders, 0, self::MAX_LISTED_PROPERTIES);
+        $hidden = \count($offenders) - \count($shown);
+
+        return \implode(', ', $shown) . ($hidden > 0 ? " and {$hidden} more" : '');
     }
 
     /**

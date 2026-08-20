@@ -1,12 +1,14 @@
 ---
 title: MissingSerializesModels
 parent: Custom Issues
-nav_order: 12
+nav_order: 6
 ---
 
 # MissingSerializesModels
 
 Emitted when a class implementing `Illuminate\Contracts\Queue\ShouldQueue` holds an Eloquent model in a property, and `Illuminate\Queue\SerializesModels` is not reachable through its trait or parent chain.
+
+One report per class, on the class declaration, naming the offending properties (the first three of them). The fix is a single `use SerializesModels;`, so a per-property report would be several findings for one edit.
 
 Opt-in. Enable with `findMissingSerializesModels` (see [Configuration](../config.md)).
 
@@ -43,17 +45,12 @@ class SendCustomerReport implements ShouldQueue
 
 ## What is not reported
 
-The trait is nearly always inherited rather than used directly, so the check resolves the complete trait closure (traits used by traits) of the class and of every ancestor. These are all silent:
+A queued class that reaches the trait at all, directly or indirectly (through a parent, or a trait that itself uses it). That covers `Illuminate\Foundation\Queue\Queueable`, which `make:job` scaffolds since Laravel 11, and `Illuminate\Notifications\Notification`.
 
-- classes using `Illuminate\Foundation\Queue\Queueable`, which `make:job` scaffolds since Laravel 11 (it is `use Dispatchable, InteractsWithQueue, QueueableByBus, SerializesModels;`)
-- classes extending `Illuminate\Notifications\Notification`, which uses the trait directly
-- classes whose parent, or a trait of a trait, brings the trait in
-- abstract classes, which may leave the trait to their children
-- static properties, which `SerializesModels::__serialize()` skips as well
-- inherited properties, reported against the class that declares them rather than every subclass
+Also silent: abstract classes, static properties, and properties inherited from a parent (they count against the class that declares them).
 
 ## How to fix
 
 Add `use SerializesModels;` to the queued class, or replace a hand-assembled trait list with `Illuminate\Foundation\Queue\Queueable`.
 
-If a property deliberately holds a detached model that must survive as-is, suppress the issue at that property with `@psalm-suppress MissingSerializesModels` and say why in a comment.
+If a property deliberately holds a detached model that must survive as-is, suppress the issue in the class docblock with `@psalm-suppress MissingSerializesModels` and say why in a comment. The report is class-level, so a property-level suppression does not reach it.
