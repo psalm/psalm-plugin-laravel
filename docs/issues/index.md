@@ -21,5 +21,6 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()` that matches no known attribute
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
+- [MissingSerializesModels](MissingSerializesModels.md) — a queued class holds an Eloquent model in a property without reaching `SerializesModels`, so the whole model is written into the queue payload (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

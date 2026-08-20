@@ -169,6 +169,22 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findMissingSerializesModels`
+
+**default**: `false`
+
+When enabled, the plugin flags a class implementing `ShouldQueue` that holds an Eloquent model (or a collection of models) in a non-static property it declares, when `Illuminate\Queue\SerializesModels` is not reachable through its trait closure or parent chain. Without the trait the whole model is written into the queue payload instead of a `ModelIdentifier`.
+
+The check resolves traits of traits and the full parent chain, so the framework bases that already pull the trait in are silent: `Illuminate\Foundation\Queue\Queueable` (what `make:job` scaffolds since Laravel 11), `Illuminate\Notifications\Notification`, and any parent or trait of your own that brings it in.
+
+See [MissingSerializesModels](issues/MissingSerializesModels.md) for details.
+
+### Example
+
+```xml
+<findMissingSerializesModels value="true" />
+```
+
 ## `findOctaneIncompatibleBinding`
 
 **default**: omit the element. The plugin then auto-detects: the rule registers if the project depends on `laravel/octane`, and stays off otherwise.
