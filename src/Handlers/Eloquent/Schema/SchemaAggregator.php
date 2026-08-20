@@ -117,14 +117,32 @@ final class SchemaAggregator
      */
     private function addMethodStatements(array $stmts): void
     {
+        // Names of local variables currently holding a Schema builder instance
+        // (e.g. `$schema = Schema::connection(...)`), scoped to this method only.
+        /** @var array<string, true> $schema_vars */
+        $schema_vars = [];
+
         // Flatten nested block structures (if/else, try/catch, foreach, etc.)
         // so Schema calls inside conditionals are not missed.
         foreach (self::flattenStatements($stmts) as $stmt) {
+            // A foreach loop variable rebinds the name each iteration
+            // (e.g. `foreach ($tables as $schema)`), so any tracked builder
+            // under that name no longer holds a schema builder afterward.
+            if ($stmt instanceof PhpParser\Node\Stmt\Foreach_) {
+                if ($stmt->valueVar instanceof PhpParser\Node\Expr\Variable && \is_string($stmt->valueVar->name)) {
+                    unset($schema_vars[$stmt->valueVar->name]);
+                }
+
+                continue;
+            }
+
             if (!$stmt instanceof PhpParser\Node\Stmt\Expression) {
                 continue;
             }
 
-            $schema_call = $this->extractSchemaCall($stmt->expr);
+            $this->trackSchemaVariable($stmt->expr, $schema_vars);
+
+            $schema_call = $this->extractSchemaCall($stmt->expr, $schema_vars);
             if ($schema_call === null || !$schema_call->name instanceof PhpParser\Node\Identifier) {
                 continue;
             }
@@ -154,17 +172,75 @@ final class SchemaAggregator
     }
 
     /**
+     * Track (or untrack) a local variable holding a Schema builder instance.
+     *
+     * Only `$var = <SchemaClass>::connection(...)` marks a variable as tracked — this
+     * mirrors the connection-chained form already handled by extractSchemaCall() and
+     * keeps the false-positive surface small (e.g. `$schema = Schema::make(...)` in
+     * Filament's unrelated `Filament\Schemas\Schema` is never tracked).
+     *
+     * Any other assignment to a previously-tracked name (a new value, a reference
+     * bind, or a compound assignment) untracks it: the variable no longer reliably
+     * holds a schema builder.
+     *
+     * @param array<string, true> $schema_vars
+     */
+    private function trackSchemaVariable(PhpParser\Node\Expr $expr, array &$schema_vars): void
+    {
+        if (
+            ($expr instanceof PhpParser\Node\Expr\AssignRef || $expr instanceof PhpParser\Node\Expr\AssignOp)
+            && $expr->var instanceof PhpParser\Node\Expr\Variable
+            && \is_string($expr->var->name)
+        ) {
+            unset($schema_vars[$expr->var->name]);
+
+            return;
+        }
+
+        if (
+            !$expr instanceof PhpParser\Node\Expr\Assign
+            || !$expr->var instanceof PhpParser\Node\Expr\Variable
+            || !\is_string($expr->var->name)
+        ) {
+            return;
+        }
+
+        $var_name = $expr->var->name;
+
+        if ($this->isSchemaConnectionCall($expr->expr)) {
+            $schema_vars[$var_name] = true;
+        } else {
+            unset($schema_vars[$var_name]);
+        }
+    }
+
+    /**
+     * Whether an expression is `<SchemaClass>::connection(...)`.
+     */
+    private function isSchemaConnectionCall(PhpParser\Node\Expr $expr): bool
+    {
+        return $expr instanceof PhpParser\Node\Expr\StaticCall
+            && $expr->class instanceof PhpParser\Node\Name
+            && $expr->name instanceof PhpParser\Node\Identifier
+            && $expr->name->name === 'connection'
+            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'));
+    }
+
+    /**
      * Extract a Schema facade call from an expression, if present.
      *
-     * Handles two forms:
-     * - Direct:  Schema::create('users', ...)
-     * - Chained: Schema::connection('mysql')->create('users', ...)
+     * Handles three forms:
+     * - Direct:   Schema::create('users', ...)
+     * - Chained:  Schema::connection('mysql')->create('users', ...)
+     * - Variable: $schema = Schema::connection('mysql'); $schema->create('users', ...)
      *
      * Only single-level chaining via connection() is detected.
      * Deeper chains like Schema::connection()->connection()->create() are not supported
      * because they are invalid at runtime.
+     *
+     * @param array<string, true> $schema_vars variables tracked as holding a schema builder
      */
-    private function extractSchemaCall(PhpParser\Node\Expr $expr): PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall|null
+    private function extractSchemaCall(PhpParser\Node\Expr $expr, array $schema_vars): PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall|null
     {
         // Direct Schema facade call: Schema::create(...), Schema::table(...), etc.
         if (
@@ -186,6 +262,18 @@ final class SchemaAggregator
             && $expr->var->name instanceof PhpParser\Node\Identifier
             && $expr->var->name->name === 'connection'
             && $this->isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+        ) {
+            return $expr;
+        }
+
+        // Variable-held call: $schema->create(...), where $schema was tracked
+        // by trackSchemaVariable() as `$schema = <SchemaClass>::connection(...)`.
+        if (
+            $expr instanceof PhpParser\Node\Expr\MethodCall
+            && $expr->name instanceof PhpParser\Node\Identifier
+            && $expr->var instanceof PhpParser\Node\Expr\Variable
+            && \is_string($expr->var->name)
+            && isset($schema_vars[$expr->var->name])
         ) {
             return $expr;
         }
