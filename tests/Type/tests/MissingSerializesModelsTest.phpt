@@ -54,13 +54,37 @@ class NotifyCustomers implements ShouldQueue
     public function __construct(public EloquentCollection $customers) {}
 }
 
-/** A Support\Collection parameterised by a model is flagged; the models inside it are what count. */
+/**
+ * A `Support\Collection` of models is NOT flagged: it is not a `QueueableCollection`, so
+ * `getSerializedPropertyValue()` passes it through untouched and adding the trait would not
+ * fix anything. Only `Eloquent\Collection` is converted.
+ */
 class ExportCustomers implements ShouldQueue
 {
     use BusQueueable;
 
     /** @param Collection<int, Customer> $customers */
     public function __construct(public Collection $customers) {}
+}
+
+/** A class that hand-writes its own serialization already decides what enters the payload. */
+class ArchiveCustomerById implements ShouldQueue
+{
+    use BusQueueable;
+
+    public function __construct(private Customer $customer) {}
+
+    /** @return array{customer: array-key} */
+    public function __serialize(): array
+    {
+        return ['customer' => $this->customer->getKey()];
+    }
+
+    /** @param array{customer: array-key} $values */
+    public function __unserialize(array $values): void
+    {
+        $this->customer = Customer::query()->findOrFail($values['customer']);
+    }
 }
 
 /**
@@ -188,6 +212,5 @@ class ConcreteCustomerJob extends AbstractCustomerJob {}
 MissingSerializesModels on line %d: App\QueuedJobs\SendCustomerReport implements ShouldQueue but does not use Illuminate\Queue\SerializesModels, so every attribute and loaded relation of $customer (App\Models\Customer) is written into the queue payload. Add `use SerializesModels;` to serialize identifiers instead and reload from the database in the worker.
 MissingSerializesModels on line %d: App\QueuedJobs\ArchiveCustomer implements ShouldQueue but does not use Illuminate\Queue\SerializesModels, so every attribute and loaded relation of $customer (App\Models\Customer) is written into the queue payload. Add `use SerializesModels;` to serialize identifiers instead and reload from the database in the worker.
 MissingSerializesModels on line %d: App\QueuedJobs\NotifyCustomers implements ShouldQueue but does not use Illuminate\Queue\SerializesModels, so every attribute and loaded relation of $customers (Illuminate\Database\Eloquent\Collection) is written into the queue payload. Add `use SerializesModels;` to serialize identifiers instead and reload from the database in the worker.
-MissingSerializesModels on line %d: App\QueuedJobs\ExportCustomers implements ShouldQueue but does not use Illuminate\Queue\SerializesModels, so every attribute and loaded relation of $customers (Illuminate\Support\Collection<App\Models\Customer>) is written into the queue payload. Add `use SerializesModels;` to serialize identifiers instead and reload from the database in the worker.
 MissingSerializesModels on line %d: App\QueuedJobs\SettleInvoice implements ShouldQueue but does not use Illuminate\Queue\SerializesModels, so every attribute and loaded relation of $payer (App\Models\Customer), $payee (App\Models\Customer), $invoice (App\Models\Invoice) is written into the queue payload. Add `use SerializesModels;` to serialize identifiers instead and reload from the database in the worker.
 MissingSerializesModels on line %d: App\QueuedJobs\ReconcileLedger implements ShouldQueue but does not use Illuminate\Queue\SerializesModels, so every attribute and loaded relation of $customer (App\Models\Customer), $opening (App\Models\Invoice), $closing (App\Models\Invoice) and 1 more is written into the queue payload. Add `use SerializesModels;` to serialize identifiers instead and reload from the database in the worker.

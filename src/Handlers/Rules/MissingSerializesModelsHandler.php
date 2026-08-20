@@ -6,21 +6,18 @@ namespace Psalm\LaravelPlugin\Handlers\Rules;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingSerializesModels;
 use Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeAnalysisEvent;
-use Psalm\Storage\ClassLikeStorage;
-use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
- * Flags a queued class that holds an Eloquent model in a property without being able to
- * reach `Illuminate\Queue\SerializesModels`.
+ * Flags a queued class that holds an Eloquent model in a property while nothing on the class
+ * prepares that model for serialization.
  *
  * `SerializesModels::__serialize()` replaces each model with a `ModelIdentifier` and
  * re-resolves it in `__unserialize()`. Without it the whole model — every attribute and
@@ -28,33 +25,34 @@ use Psalm\Type\Union;
  * snapshot taken at dispatch time, payloads grow with the model, and a payload written
  * before a schema change can fail to unserialise after it.
  *
- * Reachability, not a direct `use`
- * --------------------------------
- * The trait is almost always inherited rather than used directly, so a direct-`use` check
- * reports mostly false positives. Three framework bases already pull it in:
+ * `__serialize()`, not the trait name
+ * ----------------------------------
+ * The trait is almost never used directly (`Illuminate\Foundation\Queue\Queueable`, what
+ * `make:job` scaffolds since Laravel 11, brings it in; so does `Notifications\Notification`;
+ * so do project base classes and shared traits), so a direct-`use` check reports mostly false
+ * positives. On a 19-application corpus that is the difference between 37 reports and 1.
  *
- *   - `Illuminate\Foundation\Queue\Queueable` (what `make:job` scaffolds since Laravel 11)
- *     is `use Dispatchable, InteractsWithQueue, QueueableByBus, SerializesModels;`
- *   - `Illuminate\Notifications\Notification` uses `SerializesModels` directly
- *   - `Illuminate\Mail\Mailable` reaches it through `Illuminate\Bus\Queueable`'s neighbours
- *     in the same way
+ * Rather than walk the trait and parent closure looking for one trait by name, the check asks
+ * whether the class ends up with a `__serialize()` or `__sleep()` at all: Psalm's populator
+ * has already flattened both across traits, traits of traits, and ancestors. That also clears
+ * a class that hand-writes its own serialization instead of using the trait, which is correct
+ * as written and must not be reported.
  *
- * So the check walks the complete trait closure (traits of traits) of the class AND of every
- * ancestor. On a 19-application corpus this is the difference between 37 reports and 1.
- *
- * Only concrete classes are inspected: an abstract queued base may legitimately leave the
- * trait to its children.
+ * Only concrete classes are inspected: an abstract queued base may legitimately leave
+ * serialization to its children.
  *
  * The report is per class, not per property: the fix is one `use SerializesModels;`, and no
  * per-property decision exists, so the offending properties are named in the message instead.
+ *
+ * Known gaps, all in the safe direction: a model held in a plain `array`, a property declared
+ * by an abstract ancestor (nobody is answerable for it), and a `Support\Collection` of models,
+ * which the trait would not fix either since it is not a `QueueableCollection`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1380
  * @internal
  */
 final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInterface
 {
-    private const SERIALIZES_MODELS = 'illuminate\queue\serializesmodels';
-
     private const SHOULD_QUEUE = 'illuminate\contracts\queue\shouldqueue';
 
     private const MAX_LISTED_PROPERTIES = 3;
@@ -65,8 +63,8 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
     {
         $storage = $event->getClasslikeStorage();
 
-        // Interfaces and traits carry no payload; an abstract queued base may leave the
-        // trait to its children, so only concrete classes are answerable for it.
+        // Interfaces and traits carry no payload; an abstract queued base may leave
+        // serialization to its children, so only concrete classes are answerable for it.
         if ($storage->is_interface || $storage->is_trait || $storage->abstract) {
             return null;
         }
@@ -75,28 +73,26 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
             return null;
         }
 
-        $codebase = $event->getCodebase();
-
-        if (self::reachesSerializesModels($storage, $codebase)) {
+        // Any inherited `__serialize()`/`__sleep()` means the class decides what goes into the
+        // payload: `SerializesModels`, a parent, or a hand-written one.
+        if (isset($storage->appearing_method_ids['__serialize'])
+            || isset($storage->appearing_method_ids['__sleep'])
+        ) {
             return null;
         }
 
         $location = $storage->location ?? $storage->stmt_location;
 
-        if (!$location instanceof \Psalm\CodeLocation) {
+        if (!$location instanceof CodeLocation) {
             return null;
         }
 
+        $codebase = $event->getCodebase();
         $offenders = [];
 
         foreach ($storage->properties as $propertyName => $property) {
             // Static properties are skipped by SerializesModels::__serialize() itself.
             if ($property->is_static === true) {
-                continue;
-            }
-
-            // An inherited property is the declaring parent's to fix, not every subclass's.
-            if (($storage->declaring_property_ids[$propertyName] ?? null) !== $storage->name) {
                 continue;
             }
 
@@ -147,70 +143,8 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
     }
 
     /**
-     * Whether `SerializesModels` is reachable through the class's own trait closure or that
-     * of any ancestor.
-     *
-     * @psalm-mutation-free
-     */
-    private static function reachesSerializesModels(ClassLikeStorage $storage, Codebase $codebase): bool
-    {
-        $storages = [$storage];
-
-        foreach (\array_keys($storage->parent_classes) as $parent) {
-            $parentStorage = self::storageFor($parent, $codebase);
-
-            if ($parentStorage instanceof ClassLikeStorage) {
-                $storages[] = $parentStorage;
-            }
-        }
-
-        foreach ($storages as $candidate) {
-            if (self::traitClosureContainsSerializesModels($candidate, $codebase)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Breadth-first walk of `used_traits`, including traits used by those traits.
-     *
-     * @psalm-mutation-free
-     */
-    private static function traitClosureContainsSerializesModels(ClassLikeStorage $storage, Codebase $codebase): bool
-    {
-        $pending = \array_keys($storage->used_traits);
-        $seen = [];
-
-        while ($pending !== []) {
-            $trait = \array_pop($pending);
-
-            if ($trait === self::SERIALIZES_MODELS) {
-                return true;
-            }
-
-            if (isset($seen[$trait])) {
-                continue;
-            }
-
-            $seen[$trait] = true;
-
-            $traitStorage = self::storageFor($trait, $codebase);
-
-            if ($traitStorage instanceof ClassLikeStorage) {
-                foreach (\array_keys($traitStorage->used_traits) as $nested) {
-                    $pending[] = $nested;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * The declared type of a property, reduced to the first Eloquent model it carries:
-     * a model, an Eloquent collection, or a `Support\Collection` parameterised by a model.
+     * The declared type of a property, reduced to the first Eloquent model it carries: a model
+     * or an Eloquent collection, the two shapes `getSerializedPropertyValue()` converts.
      *
      * @psalm-external-mutation-free
      */
@@ -221,34 +155,14 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
                 continue;
             }
 
-            if (self::isModel($atomic->value, $codebase)) {
+            if (self::isOrExtends($atomic->value, Model::class, $codebase)
+                || self::isOrExtends($atomic->value, EloquentCollection::class, $codebase)
+            ) {
                 return $atomic->value;
-            }
-
-            if (self::isOrExtends($atomic->value, EloquentCollection::class, $codebase)) {
-                return $atomic->value;
-            }
-
-            // A Support\Collection is only interesting when it is parameterised by a model;
-            // an unparameterised one says nothing about what it will hold.
-            if ($atomic instanceof TGenericObject && self::isOrExtends($atomic->value, Collection::class, $codebase)) {
-                foreach ($atomic->type_params as $param) {
-                    foreach ($param->getAtomicTypes() as $inner) {
-                        if ($inner instanceof TNamedObject && self::isModel($inner->value, $codebase)) {
-                            return $atomic->value . '<' . $inner->value . '>';
-                        }
-                    }
-                }
             }
         }
 
         return null;
-    }
-
-    /** @psalm-external-mutation-free */
-    private static function isModel(string $className, Codebase $codebase): bool
-    {
-        return self::isOrExtends($className, Model::class, $codebase);
     }
 
     /** @psalm-external-mutation-free */
@@ -263,19 +177,5 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
         }
 
         return $codebase->classExtends($className, $parent);
-    }
-
-    /**
-     * Storage lookups can fire before the class is populated; that is "not proven", not an error.
-     *
-     * @psalm-mutation-free
-     */
-    private static function storageFor(string $classLikeName, Codebase $codebase): ?ClassLikeStorage
-    {
-        try {
-            return $codebase->classlike_storage_provider->get(\strtolower($classLikeName));
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return null;
-        }
     }
 }
