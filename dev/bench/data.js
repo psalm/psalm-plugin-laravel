@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787178639086,
+  "lastUpdate": 1787213533230,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10140,6 +10140,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.02,
             "range": "± 0.47",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cefaf08829e0cef999cfb17fb750791f4d71f850",
+          "message": "Support `$schema = Schema::connection(...)` in migrations (#1382)\n\n* test(schema): add regression coverage for variable-held schema builders\n\nSchemaAggregator only recognizes Schema::create(...) and\nSchema::connection(...)->create(...); it misses `$schema = Schema::connection(...);\n$schema->create(...)`, a shape published by Telescope's migrations. Tests are red\nuntil the aggregator tracks the local variable.\n\nFixes #1377.\n\n* fix(schema): recognize a schema builder assigned to a local variable\n\nMigrations that write `$schema = Schema::connection(...); $schema->create(...)`\n(Laravel Telescope's published migrations) were invisible to the aggregator,\nwhich only matched the direct and connection()-chained facade forms.\n\nTrack a local variable as a schema builder only when it's assigned exactly\n`<SchemaClass>::connection(...)`, scoped per method to avoid leaking across\nmigration helper methods. Untrack it on any other assignment, reference bind,\ncompound assignment, or foreach rebinding of the same name. The gate stays\nnarrow so `$schema = Schema::make(...)` (Filament's unrelated\nFilament\\Schemas\\Schema) is never mistaken for a builder.\n\nFixes #1377.\n\n* test(schema): pin the untrack and connection-gate branches for schema variables\n\nThe Assign/AssignRef/AssignOp untracking, the connection() name gate, and the\nisSchemaClass() gate in SchemaAggregator's variable tracking had no coverage\nthat could distinguish their presence from their absence.\n\nAdd coverage for the two untracking paths not yet exercised (compound\nassignment, reference rebind), the Filament\\Schemas\\Schema::make() lookalike\n(same class name, no connection(), 170 corpus occurrences), and a real\nnon-Schema class exposing a connection() method.\n\nRefs #1377.\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-08-20T10:09:14+02:00",
+          "tree_id": "53a2a0042e4c7096b64072e9e0eabf8faff0a687",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cefaf08829e0cef999cfb17fb750791f4d71f850"
+        },
+        "date": 1787213531749,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.11,
+            "range": "± 0.04",
             "unit": "s"
           },
           {
