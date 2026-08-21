@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787302938639,
+  "lastUpdate": 1787304726696,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10250,6 +10250,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5949e9b783a6a927f3bda945ef3406cc7b3b4a2e",
+          "message": "refactor(rules): rename MissingSerializesModels to SerializedQueuedModel (#1393)\n\n`Missing*` means \"the thing your code referenced does not exist\" everywhere else\nhere (MissingView, MissingTranslation). This rule has no missing referent, and\nsince it now gates on the class ending up with a `__serialize()` from any source,\nnaming it after one particular fix also overstates what it requires.\n\n`SerializedQueuedModel` follows the house shape, [state][domain][offending thing],\nthe same as `UnresolvableAppendedModelAttribute`, and adds the queue context the\nold name lacked. `Queued` rather than `Job` because `ShouldQueue` also covers\nmailables, notifications, and listeners.\n\nThe config flag follows the issue name as every other flag does:\n`findMissingSerializesModels` becomes `findSerializedQueuedModels`.\n\nThe rule is unreleased (merged after v4.15.5), so no baseline entry, suppression,\nor documentation URL in the wild points at the old name.",
+          "timestamp": "2026-08-21T11:28:59+02:00",
+          "tree_id": "52668c695c5cedfd57f21446d3f274785fa16815",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5949e9b783a6a927f3bda945ef3406cc7b3b4a2e"
+        },
+        "date": 1787304725801,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.42,
+            "range": "± 0.51",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
