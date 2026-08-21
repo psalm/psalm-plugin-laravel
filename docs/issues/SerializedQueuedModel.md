@@ -1,16 +1,16 @@
 ---
-title: MissingSerializesModels
+title: SerializedQueuedModel
 parent: Custom Issues
 nav_order: 6
 ---
 
-# MissingSerializesModels
+# SerializedQueuedModel
 
 Emitted when a class implementing `Illuminate\Contracts\Queue\ShouldQueue` holds an Eloquent model (or an `Eloquent\Collection`) in a property, and the class has no `__serialize()` or `__sleep()` of its own, inherited, or brought in by a trait.
 
 One report per class, on the class declaration, naming the offending properties (the first three of them). The fix is a single `use SerializesModels;`, so a per-property report would be several findings for one edit.
 
-Controlled by the `findMissingSerializesModels` flag (see [Configuration](../config.md)).
+Controlled by the `findSerializedQueuedModels` flag (see [Configuration](../config.md)).
 
 ## Why this is a problem
 
@@ -58,4 +58,4 @@ Known blind spots, all in the safe direction:
 
 Add `use SerializesModels;` to the queued class, or replace a hand-assembled trait list with `Illuminate\Foundation\Queue\Queueable`.
 
-If a property deliberately holds a detached model that must survive as-is, suppress the issue in the class docblock with `@psalm-suppress MissingSerializesModels` and say why in a comment. The report is class-level, so a property-level suppression does not reach it.
+If a property deliberately holds a detached model that must survive as-is, suppress the issue in the class docblock with `@psalm-suppress SerializedQueuedModel` and say why in a comment. The report is class-level, so a property-level suppression does not reach it.

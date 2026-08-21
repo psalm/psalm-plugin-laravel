@@ -17,7 +17,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
 
 /**
- * The MissingSerializesModels rule flags a queued class holding an Eloquent model without
+ * The SerializedQueuedModel rule flags a queued class holding an Eloquent model without
  * reaching Illuminate\Queue\SerializesModels, which would serialize the whole model into
  * the payload instead of a ModelIdentifier. Registered by the config this test runs under
  * (see --ARGS-- above).
@@ -172,7 +172,7 @@ class PruneCache implements ShouldQueue
  * The report lands on the class, so a deliberate detached model is silenced by a class-level
  * suppression — a property-level one would not be seen.
  *
- * @psalm-suppress MissingSerializesModels
+ * @psalm-suppress SerializedQueuedModel
  */
 class KeepDetachedCustomer implements ShouldQueue
 {
@@ -209,8 +209,8 @@ abstract class AbstractCustomerJob implements ShouldQueue
 class ConcreteCustomerJob extends AbstractCustomerJob {}
 ?>
 --EXPECTF--
-MissingSerializesModels on line %d: App\QueuedJobs\SendCustomerReport implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customer will be serialized whole into the queue payload
-MissingSerializesModels on line %d: App\QueuedJobs\ArchiveCustomer implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customer will be serialized whole into the queue payload
-MissingSerializesModels on line %d: App\QueuedJobs\NotifyCustomers implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customers will be serialized whole into the queue payload
-MissingSerializesModels on line %d: App\QueuedJobs\SettleInvoice implements ShouldQueue without Illuminate\Queue\SerializesModels, so $payer, $payee, $invoice will be serialized whole into the queue payload
-MissingSerializesModels on line %d: App\QueuedJobs\ReconcileLedger implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customer, $opening, $closing and 1 more will be serialized whole into the queue payload
+SerializedQueuedModel on line %d: App\QueuedJobs\SendCustomerReport implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customer will be serialized whole into the queue payload
+SerializedQueuedModel on line %d: App\QueuedJobs\ArchiveCustomer implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customer will be serialized whole into the queue payload
+SerializedQueuedModel on line %d: App\QueuedJobs\NotifyCustomers implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customers will be serialized whole into the queue payload
+SerializedQueuedModel on line %d: App\QueuedJobs\SettleInvoice implements ShouldQueue without Illuminate\Queue\SerializesModels, so $payer, $payee, $invoice will be serialized whole into the queue payload
+SerializedQueuedModel on line %d: App\QueuedJobs\ReconcileLedger implements ShouldQueue without Illuminate\Queue\SerializesModels, so $customer, $opening, $closing and 1 more will be serialized whole into the queue payload

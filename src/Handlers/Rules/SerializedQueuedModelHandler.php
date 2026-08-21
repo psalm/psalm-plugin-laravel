@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Issues\MissingSerializesModels;
+use Psalm\LaravelPlugin\Issues\SerializedQueuedModel;
 use Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeAnalysisEvent;
 use Psalm\Type\Atomic\TNamedObject;
@@ -51,7 +51,7 @@ use Psalm\Type\Union;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1380
  * @internal
  */
-final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInterface
+final class SerializedQueuedModelHandler implements AfterClassLikeAnalysisInterface
 {
     private const SHOULD_QUEUE = 'illuminate\contracts\queue\shouldqueue';
 
@@ -110,7 +110,7 @@ final class MissingSerializesModelsHandler implements AfterClassLikeAnalysisInte
         // One report per class, anchored at the class name: the fix is a single
         // `use SerializesModels;`, so a per-property report would be N findings for one edit.
         IssueBuffer::accepts(
-            new MissingSerializesModels(
+            new SerializedQueuedModel(
                 "{$storage->name} implements ShouldQueue without "
                 . 'Illuminate\Queue\SerializesModels, so '
                 . self::listOffenders($offenders)
