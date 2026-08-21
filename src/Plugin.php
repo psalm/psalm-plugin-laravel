@@ -516,6 +516,12 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
         }
 
+        // Flag queued classes that hold an Eloquent model without reaching SerializesModels.
+        if ($pluginConfig->findMissingSerializesModels) {
+            require_once __DIR__ . '/Handlers/Rules/MissingSerializesModelsHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\MissingSerializesModelsHandler::class);
+        }
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled
