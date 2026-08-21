@@ -17,10 +17,10 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
 
 /**
- * The opt-in MissingSerializesModels rule flags a queued class holding an Eloquent model
- * without reaching Illuminate\Queue\SerializesModels, which would serialize the whole model
- * into the payload instead of a ModelIdentifier. Only registered under the opt-in config
- * used by this test (see --ARGS-- above).
+ * The MissingSerializesModels rule flags a queued class holding an Eloquent model without
+ * reaching Illuminate\Queue\SerializesModels, which would serialize the whole model into
+ * the payload instead of a ModelIdentifier. Registered by the config this test runs under
+ * (see --ARGS-- above).
  *
  * The negative cases matter as much as the positives: the trait is nearly always inherited,
  * so a direct-`use` check would report every one of them.

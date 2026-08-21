@@ -513,10 +513,7 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
         }
 
-        // Opt-in: flag queued classes that hold an Eloquent model without reaching
-        // SerializesModels. Off by default — the framework bases scaffolded by make:job and
-        // make:notification already pull the trait in, so the rule only earns its keep on
-        // hand-written ShouldQueue classes.
+        // Flag queued classes that hold an Eloquent model without reaching SerializesModels.
         if ($pluginConfig->findMissingSerializesModels) {
             require_once __DIR__ . '/Handlers/Rules/MissingSerializesModelsHandler.php';
             $registration->registerHooksFromClass(Handlers\Rules\MissingSerializesModelsHandler::class);
