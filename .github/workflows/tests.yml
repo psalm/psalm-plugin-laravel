@@ -3,7 +3,10 @@ name: Tests
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    # Both maintained release lines: a 3.x backport must run the same matrix as
+    # master before it can be tagged. GitHub reads this file from the branch
+    # being pushed, so the entry only takes effect once it exists on that branch.
+    branches: [master, 3.x]
     paths:
       - '**.php'
       - '**.phpstub'
