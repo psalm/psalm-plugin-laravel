@@ -159,7 +159,8 @@ final class SerializedQueuedModelHandler implements AfterClassLikeAnalysisInterf
         return false;
     }
 
-    /** @psalm-external-mutation-free */
+    // Not marked mutation-free: Psalm 6's Codebase::classOrInterfaceExists() and classExtends()
+    // are not annotated mutation-free, unlike Psalm 7.
     private static function isOrExtends(string $className, string $parent, Codebase $codebase): bool
     {
         if (\strtolower($className) === \strtolower($parent)) {
