@@ -169,6 +169,22 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findSerializedQueuedModels`
+
+**default**: `false`
+
+When enabled, the plugin flags a class implementing `ShouldQueue` that holds an Eloquent model (or an `Eloquent\Collection`) in a non-static property it declares, when the class has no `__serialize()` or `__sleep()` from any source. Without one the whole model is written into the queue payload instead of a `ModelIdentifier`.
+
+The check is on the resulting `__serialize()`, not on the trait name, so the framework bases that already pull the trait in are silent (`Illuminate\Foundation\Queue\Queueable`, what `make:job` scaffolds since Laravel 11, and `Illuminate\Notifications\Notification`), as is a class that hand-writes its own serialization.
+
+See [SerializedQueuedModel](issues/SerializedQueuedModel.md) for details.
+
+### Example
+
+```xml
+<findSerializedQueuedModels value="true" />
+```
+
 ## `findOctaneIncompatibleBinding`
 
 **default**: omit the element. The plugin then auto-detects: the rule registers if the project depends on `laravel/octane`, and stays off otherwise.

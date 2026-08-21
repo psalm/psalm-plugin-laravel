@@ -373,6 +373,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
 
+        require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
+
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
         require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
@@ -509,6 +512,12 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->reportImplicitQueryBuilderCalls) {
             require_once __DIR__ . '/Handlers/Rules/ImplicitQueryBuilderCallHandler.php';
             $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
+        }
+
+        // Flag queued classes that hold an Eloquent model without reaching SerializesModels.
+        if ($pluginConfig->findSerializedQueuedModels) {
+            require_once __DIR__ . '/Handlers/Rules/SerializedQueuedModelHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\SerializedQueuedModelHandler::class);
         }
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:

@@ -44,6 +44,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
@@ -248,6 +249,7 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->findSerializedQueuedModels);
     }
 
     #[Test]

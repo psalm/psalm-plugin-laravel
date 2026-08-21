@@ -24,6 +24,19 @@ class Pipeline implements PipelineContract
     public function through($pipes) {}
 
     /**
+     * Run the pipeline with a final destination callback.
+     *
+     * `then()` returns whatever the destination closure returns, so the return type
+     * follows the closure instead of Laravel's declared `mixed`.
+     *
+     * @template TReturn
+     *
+     * @param  \Closure(mixed): TReturn  $destination
+     * @return TReturn
+     */
+    public function then(\Closure $destination) {}
+
+    /**
      * Push additional pipes onto the pipeline.
      *
      * Accepts an array of pipes or variadic pipe arguments via func_get_args().
