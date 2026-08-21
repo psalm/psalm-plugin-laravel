@@ -17,6 +17,8 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
+| Prompt injection | LLM01:2025 | `laravel/ai` agents: `Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, `Embeddings::for()` (advisory unless [`findPromptInjection`](config.md#findpromptinjection) is enabled) |
+| LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
@@ -53,6 +55,61 @@ flagged location is the comparison itself. The message text is the generic
 Psalm hardcodes taint messages per kind ([vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762)).
 Treat any such finding from this plugin as a timing issue and fix it with
 `hash_equals()`.
+
+### LLM prompt injection (OWASP LLM01:2025)
+
+Applies to projects using `laravel/ai`. The stubs and the LLM-output handler load
+only when that package is installed and satisfies `>=0.10.0 <1.0.0`, so projects
+without it pay nothing.
+
+Two directions are covered, and they ship at different reporting levels.
+
+* Untrusted input reaching a prompt is reported as `TaintedLlmPrompt`, **advisory
+  by default**: computed, visible with `--show-info=true`, never build-breaking.
+  Turn it into an error with [`findPromptInjection`](config.md#findpromptinjection).
+  The asymmetry is deliberate. Every other taint kind here names its own fix, but
+  no reliable prompt-injection sanitizer exists, so an error on
+  `$agent->prompt($request->input('message'))` flags a chatbot for being a chatbot
+  and leaves suppression as the only remedy. Enforcement earns its keep where the
+  prompt is assembled from data the user did not knowingly submit: retrieved
+  documents, scraped pages, webhook bodies, tool results. Sinks are
+  `Promptable::prompt()` / `stream()` / `queue()` / `broadcast*()`, the
+  `Laravel\Ai\agent()` helper, `AgentPrompt::prepend()` / `append()` / `revise()`,
+  `Embeddings::for()`, `Tools\Document::fromString()` / `fromBase64()`, and the
+  `Messages\UserMessage` / `Messages\Message` constructors.
+* Model output is itself a taint source, reported as an error out of the box and
+  unaffected by `findPromptInjection`: these findings have the ordinary fix
+  (parameterize, escape). Reading `$response->text` (or casting the
+  response to string) yields tainted data, so an answer echoed into HTML, SQL, or a
+  shell command is reported like any other user input. That models indirect prompt
+  injection, where the payload arrives through a page, document, or tool result the
+  model read. Transcripts count on both paths (`TranscriptionResponse::$text` and
+  the string cast): the audio was supplied by a user, so the transcript is
+  attacker-authored text a speech model merely re-typed.
+* Structured output is a source on the same footing. On
+  `StructuredAgentResponse` / `StructuredTextResponse`, the covered reads are the
+  `$structured` property, `toArray()`, `toJson()`, `jsonSerialize()`, the string
+  cast, and an explicit `offsetGet()` call. The keys come from the application's
+  schema, the values come from the model.
+
+Two shapes are not covered. Each is an upstream limitation rather than a
+judgement that the flow is safe, so treat them as blind spots when reviewing.
+
+Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
+yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in
+[#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
+
+Array-access reads (`$response['field']`, `$request['task']`) are not covered
+either, on any class: Psalm drops the taint edge when it resolves the `[]` sugar,
+which affects every `ArrayAccess`-based taint source and is left for an upstream
+fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)). It is worth
+knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to
+a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit
+`offsetGet()` call, all of which are covered.
+
+Reading a single element back out of an array-typed source is covered. Both the
+`$structured` property and the `toArray()` return keep the taint through
+`$payload['body']`, so a sink reached that way reports like any other flow.
 
 ### How it compares
 

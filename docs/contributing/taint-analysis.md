@@ -30,6 +30,34 @@ Version difference that bites when testing: Psalm 6 runs in exactly one mode per
 
 **Exception — classes reached only through narrowing.** A taint stub redeclares the class to host the annotated method, which makes the stub claim the class's file slot. Psalm *merges* that stub with the real class (stub members win on overlapping names) — but only when the real source is **also** scanned, which a direct mention of the class in analysed code triggers. A class reached only through a return-type provider (for example `Illuminate\Auth\SessionGuard` produced by `auth('web')`, or `Illuminate\Encryption\Encrypter` produced by `app('encrypter')`) is never named in analysed code, so its real source is never scanned. The stub then becomes the class's sole definition and every non-stubbed method goes missing, breaking calls like `auth('web')->user()` and `app('encrypter')->getKey()` (#1113). The strip stays invisible when the class carries a `Macroable` or `__call` (most Laravel service classes, such as `Cache\Repository`, `Session\Store`, and `Database\Connection`, mask the missing methods as magic calls). It surfaces as a hard `UndefinedMethod` only on the few classes that lack that masking, like the auth guards and the encrypter. For those, set the taint on the *real* method storage from a scan-phase handler instead. The fields `taint_source_types`, `added_taints`, `removed_taints`, and `return_source_params` are exactly what `@psalm-taint-source`, `@psalm-taint-unescape`, `@psalm-taint-escape`, and `@psalm-flow` populate, and the instance-call taint path reads them back. See `src/Handlers/Auth/GuardTaintHandler.php` and `src/Handlers/Encryption/EncrypterTaintHandler.php`.
 
+### Optional third-party integrations: `stubs/integrations/<package>/`
+
+Stubs for packages that ship outside `laravel/framework` (currently: `laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only when the host application has the package installed. The plugin probes Composer's runtime metadata in `Plugin::optionalIntegrationStubs()`:
+
+```php
+if (self::isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0')) {
+    \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
+}
+```
+
+Two reasons for the version range:
+
+1. **Absent packages contribute zero cost** (no class lookups, no stub parsing).
+2. **A future major bump won't silently load stubs that reference removed or renamed classes**: `satisfies()` traps the mismatch and falls back to no-op.
+
+When adding a new integration, gate it on both `isInstalled()` (cheap presence check) and `satisfies()` (range guard), then drop the stubs into a new directory under `stubs/integrations/`.
+
+**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from drift. Two CI legs compensate, both running weekly (Friday 06:00 UTC) and via `workflow_dispatch` regardless of which files changed, both against the newest installed `laravel/ai` release: `type_tests_laravel_ai` (`.github/workflows/tests.yml`) and the PHP >= 8.3 cells of `test-laravel-app.yml`.
+
+What they catch:
+
+- `laravel/ai` failing to install. Every PromptInjection phpt carries a SKIPIF gated on `laravel/ai` class presence, so a failed install SKIPs every phpt; `type_tests_laravel_ai` asserts the suite actually executed rather than trusting a green exit code on an all-skipped run.
+- A stubbed class being renamed, moved, or removed, via the same SKIPIF/all-skipped guard.
+- The plugin's own regressions, via the normal test suite.
+- A stubbed method's native parameter/return type drifting on a `laravel/ai` release, via `bin/ci/check-laravel-ai-stub-parity.php` (run from `type_tests_laravel_ai`). Nothing else here can see this: Psalm resolves calls against a redeclaration stub's signature, not the vendor's, and a registered stub is never diffed against the real class it redeclares, so the phpt and app-leg checks above stay green through it. This script parses the stub source with php-parser, reflects the installed classes directly, and diffs native types independent of Psalm. Confirmed to catch a synthetic vendor-only mutation; see [psalm/psalm-plugin-laravel#1331](https://github.com/psalm/psalm-plugin-laravel/issues/1331) for the reproduction that motivated it.
+
+A `KNOWN_GAPS` allowlist inside that script covers pre-existing mismatches found while building it (currently one: `Contracts\CanActAsTool::description()`'s return type, widened upstream to `Stringable|string`), so the job fails only on genuinely new drift. An allowlisted entry that stops reproducing (its stub gets fixed) prints a loud warning to remove the entry rather than silently passing forever.
+
 ## Annotations quick reference
 
 Psalm parses eight taint-related tags. The first four are the ones you'll use most in stubs.
@@ -272,6 +300,10 @@ A value passed only through `e()` (which escapes `html` and `has_quotes`) is sti
 ### Testing-time pitfall: Psalm's per-sink-node taint de-duplication
 
 When two PHPT tests in the same suite source the same taint kind into the **same stubbed sink** (e.g. both flow `html_url` into `MailMessage::action()`), only one of the two will emit `TaintedCustom`. `TaintFlowGraph::connectSinksAndSources()` keeps a `visited_source_ids[$sink_node][$taint_mask]` set and skips repeated visits, so the first `(sink, mask)` pair reached during BFS wins the report and any subsequent source path to that same pair is silently dropped. The Tainted case using `e()` (`TaintedHtmlUrlEDoesNotEscape.phpt`) therefore routes through a per-file local sink instead of `MailMessage::action()`. The Safe test is unaffected: the sanitizer drops `html_url`, so the taint mask reaching the shared sink is `0`, which is a distinct dedupe key from any concurrent Tainted test's `html_url` mask. Use a local `@psalm-taint-sink html_url $url` helper whenever you need a second Tainted test against an already-covered sink.
+
+The pruning is by node id, not by sink id, so it also swallows intermediate hops: two flows through the same stubbed sink from different sources can both be lost, not just the later one.
+
+**A negative assertion against a shared sink is unfalsifiable.** This is the sharper edge of the same behavior, and it has already produced one fixture that asserted the exact opposite of the truth. An empty `--EXPECTF--` reads as "the plugin does not detect this flow", but a flow reaching an already-visited node is dropped whether or not the edge exists, so the fixture stays green in both worlds. Any phpt whose point is that nothing is reported must route through a per-file local sink AND carry a positive control in the same file that does report, otherwise it proves nothing. `StructuredResponseArrayAccessKnownLimitation.phpt` and `SubAgentToolDelegationKnownLimitation.phpt` are the worked examples.
 
 ## Stub patterns by annotation type
 
@@ -676,3 +708,67 @@ The limitation still applies to any facade covered by neither: user-defined faca
 A variadic sink covers only its first argument, on either call form. `Filesystem::delete()` and `FilesystemAdapter::delete()` accept an array or variadic string arguments (`func_get_args()` at runtime), so their stubs carry `@psalm-variadic` next to the sink. That tag only relaxes the arity check and does not spread the sink across the extra arguments, so `Storage::disk('local')->delete($safe, $tainted)` goes unreported. The static facade form misses it too, because a flat `@method` tag cannot express variadic at all, though there the call is at least loud (Psalm reports `TooManyArguments`). Prefer the array form, `delete([$safe, $tainted])`, which is fully covered on both paths.
 
 To cover another core facade, add `Facade::class => [TargetClass::class]` to `FacadeTaintForwardingHandler::FACADE_TARGETS`, confirm against `vendor/laravel/framework` that the facade's `@method` tags mirror the target's real signatures (the copy matches on both parameter offset and parameter name, so a drifted tag is skipped rather than mis-assigned), and add a `.phpt` under `tests/Type/tests/TaintAnalysis/`.
+
+## LLM prompt-injection sinks (`laravel/ai`)
+
+The `llm_prompt` taint kind models OWASP LLM01:2025 (direct + indirect prompt injection). Annotations are applied in two layers, depending on what the sink shape allows. Both layers are a worked instance of the scope rule in [Annotations quick reference](#annotations-quick-reference): the tags are function-like only, so anything that is not a function parameter needs a handler instead.
+
+### Parameter sinks (docblock annotation works)
+
+Methods that accept the prompt as a named parameter are annotated normally:
+
+```php
+trait Promptable
+{
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function prompt(string $prompt, ...): AgentResponse {}
+}
+```
+
+Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\Laravel\Ai\agent()` factory, `AgentPrompt::prepend()`/`append()`/`revise()`, `Embeddings::for()`, `Tools\Document::fromString()/fromBase64()`, `Messages\UserMessage`, and `Messages\Message::__construct()`.
+
+### Property-source pattern: `$response->text` (handler required)
+
+Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**: `PropertyStorage` carries no taint fields at all, so the annotation is dropped at scan time rather than misapplied. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
+
+`src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches the read, and calls `Codebase::addTaintSource()` to add the `ALL_INPUT` taint to the expression's type. `TAINTED_PROPERTIES` maps each property name to the classes that declare it, rather than crossing one class list with one property list, because the two properties sit on different parts of the hierarchy:
+
+- `$text` on `Laravel\Ai\Responses\{TextResponse, AgentResponse, StreamedAgentResponse, StreamableAgentResponse, TranscriptionResponse}`.
+- `$structured` on `Laravel\Ai\Responses\{StructuredAgentResponse, StructuredTextResponse}`, the decoded payload the `ProvidesStructuredResponse` trait declares as a public array. laravel/ai's own `ChatCommand` reads it, so it is a first-class access path rather than an internal.
+
+The subclass walk is load-bearing, not a courtesy: `StructuredAgentResponse` and `StructuredTextResponse` both inherit `$text` from `TextResponse` and are tainted through it, even though neither is named in the `$text` list. `TranscriptionResponse` is named explicitly because it sits in its own hierarchy (it does not extend `TextResponse`), so no walk reaches it.
+
+Casts are a separate path, and missing one is easy: `__toString()` is a method return, so it takes a plain stub annotation, but a subclass that overrides `__toString()` drops the parent's. Each of `TextResponse`, `AgentResponse`, `TranscriptionResponse`, `StructuredAgentResponse` and `StructuredTextResponse` therefore carries its own. Adding a class to `TAINTED_PROPERTIES` covers the property read only; check whether the class also declares `__toString()` and needs the stub.
+
+Check that it really declares one. `StreamableAgentResponse` is the exception in this package: it has no `__toString()`, and the stub declared one anyway to hang the annotation off. The annotation was inert, and worse, the declaration told Psalm that `(string) $response` type-checks when it fatals at runtime, suppressing an `InvalidCast` the user should have seen. A stub that invents API is worse than a missing stub, because the invented member silences real errors instead of merely missing them. `StreamableResponseHasNoStringCast.phpt` pins the corrected behavior.
+
+### Array-access sources do not work: `$response['field']` (upstream gap)
+
+`@psalm-taint-source` on `offsetGet()` sources an explicit `$response->offsetGet('field')` call and nothing else. Psalm's `ArrayFetchAnalyzer` resolves the `$response['field']` sugar by synthesizing a `VirtualMethodCall` to `offsetGet()`, analyzing it against a **cloned** node-data set, then copying back only the resulting type. Everything that call recorded about data flow stays in the clone and is discarded, so no edge reaches the outer expression. Type inference is unaffected, which is why the gap is invisible without a taint test.
+
+The loss is not specific to source annotations: any taint edge crossing the sugar is dropped, including a plain argument-to-return pass through `offsetGet()`. This is a Psalm core soundness bug, not a Laravel one, and it silently breaks every `ArrayAccess`-based taint source in any codebase. Filed upstream as [vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912); `#1304` here was closed for the same reason. Do not add an annotation and assume the sugar is covered.
+
+An `ArrayDimFetch` branch on `LlmOutputTaintHandler` would close it, and was prototyped, but is deliberately not shipped: `ArrayDimFetch` is among the hottest node types in any codebase, so the branch charges a per-expression cost on every analysis, and it becomes dead code the moment upstream lands. Keep the `offsetGet()` annotations anyway, since the explicit call form is genuinely covered by them.
+
+What that costs, pinned by fixtures rather than left implicit:
+
+- `SubAgentToolDelegationKnownLimitation.phpt`: `Tools\AgentTool::handle()` forwards `(string) $request['task']` straight into a sub-agent's `prompt()`, so the whole delegation chain is silent.
+- `StructuredResponseArrayAccessKnownLimitation.phpt`: `$response['field']` on the structured responses.
+
+Both assert the current (wrong) behavior, so an upstream fix turns them red and names itself.
+
+Neither fixture may state that silence with a bare empty expectation. A "should not report" assertion routed through a sink the rest of the batch also reaches is unfalsifiable: the BFS de-duplication described under [Testing-time pitfall](#testing-time-pitfall-psalms-per-sink-node-taint-de-duplication) would keep it silent even if the edge survived. Both files therefore use per-file local sinks and carry an explicit `offsetGet()` control that DOES report, which pins the source and the sink as live and leaves the sugar as the only difference.
+
+That trap is not hypothetical. A third fixture, `StructuredArrayReturnKnownLimitation.phpt`, claimed that reading one element back out of an array-typed source (`$payload['body']` after `toArray()`, or after `$structured`) lost the edge. It was routed through `DB::select()` and asserted nothing. Against per-file local sinks the same two flows report `TaintedSql`, so there was never a limitation. It is now positive coverage, `StructuredArrayElementRead.phpt`.
+
+The handler is registered in `Plugin::registerHandlers()` behind the same version gate as the stubs, and self-disables when `Codebase::$taint_flow_graph === null`, so it costs nothing on non-taint runs.
+
+Note the mechanism split: this handler re-sources from `AfterExpressionAnalysisEvent`, while the plugin's other property-read taint path (`ValidationTaintHandler`) implements `AddTaintsInterface`, which Psalm dispatches from `AtomicPropertyFetchAnalyzer` for every property fetch. Prefer `AddTaintsInterface` for new property-taint work: it hooks the taint bitmask Psalm already threads through the data-flow edge, instead of rewriting the expression type afterwards. `AddTaintsInterface` also fires twice per node (property-read pass and argument-binding pass), so it needs per-node dedupe that the `AfterExpressionAnalysis` route avoids.
+
+### Return-value sinks are not yet expressible
+
+`Tool::description()` and `Agent::instructions()` produce values that the framework later concatenates into the LLM prompt (the static signature of MCP-style tool poisoning, CVE-2025-54136). The natural annotation shape is "the return value is a sink," but Psalm's docblock scanner only matches **parameter names** for `@psalm-taint-sink`. The `return` token is silently dropped; the annotation is inert.
+
+These return-value sinks are intentionally not annotated in stubs today (the comment in the stub says so). Coverage requires a dedicated `AfterMethodCallAnalysisInterface` / `MethodReturnTypeProvider`-style handler that wires the return expression into a synthetic sink — tracked in `#484`.
