@@ -476,6 +476,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
+        // Removes only html taint on `make($content, $status, $headers)` calls with literal headers
+        // that prove Symfony will not render the content as HTML (#1345). The ResponseFactory stubs
+        // retain their default sinks; this hook scopes the narrow exception to the exact call site.
+        require_once __DIR__ . '/Handlers/Http/ResponseFactoryTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Http\ResponseFactoryTaintHandler::class);
+
         // CacheManager::store()/driver()/memo() narrowed to the concrete Repository, on
         // both the real-manager and `Cache` facade paths (#1230). getClassLikeNames()
         // reads FacadeMapProvider for the `\Cache` alias, so it relies on init() above.

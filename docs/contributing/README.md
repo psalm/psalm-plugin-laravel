@@ -205,6 +205,18 @@ There are two ways to register:
 1. **Class-level** (most handlers): implement the interface, register via `$registration->registerHooksFromClass(MyHandler::class)` in `Plugin::registerHandlers()`
 2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
 
+Every class registration keeps the matching `require_once` beside
+`registerHooksFromClass()`. Call site taint handlers such as
+`ResponseFactoryTaintHandler` pair `BeforeExpressionAnalysisInterface` with
+`RemoveTaintsInterface` because Psalm's removal event has neither a method id nor
+an argument offset. Key that bridge on the node object (a `WeakMap`), never on its
+`spl_object_id`. Psalm frees whole ASTs other than the analysed file's while that
+file is still being analysed (`ProjectAnalyzer::getMethodMutations()` on the
+constructor initialisation path, `ClassLikes::getTraitNode()`), and dispatches no
+`BeforeFileAnalysisEvent` for them, so a per file flush does not bound an id's
+lifetime. PHP then reissues the freed handle to an unrelated node, and a stale hit
+STRIPS taint, which is a missed finding rather than a false positive.
+
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 
 ## External resources

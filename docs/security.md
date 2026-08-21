@@ -30,6 +30,19 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+### `ResponseFactory::make()` HTML responses
+
+`ResponseFactory::make()` reports XSS for unescaped content because its default
+response is HTML. The finding is removed only for a positional call whose
+literal headers array contains one direct string `Content-Disposition:
+attachment`.
+
+Dynamic, duplicate, list valued, underscore named, or non attachment
+dispositions continue to report, as do all content type only responses. This
+applies to the concrete factory, its contract, and the `Response` facade only.
+A custom class with a `make()` method is not assumed to share Laravel's response
+semantics.
+
 ### Timing-unsafe secret comparison (CWE-208)
 
 Comparing a secret (a password hash, remember-token, or decrypted value) with a
