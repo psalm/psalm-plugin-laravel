@@ -11,7 +11,7 @@ use Psalm\Issue\PluginIssue;
  * but cannot reach Illuminate\Queue\SerializesModels, so the whole model is written into
  * the queue payload instead of a ModelIdentifier.
  */
-final class MissingSerializesModels extends PluginIssue
+final class SerializedQueuedModel extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingSerializesModels/';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/SerializedQueuedModel/';
 }

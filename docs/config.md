@@ -169,7 +169,7 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
-## `findMissingSerializesModels`
+## `findSerializedQueuedModels`
 
 **default**: `false`
 
@@ -177,12 +177,12 @@ When enabled, the plugin flags a class implementing `ShouldQueue` that holds an 
 
 The check is on the resulting `__serialize()`, not on the trait name, so the framework bases that already pull the trait in are silent (`Illuminate\Foundation\Queue\Queueable`, what `make:job` scaffolds since Laravel 11, and `Illuminate\Notifications\Notification`), as is a class that hand-writes its own serialization.
 
-See [MissingSerializesModels](issues/MissingSerializesModels.md) for details.
+See [SerializedQueuedModel](issues/SerializedQueuedModel.md) for details.
 
 ### Example
 
 ```xml
-<findMissingSerializesModels value="true" />
+<findSerializedQueuedModels value="true" />
 ```
 
 ## `findOctaneIncompatibleBinding`
