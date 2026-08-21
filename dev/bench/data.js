@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787213977999,
+  "lastUpdate": 1787302938639,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10215,6 +10215,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "319b180d8f66998d06a52e077ef9a4bd77591173",
+          "message": "Add opt-in `MissingSerializesModels` rule for queued classes holding Eloquent models (#1385)\n\n* feat(rules): add opt-in MissingSerializesModels rule\n\nA class implementing ShouldQueue that holds an Eloquent model in a property\nit declares, without reaching Illuminate\\Queue\\SerializesModels, serializes\nthe whole model into the queue payload instead of a ModelIdentifier: the\nworker then runs against a dispatch-time snapshot, payloads grow with the\nmodel, and a payload can outlive the schema it was written against.\n\nThe trait is nearly always inherited, so the check resolves the complete\ntrait closure (traits of traits) of the class and of every ancestor rather\nthan looking for a direct `use`. Foundation\\Queue\\Queueable (what make:job\nscaffolds since Laravel 11) and Notifications\\Notification both pull the\ntrait in; without that resolution they would dominate the reports.\n\nOff by default behind findMissingSerializesModels.\n\nCloses #1380\n\n* refactor(rules): report MissingSerializesModels once per class\n\nThe fix is a single `use SerializesModels;`, so a per-property report produced\nN findings for one edit (three on a job holding two models and an order line).\n\n- emit one issue at the class declaration, naming the offending properties and\n  their model types, truncated after three\n- honour class-docblock suppression: `ClassLikeStorage::$suppressed_issues` does\n  not reach the statements source at this hook\n\n* refactor(rules): gate MissingSerializesModels on __serialize(), not the trait name\n\nReview findings from the queued-serialization rule, all verified against Laravel\nsource:\n\n- `Support\\Collection` is not a `QueueableCollection`, so\n  `getSerializedPropertyValue()` passes it through untouched and adding the trait\n  fixes nothing. Reporting it gave advice that does not work; the branch is gone\n  and the fixture is now a documented negative.\n- A class that hand-writes `__serialize()` / `__sleep()` already decides what\n  enters the payload and was reported anyway.\n\nBoth fall out of one check: `appearing_method_ids['__serialize']`, which Psalm's\npopulator has already flattened across traits, traits of traits, and ancestors.\nThat replaces the trait-closure walk (a BFS, a parent loop, and a storage lookup\nthat treated an unpopulated class as proof of absence), and it no longer depends\non the trait being reachable under its own name.\n\nAlso: drop the dead `declaring_property_ids` filter (`ClassLikeStorage::$properties`\nis never merged from parents or traits, so it was always false), drop the docblock\nclaim that `Mailable` pulls the trait in (it does not: `make:mail` scaffolds it\nexplicitly), document the blind spots, and assert the config default.\n\n* refactor(rules): shorten the MissingSerializesModels message to Psalm house style\n\nState the fact and stop: class, missing trait, offending property names. The fix\nbelongs on the issue page the report already links to, and the model class of each\nproperty is one hover away.\n\n* docs(rules): stop restating the MissingSerializesModels default state\n\nThe flag's default belongs in docs/config.md alone, so flipping it later is a\none-line change instead of a sweep through comments, the issue page, and tests.",
+          "timestamp": "2026-08-21T10:59:21+02:00",
+          "tree_id": "c44327eb85c89f0e1e302cdf4219d6de526ddd5c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/319b180d8f66998d06a52e077ef9a4bd77591173"
+        },
+        "date": 1787302937749,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.24,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
