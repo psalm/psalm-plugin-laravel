@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787695181292,
+  "lastUpdate": 1787695500563,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10385,6 +10385,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 22.7,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d20225ca16c0215b76be5c0fdaf8a7d26cf004f",
+          "message": "Enable `findSerializedQueuedModels` under `experimental` unless explicitly set (#1400)\n\n* feat(config): default findSerializedQueuedModels to experimental\n\nAuto-enable the rule when <experimental value=\"true\" /> is set, since\nit is the kind of not-yet-default check the flag exists to preview. An\nexplicit findSerializedQueuedModels value still always wins.\n\n* docs(config): simplify the experimental section\n\nDrop the enumerated issue list and the ModelToArrayShapeHandler aside,\nboth stale, and state the mechanical facts: default issue level, that\nan explicit PluginIssue entry overrides it, and the\nfindSerializedQueuedModels interaction added in the previous commit.",
+          "timestamp": "2026-08-26T00:02:13+02:00",
+          "tree_id": "17c4ae1667c627ff9e8ddb4932eee319e87ecebf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2d20225ca16c0215b76be5c0fdaf8a7d26cf004f"
+        },
+        "date": 1787695499454,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.85,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
