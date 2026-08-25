@@ -169,6 +169,22 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findUnknownFilesystemDisks`
+
+**default**: `false`
+
+When enabled, the plugin checks that literal disk names passed to `Storage::disk()` / `Storage::drive()` (and the same call on an injected `FilesystemManager` or `Factory` contract) are present in `filesystems.disks`. An unknown disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local` — the failure mode is availability, not a wrong write target.
+
+Only string literal disk names are validated — dynamic, enum, and `null` names are skipped, as is an empty string literal. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve; it stays off under the Testbench package-mode fallback.
+
+See [UnknownFilesystemDisk](issues/UnknownFilesystemDisk.md) for details.
+
+### Example
+
+```xml
+<findUnknownFilesystemDisks value="true" />
+```
+
 ## `findSerializedQueuedModels`
 
 **default**: `false`
