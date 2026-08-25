@@ -39,11 +39,13 @@ final class MissingRouteEmissionTest extends TestCase
         $joined = \implode("\n", $messages);
 
         // One finding per typo'd receiver call site: route(), to_route(), URL::route(),
-        // URL::signedRoute(), URL::temporarySignedRoute(), Redirect::route(), redirect()->route().
+        // URL::signedRoute(), URL::temporarySignedRoute(), Redirect::route(), redirect()->route(),
+        // url()->route() (the last one hits the \Illuminate\Contracts\Routing\UrlGenerator
+        // contract url() returns with no path, a distinct receiver from the concrete class).
         // The clean calls, the spread, the non-literal name, and the enum name must stay silent —
         // asserting an exact count proves both that the rule fires on every covered receiver and
         // that it does not over-fire on the forms it deliberately skips.
-        $this->assertCount(7, $findings, "Expected exactly 7 MissingRoute findings, got:\n{$joined}");
+        $this->assertCount(8, $findings, "Expected exactly 8 MissingRoute findings, got:\n{$joined}");
         $this->assertStringContainsString("'dashbaord'", $joined, 'Every URL/Redirect-family typo must be flagged.');
         $this->assertStringContainsString("'posts.hsow'", $joined, 'to_route() with a typo must be flagged.');
         $this->assertStringNotContainsString(
@@ -56,7 +58,7 @@ final class MissingRouteEmissionTest extends TestCase
             $joined,
             'A registered route name must never be flagged, on any receiver.',
         );
-        $this->assertSame(\array_fill(0, 7, 'info'), \array_column($findings, 'severity'));
+        $this->assertSame(\array_fill(0, 8, 'info'), \array_column($findings, 'severity'));
     }
 
     #[Test]
@@ -64,8 +66,8 @@ final class MissingRouteEmissionTest extends TestCase
     {
         $findings = $this->runPsalmAndCollectFindings('psalm-experimental.xml');
 
-        $this->assertCount(7, $findings);
-        $this->assertSame(\array_fill(0, 7, 'error'), \array_column($findings, 'severity'));
+        $this->assertCount(8, $findings);
+        $this->assertSame(\array_fill(0, 8, 'error'), \array_column($findings, 'severity'));
     }
 
     /**
