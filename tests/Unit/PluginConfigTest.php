@@ -439,6 +439,25 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function experimental_flags_resolve_independently_when_only_one_is_overridden(): void
+    {
+        // An explicit override on one experimental-gated flag must not leak into the
+        // other: findUnknownFilesystemDisks is forced off here while
+        // findSerializedQueuedModels is left unset and must still follow experimental.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+        $this->assertTrue($config->findSerializedQueuedModels);
+    }
+
+    #[Test]
     public function invalid_experimental_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental value="maybe" /></pluginClass>');

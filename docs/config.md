@@ -258,6 +258,7 @@ Early access to plugin features that are still on their way to becoming the defa
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
 - [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turns on unless the project sets it explicitly.
+- [`findUnknownFilesystemDisks`](#findunknownfilesystemdisks), off by default, turns on unless the project sets it explicitly.
 
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 
