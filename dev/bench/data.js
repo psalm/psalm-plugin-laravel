@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787696904359,
+  "lastUpdate": 1787697411502,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10455,6 +10455,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.95,
             "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "abaccc94028727955d5b4ef917d81da78512c162",
+          "message": "fix(taint): never strip taint from a node that is itself a sink subject #1395 (#1409)\n\nA named argument's value can be an expression that Psalm already treats as a\nsink in its own right: `Eval_`, `Include_`, a `FuncCall` with a dynamic callee,\nor a `New_` with a dynamic class. `EvalAnalyzer`, `IncludeAnalyzer`,\n`FunctionCallAnalyzer` and `NewAnalyzer` each dispatch `AddRemoveTaintsEvent`\non that same node for the sink's own sake, so recording the node for a\nmismatch strip silently erased the independent finding -- `outer(label:\neval(tainted()))` lost its `TaintedEval` entirely.\n\n`isSelfDispatchedSinkSubject()` excludes those four node shapes from ever being\nrecorded. All 22 `AddRemoveTaintsEvent` dispatch sites were enumerated; exactly\nthese four keep a sink keyed to the node itself. `StaticCall` is deliberately\nleft recordable: its event feeds only the conditionally-escaped path for the\ncall's own return value, so it carries no independent sink.\n\nAccepted false negatives are documented on the handler (FN-over-FP): named\narguments on method calls, on unresolvable callees, and captured by a variadic\nare stripped unconditionally, and `static::`/`self::` resolve to the declaring\nclass so an overriding subclass signature is never consulted.\n\nA variadic-parameter exemption and a shared-AST staleness fix were attempted and\nwithdrawn: the variadic rule keyed on the argument's written offset while PHP\nmatches by name, which traded a false negative for a false positive, and the\nstaleness fix never covered inheritance. Both are tracked in #1406, along with a\nre-entrant `beforeFileAnalysis` defect.",
+          "timestamp": "2026-08-26T00:33:40+02:00",
+          "tree_id": "d791de4653c94d635151dcd2b932a099546c1f09",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/abaccc94028727955d5b4ef917d81da78512c162"
+        },
+        "date": 1787697409932,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.82,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
