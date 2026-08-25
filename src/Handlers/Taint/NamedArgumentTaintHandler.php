@@ -29,28 +29,54 @@ use Psalm\Type\TaintKind;
  * ## Upstream bug
  *
  * In `ArgumentsAnalyzer::checkArgumentsMatch()` a named argument is resolved to the correct
- * declared parameter for type-checking, but the taint node built for it (`ArgumentAnalyzer.php`
- * ~:1774-1791, `DataFlowNode::getForMethodArgument(..., $argument_offset, ...)`) is keyed by the
- * argument's WRITTEN position instead. Sinks are keyed by declared parameter index, so
- * `sink(label: tainted())` on `sink(string $path, string $label)` reports on `$path` (false
- * positive) and nothing on `$label` (false negative). Type checking is unaffected — only the
- * taint graph mis-routes. Reported as psalm/psalm-plugin-laravel#1395.
+ * declared parameter for type-checking, but the taint node id built for it (`ArgumentAnalyzer.php`
+ * ~:1774-1791, `DataFlowNode::getForMethodArgument(..., $argument_offset, $function_param->location, ...)`)
+ * mixes the two: the id uses the argument's WRITTEN offset, while the reported LOCATION uses the
+ * correctly-matched parameter. Sinks are keyed by declared parameter index, so the id mismatch
+ * routes the taint to the wrong sink's `taint_sink_params` entry — but a matching sink at the
+ * RIGHT parameter still reports there, using the right location, if one is declared. Concretely,
+ * for `sink(string $a, string $b)` with BOTH params sunk, `sink(b: tainted())` correctly reports
+ * `TaintedFile` located at `$b`'s own declaration — the id mismatch only matters when the sinks
+ * at the two positions differ (as in the false positive: `sink(string $path, string $label)`
+ * with `$path` sunk `file` and `$label` sunk `html`, `sink(label: tainted())` reports on `$path`
+ * instead of `$label`). So a mismatched-offset named argument does NOT always lose a genuine
+ * finding — it is stripped anyway because this handler cannot tell the two shapes apart from the
+ * AST alone (no method id or per-parameter sink map is available at
+ * {@see BeforeExpressionAnalysisEvent} / {@see AddRemoveTaintsEvent} time), which is why the
+ * false-negative exposure below is real, not merely theoretical. Type checking is unaffected —
+ * only the taint graph mis-routes. Reported as psalm/psalm-plugin-laravel#1395.
  *
- * ## Design consequence
+ * ## False-negative surface (accepted, cheap-heuristic-first / FN-over-FP)
  *
- * When a named argument's name does NOT match the parameter at its own written offset, every
- * finding Psalm currently produces through it is already mis-attributed — stripping loses no
- * genuine detection. Only the case where the name happens to equal its position works correctly
- * today ({@see resolveDeclaredParams} + the name/offset comparison in
- * {@see beforeExpressionAnalysis} preserve exactly that case). Everything else is stripped
- * entirely ({@see TaintKind::ALL_INPUT}, not just the kind a given sink cares about) because the
- * mis-routed node can resurface as an arbitrary taint kind at an arbitrary sink downstream.
+ * Only the case where a named argument's name equals the declared parameter at its own written
+ * offset is preserved ({@see resolveDeclaredParams} + the name/offset comparison in
+ * {@see beforeExpressionAnalysis}); every other named argument is stripped entirely
+ * ({@see TaintKind::ALL_INPUT}, not just the kind a given sink cares about, because the
+ * mis-routed node can resurface as an arbitrary kind at an arbitrary sink). Concretely that is:
  *
- * A `MethodCall`/`NullsafeMethodCall` receiver's type is not resolved yet at this pre-pass (this
- * hook fires before the receiver is descended into), so there is no cheap way to look up the
- * declared parameter here. Every named argument on those call kinds is recorded unconditionally
- * — an accepted false negative, matching this stop-gap's cheap-heuristic-first, FN-over-FP
- * posture.
+ * - Every named argument on a `MethodCall`/`NullsafeMethodCall`: its receiver's type is not
+ *   resolved yet at this pre-pass (the hook fires before the receiver is descended into), so
+ *   there is no cheap way to look up the declared parameter.
+ * - Every named argument whose callee resolves to a PHP-internal (CallMap-only) function once
+ *   {@see resolveDeclaredParams}'s stub-storage lookup AND its CallMap fallback both miss —
+ *   `getFunctionLikeStorage()` throws for those (they have no `FunctionStorage`), so a candidate
+ *   id that also fails `InternalCallMapHandler::getCallablesFromCallMap()` (an unusual internal
+ *   name, an unresolvable candidate) falls through to "unresolvable" and strips.
+ * - Any callee this handler cannot statically name at all (a dynamic function/class expression).
+ *
+ * A corpus scan across 18 real Laravel apps (5,718 MethodCall/NullsafeMethodCall/StaticCall
+ * named-argument sites, 329 distinct method names; ~550 FuncCall named-argument sites, 65
+ * distinct function names) found none of the top 40 method names by frequency, nor any of the
+ * 65 FuncCall names — checked exhaustively, since there are only 65 — landing on a taint sink;
+ * the long tail of the remaining ~289 less-frequent method names was not individually checked
+ * against the sink list. So the exposure is architectural, not realised today as far as this
+ * scan reached, but it is not the exhaustive "loses nothing" guarantee an earlier draft of this
+ * docblock claimed.
+ *
+ * Residual: the raw/global candidate ({@see functionNameCandidates}) could in principle read a
+ * PHP builtin's param names for a namespaced userland function of the same short name — but
+ * only when BOTH the `resolvedName` and `namespacedName` candidates already miss storage first,
+ * which requires that userland function's own storage lookup to fail too. Not reproduced.
  *
  * Retirement: once upstream threads the matched parameter's declared index into
  * `DataFlowNode::getForMethodArgument()` instead of the written offset, this handler has nothing
@@ -156,9 +182,10 @@ final class NamedArgumentTaintHandler implements
 
     /**
      * The callee's declared params for a `FuncCall`/`StaticCall`/`New_` with a statically
-     * resolvable name, or `null` when unresolvable (a dynamic call/class, an unpopulated
-     * storage, or — always — a `MethodCall`/`NullsafeMethodCall`; see the class docblock). `null`
-     * makes every named argument on this call record itself, the safe (strip-taint) direction.
+     * resolvable name, or `null` when unresolvable (a dynamic call/class, a name none of whose
+     * candidates resolve to storage or a CallMap entry, or — always — a
+     * `MethodCall`/`NullsafeMethodCall`; see the class docblock). `null` makes every named
+     * argument on this call record itself, the safe (strip-taint) direction.
      *
      * @return list<FunctionLikeParameter>|null
      */
@@ -170,59 +197,99 @@ final class NamedArgumentTaintHandler implements
             return null;
         }
 
-        $functionId = self::resolveCalleeId($expr, $event);
-
-        if ($functionId === null || $functionId === '') {
-            return null;
-        }
-
         $statementsSource = $event->getStatementsSource();
 
         if (!$statementsSource instanceof StatementsAnalyzer) {
             return null;
         }
 
-        try {
-            return $event->getCodebase()->getFunctionLikeStorage($statementsSource, $functionId)->params;
-        } catch (\Throwable) {
-            // Storage genuinely unresolvable (unpopulated classlike, unknown function, ...) —
-            // treat exactly like an unresolved callee rather than risk a crash on this
-            // best-effort probe.
-            return null;
+        foreach (self::resolveCalleeIdCandidates($expr, $event) as $functionId) {
+            $params = self::resolveParamsForCandidate($functionId, $statementsSource, $event);
+
+            if ($params !== null) {
+                return $params;
+            }
         }
+
+        return null;
     }
 
     /**
-     * Resolves a `FuncCall`'s function name or a `StaticCall`/`New_`'s "Class::method" id, or
-     * `null` for anything not statically nameable (a dynamic function/class expression, an
-     * anonymous class).
+     * One candidate id's params, or `null` if this candidate does not resolve at all. Tries
+     * `FunctionLikeStorage` first (userland functions, methods, `New_`), then — only for a plain
+     * function candidate (no `::`) — the internal CallMap, because a PHP-internal function like
+     * `file_put_contents()` has no `FunctionStorage` at all: `Functions::getStorage()`
+     * (`Reflection::hasFunction()` gate, vendor Functions.php ~:112-124) throws for it, while its
+     * declared param NAMES live only in `InternalCallMapHandler::getCallablesFromCallMap()`. An
+     * overloaded builtin (`file_put_contents'1`, ...) picks the FIRST listed signature; a
+     * misaligned pick just falls through to the accepted-strip default, not a crash.
+     *
+     * @param non-empty-string $functionId
+     *
+     * @return list<FunctionLikeParameter>|null
      */
-    private static function resolveCalleeId(
+    private static function resolveParamsForCandidate(
+        string $functionId,
+        StatementsAnalyzer $statementsSource,
+        BeforeExpressionAnalysisEvent $event,
+    ): ?array {
+        try {
+            return $event->getCodebase()->getFunctionLikeStorage($statementsSource, $functionId)->params;
+        } catch (\Throwable) {
+            // No FunctionStorage/MethodStorage under this candidate — fall through below.
+        }
+
+        if (\str_contains($functionId, '::')) {
+            return null; // a method id is never a CallMap entry.
+        }
+
+        try {
+            $callables = \Psalm\Internal\Codebase\InternalCallMapHandler::getCallablesFromCallMap(
+                \strtolower($functionId),
+            );
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $callables[0]->params ?? null;
+    }
+
+    /**
+     * Candidate callee ids for a `FuncCall`'s function name or a `StaticCall`/`New_`'s
+     * "Class::method" id, most-likely-correct first, or an empty list for anything not
+     * statically nameable (a dynamic function/class expression, an anonymous class). A
+     * `StaticCall`/`New_` class name always gets an eager `resolvedName`
+     * ({@see resolveClassNamePart}'s docblock) so it yields at most one candidate; a `FuncCall`'s
+     * function name can need up to three (see {@see functionNameCandidates}).
+     *
+     * @return list<non-empty-string>
+     */
+    private static function resolveCalleeIdCandidates(
         FuncCall|StaticCall|New_ $expr,
         BeforeExpressionAnalysisEvent $event,
-    ): ?string {
+    ): array {
         if ($expr instanceof FuncCall) {
-            return $expr->name instanceof Name ? self::resolveFunctionNamePart($expr->name) : null;
+            return $expr->name instanceof Name ? self::functionNameCandidates($expr->name) : [];
         }
 
         if ($expr instanceof StaticCall) {
             if (!$expr->name instanceof Identifier || !$expr->class instanceof Name) {
-                return null;
+                return [];
             }
 
             $class = self::resolveClassNamePart($expr->class, $event);
 
-            return $class === null ? null : $class . '::' . $expr->name->name;
+            return $class === null || $class === '' ? [] : [$class . '::' . $expr->name->name];
         }
 
         // New_: an anonymous class (`Class_`) or a dynamic class expression is not nameable here.
         if (!$expr->class instanceof Name) {
-            return null;
+            return [];
         }
 
         $class = self::resolveClassNamePart($expr->class, $event);
 
-        return $class === null ? null : $class . '::__construct';
+        return $class === null || $class === '' ? [] : [$class . '::__construct'];
     }
 
     /**
@@ -230,27 +297,49 @@ final class NamedArgumentTaintHandler implements
      * qualified — an unqualified, unaliased function call inside a namespace is genuinely
      * ambiguous until runtime (PHP tries the current namespace first, then falls back to the
      * global function), so `SimpleNameResolver` leaves `resolvedName` unset and records the
-     * namespaced CANDIDATE under `namespacedName` instead. Preferred over the raw written name so
-     * an in-namespace function (like this stop-gap's own test fixtures) resolves; a bare global
-     * function called from inside a namespace fails that candidate and falls through to the
-     * `\Throwable` catch in {@see resolveDeclaredParams} as unresolved — the safe direction.
+     * namespaced CANDIDATE under `namespacedName` instead.
+     *
+     * Neither candidate alone is enough: `namespacedName` misses every PHP-internal/global
+     * function called unqualified from inside a namespace (`file_put_contents(...)` inside
+     * `namespace App;` only has the useless candidate `App\file_put_contents`), and skipping
+     * straight to the raw written name would wrongly prefer the global function over a real
+     * in-namespace one of the same short name. So all three are tried, in order of confidence:
+     * `resolvedName` (aliased/FQN — authoritative when present), then `namespacedName` (the
+     * in-namespace candidate), then the raw written name (the global-fallback candidate PHP
+     * itself would try last). {@see resolveParamsForCandidate} tries each in turn; a name that
+     * matches none of the callee's real candidates falls through to the accepted-strip default.
      *
      * Not `@psalm-mutation-free`: `Name::getAttribute()` is stubbed impure (PHP-Parser nodes are
      * mutable), even though this method itself never mutates anything.
+     *
+     * @return list<non-empty-string>
      */
-    private static function resolveFunctionNamePart(Name $name): string
+    private static function functionNameCandidates(Name $name): array
     {
+        $candidates = [];
+
         /** @psalm-var ?string $resolved */
         $resolved = $name->getAttribute('resolvedName');
 
-        if (\is_string($resolved)) {
-            return $resolved;
+        if (\is_string($resolved) && $resolved !== '') {
+            $candidates[] = $resolved;
         }
 
         /** @psalm-var ?string $namespaced */
         $namespaced = $name->getAttribute('namespacedName');
 
-        return \is_string($namespaced) ? $namespaced : $name->toString();
+        if (\is_string($namespaced) && $namespaced !== '' && !\in_array($namespaced, $candidates, true)) {
+            $candidates[] = $namespaced;
+        }
+
+        // Name::toString() is stubbed non-empty-string, unlike the two free-form attributes above.
+        $raw = $name->toString();
+
+        if (!\in_array($raw, $candidates, true)) {
+            $candidates[] = $raw;
+        }
+
+        return $candidates;
     }
 
     /**
