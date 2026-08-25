@@ -20,8 +20,8 @@ use Psalm\Type\Union;
 
 /**
  * Detects calls to route(), to_route(), URL::route()/signedRoute()/temporarySignedRoute(),
- * Redirect::route(), and redirect()->route() whose route name is not registered anywhere
- * in the booted application, and flags it as {@see MissingRoute}.
+ * Redirect::route(), redirect()->route(), and url()->route() whose route name is not
+ * registered anywhere in the booted application, and flags it as {@see MissingRoute}.
  *
  * Diagnostic only — every provider method below always returns null; stub/native return
  * types are left untouched.
@@ -40,16 +40,17 @@ use Psalm\Type\Union;
  * so it is skipped too — a deliberate false-negative, not a bug.
  *
  * The named-route table is populated once per invocation from the booted app's router
- * (see `Plugin::initMissingRouteHandler()`). When that table comes back empty — a
- * package/library project analysed through the Testbench fallback never loads user route
- * files — the handler stays disabled entirely rather than reporting every route name as
- * missing.
+ * (see `Plugin::initMissingRouteHandler()`). When that table comes back empty, the handler
+ * stays disabled entirely rather than reporting every route name as missing. Two situations
+ * produce that empty table: a package/library project analysed through the Testbench
+ * fallback (never loads user route files, no warning) and an application whose routes are
+ * cached but whose cache yields no named routes (warns, naming `route:clear` / `optimize:clear`).
  *
  * Known limitations (by design, not pre-waived accidents): `Route::has()` guards around a
  * call site are not tracked, so a name that is only conditionally missing still reports;
  * conditionally-registered routes (feature flags, env-gated route files) can produce a
  * false positive if the analysing environment doesn't register them; Blade templates are
- * out of scope; a stale compiled route cache is not detected as such.
+ * out of scope.
  *
  * @see https://laravel.com/docs/routing#named-routes
  */
@@ -119,6 +120,12 @@ final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, 
     {
         return \array_values(\array_unique([
             UrlGenerator::class,
+            // The url() helper returns this contract, not the concrete class, when
+            // called with no path (see the ($path is null ? ...) conditional return
+            // in helpers.phpstub) — url()->route('x') would otherwise miss the
+            // handler entirely, matching a real @mixin-reroute trap this repo has
+            // hit before (#1215).
+            \Illuminate\Contracts\Routing\UrlGenerator::class,
             Redirector::class,
             \Illuminate\Support\Facades\URL::class,
             \Illuminate\Support\Facades\Redirect::class,

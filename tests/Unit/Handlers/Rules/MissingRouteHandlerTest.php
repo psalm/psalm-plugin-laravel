@@ -69,6 +69,18 @@ final class MissingRouteHandlerTest extends TestCase
     }
 
     #[Test]
+    public function registers_the_url_generator_contract_that_url_helper_returns(): void
+    {
+        // url() with no path returns \Illuminate\Contracts\Routing\UrlGenerator, not the
+        // concrete class registered above — a distinct receiver that url()->route()
+        // resolves to and that the handler would otherwise never see.
+        $this->assertContains(
+            \Illuminate\Contracts\Routing\UrlGenerator::class,
+            MissingRouteHandler::getClassLikeNames(),
+        );
+    }
+
+    #[Test]
     public function skips_no_arguments(): void
     {
         $event = $this->createFunctionEvent('route', []);

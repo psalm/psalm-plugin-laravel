@@ -67,6 +67,21 @@ final class UsesRoutes
     }
 
     /**
+     * url() with no path returns \Illuminate\Contracts\Routing\UrlGenerator, not the
+     * concrete \Illuminate\Routing\UrlGenerator — a distinct receiver the handler must
+     * also register for, or this call site is missed entirely.
+     */
+    public function urlHelperRouteTypo(): string
+    {
+        return url()->route('dashbaord');
+    }
+
+    public function urlHelperRouteClean(): string
+    {
+        return url()->route('dashboard');
+    }
+
+    /**
      * A leading spread hides the name entirely — must never be flagged.
      * @psalm-suppress MixedArgument unrelated to MissingRoute — spread hides the argument types too
      */
