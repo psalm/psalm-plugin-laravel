@@ -80,6 +80,51 @@ final class PluginMissingRouteInitializationTest extends TestCase
         $this->assertStringContainsString('route:clear', $progress->lastWarning);
     }
 
+    /**
+     * Regression: routesAreCached() resolves the 'files' container binding
+     * (Illuminate\Foundation\Application::routesAreCached()). The UnknownModelAttribute
+     * fixture's bootstrap/app.php never completes BootProviders (no bootstrap/cache
+     * directory — see that fixture's own bootstrap/app.php docblock), so 'files' is never
+     * bound there at all. Before this was caught, the resulting BindingResolutionException
+     * escaped initMissingRouteHandler() uncaught, propagated through __invoke()'s try block,
+     * and disabled the WHOLE plugin for the run via the outer catch — not just the
+     * MissingRoute feature. This is exactly how UnknownModelAttributeEmissionTest's
+     * experimental fixture broke once findMissingRoutes started auto-enabling under
+     * <experimental> (that fixture's own findings dropped to zero with this bug present).
+     *
+     * A plain `unset($app['files'])` does not reproduce this: the Testbench-fallback app
+     * this test suite otherwise boots has 'files' registered as a deferred service, so the
+     * container silently reloads FilesystemServiceProvider on next access. Only a genuinely
+     * partial boot (this fixture) leaves it truly unbound.
+     */
+    #[Test]
+    public function a_throwing_routes_are_cached_check_degrades_only_this_feature(): void
+    {
+        $fixtureDir = __DIR__ . '/Handlers/Fixtures/UnknownModelAttribute';
+        $originalCwd = \getcwd();
+        \assert(\is_string($originalCwd));
+
+        \chdir($fixtureDir);
+
+        try {
+            ApplicationProvider::bootApp();
+            $app = ApplicationProvider::getApp();
+
+            // Confirm the fixture is still in the partial-boot shape this regression needs,
+            // so a future fixture change that completes the boot fails loudly here instead
+            // of this test silently passing for the wrong reason.
+            $this->assertFalse($app->bound('files'), "Fixture assumption broken: 'files' is bound, so this no longer reproduces the regression.");
+
+            $progress = new RecordingProgress();
+            $this->invokeInitMissingRouteHandler($progress);
+        } finally {
+            \chdir($originalCwd);
+        }
+
+        $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled, not crash the whole invocation.');
+        $this->assertSame(0, $progress->warningCount, 'Cannot determine cache state, so this must fall through to the silent path, same as a genuinely empty table.');
+    }
+
     private function invokeInitMissingRouteHandler(\Psalm\Progress\Progress $progress): void
     {
         $method = new \ReflectionMethod(Plugin::class, 'initMissingRouteHandler');

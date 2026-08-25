@@ -779,7 +779,20 @@ final class Plugin implements PluginEntryPointInterface
             // routes (e.g. it was cached before any named route existed), not because the
             // plugin failed to read it. Warn here so the resulting silence reads as "cache
             // has nothing to check", not as a clean run.
-            if ($app->routesAreCached()) {
+            //
+            // routesAreCached() resolves the 'files' binding, which a minimal bootstrap/app.php
+            // (no filesystem provider registered) does not guarantee. A throw here must degrade
+            // this one probe, not escape to __invoke()'s outer catch and disable the whole
+            // plugin — same per-probe policy as the router resolution above.
+            $routesAreCached = false;
+
+            try {
+                $routesAreCached = $app->routesAreCached();
+            } catch (\Throwable $throwable) {
+                $output->debug("Laravel plugin: checking routesAreCached() threw: {$throwable->getMessage()}\n");
+            }
+
+            if ($routesAreCached) {
                 $output->warning(
                     'Laravel plugin: findMissingRoutes is enabled but the application has a route cache '
                     . 'that carries no named routes. The MissingRoute check will be skipped for this run. '
