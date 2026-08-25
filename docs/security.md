@@ -30,6 +30,20 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+### Known limitation: named arguments
+
+Psalm keys a named argument's taint node by the argument's written position rather than by the
+parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
+can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
+taint from a named argument it cannot prove is attributed correctly.
+
+Detection is unaffected when the callee is statically known (a plain function, a facade, a
+static call, a constructor, or a method on a receiver typed as exactly one class) and the
+argument names the parameter at its own position, which covers ordinary application code. It is
+lost for a dynamic callee, a receiver Psalm cannot resolve to a single class, an argument
+captured by a variadic, and a `static::` call resolved through a subclass override. Passing the
+same values positionally always reports.
+
 ### Timing-unsafe secret comparison (CWE-208)
 
 Comparing a secret (a password hash, remember-token, or decrypted value) with a
