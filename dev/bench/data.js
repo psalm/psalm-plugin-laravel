@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787694057251,
+  "lastUpdate": 1787694433751,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10320,6 +10320,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "422c4b3cbd9c8f6428e755414e67f212eaeadffb",
+          "message": "Narrow `AbstractPaginator::getCollection()` to `Eloquent\\Collection` for model paginators (#1397)\n\n* fix(stubs): narrow paginator getCollection() to Eloquent\\Collection #1384\n\npaginate()/simplePaginate()/cursorPaginate() on an Eloquent\\Builder\nalways hold an Eloquent\\Collection at runtime; getCollection() stayed\ntyped as the plain Support\\Collection it natively wraps, hiding\nEloquent-only methods (load(), etc.) on the result.\n\nAdds a TValue-keyed conditional return, mirroring the existing\nEloquent\\Collection::map() trade-off. Manual construction and a\nplain-string TValue keep documented, deliberate imprecision.\n\n* test: update paginator getCollection() expectations for #1384\n\nThe narrowing fix in the prior commit makes these two pre-existing\nphpt assertions more precise (Eloquent\\Collection instead of the\nplain Support\\Collection they were pinning before).",
+          "timestamp": "2026-08-25T23:44:22+02:00",
+          "tree_id": "3512ad11e5415f0093f72dad3ad94608833c58dc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/422c4b3cbd9c8f6428e755414e67f212eaeadffb"
+        },
+        "date": 1787694432550,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.34,
+            "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1110,
             "unit": "MB"
           }
         ]
