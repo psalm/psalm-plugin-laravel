@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787304726696,
+  "lastUpdate": 1787694057251,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10280,6 +10280,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 34.42,
             "range": "± 0.51",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "d42df663ba82d0bb8465ed5ddcc520d11dc03a07",
+          "message": "Revert \"feat(support): add Collection/LazyCollection::select() stub\"\n\nThis reverts commit f2f5e42b95f45285be0281e2b3ec1b82666d0e51.",
+          "timestamp": "2026-08-25T23:19:36+02:00",
+          "tree_id": "5801fc33258b94aecbe672c13eb25d166860f6f8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d42df663ba82d0bb8465ed5ddcc520d11dc03a07"
+        },
+        "date": 1787694056283,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.6,
+            "range": "± 0.5",
             "unit": "s"
           },
           {
