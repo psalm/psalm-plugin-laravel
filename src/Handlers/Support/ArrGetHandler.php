@@ -88,9 +88,18 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface
         $codebase = $event->getSource()->getCodebase();
 
         // Arr::get() checks the WHOLE key via exists() BEFORE ever splitting on '.',
-        // so a literal key that itself contains a dot must win over the segment walk.
+        // so a literal key that itself contains a dot must win over the segment walk —
+        // but only when it's guaranteed present. If it's merely optional AND contains a
+        // dot, Arr::exists() can return false for it at runtime, falling through into the
+        // dot-split walk instead of $default; that walk may resolve to a type this
+        // shortcut never sees, so decline rather than guess at the union.
         if (\array_key_exists($key, $atomic->properties)) {
-            return self::resolveValue($atomic->properties[$key], $defaultType, $codebase);
+            $prop = $atomic->properties[$key];
+            if (!$prop->possibly_undefined || !\str_contains($key, '.')) {
+                return self::resolveValue($prop, $defaultType, $codebase);
+            }
+
+            return null;
         }
 
         if (!\str_contains($key, '.')) {
@@ -116,9 +125,9 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface
 
         $atomics = $type->getAtomicTypes();
         if (\count($atomics) !== 1) {
-            // Defensive: on beta19, Psalm's own type combiner merges compatible TKeyedArray
-            // unions into a single atomic before this handler ever sees them, so this branch
-            // is empirically unreachable — not merely untested. Kept in case that changes.
+            // Defensive by design, not merely untested: reachable via a mixed-type union
+            // (e.g. array{a: int}|string), where Psalm's combiner leaves the atomics
+            // separate. Declines rather than guessing which atomic is the real shape.
             return null;
         }
 

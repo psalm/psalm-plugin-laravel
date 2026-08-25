@@ -89,6 +89,20 @@ function test_get_optional_intermediate_segment(array $shape): void
     /** @psalm-check-type-exact $_result = 'fallback'|int */
 }
 
+/**
+ * An optional whole-key match that itself contains a dot is unsound to shortcut:
+ * Arr::exists() can return false for it at runtime, falling through into the
+ * dot-split walk (here always resolving to `a.b`'s nested string) instead of
+ * $default — a type the shortcut alone never sees. Decline rather than guess.
+ *
+ * @param array{'a.b'?: int, a: array{b: string}} $shape
+ */
+function test_get_optional_literal_dot_key_falls_through(array $shape): void
+{
+    $_result = Arr::get($shape, 'a.b');
+    /** @psalm-check-type-exact $_result = mixed */
+}
+
 // --- negative: handler declines, Psalm's default `mixed` survives ---
 
 /** @param array{a: int} $shape */
