@@ -773,17 +773,18 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         if ($names === []) {
-            // A compiled route cache (bootstrap/cache/routes-v7.php) loads into a
-            // RouteCollection whose name lookup is never populated the way a live
-            // route-file boot populates it — getRoutesByName() comes back empty even
-            // though the application genuinely has named routes. Warn here so the
-            // resulting silence reads as "cache means untracked", not as a clean run.
+            // A compiled route cache (bootstrap/cache/routes-v7.php) is read the same way
+            // a live route-file boot is: refreshNameLookups() populates the name table from
+            // it normally. This branch only fires when that cache itself carries zero named
+            // routes (e.g. it was cached before any named route existed), not because the
+            // plugin failed to read it. Warn here so the resulting silence reads as "cache
+            // has nothing to check", not as a clean run.
             if ($app->routesAreCached()) {
                 $output->warning(
-                    'Laravel plugin: findMissingRoutes is enabled but the application has a cached route '
-                    . 'file (routes:cache) and no named routes could be read from it. The MissingRoute check '
-                    . 'will be skipped for this run — run `php artisan route:clear` (or `optimize:clear`) '
-                    . 'before analysing, or `php artisan route:cache` again after a route change.',
+                    'Laravel plugin: findMissingRoutes is enabled but the application has a route cache '
+                    . 'that carries no named routes. The MissingRoute check will be skipped for this run. '
+                    . 'Run `php artisan route:cache` to regenerate it, or `php artisan route:clear` to '
+                    . 'remove it and analyse against the live route files instead.',
                 );
 
                 return;

@@ -21,10 +21,12 @@ use Psalm\LaravelPlugin\Plugin;
  * so the named-route table comes back empty. `MissingRouteHandler::init()` must not be called
  * in that case, or an app with zero known routes would report every route name as missing.
  *
- * A second scenario shares that same empty table but for a different, more surprising reason:
- * `routesAreCached()` is true (a compiled `bootstrap/cache/routes-v7.php`), so the router never
- * sees the application's real route names either. Silently disabling in that case would read
- * as "no findings" (clean) rather than "not checked" (untracked) — that path must warn.
+ * A second scenario shares that same empty table for a different, more surprising reason.
+ * A compiled route cache (`bootstrap/cache/routes-v7.php`) is read the same way a live
+ * route-file boot is, so a genuine, current cache populates the table normally; this
+ * branch is for the narrower case where `routesAreCached()` is true and the cache itself
+ * carries zero named routes. Silently disabling in that case would read as "no findings"
+ * (clean) rather than "not checked" (untracked), so that path must warn.
  *
  * The positive path (a real, non-empty route table) is guarded end-to-end by
  * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\MissingRouteEmissionTest}.
@@ -74,8 +76,8 @@ final class PluginMissingRouteInitializationTest extends TestCase
 
         $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled when the route cache yields no named routes.');
         $this->assertSame(1, $progress->warningCount, 'A cached-routes empty table must warn exactly once.');
+        $this->assertStringContainsString('route:cache', $progress->lastWarning);
         $this->assertStringContainsString('route:clear', $progress->lastWarning);
-        $this->assertStringContainsString('optimize:clear', $progress->lastWarning);
     }
 
     private function invokeInitMissingRouteHandler(\Psalm\Progress\Progress $progress): void
