@@ -43,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findUnknownFilesystemDisks);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -229,6 +230,37 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->findMissingViews);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function invalid_find_unknown_filesystem_disks_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findUnknownFilesystemDisks value 'yes'");
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]
@@ -492,6 +524,7 @@ final class PluginConfigTest extends TestCase
             . '<resolveConfigReturnTypes value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUnknownFilesystemDisks value="true" />'
             . '<experimental value="true" />'
             . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
@@ -506,6 +539,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnknownFilesystemDisks);
         $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);

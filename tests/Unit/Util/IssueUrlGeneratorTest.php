@@ -156,6 +156,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: true', $body);
         $this->assertStringContainsString('- findMissingTranslations: false', $body);
         $this->assertStringContainsString('- findMissingViews: false', $body);
+        $this->assertStringContainsString('- findUnknownFilesystemDisks: false', $body);
         // Tri-state default (null) renders as "auto (...)" with the resolved
         // class_exists() outcome so triagers know whether the handler actually ran.
         // The plugin's own composer.json does not depend on laravel/octane, so the
@@ -177,6 +178,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '<resolveDynamicWhereClauses value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUnknownFilesystemDisks value="true" />'
             . '<findOctaneIncompatibleBinding value="true" />'
             . '<failOnInternalError value="true" />'
             . '</pluginClass>',
@@ -189,6 +191,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: false', $body);
         $this->assertStringContainsString('- findMissingTranslations: true', $body);
         $this->assertStringContainsString('- findMissingViews: true', $body);
+        $this->assertStringContainsString('- findUnknownFilesystemDisks: true', $body);
         $this->assertStringContainsString('- findOctaneIncompatibleBinding: true', $body);
         $this->assertStringContainsString('- failOnInternalError: true', $body);
     }
