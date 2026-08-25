@@ -71,6 +71,25 @@ final class MissingRouteEmissionTest extends TestCase
     }
 
     /**
+     * PluginConfig::fromXml() enables findMissingRoutes under `<experimental>` unless the
+     * project sets it explicitly (matching findSerializedQueuedModels's own convention), and
+     * ExperimentalIssuePolicy separately promotes MissingRoute's severity to error whenever
+     * `<experimental>` is set. This fixture config carries neither `findMissingRoutes` nor an
+     * explicit `issueHandlers` entry, so both mechanisms fire from `<experimental value="true" />`
+     * alone: the rule turns on AND its findings report as errors, proving the two independent
+     * gates (enablement and severity) combine coherently rather than one silently overriding
+     * or masking the other.
+     */
+    #[Test]
+    public function experimental_alone_both_enables_the_rule_and_promotes_its_severity(): void
+    {
+        $findings = $this->runPsalmAndCollectFindings('psalm-experimental-auto-enable.xml');
+
+        $this->assertCount(8, $findings);
+        $this->assertSame(\array_fill(0, 8, 'error'), \array_column($findings, 'severity'));
+    }
+
+    /**
      * @return list<array{type: string, message: string, severity: string}>
      */
     private function runPsalmAndCollectFindings(string $config = 'psalm.xml'): array
