@@ -50,7 +50,7 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 </plugins>
 ```
 
-The plugin bails on the check entirely, with no findings at all, when the booted application resolves zero named routes. This avoids reporting every route name as missing when the plugin simply has no route table to check against. Two situations produce that empty table: a package/library project analysed through the Testbench fallback (which never loads an application's route files, and produces no warning, since that is the expected shape for a non-application analysis target) and an application whose routes are cached (`route:cache`) but whose cache file yields no named routes (which does produce a warning naming `route:clear` / `optimize:clear`, since a real application with real routes silently going unchecked is worth flagging).
+The plugin bails on the check entirely, with no findings at all, when the booted application resolves zero named routes. This avoids reporting every route name as missing when the plugin simply has no route table to check against. Two situations produce that empty table: a package/library project analysed through the Testbench fallback (which never loads an application's route files, and produces no warning, since that is the expected shape for a non-application analysis target) and an application whose route cache itself carries no named routes (which does produce a warning naming `route:cache` and `route:clear`, since a real application with real routes silently going unchecked is worth flagging).
 
 ## Limitations
 
@@ -59,4 +59,5 @@ The plugin bails on the check entirely, with no findings at all, when the booted
 - A call site guarded by `Route::has('name')` is not tracked — the guarded branch still reports if the name is unregistered in the analysed boot
 - Routes registered conditionally (behind a feature flag, an env check, or a package's own conditional registration) can produce a false positive if the plugin's boot doesn't register them the same way production does
 - Blade templates are out of scope — only PHP call sites are checked
-- A compiled route cache (`route:cache`) loads into a route collection whose name lookup the plugin cannot read the same way it reads a live route-file boot. When that happens the check disables itself for the run and warns, rather than reading the cache file directly or silently reporting nothing
+- When `bootstrap/cache/routes-v7.php` is present, named routes are read from it, the same as from a live route-file boot
+- A stale route cache (one written before a route was added, renamed, or given a name) can produce a false positive, reporting a route that does exist because the cache predates it. Running `php artisan route:cache` again, or `php artisan route:clear`, resolves it. This is a known, accepted limitation of checking against whatever route table the analysed boot actually resolves

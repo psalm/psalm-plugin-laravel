@@ -40,17 +40,21 @@ use Psalm\Type\Union;
  * so it is skipped too — a deliberate false-negative, not a bug.
  *
  * The named-route table is populated once per invocation from the booted app's router
- * (see `Plugin::initMissingRouteHandler()`). When that table comes back empty, the handler
- * stays disabled entirely rather than reporting every route name as missing. Two situations
- * produce that empty table: a package/library project analysed through the Testbench
- * fallback (never loads user route files, no warning) and an application whose routes are
- * cached but whose cache yields no named routes (warns, naming `route:clear` / `optimize:clear`).
+ * (see `Plugin::initMissingRouteHandler()`). A compiled route cache
+ * (`bootstrap/cache/routes-v7.php`) is read the same way a live route-file boot is; the
+ * plugin does not treat a cached boot any differently. When the table comes back empty,
+ * the handler stays disabled entirely rather than reporting every route name as missing.
+ * Two situations produce that empty table: a package/library project analysed through the
+ * Testbench fallback (never loads user route files, no warning) and a route cache that
+ * itself carries no named routes (warns, naming `route:cache` and `route:clear`).
  *
  * Known limitations (by design, not pre-waived accidents): `Route::has()` guards around a
  * call site are not tracked, so a name that is only conditionally missing still reports;
  * conditionally-registered routes (feature flags, env-gated route files) can produce a
- * false positive if the analysing environment doesn't register them; Blade templates are
- * out of scope.
+ * false positive if the analysing environment doesn't register them; a stale route cache
+ * (one written before a route was added, renamed, or before its name was added) can also
+ * produce a false positive, reporting a route that does exist because the cache predates
+ * it, and `route:cache` or `route:clear` resolves it; Blade templates are out of scope.
  *
  * @see https://laravel.com/docs/routing#named-routes
  */
