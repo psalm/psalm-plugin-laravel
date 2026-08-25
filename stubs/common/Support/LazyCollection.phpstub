@@ -137,18 +137,4 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @psalm-variadic
      */
     public function hasAny($key) {}
-
-    /**
-     * Select specific values from the items within the collection.
-     *
-     * Arr::select() maps every item to an array holding only the requested keys and
-     * preserves the outer keys; a null $keys short-circuits to the untouched collection.
-     * The per-item shape depends on the literal key list, which a docblock cannot express.
-     *
-     * @param  \Illuminate\Support\Enumerable<array-key, array-key>|array<array-key, array-key>|string|null  $keys
-     * @return ($keys is null ? static<TKey, TValue> : static<TKey, array<array-key, mixed>>)
-     *
-     * @psalm-variadic
-     */
-    public function select($keys) {}
 }

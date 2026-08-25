@@ -107,19 +107,4 @@ class Collection extends BaseCollection implements QueueableCollection
      * @psalm-variadic
      */
     public function loadMissing($relations) {}
-
-    /**
-     * Select specific values from the items within the collection.
-     *
-     * Overrides the inherited Support\Collection stub: the non-null branch's items shrink to
-     * `array<array-key, mixed>`, which violates `TModel of Model`, so it widens to
-     * `Illuminate\Support\Collection` instead — a widening, not a lie, since the object
-     * returned by Arr::select()-through-newInstance() genuinely IS-A Support\Collection.
-     *
-     * @param  \Illuminate\Support\Enumerable<array-key, array-key>|array<array-key, array-key>|string|null  $keys
-     * @return ($keys is null ? static<TKey, TModel> : \Illuminate\Support\Collection<TKey, array<array-key, mixed>>)
-     *
-     * @psalm-variadic
-     */
-    public function select($keys) {}
 }
