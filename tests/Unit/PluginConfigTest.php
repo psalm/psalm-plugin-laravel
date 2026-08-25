@@ -253,6 +253,73 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_unknown_filesystem_disks_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_explicit_true_with_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks value="true" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_absent_without_experimental_stays_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass />');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_no_value_attribute_treated_as_absent(): void
+    {
+        // A present element without a `value` attribute is auto-detect, same as a
+        // missing element — see xmlOptionalBoolAttr().
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
     public function invalid_find_unknown_filesystem_disks_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="yes" /></pluginClass>');

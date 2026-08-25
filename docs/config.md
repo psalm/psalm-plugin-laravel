@@ -171,7 +171,7 @@ See [MissingView](issues/MissingView.md) for details.
 
 ## `findUnknownFilesystemDisks`
 
-**default**: `false`
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnknownFilesystemDisks />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
 
 When enabled, the plugin checks that literal disk names passed to `Storage::disk()` / `Storage::drive()` (and the same call on an injected `FilesystemManager` or `Factory` contract) are present in `filesystems.disks`. An unknown disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local` — the failure mode is availability, not a wrong write target.
 

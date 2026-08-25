@@ -64,7 +64,9 @@ final readonly class PluginConfig
         $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        $findUnknownFilesystemDisks = self::xmlBoolAttr($config?->findUnknownFilesystemDisks, 'findUnknownFilesystemDisks');
+        // experimental = early access to rules not yet promoted to default; an explicit
+        // value always overrides it, in either direction.
+        $findUnknownFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnknownFilesystemDisks, 'findUnknownFilesystemDisks') ?? $experimental;
         $findSerializedQueuedModels = self::xmlBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
