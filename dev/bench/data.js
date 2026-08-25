@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787695500563,
+  "lastUpdate": 1787696904359,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10420,6 +10420,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.85,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d9e4c0ae1d438b71dc07c66e73970ab3a9b990c",
+          "message": "fix(auth): resolve guard name from string-backed enum case (#1405)\n\nAuth::guard(Guards::Admin) and the AuthManager/Factory DI forms now\nresolve a string-backed enum case argument to its backing value and\nnarrow the return type exactly like the equivalent literal\nguard('admin') call. Int-backed and pure (non-backed) enums, dynamic\ncase expressions, and plain class constants on the enum are left\nalone and fall back to the stub's declared union as before.\n\nRequest::user($guard) is forward-compatible with this same resolution\n(reuses the shared trait) but not usable with an enum today: Laravel's\nown Request::user() docblock still declares `string|null $guard`, so\nPsalm rejects an enum argument there with InvalidArgument before this\nnarrowing is ever reached. It will start working the moment that\ndocblock widens, with no plugin change required.\n\nThe enum case is read from the argument's AST (ClassConstFetch) rather\nthan its inferred Psalm type: for the Auth facade, guard() only exists\nas a parent @method pseudo-declaration, and Psalm has not yet populated\nthe node type provider for the argument by the time the return-type\nprovider runs, so the type-based route silently saw no argument type.\n\nAuthMethodHandler::getMethodParams() also stopped hardcoding a\nstring|null signature for the facade's guard() pseudo-method: with a\nreal enum argument in play that stale signature started rejecting\nvalid calls with a false-positive InvalidArgument. It now copies the\ncanonical facade's own declared @method params (mirroring\nCacheManagerReturnTypeHandler::pseudoMethodParams()), so the signature\ntracks whatever Laravel version is actually installed instead of\nduplicating it.\n\nRefs #1389",
+          "timestamp": "2026-08-26T00:25:24+02:00",
+          "tree_id": "3af5846327f89c2053414483200dbe1b1706cbb2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7d9e4c0ae1d438b71dc07c66e73970ab3a9b990c"
+        },
+        "date": 1787696902969,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.95,
+            "range": "± 0.24",
             "unit": "s"
           },
           {
