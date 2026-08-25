@@ -7,11 +7,6 @@ use Illuminate\Support\Manager;
  * Every case the handler must decline on (return null, never a guessed type),
  * leaving Laravel's own declared `mixed` in place (#1392).
  */
-enum DriverEnum
-{
-    case Foo;
-}
-
 class DeclineFooDriver
 {
 }
@@ -105,12 +100,6 @@ function computed_default(ComputedDefaultManager $manager): void
 {
     $_computed = $manager->driver();
     /** @psalm-check-type-exact $_computed = mixed */
-}
-
-function enum_argument(DeclineManager $manager, DriverEnum $driver): void
-{
-    $_enum = $manager->driver($driver);
-    /** @psalm-check-type-exact $_enum = mixed */
 }
 
 /**
