@@ -29,6 +29,7 @@ final readonly class PluginConfig
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findMissingRoutes,
         public bool $findSerializedQueuedModels,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
@@ -63,6 +64,7 @@ final readonly class PluginConfig
         $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $findMissingRoutes = self::xmlBoolAttr($config?->findMissingRoutes, 'findMissingRoutes');
         // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
@@ -80,6 +82,7 @@ final readonly class PluginConfig
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            findMissingRoutes: $findMissingRoutes,
             findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),

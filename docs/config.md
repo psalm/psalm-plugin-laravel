@@ -26,6 +26,7 @@ Full config example:
         <reportImplicitQueryBuilderCalls value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <findMissingRoutes value="true" />
         <findOctaneIncompatibleBinding value="true" />
         <experimental value="true" />
         <failOnInternalError value="true" />
@@ -167,6 +168,22 @@ See [MissingView](issues/MissingView.md) for details.
 
 ```xml
 <findMissingViews value="true" />
+```
+
+## `findMissingRoutes`
+
+**default**: `false`
+
+When enabled, the plugin checks that `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, and `redirect()->route()` calls reference a route name registered in the booted application.
+
+Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. The check bails entirely when the application boots with no named routes at all (e.g. a package/library project analysed through the Testbench fallback), rather than reporting every route name as missing.
+
+See [MissingRoute](issues/MissingRoute.md) for details, including its known false-negative and false-positive limitations.
+
+### Example
+
+```xml
+<findMissingRoutes value="true" />
 ```
 
 ## `findSerializedQueuedModels`

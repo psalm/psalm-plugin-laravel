@@ -43,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findMissingRoutes);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -232,6 +233,26 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_missing_routes_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingRoutes value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findMissingRoutes);
+    }
+
+    #[Test]
+    public function find_missing_routes_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingRoutes value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findMissingRoutes);
+    }
+
+    #[Test]
     public function report_implicit_query_builder_calls_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="true" /></pluginClass>');
@@ -368,6 +389,17 @@ final class PluginConfigTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid findMissingViews value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function invalid_find_missing_routes_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingRoutes value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findMissingRoutes value 'yes'");
 
         PluginConfig::fromXml($xml);
     }
@@ -559,6 +591,7 @@ final class PluginConfigTest extends TestCase
             . '<resolveConfigReturnTypes value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findMissingRoutes value="true" />'
             . '<experimental value="true" />'
             . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
@@ -573,6 +606,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findMissingRoutes);
         $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);

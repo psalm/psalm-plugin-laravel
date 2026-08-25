@@ -34,6 +34,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        require_once __DIR__ . '/Issues/MissingRoute.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
         $output = $this->getProgress($registration);
         $this->loadInitializationHandlers();
@@ -86,6 +87,10 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
+            if ($pluginConfig->findMissingRoutes) {
+                $this->initMissingRouteHandler($output);
+            }
+
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
@@ -109,6 +114,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        require_once __DIR__ . '/Handlers/Rules/MissingRouteHandler.php';
         require_once __DIR__ . '/Handlers/Application/ContainerResolver.php';
         require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
         require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
@@ -184,6 +190,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Jobs\DispatchableHandler::reset();
         Handlers\Magic\MacroRegistry::reset();
         Handlers\Producers\ProducerReturnTypeHandler::reset();
+        Handlers\Rules\MissingRouteHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -528,6 +535,16 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Rules\SerializedQueuedModelHandler::class);
         }
 
+        // Flag route() / to_route() / URL::route() / Redirect::route() calls that reference
+        // an undefined route name. initMissingRouteHandler() already gated the handler's
+        // internal $enabled flag on a non-empty named-route table, so registering the hooks
+        // here whenever the config flag is set is safe — a package/library boot with no
+        // routes loaded stays silent via that internal gate, not by skipping registration.
+        if ($pluginConfig->findMissingRoutes) {
+            require_once __DIR__ . '/Handlers/Rules/MissingRouteHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\MissingRouteHandler::class);
+        }
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled
@@ -706,6 +723,64 @@ final class Plugin implements PluginEntryPointInterface
         $extensions = $finder->getExtensions();
 
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
+    }
+
+    /**
+     * Read the booted app's named-route table and pass it to MissingRouteHandler.
+     *
+     * A package/library project analysed through the Testbench fallback boots a router
+     * but never loads any user route file, so the table comes back empty — that case is
+     * NOT an error, but init() is deliberately skipped: the handler must stay disabled
+     * rather than treat "no routes known" as "every route name is missing" (mirrors
+     * ApplicationProvider's own bound()-then-verify caution around partial boots).
+     *
+     * refreshNameLookups() mirrors the call ApplicationProvider's CreatesApplication
+     * override makes after boot, in case route names were registered fluently or a
+     * route file overwrote an earlier definition after the router last indexed them.
+     */
+    private function initMissingRouteHandler(\Psalm\Progress\Progress $output): void
+    {
+        $app = ApplicationProvider::getApp();
+
+        if (!$app->bound('router')) {
+            $output->warning(
+                'Laravel plugin: findMissingRoutes is enabled but the router service is not bound. '
+                . 'The MissingRoute check will be skipped.',
+            );
+
+            return;
+        }
+
+        try {
+            /** @var \Illuminate\Routing\Router $router */
+            $router = $app->make('router');
+            $routes = $router->getRoutes();
+            $routes->refreshNameLookups();
+
+            /** @var array<string, true> $names */
+            $names = \array_fill_keys(\array_keys($routes->getRoutesByName()), true);
+        } catch (\Throwable $throwable) {
+            // A throwing router resolution must degrade this one feature, not escape to
+            // __invoke()'s outer catch and disable the whole plugin — same per-probe
+            // policy as resolveViewFactory(). Keep the real cause reachable for --debug.
+            $output->warning(
+                'Laravel plugin: findMissingRoutes is enabled but the router could not be resolved '
+                . '(run with --debug for the underlying cause). The MissingRoute check will be skipped.',
+            );
+            $output->debug("Laravel plugin: resolving the 'router' binding threw: {$throwable->getMessage()}\n");
+
+            return;
+        }
+
+        if ($names === []) {
+            // No named routes known to this boot (most commonly: a package/library
+            // project with no app route files). Reporting every route name as missing
+            // would be all false positives, so the handler stays disabled — no warning,
+            // since this is the expected shape for a non-application analysis target.
+            return;
+        }
+
+        Handlers\Rules\MissingRouteHandler::init($names);
     }
 
     /**
