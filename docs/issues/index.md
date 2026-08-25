@@ -11,7 +11,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [NoEnvOutsideConfig](NoEnvOutsideConfig.md) — `env()` called outside the application's config directory
 - [InvalidConsoleArgumentName](InvalidConsoleArgumentName.md) — `argument()` references undefined console command argument
 - [InvalidConsoleOptionName](InvalidConsoleOptionName.md) — `option()` references undefined console command option
-- [MissingView](MissingView.md) — `view()` references a non-existent Blade template (opt-in)
+- [MissingView](MissingView.md) — a view name passed to `view()`, `Factory`, `ResponseFactory`, `Router`, `MailMessage`, or `TestResponse` methods references a non-existent Blade template (opt-in)
 - [MissingTranslation](MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [SerializedQueuedModel](SerializedQueuedModel.md) — a queued class holds an Eloquent model in a property without reaching `SerializesModels`, so the whole model is written into the queue payload
 - [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
