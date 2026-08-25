@@ -13,6 +13,7 @@ use PhpParser\Node\Name;
 use Psalm\LaravelPlugin\Handlers\Auth\Concerns\ExtractsGuardNameFromCallLike;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
 use Psalm\Type;
 
 /**
@@ -81,7 +82,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
             return $default_return_type;
         }
 
-        $guard = self::findGuardNameInCallChain($statement);
+        $guard = self::findGuardNameInCallChain($statement, $event->getSource());
 
         $is_guard_known = \is_string($guard);
         if (!$is_guard_known) {
@@ -110,7 +111,7 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
      * ->guard($guard) method call or auth($guard) helper call.
      * Return null when such method nof found (so we don't know which guard used).
      */
-    private static function findGuardNameInCallChain(MethodCall $methodCall): ?string
+    private static function findGuardNameInCallChain(MethodCall $methodCall, StatementsSource $source): ?string
     {
         $call_contains_guard_name = null;
 
@@ -152,6 +153,6 @@ final class GuardHandler implements MethodReturnTypeProviderInterface
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
-        return self::getGuardNameFromFirstArgument($call_contains_guard_name, $default_guard);
+        return self::getGuardNameFromFirstArgument($call_contains_guard_name, $default_guard, $source);
     }
 }
