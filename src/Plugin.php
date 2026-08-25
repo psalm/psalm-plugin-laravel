@@ -383,6 +383,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ArrGetHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
