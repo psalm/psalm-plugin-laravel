@@ -64,7 +64,13 @@ final readonly class PluginConfig
         $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        $findMissingRoutes = self::xmlBoolAttr($config?->findMissingRoutes, 'findMissingRoutes');
+        // experimental = early access to rules not yet promoted to default; an explicit
+        // value always overrides it, in either direction. This governs ENABLEMENT, distinct
+        // from ExperimentalIssuePolicy, which governs SEVERITY (info vs error) for issues
+        // already listed there — MissingRoute is in both, so <experimental value="true" />
+        // both turns the rule on and reports it as an error, the same combined effect
+        // findSerializedQueuedModels gets below.
+        $findMissingRoutes = self::xmlOptionalBoolAttr($config?->findMissingRoutes, 'findMissingRoutes') ?? $experimental;
         // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
