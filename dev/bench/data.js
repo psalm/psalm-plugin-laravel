@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787694433751,
+  "lastUpdate": 1787695181292,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10355,6 +10355,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f01cbe252449779b611592b1a252d50a247d451c",
+          "message": "feat(support): add Collection/LazyCollection::select() stub (#1399)\n\nAdd a conditional-return stub for select() on Support\\Collection,\nLazyCollection, and Database\\Eloquent\\Collection: a null $keys returns\nthe untouched collection unchanged, any other $keys maps every item\nthrough Arr::select(), which loses the item's original shape (the\nper-item result depends on the literal key list, so the non-null\nbranch widens to array<array-key, mixed>). The Eloquent override\nwidens further to Support\\Collection since array items violate\n`TModel of Model`.\n\nCloses #1388",
+          "timestamp": "2026-08-25T23:56:44+02:00",
+          "tree_id": "03d080b475d165ac8c972d09fa13f1c2ce347a4d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f01cbe252449779b611592b1a252d50a247d451c"
+        },
+        "date": 1787695180471,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.7,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
