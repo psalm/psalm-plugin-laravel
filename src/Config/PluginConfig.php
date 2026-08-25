@@ -67,7 +67,7 @@ final readonly class PluginConfig
         // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
         $findUnknownFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnknownFilesystemDisks, 'findUnknownFilesystemDisks') ?? $experimental;
-        $findSerializedQueuedModels = self::xmlBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
+        $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
