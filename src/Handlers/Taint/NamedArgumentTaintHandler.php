@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Taint;
 
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Eval_;
 use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\Include_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\NullsafeMethodCall;
@@ -63,6 +66,26 @@ use Psalm\Type\TaintKind;
  *   id that also fails `InternalCallMapHandler::getCallablesFromCallMap()` (an unusual internal
  *   name, an unresolvable candidate) falls through to "unresolvable" and strips.
  * - Any callee this handler cannot statically name at all (a dynamic function/class expression).
+ * - Every named argument that lands in a VARIADIC parameter, unconditionally — including when
+ *   that variadic parameter carries a real taint sink of its own and upstream's offset-based
+ *   node id happens to land on it correctly (`vsink(safe: '', html: tainted())` against
+ *   `vsink(string $safe, string ...$values)` with `@psalm-taint-sink html $values` loses a
+ *   genuine `TaintedHtml`), and including when the argument's name matches nothing declared at
+ *   all (`v(zzz: tainted())`). An earlier draft (#1395 round 3) added an exemption for the
+ *   sink-bearing case, gated on the argument's written offset equalling the variadic's declared
+ *   index — but PHP binds a named argument to whichever parameter shares its NAME, not to
+ *   whatever sits at the written offset, so `vsink(extra: 'safe', target: tainted())` (`target:`
+ *   genuinely binds to the earlier, unsunk `$target`) hit that same offset and the exemption
+ *   wrongly preserved it, reopening upstream's own false positive (#1395 round 4). Reverted
+ *   rather than patched further, given the accumulating false-negative and false-positive
+ *   surface each attempt uncovered. A name-based rewrite is tracked in #1406.
+ * - A `static::`/`self::` `StaticCall` written inside a base class resolves against
+ *   `$event->getContext()->self` ({@see resolveClassNamePart}) — the class the CODE is declared
+ *   in, not whatever class is actually receiving the call at runtime. A subclass that overrides
+ *   the called method with a different parameter order is never consulted, so a named argument
+ *   that is correctly attributed against the base class's signature can still be silently
+ *   mis-attributed against the override that runtime dispatch would actually use. Tracked
+ *   in #1406.
  *
  * A corpus scan across 18 real Laravel apps (5,718 MethodCall/NullsafeMethodCall/StaticCall
  * named-argument sites, 329 distinct method names; ~550 FuncCall named-argument sites, 65
@@ -174,10 +197,58 @@ final class NamedArgumentTaintHandler implements
                 continue;
             }
 
+            if (self::isSelfDispatchedSinkSubject($arg->value)) {
+                // Never record a node Psalm's OWN core dispatches AddRemoveTaintsEvent against
+                // for an unrelated reason — see {@see isSelfDispatchedSinkSubject}.
+                continue;
+            }
+
             (self::$namedArgumentValues ??= self::newValueMap())->offsetSet($arg->value, true);
         }
 
         return null;
+    }
+
+    /**
+     * True when `$value` is a node Psalm's OWN core (not this handler) separately dispatches
+     * `AddRemoveTaintsEvent` against, using the value node ITSELF as `$event->getExpr()`, for a
+     * reason that has nothing to do with being a named-argument value. Our `\WeakMap` matches by
+     * node IDENTITY only ({@see removeTaints}), so recording such a node here would make OUR
+     * strip fire on THAT unrelated dispatch too and silently destroy a genuine, independent
+     * finding (MUST-FIX A, #1395 round 3):
+     *
+     * - `Eval_`/`Include_`: `EvalAnalyzer`/`IncludeAnalyzer` build a sink keyed to the
+     *   EXPRESSION ITSELF (`eval`/`include` are the vulnerability, not a return value) and
+     *   dispatch `AddRemoveTaintsEvent($stmt, ...)` on it directly (vendor `EvalAnalyzer.php`
+     *   ~:58, `IncludeAnalyzer.php` ~:130). `outer(label: eval(tainted()))` — recording the
+     *   `Eval_` node for the `label:` mismatch strips `INPUT_EVAL` off the SAME node when
+     *   `EvalAnalyzer` asks about it, erasing a `TaintedEval` finding entirely.
+     * - A `FuncCall` with a DYNAMIC (non-`Name`) callee, or a `New_` with a dynamic
+     *   (non-single-literal) class expression: `FunctionCallAnalyzer.php` ~:855 /
+     *   `NewAnalyzer.php` ~:731 build a `TaintKind::INPUT_CALLABLE` ("variable-call") sink keyed
+     *   to the WHOLE call/instantiation node whenever the callee/class expression itself carries
+     *   taint, and dispatch on that SAME node. `outer(label: $dynamicallyNamedFn())` erases a
+     *   `TaintedCallable` finding the same way.
+     *
+     * `StaticCall`s are NOT included: `StaticCallAnalyzer.php` ~:333 dispatches
+     * `AddRemoveTaintsEvent($stmt, ...)` unconditionally too, but only to apply a method's
+     * OWN `conditionally_removed_taints` (stub-declared conditional escapes) to ITS OWN return
+     * value — the same value we intend to strip, so colliding there is the desired effect, not
+     * an unrelated one.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isSelfDispatchedSinkSubject(Expr $value): bool
+    {
+        if ($value instanceof Eval_ || $value instanceof Include_) {
+            return true;
+        }
+
+        if ($value instanceof FuncCall && !$value->name instanceof Name) {
+            return true;
+        }
+
+        return $value instanceof New_ && !$value->class instanceof Name;
     }
 
     /**
