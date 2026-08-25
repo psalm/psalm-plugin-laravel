@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -78,6 +79,10 @@ final class Plugin implements PluginEntryPointInterface
 
             if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler($output, $viewFactory);
+            }
+
+            if ($pluginConfig->findUnknownFilesystemDisks) {
+                $this->initUnknownFilesystemDiskHandler($output);
             }
 
             // Always called — provides type narrowing for the view() helper regardless
@@ -706,6 +711,45 @@ final class Plugin implements PluginEntryPointInterface
         $extensions = $finder->getExtensions();
 
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
+    }
+
+    /**
+     * Read `filesystems.disks` once from the booted app and arm StorageHandler's
+     * UnknownFilesystemDisk diagnostic with the configured disk names.
+     *
+     * Restricted to a real `bootstrap/app.php` boot (ApplicationProvider::getBootMode()
+     * === 'bootstrap'): the Testbench package-mode fallback boots Testbench's own bundled
+     * skeleton config, not the analysed project's, so flagging disk names against that
+     * config would be pure noise rather than project truth. A degraded boot can still
+     * leave the mode at 'bootstrap' with an incomplete config load, so the disk list is
+     * also required to be non-empty before the diagnostic is armed.
+     */
+    private function initUnknownFilesystemDiskHandler(\Psalm\Progress\Progress $output): void
+    {
+        if (ApplicationProvider::getBootMode() !== 'bootstrap') {
+            return;
+        }
+
+        try {
+            $configured = ConfigRepositoryProvider::get()->get('filesystems.disks');
+        } catch (\Throwable $throwable) {
+            $output->debug("Laravel plugin: reading filesystems.disks threw: {$throwable->getMessage()}\n");
+
+            return;
+        }
+
+        if (!\is_array($configured) || $configured === []) {
+            $output->warning(
+                'Laravel plugin: findUnknownFilesystemDisks is enabled but filesystems.disks resolved '
+                . 'empty (possibly a degraded boot). The UnknownFilesystemDisk check will be skipped.',
+            );
+
+            return;
+        }
+
+        $disks = \array_map(static fn(int|string $name): string => (string) $name, \array_keys($configured));
+
+        Handlers\Filesystem\StorageHandler::init($disks);
     }
 
     /**

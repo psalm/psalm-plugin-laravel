@@ -87,6 +87,7 @@ final class IssueUrlGenerator
             '- reportImplicitQueryBuilderCalls: ' . self::formatBool($pluginConfig->reportImplicitQueryBuilderCalls),
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
+            '- findUnknownFilesystemDisks: ' . self::formatBool($pluginConfig->findUnknownFilesystemDisks),
             '- findSerializedQueuedModels: ' . self::formatBool($pluginConfig->findSerializedQueuedModels),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
