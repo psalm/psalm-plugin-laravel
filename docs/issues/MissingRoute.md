@@ -50,7 +50,7 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 </plugins>
 ```
 
-The plugin bails on the check entirely — no findings at all — when the booted application resolves zero named routes (for example, a package/library project analysed through the Testbench fallback, which never loads an application's route files). This avoids reporting every route name as missing when the plugin simply has no route table to check against.
+The plugin bails on the check entirely, with no findings at all, when the booted application resolves zero named routes. This avoids reporting every route name as missing when the plugin simply has no route table to check against. Two situations produce that empty table: a package/library project analysed through the Testbench fallback (which never loads an application's route files, and produces no warning, since that is the expected shape for a non-application analysis target) and an application whose routes are cached (`route:cache`) but whose cache file yields no named routes (which does produce a warning naming `route:clear` / `optimize:clear`, since a real application with real routes silently going unchecked is worth flagging).
 
 ## Limitations
 
@@ -59,4 +59,4 @@ The plugin bails on the check entirely — no findings at all — when the boote
 - A call site guarded by `Route::has('name')` is not tracked — the guarded branch still reports if the name is unregistered in the analysed boot
 - Routes registered conditionally (behind a feature flag, an env check, or a package's own conditional registration) can produce a false positive if the plugin's boot doesn't register them the same way production does
 - Blade templates are out of scope — only PHP call sites are checked
-- A stale compiled route cache (`route:cache`) is not detected as such; the plugin always reads the live route table from the booted application, not the cache file
+- A compiled route cache (`route:cache`) loads into a route collection whose name lookup the plugin cannot read the same way it reads a live route-file boot. When that happens the check disables itself for the run and warns, rather than reading the cache file directly or silently reporting nothing
