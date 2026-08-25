@@ -22,7 +22,20 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     public function items(): array {}
 
     /**
-     * @return \Illuminate\Support\Collection<TKey, TValue>
+     * paginate()/simplePaginate()/cursorPaginate() on an Eloquent\Builder always hold an
+     * Eloquent\Collection at runtime; DB::table(...) rows (stdClass) and manually-constructed
+     * paginators stay on the plain Support\Collection this class natively wraps. The
+     * conditional keys off TValue, so it's a deliberate FN on manual construction: `new
+     * LengthAwarePaginator([$model], ...)`, `new LengthAwarePaginator(collect([$model]), ...)`
+     * and `setCollection(collect([$model]))` all hold a plain Support\Collection even though
+     * TValue is a Model, because the constructor/setCollection() never upgrade the wrapped
+     * collection class — only Eloquent\Builder's own pagination methods do.
+     *
+     * `Model::__toString()` exists (CanBeEscapedWhenCastToString), so a plain `string` TValue
+     * makes `TValue is Model` undecidable and both branches merge into a union. Pre-existing
+     * house behaviour: Eloquent\Collection::map() has the identical trade-off.
+     *
+     * @psalm-return (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>)
      */
     public function getCollection(): \Illuminate\Support\Collection {}
 
@@ -119,7 +132,10 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
     public function items(): array {}
 
     /**
-     * @return \Illuminate\Support\Collection<TKey, TValue>
+     * See AbstractPaginator::getCollection() above for the full conditional-return rationale
+     * (provenance gap on manual construction; string-vs-Model undecidability).
+     *
+     * @psalm-return (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>)
      */
     public function getCollection(): \Illuminate\Support\Collection {}
 

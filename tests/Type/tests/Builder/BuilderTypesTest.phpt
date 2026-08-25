@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
-use Illuminate\Support\Collection as SupportCollection;
 use App\Models\Customer;
 use App\Models\Vehicle;
 
@@ -106,8 +105,9 @@ final class EloquentBuilderCustomerRepository
         $paginator = Customer::query()->paginate();
         /** @psalm-check-type-exact $paginator = LengthAwarePaginator<int, Customer> */
 
+        // getCollection() narrows to Eloquent\Collection when TValue is a Model (issue #1384).
         $_collection = $paginator->getCollection();
-        /** @psalm-check-type-exact $_collection = SupportCollection<int, Customer> */
+        /** @psalm-check-type-exact $_collection = Collection<int, Customer> */
 
         return $paginator;
     }
