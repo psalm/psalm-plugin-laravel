@@ -11,6 +11,7 @@ use PhpParser\Node\Stmt;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -63,10 +64,30 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         }
 
         try {
-            return $codebase->methods->getStorage($creatorId)->return_type;
+            $returnType = $codebase->methods->getStorage($creatorId)->return_type;
         } catch (\UnexpectedValueException) {
             return null;
         }
+
+        if (!$returnType instanceof Union) {
+            return null;
+        }
+
+        // A creator's `: static`/`: self`/`$this` (or a class constant) is anchored to the
+        // DECLARING class syntactically but must resolve against the CALLED $receiver — a
+        // raw pass-through leaves `static` unresolved and a caller checking against the
+        // concrete subclass sees a bogus `Declaring&static` instead of $receiver itself.
+        // `final: true` mirrors BuilderScopeHandler::appearingScopeClass()'s reasoning: the
+        // called class is already exactly known here, so collapse to the plain class rather
+        // than an open-ended intersection.
+        return TypeExpander::expandUnion(
+            $codebase,
+            $returnType,
+            $creatorId->fq_class_name,
+            $receiver,
+            null,
+            final: true,
+        );
     }
 
     /**
