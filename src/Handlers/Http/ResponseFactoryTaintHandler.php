@@ -98,13 +98,23 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     private const HEADER_NAME_LOWER = '-abcdefghijklmnopqrstuvwxyz';
 
     /**
-     * A declared media type never sniffed as HTML per the MIME-sniffing spec. `html` and `xml`
-     * cover `text/html`, `application/xhtml+xml`, every `*+xml` suffix (XML renders an
-     * XHTML-namespaced `<script>`), and `image/svg+xml`. `multipart/*` is excluded because its
-     * parts are not the declared type at all. Everything else well-formed, vendor download types
-     * included, is exempt.
+     * Per the WHATWG MIME Sniffing spec (https://mimesniff.spec.whatwg.org/), a supplied
+     * Content-Type is returned unchanged for every essence except the narrow exception set in
+     * {@see UNSAFE_MEDIA_TYPE_ESSENCES}. Outside that set, `html` and `xml` cover `text/html`,
+     * `application/xhtml+xml`, every `*+xml` suffix (XML renders an XHTML-namespaced `<script>`),
+     * and `image/svg+xml`. `multipart/*` is excluded because its parts are not the declared type
+     * at all. Everything else well-formed, vendor download types included, is exempt.
      */
     private const UNSAFE_MEDIA_TYPE_NEEDLES = ['html', 'xml'];
+
+    /**
+     * The essences the WHATWG MIME Sniffing spec's "rules for identifying an unknown MIME type"
+     * fall through to sniffing for, whose result CAN be `text/html`: an undefined supplied type,
+     * or one whose essence is `unknown/unknown`, `application/unknown`, or the wildcard-over-
+     * wildcard essence (a bare `*` on both sides of the slash). The wildcard essence never reaches
+     * this list: the token regex in {@see isSafeContentType()} already rejects a bare `*`.
+     */
+    private const UNSAFE_MEDIA_TYPE_ESSENCES = ['unknown/unknown', 'application/unknown'];
 
     #[\Override]
     public static function beforeAddIssue(BeforeAddIssueEvent $event): ?bool
@@ -402,8 +412,12 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         }
 
         // Only the leading literal is trusted; the interpolated or concatenated suffix is never
-        // inspected. Nothing that can appear after a literal `attachment;` parameter separator can
-        // retract the token, so the prefix alone is as strong a proof as an all-literal value.
+        // inspected. True of the header GRAMMAR: nothing that can follow a literal `attachment;`
+        // parameter separator can retract the token itself. ACCEPTED gap at runtime: a CR/LF
+        // arriving through the unproven suffix still drops the whole header the way
+        // isAttachmentDisposition()'s docblock below describes for an all-literal value, and
+        // Symfony's Response::prepare() then defaults Content-Type to text/html, rendering the
+        // tainted body. The guard two lines down only covers the literal prefix.
         $prefix = self::literalPrefix($value);
 
         return $prefix !== null
@@ -478,6 +492,13 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         $mediaType = \trim(\explode(';', \strtolower($value), 2)[0]);
 
         if (\preg_match('~^[0-9a-z!#$&^_.+-]+/[0-9a-z!#$&^_.+-]+$~', $mediaType) !== 1) {
+            return false;
+        }
+
+        // The exact essences the sniffing spec can still turn into text/html; see the const
+        // docblock. Case-folded and parameter-stripped above, so `Application/Unknown;
+        // charset=x` is caught here too.
+        if (\in_array($mediaType, self::UNSAFE_MEDIA_TYPE_ESSENCES, true)) {
             return false;
         }
 

@@ -185,6 +185,13 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'content type application xml' => ['$r->make($c, 200, ["Content-Type" => "application/xml"])', false];
         yield 'content type multipart' => ['$r->make($c, 200, ["Content-Type" => "multipart/form-data"])', false];
         yield 'content type malformed' => ['$r->make($c, 200, ["Content-Type" => "not-a-media-type"])', false];
+        // WHATWG MIME Sniffing's "rules for identifying an unknown MIME type" fall through to
+        // sniffing for exactly these two essences (plus `*/*`, already rejected by the token
+        // regex), and that sniffing CAN return text/html.
+        yield 'content type unknown/unknown' => ['$r->make($c, 200, ["Content-Type" => "unknown/unknown"])', false];
+        yield 'content type application/unknown' => ['$r->make($c, 200, ["Content-Type" => "application/unknown"])', false];
+        yield 'content type unknown essence case-folded with parameters' => ['$r->make($c, 200, ["Content-Type" => "Application/Unknown; charset=x"])', false];
+        yield 'content type unknown essence via a single-assignment variable' => ['function f($r, $c) { $headers = ["Content-Type" => "unknown/unknown"]; $r->make($c, 200, $headers); }', false];
         yield 'content type non-literal value' => ['$r->make($c, 200, ["Content-Type" => $type])', false];
         yield 'content type duplicate' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "content-type" => "text/csv"])', false];
         yield 'content type underscore spelling alone' => ['$r->make($c, 200, ["Content_Type" => "text/csv"])', false];
