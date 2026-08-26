@@ -14,8 +14,8 @@ use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
 /**
  * `AddRemoveTaintsEvent` does not identify the enclosing method or parameter offset, so the handler
  * scopes removal through the identity of the recorded content node. These tests pin the two
- * properties that keeps sound: an entry never outlives the node it was recorded for, and the file
- * hook still drops whatever a mid-file analysis throw left behind.
+ * properties that keep that sound: an entry never outlives the node it was recorded for, and the
+ * file hook still drops whatever a mid-file analysis throw left behind.
  */
 #[CoversClass(ResponseFactoryTaintHandler::class)]
 final class ResponseFactoryTaintHandlerTest extends TestCase

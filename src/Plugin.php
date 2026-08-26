@@ -483,8 +483,9 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
         // Removes only html taint on `make($content, $status, $headers)` calls with literal headers
-        // that prove Symfony will not render the content as HTML (#1345). The ResponseFactory stubs
-        // retain their default sinks; this hook scopes the narrow exception to the exact call site.
+        // that prove the browser downloads the response instead of rendering it (#1345). The
+        // ResponseFactory stubs retain their default sinks; this hook scopes the narrow exception
+        // to the exact call site.
         require_once __DIR__ . '/Handlers/Http/ResponseFactoryTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Http\ResponseFactoryTaintHandler::class);
 
