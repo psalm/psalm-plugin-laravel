@@ -207,15 +207,14 @@ final class ResponseFactoryTaintHandler implements
     /** @psalm-pure */
     private static function isAttachmentDisposition(string $disposition): bool
     {
-        $disposition = \trim($disposition);
-
-        // `\s` in the parameter branch would let a CR/LF smuggled into the value count as proof,
-        // but PHP refuses to emit such a header, so the response is served without it.
+        // Checked on the RAW value, before trim(): trim() eats a boundary CR/LF/NUL and would
+        // approve a value PHP still refuses to emit at runtime (the header is dropped, the
+        // response renders as HTML), and `\s` in the parameter branch would accept an inner one.
         if (\strpbrk($disposition, "\r\n\0") !== false) {
             return false;
         }
 
-        return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', $disposition) === 1;
+        return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', \trim($disposition)) === 1;
     }
 
     private static function isExactResponseFacade(StaticCall $call): bool

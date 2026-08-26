@@ -53,6 +53,7 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
     ]);
     $response->make($request->input('dynamic-key'), 200, ['Content-' . 'Disposition' => 'attachment']);
     $response->make($request->input('crlf-disposition'), 200, ['Content-Disposition' => "attachment;\nX-Injected: x"]);
+    $response->make($request->input('trailing-newline-disposition'), 200, ['Content-Disposition' => "attachment\n"]);
     $response->make(content: $request->input('named-arguments'), status: 200, headers: ['Content-Disposition' => 'attachment']);
     $custom->make((string) $request->input('custom'), 200, ['Content-Disposition' => 'attachment']);
 }
@@ -85,6 +86,7 @@ function makeThroughRootAliasFacade(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
