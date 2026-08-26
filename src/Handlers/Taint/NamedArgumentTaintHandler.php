@@ -429,6 +429,10 @@ final class NamedArgumentTaintHandler implements
      * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler::beforeAnalyzeFile}
      * for why per-file (not per-function-like) is correct here too.
      *
+     * The only branch here with no test: deleting this flush fails nothing, because a stale
+     * record needs PHP to reissue a freed node's object handle, which no fixture can force.
+     * WhereColumn's equivalent bug was found in the wild, so treat a change here as unguarded.
+     *
      * @psalm-external-mutation-free
      */
     #[\Override]
