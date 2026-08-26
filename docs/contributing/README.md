@@ -221,21 +221,16 @@ Narrow the finding at emission time, not in the taint graph.
 `ResponseFactoryTaintHandler` is the reference shape: it implements only
 `BeforeAddIssueInterface`, matches the issue's journey tail against the sink's
 labels, re-checks the call site, and returns `false` to drop the finding. Graph
-level removal (`RemoveTaintsInterface`) cannot express "this call site only":
-`AddRemoveTaintsEvent` carries neither a method id nor an argument offset, so the
-removal is keyed on an AST node, and Psalm dispatches the event for that node a
-second time while fetching its own callee's return type. The removal then lands on
-a shared, project wide `@psalm-flow` edge and silences unrelated flows. See
-[Architecture Decisions](decisions.md) for the full dead end record.
+level removal (`RemoveTaintsInterface`) cannot express "this call site only" and
+leaks onto shared flow edges; [Architecture Decisions](decisions.md) records why,
+along with the alternatives already ruled out.
 
-An emission time handler must be stateless. Taint findings are resolved in the
-MAIN process after the worker pool exits (`Analyzer::analyzeFiles()`), while type
-issues are emitted inside the workers, so nothing a per expression or per file
-hook recorded survives to `beforeAddIssue()`. Re-derive every fact from the issue
-plus `Codebase::getStatementsForFile()`, which reads the parser cache. The hook
-also fires for every issue in the run, so bail on the issue class first and only
-then do anything expensive. Every uncertain path returns `null` and keeps the
-finding.
+Such a handler has to be stateless, because the analysis hooks run in the worker
+processes and taint issues are emitted only after those exit. Re-derive every fact
+from the issue plus `Codebase::getStatementsForFile()`, which reads the parser
+cache. The hook fires for every issue in the run, so bail on the issue class first
+and only then do anything expensive. Every uncertain path returns `null` and keeps
+the finding.
 
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 

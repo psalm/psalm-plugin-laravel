@@ -23,15 +23,11 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * Suppresses the `TaintedHtml` finding on `ResponseFactory::make()` content when the call's literal
  * headers prove the browser downloads the response instead of rendering it.
  *
- * The exemption is applied when the issue is emitted, not by editing the taint graph. A graph
- * removal is keyed on an AST node, and Psalm dispatches the removal event for a call node a second
- * time while fetching that callee's own return type, which lands the removal on the callee's shared
- * project-wide `@psalm-flow` edge and silences unrelated flows (vimeo/psalm#11924). Nothing is
- * written here, so nothing can leak: the worst failure mode is a retained finding.
- *
- * Taint findings are emitted in the MAIN process after the worker pool exits, so no state recorded
- * by a per-expression hook survives to this point. Every fact is re-derived from the issue plus a
- * fresh look at the sink's file, and the handler holds no state at all.
+ * The exemption is applied when the issue is emitted and the taint graph is never edited, so no
+ * decision made here can reach another flow. Nothing is carried over from the analysis phase
+ * either: every fact is re-derived from the issue plus a fresh look at the sink's file. Rationale
+ * for both, and the dead end they replace, in `docs/contributing/decisions.md` under "Call-site
+ * sink exemptions are applied at issue emission" (vimeo/psalm#11924).
  *
  * The proof stays deliberately syntactic: the headers argument must be an array literal at the call
  * site with every entry a literal string pair. A variable holding the very same attachment array
