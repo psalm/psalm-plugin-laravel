@@ -43,6 +43,12 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
     $response->make($request->input('whitespace-parameter'), 200, ['Content-Disposition' => "attachment; \t"]);
     $response->make($request->input('inline-disposition'), 200, ['Content-Disposition' => 'inline; filename="members.csv"']);
     $response->make($request->input('underscore-disposition'), 200, ['Content_Disposition' => 'attachment']);
+    // Symfony folds `_` onto `-` before keying, so these two entries are one header and the last
+    // write wins: the response is served inline while a name-blind proof would read an attachment.
+    $response->make($request->input('underscore-shadowed-disposition'), 200, [
+        'Content-Disposition' => 'attachment',
+        'Content_Disposition' => 'inline',
+    ]);
     $response->make($request->input('duplicate-disposition'), 200, [
         'Content-Disposition' => 'attachment',
         'content-disposition' => 'attachment',
@@ -69,6 +75,7 @@ function makeThroughRootAliasFacade(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

@@ -43,7 +43,14 @@ key and a literal string value. A variable holding the very same attachment
 array keeps the finding, which makes it the most likely false positive to meet
 in real code. Dynamic, duplicate, list valued, underscore named, or non
 attachment dispositions continue to report, as do all content type only
-responses and every named argument call. This applies to the concrete factory,
+responses and every named argument call. Header names are folded the way
+Symfony folds them (underscore onto hyphen, then lower case), so a second entry
+that spells the disposition differently but lands on the same header keeps the
+finding: the last write is what the browser sees. A value carrying any control
+character other than a horizontal tab keeps the finding too, since a runtime
+that drops the header serves the response as HTML. Parameters after the
+`attachment` token are not validated, because every browser downloads on the
+token whatever follows it. This applies to the concrete factory,
 its contract, and the `Illuminate\Support\Facades\Response` facade, including a
 receiver whose type intersects one of them with another interface. The root
 `\Response` alias and custom classes with a `make()` method keep the sink. A

@@ -114,7 +114,16 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'list value' => ['$r->make($c, 200, ["Content-Disposition" => ["attachment"]])', false];
         yield 'list entry' => ['$r->make($c, 200, ["attachment"])', false];
         yield 'duplicate disposition' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "content-disposition" => "attachment"])', false];
+        yield 'attachment with an extended filename' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename*=UTF-8\'\'x.csv"])', true];
+        yield 'attachment with a quoted semicolon' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"a;b\""])', true];
+        yield 'attachment with an unknown parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; junk"])', true];
+
+        // Symfony folds `_` onto `-` before keying, so these are one header at runtime and the last
+        // write decides. Both orders keep the sink, and the underscore spelling never proves alone.
         yield 'underscore header' => ['$r->make($c, 200, ["Content_Disposition" => "attachment"])', false];
+        yield 'underscore inline shadows a dashed attachment' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "Content_Disposition" => "inline"])', false];
+        yield 'dashed attachment shadows an underscore inline' => ['$r->make($c, 200, ["Content_Disposition" => "inline", "Content-Disposition" => "attachment"])', false];
+        yield 'underscore duplicate of a dashed attachment' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "CONTENT_DISPOSITION" => "attachment"])', false];
         yield 'inline disposition' => ['$r->make($c, 200, ["Content-Disposition" => "inline; filename=x.csv"])', false];
         yield 'attachment prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachmentx"])', false];
         yield 'missing semicolon' => ['$r->make($c, 200, ["Content-Disposition" => "attachment filename=x.csv"])', false];
@@ -126,6 +135,17 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'trailing newline' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\n"])', false];
         yield 'leading carriage return' => ['$r->make($c, 200, ["Content-Disposition" => "\rattachment"])', false];
         yield 'embedded nul' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\0"])', false];
+
+        // Every other C0 control and DEL, none of which trim() removes on the way to the token.
+        yield 'trailing vertical tab' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\v"])', false];
+        yield 'control in a parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; \x01"])', false];
+        yield 'form feed' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\f"])', false];
+        yield 'trailing delete' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\x7f"])', false];
+        yield 'escape in a filename' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"a\x1bb\""])', false];
+
+        // Horizontal tab stays accepted: it is the one control a field value carries legitimately.
+        yield 'horizontal tab around the token' => ['$r->make($c, 200, ["Content-Disposition" => " \tattachment\t "])', true];
+        yield 'token followed by a tab and text' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\tfilename=x.csv"])', false];
     }
 
     /** The content argument's span is the only link from the emitted issue back to the call site. */

@@ -71,6 +71,15 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         'call to ' . Response::class . '::make',
     ];
 
+    /**
+     * Symfony's header-name folding, copied from `HeaderBag::UPPER` / `HeaderBag::LOWER`. Every
+     * `ResponseHeaderBag` write runs the name through `strtr()` with this pair, so `_` collapses
+     * onto `-` and two spellings of one header collide.
+     */
+    private const HEADER_NAME_UPPER = '_ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    private const HEADER_NAME_LOWER = '-abcdefghijklmnopqrstuvwxyz';
+
     #[\Override]
     public static function beforeAddIssue(BeforeAddIssueEvent $event): ?bool
     {
@@ -184,13 +193,18 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
                 return false;
             }
 
-            $header = \strtolower($item->key->value);
-
-            if ($header !== 'content-disposition') {
+            if (\strtr($item->key->value, self::HEADER_NAME_UPPER, self::HEADER_NAME_LOWER) !== 'content-disposition') {
                 continue;
             }
 
-            if ($hasAttachment || !self::isAttachmentDisposition($item->value->value)) {
+            // Two entries that fold to the same name are one header at runtime, and
+            // `ResponseHeaderBag::set()` replaces, so the LAST one decides. Proof also needs the
+            // canonical spelling: an entry that only reaches this name through Symfony's underscore
+            // folding is exotic enough to keep the sink, as it did before that folding was modelled.
+            if ($hasAttachment
+                || \strtolower($item->key->value) !== 'content-disposition'
+                || !self::isAttachmentDisposition($item->value->value)
+            ) {
                 return false;
             }
 
@@ -203,13 +217,19 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     /** @psalm-pure */
     private static function isAttachmentDisposition(string $disposition): bool
     {
-        // Checked on the RAW value, before trim(): trim() eats a boundary CR/LF/NUL and would
-        // approve a value PHP still refuses to emit at runtime (the header is dropped, the
-        // response renders as HTML), and `\s` in the parameter branch would accept an inner one.
-        if (\strpbrk($disposition, "\r\n\0") !== false) {
+        // Checked on the RAW value, before trim(): trim() eats a boundary CR, LF, NUL or vertical
+        // tab and would approve a value PHP still refuses to emit at runtime (the header is
+        // dropped, the response renders as HTML), and `\s` in the parameter branch would accept an
+        // inner one. Every C0 control and DEL is rejected, horizontal tab excepted: HTAB is the one
+        // control a header field value may legitimately carry, as optional whitespace.
+        if (\preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $disposition) === 1) {
             return false;
         }
 
+        // The token has to end the value or be followed by its parameter list. Parameters
+        // themselves are not validated: every browser downloads on an `attachment` token whatever
+        // follows it, so rejecting an unrecognised parameter would only manufacture false
+        // positives on shapes like `filename*=UTF-8''x.csv`.
         return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', \trim($disposition)) === 1;
     }
 }
