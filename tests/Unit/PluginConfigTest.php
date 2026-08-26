@@ -44,6 +44,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
@@ -248,6 +249,7 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
+        $this->assertFalse($config->findSerializedQueuedModels);
     }
 
     #[Test]
@@ -268,6 +270,69 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->experimental);
+    }
+
+    #[Test]
+    public function find_serialized_queued_models_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findSerializedQueuedModels);
+    }
+
+    #[Test]
+    public function find_serialized_queued_models_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findSerializedQueuedModels value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findSerializedQueuedModels);
+    }
+
+    #[Test]
+    public function find_serialized_queued_models_explicit_true_without_experimental(): void
+    {
+        // The one combination `= $experimental` alone cannot satisfy: the flag must be read.
+        $xml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findSerializedQueuedModels);
+    }
+
+    #[Test]
+    public function find_serialized_queued_models_absent_without_experimental_stays_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass />');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findSerializedQueuedModels);
+    }
+
+    #[Test]
+    public function find_serialized_queued_models_no_value_attribute_treated_as_absent(): void
+    {
+        // A present element without a `value` attribute is auto-detect, same as a
+        // missing element — see xmlOptionalBoolAttr().
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findSerializedQueuedModels />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findSerializedQueuedModels);
     }
 
     #[Test]

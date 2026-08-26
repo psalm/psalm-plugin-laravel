@@ -12,31 +12,15 @@ name: Install smoke test
 # bug fixed in #1189, where a Windows proc_open() launcher regression could pass
 # every Ubuntu-only check.
 
+# Weekly, not per-PR: the matrix needs six cross-OS runners for a check that only
+# moves when the installer, the CLI, or the quickstart in the README changes. A
+# schedule only ever fires on the default branch, so the maintained release lines
+# are covered by checking each one out explicitly (matrix `ref`).
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - README.md
-      - composer.json
-      - bin/psalm-laravel
-      - bin/ci/install-smoke.php
-      - src/Cli/**
-      - src/Plugin.php
-      - src/Bootstrap/ApplicationProvider.php
-      - .github/workflows/install-smoke.yml
-  push:
-    branches: [master]
-    paths:
-      - README.md
-      - composer.json
-      - bin/psalm-laravel
-      - bin/ci/install-smoke.php
-      - src/Cli/**
-      - src/Plugin.php
-      - src/Bootstrap/ApplicationProvider.php
-      - .github/workflows/install-smoke.yml
+  schedule:
+    - cron: '23 5 * * 1' # Mondays, 05:23 UTC
 
-# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -46,35 +30,63 @@ permissions:
 
 jobs:
   install-smoke:
-    # The `app` rows keep #1197's exact job names ("Install smoke (Ubuntu)" etc.)
-    # so any branch-protection check keyed on them stays valid; `package` rows
-    # append " / package". Explicit include rows (rather than an os x kind
-    # cross-product) keep `runs-on: ${{ matrix.runner }}` statically resolvable to
-    # a concrete Blacksmith label — lint-workflows.yml's octoscan step ignores the
-    # runner-label warning by label, which a nested `matrix.os.runner` would turn
-    # into an unresolvable expression and trip as a self-hosted-runner alert.
-    name: Install smoke (${{ matrix.name }}${{ matrix.kind == 'package' && ' / package' || '' }})
+    # Explicit include rows (rather than a ref x os x kind cross-product) keep
+    # `runs-on: ${{ matrix.runner }}` statically resolvable to a concrete Blacksmith
+    # label — lint-workflows.yml's octoscan step ignores the runner-label warning by
+    # label, which a nested `matrix.os.runner` would turn into an unresolvable
+    # expression and trip as a self-hosted-runner alert.
+    name: Install smoke (${{ matrix.ref }} / ${{ matrix.name }}${{ matrix.kind == 'package' && ' / package' || '' }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu
+          - ref: master
+            name: Ubuntu
             runner: blacksmith-2vcpu-ubuntu-2404
             kind: app
-          - name: Ubuntu
+          - ref: master
+            name: Ubuntu
             runner: blacksmith-2vcpu-ubuntu-2404
             kind: package
-          - name: Windows
+          - ref: master
+            name: Windows
             runner: blacksmith-2vcpu-windows-2025
             kind: app
-          - name: Windows
+          - ref: master
+            name: Windows
             runner: blacksmith-2vcpu-windows-2025
             kind: package
-          - name: macOS
+          - ref: master
+            name: macOS
             runner: blacksmith-6vcpu-macos-15
             kind: app
-          - name: macOS
+          - ref: master
+            name: macOS
+            runner: blacksmith-6vcpu-macos-15
+            kind: package
+          - ref: '3.x'
+            name: Ubuntu
+            runner: blacksmith-2vcpu-ubuntu-2404
+            kind: app
+          - ref: '3.x'
+            name: Ubuntu
+            runner: blacksmith-2vcpu-ubuntu-2404
+            kind: package
+          - ref: '3.x'
+            name: Windows
+            runner: blacksmith-2vcpu-windows-2025
+            kind: app
+          - ref: '3.x'
+            name: Windows
+            runner: blacksmith-2vcpu-windows-2025
+            kind: package
+          - ref: '3.x'
+            name: macOS
+            runner: blacksmith-6vcpu-macos-15
+            kind: app
+          - ref: '3.x'
+            name: macOS
             runner: blacksmith-6vcpu-macos-15
             kind: package
     runs-on: ${{ matrix.runner }}
@@ -91,6 +103,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The scheduled run always starts from the default branch; each release
+          # line is smoke-tested against its own tree, installer script included.
+          ref: ${{ matrix.ref }}
           persist-credentials: false
 
       - name: Setup PHP
@@ -124,7 +139,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: install-smoke-${{ matrix.name }}-${{ matrix.kind }}
+          name: install-smoke-${{ matrix.ref }}-${{ matrix.name }}-${{ matrix.kind }}
           path: |
             install-smoke.log
             ${{ runner.temp }}/psalm-install-smoke/composer.json

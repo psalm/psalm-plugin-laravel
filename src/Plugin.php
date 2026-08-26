@@ -216,6 +216,12 @@ final class Plugin implements PluginEntryPointInterface
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
+        // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
+        // Not domain-specific like the other taint handlers below, so it is registered
+        // first rather than filed under any one Laravel feature directory.
+        require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Taint\NamedArgumentTaintHandler::class);
+
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
@@ -362,6 +368,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Collections\CollectionMakeHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/CollectionGroupByKeyByHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\CollectionGroupByKeyByHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionReindexAllHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionReindexAllHandler::class);
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
@@ -372,6 +380,9 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
+
+        require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
@@ -449,7 +460,9 @@ final class Plugin implements PluginEntryPointInterface
         // never sees. See https://github.com/psalm/psalm-plugin-laravel/issues/787.
         require_once __DIR__ . '/Handlers/Facades/FacadeMethodHandler.php';
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/Facades/FacadeStubPrecedenceHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
+        $registration->registerHooksFromClass(Handlers\Facades\FacadeStubPrecedenceHandler::class);
 
         // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
@@ -462,9 +475,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
-        // Copies taint sinks from each mapped facade's forwarding target onto the facade's
+        // Copies taint sinks from each mapped facade's forwarding target onto the surviving
         // `@method` pseudo-methods, so `Storage::get($userInput)` is a sink like the
-        // `Storage::disk()->get($userInput)` chain already is. Order-independent.
+        // `Storage::disk()->get($userInput)` chain already is. FacadeStubPrecedenceHandler
+        // intentionally runs first; real facade stubs carry their own sink metadata.
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
@@ -512,6 +526,12 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->reportImplicitQueryBuilderCalls) {
             require_once __DIR__ . '/Handlers/Rules/ImplicitQueryBuilderCallHandler.php';
             $registration->registerHooksFromClass(Handlers\Rules\ImplicitQueryBuilderCallHandler::class);
+        }
+
+        // Flag queued classes that hold an Eloquent model without reaching SerializesModels.
+        if ($pluginConfig->findSerializedQueuedModels) {
+            require_once __DIR__ . '/Handlers/Rules/SerializedQueuedModelHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\SerializedQueuedModelHandler::class);
         }
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:

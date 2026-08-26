@@ -28,8 +28,8 @@ use Psalm\Storage\MethodStorage;
  * the facade forwards to, which that code path never consults.
  *
  * So: after population, copy each target method's parameter sinks onto the facade's
- * same-named pseudo parameter. This adds detection only — it never removes a sink,
- * and it leaves types, return types and resolution untouched.
+ * same-named surviving pseudo parameter. This adds detection only — it never removes a
+ * sink, and it leaves types, return types and resolution untouched.
  *
  * Why a hardcoded map
  * -------------------
@@ -42,15 +42,19 @@ use Psalm\Storage\MethodStorage;
  *
  * To extend: add `Facade::class => [TargetClass::class]` to {@see self::FACADE_TARGETS},
  * confirm the facade's `@method` tags mirror the target's real signatures, and add a
- * `.phpt` under `tests/Type/tests/TaintAnalysis/`.
+ * `.phpt` under `tests/Type/tests/TaintAnalysis/`. If the facade also has a plugin-owned
+ * real method under `stubs/<layer>/Support/Facades/`, put the sink on that method directly:
+ * {@see FacadeStubPrecedenceHandler} removes its shadowing pseudo-method before this
+ * handler runs, so there is intentionally no pseudo target to decorate.
  *
  * Ordering and lifecycle
  * ----------------------
- * Order among `AfterCodebasePopulated` handlers is irrelevant here: the only inputs are
- * pseudo-method and declaring-method storage, both finalised by the populator before the
- * event fires, and no other handler writes `$sinks`. The handler holds no static state,
- * so it needs no `reset()` in {@see \Psalm\LaravelPlugin\Plugin}: the map is a constant
- * and `|=` is idempotent, so a repeated invocation over the same Codebase is a no-op.
+ * Registration order matters for the available pseudo-method set:
+ * {@see FacadeStubPrecedenceHandler} runs first and removes entries shadowed by real facade
+ * stubs; this handler forwards sinks only onto the entries that remain. No other handler
+ * writes `$sinks`. This handler holds no static state, so it needs no `reset()` in
+ * {@see \Psalm\LaravelPlugin\Plugin}: the map is a constant and `|=` is idempotent, so a
+ * repeated invocation over the same Codebase is a no-op.
  */
 final class FacadeTaintForwardingHandler implements AfterCodebasePopulatedInterface
 {

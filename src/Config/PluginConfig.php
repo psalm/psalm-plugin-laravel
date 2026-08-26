@@ -29,6 +29,7 @@ final readonly class PluginConfig
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findSerializedQueuedModels,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
          *
@@ -62,6 +63,9 @@ final readonly class PluginConfig
         $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        // experimental = early access to rules not yet promoted to default; an explicit
+        // value always overrides it, in either direction.
+        $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
@@ -76,6 +80,7 @@ final readonly class PluginConfig
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
             experimental: $experimental,

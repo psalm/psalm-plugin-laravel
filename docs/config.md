@@ -169,6 +169,22 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findSerializedQueuedModels`
+
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findSerializedQueuedModels />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
+
+When enabled, the plugin flags a class implementing `ShouldQueue` that holds an Eloquent model (or an `Eloquent\Collection`) in a non-static property it declares, when the class has no `__serialize()` or `__sleep()` from any source. Without one the whole model is written into the queue payload instead of a `ModelIdentifier`.
+
+The check is on the resulting `__serialize()`, not on the trait name, so the framework bases that already pull the trait in are silent (`Illuminate\Foundation\Queue\Queueable`, what `make:job` scaffolds since Laravel 11, and `Illuminate\Notifications\Notification`), as is a class that hand-writes its own serialization.
+
+See [SerializedQueuedModel](issues/SerializedQueuedModel.md) for details.
+
+### Example
+
+```xml
+<findSerializedQueuedModels value="true" />
+```
+
 ## `findOctaneIncompatibleBinding`
 
 **default**: omit the element. The plugin then auto-detects: the rule registers if the project depends on `laravel/octane`, and stays off otherwise.
@@ -222,16 +238,12 @@ PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 <experimental value="true" />
 ```
 
-The plugin registers its handlers and type inference normally in every mode. This option only changes the default reporting level for experimental plugin issues:
+Early access to plugin features that are still on their way to becoming the default in a later minor or major release. Enabling it pulls in two directions at once, tightening some checks while turning others on:
 
-- `UnknownModelAttribute`
-- `UndefinedModelRelation`
+- Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
+- [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turns on unless the project sets it explicitly.
 
-If an experimental issue has no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry, the plugin defaults it to `info`, or to `error` when enforcement is enabled.
-
-Any explicit `<PluginIssue>` entry takes complete ownership of that issue. The plugin then leaves both its base reporting level and scoped filters unchanged, regardless of `<experimental>`.
-
-When using scoped filters, specify the desired base level explicitly:
+An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 
 ```xml
 <PluginIssue name="UndefinedModelRelation" errorLevel="info">
@@ -242,8 +254,6 @@ When using scoped filters, specify the desired base level explicitly:
 ```
 
 Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
-
-Experimental issue behaviour may change before graduation. Model serialization array-shape inference (`ModelToArrayShapeHandler`) is a stable v4.15 enhancement and is always active; it is not controlled by this setting. `UnresolvableAppendedModelAttribute` is also stable and remains an error by default in both modes.
 
 ## `failOnInternalError`
 

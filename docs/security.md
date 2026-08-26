@@ -34,14 +34,34 @@ Security scanning runs automatically alongside type analysis, no extra configura
 
 `ResponseFactory::make()` reports XSS for unescaped content because its default
 response is HTML. The finding is removed only for a positional call whose
-literal headers array contains one direct string `Content-Disposition:
-attachment`.
+headers array is written literally at the call site and contains one direct
+string `Content-Disposition: attachment` entry.
 
-Dynamic, duplicate, list valued, underscore named, or non attachment
-dispositions continue to report, as do all content type only responses. This
-applies to the concrete factory, its contract, and the `Response` facade only.
-A custom class with a `make()` method is not assumed to share Laravel's response
-semantics.
+The gate is deliberately syntactic. Every header entry must be a literal string
+key and a literal string value. A variable holding the very same attachment
+array keeps the finding, which makes it the most likely false positive to meet
+in real code. Dynamic, duplicate, list valued, underscore named, or non
+attachment dispositions continue to report, as do all content type only
+responses, and content produced directly by a function or static call (the
+removal cannot be scoped to one call site there). This applies to the concrete
+factory, its contract, and the `Illuminate\Support\Facades\Response` facade.
+The root `\Response` alias and custom classes with a `make()` method keep the
+sink.
+
+### Known limitation: named arguments
+
+Psalm keys a named argument's taint node by the argument's written position rather than by the
+parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
+can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
+taint from a named argument it cannot prove is attributed correctly.
+
+Detection is unaffected when the callee is statically known (a plain function, a facade, a
+static call, a constructor, or a method on a receiver typed as exactly one class) and the
+argument names the parameter at its own position, which covers ordinary application code. It is
+lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
+chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
+expression rather than a variable), an argument captured by a variadic, and a `static::` call
+resolved through a subclass override. Passing the same values positionally always reports.
 
 ### Timing-unsafe secret comparison (CWE-208)
 

@@ -1,0 +1,64 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * Laravel 13.0 added a 4th $fetchUsing param to the select family (laravel/framework#55394).
+ * The common stub keeps the Laravel 12 (3-arg) shape; this override widens the arity for
+ * Laravel 13+ only, so a Laravel 12 project passing a 4th argument still gets an arity error.
+ *
+ * The full class header is copied verbatim because re-declaring the class resets Psalm's
+ * metadata (hard rule 2). Each method restates its own @psalm-taint-sink here even though
+ * the common 3-arg declaration also carries one: each file is the sole authoritative
+ * declaration for its own Laravel line (common for 12, this override for 13+), so both need
+ * the sink. Taint annotations accumulate across stub files (hard rule 4), but this does not
+ * double-report — verified via TaintedSqlDbCursor.phpt, which asserts exactly one TaintedSql.
+ *
+ * stdClass is only true for PDO's DEFAULT fetch mode. $fetchUsing forwards straight to
+ * PDOStatement::fetch(...$fetchUsing) (Connection::cursor()) / fetchAll(...$fetchUsing)
+ * (select()/selectResultSets()), so a non-default mode (e.g. PDO::FETCH_ASSOC) yields arrays,
+ * not stdClass objects. Each @psalm-return keys off whether $fetchUsing is the empty-array
+ * default; a non-empty literal degrades to mixed, and a non-literal array unions both branches
+ * (Psalm can't prove emptiness statically), matching what the runtime can actually produce.
+ */
+class DB extends Facade
+{
+    /**
+     * Run a select statement against the database.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
+     *
+     * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? list<\stdClass> : list<mixed>)
+     */
+    public static function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
+
+    /**
+     * Run a select statement against the database and return a generator.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
+     *
+     * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? \Generator<int, \stdClass> : \Generator<int, mixed>)
+     */
+    public static function cursor($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
+
+    /**
+     * Run a select statement against the database and return all result sets.
+     *
+     * @param  string  $query
+     * @param  array  $bindings
+     * @param  bool  $useReadPdo
+     * @param  array  $fetchUsing
+     *
+     * @psalm-taint-sink sql $query
+     * @psalm-return ($fetchUsing is array{} ? list<list<\stdClass>> : list<list<mixed>>)
+     */
+    public static function selectResultSets($query, $bindings = [], $useReadPdo = true, array $fetchUsing = []) {}
+}

@@ -21,7 +21,9 @@ function test_runtime_probe_resolves_method_not_in_method_catalogue(): string
 }
 
 /**
- * `@method` takes precedence over the runtime probe. The facade declares
+ * `@method` takes precedence over the runtime probe. This is also the negative pin for
+ * FacadeStubPrecedenceHandler: an ordinary application facade outside a plugin-stubbed
+ * first-party facade hierarchy must keep its own pseudo-method declaration. The facade declares
  * `@method static bool isCritical()` but `DiagnosticService::isCritical()` returns
  * `string` at runtime — the facade's declaration wins because FacadeMethodHandler
  * explicitly short-circuits when `pseudo_static_methods` contains the method.

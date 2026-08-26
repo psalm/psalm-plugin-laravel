@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
-use Illuminate\Support\Collection as SupportCollection;
 use App\Models\Customer;
 use App\Models\Vehicle;
 
@@ -79,6 +78,22 @@ final class EloquentBuilderCustomerRepository
             });
     }
 
+    /** chunkById() types its callback like chunk() does, both for a hinted and an unhinted parameter. */
+    public function chunkByIdReturnsTemplatedCollection(): void
+    {
+        Customer::query()
+            ->chunkById(10, function (Collection $collection) {
+                /** @psalm-check-type-exact $collection = \Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */
+                echo $collection->count();
+            });
+
+        Customer::query()
+            ->chunkById(10, function ($collection) {
+                /** @psalm-check-type-exact $collection = \Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */
+                echo $collection->count();
+            });
+    }
+
     /**
      * paginate() resolves to the concrete Illuminate\Pagination class (issue #1052),
      * so the concrete-only getCollection() resolves on the result (subsumes #978).
@@ -90,8 +105,9 @@ final class EloquentBuilderCustomerRepository
         $paginator = Customer::query()->paginate();
         /** @psalm-check-type-exact $paginator = LengthAwarePaginator<int, Customer> */
 
+        // getCollection() narrows to Eloquent\Collection when TValue is a Model (issue #1384).
         $_collection = $paginator->getCollection();
-        /** @psalm-check-type-exact $_collection = SupportCollection<int, Customer> */
+        /** @psalm-check-type-exact $_collection = Collection<int, Customer> */
 
         return $paginator;
     }
