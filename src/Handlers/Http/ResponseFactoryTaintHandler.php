@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Http;
 
 use Illuminate\Contracts\Routing\ResponseFactory as ResponseFactoryContract;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\Response;
 use PhpParser\Node;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\String_;
@@ -20,8 +22,9 @@ use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 
 /**
- * Suppresses the `TaintedHtml` finding on `ResponseFactory::make()` content when the call's literal
- * headers prove the browser downloads the response instead of rendering it.
+ * Suppresses the `TaintedHtml` finding on a `ResponseFactory::make()` or `Illuminate\Http\Response`
+ * constructor call when the call's literal headers prove the browser downloads the response instead
+ * of rendering it.
  *
  * The exemption is applied when the issue is emitted and the taint graph is never edited, so no
  * decision made here can reach another flow. Nothing is carried over from the analysis phase
@@ -49,11 +52,13 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      * Journey-tail labels that mark the response factory's html content sink.
      *
      * Derived empirically on Psalm 7.0.0-beta19 by dumping `TaintedInput::$journey` tails for the
-     * concrete, contract, facade, root-alias and `response()` helper call routes. Two properties of
-     * that dump shape this list:
+     * concrete, contract, facade, root-alias, `response()` helper, and `Illuminate\Http\Response`
+     * constructor call routes. Two properties of that dump shape this list:
      *
      * - The tail is the ARGUMENT node feeding the sink, one node short of the sink itself, and its
-     *   label is `call to <declaring class>::<method>`.
+     *   label is `call to <declaring class>::<method>`. The constructor route confirmed the same
+     *   shape: `call to Illuminate\Http\Response::__construct`, with the location spanning the
+     *   `$content` argument exactly as the `make()` labels span theirs.
      * - The root `\Response` alias yields the unqualified label `call to Response::make`. It is left
      *   out, so that alias keeps the sink exactly as it did under the previous receiver check.
      *
@@ -65,6 +70,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         'call to ' . ResponseFactory::class . '::make',
         'call to ' . ResponseFactoryContract::class . '::make',
         'call to ' . Response::class . '::make',
+        'call to ' . HttpResponse::class . '::__construct',
     ];
 
     /**
@@ -120,19 +126,34 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * Locates the `make()` call whose content argument spans exactly `$bounds`.
+     * Locates the `make()` or `new Response()` call whose content argument spans exactly `$bounds`.
      *
-     * The receiver is deliberately not inspected: `parent::make()`, `$this->make()` and
-     * `static::make()` all reach the stubbed sink, and only Psalm's own resolution — already proven
-     * by the journey label — can tell them apart. More than one match is treated as unproven.
+     * The receiver and, for `New_`, the class name are deliberately not inspected: `parent::make()`,
+     * `$this->make()`, `static::make()`, and any `New_` all reach the stubbed sink, and only Psalm's
+     * own resolution — already proven by the journey label — can tell them apart. More than one
+     * match is treated as unproven.
      *
      * @param list<Node\Stmt> $stmts
      * @param array{0: int, 1: int} $bounds
      */
-    private static function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|null
+    private static function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|New_|null
     {
-        /** @psalm-var list<MethodCall|StaticCall> $calls */
+        /** @psalm-var list<MethodCall|StaticCall|New_> $calls */
         $calls = (new NodeFinder())->find($stmts, static function (Node $node) use ($bounds): bool {
+            if ($node instanceof New_) {
+                // getArgs() throws on a first-class callable (`new A(...)` is not valid syntax, but
+                // an anonymous class body could still reach here through a nested closure).
+                if ($node->isFirstClassCallable()) {
+                    return false;
+                }
+
+                $args = $node->getArgs();
+
+                return $args !== []
+                    && $args[0]->value->getStartFilePos() === $bounds[0]
+                    && $args[0]->value->getEndFilePos() + 1 === $bounds[1];
+            }
+
             if ((!$node instanceof MethodCall && !$node instanceof StaticCall)
                 || !$node->name instanceof Identifier
                 || \strtolower($node->name->name) !== 'make'
@@ -160,7 +181,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      * only after every positional one, so a third argument that is neither proves the first two are
      * positional too. The unit tests pin each position rather than the check that catches it.
      */
-    private static function provesLiteralAttachment(MethodCall|StaticCall $call): bool
+    private static function provesLiteralAttachment(MethodCall|StaticCall|New_ $call): bool
     {
         $args = $call->getArgs();
 

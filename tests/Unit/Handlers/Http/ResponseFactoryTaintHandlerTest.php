@@ -6,6 +6,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Http;
 
 use PhpParser\Node;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
@@ -34,6 +35,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
             'call to Illuminate\Routing\ResponseFactory::make',
             'call to Illuminate\Contracts\Routing\ResponseFactory::make',
             'call to Illuminate\Support\Facades\Response::make',
+            'call to Illuminate\Http\Response::__construct',
         ] as $label) {
             $this->assertSame($location, $this->contentLocationOfMakeSink([$this->node('call to something-else'), $this->node($label, $location)]), $label);
         }
@@ -146,6 +148,10 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         // Horizontal tab stays accepted: it is the one control a field value carries legitimately.
         yield 'horizontal tab around the token' => ['$r->make($c, 200, ["Content-Disposition" => " \tattachment\t "])', true];
         yield 'token followed by a tab and text' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\tfilename=x.csv"])', false];
+
+        // #1416 widening 3: the `Illuminate\Http\Response` constructor shares the same sink and proof.
+        yield 'new Response with literal attachment' => ['new \Illuminate\Http\Response($c, 200, ["Content-Disposition" => "attachment"])', true];
+        yield 'new Response with named headers argument' => ['new \Illuminate\Http\Response($c, 200, headers: ["Content-Disposition" => "attachment"])', false];
     }
 
     /** The content argument's span is the only link from the emitted issue back to the call site. */
@@ -183,9 +189,9 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
     {
         $found = (new NodeFinder())->findFirst(
             $this->parse('<?php ' . $call . ';'),
-            static fn(Node $node): bool => $node instanceof MethodCall || $node instanceof StaticCall,
+            static fn(Node $node): bool => $node instanceof MethodCall || $node instanceof StaticCall || $node instanceof New_,
         );
-        $this->assertTrue($found instanceof MethodCall || $found instanceof StaticCall);
+        $this->assertTrue($found instanceof MethodCall || $found instanceof StaticCall || $found instanceof New_);
 
         /** @psalm-var bool */
         return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesLiteralAttachment'))
@@ -196,9 +202,9 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
      * @param list<Node\Stmt> $stmts
      * @param array{0: int, 1: int} $bounds
      */
-    private function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|null
+    private function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|New_|null
     {
-        /** @psalm-var MethodCall|StaticCall|null */
+        /** @psalm-var MethodCall|StaticCall|New_|null */
         return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'findMakeCallWithContentAt'))
             ->invoke(null, $stmts, $bounds);
     }
