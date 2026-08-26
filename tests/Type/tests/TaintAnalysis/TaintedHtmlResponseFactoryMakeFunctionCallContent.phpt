@@ -26,8 +26,13 @@ function frameValue(string $value): string
  * removal lands on the callee's single project-wide argument-to-return edge (`framevalue#1 ->
  * framevalue`): exempting the `make()` call below would silence this unrelated `echo` flow.
  *
- * Order is load-bearing: the edge is last-write-wins, so the would-be-exempted call must be
- * analysed AFTER the unrelated flow it would poison, or this test passes vacuously.
+ * Order decides WHICH failure this test pins: the edge is last-write-wins, so only with the
+ * would-be-exempted call analysed AFTER the unrelated flow does a regression silence the `echo`
+ * finding (the cross-flow leak). Reversed, a regression still fails the test, but only through
+ * the `make()` call's own missing finding — the local strip, not the leak.
+ *
+ * Line numbers in the expectation are exact on purpose: with `%d`, an unrelated extra finding
+ * could stand in for the silenced flow.
  */
 function echoUnrelatedFramedBanner(Request $request): void
 {
@@ -40,6 +45,6 @@ function makeAttachmentFromCallContent(Request $request): void
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
-TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line 39: Detected tainted HTML
+TaintedTextWithQuotes on line 39: Detected tainted text with possible quotes
+TaintedHtml on line 44: Detected tainted HTML
