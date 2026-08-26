@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787731022384,
+  "lastUpdate": 1787731238481,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10525,6 +10525,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.97,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51e8303d487d5b84a34427af74a4faa54d582151",
+          "message": "docs(taint): mark the per-file flush as the one unguarded branch (#1414)\n\nMutation coverage across the handler leaves exactly one branch with no failing\ntest: deleting the flush in beforeAnalyzeFile() fails nothing. That is not an\noversight to close with a fixture — a stale record requires PHP to reissue a\nfreed node's object handle, which no test can force deterministically.\n\nWhereColumnTaintHandler's equivalent bug was found in the wild, so the absence of\na test is worth stating at the method rather than leaving a future editor to\nassume the suite is watching.\n\nRefs #1406.",
+          "timestamp": "2026-08-26T09:57:40+02:00",
+          "tree_id": "6c369e60a8d44281c8fd6824ecc46122796168aa",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/51e8303d487d5b84a34427af74a4faa54d582151"
+        },
+        "date": 1787731237575,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.31,
+            "range": "± 0.86",
             "unit": "s"
           },
           {
