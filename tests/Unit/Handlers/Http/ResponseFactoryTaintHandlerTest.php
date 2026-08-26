@@ -100,7 +100,9 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'static call' => ['Response::make($c, 200, ["Content-Disposition" => "attachment"])', true];
 
         yield 'no headers argument' => ['$r->make($c)', false];
-        yield 'content type only' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', false];
+        // #1416 widening 4: a literal Content-Type naming a media type never sniffed as HTML proves
+        // the exemption on its own, with no Content-Disposition at all.
+        yield 'content type only' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', true];
         yield 'fourth argument' => ['$r->make($c, 200, ["Content-Disposition" => "attachment"], true)', false];
         // PHP allows a named argument only after every positional one, so these three are the only
         // reachable named shapes. The last is the load-bearing one: the earlier two are also caught
@@ -176,6 +178,25 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'concatenated disposition leftmost leaf is not a string' => ['$r->make($c, 200, ["Content-Disposition" => $name . "; attachment"])', false];
         yield 'concatenated disposition split across two literals' => ['$r->make($c, 200, ["Content-Disposition" => "attachment" . "; filename=" . $name])', false];
         yield 'interpolated disposition prefix carries a control character' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;\n{$name}"])', false];
+
+        // #1416 widening 4: a literal Content-Type proof, independent of Content-Disposition.
+        yield 'content type html' => ['$r->make($c, 200, ["Content-Type" => "text/html"])', false];
+        yield 'content type svg xml' => ['$r->make($c, 200, ["Content-Type" => "image/svg+xml"])', false];
+        yield 'content type application xml' => ['$r->make($c, 200, ["Content-Type" => "application/xml"])', false];
+        yield 'content type multipart' => ['$r->make($c, 200, ["Content-Type" => "multipart/form-data"])', false];
+        yield 'content type malformed' => ['$r->make($c, 200, ["Content-Type" => "not-a-media-type"])', false];
+        yield 'content type non-literal value' => ['$r->make($c, 200, ["Content-Type" => $type])', false];
+        yield 'content type duplicate' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "content-type" => "text/csv"])', false];
+        yield 'content type underscore spelling alone' => ['$r->make($c, 200, ["Content_Type" => "text/csv"])', false];
+        yield 'content type control character' => ['$r->make($c, 200, ["Content-Type" => "text/csv\r\nX-Injected: x"])', false];
+        yield 'content type with parameters stripped' => ['$r->make($c, 200, ["Content-Type" => "text/csv; charset=utf-8"])', true];
+        yield 'content type case insensitive' => ['$r->make($c, 200, ["CONTENT-TYPE" => "TEXT/CSV"])', true];
+        yield 'content type vendor download type' => ['$r->make($c, 200, ["Content-Type" => "application/pdf"])', true];
+        // Non-proving entries only need a literal key; an unrelated entry's value may be dynamic.
+        yield 'content type alongside an unrelated dynamic entry' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "X-Custom" => $dynamic])', true];
+        yield 'non-literal key anywhere bails the whole array' => ['$r->make($c, 200, [$key => "value", "Content-Type" => "text/csv"])', false];
+        yield 'new Response with content type only' => ['new \Illuminate\Http\Response($c, 200, ["Content-Type" => "text/csv"])', true];
+        yield 'variable resolved through a content type only assignment' => ['function f($r, $c) { $headers = ["Content-Type" => "text/csv"]; $r->make($c, 200, $headers); }', true];
     }
 
     /** The content argument's span is the only link from the emitted issue back to the call site. */

@@ -30,39 +30,65 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
-### `ResponseFactory::make()` HTML responses
+### `ResponseFactory::make()` and `new Response()` HTML responses
 
-`ResponseFactory::make()` reports XSS for unescaped content because its default
-response is HTML. The finding is dropped only for a positional call whose
-headers array is written literally at the call site and contains one direct
-string `Content-Disposition: attachment` entry. It is dropped as it is reported,
-so no other flow through the same code is affected.
+`ResponseFactory::make()` and the `Illuminate\Http\Response` constructor both
+report XSS for unescaped content because their default response is HTML. The
+finding is dropped for a positional call whose headers array proves either
+that the browser downloads the response instead of rendering it, or that the
+declared content type is never sniffed as HTML. It is dropped as it is
+reported, so no other flow through the same code is affected.
 
-The gate is deliberately syntactic. Every header entry must be a literal string
-key and a literal string value. A variable holding the very same attachment
-array keeps the finding, which makes it the most likely false positive to meet
-in real code. Dynamic, duplicate, list valued, underscore named, or non
-attachment dispositions continue to report, as do all content type only
-responses and every named argument call. Header names are folded the way
-Symfony folds them (underscore onto hyphen, then lower case), so a second entry
-that spells the disposition differently but lands on the same header keeps the
-finding: the last write is what the browser sees. A value carrying any control
-character other than a horizontal tab keeps the finding too, since a runtime
-that drops the header serves the response as HTML. Parameters after the
-`attachment` token are not validated, because every browser downloads on the
-token whatever follows it. This applies to the concrete factory,
-its contract, and the `Illuminate\Support\Facades\Response` facade, including a
-receiver whose type intersects one of them with another interface. The root
-`\Response` alias and custom classes with a `make()` method keep the sink. A
-receiver typed as the factory or its contract is trusted to apply the headers
-argument, as every conforming implementation does. An implementation that
-silently discards its headers argument violates that contract and is out of
-scope.
+The proof is deliberately syntactic, never control-flow aware, and stays two
+independent checks over the same header entries; either alone is enough:
+
+- **Attachment disposition.** A literal `Content-Disposition: attachment`
+  entry, or one whose value is an interpolated string or `.`-concatenation
+  whose literal leading part already contains the `attachment;` token
+  (`"attachment; filename=\"{$name}.csv\""`, `'attachment; filename=' . $name`).
+  The interpolated or concatenated suffix is never inspected: nothing that can
+  follow a literal parameter separator can retract the token. A value carrying
+  any control character other than a horizontal tab keeps the finding, since a
+  runtime that drops the header serves the response as HTML. Parameters after
+  the `attachment` token are not validated, because every browser downloads on
+  the token whatever follows it.
+- **Safe content type.** A literal `Content-Type` naming a well-formed media
+  type that is not `text/html`, does not contain `html` or `xml` anywhere
+  (covering every `*+xml` suffix, `application/xml`, and `image/svg+xml` —
+  XML can carry an XHTML-namespaced `<script>`), and does not start with
+  `multipart/`. Every other well-formed media type is exempt, vendor download
+  types included. Parameters after the first `;` (`charset=`, ...) are
+  discarded before matching.
+
+The headers array itself may be written literally at the call site, or held in
+a local variable proven to be a single, unmutated assignment: the enclosing
+function or method assigns it exactly once, before the call, and neither
+reassigns, mutates, passes it elsewhere, nor captures it in a nested closure.
+A variable-variable (`$$x`) or an `extract()`/`compact()`/`get_defined_vars()`
+call anywhere in the same scope keeps the finding regardless, since none of
+those produce the AST nodes the proof looks for. Dynamic, duplicate, list
+valued, underscore named, or non-attachment dispositions continue to report,
+as does a dynamic or malformed content type, a variable that fails any of the
+single-assignment conditions above, and every named argument call. Header
+names are folded the way Symfony folds them (underscore onto hyphen, then
+lower case), so a second entry that spells either header differently but
+lands on the same name keeps the finding for that header. An entry that is
+not itself an attachment or content-type candidate only needs a literal
+string key (to still detect such a duplicate); its value may be any
+expression. This applies to the concrete factory, its contract, and the
+`Illuminate\Support\Facades\Response` facade, including a receiver whose type
+intersects one of them with another interface, plus a direct `new
+Illuminate\Http\Response(...)` call. The root `\Response` alias and custom
+classes with a `make()` method keep the sink. A receiver typed as the factory
+or its contract is trusted to apply the headers argument, as every conforming
+implementation does. An implementation that silently discards its headers
+argument violates that contract and is out of scope.
 
 One accepted gap. All `make()` calls in a project meet at a single taint graph
-node, and Psalm walks that node once, so it already reports only the shortest
-flow reaching it and discards the rest. When that shortest flow is the exempt
-one, the call reports nothing at all instead of reporting one of its flows. The
+node (and, separately, all `new Response()` calls meet at their own), and
+Psalm walks each node once, so it already reports only the shortest flow
+reaching it and discards the rest. When that shortest flow is the exempt one,
+the call reports nothing at all instead of reporting one of its flows. The
 longer flows are discarded whether or not the exemption applies, so this costs
 no coverage relative to running without the plugin.
 

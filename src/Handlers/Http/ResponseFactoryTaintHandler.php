@@ -35,8 +35,8 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 
 /**
  * Suppresses the `TaintedHtml` finding on a `ResponseFactory::make()` or `Illuminate\Http\Response`
- * constructor call when the call's literal headers prove the browser downloads the response instead
- * of rendering it.
+ * constructor call when the call's headers prove the browser downloads the response, or that the
+ * declared content type is never sniffed as HTML, instead of rendering it.
  *
  * The exemption is applied when the issue is emitted and the taint graph is never edited, so no
  * decision made here can reach another flow. Nothing is carried over from the analysis phase
@@ -96,6 +96,15 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     private const HEADER_NAME_UPPER = '_ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
     private const HEADER_NAME_LOWER = '-abcdefghijklmnopqrstuvwxyz';
+
+    /**
+     * A declared media type never sniffed as HTML per the MIME-sniffing spec. `html` and `xml`
+     * cover `text/html`, `application/xhtml+xml`, every `*+xml` suffix (XML renders an
+     * XHTML-namespaced `<script>`), and `image/svg+xml`. `multipart/*` is excluded because its
+     * parts are not the declared type at all. Everything else well-formed, vendor download types
+     * included, is exempt.
+     */
+    private const UNSAFE_MEDIA_TYPE_NEEDLES = ['html', 'xml'];
 
     #[\Override]
     public static function beforeAddIssue(BeforeAddIssueEvent $event): ?bool
@@ -209,7 +218,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         $headers = $args[2]->value;
 
         if ($headers instanceof Array_) {
-            return self::provesAttachment($headers);
+            return self::provesExempt($headers);
         }
 
         if (!$headers instanceof Variable || !\is_string($headers->name)) {
@@ -218,7 +227,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 
         $resolved = self::resolveVariableHeaders($stmts, $call, $headers);
 
-        return $resolved instanceof Array_ && self::provesAttachment($resolved);
+        return $resolved instanceof Array_ && self::provesExempt($resolved);
     }
 
     /**
@@ -244,7 +253,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 
         $scope = self::findEnclosingFunctionLike($stmts, $call);
 
-        if ($scope === null || self::hasDynamicVariableAccess($scope)) {
+        if (!$scope instanceof \PhpParser\Node\FunctionLike || self::hasDynamicVariableAccess($scope)) {
             return null;
         }
 
@@ -328,42 +337,57 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
                 && $node->name instanceof Name
                 && !$node->name instanceof Relative
                 && \in_array(\strtolower($node->name->toString()), ['extract', 'compact', 'get_defined_vars'], true);
-        }) !== null;
+        }) instanceof \PhpParser\Node;
     }
 
-    /** @psalm-mutation-free */
-    private static function provesAttachment(Array_ $headers): bool
+    /**
+     * A literal `Content-Disposition: attachment` entry proves the browser downloads the response
+     * regardless of content type; a literal `Content-Type` naming a media type never sniffed as
+     * HTML proves the opposite direction. Either alone exempts the call, checked in one pass so a
+     * duplicate of one header cannot be masked by an unrelated proof on the other.
+     *
+     * Every entry needs a literal string key so a duplicate fold can always be detected; an entry
+     * that is not itself proving disposition or content type may carry any value, since it cannot
+     * retract a proof made by a different entry.
+     *
+     * @psalm-mutation-free
+     */
+    private static function provesExempt(Array_ $headers): bool
     {
-        $hasAttachment = false;
+        $dispositionCount = 0;
+        $dispositionProven = false;
+        $contentTypeCount = 0;
+        $contentTypeProven = false;
 
         foreach ($headers->items as $item) {
-            if ($item === null || $item->unpack || !$item->key instanceof String_) {
-                return false;
-            }
-
-            if (\strtr($item->key->value, self::HEADER_NAME_UPPER, self::HEADER_NAME_LOWER) !== 'content-disposition') {
-                if (!$item->value instanceof String_) {
-                    return false;
-                }
-
-                continue;
-            }
-
-            // Two entries that fold to the same name are one header at runtime, and
-            // `ResponseHeaderBag::set()` replaces, so the LAST one decides. Proof also needs the
-            // canonical spelling: an entry that only reaches this name through Symfony's underscore
-            // folding is exotic enough to keep the sink, as it did before that folding was modelled.
-            if ($hasAttachment
-                || \strtolower($item->key->value) !== 'content-disposition'
-                || !self::provesAttachmentValue($item->value)
+            if ($item === null
+                || $item->unpack
+                || !$item->key instanceof String_
             ) {
                 return false;
             }
 
-            $hasAttachment = true;
+            $folded = \strtr($item->key->value, self::HEADER_NAME_UPPER, self::HEADER_NAME_LOWER);
+
+            if ($folded === 'content-disposition') {
+                $dispositionCount++;
+                // Two entries that fold to the same name are one header at runtime, and
+                // `ResponseHeaderBag::set()` replaces, so the LAST one decides. A second fold
+                // invalidates the proof outright rather than re-checking the newer value: exotic
+                // enough to keep the sink, as it did before folding was modelled.
+                $dispositionProven = $dispositionCount === 1
+                    && \strtolower($item->key->value) === 'content-disposition'
+                    && self::provesAttachmentValue($item->value);
+            } elseif ($folded === 'content-type') {
+                $contentTypeCount++;
+                $contentTypeProven = $contentTypeCount === 1
+                    && \strtolower($item->key->value) === 'content-type'
+                    && $item->value instanceof String_
+                    && self::isSafeContentType($item->value->value);
+            }
         }
 
-        return $hasAttachment;
+        return $dispositionProven || $contentTypeProven;
     }
 
     /** @psalm-mutation-free */
@@ -435,5 +459,38 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         // follows it, so rejecting an unrecognised parameter would only manufacture false
         // positives on shapes like `filename*=UTF-8''x.csv`.
         return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', \trim($disposition)) === 1;
+    }
+
+    /**
+     * `$value` is the raw, un-trimmed header value: the same CRLF/NUL/control-char guard as the
+     * disposition check runs first, because a runtime that drops the header for those bytes serves
+     * the response as HTML regardless of what type was declared. Parameters after the first `;`
+     * (`charset=`, boundary, ...) are not part of the media type and are discarded before matching.
+     *
+     * @psalm-pure
+     */
+    private static function isSafeContentType(string $value): bool
+    {
+        if (\preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $value) === 1) {
+            return false;
+        }
+
+        $mediaType = \trim(\explode(';', \strtolower($value), 2)[0]);
+
+        if (\preg_match('~^[0-9a-z!#$&^_.+-]+/[0-9a-z!#$&^_.+-]+$~', $mediaType) !== 1) {
+            return false;
+        }
+
+        if (\str_starts_with($mediaType, 'multipart/')) {
+            return false;
+        }
+
+        foreach (self::UNSAFE_MEDIA_TYPE_NEEDLES as $needle) {
+            if (\str_contains($mediaType, $needle)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
