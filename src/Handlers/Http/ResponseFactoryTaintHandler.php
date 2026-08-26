@@ -9,13 +9,22 @@ use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\Response;
 use PhpParser\Node;
+use PhpParser\Node\ClosureUse;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
+use PhpParser\Node\Name\Relative;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\NodeFinder;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\ParentConnectingVisitor;
 use Psalm\CodeLocation;
 use Psalm\Issue\TaintedHtml;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
@@ -32,9 +41,12 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * for both, and the dead end they replace, in `docs/contributing/decisions.md` under "Call-site
  * sink exemptions are applied at issue emission" (vimeo/psalm#11924).
  *
- * The proof stays deliberately syntactic: the headers argument must be an array literal at the call
- * site with every entry a literal string pair. A variable holding the very same attachment array
- * keeps the sink. Each such miss fails toward a retained finding, never a dropped one.
+ * The proof stays deliberately syntactic, never control-flow aware. The headers argument must
+ * either be an array literal at the call site, or a local variable proven to hold exactly one
+ * array literal: assigned once, in the same function-like, before the call, never reassigned,
+ * mutated, passed elsewhere, or captured by a nested closure, and the scope must not touch a
+ * variable-variable or `extract()`/`compact()`/`get_defined_vars()`. Each such miss fails toward a
+ * retained finding, never a dropped one.
  *
  * ACCEPTED LIMITATION: every `make()` call in a project shares one sink node, and
  * `TaintFlowGraph::getChildNodes()` walks it once, so its `visited_source_ids` set already discards
@@ -43,8 +55,8 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * this handler; pinned by `TaintedHtmlResponseFactoryMakeSharedSinkKnownLimitation.phpt`.
  *
  * Every private helper below is free of side effects, but the purity annotations follow what Psalm
- * can verify rather than what is true: the two helpers that reach for a call's arguments carry none,
- * because `NodeFinder::find()` and `CallLike::getArgs()` are impure in Psalm's own stubs.
+ * can verify rather than what is true: helpers that reach for a call's arguments or walk the AST
+ * with `NodeFinder`/`NodeTraverser` carry none, because those are impure in Psalm's own stubs.
  */
 final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 {
@@ -106,7 +118,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 
         $call = self::findMakeCallWithContentAt($stmts, $content->getSelectionBounds());
 
-        return $call !== null && self::provesLiteralAttachment($call) ? false : null;
+        return $call !== null && self::provesLiteralAttachment($stmts, $call) ? false : null;
     }
 
     /**
@@ -180,20 +192,140 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      * Testing the LAST argument covers all three positions. PHP allows a named or unpacked argument
      * only after every positional one, so a third argument that is neither proves the first two are
      * positional too. The unit tests pin each position rather than the check that catches it.
+     *
+     * @param list<Node\Stmt> $stmts
      */
-    private static function provesLiteralAttachment(MethodCall|StaticCall|New_ $call): bool
+    private static function provesLiteralAttachment(array $stmts, MethodCall|StaticCall|New_ $call): bool
     {
         $args = $call->getArgs();
 
-        if (\count($args) !== 3
-            || $args[2]->name !== null
-            || $args[2]->unpack
-            || !$args[2]->value instanceof Array_
-        ) {
+        if (\count($args) !== 3 || $args[2]->name !== null || $args[2]->unpack) {
             return false;
         }
 
-        return self::provesAttachment($args[2]->value);
+        $headers = $args[2]->value;
+
+        if ($headers instanceof Array_) {
+            return self::provesAttachment($headers);
+        }
+
+        if (!$headers instanceof Variable || !\is_string($headers->name)) {
+            return false;
+        }
+
+        $resolved = self::resolveVariableHeaders($stmts, $call, $headers);
+
+        return $resolved instanceof Array_ && self::provesAttachment($resolved);
+    }
+
+    /**
+     * Resolves `$headersVar` to the single array literal assigned to it, when the enclosing
+     * function-like proves that assignment is the only write and the call's argument is the only
+     * other read.
+     *
+     * Deliberately syntactic, not control-flow aware: an assignment inside a conditional branch
+     * still counts as long as it is textually the only one and precedes the call, exactly like a
+     * reassignment or a read anywhere else disqualifies it regardless of reachability. This mirrors
+     * the literal-array proof it feeds: both fail toward a retained finding on anything they cannot
+     * fully account for syntactically.
+     *
+     * @param list<Node\Stmt> $stmts
+     */
+    private static function resolveVariableHeaders(array $stmts, MethodCall|StaticCall|New_ $call, Variable $headersVar): ?Array_
+    {
+        $name = $headersVar->name;
+
+        if (!\is_string($name)) {
+            return null;
+        }
+
+        $scope = self::findEnclosingFunctionLike($stmts, $call);
+
+        if ($scope === null || self::hasDynamicVariableAccess($scope)) {
+            return null;
+        }
+
+        // Parent pointers are the only way to tell "the assignment's LHS" from any other read of
+        // the same name without re-implementing a scope walk; ParentConnectingVisitor mutates node
+        // attributes, but re-running it is idempotent, so this stays safe to call once per issue.
+        (new NodeTraverser(new ParentConnectingVisitor()))->traverse([$scope]);
+
+        /** @var list<Variable|ClosureUse> $occurrences */
+        $occurrences = (new NodeFinder())->find($scope, static fn(Node $node): bool => ($node instanceof Variable && \is_string($node->name) && $node->name === $name)
+            || ($node instanceof ClosureUse && $node->var->name === $name));
+
+        if (\count($occurrences) !== 2) {
+            return null;
+        }
+
+        $assignedArray = null;
+
+        foreach ($occurrences as $occurrence) {
+            if ($occurrence === $headersVar) {
+                continue;
+            }
+
+            $assign = $occurrence instanceof Variable ? $occurrence->getAttribute('parent') : null;
+
+            if (!$occurrence instanceof Variable
+                || !$assign instanceof Assign
+                || $assign->var !== $occurrence
+                || !$assign->expr instanceof Array_
+                || $assign->getEndFilePos() >= $call->getStartFilePos()
+            ) {
+                return null;
+            }
+
+            $assignedArray = $assign->expr;
+        }
+
+        return $assignedArray;
+    }
+
+    /**
+     * Finds the innermost function-like whose span contains `$call`. Top-level code (no enclosing
+     * function-like) returns null, which keeps the sink: there is no scope to prove a single
+     * assignment within.
+     *
+     * @param list<Node\Stmt> $stmts
+     */
+    private static function findEnclosingFunctionLike(array $stmts, MethodCall|StaticCall|New_ $call): ?FunctionLike
+    {
+        $callStart = $call->getStartFilePos();
+        $callEnd = $call->getEndFilePos() + 1;
+
+        /** @var list<FunctionLike> $candidates */
+        $candidates = (new NodeFinder())->find($stmts, static fn(Node $node): bool => $node instanceof FunctionLike
+            && $node->getStartFilePos() <= $callStart
+            && $node->getEndFilePos() + 1 >= $callEnd);
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        \usort($candidates, static fn(Node $a, Node $b): int => ($a->getEndFilePos() - $a->getStartFilePos()) <=> ($b->getEndFilePos() - $b->getStartFilePos()));
+
+        return $candidates[0];
+    }
+
+    /**
+     * `$$x`, `${$x}`, `extract()`, `compact()`, and `get_defined_vars()` read or write a variable
+     * without ever producing a `Variable` node with the target name, so the occurrence count in
+     * {@see resolveVariableHeaders()} cannot see them. Their mere presence anywhere in the scope
+     * disqualifies every variable in it, since any of them could reach `$headersVar`.
+     */
+    private static function hasDynamicVariableAccess(FunctionLike $scope): bool
+    {
+        return (new NodeFinder())->findFirst($scope, static function (Node $node): bool {
+            if ($node instanceof Variable) {
+                return !\is_string($node->name);
+            }
+
+            return $node instanceof FuncCall
+                && $node->name instanceof Name
+                && !$node->name instanceof Relative
+                && \in_array(\strtolower($node->name->toString()), ['extract', 'compact', 'get_defined_vars'], true);
+        }) !== null;
     }
 
     /** @psalm-mutation-free */

@@ -152,6 +152,20 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         // #1416 widening 3: the `Illuminate\Http\Response` constructor shares the same sink and proof.
         yield 'new Response with literal attachment' => ['new \Illuminate\Http\Response($c, 200, ["Content-Disposition" => "attachment"])', true];
         yield 'new Response with named headers argument' => ['new \Illuminate\Http\Response($c, 200, headers: ["Content-Disposition" => "attachment"])', false];
+
+        // #1416 widening 1: a local variable resolved to the single array literal assigned to it.
+        yield 'variable resolved to a single literal assignment' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers); }', true];
+        yield 'variable with no enclosing function-like keeps the sink' => ['$headers = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers)', false];
+        yield 'variable reassigned before the call' => ['function f($r, $c) { $headers = ["Content-Disposition" => "inline"]; $headers = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers); }', false];
+        yield 'variable dim-mutated before the call' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $headers["X-Extra"] = "y"; $r->make($c, 200, $headers); }', false];
+        yield 'variable passed elsewhere before the call' => ['function f($r, $c, $other) { $headers = ["Content-Disposition" => "attachment"]; $other->log($headers); $r->make($c, 200, $headers); }', false];
+        yield 'variable captured by a nested closure' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $cb = function () use ($headers) { return $headers; }; $r->make($c, 200, $headers); }', false];
+        yield 'variable assigned from a non-array expression' => ['function f($r, $c, $h) { $headers = $h; $r->make($c, 200, $headers); }', false];
+        yield 'variable assigned by AssignOp' => ['function f($r, $c) { $headers = ["Content-Disposition" => "x"]; $headers ??= ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers); }', false];
+        yield 'variable assigned after the call' => ['function f($r, $c) { $r->make($c, 200, $headers); $headers = ["Content-Disposition" => "attachment"]; }', false];
+        yield 'variable resolution bails on a sibling variable-variable' => ['function f($r, $c, $name) { $headers = ["Content-Disposition" => "attachment"]; $$name = 1; $r->make($c, 200, $headers); }', false];
+        yield 'variable resolution bails on extract() in scope' => ['function f($r, $c, $vars) { $headers = ["Content-Disposition" => "attachment"]; extract($vars); $r->make($c, 200, $headers); }', false];
+        yield 'variable resolution bails on compact() in scope' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $all = compact("headers"); $r->make($c, 200, $headers); }', false];
     }
 
     /** The content argument's span is the only link from the emitted issue back to the call site. */
@@ -185,17 +199,28 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
             ->invoke(null, $journey);
     }
 
-    private function provesLiteralAttachment(string $call): bool
+    /**
+     * `$code` is appended with a trailing `;`, so it may be either a bare call expression (top-level
+     * code, no enclosing function-like) or a full snippet containing a function definition followed
+     * by the call: the extra empty statement after the closing brace is harmless.
+     */
+    private function provesLiteralAttachment(string $code): bool
     {
+        $stmts = $this->parse('<?php ' . $code . ';');
+        // Restricted to `make`/`New_` so a scoped snippet may freely contain another call (passing
+        // the headers variable elsewhere, logging it, ...) before or after the one under test.
         $found = (new NodeFinder())->findFirst(
-            $this->parse('<?php ' . $call . ';'),
-            static fn(Node $node): bool => $node instanceof MethodCall || $node instanceof StaticCall || $node instanceof New_,
+            $stmts,
+            static fn(Node $node): bool => $node instanceof New_
+                || (($node instanceof MethodCall || $node instanceof StaticCall)
+                    && $node->name instanceof Node\Identifier
+                    && \strtolower($node->name->name) === 'make'),
         );
         $this->assertTrue($found instanceof MethodCall || $found instanceof StaticCall || $found instanceof New_);
 
         /** @psalm-var bool */
         return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesLiteralAttachment'))
-            ->invoke(null, $found);
+            ->invoke(null, $stmts, $found);
     }
 
     /**
