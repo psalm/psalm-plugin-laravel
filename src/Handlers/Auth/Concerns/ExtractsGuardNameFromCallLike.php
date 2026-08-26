@@ -93,8 +93,10 @@ trait ExtractsGuardNameFromCallLike
             return null; // unresolvable case value (deferred constant expression)
         }
 
-        // getValue() answers TLiteralInt for an int-backed case and null for a pure one, so this
-        // single check is also what declines both of those, per the docblock above.
+        // getValue() answers TLiteralInt for an int-backed case and null for a well-formed pure
+        // one, so this single check declines both without a separate enum_type gate. It does
+        // answer TLiteralString for a pure enum whose case illegally carries a value, but PHP
+        // refuses to compile that and Psalm flags the declaration itself.
         return $value instanceof TLiteralString ? $value->value : null;
     }
 }
