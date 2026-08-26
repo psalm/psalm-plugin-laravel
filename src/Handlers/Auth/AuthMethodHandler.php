@@ -10,7 +10,6 @@ use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
-use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 
@@ -209,16 +208,15 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
     }
 
     /**
-     * `guard()`'s params. Real declaring classes (AuthManager / Factory) keep Laravel's
-     * actual, version-correct signature — return null so Psalm derives it from source.
-     * Facade / root-alias pseudo-method calls have no real params of their own; copy the
-     * canonical facade's declared `@method static` params so the \UnitEnum widening added
-     * in Laravel 13.5.0 is honored automatically when present, without duplicating it here.
+     * `guard()`'s params. Real declaring classes (AuthManager / Factory) keep Laravel's actual,
+     * version-correct signature — return null so Psalm derives it from source. Facade and
+     * root-alias pseudo-method calls have no real params of their own, so copy the canonical
+     * facade's declared `@method static` params: the `\UnitEnum` widening Laravel 13.5.0 added
+     * is then honored automatically, and live storage params carry taint sinks that a hardcoded
+     * {@see FunctionLikeParameter} drops.
      *
-     * Falls back to the pre-13.5 `string|null` signature (never null — see the crash this
-     * method exists to avoid) when the source or facade storage isn't available, which is
-     * only reachable from tests constructing the event directly; real Psalm runs always
-     * supply both.
+     * Never returns null for those receivers — that re-triggers the #454/#854 crash — so an
+     * unreadable facade storage falls back to the pre-13.5 `string|null` signature.
      *
      * @return list<FunctionLikeParameter>|null
      */
@@ -231,7 +229,15 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             return null;
         }
 
-        $fallback = [
+        try {
+            $declared = $event->getStatementsSource()?->getCodebase()->classlike_storage_provider
+                ->get(\Illuminate\Support\Facades\Auth::class)
+                ->pseudo_static_methods['guard'] ?? null;
+        } catch (\InvalidArgumentException) {
+            $declared = null; // facade storage missing — its @method tag remains authoritative
+        }
+
+        return $declared?->params ?? [
             new FunctionLikeParameter(
                 'name',
                 false,
@@ -241,18 +247,5 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
                 default_type: Type::getNull(),
             ),
         ];
-
-        $source = $event->getStatementsSource();
-        if (!$source instanceof StatementsSource) {
-            return $fallback;
-        }
-
-        try {
-            $storage = $source->getCodebase()->classlike_storage_provider->get(\Illuminate\Support\Facades\Auth::class);
-        } catch (\InvalidArgumentException) {
-            return $fallback; // facade storage missing — its @method tag remains authoritative
-        }
-
-        return $storage->pseudo_static_methods['guard']->params ?? $fallback;
     }
 }
