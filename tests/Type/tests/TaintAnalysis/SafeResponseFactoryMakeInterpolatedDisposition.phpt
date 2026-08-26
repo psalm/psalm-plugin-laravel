@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Response;
 
 /**
  * #1416 widening 2. The `attachment;` token and its separator are literal; only the filename is
- * interpolated. The unique ARGS line runs this file in its own batch (see the sibling const-folded
- * headers test for why a shared batch would mask a regression here).
+ * interpolated. No `Content-Type` entry: the content-type denylist proof (widening 4) must not be
+ * able to prove this call exempt on its own, or the interpolated-disposition proof could break
+ * completely without failing this test. The unique ARGS line runs this file in its own batch (see
+ * the sibling const-folded headers test for why a shared batch would mask a regression here).
  */
 function makeCsvExportWithInterpolatedFilename(Request $request): void
 {
@@ -17,7 +19,6 @@ function makeCsvExportWithInterpolatedFilename(Request $request): void
     $date = \date('Y-m-d');
 
     Response::make($output, 200, [
-        'Content-Type' => 'text/csv',
         'Content-Disposition' => "attachment; filename=\"{$date}.csv\"",
     ]);
 }

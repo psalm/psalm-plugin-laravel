@@ -22,9 +22,9 @@ use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\InterpolatedStringPart;
 use PhpParser\Node\Name;
-use PhpParser\Node\Name\Relative;
 use PhpParser\Node\Scalar\InterpolatedString;
 use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Expression;
 use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\ParentConnectingVisitor;
@@ -46,10 +46,15 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  *
  * The proof stays deliberately syntactic, never control-flow aware. The headers argument must
  * either be an array literal at the call site, or a local variable proven to hold exactly one
- * array literal: assigned once, in the same function-like, before the call, never reassigned,
+ * array literal: assigned once as a direct top-level statement of the enclosing function-like's
+ * own body (never nested in a ternary, `if`, loop, or `try`, which could let one runtime branch
+ * feed the sink an array a sibling branch proved safe), before the call, never reassigned,
  * mutated, passed elsewhere, or captured by a nested closure, and the scope must not touch a
- * variable-variable or `extract()`/`compact()`/`get_defined_vars()`. Each such miss fails toward a
- * retained finding, never a dropped one.
+ * variable-variable, a dynamic function-name callee, or `extract()`/`compact()`/
+ * `get_defined_vars()` under any alias Psalm's own name resolution can see through. An
+ * `ArrowFunction` scope never resolves anything, since its body has no statement list for a
+ * "direct top-level statement" to belong to. Superglobals and `$this` are rejected outright. Each
+ * such miss fails toward a retained finding, never a dropped one.
  *
  * ACCEPTED LIMITATION: every `make()` call in a project shares one sink node, and
  * `TaintFlowGraph::getChildNodes()` walks it once, so its `visited_source_ids` set already discards
@@ -98,14 +103,30 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     private const HEADER_NAME_LOWER = '-abcdefghijklmnopqrstuvwxyz';
 
     /**
+     * PHP's superglobals are implicitly available, and implicitly mutable, in every scope without
+     * ever producing a matching `Variable` node for a competing write, and `$this` is bound by the
+     * runtime rather than by an assignment this proof could ever find. Const-folding any of these
+     * would be unsound regardless of how the occurrence count comes out.
+     */
+    private const NEVER_RESOLVED_VARIABLE_NAMES = [
+        'GLOBALS', '_GET', '_POST', '_COOKIE', '_REQUEST', '_SERVER', '_ENV', '_FILES', '_SESSION', 'this',
+    ];
+
+    /**
      * Per the WHATWG MIME Sniffing spec (https://mimesniff.spec.whatwg.org/), a supplied
      * Content-Type is returned unchanged for every essence except the narrow exception set in
      * {@see UNSAFE_MEDIA_TYPE_ESSENCES}. Outside that set, `html` and `xml` cover `text/html`,
      * `application/xhtml+xml`, every `*+xml` suffix (XML renders an XHTML-namespaced `<script>`),
-     * and `image/svg+xml`. `multipart/*` is excluded because its parts are not the declared type
-     * at all. Everything else well-formed, vendor download types included, is exempt.
+     * and `image/svg+xml`. `script` covers the WHATWG JavaScript MIME group in one needle -
+     * `text/javascript`, `application/javascript`, `text/jscript`, `text/ecmascript`,
+     * `application/x-ecmascript`, `text/livescript`, and every other member contains the substring
+     * `script`, and a response an attacker controls is exactly as dangerous loaded as an external
+     * `<script>` as it is rendered as HTML. Known collateral, an accepted retained finding rather
+     * than a dropped one: `application/postscript` also contains `script` and keeps the sink even
+     * though it is not a script MIME type. `multipart/*` is excluded because its parts are not the
+     * declared type at all. Everything else well-formed, vendor download types included, is exempt.
      */
-    private const UNSAFE_MEDIA_TYPE_NEEDLES = ['html', 'xml'];
+    private const UNSAFE_MEDIA_TYPE_NEEDLES = ['html', 'xml', 'script'];
 
     /**
      * The essences the WHATWG MIME Sniffing spec's "rules for identifying an unknown MIME type"
@@ -242,14 +263,23 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 
     /**
      * Resolves `$headersVar` to the single array literal assigned to it, when the enclosing
-     * function-like proves that assignment is the only write and the call's argument is the only
-     * other read.
+     * function-like proves that assignment DOMINATES the call: it is a direct top-level statement
+     * of the function-like's own body (never nested in a ternary, `if`, loop, or `try`), it is the
+     * only write and the call's argument the only other read, and it textually precedes the call.
      *
-     * Deliberately syntactic, not control-flow aware: an assignment inside a conditional branch
-     * still counts as long as it is textually the only one and precedes the call, exactly like a
-     * reassignment or a read anywhere else disqualifies it regardless of reachability. This mirrors
-     * the literal-array proof it feeds: both fail toward a retained finding on anything they cannot
-     * fully account for syntactically.
+     * Deliberately syntactic, not control-flow aware otherwise: a straight-line assignment earlier
+     * in the same body counts even where a real CFG would need to prove reachability, exactly like
+     * a reassignment or a read anywhere else disqualifies it regardless of reachability. But an
+     * assignment nested in a conditional branch is REJECTED even when it is textually the only one,
+     * because the branch that executes at runtime need not be the one containing it (`$cond ? (
+     * $headers = $safe) : $sink` runs one arm or the other, never both, and the AST shape alone
+     * cannot tell which — see #1416 review). Requiring the direct-statement shape also means an
+     * `ArrowFunction` scope never resolves anything: its body is a bare expression with no
+     * statement list at all, so no assignment inside it can ever be a "direct top-level statement",
+     * and its implicit-by-value variable capture would otherwise let an outer `$headers` leak in
+     * unproven. Superglobals and `$this` are rejected outright: they are available in every scope
+     * without ever producing a matching `Variable` node for a competing write, so the occurrence
+     * count could never see a mutation this proof needs to rule out.
      *
      * @param list<Node\Stmt> $stmts
      */
@@ -257,7 +287,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     {
         $name = $headersVar->name;
 
-        if (!\is_string($name)) {
+        if (!\is_string($name) || \in_array($name, self::NEVER_RESOLVED_VARIABLE_NAMES, true)) {
             return null;
         }
 
@@ -288,12 +318,19 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
             }
 
             $assign = $occurrence instanceof Variable ? $occurrence->getAttribute('parent') : null;
+            $statement = $assign instanceof Assign ? $assign->getAttribute('parent') : null;
 
+            // $statement must be the Assign's immediate Stmt\Expression wrapper (rejects a ternary,
+            // and an ArrowFunction body, where the Assign's parent is never a statement at all),
+            // AND that statement's own parent must be $scope itself (rejects an `if`/loop/`try`
+            // body, whose statements are parented to the control-structure node instead).
             if (!$occurrence instanceof Variable
                 || !$assign instanceof Assign
                 || $assign->var !== $occurrence
                 || !$assign->expr instanceof Array_
-                || $assign->getEndFilePos() >= $call->getStartFilePos()
+                || !$statement instanceof Expression
+                || $statement->getAttribute('parent') !== $scope
+                || $statement->getEndFilePos() >= $call->getStartFilePos()
             ) {
                 return null;
             }
@@ -335,6 +372,15 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      * without ever producing a `Variable` node with the target name, so the occurrence count in
      * {@see resolveVariableHeaders()} cannot see them. Their mere presence anywhere in the scope
      * disqualifies every variable in it, since any of them could reach `$headersVar`.
+     *
+     * A `FuncCall` with a non-`Name` callee (`$fn(...)`, `(fn())(...)`, ...) disqualifies
+     * unconditionally: no static name comparison is possible, so treating it as "not one of the
+     * three" would be a guess, not a proof. For a `Name` callee, Psalm's own name resolution
+     * (`resolvedName`, set on the node while the file's real analysis pass runs) is checked before
+     * the written spelling, so `use function extract as hydrate; hydrate($vars)` is caught the same
+     * as a direct `extract()` call: the written name is `hydrate`, the resolved one is `extract`.
+     * Compared by the LAST namespace segment, case-insensitively, so a fully-qualified
+     * `\extract(...)` and a namespaced call that resolves to it are both caught too.
      */
     private static function hasDynamicVariableAccess(FunctionLike $scope): bool
     {
@@ -343,10 +389,20 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
                 return !\is_string($node->name);
             }
 
-            return $node instanceof FuncCall
-                && $node->name instanceof Name
-                && !$node->name instanceof Relative
-                && \in_array(\strtolower($node->name->toString()), ['extract', 'compact', 'get_defined_vars'], true);
+            if (!$node instanceof FuncCall) {
+                return false;
+            }
+
+            if (!$node->name instanceof Name) {
+                return true;
+            }
+
+            /** @var string|null $resolvedName */
+            $resolvedName = $node->name->getAttribute('resolvedName');
+            $calleeName = \is_string($resolvedName) ? $resolvedName : $node->name->toString();
+            $segments = \explode('\\', $calleeName);
+
+            return \in_array(\strtolower($segments[\count($segments) - 1]), ['extract', 'compact', 'get_defined_vars'], true);
         }) instanceof \PhpParser\Node;
     }
 

@@ -168,6 +168,32 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'variable resolution bails on a sibling variable-variable' => ['function f($r, $c, $name) { $headers = ["Content-Disposition" => "attachment"]; $$name = 1; $r->make($c, 200, $headers); }', false];
         yield 'variable resolution bails on extract() in scope' => ['function f($r, $c, $vars) { $headers = ["Content-Disposition" => "attachment"]; extract($vars); $r->make($c, 200, $headers); }', false];
         yield 'variable resolution bails on compact() in scope' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $all = compact("headers"); $r->make($c, 200, $headers); }', false];
+        yield 'variable resolution bails on a dynamic function-name callee' => ['function f($r, $c, $vars) { $headers = ["Content-Disposition" => "attachment"]; $fn = "extract"; $fn($vars); $r->make($c, 200, $headers); }', false];
+
+        // #1416 review round 3: an assignment nested in a ternary/if/loop/try does not DOMINATE
+        // the sink read, even when it is textually the only assignment and precedes the call: the
+        // branch that runs at runtime need not be the one containing the assignment.
+        yield 'arrow function ternary assignment does not dominate the sink' => ['$send = fn ($download, $tainted) => $download ? ($headers = ["Content-Type" => "text/html"]) : $response->make($tainted, 200, $headers);', false];
+        yield 'if-wrapped assignment does not dominate the sink' => ['function f($r, $c, $cond) { if ($cond) { $headers = ["Content-Disposition" => "attachment"]; } $r->make($c, 200, $headers); }', false];
+        yield 'loop-wrapped assignment does not dominate the sink' => ['function f($r, $c, $items) { foreach ($items as $item) { $headers = ["Content-Disposition" => "attachment"]; } $r->make($c, 200, $headers); }', false];
+        yield 'try-wrapped assignment does not dominate the sink' => ['function f($r, $c) { try { $headers = ["Content-Disposition" => "attachment"]; } catch (\Throwable $e) { } $r->make($c, 200, $headers); }', false];
+        // Arrow functions implicitly capture outer variables by value with no ClosureUse node at
+        // all, so even a straight-line assignment inside one is rejected: its body has no
+        // statement list for a "direct top-level statement" to belong to.
+        yield 'arrow function straight-line assignment still declines (no statement list)' => ['$send = fn ($c) => ($headers = ["Content-Disposition" => "attachment"]) && $r->make($c, 200, $headers);', false];
+
+        // Superglobals and $this are rejected outright, regardless of the occurrence count.
+        yield 'superglobal variable keeps the sink' => ['function f($r, $c) { $_SERVER = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $_SERVER); }', false];
+        yield 'this keeps the sink' => ['class C { function f($r, $c) { $this = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $this); } }', false];
+
+        // #1416 review round 3: the WHATWG JavaScript MIME group all contain "script".
+        yield 'content type javascript' => ['$r->make($c, 200, ["Content-Type" => "text/javascript"])', false];
+        yield 'content type application javascript' => ['$r->make($c, 200, ["Content-Type" => "application/javascript"])', false];
+        yield 'content type ecmascript' => ['$r->make($c, 200, ["Content-Type" => "application/x-ecmascript"])', false];
+        // Known, accepted collateral: application/postscript also contains "script" and keeps the
+        // sink even though it is not a script MIME type, matching the fail-toward-retained rule.
+        yield 'content type postscript collateral' => ['$r->make($c, 200, ["Content-Type" => "application/postscript"])', false];
+        yield 'content type csv still exempt after adding the script needle' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', true];
 
         // #1416 widening 2: an interpolated or concatenated disposition whose literal prefix already
         // proves the `attachment;` token. The suffix is never inspected.
@@ -227,6 +253,53 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         $stmts = $this->parse('<?php $a->send($first, 200, []);');
 
         $this->assertNull($this->findMakeCallWithContentAt($stmts, [6, 12]));
+    }
+
+    /**
+     * `use function extract as hydrate; hydrate($vars)` defeats a written-name comparison: the
+     * written callee is `hydrate`, and only Psalm's own name resolution knows it resolves to
+     * `extract`. That resolution runs during the file's REAL analysis pass, which this harness
+     * (a bare `ParserFactory` parse, no Psalm involved) never performs, so the `resolvedName`
+     * attribute is stamped on by hand here to stand in for it — this is what
+     * {@see ResponseFactoryTaintHandler::hasDynamicVariableAccess()} reads on the real path.
+     */
+    #[Test]
+    public function bails_on_an_aliased_extract_call_resolved_via_psalms_name_resolution(): void
+    {
+        $code = <<<'PHP'
+        <?php
+        use function extract as hydrate;
+
+        function f($r, $c, $vars) {
+            $headers = ["Content-Disposition" => "attachment"];
+            hydrate($vars);
+            $r->make($c, 200, $headers);
+        }
+        PHP;
+
+        $stmts = $this->parse($code);
+
+        $hydrateCall = (new NodeFinder())->findFirst(
+            $stmts,
+            static fn(Node $node): bool => $node instanceof \PhpParser\Node\Expr\FuncCall,
+        );
+        $this->assertInstanceOf(\PhpParser\Node\Expr\FuncCall::class, $hydrateCall);
+        $this->assertInstanceOf(Node\Name::class, $hydrateCall->name);
+        $hydrateCall->name->setAttribute('resolvedName', 'extract');
+
+        $makeCall = (new NodeFinder())->findFirst(
+            $stmts,
+            static fn(Node $node): bool => $node instanceof MethodCall
+                && $node->name instanceof Node\Identifier
+                && \strtolower($node->name->name) === 'make',
+        );
+        $this->assertInstanceOf(MethodCall::class, $makeCall);
+
+        /** @psalm-var bool */
+        $result = (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesLiteralAttachment'))
+            ->invoke(null, $stmts, $makeCall);
+
+        $this->assertFalse($result);
     }
 
     /** @param list<array{location: ?CodeLocation, label: string, entry_path_type: string}> $journey */
