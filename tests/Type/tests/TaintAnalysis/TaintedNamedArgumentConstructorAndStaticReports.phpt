@@ -25,14 +25,26 @@ abstract class Base
         echo $label;
     }
 
+    /**
+     * A second sink so `self::` and `static::` land somewhere other than `report()`. Routing
+     * all four static shapes through one method collapses them onto one expectation line,
+     * where a single-shape regression shows up only as a change in the total count.
+     *
+     * @psalm-taint-sink html $label
+     */
+    public static function relay(string $path = 'safe', string $label = 'x'): void
+    {
+        echo $label;
+    }
+
     public static function viaSelf(): void
     {
-        self::report(path: 'safe', label: tainted());
+        self::relay(path: 'safe', label: tainted());
     }
 
     public static function viaStatic(): void
     {
-        static::report(path: 'safe', label: tainted());
+        static::relay(path: 'safe', label: tainted());
     }
 }
 
@@ -60,6 +72,8 @@ TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

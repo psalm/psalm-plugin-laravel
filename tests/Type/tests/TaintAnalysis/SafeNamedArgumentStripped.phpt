@@ -32,6 +32,24 @@ final class Sink
 }
 
 /**
+ * A separate class so the resolved-receiver and unresolved-receiver cases below emit at
+ * DIFFERENT locations. Sharing one sink lets either case stop being a live trigger while the
+ * other keeps the file silent, and the file would still pass.
+ */
+final class UnresolvedSink
+{
+    /**
+     * @psalm-taint-sink file $path
+     * @psalm-taint-sink html $label
+     */
+    public function report(string $path = 'safe', string $label = 'x'): void
+    {
+        echo $path;
+        echo $label;
+    }
+}
+
+/**
  * Every shape below must produce NOTHING. Upstream (vimeo/psalm#11923) keys a named argument's
  * taint node by its WRITTEN offset, so letting any of these through reports against the wrong
  * parameter — `$path`'s `file` sink instead of `$label`'s `html` sink.
@@ -54,13 +72,13 @@ function resolvedReceiverPositionMismatchIsStripped(Sink $sink): void
 }
 
 /**
- * A `new Sink()` receiver has no `vars_in_scope` entry, so the declared parameter cannot be
- * looked up at all and the argument is stripped even though `label:` genuinely does match
- * position 0. Accepted false negative, tracked in #1406.
+ * A `new UnresolvedSink()` receiver has no `vars_in_scope` entry, so the declared parameter
+ * cannot be looked up at all and the argument is stripped even though `label:` genuinely does
+ * match position 0. Accepted false negative, tracked in #1406.
  */
 function unresolvedReceiverIsStripped(): void
 {
-    (new Sink())->report(label: tainted());
+    (new UnresolvedSink())->report(label: tainted());
 }
 
 /**
