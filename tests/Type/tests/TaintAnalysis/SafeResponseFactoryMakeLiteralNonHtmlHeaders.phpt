@@ -24,6 +24,23 @@ function makeCaseInsensitiveAttachment(ResponseFactory $response, Request $reque
     $response->make($request->input('case-insensitive-download'), 200, ['Content-Disposition' => " \tATTACHMENT ; filename=members.csv\t "]);
 }
 
+function makeBareAttachment(ResponseFactory $response, Request $request): void
+{
+    $response->make($request->input('bare-attachment-download'), 200, ['Content-Disposition' => 'attachment']);
+}
+
+/**
+ * The verbatim two-header shape from the #1345 report: an explicit content type next to the
+ * attachment disposition.
+ */
+function makeCsvExportFromIssueReport(Request $request): void
+{
+    response()->make((string) $request->input('issue-shape-download'), 200, [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => 'attachment; filename="export.csv"',
+    ]);
+}
+
 /**
  * The reported shape in #1345. `response()` resolves to the contract, so this is the route the
  * receiver check has to accept for the issue to be fixed at all.

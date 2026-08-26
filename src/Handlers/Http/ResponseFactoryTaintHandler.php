@@ -9,6 +9,7 @@ use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\Response;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
@@ -30,6 +31,11 @@ use Psalm\Type\Union;
  *
  * `AddRemoveTaintsEvent` exposes neither call nor argument offset, so the preceding call hook
  * records only its exact content node, keyed by object identity.
+ *
+ * The exemption is deliberately syntactic: the headers argument must be an array literal at the
+ * call site with every entry a literal string pair, and content produced directly by a function
+ * or static call is never exempted. A variable holding the very same attachment array keeps the
+ * sink. Each of those misses fails toward a retained finding, never a dropped one.
  */
 final class ResponseFactoryTaintHandler implements
     BeforeExpressionAnalysisInterface,
@@ -83,6 +89,7 @@ final class ResponseFactoryTaintHandler implements
             || !$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph
             || !$call->name instanceof Identifier
             || \strtolower($call->name->name) !== 'make'
+            // getArgs() throws on a first-class callable (`make(...)`).
             || $call->isFirstClassCallable()
         ) {
             return null;
@@ -100,6 +107,18 @@ final class ResponseFactoryTaintHandler implements
             || !$args[2]->value instanceof Array_
             || !self::provesAttachment($args[2]->value)
         ) {
+            return null;
+        }
+
+        // Content produced directly by a function or static call is never recorded: Psalm
+        // dispatches `AddRemoveTaintsEvent` for that same node a second time while fetching the
+        // callee's own return type, and for a flow-carrying callee (`@psalm-flow` without
+        // `@psalm-taint-specialize`, e.g. `decrypt()`) the removal is written onto the callee's
+        // single project-wide argument-to-return edge, silencing html findings on every unrelated
+        // flow through it (the #1395 failure class). `make(decrypt(...), ...)` therefore keeps a
+        // false positive. A method call is safe to record: Psalm dispatches its removal event on
+        // the receiver node, not the call node.
+        if ($args[0]->value instanceof FuncCall || $args[0]->value instanceof StaticCall) {
             return null;
         }
 
@@ -188,7 +207,15 @@ final class ResponseFactoryTaintHandler implements
     /** @psalm-pure */
     private static function isAttachmentDisposition(string $disposition): bool
     {
-        return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', \trim($disposition)) === 1;
+        $disposition = \trim($disposition);
+
+        // `\s` in the parameter branch would let a CR/LF smuggled into the value count as proof,
+        // but PHP refuses to emit such a header, so the response is served without it.
+        if (\strpbrk($disposition, "\r\n\0") !== false) {
+            return false;
+        }
+
+        return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', $disposition) === 1;
     }
 
     private static function isExactResponseFacade(StaticCall $call): bool

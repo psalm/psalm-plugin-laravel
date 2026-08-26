@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1 --no-file-cache
 --FILE--
 <?php declare(strict_types=1);
 
@@ -18,19 +18,15 @@ interface ResponseFactoryMarker
 {
 }
 
-final class IntersectedResponseFactory extends ResponseFactory implements ResponseFactoryMarker
-{
-    #[\Override]
-    public function make($content = '', $status = 200, array $headers = [])
-    {
-        return new \Illuminate\Http\Response($content, $status, $headers);
-    }
-}
-
 /**
  * Only a direct, literal attachment disposition on an exact factory is exempt. Default,
- * content-type-only, dynamic, list-valued, malformed, non-attachment, duplicate, and underscore
- * disposition headers, custom receivers, and intersections retain the default HTML sink.
+ * content-type-only, dynamic, list-valued, malformed, non-attachment, duplicate, underscore,
+ * CRLF-smuggling, and computed-key disposition headers, named-argument calls, custom receivers,
+ * and intersections retain the default HTML sink.
+ *
+ * The unique ARGS line runs this file in its own batch. So many flows converging on the shared
+ * `make#1` node cross Psalm's visited-node pruning in a shared batch, which silently drops the
+ * last findings; standalone, all of them report.
  *
  * The headers argument must be an array literal AT the call. A variable holding the very same
  * literal is not followed, so it keeps the sink: the exemption is deliberately syntactic.
@@ -55,12 +51,24 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
         'Content-Disposition' => 'attachment',
         'content-disposition' => 'attachment',
     ]);
+    $response->make($request->input('dynamic-key'), 200, ['Content-' . 'Disposition' => 'attachment']);
+    $response->make($request->input('crlf-disposition'), 200, ['Content-Disposition' => "attachment;\nX-Injected: x"]);
+    $response->make(content: $request->input('named-arguments'), status: 200, headers: ['Content-Disposition' => 'attachment']);
     $custom->make((string) $request->input('custom'), 200, ['Content-Disposition' => 'attachment']);
 }
 
 function makeWithIntersectedReceiver(Request $request, ResponseFactoryMarker&ResponseFactory $response): void
 {
     $response->make($request->input('intersected'), 200, ['Content-Disposition' => 'attachment']);
+}
+
+/**
+ * The reversed intersection order puts `ResponseFactory` in the primary atomic and the marker in
+ * `extra_types`, so this is the case only the `extra_types` guard declines.
+ */
+function makeWithFactoryPrimaryIntersection(Request $request, ResponseFactory&ResponseFactoryMarker $response): void
+{
+    $response->make($request->input('factory-primary-intersected'), 200, ['Content-Disposition' => 'attachment']);
 }
 
 /**
@@ -77,6 +85,10 @@ function makeThroughRootAliasFacade(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
