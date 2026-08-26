@@ -12,6 +12,7 @@ use PhpParser\Node;
 use PhpParser\Node\ClosureUse;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\BinaryOp\Concat;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\New_;
@@ -19,8 +20,10 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\InterpolatedStringPart;
 use PhpParser\Node\Name;
 use PhpParser\Node\Name\Relative;
+use PhpParser\Node\Scalar\InterpolatedString;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
@@ -334,15 +337,15 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         $hasAttachment = false;
 
         foreach ($headers->items as $item) {
-            if ($item === null
-                || $item->unpack
-                || !$item->key instanceof String_
-                || !$item->value instanceof String_
-            ) {
+            if ($item === null || $item->unpack || !$item->key instanceof String_) {
                 return false;
             }
 
             if (\strtr($item->key->value, self::HEADER_NAME_UPPER, self::HEADER_NAME_LOWER) !== 'content-disposition') {
+                if (!$item->value instanceof String_) {
+                    return false;
+                }
+
                 continue;
             }
 
@@ -352,7 +355,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
             // folding is exotic enough to keep the sink, as it did before that folding was modelled.
             if ($hasAttachment
                 || \strtolower($item->key->value) !== 'content-disposition'
-                || !self::isAttachmentDisposition($item->value->value)
+                || !self::provesAttachmentValue($item->value)
             ) {
                 return false;
             }
@@ -361,6 +364,58 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         }
 
         return $hasAttachment;
+    }
+
+    /** @psalm-mutation-free */
+    private static function provesAttachmentValue(Node\Expr $value): bool
+    {
+        if ($value instanceof String_) {
+            return self::isAttachmentDisposition($value->value);
+        }
+
+        if (!$value instanceof InterpolatedString && !$value instanceof Concat) {
+            return false;
+        }
+
+        // Only the leading literal is trusted; the interpolated or concatenated suffix is never
+        // inspected. Nothing that can appear after a literal `attachment;` parameter separator can
+        // retract the token, so the prefix alone is as strong a proof as an all-literal value.
+        $prefix = self::literalPrefix($value);
+
+        return $prefix !== null
+            && \preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $prefix) !== 1
+            && \preg_match('/^attachment\s*;/i', $prefix) === 1;
+    }
+
+    /**
+     * The first interpolated string part, or the leftmost leaf of a left-associative `Concat`
+     * chain. A multi-literal prefix split across several concatenated strings (`"a" . "b" . $x`) is
+     * deliberately not reassembled: only the single leftmost leaf has to carry the whole
+     * `attachment;` token.
+     *
+     * @psalm-mutation-free
+     */
+    private static function literalPrefix(Node\Expr $value): ?string
+    {
+        if ($value instanceof InterpolatedString) {
+            $first = $value->parts[0] ?? null;
+
+            if (!$first instanceof InterpolatedStringPart) {
+                return null;
+            }
+
+            return $first->value;
+        }
+
+        if ($value instanceof Concat) {
+            return self::literalPrefix($value->left);
+        }
+
+        if ($value instanceof String_) {
+            return $value->value;
+        }
+
+        return null;
     }
 
     /** @psalm-pure */

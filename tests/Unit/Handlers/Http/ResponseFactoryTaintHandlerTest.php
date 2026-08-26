@@ -166,6 +166,16 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'variable resolution bails on a sibling variable-variable' => ['function f($r, $c, $name) { $headers = ["Content-Disposition" => "attachment"]; $$name = 1; $r->make($c, 200, $headers); }', false];
         yield 'variable resolution bails on extract() in scope' => ['function f($r, $c, $vars) { $headers = ["Content-Disposition" => "attachment"]; extract($vars); $r->make($c, 200, $headers); }', false];
         yield 'variable resolution bails on compact() in scope' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $all = compact("headers"); $r->make($c, 200, $headers); }', false];
+
+        // #1416 widening 2: an interpolated or concatenated disposition whose literal prefix already
+        // proves the `attachment;` token. The suffix is never inspected.
+        yield 'interpolated disposition with literal prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"{$name}.csv\""])', true];
+        yield 'concatenated disposition with literal prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=" . $name])', true];
+        yield 'interpolated disposition missing the separator' => ['$r->make($c, 200, ["Content-Disposition" => "attachment{$name}"])', false];
+        yield 'interpolated disposition not starting with attachment' => ['$r->make($c, 200, ["Content-Disposition" => "{$name}; attachment"])', false];
+        yield 'concatenated disposition leftmost leaf is not a string' => ['$r->make($c, 200, ["Content-Disposition" => $name . "; attachment"])', false];
+        yield 'concatenated disposition split across two literals' => ['$r->make($c, 200, ["Content-Disposition" => "attachment" . "; filename=" . $name])', false];
+        yield 'interpolated disposition prefix carries a control character' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;\n{$name}"])', false];
     }
 
     /** The content argument's span is the only link from the emitted issue back to the call site. */
