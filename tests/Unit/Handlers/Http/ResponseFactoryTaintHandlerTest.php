@@ -4,76 +4,199 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Http;
 
-use PhpParser\Node\Expr\Variable;
+use PhpParser\Node;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\NodeFinder;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\CodeLocation;
 use Psalm\LaravelPlugin\Handlers\Http\ResponseFactoryTaintHandler;
-use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
 
 /**
- * `AddRemoveTaintsEvent` does not identify the enclosing method or parameter offset, so the handler
- * scopes removal through the identity of the recorded content node. These tests pin the property
- * that keeps that sound — an entry never outlives the node it was recorded for — plus the file
- * hook's footprint bound, which survives a mid-file analysis throw. Correctness does not rest on
- * the flush; see the handler's docblock on {@see ResponseFactoryTaintHandler::beforeAnalyzeFile}.
+ * The handler re-derives everything from the emitted issue, so its two proof steps are pure and
+ * testable in isolation: which journey tails name the response factory's html sink, and which
+ * `make()` call shapes prove a literal attachment disposition. Both fail toward a retained finding,
+ * which is what most of these cases pin.
  */
 #[CoversClass(ResponseFactoryTaintHandler::class)]
 final class ResponseFactoryTaintHandlerTest extends TestCase
 {
+    #[Test]
+    public function accepts_the_journey_tail_of_every_exempt_call_route(): void
+    {
+        $location = $this->codeLocation();
+
+        foreach ([
+            'call to Illuminate\Routing\ResponseFactory::make',
+            'call to Illuminate\Contracts\Routing\ResponseFactory::make',
+            'call to Illuminate\Support\Facades\Response::make',
+        ] as $label) {
+            $this->assertSame($location, $this->contentLocationOfMakeSink([$this->node('call to something-else'), $this->node($label, $location)]), $label);
+        }
+    }
+
     /**
-     * A recorded entry must vanish with its node. Psalm frees foreign ASTs mid-file
-     * (`ProjectAnalyzer::getMethodMutations()`, `ClassLikes::getTraitNode()`) without dispatching
-     * `BeforeFileAnalysisEvent`, and PHP reissues freed object handles, so an entry keyed on
-     * `spl_object_id` could be hit by an unrelated later node — stripping html taint off it.
+     * The bare sink id with no `call to ` prefix is the shape Psalm emits when the sink's file is
+     * not reportable and the issue falls back to the SOURCE location: the tail then points into a
+     * stub, where no call site exists to re-check.
      */
     #[Test]
-    public function recorded_content_does_not_outlive_its_node(): void
+    #[DataProvider('provideRetainedJourneyTails')]
+    public function declines_tails_that_do_not_prove_the_sink(string $label): void
     {
-        $recorded = $this->recordedContent();
+        $this->assertNull($this->contentLocationOfMakeSink([$this->node($label, $this->codeLocation())]));
+    }
 
-        $node = new Variable('content');
-        $recorded->offsetSet($node, ['receiver' => null]);
-
-        $this->assertCount(1, $recorded);
-
-        unset($node);
-        \gc_collect_cycles();
-
-        $this->assertCount(0, $recorded, 'A recorded content node must not be retained after the AST is freed.');
+    /** @return iterable<string, array{string}> */
+    public static function provideRetainedJourneyTails(): iterable
+    {
+        yield 'root alias' => ['call to Response::make'];
+        yield 'sink id fallback' => ['Illuminate\Contracts\Routing\ResponseFactory::make#1'];
+        yield 'facade sink id fallback' => ['Illuminate\Support\Facades\Response::make#1'];
+        yield 'custom receiver' => ['call to App\Http\ResponseFactory::make'];
+        yield 'other factory method' => ['call to Illuminate\Routing\ResponseFactory::view'];
+        yield 'echo sink' => ['echo'];
     }
 
     #[Test]
-    public function clears_recorded_content_nodes_before_each_file(): void
+    public function declines_an_empty_journey_and_a_locationless_tail(): void
     {
-        $recorded = $this->recordedContent();
-        $node = new Variable('content');
-        $recorded->offsetSet($node, ['receiver' => null]);
-
-        /** @var BeforeFileAnalysisEvent $event */
-        $event = (new \ReflectionClass(BeforeFileAnalysisEvent::class))->newInstanceWithoutConstructor();
-        ResponseFactoryTaintHandler::beforeAnalyzeFile($event);
-
-        $this->assertFalse($this->recordedContent()->offsetExists($node));
+        $this->assertNull($this->contentLocationOfMakeSink([]));
+        $this->assertNull($this->contentLocationOfMakeSink([$this->node('call to Illuminate\Routing\ResponseFactory::make')]));
     }
 
-    /** @return \WeakMap<object, mixed> */
-    private function recordedContent(): \WeakMap
+    /** An exempt label anywhere but the tail is a hop through the sink, not the sink itself. */
+    #[Test]
+    public function declines_an_exempt_label_that_is_not_the_tail(): void
     {
-        $property = new \ReflectionProperty(ResponseFactoryTaintHandler::class, 'recordedContent');
-        $map = $property->getValue();
+        $journey = [
+            $this->node('call to Illuminate\Routing\ResponseFactory::make', $this->codeLocation()),
+            $this->node('echo', $this->codeLocation()),
+        ];
 
-        if (!$map instanceof \WeakMap) {
-            $map = new \WeakMap();
-            $property->setValue(null, $map);
-        }
-
-        return $map;
+        $this->assertNull($this->contentLocationOfMakeSink($journey));
     }
 
-    #[\Override]
-    protected function tearDown(): void
+    #[Test]
+    #[DataProvider('provideMakeCalls')]
+    public function proves_attachment_only_for_literal_downloads(string $call, bool $proven): void
     {
-        (new \ReflectionProperty(ResponseFactoryTaintHandler::class, 'recordedContent'))->setValue(null, null);
+        $this->assertSame($proven, $this->provesLiteralAttachment($call));
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function provideMakeCalls(): iterable
+    {
+        yield 'bare attachment' => ['$r->make($c, 200, ["Content-Disposition" => "attachment"])', true];
+        yield 'attachment with filename' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"x.csv\""])', true];
+        yield 'case insensitive header and value' => ['$r->make($c, 200, ["CONTENT-disposition" => " \tATTACHMENT ; filename=x.csv\t "])', true];
+        yield 'alongside a content type' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "Content-Disposition" => "attachment"])', true];
+        yield 'static call' => ['Response::make($c, 200, ["Content-Disposition" => "attachment"])', true];
+
+        yield 'no headers argument' => ['$r->make($c)', false];
+        yield 'content type only' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', false];
+        yield 'fourth argument' => ['$r->make($c, 200, ["Content-Disposition" => "attachment"], true)', false];
+        yield 'named arguments' => ['$r->make(content: $c, status: 200, headers: ["Content-Disposition" => "attachment"])', false];
+        yield 'spread headers' => ['$r->make($c, 200, ...[["Content-Disposition" => "attachment"]])', false];
+        yield 'variable headers' => ['$r->make($c, 200, $headers)', false];
+        yield 'spread entry' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", ...$extra])', false];
+        yield 'computed key' => ['$r->make($c, 200, ["Content-" . "Disposition" => "attachment"])', false];
+        yield 'variable value' => ['$r->make($c, 200, ["Content-Disposition" => $disposition])', false];
+        yield 'list value' => ['$r->make($c, 200, ["Content-Disposition" => ["attachment"]])', false];
+        yield 'list entry' => ['$r->make($c, 200, ["attachment"])', false];
+        yield 'duplicate disposition' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "content-disposition" => "attachment"])', false];
+        yield 'underscore header' => ['$r->make($c, 200, ["Content_Disposition" => "attachment"])', false];
+        yield 'inline disposition' => ['$r->make($c, 200, ["Content-Disposition" => "inline; filename=x.csv"])', false];
+        yield 'attachment prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachmentx"])', false];
+        yield 'missing semicolon' => ['$r->make($c, 200, ["Content-Disposition" => "attachment filename=x.csv"])', false];
+        yield 'empty parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;"])', false];
+        yield 'whitespace parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; \t"])', false];
+
+        // Trimming first would approve values PHP refuses to emit, leaving the response HTML.
+        yield 'smuggled header' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;\nX-Injected: x"])', false];
+        yield 'trailing newline' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\n"])', false];
+        yield 'leading carriage return' => ['$r->make($c, 200, ["Content-Disposition" => "\rattachment"])', false];
+        yield 'embedded nul' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\0"])', false];
+    }
+
+    /** The content argument's span is the only link from the emitted issue back to the call site. */
+    #[Test]
+    public function finds_the_make_call_by_its_content_argument_span(): void
+    {
+        $code = '<?php $a->make($first, 200, []); $b->make($second, 200, []);';
+        $stmts = $this->parse($code);
+        $second = \strpos($code, '$second');
+        $this->assertIsInt($second);
+
+        $call = $this->findMakeCallWithContentAt($stmts, [$second, $second + \strlen('$second')]);
+
+        $this->assertInstanceOf(MethodCall::class, $call);
+        $this->assertSame('second', $call->getArgs()[0]->value->name ?? null);
+    }
+
+    #[Test]
+    public function declines_when_no_make_call_owns_the_span(): void
+    {
+        $stmts = $this->parse('<?php $a->send($first, 200, []);');
+
+        $this->assertNull($this->findMakeCallWithContentAt($stmts, [6, 12]));
+    }
+
+    /** @param list<array{location: ?CodeLocation, label: string, entry_path_type: string}> $journey */
+    private function contentLocationOfMakeSink(array $journey): ?CodeLocation
+    {
+        /** @psalm-var ?CodeLocation */
+        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'contentLocationOfMakeSink'))
+            ->invoke(null, $journey);
+    }
+
+    private function provesLiteralAttachment(string $call): bool
+    {
+        $found = (new NodeFinder())->findFirst(
+            $this->parse('<?php ' . $call . ';'),
+            static fn(Node $node): bool => $node instanceof MethodCall || $node instanceof StaticCall,
+        );
+        $this->assertTrue($found instanceof MethodCall || $found instanceof StaticCall);
+
+        /** @psalm-var bool */
+        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesLiteralAttachment'))
+            ->invoke(null, $found);
+    }
+
+    /**
+     * @param list<Node\Stmt> $stmts
+     * @param array{0: int, 1: int} $bounds
+     */
+    private function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|null
+    {
+        /** @psalm-var MethodCall|StaticCall|null */
+        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'findMakeCallWithContentAt'))
+            ->invoke(null, $stmts, $bounds);
+    }
+
+    /** @return list<Node\Stmt> */
+    private function parse(string $code): array
+    {
+        $stmts = (new ParserFactory())->createForHostVersion()->parse($code);
+        $this->assertIsArray($stmts);
+
+        return \array_values($stmts);
+    }
+
+    /** @return array{location: ?CodeLocation, label: string, entry_path_type: string} */
+    private function node(string $label, ?CodeLocation $location = null): array
+    {
+        return ['location' => $location, 'label' => $label, 'entry_path_type' => ''];
+    }
+
+    /** A journey entry is only ever read for its identity here, never for its file or bounds. */
+    private function codeLocation(): CodeLocation
+    {
+        /** @psalm-var CodeLocation */
+        return (new \ReflectionClass(CodeLocation::class))->newInstanceWithoutConstructor();
     }
 }

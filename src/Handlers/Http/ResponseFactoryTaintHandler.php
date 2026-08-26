@@ -7,94 +7,142 @@ namespace Psalm\LaravelPlugin\Handlers\Http;
 use Illuminate\Contracts\Routing\ResponseFactory as ResponseFactoryContract;
 use Illuminate\Routing\ResponseFactory;
 use Illuminate\Support\Facades\Response;
-use PhpParser\Node\Expr;
+use PhpParser\Node;
 use PhpParser\Node\Expr\Array_;
-use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
-use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
-use Psalm\Internal\Analyzer\StatementsAnalyzer;
-use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
-use Psalm\Plugin\EventHandler\BeforeFileAnalysisInterface;
-use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
-use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
-use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
-use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
-use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
-use Psalm\Type\Union;
+use PhpParser\NodeFinder;
+use Psalm\CodeLocation;
+use Psalm\Issue\TaintedHtml;
+use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
+use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 
 /**
- * Removes html taint from `ResponseFactory::make()` content only for literal attachment responses.
+ * Suppresses the `TaintedHtml` finding on `ResponseFactory::make()` content when the call's literal
+ * headers prove the browser downloads the response instead of rendering it.
  *
- * `AddRemoveTaintsEvent` exposes neither call nor argument offset, so the preceding call hook
- * records only its exact content node, keyed by object identity.
+ * The exemption is applied when the issue is emitted, not by editing the taint graph. A graph
+ * removal is keyed on an AST node, and Psalm dispatches the removal event for a call node a second
+ * time while fetching that callee's own return type, which lands the removal on the callee's shared
+ * project-wide `@psalm-flow` edge and silences unrelated flows (vimeo/psalm#11924). Nothing is
+ * written here, so nothing can leak: the worst failure mode is a retained finding.
  *
- * The exemption is deliberately syntactic: the headers argument must be an array literal at the
- * call site with every entry a literal string pair, and content produced directly by a function
- * or static call is never exempted. A variable holding the very same attachment array keeps the
- * sink. Each of those misses fails toward a retained finding, never a dropped one.
+ * Taint findings are emitted in the MAIN process after the worker pool exits, so no state recorded
+ * by a per-expression hook survives to this point. Every fact is re-derived from the issue plus a
+ * fresh look at the sink's file, and the handler holds no state at all.
+ *
+ * The proof stays deliberately syntactic: the headers argument must be an array literal at the call
+ * site with every entry a literal string pair. A variable holding the very same attachment array
+ * keeps the sink. Each such miss fails toward a retained finding, never a dropped one.
  */
-final class ResponseFactoryTaintHandler implements
-    BeforeExpressionAnalysisInterface,
-    RemoveTaintsInterface,
-    BeforeFileAnalysisInterface
+final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 {
     /**
-     * Content nodes exempted from the html sink, mapped to the receiver node whose type
-     * {@see removeTaints} still has to resolve, or `null` for a `StaticCall` already verified at
-     * record time by {@see isExactResponseFacade}, which skips that check.
+     * Journey-tail labels that mark the response factory's html content sink.
      *
-     * Keyed WEAKLY, on the node object rather than its `spl_object_id`. Psalm frees whole ASTs
-     * other than the analysed file's while that file is still being analysed —
-     * `ProjectAnalyzer::getMethodMutations()` parses, analyses and releases a foreign file on the
-     * constructor-initialisation path, and `ClassLikes::getTraitNode()` keeps only the `Trait_` node
-     * of the file it parsed — and neither dispatches `BeforeFileAnalysisEvent`. Those bodies do reach
-     * {@see beforeExpressionAnalysis}, so an id-keyed record can outlive its node, and PHP then hands
-     * the freed handle to an unrelated fresh node. A stale hit STRIPS taint, so that collision is a
-     * missed vulnerability, not a false positive. A weak key cannot survive its node.
+     * Derived empirically on Psalm 7.0.0-beta19 by dumping `TaintedInput::$journey` tails for the
+     * concrete, contract, facade, root-alias and `response()` helper call routes. Two properties of
+     * that dump shape this list:
      *
-     * The receiver is wrapped in a shape rather than stored bare, because `WeakMap::offsetExists()`
-     * is `isset`-shaped: a bare `null` value reads back as absent, which would silently disable the
-     * facade path.
+     * - The tail is the ARGUMENT node feeding the sink, one node short of the sink itself, and its
+     *   label is `call to <declaring class>::<method>`.
+     * - The root `\Response` alias yields the unqualified label `call to Response::make`. It is left
+     *   out, so that alias keeps the sink exactly as it did under the previous receiver check.
      *
-     * @psalm-var \WeakMap<object, array{receiver: Expr|null}>|null
+     * When the sink's file is not reportable Psalm falls back to the SOURCE location and the tail
+     * carries the bare sink id instead (`...ResponseFactory::make#1`, no `call to ` prefix). Those
+     * fail this match and retain the finding.
      */
-    private static ?\WeakMap $recordedContent = null;
-
-    /**
-     * `new \WeakMap()` alone infers `WeakMap<object, mixed>`, so the value shape is pinned here
-     * rather than at each of the two construction sites.
-     *
-     * @return \WeakMap<object, array{receiver: Expr|null}>
-     *
-     * @psalm-pure
-     */
-    private static function newRecordMap(): \WeakMap
-    {
-        /** @psalm-var \WeakMap<object, array{receiver: Expr|null}> $map */
-        $map = new \WeakMap();
-
-        return $map;
-    }
+    private const SINK_CALL_LABELS = [
+        'call to ' . ResponseFactory::class . '::make',
+        'call to ' . ResponseFactoryContract::class . '::make',
+        'call to ' . Response::class . '::make',
+    ];
 
     #[\Override]
-    public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
+    public static function beforeAddIssue(BeforeAddIssueEvent $event): ?bool
     {
-        $call = $event->getExpr();
+        $issue = $event->getIssue();
 
-        if ((!$call instanceof MethodCall && !$call instanceof StaticCall)
-            || !$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph
-            || !$call->name instanceof Identifier
-            || \strtolower($call->name->name) !== 'make'
-            // getArgs() throws on a first-class callable (`make(...)`).
-            || $call->isFirstClassCallable()
-        ) {
+        if (!$issue instanceof TaintedHtml) {
             return null;
         }
 
+        $content = self::contentLocationOfMakeSink($issue->journey);
+
+        if (!$content instanceof CodeLocation) {
+            return null;
+        }
+
+        try {
+            $stmts = $event->getCodebase()->getStatementsForFile($content->file_path);
+        } catch (\Throwable) {
+            // An unreadable or unparsable sink file proves nothing, so the finding stands.
+            return null;
+        }
+
+        $call = self::findMakeCallWithContentAt($stmts, $content->getSelectionBounds());
+
+        return $call !== null && self::provesLiteralAttachment($call) ? false : null;
+    }
+
+    /**
+     * @param list<array{location: ?CodeLocation, label: string, entry_path_type: string}> $journey
+     *
+     * @psalm-pure
+     */
+    private static function contentLocationOfMakeSink(array $journey): ?CodeLocation
+    {
+        $tail = $journey === [] ? null : $journey[\count($journey) - 1];
+
+        if ($tail === null || !\in_array($tail['label'], self::SINK_CALL_LABELS, true)) {
+            return null;
+        }
+
+        return $tail['location'];
+    }
+
+    /**
+     * Locates the `make()` call whose content argument spans exactly `$bounds`.
+     *
+     * The receiver is deliberately not inspected: `parent::make()`, `$this->make()` and
+     * `static::make()` all reach the stubbed sink, and only Psalm's own resolution — already proven
+     * by the journey label — can tell them apart. More than one match is treated as unproven.
+     *
+     * @param list<Node\Stmt> $stmts
+     * @param array{0: int, 1: int} $bounds
+     */
+    private static function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|null
+    {
+        /** @psalm-var list<MethodCall|StaticCall> $calls */
+        $calls = (new NodeFinder())->find($stmts, static function (Node $node) use ($bounds): bool {
+            if ((!$node instanceof MethodCall && !$node instanceof StaticCall)
+                || !$node->name instanceof Identifier
+                || \strtolower($node->name->name) !== 'make'
+                // getArgs() throws on a first-class callable (`make(...)`).
+                || $node->isFirstClassCallable()
+            ) {
+                return false;
+            }
+
+            $args = $node->getArgs();
+
+            return $args !== []
+                && $args[0]->value->getStartFilePos() === $bounds[0]
+                && $args[0]->value->getEndFilePos() + 1 === $bounds[1];
+        });
+
+        return \count($calls) === 1 ? $calls[0] : null;
+    }
+
+    /**
+     * Named arguments are rejected rather than resolved: in-order named arguments carry the same
+     * content span as positional ones, so accepting the span alone would silently exempt them.
+     */
+    private static function provesLiteralAttachment(MethodCall|StaticCall $call): bool
+    {
         $args = $call->getArgs();
 
         if (\count($args) !== 3
@@ -105,73 +153,11 @@ final class ResponseFactoryTaintHandler implements
             || $args[1]->unpack
             || $args[2]->unpack
             || !$args[2]->value instanceof Array_
-            || !self::provesAttachment($args[2]->value)
         ) {
-            return null;
+            return false;
         }
 
-        // Content produced directly by a function or static call is never recorded: Psalm
-        // dispatches `AddRemoveTaintsEvent` for that same node a second time while fetching the
-        // callee's own return type, and for a flow-carrying callee (`@psalm-flow` without
-        // `@psalm-taint-specialize`, e.g. `decrypt()`) the removal is written onto the callee's
-        // single project-wide argument-to-return edge, silencing html findings on every unrelated
-        // flow through it (the #1395 failure class). `make(decrypt(...), ...)` therefore keeps a
-        // false positive. A method call is safe to record: Psalm dispatches its removal event on
-        // the receiver node, not the call node.
-        if ($args[0]->value instanceof FuncCall || $args[0]->value instanceof StaticCall) {
-            return null;
-        }
-
-        if ($call instanceof StaticCall) {
-            if (!self::isExactResponseFacade($call)) {
-                return null;
-            }
-
-            (self::$recordedContent ??= self::newRecordMap())
-                ->offsetSet($args[0]->value, ['receiver' => null]);
-
-            return null;
-        }
-
-        (self::$recordedContent ??= self::newRecordMap())
-            ->offsetSet($args[0]->value, ['receiver' => $call->var]);
-
-        return null;
-    }
-
-    #[\Override]
-    public static function removeTaints(AddRemoveTaintsEvent $event): int
-    {
-        $content = $event->getExpr();
-        $recorded = self::$recordedContent;
-
-        if (!$recorded instanceof \WeakMap || !$recorded->offsetExists($content)) {
-            return 0;
-        }
-
-        $entry = $recorded->offsetGet($content);
-
-        if ($entry === null) {
-            return 0;
-        }
-
-        $receiver = $entry['receiver'];
-
-        if (!$receiver instanceof Expr) {
-            return TaintKind::INPUT_HTML;
-        }
-
-        $statementsSource = $event->getStatementsSource();
-
-        if (!$statementsSource instanceof StatementsAnalyzer) {
-            return 0;
-        }
-
-        $receiverType = $statementsSource->node_data->getType($receiver);
-
-        return $receiverType instanceof Union && self::isExactFactoryReceiver($receiverType)
-            ? TaintKind::INPUT_HTML
-            : 0;
+        return self::provesAttachment($args[2]->value);
     }
 
     /** @psalm-mutation-free */
@@ -215,50 +201,5 @@ final class ResponseFactoryTaintHandler implements
         }
 
         return \preg_match('/^attachment(?:\s*;\s*\S.*)?$/i', \trim($disposition)) === 1;
-    }
-
-    private static function isExactResponseFacade(StaticCall $call): bool
-    {
-        if (!$call->class instanceof Name || $call->class->isSpecialClassName()) {
-            return false;
-        }
-
-        /** @psalm-var ?string $resolved */
-        $resolved = $call->class->getAttribute('resolvedName');
-        $class = \is_string($resolved) ? $resolved : $call->class->toString();
-
-        return \strtolower($class) === \strtolower(Response::class);
-    }
-
-    /** @psalm-mutation-free */
-    private static function isExactFactoryReceiver(Union $receiverType): bool
-    {
-        if (!$receiverType->isSingle()) {
-            return false;
-        }
-
-        $atomic = $receiverType->getSingleAtomic();
-
-        if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
-            return false;
-        }
-
-        $class = \strtolower($atomic->value);
-
-        return $class === \strtolower(ResponseFactory::class)
-            || $class === \strtolower(ResponseFactoryContract::class);
-    }
-
-    /**
-     * Drop the recorded nodes at file START. Correctness no longer rests on this — the weak keys
-     * bound each entry to its own node's lifetime — but it caps the footprint at one file's exempted
-     * calls and, unlike an end-of-file flush, survives a mid-file analysis throw.
-     *
-     * @psalm-external-mutation-free
-     */
-    #[\Override]
-    public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
-    {
-        self::$recordedContent = self::newRecordMap();
     }
 }

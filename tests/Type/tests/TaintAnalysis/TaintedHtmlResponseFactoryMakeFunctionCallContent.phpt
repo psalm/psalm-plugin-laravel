@@ -21,24 +21,27 @@ function frameValue(string $value): string
 }
 
 /**
- * Content produced directly by a function or static call is never exempted. Psalm dispatches the
- * removal event for that node a second time while fetching the callee's own return type, where a
- * removal lands on the callee's single project-wide argument-to-return edge (`framevalue#1 ->
- * framevalue`): exempting the `make()` call below would silence this unrelated `echo` flow.
+ * The exempted `make()` call below shares this callee's single project-wide argument-to-return
+ * edge (`framevalue#1 -> framevalue`). Suppressing at issue-emission time writes nothing to that
+ * edge, so this unrelated `echo` flow must keep reporting both of its findings. A regression back
+ * to a graph removal keyed on the content node silences them (#1348, vimeo/psalm#11924).
  *
- * Order decides WHICH failure this test pins: the edge is last-write-wins, so only with the
- * would-be-exempted call analysed AFTER the unrelated flow does a regression silence the `echo`
- * finding (the cross-flow leak). Reversed, a regression still fails the test, but only through
- * the `make()` call's own missing finding — the local strip, not the leak.
+ * Order decides WHICH failure this test pins: the edge would be last-write-wins, so only with the
+ * exempted call analysed AFTER the unrelated flow does such a regression silence the `echo`
+ * finding — the cross-flow leak rather than a merely local strip.
  *
  * The `%d` placeholders are a repo-wide convention enforced by CI; the single-file batch and
- * the fixed kind order keep an unrelated finding from standing in for the silenced flow.
+ * the fixed kind order keep an unrelated finding from standing in for a silenced flow.
  */
 function echoUnrelatedFramedBanner(Request $request): void
 {
     echo frameValue((string) $request->input('banner'));
 }
 
+/**
+ * Content produced directly by a function call, exempt by its literal attachment headers. This is
+ * the false positive the previous FuncCall/StaticCall record gate had to keep.
+ */
 function makeAttachmentFromCallContent(Request $request): void
 {
     Response::make(frameValue((string) $request->input('blob')), 200, ['Content-Disposition' => 'attachment; filename="export.csv"']);
@@ -47,4 +50,3 @@ function makeAttachmentFromCallContent(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedHtml on line %d: Detected tainted HTML

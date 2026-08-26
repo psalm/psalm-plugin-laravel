@@ -14,15 +14,11 @@ final class CustomResponseFactory
     }
 }
 
-interface ResponseFactoryMarker
-{
-}
-
 /**
- * Only a direct, literal attachment disposition on an exact factory is exempt. Default,
- * content-type-only, dynamic, list-valued, malformed, non-attachment, duplicate, underscore,
- * CRLF-smuggling, and computed-key disposition headers, named-argument calls, custom receivers,
- * and intersections retain the default HTML sink.
+ * Only a direct, literal attachment disposition on a call Psalm resolved to the factory's own sink
+ * is exempt. Default, content-type-only, dynamic, list-valued, malformed, non-attachment,
+ * duplicate, underscore, CRLF-smuggling, and computed-key disposition headers, named-argument
+ * calls, and custom receivers retain the default HTML sink.
  *
  * The unique ARGS line runs this file in its own batch. So many flows converging on the shared
  * `make#1` node cross Psalm's visited-node pruning in a shared batch, which silently drops the
@@ -58,25 +54,12 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
     $custom->make((string) $request->input('custom'), 200, ['Content-Disposition' => 'attachment']);
 }
 
-function makeWithIntersectedReceiver(Request $request, ResponseFactoryMarker&ResponseFactory $response): void
-{
-    $response->make($request->input('intersected'), 200, ['Content-Disposition' => 'attachment']);
-}
-
 /**
- * The reversed intersection order puts `ResponseFactory` in the primary atomic and the marker in
- * `extra_types`, so this is the case only the `extra_types` guard declines.
- */
-function makeWithFactoryPrimaryIntersection(Request $request, ResponseFactory&ResponseFactoryMarker $response): void
-{
-    $response->make($request->input('factory-primary-intersected'), 200, ['Content-Disposition' => 'attachment']);
-}
-
-/**
- * The static path is gated on the `Illuminate\Support\Facades\Response` facade by resolved name.
- * The root `\Response` alias resolves to `Response`, so it declines and keeps the sink. Accepted
- * imprecision: a project that trims the alias registry is unaffected either way, and the miss is a
- * retained finding rather than a dropped one.
+ * The exempt journey labels name the concrete factory, its contract, and the fully qualified
+ * facade. The root `\Response` alias reaches the same sink under the unqualified label
+ * `Response::make`, which is left out of that list, so it keeps the sink. Accepted imprecision: a
+ * project that trims the alias registry is unaffected either way, and the miss is a retained
+ * finding rather than a dropped one.
  */
 function makeThroughRootAliasFacade(Request $request): void
 {
@@ -86,8 +69,6 @@ function makeThroughRootAliasFacade(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedHtml on line %d: Detected tainted HTML
-TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

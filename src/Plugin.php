@@ -482,10 +482,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
-        // Removes only html taint on `make($content, $status, $headers)` calls with literal headers
-        // that prove the browser downloads the response instead of rendering it (#1345). The
-        // ResponseFactory stubs retain their default sinks; this hook scopes the narrow exception
-        // to the exact call site.
+        // Drops the TaintedHtml finding on `make($content, $status, $headers)` calls with literal
+        // headers that prove the browser downloads the response instead of rendering it (#1345).
+        // The ResponseFactory stubs retain their default sinks and the taint graph is never edited:
+        // the exception is applied when the issue is emitted, so it cannot leak onto another flow.
         require_once __DIR__ . '/Handlers/Http/ResponseFactoryTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Http\ResponseFactoryTaintHandler::class);
 
