@@ -192,11 +192,17 @@ flowchart TD
         C7 --> C8["AfterFileAnalysisInterface"]
     end
 
+    subgraph P3B["Phase 3b — Taint graph resolved (main process, after the workers exit)"]
+        E1["BeforeAddIssueInterface
+        fires here for every taint issue,
+        and inside the workers above for every type issue"]
+    end
+
     subgraph P4["Phase 4 — Run complete (fires once)"]
         D1["AfterAnalysisInterface"]
     end
 
-    P1 --> P2 --> P3 --> P4
+    P1 --> P2 --> P3 --> P3B --> P4
 ```
 
 ### Registering handlers

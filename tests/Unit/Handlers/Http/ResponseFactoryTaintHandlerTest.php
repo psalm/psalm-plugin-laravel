@@ -100,7 +100,12 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'no headers argument' => ['$r->make($c)', false];
         yield 'content type only' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', false];
         yield 'fourth argument' => ['$r->make($c, 200, ["Content-Disposition" => "attachment"], true)', false];
-        yield 'named arguments' => ['$r->make(content: $c, status: 200, headers: ["Content-Disposition" => "attachment"])', false];
+        // PHP allows a named argument only after every positional one, so these three are the only
+        // reachable named shapes. The last is the load-bearing one: the earlier two are also caught
+        // by the same check on the third argument.
+        yield 'all named arguments' => ['$r->make(content: $c, status: 200, headers: ["Content-Disposition" => "attachment"])', false];
+        yield 'named from the status argument' => ['$r->make($c, status: 200, headers: ["Content-Disposition" => "attachment"])', false];
+        yield 'named headers argument only' => ['$r->make($c, 200, headers: ["Content-Disposition" => "attachment"])', false];
         yield 'spread headers' => ['$r->make($c, 200, ...[["Content-Disposition" => "attachment"]])', false];
         yield 'variable headers' => ['$r->make($c, 200, $headers)', false];
         yield 'spread entry' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", ...$extra])', false];
