@@ -33,23 +33,24 @@ Security scanning runs automatically alongside type analysis, no extra configura
 ### `ResponseFactory::make()` HTML responses
 
 `ResponseFactory::make()` reports XSS for unescaped content because its default
-response is HTML. The finding is removed only for a positional call whose
+response is HTML. The finding is dropped only for a positional call whose
 headers array is written literally at the call site and contains one direct
-string `Content-Disposition: attachment` entry.
+string `Content-Disposition: attachment` entry. It is dropped as it is reported,
+so no other flow through the same code is affected.
 
 The gate is deliberately syntactic. Every header entry must be a literal string
 key and a literal string value. A variable holding the very same attachment
 array keeps the finding, which makes it the most likely false positive to meet
 in real code. Dynamic, duplicate, list valued, underscore named, or non
 attachment dispositions continue to report, as do all content type only
-responses, and content produced directly by a function or static call (the
-removal cannot be scoped to one call site there). This applies to the concrete
-factory, its contract, and the `Illuminate\Support\Facades\Response` facade.
-The root `\Response` alias and custom classes with a `make()` method keep the
-sink. A receiver typed as the factory or its contract is trusted to apply the
-headers argument, as every conforming implementation does. An implementation
-that silently discards its headers argument violates that contract and is out
-of scope.
+responses and every named argument call. This applies to the concrete factory,
+its contract, and the `Illuminate\Support\Facades\Response` facade, including a
+receiver whose type intersects one of them with another interface. The root
+`\Response` alias and custom classes with a `make()` method keep the sink. A
+receiver typed as the factory or its contract is trusted to apply the headers
+argument, as every conforming implementation does. An implementation that
+silently discards its headers argument violates that contract and is out of
+scope.
 
 ### Known limitation: named arguments
 

@@ -207,16 +207,29 @@ There are two ways to register:
 2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
 
 Every class registration keeps the matching `require_once` beside
-`registerHooksFromClass()`. Call site taint handlers such as
-`ResponseFactoryTaintHandler` pair `BeforeExpressionAnalysisInterface` with
-`RemoveTaintsInterface` because Psalm's removal event has neither a method id nor
-an argument offset. Key that bridge on the node object (a `WeakMap`), never on its
-`spl_object_id`. Psalm frees whole ASTs other than the analysed file's while that
-file is still being analysed (`ProjectAnalyzer::getMethodMutations()` on the
-constructor initialisation path, `ClassLikes::getTraitNode()`), and dispatches no
-`BeforeFileAnalysisEvent` for them, so a per file flush does not bound an id's
-lifetime. PHP then reissues the freed handle to an unrelated node, and a stale hit
-STRIPS taint, which is a missed finding rather than a false positive.
+`registerHooksFromClass()`.
+
+#### Exempting one call site from a stub's taint sink
+
+Narrow the finding at emission time, not in the taint graph.
+`ResponseFactoryTaintHandler` is the reference shape: it implements only
+`BeforeAddIssueInterface`, matches the issue's journey tail against the sink's
+labels, re-checks the call site, and returns `false` to drop the finding. Graph
+level removal (`RemoveTaintsInterface`) cannot express "this call site only":
+`AddRemoveTaintsEvent` carries neither a method id nor an argument offset, so the
+removal is keyed on an AST node, and Psalm dispatches the event for that node a
+second time while fetching its own callee's return type. The removal then lands on
+a shared, project wide `@psalm-flow` edge and silences unrelated flows. See
+[Architecture Decisions](decisions.md) for the full dead end record.
+
+An emission time handler must be stateless. Taint findings are resolved in the
+MAIN process after the worker pool exits (`Analyzer::analyzeFiles()`), while type
+issues are emitted inside the workers, so nothing a per expression or per file
+hook recorded survives to `beforeAddIssue()`. Re-derive every fact from the issue
+plus `Codebase::getStatementsForFile()`, which reads the parser cache. The hook
+also fires for every issue in the run, so bail on the issue class first and only
+then do anything expensive. Every uncertain path returns `null` and keeps the
+finding.
 
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 
