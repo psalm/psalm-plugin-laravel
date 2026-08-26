@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787697411502,
+  "lastUpdate": 1787731022384,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10490,6 +10490,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.82,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db6f448c07e96ae1b1375388407900ab58bb3027",
+          "message": "Restore named-argument taint tracking on facades and known receivers (#1413)\n\n* fix(taint): stop stripping named-argument taint on facades and known receivers\n\n`NamedArgumentTaintHandler` treated a callee it could not resolve as a reason to\nstrip every named argument on the call. Two very common Laravel shapes fell into\nthat bucket and lost genuine findings:\n\n- A facade `@method static` pseudo-method has no `MethodStorage`, and\n  `Codebase::getFunctionLikeStorage()` cannot see it because its `methodExists()`\n  gate leaves `$with_pseudo` false. `File::delete(paths: $tainted)` and\n  `Storage::get(path: $tainted)` both report `TaintedFile` without the handler\n  and were silent with it, even though the argument names the declared parameter\n  at its own offset and upstream attributes it correctly.\n- A method call on a receiver typed as exactly one class, including `$this->m()`\n  and any DI-injected service, was declined outright.\n\nResolve pseudo-method params from `pseudo_static_methods`/`pseudo_methods`, and\nresolve a plain `$var` receiver from `Context::vars_in_scope` when it holds\nexactly one named object. A union or non-object receiver still declines, so the\nstrip stays the default wherever the parameter cannot be proven.\n\nThe upstream false positive this handler exists to suppress (vimeo/psalm#11923)\nis unaffected: preservation still requires the declared parameter at the\nargument's own written offset to carry the argument's name.\n\nAlso condenses the handler's documentation. The class docblock restated issue\n#1406's deferred-work list, a corpus-scan statistic, and the review history of\ntwo reverted attempts; those live in #1406 and the PR history, so the docblock\nnow states the rule, the trade, and the retirement condition and links out. The\nrecording loop no longer builds an intermediate array just to re-narrow the same\nvalue for Psalm on the next pass.\n\n`docs/security.md` gains the named-argument limitation so the remaining gap is\ndiscoverable rather than silent.\n\nRefs #1395, #1406.\n\n* refactor(auth): read guard() params without building the fallback first\n\n`guardParams()` allocated the pre-13.5 `string|null` fallback on every call and\nthen usually discarded it, and tested a nullable getter with `instanceof` across\ntwo separate early returns. Fold the lookup into one nullsafe chain and use the\nfallback as the `??` right-hand side, so it is built only when the facade storage\nreally is unreadable.\n\nBehaviour is unchanged: AuthManager and the Factory contract still return null so\nPsalm derives the signature from source, every other receiver still gets the\nfacade's own declared `@method static` params, and the method still never returns\nnull for those receivers (which would re-trigger the #454/#854 crash).\n\nRefs #1389.\n\n* test(taint): pin the constructor, static and resolved-receiver named-argument paths\n\nAdversarial review of the preceding commit found the new preserve path had no\nnegative test: nothing asserted that a receiver which DOES resolve still strips a\nname/offset mismatch. A later widening of the receiver gate would silently reopen\nthe #1395 false positive with a green suite.\n\n- `SafeNamedArgumentStripped.phpt` merges the three empty-expectation strip tests\n  into one file and adds the missing resolved-receiver-mismatch case. The deleted\n  `SafeNamedArgumentDynamicCalleeStripped.phpt` survived every mutation of the\n  handler, including deleting it outright; the shape it documented is now three\n  lines in the merged file instead of a 30-line file asserting nothing.\n- `TaintedNamedArgumentConstructorAndStaticReports.phpt` covers `New_`, a plain\n  `StaticCall`, `self::` and `static::`. Neutralising `resolveClassNamePart()`\n  drops all ten findings, so it has teeth in every arm.\n- `TaintedNamedArgumentResolvedReceiverReports.phpt`'s negative half used\n  `Filesystem|null` with `?->`, conflating the union decline with the nullsafe\n  path. A `Writer|OtherWriter` receiver isolates \"not exactly one known class\".\n\n`PluginConfigTest::find_serialized_queued_models_explicit_true_with_experimental`\nwas vacuous: with `experimental` also true, dropping the explicit read entirely\nstill satisfied it. Replaced with the `experimental`-absent variant, which is the\none combination that cannot pass without reading the flag.\n\n`AuthMethodHandlerTest::testGetMethodParamsForGuard` reads as the facade-params\ntest but builds an event with no statements source, so it only ever exercised the\nfallback. Renamed to say so and to name the type test that pins the live-storage\narm.\n\nDrops the `enum_type !== 'string'` gate in `ExtractsGuardNameFromCallLike`:\n`EnumCaseStorage::getValue()` returns `TLiteralInt|TLiteralString|null`, so the\nterminal `instanceof TLiteralString` already declines int-backed and pure enums.\n\nDocuments the residual the receiver gate leaves behind. A chained receiver\n(`Storage::disk('local')->put(path: ...)`) is an expression, not a variable, so it\nstill strips while the variable form does not.\n\nRefs #1395, #1406.\n\n* test(taint): stop the merged named-argument fixtures from masking each other\n\nBoth new files passed while hiding which case actually fired.\n\n`SafeNamedArgumentStripped.phpt` routed the resolved-receiver and\nunresolved-receiver cases through one `Sink::report`, so they emitted at the same\nlocation. Either could have stopped being a live trigger and the file would still\nhave asserted nothing and still passed. The unresolved case gets its own class.\n\n`TaintedNamedArgumentConstructorAndStaticReports.phpt` routed `Base::`, `Child::`,\n`self::` and `static::` through one method, collapsing four shapes onto one\nexpectation line whose line number is already a `%d` wildcard. A single-shape\nregression was visible only as a change in the total count. `self::` and\n`static::` now go through a second sink so the static family spans two locations.\n\nVerified per case in isolation with the handler on versus neutralised: every case\nexcept the dynamic callee is a live trigger, and the dynamic callee is a shape pin\nby construction (Psalm cannot resolve the callee, so there is no sink to lose).\n\nRefs #1395, #1406.\n\n* test(taint): pin both attribute-derived function-name candidates\n\n`functionNameCandidates()` tries `resolvedName`, then `namespacedName`, then the\nraw written name, but nothing in the suite distinguished the first two: dropping\neither left every test green.\n\n`Functions::getStorage()` only ever looks its id up as a key, in\n`self::$stubbed_functions`, `$file_storage->functions`, `reflection`, and\n`declaring_function_ids`. It never consults the file's `use function` alias table,\nso each attribute is the only candidate that resolves for its own call shape:\n\n- an aliased call whose written name names no real function anywhere\n  (`use function Lib\\sink as aliasedSink;` then `aliasedSink(...)`), which needs\n  `resolvedName`;\n- an unqualified call to a same-namespace function, which PHP-Parser leaves\n  without a `resolvedName` because PHP itself defers the choice to runtime, and\n  which therefore needs `namespacedName`.\n\nBoth arms land at different locations so neither masks the other. Proven\nindependently: dropping `resolvedName` fails the aliased arm, dropping\n`namespacedName` fails the unqualified arm. The raw candidate stays pinned by\n`TaintedNamedArgumentBuiltinFunctionPositionMatchReports.phpt`.\n\nRefs #1395.\n\n* docs(auth): state precisely why the enum_type gate was redundant\n\ngetValue() also answers TLiteralString for a pure enum whose case illegally\ncarries a value, so \"null for a pure one\" was not the whole rule. That shape is\nthe one place the removed gate changed behaviour, and it cannot execute: PHP\nrefuses to compile a non-backed enum case with a value, and Psalm flags the\ndeclaration itself. Worth stating, since this comment is the justification for\ndeleting the gate.\n\nRefs #1389.",
+          "timestamp": "2026-08-26T09:53:41+02:00",
+          "tree_id": "879763c96d2f0ac2190e2004b74b1d6d6ac07c85",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/db6f448c07e96ae1b1375388407900ab58bb3027"
+        },
+        "date": 1787731020894,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.97,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
