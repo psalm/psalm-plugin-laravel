@@ -46,7 +46,10 @@ responses, and content produced directly by a function or static call (the
 removal cannot be scoped to one call site there). This applies to the concrete
 factory, its contract, and the `Illuminate\Support\Facades\Response` facade.
 The root `\Response` alias and custom classes with a `make()` method keep the
-sink.
+sink. A receiver typed as the factory or its contract is trusted to apply the
+headers argument, as every conforming implementation does. An implementation
+that silently discards its headers argument violates that contract and is out
+of scope.
 
 ### Known limitation: named arguments
 
