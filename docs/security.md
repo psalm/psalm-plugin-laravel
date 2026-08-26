@@ -52,6 +52,13 @@ argument, as every conforming implementation does. An implementation that
 silently discards its headers argument violates that contract and is out of
 scope.
 
+One accepted gap. All `make()` calls in a project meet at a single taint graph
+node, and Psalm walks that node once, so it already reports only the shortest
+flow reaching it and discards the rest. When that shortest flow is the exempt
+one, the call reports nothing at all instead of reporting one of its flows. The
+longer flows are discarded whether or not the exemption applies, so this costs
+no coverage relative to running without the plugin.
+
 ### Known limitation: named arguments
 
 Psalm keys a named argument's taint node by the argument's written position rather than by the

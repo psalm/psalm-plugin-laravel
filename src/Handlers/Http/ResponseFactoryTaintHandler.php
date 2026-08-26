@@ -36,6 +36,16 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * The proof stays deliberately syntactic: the headers argument must be an array literal at the call
  * site with every entry a literal string pair. A variable holding the very same attachment array
  * keeps the sink. Each such miss fails toward a retained finding, never a dropped one.
+ *
+ * ACCEPTED LIMITATION: every `make()` call in a project shares one sink node, and
+ * `TaintFlowGraph::getChildNodes()` walks it once, so its `visited_source_ids` set already discards
+ * every flow into it longer than the first one found. Exempting that first flow leaves the sink
+ * reporting nothing rather than reporting one of its flows. The longer flow is lost with or without
+ * this handler; pinned by `TaintedHtmlResponseFactoryMakeSharedSinkKnownLimitation.phpt`.
+ *
+ * Every private helper below is free of side effects, but the purity annotations follow what Psalm
+ * can verify rather than what is true: the two helpers that reach for a call's arguments carry none,
+ * because `NodeFinder::find()` and `CallLike::getArgs()` are impure in Psalm's own stubs.
  */
 final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
 {
@@ -138,19 +148,19 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * Named arguments are rejected rather than resolved: in-order named arguments carry the same
-     * content span as positional ones, so accepting the span alone would silently exempt them.
+     * Named arguments are rejected rather than resolved: an in-order named argument carries the
+     * same content span as a positional one, so accepting the span alone would silently exempt it.
+     *
+     * Testing the LAST argument covers all three positions. PHP allows a named or unpacked argument
+     * only after every positional one, so a third argument that is neither proves the first two are
+     * positional too. The unit tests pin each position rather than the check that catches it.
      */
     private static function provesLiteralAttachment(MethodCall|StaticCall $call): bool
     {
         $args = $call->getArgs();
 
         if (\count($args) !== 3
-            || $args[0]->name !== null
-            || $args[1]->name !== null
             || $args[2]->name !== null
-            || $args[0]->unpack
-            || $args[1]->unpack
             || $args[2]->unpack
             || !$args[2]->value instanceof Array_
         ) {
