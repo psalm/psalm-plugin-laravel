@@ -8,11 +8,11 @@ use App\Models\Part;
 use App\Models\Supplier;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
-use Illuminate\Support\Collection;
 
 /**
  * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/1051
@@ -32,6 +32,7 @@ function relation_paginate_keeps_template(Customer $customer): void
     /** @psalm-check-type-exact $_paginator = LengthAwarePaginator<int, Vehicle> */
 
     // #1052/#978 — getCollection() lives on the concrete AbstractPaginator only.
+    // #1384 — and narrows to Eloquent\Collection since TValue (Vehicle) is a Model.
     $_collection = $customer->vehicles()->paginate()->getCollection();
     /** @psalm-check-type-exact $_collection = Collection<int, Vehicle> */
 }

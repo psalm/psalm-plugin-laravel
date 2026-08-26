@@ -214,6 +214,12 @@ final class Plugin implements PluginEntryPointInterface
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
     {
+        // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
+        // Not domain-specific like the other taint handlers below, so it is registered
+        // first rather than filed under any one Laravel feature directory.
+        require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Taint\NamedArgumentTaintHandler::class);
+
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';
