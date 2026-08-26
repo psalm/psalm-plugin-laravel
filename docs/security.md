@@ -30,6 +30,42 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+### `ResponseFactory::make()` HTML responses
+
+`ResponseFactory::make()` reports XSS for unescaped content because its default
+response is HTML. The finding is dropped only for a positional call whose
+headers array is written literally at the call site and contains one direct
+string `Content-Disposition: attachment` entry. It is dropped as it is reported,
+so no other flow through the same code is affected.
+
+The gate is deliberately syntactic. Every header entry must be a literal string
+key and a literal string value. A variable holding the very same attachment
+array keeps the finding, which makes it the most likely false positive to meet
+in real code. Dynamic, duplicate, list valued, underscore named, or non
+attachment dispositions continue to report, as do all content type only
+responses and every named argument call. Header names are folded the way
+Symfony folds them (underscore onto hyphen, then lower case), so a second entry
+that spells the disposition differently but lands on the same header keeps the
+finding: the last write is what the browser sees. A value carrying any control
+character other than a horizontal tab keeps the finding too, since a runtime
+that drops the header serves the response as HTML. Parameters after the
+`attachment` token are not validated, because every browser downloads on the
+token whatever follows it. This applies to the concrete factory,
+its contract, and the `Illuminate\Support\Facades\Response` facade, including a
+receiver whose type intersects one of them with another interface. The root
+`\Response` alias and custom classes with a `make()` method keep the sink. A
+receiver typed as the factory or its contract is trusted to apply the headers
+argument, as every conforming implementation does. An implementation that
+silently discards its headers argument violates that contract and is out of
+scope.
+
+One accepted gap. All `make()` calls in a project meet at a single taint graph
+node, and Psalm walks that node once, so it already reports only the shortest
+flow reaching it and discards the rest. When that shortest flow is the exempt
+one, the call reports nothing at all instead of reporting one of its flows. The
+longer flows are discarded whether or not the exemption applies, so this costs
+no coverage relative to running without the plugin.
+
 ### Known limitation: named arguments
 
 Psalm keys a named argument's taint node by the argument's written position rather than by the
