@@ -25,7 +25,9 @@ function dynamicFuncCallCalleeSurvives(): void
 
 /**
  * Same collision for `New_` with a dynamic class-name expression (`NewAnalyzer`'s own
- * `INPUT_CALLABLE` sink on `new $class()`).
+ * `INPUT_CALLABLE` sink on `new $class()`). Psalm 7 additionally reports
+ * `InvalidStringClass` for the `new $class()` itself; Psalm 6 does not, which is a core
+ * difference and leaves the two `TaintedCallable` findings this test is about intact.
  */
 function dynamicNewCalleeSurvives(): void
 {
@@ -35,5 +37,4 @@ function dynamicNewCalleeSurvives(): void
 ?>
 --EXPECTF--
 TaintedCallable on line %d: Detected tainted text
-InvalidStringClass on line %d: String cannot be used as a class
 TaintedCallable on line %d: Detected tainted text

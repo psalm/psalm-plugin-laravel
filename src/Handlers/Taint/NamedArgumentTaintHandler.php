@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\BeforeFileAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
@@ -38,9 +39,9 @@ use Psalm\Type\TaintKind;
  *
  * A named argument is preserved only when the callee is statically resolvable AND the declared
  * parameter at the argument's own written offset already carries the argument's name — the one
- * shape upstream gets right. Everything else is stripped, and the strip is total
- * ({@see TaintKind::ALL_INPUT}, not the kind a given sink cares about) because a mis-routed
- * node can resurface as an arbitrary kind at an arbitrary sink.
+ * shape upstream gets right. Everything else is stripped, and the strip is total (every input
+ * kind via {@see ValidationRuleAnalyzer::allInputTaints()}, not the kind a given sink cares
+ * about) because a mis-routed node can resurface as an arbitrary kind at an arbitrary sink.
  *
  * That trade is FN-over-FP by design. The resulting false-negative surface — variadic capture,
  * late static binding, re-entrant file analysis, callees that stay unresolvable — is enumerated
@@ -411,17 +412,19 @@ final class NamedArgumentTaintHandler implements
     /**
      * Removes every taint kind from a recorded named-argument value node. See the class
      * docblock for why the strip is total rather than kind-scoped.
+     *
+     * @return list<string>
      */
     #[\Override]
-    public static function removeTaints(AddRemoveTaintsEvent $event): int
+    public static function removeTaints(AddRemoveTaintsEvent $event): array
     {
         $recorded = self::$namedArgumentValues;
 
         if (!$recorded instanceof \WeakMap || !$recorded->offsetExists($event->getExpr())) {
-            return 0;
+            return [];
         }
 
-        return TaintKind::ALL_INPUT;
+        return ValidationRuleAnalyzer::allInputTaints();
     }
 
     /**

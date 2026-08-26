@@ -39,6 +39,10 @@ final class ListChangelogEntriesAction
  * declared parameter is the variadic `$arguments`, not `$page`, so NamedArgumentTaintHandler
  * strips the value here at the call site, before it can ever re-spread into `handle()`'s
  * `$directory` and mis-report TaintedFile (#1395).
+ *
+ * Psalm 6 does not check a `mixed ...$arguments` re-spread against the callee's declared
+ * parameters, so the two `MixedArgument` findings Psalm 7 emits are absent here; the
+ * assertion that matters — no `TaintedFile` — is the empty expectation itself.
  */
 function controllerAction(Request $request): mixed
 {
@@ -46,5 +50,3 @@ function controllerAction(Request $request): mixed
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of SafeNamedArgumentVariadicRespreadFileFilesReporterShape\ListChangelogEntriesAction::handle cannot be mixed, expecting null|string
-MixedArgument on line %d: Argument 2 of SafeNamedArgumentVariadicRespreadFileFilesReporterShape\ListChangelogEntriesAction::handle cannot be mixed, expecting int

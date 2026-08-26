@@ -25,7 +25,9 @@ function evalValueSurvives(): void
 }
 
 /**
- * Same collision, `IncludeAnalyzer` in place of `EvalAnalyzer`.
+ * Same collision, `IncludeAnalyzer` in place of `EvalAnalyzer`. Psalm 7 also reports
+ * `UnresolvableInclude` for the dynamic path; Psalm 6 does not, which is a core difference
+ * and leaves the `TaintedInclude` finding this test is about intact.
  */
 function includeValueSurvives(): void
 {
@@ -35,5 +37,4 @@ function includeValueSurvives(): void
 ?>
 --EXPECTF--
 TaintedEval on line %d: Detected tainted code passed to eval or similar
-UnresolvableInclude on line %d: Cannot resolve the given expression to a file path
 TaintedInclude on line %d: Detected tainted code passed to include or similar
