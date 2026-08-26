@@ -243,6 +243,10 @@ final class NamedArgumentTaintHandler implements
      * every other facade named-argument call counted as "unresolvable" and had its taint
      * stripped, losing genuine findings upstream attributes correctly.
      *
+     * `pseudo_methods` is read for symmetry only: a stock Laravel codebase carries every
+     * sink-bearing pseudo-method as a STATIC one. A class with both a real method and a
+     * same-named `@method` tag never reaches here, because real storage resolves first.
+     *
      * @param non-empty-string $methodId
      *
      * @return list<FunctionLikeParameter>|null
@@ -316,10 +320,13 @@ final class NamedArgumentTaintHandler implements
      * The single class a method call's receiver is known to hold, or null. Only a plain
      * `$var` receiver already in scope resolves: the argument types are not inferred yet at
      * this pre-pass, but the receiver VARIABLE's own type is, because it was assigned by an
-     * earlier statement. A union or a non-object receiver declines, per the house rule that
-     * narrowing on anything but exactly one known class turns into false positives. A runtime
-     * subclass that renames the parameter is still read against the declared class, the same
-     * late-static-binding gap `static::` has (#1406).
+     * earlier statement, and it is the same type `MethodCallAnalyzer` resolves the call against,
+     * so the two cannot disagree. A union or non-object receiver declines, per the house rule
+     * that narrowing on anything but exactly one known class turns into false positives.
+     *
+     * A CHAINED receiver (`Storage::disk('local')->put(path: ...)`) is not a `Variable` and has
+     * no entry to read, so the fluent form still strips while the variable form does not. There
+     * is no receiver type at this pre-pass to fix that with; tracked in #1406.
      *
      * @psalm-mutation-free
      */

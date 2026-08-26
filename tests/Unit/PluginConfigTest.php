@@ -298,14 +298,10 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function find_serialized_queued_models_explicit_true_with_experimental(): void
+    public function find_serialized_queued_models_explicit_true_without_experimental(): void
     {
-        $xml = new \SimpleXMLElement(
-            '<pluginClass>'
-            . '<experimental value="true" />'
-            . '<findSerializedQueuedModels value="true" />'
-            . '</pluginClass>',
-        );
+        // The one combination `= $experimental` alone cannot satisfy: the flag must be read.
+        $xml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="true" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 

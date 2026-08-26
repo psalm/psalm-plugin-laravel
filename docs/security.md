@@ -40,9 +40,10 @@ taint from a named argument it cannot prove is attributed correctly.
 Detection is unaffected when the callee is statically known (a plain function, a facade, a
 static call, a constructor, or a method on a receiver typed as exactly one class) and the
 argument names the parameter at its own position, which covers ordinary application code. It is
-lost for a dynamic callee, a receiver Psalm cannot resolve to a single class, an argument
-captured by a variadic, and a `static::` call resolved through a subclass override. Passing the
-same values positionally always reports.
+lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
+chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
+expression rather than a variable), an argument captured by a variadic, and a `static::` call
+resolved through a subclass override. Passing the same values positionally always reports.
 
 ### Timing-unsafe secret comparison (CWE-208)
 
