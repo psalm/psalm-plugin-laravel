@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Filesystem;
 
+use PhpParser\Node\Arg;
+use PhpParser\Node\Scalar\String_;
+use Psalm\CodeLocation;
+use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Issues\UnknownFilesystemDisk;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -102,11 +107,37 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static ?array $facade_disk_params = null;
 
+    /** Guards the {@see UnknownFilesystemDisk} diagnostic — off unless {@see self::init()} ran. */
+    private static bool $enabled = false;
+
+    /**
+     * Configured disk names from `filesystems.disks`, in config order (used to render the
+     * "configured: ..." hint on the diagnostic). Membership is checked against this same list —
+     * it is small enough in real apps that a set is not worth the extra allocation.
+     *
+     * @var list<string>
+     */
+    private static array $disks = [];
+
     /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$adapter_return_type = null;
         self::$facade_disk_params = null;
+        self::$enabled = false;
+        self::$disks = [];
+    }
+
+    /**
+     * Arm the {@see UnknownFilesystemDisk} diagnostic with the booted app's configured disk names.
+     *
+     * @param list<string> $disks
+     * @psalm-external-mutation-free
+     */
+    public static function init(array $disks): void
+    {
+        self::$enabled = true;
+        self::$disks = $disks;
     }
 
     /**
@@ -134,9 +165,11 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      * the configured driver and a dynamic `disk($name)` narrows just as a literal
      * `disk('s3')` does.
      *
-     * @inheritDoc
+     * Not `@psalm-external-mutation-free`: {@see self::checkDiskExists()} calls
+     * `IssueBuffer::accepts()`, impure like {@see \Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler::getMethodReturnType()}'s
+     * `checkViewExists()`.
      *
-     * @psalm-external-mutation-free
+     * @inheritDoc
      */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
@@ -145,9 +178,64 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             return null;
         }
 
+        self::checkDiskExists(
+            $event->getCallArgs(),
+            $event->getCodeLocation(),
+            $event->getSource()->getSuppressedIssues(),
+        );
+
         return self::$adapter_return_type ??= new Type\Union([
             new Type\Atomic\TNamedObject(\Illuminate\Filesystem\FilesystemAdapter::class),
         ]);
+    }
+
+    /**
+     * Flag `disk('s3-old')` / `drive('s3-old')` when the literal name is not a key in
+     * `filesystems.disks`. Laravel's `FilesystemManager::resolve()` throws a hard
+     * `InvalidArgumentException` for an unconfigured disk — this is not a silent fallback to
+     * `local`, so an unknown name is an availability bug, not a wrong write target.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkDiskExists(array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if (!self::$enabled) {
+            return;
+        }
+
+        if ($callArgs === []) {
+            return;
+        }
+
+        $value = $callArgs[0]->value;
+
+        if (!$value instanceof String_) {
+            return;
+        }
+
+        $diskName = $value->value;
+
+        // Dynamic/enum/null names are skipped above (not a String_ node); an empty literal is
+        // skipped here too — Storage::disk('') resolves to the default disk at runtime, not a
+        // lookup failure, so flagging it would be a false positive.
+        if ($diskName === '') {
+            return;
+        }
+
+        if (\in_array($diskName, self::$disks, true)) {
+            return;
+        }
+
+        $configured = \implode(', ', self::$disks);
+
+        IssueBuffer::accepts(
+            new UnknownFilesystemDisk(
+                "Disk '{$diskName}' is not configured in filesystems.disks (configured: {$configured})",
+                $codeLocation,
+            ),
+            $suppressedIssues,
+        );
     }
 
     /**

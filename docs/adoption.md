@@ -35,7 +35,7 @@ Psalm's levels run from `1` (strictest) to `8` (most lenient). `psalm-laravel in
 
 ## Turning down the noise
 
-* **The noisier checks are opt-in.** `findMissingViews`, `findMissingTranslations`, and `reportImplicitQueryBuilderCalls` are all off by default. Enable them when the rest of the analysis is quiet, not on day one. See [Configuration](config.md).
+* **The noisier checks are opt-in.** `findMissingViews`, `findMissingTranslations`, `findUnknownFilesystemDisks`, and `reportImplicitQueryBuilderCalls` are all off by default. Enable them when the rest of the analysis is quiet, not on day one. See [Configuration](config.md).
 * **Any issue type can be downgraded or suppressed project-wide** in `<issueHandlers>`, for example `<MissingReturnType errorLevel="info"/>`.
 * **Per line, use `@psalm-suppress`.** This works for type issues only. Taint findings ignore the inline form, so silencing one takes an `<issueHandlers>` entry or a baseline line. Prefer fixing the flow, or annotating the sanitizer with `@psalm-taint-escape`, over suppressing a security finding.
 
