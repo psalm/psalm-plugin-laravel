@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788195840674,
+  "lastUpdate": 1788197666056,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10805,6 +10805,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.91,
             "range": "± 0.09",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d165957dd66eca7c3975bfa7b54c9b7ab471557c",
+          "message": "Improve MissingView  detection: Extend `MissingView` to `Factory::first()`, `ResponseFactory::view()`, `Route::view()`, and other view-name-bearing APIs (#1407)\n\n* feat(views): extend MissingView to more view-name-bearing Laravel APIs #1386\n\nRecognize view names on Factory::first()/renderWhen()/renderUnless()/\nrenderEach(), ResponseFactory::view() (concrete/contract/facade/helper),\nRouter::view()/Route facade, MailMessage::view()/markdown(), and\nTestResponse::assertViewIs() — previously only view() and Factory::make()\nwere checked.\n\nViewNameSignatures centralizes the five receiver families (and their\nfacade/contract aliases) behind a role lookup, mirroring\nProducerReturnTypeHandler's family/reverse-index shape so MissingViewHandler's\nper-role argument-extraction rules (position, array-candidate, or\nnamed-argument) stay in one place.\n\n* test(views): pin the extended MissingView signature coverage #1386\n\nRegression phpts for Factory::first()/renderWhen()/renderUnless()/renderEach(),\nResponseFactory::view() (concrete/contract/facade/helper/array-form),\nRouter::view()/Route facade (including named-argument reordering), and\nMailMessage/TestResponse. Extends MissingViewStillFiresAfterNarrowingTest to\npin that first() also survives the MissingViewHandler-before-\nProducerReturnTypeHandler registration order, not only make().\n\n* docs(views): document the extended MissingView coverage #1386\n\nReflect the new receiver families (ResponseFactory, Router, MailMessage,\nTestResponse) and Factory methods (first/renderWhen/renderUnless/renderEach)\nin the config reference and the MissingView issue page, plus the first()/\narray-form all-missing semantics and renderEach()'s raw| skip.",
+          "timestamp": "2026-08-31T19:31:40+02:00",
+          "tree_id": "66b1baefba8e5c5480aee38433edc9ab9170ba2a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d165957dd66eca7c3975bfa7b54c9b7ab471557c"
+        },
+        "date": 1788197664875,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.79,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
