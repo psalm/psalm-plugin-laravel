@@ -12,6 +12,29 @@ namespace Illuminate\Redis\Connections;
 abstract class Connection
 {
     /**
+     * Execute commands in a pipeline.
+     *
+     * Both supported Redis drivers return their driver-specific pipeline object
+     * when no callback is given. With a callback, they return command results in
+     * execution order; PhpRedis can return false when execution fails.
+     *
+     * @param  (callable(mixed): mixed)|null  $callback
+     * @return ($callback is null ? (object|false) : (list<mixed>|false))
+     */
+    public function pipeline(?callable $callback = null) {}
+
+    /**
+     * Execute commands in a transaction.
+     *
+     * Predis returns null when the callback queues no commands. PhpRedis can
+     * return false when the transaction is aborted.
+     *
+     * @param  (callable(mixed): mixed)|null  $callback
+     * @return ($callback is null ? (object|false) : (list<mixed>|false|null))
+     */
+    public function transaction(?callable $callback = null) {}
+
+    /**
      * @return mixed
      */
     public function multi() {}
