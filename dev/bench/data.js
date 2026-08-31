@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787754327188,
+  "lastUpdate": 1788184834959,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10600,6 +10600,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1110,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0f76ede14d5f2e9ae98bac7583183a9b036d316d",
+          "message": "feat(pagination): narrow getCollection() to custom Eloquent collections (#1408)\n\nAbstractPaginator/AbstractCursorPaginator::getCollection() already narrows\nto Eloquent\\Collection for model paginators (#1397); extend\nCustomCollectionHandler to further narrow that branch to a model's\nregistered custom collection (#[CollectedBy] / newCollection() override),\nmatching the narrowing already applied to Builder/Relation methods.\n\nCloses #1398",
+          "timestamp": "2026-08-31T15:58:08+02:00",
+          "tree_id": "434ed6fe2b229299fb25dc301f398edf8aec841e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0f76ede14d5f2e9ae98bac7583183a9b036d316d"
+        },
+        "date": 1788184833551,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.06,
+            "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
             "unit": "MB"
           }
         ]
