@@ -296,6 +296,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         foreach ($stubs as $file => $_) {
             \unlink($stubsDir . '/' . $file);
         }
+
         \rmdir($stubsDir);
 
         return [$exitCode, \implode("\n", $output)];
