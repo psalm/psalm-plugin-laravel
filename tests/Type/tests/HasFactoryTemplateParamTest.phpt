@@ -47,5 +47,54 @@ class ExplicitArticle extends Model
 // plugin's Factory<Model>). Guards the documented escape hatch from #960.
 $_explicitFactory = ExplicitArticle::factory();
 /** @psalm-check-type-exact $_explicitFactory = ExplicitArticleFactory */;
+
+class BareFactoryArticle extends Model
+{
+    /** @use HasFactory<Factory> */
+    use HasFactory;
+}
+
+$_bareFactory = BareFactoryArticle::factory();
+/** @psalm-check-type-exact $_bareFactory = Factory */;
+
+abstract class BareFactoryArticleBase extends Model
+{
+    /** @use HasFactory<Factory> */
+    use HasFactory;
+}
+
+final class InheritedBareFactoryArticle extends BareFactoryArticleBase
+{
+}
+
+$_inheritedBareFactory = InheritedBareFactoryArticle::factory();
+/** @psalm-check-type-exact $_inheritedBareFactory = Factory */;
+
+trait ApplicationHasFactory
+{
+    /** @use HasFactory<ExplicitArticleFactory> */
+    use HasFactory;
+}
+
+class WrappedExplicitArticle extends Model
+{
+    use ApplicationHasFactory;
+}
+
+$_wrappedExplicitFactory = WrappedExplicitArticle::factory();
+/** @psalm-check-type-exact $_wrappedExplicitFactory = ExplicitArticleFactory */;
+
+trait NestedApplicationHasFactory
+{
+    use ApplicationHasFactory;
+}
+
+class NestedWrappedExplicitArticle extends Model
+{
+    use NestedApplicationHasFactory;
+}
+
+$_nestedWrappedExplicitFactory = NestedWrappedExplicitArticle::factory();
+/** @psalm-check-type-exact $_nestedWrappedExplicitFactory = ExplicitArticleFactory */;
 ?>
 --EXPECTF--

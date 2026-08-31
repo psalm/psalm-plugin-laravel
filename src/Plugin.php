@@ -13,6 +13,8 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
+use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
+use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
@@ -31,10 +33,20 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
         $pluginConfig = PluginConfig::fromXml($config);
+        require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
+
+        // Third gated laravel/ai call site, alongside the stubs and the handler.
+        // Restricted to projects that actually have the package so a project
+        // carrying its own `llm_prompt` annotations keeps Psalm's own default.
+        if ($this->laravelAiIntegrationEnabled()) {
+            require_once __DIR__ . '/Internal/PromptInjectionIssuePolicy.php';
+            PromptInjectionIssuePolicy::apply($pluginConfig->findPromptInjection);
+        }
+
         $output = $this->getProgress($registration);
         $this->loadInitializationHandlers();
         $this->resetInvocationState();
@@ -123,6 +135,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceRecorder.php';
+        require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
@@ -172,6 +186,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
+        Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
@@ -201,6 +216,7 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = \array_merge(
             StubFileFinder::commonStubs($stubsRoot, $output),
             StubFileFinder::stubsForLaravelVersion($stubsRoot, Application::VERSION, $output),
+            $this->optionalIntegrationStubs($stubsRoot, $output),
         );
 
         foreach ($stubs as $stubFilePath) {
@@ -210,6 +226,40 @@ final class Plugin implements PluginEntryPointInterface
         AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
         CarbonStubProvider::register($registration, $output);
+    }
+
+    /**
+     * Stubs for optional first/third-party AI packages. Each entry guards on
+     * Composer's runtime metadata so absent packages contribute zero stubs and
+     * we avoid triggering the project autoloader for a class lookup. The
+     * version constraint additionally protects against a future major bump
+     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
+     * renamed classes.
+     *
+     * @return list<string>
+     */
+    private function optionalIntegrationStubs(string $stubsRoot, \Psalm\Progress\Progress $output): array
+    {
+        $stubs = [];
+
+        if ($this->laravelAiIntegrationEnabled()) {
+            \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
+        }
+
+        return $stubs;
+    }
+
+    /**
+     * Single gate for every laravel/ai call site (stubs, LlmOutputTaintHandler,
+     * PromptInjectionIssuePolicy). They must move in lockstep: a stub loaded
+     * without its handler, or an issue policy applied without the stubs that
+     * feed it, is a silent half-integration. The version range has no ceiling
+     * below 1.0 because disabling coverage on every minor is worse than the
+     * rare drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
+     */
+    private function laravelAiIntegrationEnabled(): bool
+    {
+        return LaravelAiIntegration::isEnabled();
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
@@ -235,6 +285,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/SanctumTokenTemplateHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\SanctumTokenTemplateHandler::class);
         // Taint source/escape for the concrete guards. Lives in a handler, not a
         // `.phpstub`, because redeclaring the guard class to host a taint method
         // shadows every other method (see GuardTaintHandler / #1113).
@@ -275,6 +327,17 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        // Laravel's container and Eloquent relationship dispatch are invisible to Psalm's syntax
+        // walker. Register this after ModelRegistrationHandler so relation metadata is complete
+        // before it queues synthetic edges for replay after incremental invalidation. Reference
+        // collection is only useful for dead-code reporting; collect_references is also enabled
+        // by unused-variable-only mode.
+        if (!($registration instanceof \Psalm\PluginRegistrationSocket)
+            || $registration->codebase->find_unused_code !== null
+        ) {
+            $registration->registerHooksFromClass(Handlers\References\IndirectMethodReferenceHandler::class);
+        }
+
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
@@ -381,6 +444,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ArrGetHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
@@ -480,14 +545,35 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
+        // Drops the TaintedHtml finding on `make($content, $status, $headers)` calls with literal
+        // headers that prove the browser downloads the response instead of rendering it (#1345).
+        // The ResponseFactory stubs retain their default sinks and the taint graph is never edited:
+        // the exception is applied when the issue is emitted, so it cannot leak onto another flow.
+        require_once __DIR__ . '/Handlers/Http/ResponseFactoryTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Http\ResponseFactoryTaintHandler::class);
+
         // CacheManager::store()/driver()/memo() narrowed to the concrete Repository, on
         // both the real-manager and `Cache` facade paths (#1230). getClassLikeNames()
         // reads FacadeMapProvider for the `\Cache` alias, so it relies on init() above.
         require_once __DIR__ . '/Handlers/Cache/CacheManagerReturnTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Cache\CacheManagerReturnTypeHandler::class);
 
+        // Userland `Illuminate\Support\Manager` subclasses: narrows driver()/driver('x')
+        // to the DECLARED return type of the matching create{Studly}Driver() (#1392).
+        require_once __DIR__ . '/Handlers/Support/ManagerDriverHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ManagerDriverHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
+
+        // laravel/ai integration: LLM output as taint source. Stubs cover the prompt
+        // sinks declaratively; this handler covers the property-level `$response->text`
+        // source because Psalm doesn't honor `@psalm-taint-source` on properties.
+        // Guarded the same way as the matching stubs in optionalIntegrationStubs().
+        if ($this->laravelAiIntegrationEnabled()) {
+            require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
+            $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
+        }
 
         // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
         // forceFill/update) — the #699 typo case. It is always registered and self-silences on any
@@ -557,15 +643,22 @@ final class Plugin implements PluginEntryPointInterface
         // narrowing runs regardless of findMissingViews — only the MissingView
         // diagnostic itself is opt-in, gated internally by self::$enabled
         // (set only when initMissingViewHandler() ran, i.e. findMissingViews is true).
+        require_once __DIR__ . '/Handlers/Views/ViewNameSignatures.php';
+        // Rebuild the role index from this invocation's FacadeMapProvider aliases
+        // (a reused process may have booted a different app). Must precede registration
+        // so the reverse index and getClassLikeNames() agree — same reasoning as
+        // ProducerReturnTypeHandler::reset() below.
+        Handlers\Views\ViewNameSignatures::reset();
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
         $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
 
         // Must come AFTER MissingViewHandler: MissingViewHandler's method provider on
-        // Factory/View-facade make() always returns null after emitting its diagnostic,
-        // but Psalm dispatches return-type providers in registration order and stops at
-        // the first non-null result. Registering the narrowing provider first would let
-        // it answer before MissingViewHandler runs, silently dropping the MissingView
-        // issue on View::make(). Reads FacadeMapProvider, so it relies on init() (above)
+        // Factory/View-facade make() AND first() (also in ProducerReturnTypeHandler's
+        // FAMILIES below) always returns null after emitting its diagnostic, but Psalm
+        // dispatches return-type providers in registration order and stops at the first
+        // non-null result. Registering the narrowing provider first would let it answer
+        // before MissingViewHandler runs, silently dropping the MissingView issue on
+        // View::make()/first(). Reads FacadeMapProvider, so it relies on init() (above)
         // having already run.
         require_once __DIR__ . '/Handlers/Producers/ProducerReturnTypeHandler.php';
         // Rebuild the family index from this invocation's FacadeMapProvider aliases

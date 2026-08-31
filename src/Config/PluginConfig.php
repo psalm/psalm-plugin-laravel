@@ -38,6 +38,15 @@ final readonly class PluginConfig
          *  - false → force disabled (override even when laravel/octane is installed)
          */
         public ?bool $findOctaneIncompatibleBinding,
+        /**
+         * Reporting mode for `TaintedLlmPrompt` (untrusted input reaching a
+         * `laravel/ai` prompt).
+         *
+         *  - null  → auto: enforce when the supported laravel/ai integration is enabled
+         *  - true  → force enforcement, still only inside that integration gate
+         *  - false → explicit opt-out: suppress D-in reporting, still only inside that gate
+         */
+        public ?bool $findPromptInjection,
         public string $cachePath,
         public bool $experimental,
         public bool $failOnInternalError,
@@ -68,6 +77,7 @@ final readonly class PluginConfig
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
+        $findPromptInjection = self::xmlPromptInjectionAttr($config);
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
@@ -82,6 +92,7 @@ final readonly class PluginConfig
             findMissingViews: $findMissingViews,
             findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
+            findPromptInjection: $findPromptInjection,
             cachePath: self::resolveCachePath(),
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
@@ -194,6 +205,36 @@ final readonly class PluginConfig
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
+        }
+
+        return $value === 'true';
+    }
+
+    /**
+     * Read the prompt-injection mode while distinguishing an omitted element
+     * from an explicit false. Unlike the Octane flag, a present element without
+     * a value is always a configuration error rather than another spelling of
+     * auto, so typos fail loudly.
+     *
+     */
+    private static function xmlPromptInjectionAttr(?\SimpleXMLElement $config): ?bool
+    {
+        if (!$config instanceof \SimpleXMLElement || !isset($config->findPromptInjection)) {
+            return null;
+        }
+
+        /** @var \SimpleXMLElement $element */
+        $element = $config->findPromptInjection;
+        if (!isset($element['value'])) {
+            throw new \InvalidArgumentException(
+                "<findPromptInjection> requires a `value` attribute of 'true' or 'false'.",
+            );
+        }
+
+        $value = (string) $element['value'];
+
+        if (!\in_array($value, ['true', 'false'], true)) {
+            throw new \InvalidArgumentException("Invalid findPromptInjection value '{$value}'. Valid values: 'true', 'false'.");
         }
 
         return $value === 'true';

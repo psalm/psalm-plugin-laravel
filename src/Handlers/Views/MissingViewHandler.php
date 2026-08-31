@@ -7,11 +7,11 @@ namespace Psalm\LaravelPlugin\Handlers\Views;
 use Illuminate\View\Factory;
 use Illuminate\View\View;
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingView;
-use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -20,14 +20,18 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
- * Detects calls to the view() helper, Factory::make(), and View facade
- * with a view name that does not correspond to an existing template file,
- * and narrows the view() helper's return type past the stub's contract
+ * Detects a view name that does not correspond to an existing template file,
+ * across every Laravel API that accepts one — the view() helper, Factory
+ * (make/first/renderWhen/renderUnless/renderEach) and its View facade,
+ * ResponseFactory::view() (concrete, contract, and Response facade),
+ * Router::view(), MailMessage::view()/markdown(), and TestResponse::assertViewIs()
+ * — and narrows the view() helper's return type past the stub's contract
  * fallback to a concrete class.
  *
- * Registers for both the service class (Factory) and its facades/aliases
- * (View, \Illuminate\Support\Facades\View) via FacadeMapProvider, so the handler
- * fires regardless of how the developer calls make().
+ * The receiver classes for the method-call families are {@see ViewNameSignatures},
+ * which also resolves a receiver back to a role so this handler knows which
+ * argument position(s) hold a view name — `view()` alone means two different
+ * positions depending on receiver (ResponseFactory arg 0, Router arg 1).
  *
  * Only string literal view names are checked for the MissingView diagnostic —
  * dynamic names and namespaced views (e.g., 'mail::html.header') are skipped
@@ -223,14 +227,10 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     }
 
     /**
-     * Register for Factory (direct usage), the canonical View facade, plus any
-     * root aliases that proxy to it.
-     *
-     * The canonical facade is hardcoded (not left to FacadeMapProvider) so the
-     * missing-view diagnostic still fires on `\Illuminate\Support\Facades\View::make()`
-     * in apps that trim their alias registry — otherwise ProducerReturnTypeHandler,
-     * which does hardcode that facade, would answer the return type first and this
-     * handler's diagnostic would never run. Matches the Auth handlers' convention.
+     * The receiver classes for every view-name-bearing method call family — see
+     * {@see ViewNameSignatures} for the table and its own hardcode-vs-FacadeMapProvider
+     * rationale (mirrors the Auth handlers' convention of hardcoding a canonical
+     * facade so an app that trims its alias registry still gets the diagnostic).
      *
      * @inheritDoc
      * @psalm-external-mutation-free
@@ -238,34 +238,238 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return \array_values(\array_unique([
-            Factory::class,
-            \Illuminate\Support\Facades\View::class,
-            ...FacadeMapProvider::getFacadeClasses(Factory::class),
-        ]));
+        return ViewNameSignatures::getClassLikeNames();
     }
 
-    /** @inheritDoc */
+    /**
+     * Dispatches by (role, method name lowercase) to the family-specific check
+     * below, then unconditionally returns null: this provider only emits the
+     * MissingView diagnostic as a side effect, never a type. A non-null Union
+     * here on the pseudo-method (facade) path would fatal Psalm's
+     * getMethodParams() — see ProducerReturnTypeHandler's docblock.
+     *
+     * @inheritDoc
+     */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        if ($event->getMethodNameLowercase() !== 'make') {
+        $role = ViewNameSignatures::resolveRole($event->getFqClasslikeName());
+
+        if ($role === null) {
             return null;
         }
 
+        $methodNameLower = $event->getMethodNameLowercase();
         $callArgs = $event->getCallArgs();
+        $codeLocation = $event->getCodeLocation();
+        $suppressedIssues = $event->getSource()->getSuppressedIssues();
 
-        if ($callArgs === []) {
-            return null;
+        match ($role) {
+            ViewNameSignatures::ROLE_VIEW_FACTORY => self::checkViewFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_RESPONSE_FACTORY => self::checkResponseFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_ROUTER => self::checkRouterCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_TEST_RESPONSE => self::checkTestResponseCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+        };
+
+        return null;
+    }
+
+    /**
+     * Factory::make()/first()/renderWhen()/renderUnless()/renderEach() and their
+     * View-facade forms. Semantics read from Illuminate\View\Factory's own body,
+     * not its PHPDoc:
+     *  - make(): single view name at $view (position 0).
+     *  - first(): `Arr::first($views, fn => exists($view))` throws only when NONE
+     *    of $views exist — see checkAllMissingInArray().
+     *  - renderWhen()/renderUnless(): single view name at $view (position 1).
+     *  - renderEach(): a view name at $view (position 0) rendered per data item,
+     *    AND an "empty" view at $empty (position 3) rendered when $data is empty —
+     *    unless $empty starts with 'raw|', which is raw text, not a view name.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkViewFactoryCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        switch ($methodNameLower) {
+            case 'make':
+                self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+
+                break;
+
+            case 'first':
+                $arg = self::argByNameOrPosition($callArgs, 0, 'views');
+
+                if ($arg instanceof \PhpParser\Node\Arg) {
+                    $viewNames = self::extractLiteralStringArrayArg($arg);
+
+                    if ($viewNames !== null) {
+                        self::checkAllMissingInArray($viewNames, $codeLocation, $suppressedIssues);
+                    }
+                }
+
+                break;
+
+            case 'renderwhen':
+            case 'renderunless':
+                self::checkArgViewName($callArgs, 1, 'view', $codeLocation, $suppressedIssues);
+
+                break;
+
+            case 'rendereach':
+                self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+
+                $emptyArg = self::argByNameOrPosition($callArgs, 3, 'empty');
+
+                if ($emptyArg instanceof \PhpParser\Node\Arg) {
+                    $emptyName = self::extractLiteralStringArg($emptyArg);
+
+                    if ($emptyName !== null && !\str_starts_with($emptyName, 'raw|')) {
+                        self::checkViewExists($emptyName, $codeLocation, $suppressedIssues);
+                    }
+                }
+
+                break;
+        }
+    }
+
+    /**
+     * ResponseFactory::view() (concrete, contract, and Response facade forms).
+     * `is_array($view)` forwards to Factory::first() semantics (a candidate
+     * list); otherwise it forwards to Factory::make() semantics (one name).
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkResponseFactoryCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if ($methodNameLower !== 'view') {
+            return;
         }
 
-        $viewName = self::extractLiteralStringArg($callArgs[0]);
+        $arg = self::argByNameOrPosition($callArgs, 0, 'view');
 
-        if ($viewName === null) {
-            return null;
+        if (!$arg instanceof \PhpParser\Node\Arg) {
+            return;
         }
 
-        self::checkViewExists($viewName, $event->getCodeLocation(), $event->getSource()->getSuppressedIssues());
+        if ($arg->value instanceof Array_) {
+            $viewNames = self::extractLiteralStringArrayArg($arg);
+
+            if ($viewNames !== null) {
+                self::checkAllMissingInArray($viewNames, $codeLocation, $suppressedIssues);
+            }
+
+            return;
+        }
+
+        $viewName = self::extractLiteralStringArg($arg);
+
+        if ($viewName !== null) {
+            self::checkViewExists($viewName, $codeLocation, $suppressedIssues);
+        }
+    }
+
+    /**
+     * Router::view()/Route facade — the view name is $view at position 1
+     * (`view($uri, $view, ...)`), not position 0 like every other family here.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkRouterCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if ($methodNameLower !== 'view') {
+            return;
+        }
+
+        self::checkArgViewName($callArgs, 1, 'view', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * MailMessage::view()/markdown() — both take a single view name at $view
+     * (position 0); markdown() renders through Illuminate\Mail\Markdown, which
+     * resolves non-namespaced names against the same registered view paths.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkMailMessageCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if ($methodNameLower !== 'view' && $methodNameLower !== 'markdown') {
+            return;
+        }
+
+        self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * TestResponse::assertViewIs() compares $value against the rendered view's
+     * name — a view name at position 0.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkTestResponseCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if ($methodNameLower !== 'assertviewis') {
+            return;
+        }
+
+        self::checkArgViewName($callArgs, 0, 'value', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * Resolve one argument by name-or-position, extract a literal string, and
+     * run the existence check — the single-view-name shape shared by most
+     * families here.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkArgViewName(
+        array $callArgs,
+        int $position,
+        string $paramName,
+        CodeLocation $codeLocation,
+        array $suppressedIssues,
+    ): void {
+        $arg = self::argByNameOrPosition($callArgs, $position, $paramName);
+
+        if (!$arg instanceof \PhpParser\Node\Arg) {
+            return;
+        }
+
+        $viewName = self::extractLiteralStringArg($arg);
+
+        if ($viewName !== null) {
+            self::checkViewExists($viewName, $codeLocation, $suppressedIssues);
+        }
+    }
+
+    /**
+     * Resolve one parameter's Arg node whether the call used positional or
+     * named arguments. PHP requires every positional argument to precede any
+     * named one, so a non-named node already at `$position` is authoritative;
+     * otherwise the parameter can only have been supplied by name, in whatever
+     * order — e.g. `Route::view(view: 'welcome', uri: '/x')` must not read
+     * '/x' (position 1) as the view name just because $paramName's usual slot
+     * is 1.
+     *
+     * @param list<Arg> $callArgs
+     */
+    private static function argByNameOrPosition(array $callArgs, int $position, string $paramName): ?Arg
+    {
+        if (isset($callArgs[$position]) && $callArgs[$position]->name === null) {
+            return $callArgs[$position];
+        }
+
+        foreach ($callArgs as $arg) {
+            if ($arg->name !== null && $arg->name->toLowerString() === $paramName) {
+                return $arg;
+            }
+        }
 
         return null;
     }
@@ -287,6 +491,67 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
         }
 
         return null;
+    }
+
+    /**
+     * Extract a literal list<string> from an array-literal argument.
+     *
+     * Any non-literal element, a keyed or spread element, or a non-array-literal
+     * argument bails to null — the caller then skips the check entirely rather
+     * than validate a partial or guessed candidate list.
+     *
+     * @return list<string>|null
+     * @psalm-mutation-free
+     */
+    private static function extractLiteralStringArrayArg(Arg $arg): ?array
+    {
+        if (!$arg->value instanceof Array_) {
+            return null;
+        }
+
+        $viewNames = [];
+
+        foreach ($arg->value->items as $item) {
+            if ($item === null || $item->unpack || $item->key !== null || !$item->value instanceof String_) {
+                return null;
+            }
+
+            $viewNames[] = $item->value->value;
+        }
+
+        return $viewNames;
+    }
+
+    /**
+     * Check a candidate list the way Factory::first()/ResponseFactory::view($array)
+     * do: `Arr::first($views, fn => exists($view))` only throws when NONE of the
+     * candidates exist, so this only emits when every one of them is missing.
+     *
+     * A namespaced or empty candidate is skipped by checkViewExists() rather than
+     * counted as "missing" — since we can't tell if it resolves, the whole array
+     * is left unchecked (bail) rather than risk a false "none of these exist".
+     *
+     * @param list<string> $viewNames
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkAllMissingInArray(array $viewNames, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if (!self::$enabled || $viewNames === []) {
+            return;
+        }
+
+        foreach ($viewNames as $viewName) {
+            if ($viewName === '' || \str_contains($viewName, '::') || self::viewFileExists($viewName)) {
+                return;
+            }
+        }
+
+        $quoted = \implode(', ', \array_map(static fn(string $viewName): string => "'{$viewName}'", $viewNames));
+
+        IssueBuffer::accepts(
+            new MissingView("None of the views {$quoted} were found in any of the registered view paths", $codeLocation),
+            $suppressedIssues,
+        );
     }
 
     /**

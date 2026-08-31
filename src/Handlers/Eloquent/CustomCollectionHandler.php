@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Pagination\AbstractCursorPaginator;
+use Illuminate\Pagination\AbstractPaginator;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
@@ -123,13 +125,27 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Builder::class, ...self::RELATION_CLASSES];
+        return [
+            Builder::class,
+            ...self::RELATION_CLASSES,
+            // Abstracts only: Psalm's provider lookup keys on the DECLARING class, and
+            // getCollection() is declared here, not on the concrete LengthAwarePaginator /
+            // Paginator / CursorPaginator subclasses.
+            AbstractPaginator::class,
+            AbstractCursorPaginator::class,
+        ];
     }
 
     /** @psalm-external-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
+        // getCollection() is not in COLLECTION_METHODS: Builder/Relation have no such method,
+        // so this early branch is unambiguous and cheaper than folding it into that list.
+        if ($event->getMethodNameLowercase() === 'getcollection') {
+            return self::paginatorCollectionType($event);
+        }
+
         if (!\in_array($event->getMethodNameLowercase(), self::COLLECTION_METHODS, true)) {
             return null;
         }
@@ -154,6 +170,52 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
         return $collectionClass !== null
             ? self::collectionType($collectionClass, $modelClass, $source->getCodebase())
+            : null;
+    }
+
+    /**
+     * Handle AbstractPaginator::getCollection() / AbstractCursorPaginator::getCollection().
+     *
+     * The stub's own conditional return already narrows to Eloquent\Collection when TValue
+     * is a Model; this only further narrows that branch to a registered custom collection.
+     * A userland paginator subclass that overrides getCollection() shifts the declaring
+     * class off AbstractPaginator/AbstractCursorPaginator, so the provider correctly stops
+     * firing for it — the override's own return type wins.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function paginatorCollectionType(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        $source = $event->getSource();
+        if (!$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        // AbstractPaginator<TKey, TValue> / AbstractCursorPaginator<TKey, TValue> — the
+        // model lives at index 1 (TValue), unlike the Builder/Relation path above where
+        // it's index 0.
+        $templateTypeParameters = $event->getTemplateTypeParameters();
+        $templateUnion = $templateTypeParameters[1] ?? null;
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion);
+        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion)) {
+            return null;
+        }
+
+        $collectionClass = self::getCollectionClassForModel($modelClass);
+
+        // Unlike Builder<TModel> (no key template; TModel bounded `of Model`), the
+        // receiver's own TKey/TValue are user-reachable here (setCollection(), through()),
+        // so — unlike the Builder/Relation call site below — pass them through instead of
+        // defaulting to `int`/a bare model type. Losing them (e.g. dropping a string key,
+        // or `WorkOrder|null`) would make this an unsound rebuild, not a narrowing.
+        return $collectionClass !== null
+            ? self::collectionType(
+                $collectionClass,
+                $modelClass,
+                $source->getCodebase(),
+                $templateTypeParameters[0] ?? null,
+                $templateUnion,
+            )
             : null;
     }
 
@@ -236,10 +298,20 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      * (TKey, TModel) inherited from EloquentCollection. This holds for all practical
      * custom collection patterns in the Laravel ecosystem.
      *
+     * $keyUnion/$valueUnion let a caller whose receiver has a user-reachable TKey/TValue
+     * (the paginator path) pass those through verbatim instead of the `int`/bare-model-type
+     * defaults below, which are only sound for Builder<TModel>/Relation<TModel> (no key
+     * template; TModel bounded `of Model`, so a bare TNamedObject can't lose anything).
+     *
      * @psalm-mutation-free
      */
-    private static function collectionType(string $collectionClass, string $modelClass, Codebase $codebase): Union
-    {
+    private static function collectionType(
+        string $collectionClass,
+        string $modelClass,
+        Codebase $codebase,
+        ?Union $keyUnion = null,
+        ?Union $valueUnion = null,
+    ): Union {
         try {
             $storage = $codebase->classlike_storage_provider->get(\strtolower($collectionClass));
         } catch (\InvalidArgumentException) {
@@ -249,8 +321,8 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         if ($storage->template_types !== null && $storage->template_types !== []) {
             return new Union([
                 new TGenericObject($collectionClass, [
-                    Type::getInt(),
-                    new Union([new TNamedObject($modelClass)]),
+                    $keyUnion ?? Type::getInt(),
+                    $valueUnion ?? new Union([new TNamedObject($modelClass)]),
                 ]),
             ]);
         }

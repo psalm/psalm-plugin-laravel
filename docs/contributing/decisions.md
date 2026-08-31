@@ -204,6 +204,27 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Exception:** Sinks for high-severity, targeted operations remain valid — e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
 
+### Call-site sink exemptions are applied at issue emission, not in the taint graph
+
+**Decision:** When one call site has to be exempted from a stub's taint sink, implement `BeforeAddIssueInterface`, re-check the call site from the emitted issue, and return `false`. Do not mutate the taint graph through `RemoveTaintsInterface`.
+
+**Why:** `AddRemoveTaintsEvent` identifies neither the method nor the argument offset, so a graph-level removal can only be keyed on the content AST node. Psalm dispatches that same event for the same node a second time while fetching the node's own callee return type. For a callee carrying `@psalm-flow` without `@psalm-taint-specialize` (`decrypt()`, and most helper stubs) the removal is then written onto that callee's single project-wide argument-to-return edge, which silences the removed taint kind on every unrelated flow through it. Emission-time suppression writes nothing, so the worst outcome of a wrong answer is a retained finding.
+
+**Dead end (#1348, upstream vimeo/psalm#11924):** the shipped bridge recorded the content node in a `WeakMap` from `BeforeExpressionAnalysisInterface` and answered `RemoveTaintsInterface` on node identity. It needed a syntactic gate refusing any content that was itself a function or static call, which kept a known false positive, and the weak keying existed only because Psalm frees foreign ASTs mid-file (`ProjectAnalyzer::getMethodMutations()`, `ClassLikes::getTraitNode()`) without dispatching `BeforeFileAnalysisEvent`, so an `spl_object_id` key could be reissued to an unrelated node and strip taint off it.
+
+**Rejected alternatives:** compensating with `AddTaintsInterface` after the fact joins the same last-write-wins race on the shared edge. Counting dispatches to tell the call-site event from the return-type-fetch event breaks across roughly seventeen dispatch sites, with the poisonous one firing first.
+
+**Constraint:** the handler must be stateless. Taint findings are resolved in the main process after the worker pool exits (`Analyzer::analyzeFiles()`) while type issues are emitted inside workers, so nothing recorded by an analysis-phase hook is still there. Re-derive from the issue plus `Codebase::getStatementsForFile()`.
+
+**Reference implementation:** `src/Handlers/Http/ResponseFactoryTaintHandler.php`.
+
+**Widenings (#1416):** the all-literal gate cleared 1 of 20 real `response()->make()` sites, so four widenings landed, each still failing toward a retained finding. Mechanics live in the handler's docblocks; the decisions were:
+
+- A headers variable resolves only on proof of one dominating assignment: exactly two occurrences of the name in the enclosing function-like, the straight-line `$headers = [...]` before the call and the call argument itself. Variable-variables, the `extract()` family, and top-level code cannot be proven and keep the sink.
+- An interpolated or concatenated disposition proves `attachment` by its literal leading part alone; nothing after a literal parameter separator can retract the token.
+- `new Illuminate\Http\Response(...)` is a second route to the same sink. Its journey tail (dumped empirically) matches `make()`'s shape, so the matcher trusts the label and needs no class gate.
+- A safe `Content-Type` is proven by a denylist, not the whitelist the issue proposed: deny types containing `html`, `xml` (an XML document can carry an XHTML-namespaced script) or `script` (the WHATWG JavaScript group; `application/postscript` is accepted collateral), plus `multipart/*` and the sniffing escapes `unknown/unknown` and `application/unknown`. Every other well-formed literal type is exempt, so vendor download types need no maintenance list.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in
