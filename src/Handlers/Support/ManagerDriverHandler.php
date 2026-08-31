@@ -146,7 +146,7 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
     private static function defaultDriverLiteral(Codebase $codebase, string $receiver): ?string
     {
         $id = self::declaringMethodId($codebase, $receiver, 'getdefaultdriver');
-        $stmts = !$id instanceof MethodIdentifier ? null : self::methodBody($codebase, $id);
+        $stmts = $id instanceof MethodIdentifier ? self::methodBody($codebase, $id) : null;
 
         if ($stmts === null || \count($stmts) !== 1) {
             return null;

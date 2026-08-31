@@ -46,7 +46,7 @@ final class ModelPropertyAccessorHandler
     {
         $source = $event->getSource();
 
-        if (!$source || !$event->isReadMode()) {
+        if (!$source instanceof \Psalm\StatementsSource || !$event->isReadMode()) {
             return null;
         }
 
@@ -79,7 +79,7 @@ final class ModelPropertyAccessorHandler
     {
         $source = $event->getSource();
 
-        if (!$source || !$event->isReadMode()) {
+        if (!$source instanceof \Psalm\StatementsSource || !$event->isReadMode()) {
             return null;
         }
 
