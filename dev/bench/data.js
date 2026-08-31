@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788192757226,
+  "lastUpdate": 1788195044239,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10735,6 +10735,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.68,
             "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7ffb246597deb19e771b618a580c5a76cae4ea53",
+          "message": "Fix: Infer default Sanctum token templates (#1425)\n\n* fix(auth): infer Sanctum token template #1424\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-08-31T18:47:22+02:00",
+          "tree_id": "4adb44d424746c8984625b296abd05107fb3c7e2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7ffb246597deb19e771b618a580c5a76cae4ea53"
+        },
+        "date": 1788195043027,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 20.82,
+            "range": "± 0.46",
             "unit": "s"
           },
           {
