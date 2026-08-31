@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788209291871,
+  "lastUpdate": 1788210019163,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10950,6 +10950,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1115,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1f081dbc0f17855193d93e3899bebf9e259dc52",
+          "message": "Fix laravel/ai TextResponse collection types (#1429)",
+          "timestamp": "2026-08-31T22:57:30+02:00",
+          "tree_id": "ffb2e5fd547403a4cb762cafc6700d64feb5a705",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f1f081dbc0f17855193d93e3899bebf9e259dc52"
+        },
+        "date": 1788210018062,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.6,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
             "unit": "MB"
           }
         ]
