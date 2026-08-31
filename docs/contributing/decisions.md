@@ -218,6 +218,13 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Reference implementation:** `src/Handlers/Http/ResponseFactoryTaintHandler.php`.
 
+**Widenings (#1416):** the all-literal gate cleared 1 of 20 real `response()->make()` sites, so four widenings landed, each still failing toward a retained finding. Mechanics live in the handler's docblocks; the decisions were:
+
+- A headers variable resolves only on proof of one dominating assignment: exactly two occurrences of the name in the enclosing function-like, the straight-line `$headers = [...]` before the call and the call argument itself. Variable-variables, the `extract()` family, and top-level code cannot be proven and keep the sink.
+- An interpolated or concatenated disposition proves `attachment` by its literal leading part alone; nothing after a literal parameter separator can retract the token.
+- `new Illuminate\Http\Response(...)` is a second route to the same sink. Its journey tail (dumped empirically) matches `make()`'s shape, so the matcher trusts the label and needs no class gate.
+- A safe `Content-Type` is proven by a denylist, not the whitelist the issue proposed: deny types containing `html`, `xml` (an XML document can carry an XHTML-namespaced script) or `script` (the WHATWG JavaScript group; `application/postscript` is accepted collateral), plus `multipart/*` and the sniffing escapes `unknown/unknown` and `application/unknown`. Every other well-formed literal type is exempt, so vendor download types need no maintenance list.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in
