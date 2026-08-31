@@ -66,6 +66,9 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     {
         self::reset();
         $codebase = $event->getCodebase();
+        if (!$codebase->collect_references) {
+            return;
+        }
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             if (!$storage->user_defined || $storage->abstract || $storage->is_interface) {
@@ -92,12 +95,16 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     #[\Override]
     public static function afterAnalyzeFile(AfterFileAnalysisEvent $event): void
     {
+        $codebase = $event->getCodebase();
+        if (!$codebase->collect_references) {
+            return;
+        }
+
         if (self::$recorded) {
             return;
         }
 
         self::$recorded = true;
-        $codebase = $event->getCodebase();
 
         foreach (self::$methodReferences as $reference) {
             IndirectMethodReferenceRecorder::record(

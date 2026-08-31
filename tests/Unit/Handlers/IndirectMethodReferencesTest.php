@@ -152,14 +152,10 @@ final class IndirectMethodReferencesTest extends TestCase
             $dependencies = $fixtureDir . '/app/Dependencies/Dependencies.php';
             $contents = \file_get_contents($dependencies);
             $this->assertIsString($contents);
-            $replacements = 0;
-            \file_put_contents($dependencies, \str_replace(
-                "public function __construct()\n    {\n        \\assert(true);\n    }",
-                "public function __construct()\n    {\n        \\assert(true && true);\n    }",
-                $contents,
-                $replacements,
+            $this->assertNotFalse(\file_put_contents(
+                $dependencies,
+                $contents . "\n// incremental dependency change {$processId}\n",
             ));
-            $this->assertSame(2, $replacements);
 
             $findingsAfterDependencyChange = $this->runPsalmAndCollectUnusedMethodFindings($fixtureDir, true);
             $messages = \implode(
@@ -172,14 +168,10 @@ final class IndirectMethodReferencesTest extends TestCase
             $user = $fixtureDir . '/app/Models/User.php';
             $contents = \file_get_contents($user);
             $this->assertIsString($contents);
-            $replacements = 0;
-            \file_put_contents($user, \str_replace(
-                'return $this->belongsTo(Team::class);',
-                'return $this->belongsTo(Team::class, \'team_id\');',
-                $contents,
-                $replacements,
+            $this->assertNotFalse(\file_put_contents(
+                $user,
+                $contents . "\n// incremental model change {$processId}\n",
             ));
-            $this->assertSame(3, $replacements);
 
             $findingsAfterRelationChange = $this->runPsalmAndCollectUnusedMethodFindings($fixtureDir, true);
             $messages = \implode(

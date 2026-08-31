@@ -15,6 +15,7 @@ use Psalm\Internal\MethodIdentifier;
  * storage instead of its supported reference graph.
  *
  * @internal
+ * @psalm-external-mutation-free
  */
 final class IndirectMethodReferenceRecorder
 {
