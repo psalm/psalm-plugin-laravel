@@ -10,6 +10,7 @@ use Composer\InstalledVersions;
 final class LaravelAiIntegration
 {
     public const PACKAGE = 'laravel/ai';
+
     public const CONSTRAINT = '>=0.11.0 <1.0.0';
 
     public static function isEnabled(): bool

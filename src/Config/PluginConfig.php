@@ -222,7 +222,7 @@ final readonly class PluginConfig
         $element = $config->findPromptInjection;
         if (!isset($element['value'])) {
             throw new \InvalidArgumentException(
-                '<findPromptInjection> requires a `value` attribute of \'true\' or \'false\'.',
+                "<findPromptInjection> requires a `value` attribute of 'true' or 'false'.",
             );
         }
 
