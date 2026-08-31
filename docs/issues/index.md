@@ -22,5 +22,6 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()` that matches no known attribute
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
+- [MissingRoute](MissingRoute.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, or `redirect()->route()` references an undefined route name (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

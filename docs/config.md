@@ -26,6 +26,7 @@ Full config example:
         <reportImplicitQueryBuilderCalls value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <findMissingRoutes value="true" />
         <findOctaneIncompatibleBinding value="true" />
         <experimental value="true" />
         <failOnInternalError value="true" />
@@ -169,6 +170,24 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findMissingRoutes`
+
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findMissingRoutes />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
+
+When enabled, the plugin checks that `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, and `redirect()->route()` calls reference a route name registered in the booted application.
+
+Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. The check bails entirely when the application boots with no named routes at all (e.g. a package/library project analysed through the Testbench fallback), rather than reporting every route name as missing.
+
+`MissingRoute` is also one of the issues [`<experimental>`](#experimental) reports at `error` instead of `info`, so turning `<experimental>` on both enables this check (via the flag above) and raises its severity at the same time.
+
+See [MissingRoute](issues/MissingRoute.md) for details, including its known false-negative and false-positive limitations.
+
+### Example
+
+```xml
+<findMissingRoutes value="true" />
+```
+
 ## `findSerializedQueuedModels`
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findSerializedQueuedModels />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
@@ -241,7 +260,7 @@ PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 Early access to plugin features that are still on their way to becoming the default in a later minor or major release. Enabling it pulls in two directions at once, tightening some checks while turning others on:
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
-- [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turns on unless the project sets it explicitly.
+- [`findMissingRoutes`](#findmissingroutes) and [`findSerializedQueuedModels`](#findserializedqueuedmodels), both off by default, turn on unless the project sets them explicitly. `findMissingRoutes` is also one of the experimental issues from the first bullet, so it gets both effects at once.
 
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 

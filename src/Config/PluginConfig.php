@@ -29,6 +29,7 @@ final readonly class PluginConfig
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findMissingRoutes,
         public bool $findSerializedQueuedModels,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
@@ -64,6 +65,13 @@ final readonly class PluginConfig
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         // experimental = early access to rules not yet promoted to default; an explicit
+        // value always overrides it, in either direction. This governs ENABLEMENT, distinct
+        // from ExperimentalIssuePolicy, which governs SEVERITY (info vs error) for issues
+        // already listed there — MissingRoute is in both, so <experimental value="true" />
+        // both turns the rule on and reports it as an error, the same combined effect
+        // findSerializedQueuedModels gets below.
+        $findMissingRoutes = self::xmlOptionalBoolAttr($config?->findMissingRoutes, 'findMissingRoutes') ?? $experimental;
+        // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
@@ -80,6 +88,7 @@ final readonly class PluginConfig
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            findMissingRoutes: $findMissingRoutes,
             findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             cachePath: self::resolveCachePath(),
