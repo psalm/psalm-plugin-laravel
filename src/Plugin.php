@@ -589,15 +589,22 @@ final class Plugin implements PluginEntryPointInterface
         // narrowing runs regardless of findMissingViews — only the MissingView
         // diagnostic itself is opt-in, gated internally by self::$enabled
         // (set only when initMissingViewHandler() ran, i.e. findMissingViews is true).
+        require_once __DIR__ . '/Handlers/Views/ViewNameSignatures.php';
+        // Rebuild the role index from this invocation's FacadeMapProvider aliases
+        // (a reused process may have booted a different app). Must precede registration
+        // so the reverse index and getClassLikeNames() agree — same reasoning as
+        // ProducerReturnTypeHandler::reset() below.
+        Handlers\Views\ViewNameSignatures::reset();
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
         $registration->registerHooksFromClass(Handlers\Views\MissingViewHandler::class);
 
         // Must come AFTER MissingViewHandler: MissingViewHandler's method provider on
-        // Factory/View-facade make() always returns null after emitting its diagnostic,
-        // but Psalm dispatches return-type providers in registration order and stops at
-        // the first non-null result. Registering the narrowing provider first would let
-        // it answer before MissingViewHandler runs, silently dropping the MissingView
-        // issue on View::make(). Reads FacadeMapProvider, so it relies on init() (above)
+        // Factory/View-facade make() AND first() (also in ProducerReturnTypeHandler's
+        // FAMILIES below) always returns null after emitting its diagnostic, but Psalm
+        // dispatches return-type providers in registration order and stops at the first
+        // non-null result. Registering the narrowing provider first would let it answer
+        // before MissingViewHandler runs, silently dropping the MissingView issue on
+        // View::make()/first(). Reads FacadeMapProvider, so it relies on init() (above)
         // having already run.
         require_once __DIR__ . '/Handlers/Producers/ProducerReturnTypeHandler.php';
         // Rebuild the family index from this invocation's FacadeMapProvider aliases
