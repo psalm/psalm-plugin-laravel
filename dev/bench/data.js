@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788195044239,
+  "lastUpdate": 1788195840674,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10770,6 +10770,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 20.82,
             "range": "± 0.46",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a113c558850e6cef44e676a39483baa963be8b8",
+          "message": "Infer `Arr::get()` value type from known array shapes (#1402)\n\n* feat(support): infer Arr::get() value type from known array shapes #1387\n\n* fix(support): decline Arr::get() whole-key shortcut on optional dotted keys #1387\n\nThe whole-key-first shortcut narrowed a possibly_undefined property even when\nits literal key contained a dot, but Arr::exists() returns false for an\nabsent key at runtime, falling through into the dot-split walk instead of\n$default. That walk can resolve to a type the shortcut never accounted for,\nso decline instead of guessing at the union.",
+          "timestamp": "2026-08-31T19:01:25+02:00",
+          "tree_id": "4721771c416d033f0dca62cf1c1d6c49d710c9b6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8a113c558850e6cef44e676a39483baa963be8b8"
+        },
+        "date": 1788195839075,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.91,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
