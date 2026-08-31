@@ -85,6 +85,10 @@ final class LaravelAiStubParityCheckerTest extends TestCase
                 ?string $model = null,
             ): QueuedAgentResponse {}
 
+            protected function getProvidersAndModels(Lab|array|string|null $provider, ?string $model): array {}
+            protected function getDefaultModelFor(\Laravel\Ai\Contracts\Providers\TextProvider $provider): string {}
+            protected function getTimeout(?int $timeout): int {}
+
             public static function fake(Closure|array $responses = []): FakeTextGateway {}
             public static function assertPrompted(Closure|string $callback): void {}
             public static function assertPromptedTimes(int $times = 1): void {}
@@ -94,6 +98,28 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             public static function assertNotQueued(Closure|string $callback): void {}
             public static function assertNeverQueued(): void {}
             public static function isFaked(): bool {}
+        }
+        PHP;
+
+    private const CLEAN_REQUEST_STUB = <<<'PHP'
+        <?php
+
+        namespace Laravel\Ai\Tools;
+
+        class Request
+        {
+            protected function data(mixed $key = null, mixed $default = null): mixed {}
+        }
+        PHP;
+
+    private const CLEAN_STREAMABLE_RESPONSE_STUB = <<<'PHP'
+        <?php
+
+        namespace Laravel\Ai\Responses;
+
+        class StreamableAgentResponse
+        {
+            protected function syncConversationFromStreamedResponse(): void {}
         }
         PHP;
 
@@ -195,12 +221,68 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $this->assertStringContainsString('assertNeverQueued(): public method exists', $output);
     }
 
+    #[Test]
+    public function a_vendor_only_protected_promptable_method_fails(): void
+    {
+        $stub = \str_replace(
+            "    protected function getTimeout(?int \$timeout): int {}\n",
+            '',
+            self::CLEAN_STUB,
+        );
+
+        [$exitCode, $output] = $this->check($stub);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('getTimeout(): protected method exists', $output);
+    }
+
+    #[Test]
+    public function a_vendor_only_protected_request_method_fails(): void
+    {
+        $stub = \str_replace(
+            "    protected function data(mixed \$key = null, mixed \$default = null): mixed {}\n",
+            '',
+            self::CLEAN_REQUEST_STUB,
+        );
+
+        [$exitCode, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('data(): protected method exists', $output);
+    }
+
+    #[Test]
+    public function a_vendor_only_protected_streamable_response_method_fails(): void
+    {
+        $stub = \str_replace(
+            "    protected function syncConversationFromStreamedResponse(): void {}\n",
+            '',
+            self::CLEAN_STREAMABLE_RESPONSE_STUB,
+        );
+
+        [$exitCode, $output] = $this->checkFiles(['StreamableAgentResponse.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('syncConversationFromStreamedResponse(): protected method exists', $output);
+    }
+
     /** @return array{int, string} exit code and combined output */
     private function check(string $stubSource): array
     {
+        return $this->checkFiles(['Promptable.phpstub' => $stubSource]);
+    }
+
+    /**
+     * @param array<string, string> $stubs
+     * @return array{int, string} exit code and combined output
+     */
+    private function checkFiles(array $stubs): array
+    {
         $stubsDir = \sys_get_temp_dir() . '/psalm-laravel-ai-parity-' . \bin2hex(\random_bytes(6));
         \mkdir($stubsDir, 0o777, true);
-        \file_put_contents($stubsDir . '/Promptable.phpstub', $stubSource);
+        foreach ($stubs as $file => $stubSource) {
+            \file_put_contents($stubsDir . '/' . $file, $stubSource);
+        }
 
         $command = \escapeshellarg(\PHP_BINARY)
             . ' ' . \escapeshellarg(\dirname(__DIR__, 3) . '/bin/ci/check-laravel-ai-stub-parity.php')
@@ -211,7 +293,9 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $exitCode = 0;
         \exec($command, $output, $exitCode);
 
-        \unlink($stubsDir . '/Promptable.phpstub');
+        foreach ($stubs as $file => $_) {
+            \unlink($stubsDir . '/' . $file);
+        }
         \rmdir($stubsDir);
 
         return [$exitCode, \implode("\n", $output)];

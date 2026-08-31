@@ -6,6 +6,7 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Queue\SerializesModels;
 use Closure;
 use Laravel\Ai\Approvals\Decisions;
+use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\QueuedAgentResponse;
@@ -102,6 +103,12 @@ trait Promptable
         Lab|array|string|null $provider = null,
         ?string $model = null,
     ): QueuedAgentResponse {}
+
+    protected function getProvidersAndModels(Lab|array|string|null $provider, ?string $model): array {}
+
+    protected function getDefaultModelFor(TextProvider $provider): string {}
+
+    protected function getTimeout(?int $timeout): int {}
 
     public static function fake(Closure|array $responses = []): FakeTextGateway {}
 

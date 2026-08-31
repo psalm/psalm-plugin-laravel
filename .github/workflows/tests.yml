@@ -215,11 +215,14 @@ jobs:
       - name: Install optional laravel/ai integration
         run: composer require --dev "laravel/ai:${{ matrix.laravel_ai_version }}" --no-interaction --no-progress
 
+      - name: Run laravel/ai parity checker unit test
+        run: vendor/bin/phpunit tests/Unit/Ci/LaravelAiStubParityCheckerTest.php
+
       - name: Verify pinned laravel/ai release
         if: matrix.laravel_ai_version == '0.11.0'
         run: >-
           php -r 'require "vendor/autoload.php";
-          exit(Composer\InstalledVersions::getPrettyVersion("laravel/ai") === "0.11.0" ? 0 : 1);'
+          exit(Composer\InstalledVersions::getPrettyVersion("laravel/ai") === "v0.11.0" ? 0 : 1);'
 
       - name: Check laravel/ai stub-vs-vendor signature parity
         # Psalm's registered stubs win over the real vendor class during analysis

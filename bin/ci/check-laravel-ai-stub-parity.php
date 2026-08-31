@@ -146,23 +146,26 @@ foreach (findStubFiles($stubsDir) as $file) {
             );
         }
 
-        // A redeclaration can silently erase a public method that was added
-        // upstream. Count methods supplied by a trait used by the stub as
-        // present, but only compare methods whose implementation belongs to
-        // laravel/ai; framework trait helpers (e.g. SerializesModels) are not
-        // this integration's API contract.
-        foreach ($reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+        // A redeclaration can silently erase a public/protected method that was
+        // added upstream. Count methods supplied by a trait used by the stub as
+        // present only when that trait has a concrete implementation. An
+        // abstract trait requirement is not an implementation of a method that
+        // the vendor class declares directly. Only compare methods whose
+        // implementation belongs to laravel/ai; framework trait helpers (e.g.
+        // SerializesModels) are not this integration's API contract.
+        foreach ($reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_PROTECTED) as $method) {
             if ($method->getDeclaringClass()->getName() !== $fqcn || !isLaravelAiSource($method->getFileName())) {
                 continue;
             }
 
-            if (isset($declaredMethodNames[$method->getName()]) || traitProvidesMethod($classLike, $method->getName())) {
+            if (isset($declaredMethodNames[$method->getName()]) || traitProvidesConcreteMethod($classLike, $method->getName())) {
                 continue;
             }
 
+            $visibility = $method->isProtected() ? 'protected' : 'public';
             reportOmission(
                 "{$fqcn}::{$method->getName()}",
-                "{$fqcn}::{$method->getName()}(): public method exists in installed laravel/ai but is missing from the stub",
+                "{$fqcn}::{$method->getName()}(): {$visibility} method exists in installed laravel/ai but is missing from the stub",
                 $mismatches,
                 $knownGaps,
                 $consumedGapKeys,
@@ -292,10 +295,15 @@ function isLaravelAiSource(?string $file): bool
     return $file !== null && \str_contains(\str_replace('\\', '/', $file), '/vendor/laravel/ai/');
 }
 
-function traitProvidesMethod(Node\Stmt\ClassLike $classLike, string $methodName): bool
+function traitProvidesConcreteMethod(Node\Stmt\ClassLike $classLike, string $methodName): bool
 {
     foreach (stubTraits($classLike) as $trait) {
-        if (\trait_exists($trait) && (new \ReflectionClass($trait))->hasMethod($methodName)) {
+        if (!\trait_exists($trait)) {
+            continue;
+        }
+
+        $reflectionClass = new \ReflectionClass($trait);
+        if ($reflectionClass->hasMethod($methodName) && !$reflectionClass->getMethod($methodName)->isAbstract()) {
             return true;
         }
     }
