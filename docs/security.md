@@ -153,6 +153,13 @@ suppresses the D-in `TaintedLlmPrompt` issue.
   cast, and an explicit `offsetGet()` call. The keys come from the application's
   schema, the values come from the model.
 
+**On this branch (Psalm 6):** `TaintedLlmPrompt` does not exist as a Psalm 6 issue
+type. The D-in finding above still fires, but under the generic `TaintedCustom`
+issue (Psalm 6's fallback for any sink kind it does not recognize), shared with
+this plugin's `html_url` sink. `findPromptInjection` has no effect here — see
+[`findPromptInjection`](config.md#findpromptinjection) for the mechanics. The
+D-out direction (model output as a source) is unaffected and reports normally.
+
 Two shapes are not covered. Each is an upstream limitation rather than a
 judgement that the flow is safe, so treat them as blind spots when reviewing.
 

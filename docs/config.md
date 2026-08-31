@@ -219,6 +219,8 @@ Use the explicit opt-out only where direct prompt flows are intentional. In secu
 
 This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.
 
+**On this branch (Psalm 6):** `TaintedLlmPrompt` is a Psalm 7 core issue type with no Psalm 6 equivalent. Psalm 6's taint engine has a fixed set of sink kinds and folds any unrecognized one (`llm_prompt` included) into the generic `TaintedCustom` issue, shared with this plugin's other custom sink (`html_url`, see [Security checks](security.md)). Detection still fires, but `findPromptInjection` has no effect here: it configures a level for an issue type Psalm 6 never emits, and an explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` is rejected outright (not a recognized element). To change the level of a `TaintedLlmPrompt`-shaped finding on this branch, configure `TaintedCustom` instead, which also affects `html_url`.
+
 ### Example
 
 ```xml

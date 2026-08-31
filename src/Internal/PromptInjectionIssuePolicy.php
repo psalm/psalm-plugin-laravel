@@ -20,18 +20,29 @@ use Psalm\Config;
  * as the usual `Tainted*` issues at their usual levels, because those DO have
  * an ordinary fix.
  *
+ * Psalm 6 has no `TaintedLlmPrompt` issue type or `llm_prompt` taint kind: both
+ * are Psalm 7 core additions. Psalm 6's taint engine folds any sink kind it does
+ * not recognize into the generic `TaintedCustom` issue (shared with this plugin's
+ * `html_url` sink), so the D-in finding still fires, but this class's effect on
+ * Psalm 6 is a no-op — it configures a level for an issue type Psalm 6 never
+ * emits, and Psalm 6's config XSD rejects an explicit `<TaintedLlmPrompt />`
+ * issueHandler outright. See `docs/config.md#findpromptinjection`.
+ *
  * @internal
- * @psalm-external-mutation-free
  */
 final class PromptInjectionIssuePolicy
 {
     /**
-     * Psalm core issue, emitted from `TaintKind::INPUT_LLM_PROMPT`; the plugin
+     * Psalm 7 core issue, emitted from `TaintKind::INPUT_LLM_PROMPT`; the plugin
      * contributes the `laravel/ai` sinks that reach it, not the issue class.
+     * Kept as the target type even though Psalm 6 never emits it under this
+     * name (see class docblock) — this mirrors Psalm 7 behavior faithfully for
+     * when it does apply, rather than silently redirecting to `TaintedCustom`.
      */
     private const ISSUE_TYPE = 'TaintedLlmPrompt';
 
-    /** @psalm-external-mutation-free */
+    // Not marked mutation-free: it calls DefaultIssueLevels::apply(), which is not
+    // mutation-free on Psalm 6 (see that class's docblock).
     public static function apply(?bool $configured): void
     {
         // Plugin::__invoke() calls this only after the supported laravel/ai gate

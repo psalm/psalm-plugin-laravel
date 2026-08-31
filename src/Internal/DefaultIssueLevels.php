@@ -18,7 +18,6 @@ use Psalm\Config\IssueHandler;
  * so a second plugin invocation can refresh it when the governing flag flips.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class DefaultIssueLevels
 {
@@ -35,7 +34,8 @@ final class DefaultIssueLevels
      * @param list<string> $issueTypes
      * @param Config::REPORT_* $level
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6's WeakMap::offsetGet()/offsetSet() and
+     * Config::setCustomErrorLevel() are not annotated mutation-free, unlike Psalm 7.
      */
     public static function apply(array $issueTypes, string $level): void
     {

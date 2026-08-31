@@ -15,13 +15,11 @@ use Psalm\Internal\MethodIdentifier;
  * storage instead of its supported reference graph.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class IndirectMethodReferenceRecorder
 {
-    /**
-     * @psalm-external-mutation-free
-     */
+    // Not marked mutation-free: Psalm 6's FileReferenceProvider::addMethodReferenceToClassMember()
+    // is not annotated mutation-free, unlike Psalm 7.
     public static function record(Codebase $codebase, MethodIdentifier $callingMethodId, MethodIdentifier $methodId): void
     {
         if ($codebase->find_unused_code === null) {
@@ -40,7 +38,8 @@ final class IndirectMethodReferenceRecorder
      * non-analyzed source for this synthetic edge, so it is not removed when an application file
      * is re-analyzed during an incremental run.
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: Psalm 6's FileReferenceProvider::addFileReferenceToClassMember()
+     * is not annotated mutation-free, unlike Psalm 7.
      */
     public static function recordFileReference(Codebase $codebase, MethodIdentifier $methodId): void
     {

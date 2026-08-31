@@ -90,7 +90,8 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
      * analysis worker this hook runs after the worker's reference-provider reset and its result is
      * merged by Psalm's normal worker consolidation.
      *
-     * @psalm-external-mutation-free
+     * Not marked mutation-free: it calls IndirectMethodReferenceRecorder, which is not
+     * mutation-free on Psalm 6 (see that class's docblock).
      */
     #[\Override]
     public static function afterAnalyzeFile(AfterFileAnalysisEvent $event): void

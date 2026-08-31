@@ -7,11 +7,11 @@ namespace Psalm\LaravelPlugin\Handlers\Ai;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
 use Psalm\CodeLocation;
+use Psalm\LaravelPlugin\Handlers\Validation\ValidationRuleAnalyzer;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 
 /**
  * Marks the properties on Laravel AI response objects that hold model output as
@@ -176,7 +176,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         $taintedType = $codebase->addTaintSource(
             $exprType,
             $taintId,
-            TaintKind::ALL_INPUT,
+            ValidationRuleAnalyzer::allInputTaints(),
             new CodeLocation($source, $expr),
         );
 
