@@ -30,6 +30,68 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+### `ResponseFactory::make()` and `new Response()` HTML responses
+
+`ResponseFactory::make()` and the `Illuminate\Http\Response` constructor both
+report XSS for unescaped content because their default response is HTML. The
+finding is dropped for a positional call whose headers array proves either
+that the browser downloads the response instead of rendering it, or that the
+declared content type is never sniffed as HTML. It is dropped as it is
+reported, so no other flow through the same code is affected.
+
+The proof is deliberately syntactic, never control-flow aware. Two independent
+checks over the header entries; either alone is enough:
+
+- **Attachment disposition.** A literal `Content-Disposition: attachment`
+  value, or an interpolated or concatenated value whose literal leading part
+  already contains the `attachment;` token: nothing after a literal parameter
+  separator can retract it. Control characters other than a horizontal tab
+  keep the finding, since a runtime that drops the header serves the response
+  as HTML. Parameters after the token are not validated.
+- **Safe content type.** A literal, well-formed `Content-Type` that does not
+  contain `html`, `xml` (XML can carry an XHTML-namespaced `<script>`) or
+  `script` (the JavaScript media types), is not `multipart/*`, and is not one
+  of the sniffing escapes `unknown/unknown` and `application/unknown`. Every
+  other well-formed type is exempt, vendor download types included; parameters
+  after the first `;` are discarded.
+
+The headers array may be written inline or held in a local variable assigned
+exactly once, as a plain statement before the call, and never reassigned,
+mutated, passed elsewhere, or captured. Anything the proof cannot see keeps
+the finding: `$$x`, the `extract()` family in the same scope, dynamic or
+duplicate or underscore-spelled headers (names are folded the way Symfony
+folds them), a malformed content type, and every named-argument call. The
+exemption applies to the concrete factory, its contract, the
+`Illuminate\Support\Facades\Response` facade (intersections included), and a
+direct `new Illuminate\Http\Response(...)`. The root `\Response` alias and
+custom classes with a `make()` method keep the sink. A receiver typed as the
+factory or its contract is trusted to apply its headers argument; an
+implementation that silently discards it violates that contract and is out of
+scope.
+
+One accepted gap. All `make()` calls in a project meet at a single taint graph
+node (and, separately, all `new Response()` calls meet at their own), and
+Psalm walks each node once, so it already reports only the shortest flow
+reaching it and discards the rest. When that shortest flow is the exempt one,
+the call reports nothing at all instead of reporting one of its flows. The
+longer flows are discarded whether or not the exemption applies, so this costs
+no coverage relative to running without the plugin.
+
+### Known limitation: named arguments
+
+Psalm keys a named argument's taint node by the argument's written position rather than by the
+parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
+can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
+taint from a named argument it cannot prove is attributed correctly.
+
+Detection is unaffected when the callee is statically known (a plain function, a facade, a
+static call, a constructor, or a method on a receiver typed as exactly one class) and the
+argument names the parameter at its own position, which covers ordinary application code. It is
+lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
+chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
+expression rather than a variable), an argument captured by a variadic, and a `static::` call
+resolved through a subclass override. Passing the same values positionally always reports.
+
 ### Timing-unsafe secret comparison (CWE-208)
 
 Comparing a secret (a password hash, remember-token, or decrypted value) with a

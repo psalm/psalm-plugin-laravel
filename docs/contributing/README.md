@@ -192,11 +192,17 @@ flowchart TD
         C7 --> C8["AfterFileAnalysisInterface"]
     end
 
+    subgraph P3B["Phase 3b — Taint graph resolved (main process, after the workers exit)"]
+        E1["BeforeAddIssueInterface
+        fires here for every taint issue,
+        and inside the workers above for every type issue"]
+    end
+
     subgraph P4["Phase 4 — Run complete (fires once)"]
         D1["AfterAnalysisInterface"]
     end
 
-    P1 --> P2 --> P3 --> P4
+    P1 --> P2 --> P3 --> P3B --> P4
 ```
 
 ### Registering handlers
@@ -205,6 +211,26 @@ There are two ways to register:
 
 1. **Class-level** (most handlers): implement the interface, register via `$registration->registerHooksFromClass(MyHandler::class)` in `Plugin::registerHandlers()`
 2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
+
+Every class registration keeps the matching `require_once` beside
+`registerHooksFromClass()`.
+
+#### Exempting one call site from a stub's taint sink
+
+Narrow the finding at emission time, not in the taint graph.
+`ResponseFactoryTaintHandler` is the reference shape: it implements only
+`BeforeAddIssueInterface`, matches the issue's journey tail against the sink's
+labels, re-checks the call site, and returns `false` to drop the finding. Graph
+level removal (`RemoveTaintsInterface`) cannot express "this call site only" and
+leaks onto shared flow edges; [Architecture Decisions](decisions.md) records why,
+along with the alternatives already ruled out.
+
+Such a handler has to be stateless, because the analysis hooks run in the worker
+processes and taint issues are emitted only after those exit. Re-derive every fact
+from the issue plus `Codebase::getStatementsForFile()`, which reads the parser
+cache. The hook fires for every issue in the run, so bail on the issue class first
+and only then do anything expensive. Every uncertain path returns `null` and keeps
+the finding.
 
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 

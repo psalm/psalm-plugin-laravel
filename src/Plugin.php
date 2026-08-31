@@ -125,6 +125,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceRecorder.php';
+        require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
@@ -174,6 +176,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
+        Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
@@ -237,6 +240,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/SanctumTokenTemplateHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\SanctumTokenTemplateHandler::class);
         // Taint source/escape for the concrete guards. Lives in a handler, not a
         // `.phpstub`, because redeclaring the guard class to host a taint method
         // shadows every other method (see GuardTaintHandler / #1113).
@@ -277,6 +282,17 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        // Laravel's container and Eloquent relationship dispatch are invisible to Psalm's syntax
+        // walker. Register this after ModelRegistrationHandler so relation metadata is complete
+        // before it queues synthetic edges for replay after incremental invalidation. Reference
+        // collection is only useful for dead-code reporting; collect_references is also enabled
+        // by unused-variable-only mode.
+        if (!($registration instanceof \Psalm\PluginRegistrationSocket)
+            || $registration->codebase->find_unused_code !== null
+        ) {
+            $registration->registerHooksFromClass(Handlers\References\IndirectMethodReferenceHandler::class);
+        }
+
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
@@ -383,6 +399,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
+        require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ArrGetHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
@@ -482,11 +500,23 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/FacadeTaintForwardingHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\FacadeTaintForwardingHandler::class);
 
+        // Drops the TaintedHtml finding on `make($content, $status, $headers)` calls with literal
+        // headers that prove the browser downloads the response instead of rendering it (#1345).
+        // The ResponseFactory stubs retain their default sinks and the taint graph is never edited:
+        // the exception is applied when the issue is emitted, so it cannot leak onto another flow.
+        require_once __DIR__ . '/Handlers/Http/ResponseFactoryTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Http\ResponseFactoryTaintHandler::class);
+
         // CacheManager::store()/driver()/memo() narrowed to the concrete Repository, on
         // both the real-manager and `Cache` facade paths (#1230). getClassLikeNames()
         // reads FacadeMapProvider for the `\Cache` alias, so it relies on init() above.
         require_once __DIR__ . '/Handlers/Cache/CacheManagerReturnTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Cache\CacheManagerReturnTypeHandler::class);
+
+        // Userland `Illuminate\Support\Manager` subclasses: narrows driver()/driver('x')
+        // to the DECLARED return type of the matching create{Studly}Driver() (#1392).
+        require_once __DIR__ . '/Handlers/Support/ManagerDriverHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ManagerDriverHandler::class);
 
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
