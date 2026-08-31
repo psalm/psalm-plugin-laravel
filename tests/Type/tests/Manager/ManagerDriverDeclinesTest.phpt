@@ -78,6 +78,63 @@ class UNoFoo extends Manager
     }
 }
 
+// A conditional body reaches 'ups' when $useUps is true; only a SINGLE
+// unconditional `return '<literal>';` body is knowable statically.
+class ConditionalDefaultManager extends Manager
+{
+    protected bool $useUps = false;
+
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        if ($this->useUps) {
+            return 'ups';
+        }
+
+        return 'foo';
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+}
+
+class VoidCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return 'foo';
+    }
+
+    protected function createFooDriver(): void
+    {
+    }
+}
+
+// Overrides createDriver() itself (Laravel's own ChannelManager/ImageManager
+// do this) — create{X}Driver() lookup no longer proves what runs.
+class OverriddenCreateDriverManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return 'foo';
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    #[\Override]
+    protected function createDriver($driver)
+    {
+        return new DeclineFooDriver();
+    }
+}
+
 function dynamic_name(DeclineManager $manager, string $name): void
 {
     $_dynamic = $manager->driver($name);
@@ -100,6 +157,24 @@ function computed_default(ComputedDefaultManager $manager): void
 {
     $_computed = $manager->driver();
     /** @psalm-check-type-exact $_computed = mixed */
+}
+
+function conditional_default(ConditionalDefaultManager $manager): void
+{
+    $_conditional = $manager->driver();
+    /** @psalm-check-type-exact $_conditional = mixed */
+}
+
+function void_creator(VoidCreatorManager $manager): void
+{
+    $_void = $manager->driver('foo');
+    /** @psalm-check-type-exact $_void = mixed */
+}
+
+function create_driver_overridden(OverriddenCreateDriverManager $manager): void
+{
+    $_overridden = $manager->driver('foo');
+    /** @psalm-check-type-exact $_overridden = mixed */
 }
 
 /**

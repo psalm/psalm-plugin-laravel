@@ -26,6 +26,12 @@ use Psalm\Type\Union;
  * `driver()` itself shadows this handler (accepted FN, see
  * ManagerDriverOverrideShadowKnownLimitation.phpt).
  *
+ * Accepted runtime imprecision that stays OUT of scope: `Manager::extend()`
+ * registering a custom creator closure, and the `$this->drivers[$name]` cache
+ * pre-populated some other way, both take precedence over `create{X}Driver()` at
+ * runtime and neither is statically provable from the call site — narrowing here
+ * assumes the stock creator-method dispatch path Laravel documents.
+ *
  * @internal
  */
 final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
@@ -50,6 +56,17 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
 
         $codebase = $event->getSource()->getCodebase();
         $receiver = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+
+        // Laravel's createDriver() dispatches to $this->createDriver($name), which a
+        // subclass (e.g. ChannelManager, ImageManager) may override wholesale. Once that
+        // happens, finding create{X}Driver() on $receiver no longer proves it is what
+        // actually runs — decline rather than trust a lookup the override can bypass.
+        $createDriverId = self::declaringMethodId($codebase, $receiver, 'createdriver');
+
+        if ($createDriverId instanceof MethodIdentifier && \strcasecmp($createDriverId->fq_class_name, Manager::class) !== 0) {
+            return null;
+        }
+
         $driverName = self::resolveDriverName($codebase, $receiver, $event);
 
         if ($driverName === null) {
@@ -69,21 +86,24 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        if (!$returnType instanceof Union) {
-            return null;
+        if (!$returnType instanceof Union || $returnType->isVoid() || $returnType->isNever()) {
+            return null; // void/never/absent: the wrapper's real value is null, not this
         }
 
         // A creator's `: static`/`: self`/`$this` (or a class constant) is anchored to the
-        // DECLARING class syntactically but must resolve against the CALLED $receiver — a
-        // raw pass-through leaves `static` unresolved and a caller checking against the
-        // concrete subclass sees a bogus `Declaring&static` instead of $receiver itself.
-        // `final: true` mirrors BuilderScopeHandler::appearingScopeClass()'s reasoning: the
-        // called class is already exactly known here, so collapse to the plain class rather
-        // than an open-ended intersection.
+        // class it APPEARS ON, not necessarily the class it's DECLARED in — a trait-provided
+        // creator's declaring class is the trait itself, and expanding `self` against the
+        // trait would leak the trait's name as a type. appearing_method_ids resolves that to
+        // the actual composing class (identical to the declaring class for a non-trait
+        // creator). `final: true` mirrors BuilderScopeHandler::appearingScopeClass()'s
+        // reasoning: the called class is already exactly known here ($receiver), so `static`
+        // collapses to the plain class rather than an open-ended intersection.
+        $selfClass = self::appearingMethodId($codebase, $receiver, $creator)?->fq_class_name ?? $creatorId->fq_class_name;
+
         return TypeExpander::expandUnion(
             $codebase,
             $returnType,
-            $creatorId->fq_class_name,
+            $selfClass,
             $receiver,
             null,
             final: true,
@@ -93,31 +113,48 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
     /**
      * A literal string argument wins; a present-but-non-literal argument (dynamic
      * name, `\UnitEnum` instance) declines; a genuinely MISSING argument falls
-     * through to the manager's own default driver.
+     * through to the manager's own default driver. Laravel resolves the argument
+     * with `enum_value($driver) ?: $this->getDefaultDriver()`: a FALSY literal
+     * (`''` or `'0'`) is therefore "no driver given" too, not a literal name.
      */
     private static function resolveDriverName(Codebase $codebase, string $receiver, MethodReturnTypeProviderEvent $event): ?string
     {
         $argType = Arg::typeAt($event->getCallArgs(), $event->getSource(), 0);
 
         if ($argType instanceof Union) {
-            return $argType->isSingleStringLiteral() ? $argType->getSingleStringLiteral()->value : null;
+            if (!$argType->isSingleStringLiteral()) {
+                return null;
+            }
+
+            $value = $argType->getSingleStringLiteral()->value;
+
+            if ($value !== '' && $value !== '0') {
+                return $value;
+            }
         }
 
         return self::defaultDriverLiteral($codebase, $receiver);
     }
 
-    /** getDefaultDriver() carries no literal type; only a single `return '...'` body is knowable statically. */
+    /**
+     * getDefaultDriver() carries no literal type; a body of exactly ONE
+     * `return '...'` statement is knowable statically. Anything else — a
+     * conditional, extra statements, a second reachable return — means a
+     * DIFFERENT literal can come back depending on state we cannot see, so
+     * that whole shape declines rather than picking one branch to trust.
+     */
     private static function defaultDriverLiteral(Codebase $codebase, string $receiver): ?string
     {
         $id = self::declaringMethodId($codebase, $receiver, 'getdefaultdriver');
+        $stmts = !$id instanceof MethodIdentifier ? null : self::methodBody($codebase, $id);
 
-        foreach ((!$id instanceof MethodIdentifier ? null : self::methodBody($codebase, $id)) ?? [] as $stmt) {
-            if ($stmt instanceof Stmt\Return_ && $stmt->expr instanceof String_) {
-                return $stmt->expr->value;
-            }
+        if ($stmts === null || \count($stmts) !== 1) {
+            return null;
         }
 
-        return null;
+        $stmt = \reset($stmts);
+
+        return $stmt instanceof Stmt\Return_ && $stmt->expr instanceof String_ ? $stmt->expr->value : null;
     }
 
     /** @psalm-mutation-free */
@@ -130,6 +167,24 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         }
 
         return $storage->declaring_method_ids[$methodNameLower] ?? null;
+    }
+
+    /**
+     * The class a method APPEARS ON — the composing class for a trait-provided
+     * method, identical to the declaring class otherwise. Used only to anchor
+     * `self`/`static`/class-constant expansion correctly for trait creators.
+     *
+     * @psalm-mutation-free
+     */
+    private static function appearingMethodId(Codebase $codebase, string $receiver, string $methodNameLower): ?MethodIdentifier
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($receiver));
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+
+        return $storage->appearing_method_ids[$methodNameLower] ?? null;
     }
 
     /**
