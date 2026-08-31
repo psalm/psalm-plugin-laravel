@@ -239,7 +239,7 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
     /** @psalm-mutation-free */
     private static function factoryClassFromObjectType(?Union $type): ?string
     {
-        if ($type === null || \count($type->getAtomicTypes()) !== 1) {
+        if (!$type instanceof \Psalm\Type\Union || \count($type->getAtomicTypes()) !== 1) {
             return null;
         }
 
@@ -251,7 +251,7 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
     /** @psalm-mutation-free */
     private static function factoryClassFromClassString(?Union $type): ?string
     {
-        if ($type === null || \count($type->getAtomicTypes()) !== 1) {
+        if (!$type instanceof \Psalm\Type\Union || \count($type->getAtomicTypes()) !== 1) {
             return null;
         }
 
@@ -260,7 +260,7 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
             return $atomic->value;
         }
 
-        return $atomic instanceof TClassString && $atomic->as_type !== null
+        return $atomic instanceof TClassString && $atomic->as_type instanceof \Psalm\Type\Atomic\TNamedObject
             ? $atomic->as_type->value
             : null;
     }
