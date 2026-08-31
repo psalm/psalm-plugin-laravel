@@ -142,6 +142,7 @@ final class IndirectMethodReferencesTest extends TestCase
         if ($processId === false) {
             $processId = 0;
         }
+
         $fixtureDir = __DIR__ . '/Fixtures/IndirectMethodReferences/.incremental-' . $processId;
         $this->copyDirectory(__DIR__ . '/Fixtures/IndirectMethodReferences', $fixtureDir);
 
@@ -153,8 +154,8 @@ final class IndirectMethodReferencesTest extends TestCase
             $this->assertIsString($contents);
             $replacements = 0;
             \file_put_contents($dependencies, \str_replace(
-                'public function __construct() { \\assert(true); }',
-                'public function __construct() { \\assert(true && true); }',
+                "public function __construct()\n    {\n        \\assert(true);\n    }",
+                "public function __construct()\n    {\n        \\assert(true && true);\n    }",
                 $contents,
                 $replacements,
             ));

@@ -159,7 +159,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
 
             foreach ($method['storage']->params as $parameter) {
                 $constructor = self::injectedConstructor($codebase, $parameter);
-                if ($constructor !== null) {
+                if ($constructor instanceof \Psalm\Internal\MethodIdentifier) {
                     self::queueConstructorReference(
                         $codebase,
                         $entrypoint,
@@ -172,7 +172,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         // A concrete class is constructed only as part of a discoverable entrypoint. Use that
         // actual method as the synthetic caller, so this edge remains in Psalm's method graph.
         $constructor = self::publicMethod($codebase, $storage, '__construct');
-        if ($constructor !== null && $entrypoint !== null) {
+        if ($constructor instanceof \Psalm\Internal\MethodIdentifier && $entrypoint !== null) {
             self::queueConstructorReference($codebase, $entrypoint, $constructor);
         }
     }
@@ -326,7 +326,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
 
         foreach ($constructorStorage->params as $parameter) {
             $dependency = self::injectedConstructor($codebase, $parameter);
-            if ($dependency !== null) {
+            if ($dependency instanceof \Psalm\Internal\MethodIdentifier) {
                 self::queueConstructorReference($codebase, $target, $dependency, $seen);
             }
         }

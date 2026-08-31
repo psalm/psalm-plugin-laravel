@@ -7,7 +7,7 @@ namespace IndirectMethodReferencesFixture\Controllers;
 use Illuminate\Routing\Controller;
 use IndirectMethodReferencesFixture\Dependencies\InvokeDependency;
 
-final class InvokableController extends Controller
+final class InvocableController extends Controller
 {
     public function __invoke(InvokeDependency $dependency): void {}
 }

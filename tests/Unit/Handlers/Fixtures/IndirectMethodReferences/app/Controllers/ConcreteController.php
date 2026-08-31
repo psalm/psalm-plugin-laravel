@@ -8,7 +8,10 @@ use IndirectMethodReferencesFixture\Dependencies\OwnerDependency;
 
 final class ConcreteController extends \Illuminate\Routing\Controller
 {
-    public function __construct(OwnerDependency $dependency) {}
+    public function __construct(OwnerDependency $dependency)
+    {
+        \assert(\is_object($dependency));
+    }
 
     public function show(): void {}
 }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace IndirectMethodReferencesFixture\Controllers;
 
-use IndirectMethodReferencesFixture\Dependencies\ContractDependency;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
+use IndirectMethodReferencesFixture\Dependencies\ContractDependency;
 use IndirectMethodReferencesFixture\Dependencies\DocblockOnlyDependency;
 use IndirectMethodReferencesFixture\Dependencies\HelperDependency;
 use IndirectMethodReferencesFixture\Dependencies\ProtectedDependency;
@@ -33,5 +33,8 @@ final class DriverController extends BaseController
     public function docblockOnly($dependency): void {}
 
     /** A helper is not an entrypoint and must not make its dependency look used. */
-    private function helper(HelperDependency $dependency): void {}
+    private function helper(HelperDependency $dependency): void
+    {
+        \assert(\is_object($dependency));
+    }
 }
