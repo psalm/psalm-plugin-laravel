@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788208952861,
+  "lastUpdate": 1788209291871,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10910,6 +10910,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.23,
             "range": "± 0.42",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1115,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7073252944879507291a410a9de987a22b0cc97d",
+          "message": "refactor(ast): share class method resolution (#1428)\n\nFixes #1411.",
+          "timestamp": "2026-08-31T22:45:56+02:00",
+          "tree_id": "115db742edbdbb35c30f11e0522632fc77a9f346",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7073252944879507291a410a9de987a22b0cc97d"
+        },
+        "date": 1788209290696,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 18.41,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
