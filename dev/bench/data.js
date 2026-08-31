@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788192557937,
+  "lastUpdate": 1788192757226,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10700,6 +10700,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.05,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "203d86a19d211d3dd37a26f518b8c4fb33a86bec",
+          "message": "Fix: track Laravel indirect method references for better dead-code detection (#1422)\n\n* Fix: track Laravel indirect method references (#1419)\n\n* style: clear PR 1422 CI blockers\n\n* fix: guard indirect reference collection\n\n* fix: register indirect references only for dead-code analysis",
+          "timestamp": "2026-08-31T18:09:26+02:00",
+          "tree_id": "42cbb01e2f33f9765a853d7c0bb74e277a0f00e3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/203d86a19d211d3dd37a26f518b8c4fb33a86bec"
+        },
+        "date": 1788192755834,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.68,
+            "range": "± 0.03",
             "unit": "s"
           },
           {
