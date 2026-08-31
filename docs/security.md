@@ -39,50 +39,35 @@ that the browser downloads the response instead of rendering it, or that the
 declared content type is never sniffed as HTML. It is dropped as it is
 reported, so no other flow through the same code is affected.
 
-The proof is deliberately syntactic, never control-flow aware, and stays two
-independent checks over the same header entries; either alone is enough:
+The proof is deliberately syntactic, never control-flow aware. Two independent
+checks over the header entries; either alone is enough:
 
 - **Attachment disposition.** A literal `Content-Disposition: attachment`
-  entry, or one whose value is an interpolated string or `.`-concatenation
-  whose literal leading part already contains the `attachment;` token
-  (`"attachment; filename=\"{$name}.csv\""`, `'attachment; filename=' . $name`).
-  The interpolated or concatenated suffix is never inspected: nothing that can
-  follow a literal parameter separator can retract the token. A value carrying
-  any control character other than a horizontal tab keeps the finding, since a
-  runtime that drops the header serves the response as HTML. Parameters after
-  the `attachment` token are not validated, because every browser downloads on
-  the token whatever follows it.
-- **Safe content type.** A literal `Content-Type` naming a well-formed media
-  type that is not `text/html`, does not contain `html` or `xml` anywhere
-  (covering every `*+xml` suffix, `application/xml`, and `image/svg+xml` —
-  XML can carry an XHTML-namespaced `<script>`), and does not start with
-  `multipart/`. Every other well-formed media type is exempt, vendor download
-  types included. Parameters after the first `;` (`charset=`, ...) are
-  discarded before matching.
+  value, or an interpolated or concatenated value whose literal leading part
+  already contains the `attachment;` token: nothing after a literal parameter
+  separator can retract it. Control characters other than a horizontal tab
+  keep the finding, since a runtime that drops the header serves the response
+  as HTML. Parameters after the token are not validated.
+- **Safe content type.** A literal, well-formed `Content-Type` that does not
+  contain `html`, `xml` (XML can carry an XHTML-namespaced `<script>`) or
+  `script` (the JavaScript media types), is not `multipart/*`, and is not one
+  of the sniffing escapes `unknown/unknown` and `application/unknown`. Every
+  other well-formed type is exempt, vendor download types included; parameters
+  after the first `;` are discarded.
 
-The headers array itself may be written literally at the call site, or held in
-a local variable proven to be a single, unmutated assignment: the enclosing
-function or method assigns it exactly once, before the call, and neither
-reassigns, mutates, passes it elsewhere, nor captures it in a nested closure.
-A variable-variable (`$$x`) or an `extract()`/`compact()`/`get_defined_vars()`
-call anywhere in the same scope keeps the finding regardless, since none of
-those produce the AST nodes the proof looks for. Dynamic, duplicate, list
-valued, underscore named, or non-attachment dispositions continue to report,
-as does a dynamic or malformed content type, a variable that fails any of the
-single-assignment conditions above, and every named argument call. Header
-names are folded the way Symfony folds them (underscore onto hyphen, then
-lower case), so a second entry that spells either header differently but
-lands on the same name keeps the finding for that header. An entry that is
-not itself an attachment or content-type candidate only needs a literal
-string key (to still detect such a duplicate); its value may be any
-expression. This applies to the concrete factory, its contract, and the
-`Illuminate\Support\Facades\Response` facade, including a receiver whose type
-intersects one of them with another interface, plus a direct `new
-Illuminate\Http\Response(...)` call. The root `\Response` alias and custom
-classes with a `make()` method keep the sink. A receiver typed as the factory
-or its contract is trusted to apply the headers argument, as every conforming
-implementation does. An implementation that silently discards its headers
-argument violates that contract and is out of scope.
+The headers array may be written inline or held in a local variable assigned
+exactly once, as a plain statement before the call, and never reassigned,
+mutated, passed elsewhere, or captured. Anything the proof cannot see keeps
+the finding: `$$x`, the `extract()` family in the same scope, dynamic or
+duplicate or underscore-spelled headers (names are folded the way Symfony
+folds them), a malformed content type, and every named-argument call. The
+exemption applies to the concrete factory, its contract, the
+`Illuminate\Support\Facades\Response` facade (intersections included), and a
+direct `new Illuminate\Http\Response(...)`. The root `\Response` alias and
+custom classes with a `make()` method keep the sink. A receiver typed as the
+factory or its contract is trusted to apply its headers argument; an
+implementation that silently discards it violates that contract and is out of
+scope.
 
 One accepted gap. All `make()` calls in a project meet at a single taint graph
 node (and, separately, all `new Response()` calls meet at their own), and
