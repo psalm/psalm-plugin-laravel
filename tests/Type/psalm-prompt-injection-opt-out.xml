@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
-<!-- The shipped auto mode: omitted findPromptInjection resolves to Psalm's normal
-     error for TaintedLlmPrompt when the supported laravel/ai integration is loaded. -->
+<!-- Explicit opt-out configuration for the D-in TaintedLlmPrompt issue. -->
 <psalm
     disableSuppressAll="true"
     ensureArrayStringOffsetsExist="true"
@@ -20,6 +19,7 @@
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
             <resolveDynamicWhereClauses value="true" />
+            <findPromptInjection value="false" />
         </pluginClass>
     </plugins>
     <issueHandlers>

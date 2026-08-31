@@ -17,7 +17,7 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` agents: `Agent::prompt()`, `stream()`, `queue()`, `broadcast*()` (advisory unless [`findPromptInjection`](config.md#findpromptinjection) is enabled) |
+| Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings) |
 | LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
@@ -62,17 +62,15 @@ Applies to projects using `laravel/ai`. The stubs and the LLM-output handler loa
 only when that package is installed and satisfies `>=0.11.0 <1.0.0`, so projects
 without it pay nothing.
 
-Two directions are covered, and they ship at different reporting levels.
+Two directions are covered. Both are errors by default; the explicit opt-out only
+suppresses the D-in `TaintedLlmPrompt` issue.
 
-* Untrusted input reaching a prompt is reported as `TaintedLlmPrompt`, **advisory
-  by default**: computed, visible with `--show-info=true`, never build-breaking.
-  Turn it into an error with [`findPromptInjection`](config.md#findpromptinjection).
-  The asymmetry is deliberate. Every other taint kind here names its own fix, but
-  no reliable prompt-injection sanitizer exists, so an error on
-  `$agent->prompt($request->input('message'))` flags a chatbot for being a chatbot
-  and leaves suppression as the only remedy. Enforcement earns its keep where the
-  prompt is assembled from data the user did not knowingly submit: retrieved
-  documents, scraped pages, webhook bodies, tool results. Sinks are
+* Untrusted input reaching a prompt is reported as `TaintedLlmPrompt` at the
+  normal error level by default when the supported `laravel/ai` integration is
+  installed. Set [`findPromptInjection`](config.md#findpromptinjection) to
+  `false` only to suppress this D-in issue; an explicit issue handler still wins.
+  The integration gate is `laravel/ai >=0.11.0 <1.0.0`, and `true` cannot bypass
+  it. Sinks are
   `Promptable::prompt()` / `stream()` / `queue()` / `broadcast*()`, the
   `Laravel\Ai\agent()` helper, `AgentPrompt::prepend()` / `append()` / `revise()`,
   `Files\Document::fromString()` / `fromBase64()`,

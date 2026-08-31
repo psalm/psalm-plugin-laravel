@@ -13,6 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
+use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
@@ -257,25 +258,7 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function laravelAiIntegrationEnabled(): bool
     {
-        return $this->isInstalledAndSatisfies('laravel/ai', '>=0.11.0 <1.0.0');
-    }
-
-    /**
-     * Composer's {@see \Composer\InstalledVersions::satisfies()} throws when the
-     * package is missing entirely. Pair it with the cheap presence check first
-     * so callers can express "installed AND in this range" as a single boolean.
-     */
-    private function isInstalledAndSatisfies(string $package, string $constraint): bool
-    {
-        if (!\Composer\InstalledVersions::isInstalled($package)) {
-            return false;
-        }
-
-        return \Composer\InstalledVersions::satisfies(
-            new \Composer\Semver\VersionParser(),
-            $package,
-            $constraint,
-        );
+        return LaravelAiIntegration::isEnabled();
     }
 
     private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void

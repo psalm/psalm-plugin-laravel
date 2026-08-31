@@ -98,13 +98,13 @@ Rules:
 
 ### The `laravel/ai` integration gate
 
-Three things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (`isInstalledAndSatisfies('laravel/ai', '>=0.11.0 <1.0.0')`), and they must stay in lockstep:
+Three things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (the shared `LaravelAiIntegration::isEnabled()` check for `>=0.11.0 <1.0.0`), and they must stay in lockstep:
 
 1. `stubs/integrations/laravel-ai/` via `Plugin::optionalIntegrationStubs()`.
 2. `Handlers\Ai\LlmOutputTaintHandler` via `Plugin::registerHandlers()`.
-3. `Internal\PromptInjectionIssuePolicy` via `Plugin::__invoke()`, which defaults `TaintedLlmPrompt` to `info` unless `<findPromptInjection value="true" />`.
+3. `Internal\PromptInjectionIssuePolicy` via `Plugin::__invoke()`, which preserves Psalm's normal `TaintedLlmPrompt` error by default and applies a narrow D-in suppression only for `<findPromptInjection value="false" />`.
 
-Half of that set is a silent half-integration: stubs without the handler lose the property sources, and the issue policy without the stubs would quietly demote a project's own `llm_prompt` annotations. Adding a fourth site means adding it to that method's callers, not writing a fourth copy of the version check.
+Half of that set is a silent half-integration: stubs without the handler lose the property sources, and the issue policy without the stubs could suppress a project's own `llm_prompt` annotations. Adding a fourth site means adding it to that method's callers, not writing a fourth copy of the version check.
 
 Stub-versus-vendor drift is invisible to Psalm here (a registered stub wins over the reflected class), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks.
 
@@ -156,7 +156,7 @@ Create the handler class in the appropriate `src/Handlers/` subdirectory, then r
 
 ### Experimental issue lifecycle
 
-Experimental status changes an issue's default severity, never whether its handler or type inference runs. Keep the policy list in `ExperimentalIssuePolicy` as the single source of truth. Both it and `PromptInjectionIssuePolicy` delegate to `Internal\DefaultIssueLevels`, which implements the safe setter Psalm lacks: it applies a default only when the project has no handler for that issue, and recognizes its own earlier default by object identity so a later invocation can refresh it when the flag flips. Any explicit issue handler owns the complete reporting policy, including its base level and scoped filters.
+Experimental status changes an issue's default severity, never whether its handler or type inference runs. Keep the experimental policy list in `ExperimentalIssuePolicy` as the single source of truth; `PromptInjectionIssuePolicy` is a separate, integration-gated opt-out for the stable `TaintedLlmPrompt` issue. Both policies delegate to `Internal\DefaultIssueLevels`, which implements the safe setter Psalm lacks: it applies a default only when the project has no handler for that issue, and recognizes its own earlier default by object identity so a later invocation can refresh it when the flag flips. Any explicit issue handler owns the complete reporting policy, including its base level and scoped filters.
 
 1. Introduce an experimental issue: register its handler normally, add its issue type to that internal list, and let the policy default it to `info` (or `error` when `<experimental value="true" />` is configured).
 2. Graduate an issue: remove it from the internal list; it becomes a normal stable error.

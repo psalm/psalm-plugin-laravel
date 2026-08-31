@@ -9,22 +9,22 @@ if (!\Psalm\LaravelPlugin\Internal\LaravelAiIntegration::isEnabled() || !trait_e
     echo 'skip needs supported laravel/ai package (>=0.11.0 <1.0.0)';
 }
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --config=./tests/Type/psalm-prompt-injection-opt-out.xml --taint-analysis
 --FILE--
 <?php declare(strict_types=1);
 
-namespace App\Agents;
-
-final class SupportAgent
+final class ExplicitOptOutAgent
 {
     use \Laravel\Ai\Promptable;
 }
 
-function askSupport(\Illuminate\Http\Request $request): \Laravel\Ai\Responses\AgentResponse {
-    $question = (string) $request->input('q');
+function explicitOptOutHidesPromptIssue(\Illuminate\Http\Request $request): void {
+    (new ExplicitOptOutAgent)->prompt((string) $request->input('message'));
+}
 
-    return (new SupportAgent())->prompt($question);
+function explicitOptOutKeepsOutputTaint(\Laravel\Ai\Responses\AgentResponse $response): void {
+    \Illuminate\Support\Facades\DB::select('SELECT * FROM notes WHERE body = ' . $response->text);
 }
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedSql on line %d: Detected tainted SQL

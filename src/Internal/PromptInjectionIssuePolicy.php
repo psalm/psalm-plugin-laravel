@@ -7,21 +7,13 @@ namespace Psalm\LaravelPlugin\Internal;
 use Psalm\Config;
 
 /**
- * Default reporting level for `TaintedLlmPrompt`, the D-in half of the
- * `laravel/ai` integration (untrusted input reaching a prompt).
+ * Opt-out policy for `TaintedLlmPrompt`, the D-in half of the `laravel/ai`
+ * integration (untrusted input reaching a prompt). Enabled integration runs
+ * use Psalm's normal error default unless configuration explicitly opts out.
  *
- * Advisory by default, unlike every other taint kind the plugin ships. The
- * difference is remediation, not confidence: an SQL or XSS finding names its
- * own fix (parameterize, escape), whereas no reliable prompt-injection
- * sanitizer exists, so there is nothing to hand a developer whose chatbot
- * legitimately passes `$request->input('message')` to an agent. Reported as an
- * error, the rule fires on the product's primary use case with `@psalm-suppress`
- * as the only way out, and a rule whose remediation is "suppress it" gets
- * suppressed everywhere, including where it mattered.
- *
- * Advisory therefore means visible under `--show-info=true` and never
- * build-breaking, until a project asks for enforcement with
- * `<findPromptInjection value="true" />`.
+ * Psalm's normal default is an error. An explicit false is a narrow opt-out
+ * for this D-in issue only: it suppresses `TaintedLlmPrompt`, while ordinary
+ * D-out taint sources and their downstream sink issues remain errors.
  *
  * This governs the prompt SINK direction only. Model output as a taint SOURCE
  * (`$response->text` reaching SQL, HTML, shell, header or file sinks) reports
@@ -40,11 +32,18 @@ final class PromptInjectionIssuePolicy
     private const ISSUE_TYPE = 'TaintedLlmPrompt';
 
     /** @psalm-external-mutation-free */
-    public static function apply(bool $enforced): void
+    public static function apply(?bool $configured): void
     {
+        // Plugin::__invoke() calls this only after the supported laravel/ai gate
+        // succeeds. Null (omitted config) and true resolve to the normal error
+        // level; false is the narrow, explicit D-in opt-out. DefaultIssueLevels
+        // also recognizes a previous policy-owned handler, allowing sequential
+        // plugin invocations to change the mode safely.
+        $level = $configured === false ? Config::REPORT_SUPPRESS : Config::REPORT_ERROR;
+
         DefaultIssueLevels::apply(
             [self::ISSUE_TYPE],
-            $enforced ? Config::REPORT_ERROR : Config::REPORT_INFO,
+            $level,
         );
     }
 }

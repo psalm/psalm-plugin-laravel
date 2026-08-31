@@ -35,7 +35,7 @@ Version difference that bites when testing: Psalm 6 runs in exactly one mode per
 Stubs for packages that ship outside `laravel/framework` (currently: `laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only when the host application has the package installed. The plugin probes Composer's runtime metadata in `Plugin::optionalIntegrationStubs()`:
 
 ```php
-if (self::isInstalledAndSatisfies('laravel/ai', '>=0.11.0 <1.0.0')) {
+if (LaravelAiIntegration::isEnabled()) {
     \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
 }
 ```
@@ -45,7 +45,7 @@ Two reasons for the version range:
 1. **Absent packages contribute zero cost** (no class lookups, no stub parsing).
 2. **A future major bump won't silently load stubs that reference removed or renamed classes**: `satisfies()` traps the mismatch and falls back to no-op.
 
-When adding a new integration, gate it on both `isInstalled()` (cheap presence check) and `satisfies()` (range guard), then drop the stubs into a new directory under `stubs/integrations/`.
+When adding a new integration, centralize its `isInstalled()` (cheap presence check) and `satisfies()` (range guard) in a shared gate, then use that gate at every integration call site and drop the stubs into a new directory under `stubs/integrations/`.
 
 **Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from drift. The dedicated `type_tests_laravel_ai` job runs exact `0.11.0` and floating `>=0.11.0 <1.0.0` stable legs weekly (Friday 06:00 UTC), on `workflow_dispatch`, and on relevant changes. It also has a scheduled/manual-only `0.x-dev` leg marked non-blocking. The PHP >= 8.3 cells of `test-laravel-app.yml` independently exercise the floating stable release.
 

@@ -88,7 +88,8 @@ final class IssueUrlGenerator
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
-            '- findPromptInjection: ' . self::formatBool($pluginConfig->findPromptInjection),
+            '- findPromptInjection: ' . self::formatNullableBool($pluginConfig->findPromptInjection),
+            '- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- experimental: ' . self::formatBool($pluginConfig->experimental),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
@@ -121,6 +122,12 @@ final class IssueUrlGenerator
     private static function formatBool(bool $value): string
     {
         return $value ? 'true' : 'false';
+    }
+
+    /** @psalm-pure */
+    private static function formatNullableBool(?bool $value): string
+    {
+        return $value === null ? 'auto' : self::formatBool($value);
     }
 
     /**

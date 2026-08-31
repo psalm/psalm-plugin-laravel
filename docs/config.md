@@ -191,23 +191,22 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 ## `findPromptInjection`
 
-**default**: `false`
+**default**: `auto`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). Only relevant to projects that install `laravel/ai`; the plugin leaves the level alone otherwise.
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). It is only relevant when the supported `laravel/ai` integration is installed; the plugin leaves the level alone otherwise.
 
-- default (element omitted, or `value="false"`): advisory. The finding is computed and visible with `--show-info=true`, and never fails the build.
-- `value="true"`: enforced. `TaintedLlmPrompt` is reported as an error like every other taint finding.
+- element omitted (`auto`): enforced when the supported `laravel/ai` integration is installed (`>=0.11.0 <1.0.0`). The plugin leaves the issue at Psalm's normal error level.
+- `value="false"`: explicit opt-out. Only `TaintedLlmPrompt` is suppressed; model-output taint sources and their ordinary SQL/HTML/shell findings remain errors.
+- `value="true"`: enforced inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
 
-Advisory is the default because prompt injection has no escape. Every other taint kind names its own fix (parameterize the query, escape the output), whereas passing the user's message straight to an agent is what a chatbot is for, and no reliable prompt-injection sanitizer exists to point a developer at. Reported as an error out of the box, the rule fires on the product's primary use case with suppression as the only remedy, which teaches people to suppress it everywhere.
-
-Enforcement is worth turning on where prompts are assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). Note that an explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
+Use the explicit opt-out only where direct prompt flows are intentional. In security-sensitive applications, the default auto mode reports prompts assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). An explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
 
 This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.
 
 ### Example
 
 ```xml
-<findPromptInjection value="true" />
+<findPromptInjection value="false" />
 ```
 
 ## Cache directory

@@ -19,12 +19,13 @@
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
             <resolveDynamicWhereClauses value="true" />
-            <!-- TaintedLlmPrompt ships advisory (info), so the PromptInjection D-in
-                 fixtures would assert nothing without this. Enforcement is turned on
-                 here rather than in a separate ARGS group on purpose: the taint batch
+            <!-- Explicitly enforce TaintedLlmPrompt here. The shipped auto default is
+                 also enforced when the integration gate is available; this explicit
+                 setting keeps these integration fixtures intentionally unambiguous. The
+                 taint batch
                  is co-analyzed, and Psalm's BFS prunes nodes already visited with the
                  same mask, so splitting it silently changes which flows reach a shared
-                 sink. The shipped default is pinned by PromptInjectionAdvisoryByDefault.phpt
+                 sink. The shipped auto default is pinned by PromptInjectionAutoDefault.phpt
                  against ./psalm-prompt-injection-default.xml. -->
             <findPromptInjection value="true" />
         </pluginClass>

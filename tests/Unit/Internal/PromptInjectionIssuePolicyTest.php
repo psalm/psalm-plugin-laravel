@@ -21,16 +21,17 @@ final class PromptInjectionIssuePolicyTest extends TestCase
         (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
     }
 
-    /** @return iterable<string, array{bool, 'error'|'info'}> */
+    /** @return iterable<string, array{?bool, 'error'|'suppress'}> */
     public static function enforcementModes(): iterable
     {
-        yield 'advisory by default' => [false, Config::REPORT_INFO];
+        yield 'auto keeps normal error' => [null, Config::REPORT_ERROR];
         yield 'enforced when enabled' => [true, Config::REPORT_ERROR];
+        yield 'explicit opt-out suppresses prompt injection' => [false, Config::REPORT_SUPPRESS];
     }
 
     #[Test]
     #[DataProvider('enforcementModes')]
-    public function it_sets_the_default_level_for_tainted_llm_prompt(bool $enforced, string $expectedLevel): void
+    public function it_sets_the_default_level_for_tainted_llm_prompt(?bool $enforced, string $expectedLevel): void
     {
         $config = $this->loadConfig();
 
@@ -45,7 +46,7 @@ final class PromptInjectionIssuePolicyTest extends TestCase
      */
     #[Test]
     #[DataProvider('enforcementModes')]
-    public function it_leaves_the_other_taint_issues_alone(bool $enforced, string $_expectedLevel): void
+    public function it_leaves_the_other_taint_issues_alone(?bool $enforced, string $_expectedLevel): void
     {
         $config = $this->loadConfig();
 
@@ -58,7 +59,7 @@ final class PromptInjectionIssuePolicyTest extends TestCase
 
     #[Test]
     #[DataProvider('enforcementModes')]
-    public function an_explicit_issue_handler_always_wins(bool $enforced, string $_expectedLevel): void
+    public function an_explicit_issue_handler_always_wins(?bool $enforced, string $_expectedLevel): void
     {
         foreach ([Config::REPORT_ERROR, Config::REPORT_INFO, Config::REPORT_SUPPRESS] as $level) {
             $config = $this->loadConfig(
@@ -71,18 +72,20 @@ final class PromptInjectionIssuePolicyTest extends TestCase
         }
     }
 
-    /** @return iterable<string, array{bool, bool, 'error'|'info'}> */
+    /** @return iterable<string, array{?bool, ?bool, 'error'|'suppress'}> */
     public static function enforcementFlips(): iterable
     {
-        yield 'advisory to enforced' => [false, true, Config::REPORT_ERROR];
-        yield 'enforced to advisory' => [true, false, Config::REPORT_INFO];
+        yield 'opt-out to auto' => [false, null, Config::REPORT_ERROR];
+        yield 'auto to opt-out' => [null, false, Config::REPORT_SUPPRESS];
+        yield 'opt-out to enforced' => [false, true, Config::REPORT_ERROR];
+        yield 'enforced to opt-out' => [true, false, Config::REPORT_SUPPRESS];
     }
 
     #[Test]
     #[DataProvider('enforcementFlips')]
     public function the_default_follows_sequential_invocations_on_the_same_config(
-        bool $initial,
-        bool $subsequent,
+        ?bool $initial,
+        ?bool $subsequent,
         string $expectedLevel,
     ): void {
         $config = $this->loadConfig();
