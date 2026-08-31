@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788188411395,
+  "lastUpdate": 1788192557937,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10665,6 +10665,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.4,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1111,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "206e802b10b6d2ecd20f13cde7b493914c5fe66c",
+          "message": "Fix: Infer HasFactory bindings without masking errors (#1423)\n\n* fix(eloquent): infer HasFactory bindings #1420\n\n* style: auto-fix (rector + php-cs-fixer)\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-08-31T18:06:10+02:00",
+          "tree_id": "2021dc232fd1c5769c935c9c800579a3f2ca955c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/206e802b10b6d2ecd20f13cde7b493914c5fe66c"
+        },
+        "date": 1788192556217,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.05,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
