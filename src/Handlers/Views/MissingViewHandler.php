@@ -27,11 +27,11 @@ use Psalm\Type\Union;
 /**
  * Detects a view name that does not correspond to an existing template file,
  * across every Laravel API that accepts one — the view() helper, Factory
- * (make/first/renderWhen/renderUnless/renderEach) and its View facade,
+ * (make/first/renderWhen/renderUnless/renderEach/composer/creator) and its View facade,
  * ResponseFactory::view() (concrete, contract, and Response facade),
- * Router::view(), MailMessage::view()/markdown(), and TestResponse::assertViewIs()
- * — and narrows the view() helper's return type past the stub's contract
- * fallback to a concrete class.
+ * Router::view(), MailMessage::view()/markdown(), Mailable::view()/markdown()/text(),
+ * and TestResponse::assertViewIs() — and narrows the view() helper's return type
+ * past the stub's contract fallback to a concrete class.
  *
  * The receiver classes for the method-call families are {@see ViewNameSignatures},
  * which also resolves a receiver back to a role so this handler knows which
