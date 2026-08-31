@@ -9,10 +9,10 @@ use Illuminate\Support\Str;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use Psalm\Codebase;
-use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\Arg;
+use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Union;
@@ -195,62 +195,6 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
      */
     private static function methodBody(Codebase $codebase, MethodIdentifier $id): ?array
     {
-        try {
-            $location = $codebase->methods->getStorage($id)->location;
-        } catch (\UnexpectedValueException) {
-            return null;
-        }
-
-        if (!$location instanceof CodeLocation) {
-            return null;
-        }
-
-        try {
-            $fileStmts = $codebase->getStatementsForFile($location->file_path);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            return null;
-        }
-
-        return self::findMethod($fileStmts, '', $id->fq_class_name, $id->method_name);
-    }
-
-    /**
-     * Walk namespace → class → method manually (Psalm's AST has no parent links).
-     *
-     * @param array<array-key, Stmt> $stmts
-     * @return ?array<array-key, Stmt>
-     * @psalm-mutation-free
-     */
-    private static function findMethod(array $stmts, string $nsPrefix, string $fqClassName, string $methodNameLower): ?array
-    {
-        foreach ($stmts as $stmt) {
-            if ($stmt instanceof Stmt\Namespace_) {
-                $found = self::findMethod($stmt->stmts, $stmt->name?->toString() ?? '', $fqClassName, $methodNameLower);
-                if ($found !== null) {
-                    return $found;
-                }
-
-                continue;
-            }
-
-            if (!$stmt instanceof Stmt\ClassLike) {
-                continue;
-            }
-
-            $shortName = $stmt->name?->toString() ?? '';
-            $fqcn = $nsPrefix !== '' ? $nsPrefix . '\\' . $shortName : $shortName;
-
-            if (\strcasecmp($fqcn, $fqClassName) !== 0) {
-                continue;
-            }
-
-            foreach ($stmt->stmts as $member) {
-                if ($member instanceof Stmt\ClassMethod && \strtolower((string) $member->name) === $methodNameLower) {
-                    return $member->stmts;
-                }
-            }
-        }
-
-        return null;
+        return ClassMethodResolver::resolve($codebase, $id)['classMethod']->stmts ?? null;
     }
 }
