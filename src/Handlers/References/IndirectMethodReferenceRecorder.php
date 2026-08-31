@@ -1,0 +1,56 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Handlers\References;
+
+use Psalm\Codebase;
+use Psalm\Internal\MethodIdentifier;
+
+/**
+ * Writes Laravel's statically-proven indirect calls into Psalm's reference provider.
+ *
+ * Keeping this mutation in one small collaborator makes it difficult for handlers to
+ * accidentally mark a method as a return-value reference or to mutate Psalm's method
+ * storage instead of its supported reference graph.
+ *
+ * @internal
+ */
+final class IndirectMethodReferenceRecorder
+{
+    /**
+     * @psalm-external-mutation-free
+     */
+    public static function record(Codebase $codebase, MethodIdentifier $callingMethodId, MethodIdentifier $methodId): void
+    {
+        if (!$codebase->collect_references) {
+            return;
+        }
+
+        $codebase->file_reference_provider->addMethodReferenceToClassMember(
+            \strtolower((string) $callingMethodId),
+            \strtolower((string) $methodId),
+            false,
+        );
+    }
+
+    /**
+     * Record an indirect call without inventing a calling method. The plugin file is a stable,
+     * non-analyzed source for this synthetic edge, so it is not removed when an application file
+     * is re-analyzed during an incremental run.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function recordFileReference(Codebase $codebase, MethodIdentifier $methodId): void
+    {
+        if (!$codebase->collect_references) {
+            return;
+        }
+
+        $codebase->file_reference_provider->addFileReferenceToClassMember(
+            __FILE__,
+            strtolower((string) $methodId),
+            false,
+        );
+    }
+}

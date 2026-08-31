@@ -125,6 +125,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
+        require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceRecorder.php';
+        require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
@@ -174,6 +176,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
+        Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
@@ -277,6 +280,10 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
+        // Laravel's container and Eloquent relationship dispatch are invisible to Psalm's syntax
+        // walker. Register this after ModelRegistrationHandler so relation metadata is complete
+        // before it queues synthetic edges for replay after incremental invalidation.
+        $registration->registerHooksFromClass(Handlers\References\IndirectMethodReferenceHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
