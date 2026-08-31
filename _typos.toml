@@ -64,6 +64,10 @@ IIF = "IIF"
 IIFE = "IIFE"
 IIFEs = "IIFEs"
 
+# Laravel's `Illuminate\Contracts\Support\Responsable` is a real contract name;
+# typos suggests "Responsible" but the framework spelling is canonical.
+Responsable = "Responsable"
+
 [default.extend-words]
 # `mis-` is a valid English prefix (mis-cased, mis-infer, mis-identify, etc.).
 # typos tokenizes the bare `mis` and flags it as a typo of "miss"/"mist".

@@ -89,12 +89,24 @@ Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
 - `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work; currently `stubs/12.42.0/`, `stubs/13/`, `stubs/13.5.0/`, and `stubs/13.8.0/` exist
-- `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed (currently `carbon/`, with a `pre-3.12/` subdir loaded only for older Carbon; see `src/Stubs/CarbonStubProvider.php`)
+- `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed (`carbon/`, with a `pre-3.12/` subdir loaded only for older Carbon, see `src/Stubs/CarbonStubProvider.php`; and `laravel-ai/`, see below)
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
 - Add a type test in `tests/Type/tests/` to prevent regression
 - For taint annotations, see [Taint Analysis Stubs](taint-analysis.md)
+
+### The `laravel/ai` integration gate
+
+Three things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (the shared `LaravelAiIntegration::isEnabled()` check for `>=0.11.0 <1.0.0`), and they must stay in lockstep:
+
+1. `stubs/integrations/laravel-ai/` via `Plugin::optionalIntegrationStubs()`.
+2. `Handlers\Ai\LlmOutputTaintHandler` via `Plugin::registerHandlers()`.
+3. `Internal\PromptInjectionIssuePolicy` via `Plugin::__invoke()`, which preserves Psalm's normal `TaintedLlmPrompt` error by default and applies a narrow D-in suppression only for `<findPromptInjection value="false" />`.
+
+Half of that set is a silent half-integration: stubs without the handler lose the property sources, and the issue policy without the stubs could suppress a project's own `llm_prompt` annotations. Adding a fourth site means adding it to that method's callers, not writing a fourth copy of the version check.
+
+Stub-versus-vendor drift is invisible to Psalm here (a registered stub wins over the reflected class), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks.
 
 ### Stub merging: how Psalm combines annotations
 
@@ -145,7 +157,7 @@ Most taint handlers live under the Laravel feature directory whose API they cove
 
 ### Experimental issue lifecycle
 
-Experimental status changes an issue's default severity, never whether its handler or type inference runs. Keep the policy list in `ExperimentalIssuePolicy` as the single source of truth. The policy uses Psalm's safe setter: it applies a default only when the project has no handler for that issue. Any explicit `PluginIssue` entry owns the complete reporting policy, including its base level and scoped filters.
+Experimental status changes an issue's default severity, never whether its handler or type inference runs. Keep the experimental policy list in `ExperimentalIssuePolicy` as the single source of truth; `PromptInjectionIssuePolicy` is a separate, integration-gated opt-out for the stable `TaintedLlmPrompt` issue. Both policies delegate to `Internal\DefaultIssueLevels`, which implements the safe setter Psalm lacks: it applies a default only when the project has no handler for that issue, and recognizes its own earlier default by object identity so a later invocation can refresh it when the flag flips. Any explicit issue handler owns the complete reporting policy, including its base level and scoped filters.
 
 1. Introduce an experimental issue: register its handler normally, add its issue type to that internal list, and let the policy default it to `info` (or `error` when `<experimental value="true" />` is configured).
 2. Graduate an issue: remove it from the internal list; it becomes a normal stable error.
