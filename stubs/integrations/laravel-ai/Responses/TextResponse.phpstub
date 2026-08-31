@@ -4,7 +4,11 @@ namespace Laravel\Ai\Responses;
 
 use Illuminate\Support\Collection;
 use Laravel\Ai\Approvals\PendingApproval;
+use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\Data\Usage;
 
 /**
@@ -32,12 +36,16 @@ class TextResponse
 {
     use Concerns\HasRawResponse;
 
+    /** @var Collection<int, Message> */
     public Collection $messages;
 
+    /** @var Collection<int, ToolCall> */
     public Collection $toolCalls;
 
+    /** @var Collection<int, ToolResult> */
     public Collection $toolResults;
 
+    /** @var Collection<int, Step> */
     public Collection $steps;
 
     /** @var Collection<int, PendingApproval> */
@@ -45,12 +53,19 @@ class TextResponse
 
     public function __construct(public string $text, public Usage $usage, public Meta $meta) {}
 
+    /** @param Collection<int, Message> $messages */
     public function withMessages(Collection $messages): self {}
 
+    /**
+     * @param Collection<int, ToolCall> $toolCalls
+     * @param Collection<int, ToolResult> $toolResults
+     */
     public function withToolCallsAndResults(Collection $toolCalls, Collection $toolResults): self {}
 
+    /** @param Collection<int, Step> $steps */
     public function withSteps(Collection $steps): self {}
 
+    /** @param Collection<int, PendingApproval> $pendingApprovals */
     public function withPendingApprovals(Collection $pendingApprovals): self {}
 
     public function hasPendingApprovals(): bool {}
