@@ -240,6 +240,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Auth\GuardHandler::class);
         require_once __DIR__ . '/Handlers/Auth/RequestHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\RequestHandler::class);
+        require_once __DIR__ . '/Handlers/Auth/SanctumTokenTemplateHandler.php';
+        $registration->registerHooksFromClass(Handlers\Auth\SanctumTokenTemplateHandler::class);
         // Taint source/escape for the concrete guards. Lives in a handler, not a
         // `.phpstub`, because redeclaring the guard class to host a taint method
         // shadows every other method (see GuardTaintHandler / #1113).
