@@ -8,9 +8,13 @@ use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
+use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\PropertyStorage;
+use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
@@ -18,34 +22,19 @@ use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
- * Resolves `Model::factory()` to a useful factory type when the model uses
- * `HasFactory` without an explicit `@use HasFactory<XFactory>` template arg.
+ * Resolves `Model::factory()` when HasFactory's template argument is omitted.
+ * Discovery follows Laravel's effective `newFactory()` override, static
+ * `$factory`, `#[UseFactory]`, naming convention, then generic fallback order.
+ * Concrete factories are returned only with a usable TModel binding; otherwise
+ * `Factory<ModelFqcn, null>` preserves model typing through count/make chains.
  *
- * Discovery order mirrors Laravel's runtime in `HasFactory::newFactory()`:
- *   1. `#[UseFactory(XFactory::class)]` attribute on the model class.
- *   2. `Factory::resolveFactoryName($modelFqcn)` — Laravel naming convention,
- *      e.g. `App\Models\Bookshelf` → `Database\Factories\BookshelfFactory`.
- *      Mirrors Larastan's lookup at
- *      `ModelFactoryDynamicStaticMethodReturnTypeExtension::getFactoryReflection()`.
- *   3. Fallback to `Factory<modelFqcn, null>` so the downstream chain still
- *      has `TModel` and `TCount` bound and `count(N)->make()` resolves to a
- *      `Collection<int, modelFqcn>` (the bug from #960).
- *
- * Returning the concrete `XFactory` (when discovered) is strictly more useful
- * than the generic `Factory<modelFqcn, null>`: subclass-specific state methods
- * (`forUser()`, `withOwner()`, etc.) become callable on the chain without
- * requiring `@use HasFactory<XFactory>` on every model.
- *
- * Skipped paths (deferred to the stub):
- *   - When the user wrote an explicit `@use HasFactory<XFactory>` binding, the
- *     stub's `@return TFactory` already resolves to the user's choice (the
- *     documented escape hatch).
+ * Explicit @use bindings are left to HasFactory's declared TFactory return.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/960
  * @see FactoryCountTypeProvider
  * @internal
  */
-final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderInterface
+final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInterface, MethodReturnTypeProviderInterface
 {
     /** Pre-lowercased Model FQCN for parent_classes lookups. */
     private const MODEL_FQCN_LOWERCASE = 'illuminate\\database\\eloquent\\model';
@@ -58,10 +47,43 @@ final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderIn
      */
     private static array $factoryUnionCache = [];
 
+    /** @var array<lowercase-string, true> */
+    private static array $explicitHasFactoryBindings = [];
+
     /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$factoryUnionCache = [];
+        self::$explicitHasFactoryBindings = [];
+    }
+
+    /**
+     * Fill only omitted HasFactory arity after Psalm has populated its default
+     * binding. Snapshot explicit uses first because bare Factory is intentional.
+     */
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
+    {
+        $provider = $event->getCodebase()->classlike_storage_provider;
+        if (!$provider->has(HasFactory::class)) {
+            return;
+        }
+
+        $hasFactory = \strtolower(HasFactory::class);
+        $templateCount = \count($provider->get(HasFactory::class)->template_types ?? []);
+
+        foreach ($provider::getAll() as $storage) {
+            if (!isset($storage->used_traits[$hasFactory])) {
+                continue;
+            }
+
+            if (isset($storage->template_type_uses_count[$hasFactory])) {
+                self::$explicitHasFactoryBindings[\strtolower($storage->name)] = true;
+                continue;
+            }
+
+            $storage->template_type_uses_count[$hasFactory] = $templateCount;
+        }
     }
 
     /**
@@ -101,28 +123,16 @@ final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderIn
         // `@use HasFactory<XFactory>` binding. The stub returns TFactory which
         // resolves to the user-chosen Factory subclass — strictly more precise
         // than anything this handler can produce.
-        if (self::hasUserBoundTFactory($storage)) {
+        if (self::hasUserBoundTFactory($storage, $codebase)) {
             return null;
         }
 
-        // Tier 1 + 2: discover the concrete factory class. Return it only
-        // when its class storage carries an `@extends Factory<X>` binding,
-        // because `FactoryCountTypeProvider::resolveModelFromClass()` needs
-        // that binding to recover TModel from a chain like
-        // `MyFactory::count(N)->make()`. Real-world factories often skip the
-        // `@extends` docblock (BookStack, etc.) and rely on the runtime
-        // `protected $model = X::class` property; returning the bare class
-        // in that case would erase TModel and downgrade the chain to base
-        // `Model`. The next-best result (`Factory<modelFqcn, null>`) is
-        // strictly more useful in that scenario.
         $factoryClass = self::discoverFactoryClass($modelFqcn, $storage, $codebase);
-        if ($factoryClass !== null && self::hasModelTemplateBinding($factoryClass, $codebase)) {
+        if ($factoryClass !== null && self::isUsableFactoryClass($factoryClass, $codebase)) {
             return new Union([new TNamedObject($factoryClass)]);
         }
 
-        // Tier 3 fallback: Factory<modelFqcn, null>. Keeps TModel and TCount
-        // bound so count(N)->make() still resolves to Collection<int,
-        // modelFqcn>. Cached because the value depends only on $modelFqcn.
+        // Generic fallback keeps TModel and TCount bound.
         return self::$factoryUnionCache[$modelFqcn] ??= new Union([
             new TGenericObject(Factory::class, [
                 new Union([new TNamedObject($modelFqcn)]),
@@ -132,22 +142,27 @@ final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderIn
     }
 
     /**
-     * Tier 1: `#[UseFactory(XFactory::class)]` attribute on the model.
-     * Tier 2: `Factory::resolveFactoryName()` naming convention.
-     * Returns the FQCN only if Psalm has scanned it; otherwise null so the
-     * caller can fall through to the generic `Factory<modelFqcn, null>`.
-     *
-     * Not mutation-free: `Factory::resolveFactoryName()` reads Laravel
-     * container state (`appNamespace()`). The handler context tolerates
-     * impure helpers; the caller is the only entry point and is also impure.
+     * Mirrors Laravel's runtime resolution order without invoking model code.
+     * A present but statically ambiguous custom method, property, or attribute
+     * stops discovery because Laravel would not continue to a later tier.
      */
     private static function discoverFactoryClass(
         string $modelFqcn,
         ClassLikeStorage $storage,
         \Psalm\Codebase $codebase,
     ): ?string {
-        $fromAttribute = self::factoryFromUseFactoryAttribute($storage);
-        if ($fromAttribute !== null && $codebase->classlike_storage_provider->has($fromAttribute)) {
+        [$hasCustomMethod, $fromCustomMethod] = self::factoryFromCustomNewFactory($storage, $codebase);
+        if ($hasCustomMethod) {
+            return $fromCustomMethod;
+        }
+
+        [$hasFactoryProperty, $fromFactoryProperty] = self::factoryFromStaticProperty($storage, $codebase);
+        if ($hasFactoryProperty) {
+            return $fromFactoryProperty;
+        }
+
+        [$hasAttribute, $fromAttribute] = self::factoryFromUseFactoryAttribute($storage);
+        if ($hasAttribute) {
             return $fromAttribute;
         }
 
@@ -162,90 +177,199 @@ final class ModelFactoryMethodTypeProvider implements MethodReturnTypeProviderIn
     }
 
     /**
-     * Confirms the factory class carries an explicit `@extends Factory<X>` to
-     * a Model SUBCLASS (not bare `Model`). Psalm populates
-     * `template_extended_params[Factory::class]['TModel']` with the bound
-     * default (bare `Model`) when the user omits `@extends`, so a plain
-     * `isset()` would be too permissive — we'd return the concrete factory
-     * class and FactoryCountTypeProvider would later recover TModel as
-     * `Model`, downgrading the chain.
+     * @return array{bool, ?string}
+     *
+     * @psalm-mutation-free
+     */
+    private static function factoryFromCustomNewFactory(
+        ClassLikeStorage $storage,
+        \Psalm\Codebase $codebase,
+    ): array {
+        $declaringId = $storage->declaring_method_ids['newfactory'] ?? null;
+        if ($declaringId === null
+            || \strtolower($declaringId->fq_class_name) === \strtolower(HasFactory::class)
+        ) {
+            return [false, null];
+        }
+
+        try {
+            $methodStorage = $codebase->methods->getStorage($declaringId);
+        } catch (\UnexpectedValueException) {
+            return [true, null];
+        }
+
+        foreach ([$methodStorage->return_type, $methodStorage->signature_return_type] as $returnType) {
+            $factoryClass = self::factoryClassFromObjectType($returnType);
+            if ($factoryClass !== null && self::isUsableFactoryClass($factoryClass, $codebase)) {
+                return [true, $factoryClass];
+            }
+        }
+
+        return [true, null];
+    }
+
+    /**
+     * @return array{bool, ?string}
+     *
+     * @psalm-mutation-free
+     */
+    private static function factoryFromStaticProperty(
+        ClassLikeStorage $storage,
+        \Psalm\Codebase $codebase,
+    ): array {
+        $declaringClass = $storage->declaring_property_ids['factory'] ?? null;
+        if ($declaringClass === null) {
+            return [false, null];
+        }
+
+        if (!$codebase->classlike_storage_provider->has($declaringClass)) {
+            return [true, null];
+        }
+
+        $property = $codebase->classlike_storage_provider
+            ->get($declaringClass)
+            ->properties['factory'] ?? null;
+        if (!$property instanceof PropertyStorage || $property->is_static !== true) {
+            return [true, null];
+        }
+
+        return [true, self::factoryClassFromClassString($property->type ?? $property->suggested_type)];
+    }
+
+    /** @psalm-mutation-free */
+    private static function factoryClassFromObjectType(?Union $type): ?string
+    {
+        if ($type === null || \count($type->getAtomicTypes()) !== 1) {
+            return null;
+        }
+
+        $atomic = \array_values($type->getAtomicTypes())[0];
+
+        return $atomic instanceof TNamedObject ? $atomic->value : null;
+    }
+
+    /** @psalm-mutation-free */
+    private static function factoryClassFromClassString(?Union $type): ?string
+    {
+        if ($type === null || \count($type->getAtomicTypes()) !== 1) {
+            return null;
+        }
+
+        $atomic = \array_values($type->getAtomicTypes())[0];
+        if ($atomic instanceof TLiteralClassString) {
+            return $atomic->value;
+        }
+
+        return $atomic instanceof TClassString && $atomic->as_type !== null
+            ? $atomic->as_type->value
+            : null;
+    }
+
+    /** @psalm-mutation-free */
+    private static function isUsableFactoryClass(string $factoryClass, \Psalm\Codebase $codebase): bool
+    {
+        return self::isConcreteFactoryClass($factoryClass, $codebase)
+            && self::hasModelTemplateBinding($factoryClass, $codebase);
+    }
+
+    /** @psalm-mutation-free */
+    private static function isConcreteFactoryClass(string $factoryClass, \Psalm\Codebase $codebase): bool
+    {
+        if (!$codebase->classlike_storage_provider->has($factoryClass)) {
+            return false;
+        }
+
+        $storage = $codebase->classlike_storage_provider->get($factoryClass);
+
+        return !$storage->abstract
+            && !$storage->is_interface
+            && !$storage->is_trait
+            && isset($storage->parent_classes[\strtolower(Factory::class)]);
+    }
+
+    /**
+     * A usable TModel is one exact, scanned Model subclass. Bare Model and
+     * ambiguous bindings would erase the concrete model from factory chains.
      *
      * @psalm-mutation-free
      */
     private static function hasModelTemplateBinding(string $factoryClass, \Psalm\Codebase $codebase): bool
     {
-        try {
-            $storage = $codebase->classlike_storage_provider->get($factoryClass);
-        } catch (\InvalidArgumentException) {
-            return false;
-        }
-
+        $storage = $codebase->classlike_storage_provider->get($factoryClass);
         $tModel = $storage->template_extended_params[Factory::class]['TModel'] ?? null;
-        if (!$tModel instanceof Union) {
+        if (!$tModel instanceof Union || \count($tModel->getAtomicTypes()) !== 1) {
             return false;
         }
 
-        foreach ($tModel->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && $atomic->value !== Model::class) {
-                return true;
-            }
+        $atomic = \array_values($tModel->getAtomicTypes())[0];
+        if (!$atomic instanceof TNamedObject
+            || $atomic->value === Model::class
+            || !$codebase->classlike_storage_provider->has($atomic->value)
+        ) {
+            return false;
         }
 
-        return false;
+        $modelStorage = $codebase->classlike_storage_provider->get($atomic->value);
+
+        return isset($modelStorage->parent_classes[self::MODEL_FQCN_LOWERCASE]);
     }
 
     /**
-     * Read `#[UseFactory(XFactory::class)]` from the model class's storage.
-     * Mirrors `HasFactory::getUseFactoryAttribute()` at static-analysis time.
+     * @return array{bool, ?string}
      *
      * @psalm-mutation-free
      */
-    private static function factoryFromUseFactoryAttribute(ClassLikeStorage $storage): ?string
+    private static function factoryFromUseFactoryAttribute(ClassLikeStorage $storage): array
     {
         foreach ($storage->attributes as $attribute) {
             if ($attribute->fq_class_name !== UseFactory::class) {
                 continue;
             }
 
-            $firstArg = $attribute->args[0] ?? null;
-            if ($firstArg === null) {
-                continue;
-            }
+            $argType = $attribute->args[0]->type ?? null;
 
-            $argType = $firstArg->type;
-            if (!$argType instanceof Union) {
-                continue;
-            }
-
-            foreach ($argType->getAtomicTypes() as $atomic) {
-                if ($atomic instanceof TLiteralClassString) {
-                    return $atomic->value;
-                }
-            }
+            return [true, $argType instanceof Union
+                ? self::factoryClassFromClassString($argType)
+                : null];
         }
 
-        return null;
+        return [false, null];
     }
 
     /**
-     * True when the model carries an explicit HasFactory template binding to
-     * a Factory subclass. Psalm's populator copies user-supplied offsets into
-     * `template_extended_params[HasFactory::class]['TFactory']`; the unbound
-     * default fills the same slot with the bound (bare Factory), so a value
-     * other than bare Factory signals a user binding.
+     * True when the model, an ancestor, or a composed application trait
+     * supplied an explicit @use binding. The signal is captured before omitted
+     * uses are normalized to the trait's populated default arity.
      *
-     * @psalm-mutation-free
+     * @psalm-external-mutation-free
      */
-    private static function hasUserBoundTFactory(ClassLikeStorage $storage): bool
-    {
-        $binding = $storage->template_extended_params[HasFactory::class]['TFactory'] ?? null;
-        if (!$binding instanceof Union) {
-            return false;
+    private static function hasUserBoundTFactory(
+        ClassLikeStorage $storage,
+        \Psalm\Codebase $codebase,
+    ): bool {
+        $relatedClasslikes = [\strtolower($storage->name) => true];
+        foreach ($storage->parent_classes as $parentClassLowercase => $_) {
+            $relatedClasslikes[$parentClassLowercase] = true;
         }
 
-        foreach ($binding->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && $atomic->value !== Factory::class) {
+        $visited = [];
+        while (($classlike = \array_key_first($relatedClasslikes)) !== null) {
+            unset($relatedClasslikes[$classlike]);
+            if (isset($visited[$classlike])) {
+                continue;
+            }
+
+            $visited[$classlike] = true;
+            if (isset(self::$explicitHasFactoryBindings[$classlike])) {
                 return true;
+            }
+
+            if (!$codebase->classlike_storage_provider->has($classlike)) {
+                continue;
+            }
+
+            foreach ($codebase->classlike_storage_provider->get($classlike)->used_traits as $traitLowercase => $_) {
+                $relatedClasslikes[$traitLowercase] = true;
             }
         }
 
