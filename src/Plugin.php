@@ -495,6 +495,11 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Cache/CacheManagerReturnTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Cache\CacheManagerReturnTypeHandler::class);
 
+        // Userland `Illuminate\Support\Manager` subclasses: narrows driver()/driver('x')
+        // to the DECLARED return type of the matching create{Studly}Driver() (#1392).
+        require_once __DIR__ . '/Handlers/Support/ManagerDriverHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ManagerDriverHandler::class);
+
         require_once __DIR__ . '/Handlers/Rules/ModelMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\ModelMakeHandler::class);
 
