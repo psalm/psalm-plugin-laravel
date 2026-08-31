@@ -87,7 +87,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
     #[DataProvider('provideMakeCalls')]
     public function proves_attachment_only_for_literal_downloads(string $call, bool $proven): void
     {
-        $this->assertSame($proven, $this->provesLiteralAttachment($call));
+        $this->assertSame($proven, $this->provesExemptResponse($call));
     }
 
     /** @return iterable<string, array{string, bool}> */
@@ -241,7 +241,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         $second = \strpos($code, '$second');
         $this->assertIsInt($second);
 
-        $call = $this->findMakeCallWithContentAt($stmts, [$second, $second + \strlen('$second')]);
+        $call = $this->findResponseCallWithContentAt($stmts, [$second, $second + \strlen('$second')]);
 
         $this->assertInstanceOf(MethodCall::class, $call);
         $this->assertSame('second', $call->getArgs()[0]->value->name ?? null);
@@ -252,7 +252,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
     {
         $stmts = $this->parse('<?php $a->send($first, 200, []);');
 
-        $this->assertNull($this->findMakeCallWithContentAt($stmts, [6, 12]));
+        $this->assertNull($this->findResponseCallWithContentAt($stmts, [6, 12]));
     }
 
     /**
@@ -296,7 +296,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         $this->assertInstanceOf(MethodCall::class, $makeCall);
 
         /** @psalm-var bool */
-        $result = (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesLiteralAttachment'))
+        $result = (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesExemptResponse'))
             ->invoke(null, $stmts, $makeCall);
 
         $this->assertFalse($result);
@@ -315,7 +315,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
      * code, no enclosing function-like) or a full snippet containing a function definition followed
      * by the call: the extra empty statement after the closing brace is harmless.
      */
-    private function provesLiteralAttachment(string $code): bool
+    private function provesExemptResponse(string $code): bool
     {
         $stmts = $this->parse('<?php ' . $code . ';');
         // Restricted to `make`/`New_` so a scoped snippet may freely contain another call (passing
@@ -330,7 +330,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         $this->assertTrue($found instanceof MethodCall || $found instanceof StaticCall || $found instanceof New_);
 
         /** @psalm-var bool */
-        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesLiteralAttachment'))
+        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'provesExemptResponse'))
             ->invoke(null, $stmts, $found);
     }
 
@@ -338,10 +338,10 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
      * @param list<Node\Stmt> $stmts
      * @param array{0: int, 1: int} $bounds
      */
-    private function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|New_|null
+    private function findResponseCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|New_|null
     {
         /** @psalm-var MethodCall|StaticCall|New_|null */
-        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'findMakeCallWithContentAt'))
+        return (new \ReflectionMethod(ResponseFactoryTaintHandler::class, 'findResponseCallWithContentAt'))
             ->invoke(null, $stmts, $bounds);
     }
 

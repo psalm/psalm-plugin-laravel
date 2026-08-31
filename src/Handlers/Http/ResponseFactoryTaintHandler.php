@@ -56,11 +56,12 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * "direct top-level statement" to belong to. Superglobals and `$this` are rejected outright. Each
  * such miss fails toward a retained finding, never a dropped one.
  *
- * ACCEPTED LIMITATION: every `make()` call in a project shares one sink node, and
- * `TaintFlowGraph::getChildNodes()` walks it once, so its `visited_source_ids` set already discards
- * every flow into it longer than the first one found. Exempting that first flow leaves the sink
- * reporting nothing rather than reporting one of its flows. The longer flow is lost with or without
- * this handler; pinned by `TaintedHtmlResponseFactoryMakeSharedSinkKnownLimitation.phpt`.
+ * ACCEPTED LIMITATION: every `make()` call in a project shares one sink node (and, separately,
+ * every constructor call shares its own), and `TaintFlowGraph::getChildNodes()` walks each once,
+ * so its `visited_source_ids` set already discards every flow into it longer than the first one
+ * found. Exempting that first flow leaves the sink reporting nothing rather than reporting one of
+ * its flows. The longer flow is lost with or without this handler; pinned for `make()` by
+ * `TaintedHtmlResponseFactoryMakeSharedSinkKnownLimitation.phpt`.
  *
  * Every private helper below is free of side effects, but the purity annotations follow what Psalm
  * can verify rather than what is true: helpers that reach for a call's arguments or walk the AST
@@ -101,6 +102,14 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     private const HEADER_NAME_UPPER = '_ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
     private const HEADER_NAME_LOWER = '-abcdefghijklmnopqrstuvwxyz';
+
+    /**
+     * Every C0 control and DEL, horizontal tab excepted: HTAB is the one control a header field
+     * value may legitimately carry, as optional whitespace. Checked on the RAW value, before
+     * trim(): trim() eats a boundary CR, LF, NUL, or vertical tab and would approve a value PHP
+     * still refuses to emit at runtime (the header is dropped, the response renders as HTML).
+     */
+    private const RAW_CONTROL_CHARACTER_PATTERN = '/[\x00-\x08\x0A-\x1F\x7F]/';
 
     /**
      * PHP's superglobals are implicitly available, and implicitly mutable, in every scope without
@@ -159,9 +168,9 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        $call = self::findMakeCallWithContentAt($stmts, $content->getSelectionBounds());
+        $call = self::findResponseCallWithContentAt($stmts, $content->getSelectionBounds());
 
-        return $call !== null && self::provesLiteralAttachment($stmts, $call) ? false : null;
+        return $call !== null && self::provesExemptResponse($stmts, $call) ? false : null;
     }
 
     /**
@@ -191,30 +200,22 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      * @param list<Node\Stmt> $stmts
      * @param array{0: int, 1: int} $bounds
      */
-    private static function findMakeCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|New_|null
+    private static function findResponseCallWithContentAt(array $stmts, array $bounds): MethodCall|StaticCall|New_|null
     {
         /** @psalm-var list<MethodCall|StaticCall|New_> $calls */
         $calls = (new NodeFinder())->find($stmts, static function (Node $node) use ($bounds): bool {
-            if ($node instanceof New_) {
-                // getArgs() throws on a first-class callable (`new A(...)` is not valid syntax, but
-                // an anonymous class body could still reach here through a nested closure).
-                if ($node->isFirstClassCallable()) {
-                    return false;
-                }
-
-                $args = $node->getArgs();
-
-                return $args !== []
-                    && $args[0]->value->getStartFilePos() === $bounds[0]
-                    && $args[0]->value->getEndFilePos() + 1 === $bounds[1];
+            if (!$node instanceof New_ && !$node instanceof MethodCall && !$node instanceof StaticCall) {
+                return false;
             }
 
-            if ((!$node instanceof MethodCall && !$node instanceof StaticCall)
-                || !$node->name instanceof Identifier
-                || \strtolower($node->name->name) !== 'make'
-                // getArgs() throws on a first-class callable (`make(...)`).
-                || $node->isFirstClassCallable()
+            if (!$node instanceof New_
+                && (!$node->name instanceof Identifier || \strtolower($node->name->name) !== 'make')
             ) {
+                return false;
+            }
+
+            // getArgs() throws on a first-class callable (`make(...)`, `new A(...)`).
+            if ($node->isFirstClassCallable()) {
                 return false;
             }
 
@@ -238,7 +239,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      *
      * @param list<Node\Stmt> $stmts
      */
-    private static function provesLiteralAttachment(array $stmts, MethodCall|StaticCall|New_ $call): bool
+    private static function provesExemptResponse(array $stmts, MethodCall|StaticCall|New_ $call): bool
     {
         $args = $call->getArgs();
 
@@ -256,7 +257,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
             return false;
         }
 
-        $resolved = self::resolveVariableHeaders($stmts, $call, $headers);
+        $resolved = self::resolveHeadersArray($stmts, $call, $headers, $headers->name);
 
         return $resolved instanceof Array_ && self::provesExempt($resolved);
     }
@@ -281,32 +282,41 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      * without ever producing a matching `Variable` node for a competing write, so the occurrence
      * count could never see a mutation this proof needs to rule out.
      *
+     * `$name` is `$headersVar->name`, passed separately because the only caller already proved it
+     * is a `string` (a computed variable name is a different `Variable` shape entirely, rejected
+     * before this is ever called).
+     *
      * @param list<Node\Stmt> $stmts
      */
-    private static function resolveVariableHeaders(array $stmts, MethodCall|StaticCall|New_ $call, Variable $headersVar): ?Array_
+    private static function resolveHeadersArray(array $stmts, MethodCall|StaticCall|New_ $call, Variable $headersVar, string $name): ?Array_
     {
-        $name = $headersVar->name;
-
-        if (!\is_string($name) || \in_array($name, self::NEVER_RESOLVED_VARIABLE_NAMES, true)) {
+        if (\in_array($name, self::NEVER_RESOLVED_VARIABLE_NAMES, true)) {
             return null;
         }
 
-        $scope = self::findEnclosingFunctionLike($stmts, $call);
+        // Parent pointers are the only way to climb from the call to its enclosing function-like,
+        // and later to tell "the assignment's LHS" from any other read of the same name, without
+        // re-implementing a scope walk; ParentConnectingVisitor mutates node attributes, but
+        // re-running it is idempotent, so this stays safe to call once per issue.
+        (new NodeTraverser(new ParentConnectingVisitor()))->traverse($stmts);
 
-        if (!$scope instanceof \PhpParser\Node\FunctionLike || self::hasDynamicVariableAccess($scope)) {
-            return null;
+        /** @var Node|null $scope */
+        $scope = $call->getAttribute('parent');
+
+        while ($scope !== null && !$scope instanceof FunctionLike) {
+            /** @var Node|null $scope */
+            $scope = $scope->getAttribute('parent');
         }
 
-        // Parent pointers are the only way to tell "the assignment's LHS" from any other read of
-        // the same name without re-implementing a scope walk; ParentConnectingVisitor mutates node
-        // attributes, but re-running it is idempotent, so this stays safe to call once per issue.
-        (new NodeTraverser(new ParentConnectingVisitor()))->traverse([$scope]);
+        if (!$scope instanceof FunctionLike) {
+            return null;
+        }
 
         /** @var list<Variable|ClosureUse> $occurrences */
         $occurrences = (new NodeFinder())->find($scope, static fn(Node $node): bool => ($node instanceof Variable && \is_string($node->name) && $node->name === $name)
             || ($node instanceof ClosureUse && $node->var->name === $name));
 
-        if (\count($occurrences) !== 2) {
+        if (\count($occurrences) !== 2 || self::hasDynamicVariableAccess($scope)) {
             return null;
         }
 
@@ -342,45 +352,22 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * Finds the innermost function-like whose span contains `$call`. Top-level code (no enclosing
-     * function-like) returns null, which keeps the sink: there is no scope to prove a single
-     * assignment within.
-     *
-     * @param list<Node\Stmt> $stmts
-     */
-    private static function findEnclosingFunctionLike(array $stmts, MethodCall|StaticCall|New_ $call): ?FunctionLike
-    {
-        $callStart = $call->getStartFilePos();
-        $callEnd = $call->getEndFilePos() + 1;
-
-        /** @var list<FunctionLike> $candidates */
-        $candidates = (new NodeFinder())->find($stmts, static fn(Node $node): bool => $node instanceof FunctionLike
-            && $node->getStartFilePos() <= $callStart
-            && $node->getEndFilePos() + 1 >= $callEnd);
-
-        if ($candidates === []) {
-            return null;
-        }
-
-        \usort($candidates, static fn(Node $a, Node $b): int => ($a->getEndFilePos() - $a->getStartFilePos()) <=> ($b->getEndFilePos() - $b->getStartFilePos()));
-
-        return $candidates[0];
-    }
-
-    /**
      * `$$x`, `${$x}`, `extract()`, `compact()`, and `get_defined_vars()` read or write a variable
      * without ever producing a `Variable` node with the target name, so the occurrence count in
-     * {@see resolveVariableHeaders()} cannot see them. Their mere presence anywhere in the scope
+     * {@see resolveHeadersArray()} cannot see them. Their mere presence anywhere in the scope
      * disqualifies every variable in it, since any of them could reach `$headersVar`.
      *
      * A `FuncCall` with a non-`Name` callee (`$fn(...)`, `(fn())(...)`, ...) disqualifies
      * unconditionally: no static name comparison is possible, so treating it as "not one of the
-     * three" would be a guess, not a proof. For a `Name` callee, Psalm's own name resolution
-     * (`resolvedName`, set on the node while the file's real analysis pass runs) is checked before
-     * the written spelling, so `use function extract as hydrate; hydrate($vars)` is caught the same
-     * as a direct `extract()` call: the written name is `hydrate`, the resolved one is `extract`.
-     * Compared by the LAST namespace segment, case-insensitively, so a fully-qualified
-     * `\extract(...)` and a namespaced call that resolves to it are both caught too.
+     * three" would be a guess, not a proof. For a `Name` callee, every candidate id Psalm's own
+     * name resolution can produce is checked against the last namespace segment,
+     * case-insensitively, mirroring {@see \Psalm\LaravelPlugin\Handlers\Taint\
+     * NamedArgumentTaintHandler::functionNameCandidates()}: `resolvedName` (set on the node while
+     * the file's real analysis pass runs) first, then `namespacedName` (the in-namespace candidate
+     * for an unqualified, unaliased call inside a namespace, where `resolvedName` is left
+     * ambiguous), then the written spelling. So `use function extract as hydrate; hydrate($vars)`
+     * is caught the same as a direct `extract()` call — the written name is `hydrate`, the
+     * resolved one is `extract` — and so is a fully-qualified `\extract(...)`.
      */
     private static function hasDynamicVariableAccess(FunctionLike $scope): bool
     {
@@ -397,13 +384,25 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
                 return true;
             }
 
-            /** @var string|null $resolvedName */
-            $resolvedName = $node->name->getAttribute('resolvedName');
-            $calleeName = \is_string($resolvedName) ? $resolvedName : $node->name->toString();
-            $segments = \explode('\\', $calleeName);
+            foreach (['resolvedName', 'namespacedName'] as $attribute) {
+                /** @var string|null $candidate */
+                $candidate = $node->name->getAttribute($attribute);
 
-            return \in_array(\strtolower($segments[\count($segments) - 1]), ['extract', 'compact', 'get_defined_vars'], true);
+                if (\is_string($candidate) && self::isExtractLikeName($candidate)) {
+                    return true;
+                }
+            }
+
+            return self::isExtractLikeName($node->name->toString());
         }) instanceof \PhpParser\Node;
+    }
+
+    /** @psalm-pure */
+    private static function isExtractLikeName(string $calleeName): bool
+    {
+        $segments = \explode('\\', $calleeName);
+
+        return \in_array(\strtolower($segments[\count($segments) - 1]), ['extract', 'compact', 'get_defined_vars'], true);
     }
 
     /**
@@ -420,9 +419,9 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
      */
     private static function provesExempt(Array_ $headers): bool
     {
-        $dispositionCount = 0;
+        $dispositionSeen = false;
         $dispositionProven = false;
-        $contentTypeCount = 0;
+        $contentTypeSeen = false;
         $contentTypeProven = false;
 
         foreach ($headers->items as $item) {
@@ -436,48 +435,50 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
             $folded = \strtr($item->key->value, self::HEADER_NAME_UPPER, self::HEADER_NAME_LOWER);
 
             if ($folded === 'content-disposition') {
-                $dispositionCount++;
                 // Two entries that fold to the same name are one header at runtime, and
                 // `ResponseHeaderBag::set()` replaces, so the LAST one decides. A second fold
                 // invalidates the proof outright rather than re-checking the newer value: exotic
                 // enough to keep the sink, as it did before folding was modelled.
-                $dispositionProven = $dispositionCount === 1
-                    && \strtolower($item->key->value) === 'content-disposition'
+                $dispositionProven = !$dispositionSeen
+                    && \strtolower($item->key->value) === $folded
                     && self::provesAttachmentValue($item->value);
+                $dispositionSeen = true;
             } elseif ($folded === 'content-type') {
-                $contentTypeCount++;
-                $contentTypeProven = $contentTypeCount === 1
-                    && \strtolower($item->key->value) === 'content-type'
+                $contentTypeProven = !$contentTypeSeen
+                    && \strtolower($item->key->value) === $folded
                     && $item->value instanceof String_
                     && self::isSafeContentType($item->value->value);
+                $contentTypeSeen = true;
             }
         }
 
         return $dispositionProven || $contentTypeProven;
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * True of the header GRAMMAR: nothing that can follow a literal `attachment;` parameter
+     * separator can retract the token itself. ACCEPTED gap at runtime: a CR/LF arriving through
+     * the unproven interpolated/concatenated suffix still drops the whole header the way
+     * isAttachmentDisposition()'s docblock describes for an all-literal value, and Symfony's
+     * Response::prepare() then defaults Content-Type to text/html, rendering the tainted body.
+     * The control-character guard below only covers the literal prefix.
+     *
+     * @psalm-mutation-free
+     */
     private static function provesAttachmentValue(Node\Expr $value): bool
     {
         if ($value instanceof String_) {
             return self::isAttachmentDisposition($value->value);
         }
 
-        if (!$value instanceof InterpolatedString && !$value instanceof Concat) {
-            return false;
-        }
-
         // Only the leading literal is trusted; the interpolated or concatenated suffix is never
-        // inspected. True of the header GRAMMAR: nothing that can follow a literal `attachment;`
-        // parameter separator can retract the token itself. ACCEPTED gap at runtime: a CR/LF
-        // arriving through the unproven suffix still drops the whole header the way
-        // isAttachmentDisposition()'s docblock below describes for an all-literal value, and
-        // Symfony's Response::prepare() then defaults Content-Type to text/html, rendering the
-        // tainted body. The guard two lines down only covers the literal prefix.
+        // inspected. literalPrefix() already returns null for anything that isn't
+        // InterpolatedString, Concat, or (recursively) a String_ leaf, so no separate type gate
+        // is needed to reject $value shapes it cannot handle.
         $prefix = self::literalPrefix($value);
 
         return $prefix !== null
-            && \preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $prefix) !== 1
+            && \preg_match(self::RAW_CONTROL_CHARACTER_PATTERN, $prefix) !== 1
             && \preg_match('/^attachment\s*;/i', $prefix) === 1;
     }
 
@@ -515,12 +516,9 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     /** @psalm-pure */
     private static function isAttachmentDisposition(string $disposition): bool
     {
-        // Checked on the RAW value, before trim(): trim() eats a boundary CR, LF, NUL or vertical
-        // tab and would approve a value PHP still refuses to emit at runtime (the header is
-        // dropped, the response renders as HTML), and `\s` in the parameter branch would accept an
-        // inner one. Every C0 control and DEL is rejected, horizontal tab excepted: HTAB is the one
-        // control a header field value may legitimately carry, as optional whitespace.
-        if (\preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $disposition) === 1) {
+        // See RAW_CONTROL_CHARACTER_PATTERN's docblock for why this runs before trim(); `\s` in
+        // the parameter branch below would otherwise accept an inner control character too.
+        if (\preg_match(self::RAW_CONTROL_CHARACTER_PATTERN, $disposition) === 1) {
             return false;
         }
 
@@ -532,16 +530,17 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * `$value` is the raw, un-trimmed header value: the same CRLF/NUL/control-char guard as the
-     * disposition check runs first, because a runtime that drops the header for those bytes serves
-     * the response as HTML regardless of what type was declared. Parameters after the first `;`
-     * (`charset=`, boundary, ...) are not part of the media type and are discarded before matching.
+     * `$value` is the raw, un-trimmed header value: the same RAW_CONTROL_CHARACTER_PATTERN guard
+     * as the disposition check runs first, because a runtime that drops the header for those
+     * bytes serves the response as HTML regardless of what type was declared. Parameters after
+     * the first `;` (`charset=`, boundary, ...) are not part of the media type and are discarded
+     * before matching.
      *
      * @psalm-pure
      */
     private static function isSafeContentType(string $value): bool
     {
-        if (\preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $value) === 1) {
+        if (\preg_match(self::RAW_CONTROL_CHARACTER_PATTERN, $value) === 1) {
             return false;
         }
 
