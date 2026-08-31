@@ -13,6 +13,7 @@ Emitted when a view name passed to any of the following does not correspond to a
 - `Router::view()` and the `Route` facade
 - `Illuminate\Notifications\Messages\MailMessage::view()`/`markdown()`
 - `Illuminate\Mail\Mailable::view()`/`markdown()`/`text()`
+- `Illuminate\Mail\Mailables\Content`'s `view`, `html`, `text`, and `markdown` constructor arguments
 - `Illuminate\Testing\TestResponse::assertViewIs()`
 
 ## Why this is a problem
