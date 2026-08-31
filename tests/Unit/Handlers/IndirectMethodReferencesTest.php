@@ -72,11 +72,44 @@ final class IndirectMethodReferencesTest extends TestCase
         }
     }
 
+    #[Test]
+    public function it_honors_the_cli_dead_code_override_when_config_disables_it(): void
+    {
+        $findings = $this->runPsalmAndCollectUnusedMethodFindings(
+            __DIR__ . '/Fixtures/IndirectMethodReferences',
+            false,
+            'psalm-no-dead-code.xml',
+            ['--find-dead-code'],
+        );
+        $joined = \implode(
+            "\n",
+            \array_map(static fn(array $finding): string => $finding['message'], $findings),
+        );
+
+        foreach ([
+            'UpdateDriver::__construct',
+            'InvokeDependency::__construct',
+            'CommandDependency::__construct',
+            'ReferenceCommand::handle',
+            'DriverController::update',
+            'User::team',
+        ] as $marker) {
+            $this->assertStringNotContainsString($marker, $joined, "Expected {$marker} to be referenced by the CLI override.");
+        }
+
+        $this->assertStringContainsString('UnusedDependency::__construct', $joined);
+        $this->assertStringContainsString('User::ordinaryUnused', $joined);
+    }
+
     /**
      * @return list<array{type: string, message: string}>
      */
-    private function runPsalmAndCollectUnusedMethodFindings(string $fixtureDir, bool $useCache): array
-    {
+    private function runPsalmAndCollectUnusedMethodFindings(
+        string $fixtureDir,
+        bool $useCache,
+        string $config = 'psalm.xml',
+        array $extraArguments = [],
+    ): array {
         $projectRoot = \dirname(__DIR__, 3);
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
 
@@ -86,10 +119,11 @@ final class IndirectMethodReferencesTest extends TestCase
             \PHP_BINARY,
             $psalmBinary,
             '-c',
-            'psalm.xml',
+            $config,
             '--threads=1',
             '--no-progress',
             '--output-format=json',
+            ...$extraArguments,
         ];
         if (!$useCache) {
             $arguments[] = '--no-cache';

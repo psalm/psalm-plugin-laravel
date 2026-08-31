@@ -24,7 +24,7 @@ final class IndirectMethodReferenceRecorder
      */
     public static function record(Codebase $codebase, MethodIdentifier $callingMethodId, MethodIdentifier $methodId): void
     {
-        if (!$codebase->collect_references) {
+        if ($codebase->find_unused_code === null) {
             return;
         }
 
@@ -44,7 +44,7 @@ final class IndirectMethodReferenceRecorder
      */
     public static function recordFileReference(Codebase $codebase, MethodIdentifier $methodId): void
     {
-        if (!$codebase->collect_references) {
+        if ($codebase->find_unused_code === null) {
             return;
         }
 

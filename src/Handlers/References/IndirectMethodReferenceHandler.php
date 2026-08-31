@@ -66,7 +66,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     {
         self::reset();
         $codebase = $event->getCodebase();
-        if (!$codebase->collect_references) {
+        if ($codebase->find_unused_code === null) {
             return;
         }
 
@@ -96,7 +96,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     public static function afterAnalyzeFile(AfterFileAnalysisEvent $event): void
     {
         $codebase = $event->getCodebase();
-        if (!$codebase->collect_references) {
+        if ($codebase->find_unused_code === null) {
             return;
         }
 

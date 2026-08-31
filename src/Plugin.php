@@ -282,8 +282,15 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
         // Laravel's container and Eloquent relationship dispatch are invisible to Psalm's syntax
         // walker. Register this after ModelRegistrationHandler so relation metadata is complete
-        // before it queues synthetic edges for replay after incremental invalidation.
-        $registration->registerHooksFromClass(Handlers\References\IndirectMethodReferenceHandler::class);
+        // before it queues synthetic edges for replay after incremental invalidation. Reference
+        // collection is only useful for dead-code reporting; collect_references is also enabled
+        // by unused-variable-only mode.
+        if (!($registration instanceof \Psalm\PluginRegistrationSocket)
+            || $registration->codebase->find_unused_code !== null
+        ) {
+            $registration->registerHooksFromClass(Handlers\References\IndirectMethodReferenceHandler::class);
+        }
+
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
