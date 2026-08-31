@@ -17,6 +17,7 @@ use Psalm\Type\Union;
 final class SanctumTokenTemplateHandler implements AfterClassLikeVisitInterface
 {
     private const HAS_API_TOKENS_LC = 'laravel\\sanctum\\hasapitokens';
+
     private const PERSONAL_ACCESS_TOKEN = 'Laravel\\Sanctum\\PersonalAccessToken';
 
     #[\Override]
