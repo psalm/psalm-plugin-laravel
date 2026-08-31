@@ -4,11 +4,13 @@ namespace Laravel\Ai;
 
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Queue\SerializesModels;
+use Closure;
 use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\QueuedAgentResponse;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Gateway\FakeTextGateway;
 
 /**
  * Trait used by every user-defined agent class.
@@ -100,4 +102,22 @@ trait Promptable
         Lab|array|string|null $provider = null,
         ?string $model = null,
     ): QueuedAgentResponse {}
+
+    public static function fake(Closure|array $responses = []): FakeTextGateway {}
+
+    public static function assertPrompted(Closure|string $callback): void {}
+
+    public static function assertPromptedTimes(int $times = 1): void {}
+
+    public static function assertNotPrompted(Closure|string $callback): void {}
+
+    public static function assertNeverPrompted(): void {}
+
+    public static function assertQueued(Closure|string $callback): void {}
+
+    public static function assertNotQueued(Closure|string $callback): void {}
+
+    public static function assertNeverQueued(): void {}
+
+    public static function isFaked(): bool {}
 }

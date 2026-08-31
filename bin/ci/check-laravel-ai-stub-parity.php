@@ -17,12 +17,15 @@ declare(strict_types=1);
  * class the vendor autoloader already provides would fatal) and reflects the
  * real installed class, then diffs native types position-by-position.
  *
- * Four things are compared per signature: parameter count, parameter names
- * position-by-position, native parameter types, and the native return type.
- * Count and names are not cosmetic. A stub missing a trailing parameter makes
- * Psalm reject a call that is valid at runtime, and a parameter renamed
- * upstream silently disarms every `@psalm-taint-sink <kind> $name` hung off
- * the old name while every existing test stays green.
+ * Signature metadata is compared beyond types: parameter count, parameter
+ * names position-by-position, optionality/default expressions, by-reference
+ * and variadic flags, and the native return type/by-reference flag. Count and
+ * names are not cosmetic. A stub missing a trailing parameter makes Psalm
+ * reject a call that is valid at runtime, and a parameter renamed upstream
+ * silently disarms every `@psalm-taint-sink <kind> $name` hung off the old name
+ * while every existing test stays green. Public/protected vendor methods and
+ * properties declared directly by laravel/ai are also checked for erasure by
+ * a redeclaration stub, with only narrow intentional omissions allowed.
  *
  * Docblock-only precision (`@param non-empty-string`) is unaffected and
  * deliberately out of scope (see docs/contributing/README.md, "Stub merging":
@@ -43,6 +46,7 @@ use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\ParserFactory;
+use PhpParser\PrettyPrinter\Standard;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
@@ -64,6 +68,15 @@ require dirname(__DIR__, 2) . '/vendor/autoload.php';
  */
 const KNOWN_GAPS = [];
 
+/**
+ * Public/protected vendor members intentionally omitted from a redeclaration.
+ * Keep this narrow and temporary: every entry is reported and consumed, and
+ * stale entries warn so an omission cannot become a permanent blind spot.
+ *
+ * @var array<string, string>
+ */
+const INTENTIONAL_OMISSIONS = [];
+
 if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
     echo "laravel/ai is not installed; nothing to compare.\n";
     exit(2);
@@ -77,6 +90,7 @@ $mismatches = [];
 $knownGaps = [];
 /** @var array<string, true> $consumedGapKeys */
 $consumedGapKeys = [];
+$consumedOmissionKeys = [];
 $comparedMethods = 0;
 $comparedClasses = 0;
 
@@ -105,10 +119,12 @@ foreach (findStubFiles($stubsDir) as $file) {
         }
 
         $comparedClasses++;
+        $declaredMethodNames = [];
         $reflectionClass = new \ReflectionClass($fqcn);
 
         foreach ($classLike->getMethods() as $method) {
             $methodName = $method->name->toString();
+            $declaredMethodNames[$methodName] = true;
             $key = "{$fqcn}::{$methodName}";
 
             if (!$reflectionClass->hasMethod($methodName)) {
@@ -121,11 +137,56 @@ foreach (findStubFiles($stubsDir) as $file) {
                 $key,
                 $method->params,
                 $method->returnType,
+                $method->byRef,
                 $reflectionClass->getMethod($methodName),
                 $fqcn,
                 $mismatches,
                 $knownGaps,
                 $consumedGapKeys,
+            );
+        }
+
+        // A redeclaration can silently erase a public method that was added
+        // upstream. Count methods supplied by a trait used by the stub as
+        // present, but only compare methods whose implementation belongs to
+        // laravel/ai; framework trait helpers (e.g. SerializesModels) are not
+        // this integration's API contract.
+        foreach ($reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->getDeclaringClass()->getName() !== $fqcn || !isLaravelAiSource($method->getFileName())) {
+                continue;
+            }
+
+            if (isset($declaredMethodNames[$method->getName()]) || traitProvidesMethod($classLike, $method->getName())) {
+                continue;
+            }
+
+            reportOmission(
+                "{$fqcn}::{$method->getName()}",
+                "{$fqcn}::{$method->getName()}(): public method exists in installed laravel/ai but is missing from the stub",
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
+                $consumedOmissionKeys,
+            );
+        }
+
+        $declaredPropertyNames = declaredPropertyNames($classLike);
+        foreach ($reflectionClass->getProperties() as $property) {
+            if ($property->getDeclaringClass()->getName() !== $fqcn
+                || $property->isPrivate()
+                || !isLaravelAiSource($property->getDeclaringClass()->getFileName())
+                || isset($declaredPropertyNames[$property->getName()])
+                || traitProvidesProperty($classLike, $property->getName())) {
+                continue;
+            }
+
+            reportOmission(
+                "{$fqcn}::\${$property->getName()}",
+                "{$fqcn}::\${$property->getName()}: public/protected property exists in installed laravel/ai but is missing from the stub",
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
+                $consumedOmissionKeys,
             );
         }
     }
@@ -140,7 +201,7 @@ foreach (findStubFiles($stubsDir) as $file) {
         }
 
         $comparedMethods++;
-        diffSignature($fqcn, $function->params, $function->returnType, new \ReflectionFunction($fqcn), null, $mismatches, $knownGaps, $consumedGapKeys);
+        diffSignature($fqcn, $function->params, $function->returnType, $function->byRef, new \ReflectionFunction($fqcn), null, $mismatches, $knownGaps, $consumedGapKeys);
     }
 }
 
@@ -165,6 +226,14 @@ if ($staleGapKeys !== []) {
     echo "\n";
     foreach ($staleGapKeys as $staleGapKey) {
         echo "::warning::Allowlisted gap for \"{$staleGapKey}\" in KNOWN_GAPS (bin/ci/check-laravel-ai-stub-parity.php) no longer reproduces. Remove this entry.\n";
+    }
+}
+
+$staleOmissionKeys = \array_diff(\array_keys(INTENTIONAL_OMISSIONS), \array_keys($consumedOmissionKeys));
+if ($staleOmissionKeys !== []) {
+    echo "\n";
+    foreach ($staleOmissionKeys as $staleOmissionKey) {
+        echo "::warning::Intentional omission for \"{$staleOmissionKey}\" in INTENTIONAL_OMISSIONS (bin/ci/check-laravel-ai-stub-parity.php) no longer reproduces. Remove this entry.\n";
     }
 }
 
@@ -193,6 +262,98 @@ function report(string $key, string $message, array &$mismatches, array &$knownG
     }
 
     $mismatches[] = $message;
+}
+
+/**
+ * Report an intentionally omitted member without making it disappear from
+ * the output. KNOWN_GAPS is for mismatched declarations; this list is for
+ * deliberate, documented omissions where a full redeclaration is out of
+ * scope.
+ *
+ * @param list<string> $mismatches
+ * @param list<string> $knownGaps
+ * @param array<string, true> $consumedGapKeys
+ * @param array<string, true> $consumedOmissionKeys
+ */
+function reportOmission(string $key, string $message, array &$mismatches, array &$knownGaps, array &$consumedGapKeys, array &$consumedOmissionKeys): void
+{
+    if (isset(INTENTIONAL_OMISSIONS[$key])) {
+        $consumedOmissionKeys[$key] = true;
+        $knownGaps[] = "{$message} ({$key}: " . INTENTIONAL_OMISSIONS[$key] . ')';
+
+        return;
+    }
+
+    report($key, $message, $mismatches, $knownGaps, $consumedGapKeys);
+}
+
+function isLaravelAiSource(?string $file): bool
+{
+    return $file !== null && \str_contains(\str_replace('\\', '/', $file), '/vendor/laravel/ai/');
+}
+
+function traitProvidesMethod(Node\Stmt\ClassLike $classLike, string $methodName): bool
+{
+    foreach (stubTraits($classLike) as $trait) {
+        if (\trait_exists($trait) && (new \ReflectionClass($trait))->hasMethod($methodName)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function traitProvidesProperty(Node\Stmt\ClassLike $classLike, string $propertyName): bool
+{
+    foreach (stubTraits($classLike) as $trait) {
+        if (\trait_exists($trait) && (new \ReflectionClass($trait))->hasProperty($propertyName)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** @return list<string> */
+function stubTraits(Node\Stmt\ClassLike $classLike): array
+{
+    $traits = [];
+    foreach ($classLike->stmts ?? [] as $statement) {
+        if (!$statement instanceof Node\Stmt\TraitUse) {
+            continue;
+        }
+
+        foreach ($statement->traits as $trait) {
+            $traits[] = $trait->toString();
+        }
+    }
+
+    return $traits;
+}
+
+/** @return array<string, true> */
+function declaredPropertyNames(Node\Stmt\ClassLike $classLike): array
+{
+    $properties = [];
+    foreach ($classLike->stmts ?? [] as $statement) {
+        if ($statement instanceof Node\Stmt\Property) {
+            foreach ($statement->props as $property) {
+                $properties[$property->name->toString()] = true;
+            }
+        }
+
+        if ($statement instanceof Node\Stmt\ClassMethod && $statement->name->toString() === '__construct') {
+            foreach ($statement->params as $parameter) {
+                if (($parameter->flags & (Node\Stmt\Class_::MODIFIER_PUBLIC | Node\Stmt\Class_::MODIFIER_PROTECTED | Node\Stmt\Class_::MODIFIER_PRIVATE)) !== 0
+                    && $parameter->var instanceof Node\Expr\Variable
+                    && \is_string($parameter->var->name)) {
+                    $properties[$parameter->var->name] = true;
+                }
+            }
+        }
+    }
+
+    return $properties;
 }
 
 /** @return \Generator<string> */
@@ -260,6 +421,7 @@ function diffSignature(
     string $label,
     array $stubParams,
     Node\Identifier|Node\Name|Node\ComplexType|null $stubReturnType,
+    bool $stubReturnsReference,
     \ReflectionFunctionAbstract $reflected,
     ?string $enclosingFqcn,
     array &$mismatches,
@@ -306,10 +468,72 @@ function diffSignature(
 
         $vendorParamType = isset($reflectedParams[$position]) ? $reflectedParams[$position]->getType() : null;
 
-        // Skip when either side is untyped: nothing to compare, and a stub
-        // legitimately adding a native type the vendor omits (or vice versa)
-        // is a strictness choice, not drift.
-        if ($stubParam->type === null || $vendorParamType === null || !isset($reflectedParams[$position])) {
+        if (!isset($reflectedParams[$position])) {
+            continue;
+        }
+
+        if ($stubParam->byRef !== $reflectedParams[$position]->isPassedByReference()) {
+            report(
+                $label,
+                "{$label}(): parameter at position {$position} by-reference metadata differs (stub: "
+                    . ($stubParam->byRef ? 'by-reference' : 'by-value') . ', installed laravel/ai: '
+                    . ($reflectedParams[$position]->isPassedByReference() ? 'by-reference' : 'by-value') . ')',
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
+            );
+        }
+
+        if ($stubParam->variadic !== $reflectedParams[$position]->isVariadic()) {
+            report(
+                $label,
+                "{$label}(): parameter at position {$position} variadic metadata differs (stub: "
+                    . ($stubParam->variadic ? 'variadic' : 'non-variadic') . ', installed laravel/ai: '
+                    . ($reflectedParams[$position]->isVariadic() ? 'variadic' : 'non-variadic') . ')',
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
+            );
+        }
+
+        $stubHasDefault = $stubParam->default !== null;
+        $vendorHasDefault = $reflectedParams[$position]->isDefaultValueAvailable();
+        if ($stubHasDefault !== $vendorHasDefault
+            || ($stubHasDefault && $vendorHasDefault && stubDefaultToString($stubParam->default) !== reflectionDefaultToString($reflectedParams[$position]))) {
+            report(
+                $label,
+                "{$label}(): parameter at position {$position} default/optionality differs (stub: "
+                    . ($stubHasDefault ? stubDefaultToString($stubParam->default) : 'required')
+                    . ', installed laravel/ai: ' . ($vendorHasDefault ? reflectionDefaultToString($reflectedParams[$position]) : 'required') . ')',
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
+            );
+        }
+
+        $vendorParamType = $reflectedParams[$position]->getType();
+        if ($stubParam->type === null || $vendorParamType === null) {
+            // Psalm stubs often spell an untyped vendor parameter as `mixed`
+            // for useful local analysis. PHP reflection reports that as no
+            // native type, so treat it as equivalent while still catching a
+            // concrete type introduced on only one side.
+            $stubIsEffectivelyUntyped = $stubParam->type instanceof Node\Identifier
+                && \strtolower($stubParam->type->toString()) === 'mixed';
+            if ($stubIsEffectivelyUntyped && $vendorParamType === null) {
+                continue;
+            }
+            if ($stubParam->type !== null || $vendorParamType !== null) {
+                report(
+                    $label,
+                    "{$label}(): parameter at position {$position} has a native type on only one side (stub: "
+                        . ($stubParam->type === null ? 'none' : stubTypeToString($stubParam->type, $stubParam->default, $enclosingFqcn))
+                        . ', installed laravel/ai: ' . ($vendorParamType === null ? 'none' : reflectionTypeToString($vendorParamType, $declaringFqcn)) . ')',
+                    $mismatches,
+                    $knownGaps,
+                    $consumedGapKeys,
+                );
+            }
+
             continue;
         }
 
@@ -323,9 +547,23 @@ function diffSignature(
         }
     }
 
+    if ($stubReturnsReference !== $reflected->returnsReference()) {
+        report(
+            $label,
+            "{$label}(): return-by-reference metadata differs (stub: "
+                . ($stubReturnsReference ? 'by-reference' : 'by-value') . ', installed laravel/ai: '
+                . ($reflected->returnsReference() ? 'by-reference' : 'by-value') . ')',
+            $mismatches,
+            $knownGaps,
+            $consumedGapKeys,
+        );
+    }
+
     if ($stubReturnType !== null) {
         $vendorReturnType = $reflected->getReturnType();
         if ($vendorReturnType === null) {
+            // Docblock/native precision on an untyped framework trait method
+            // is an intentional Psalm enhancement, not vendor drift.
             return;
         }
 
@@ -373,6 +611,44 @@ function reflectedParamNameList(array $params): string
         static fn(\ReflectionParameter $param): string => '$' . $param->getName(),
         $params,
     ));
+}
+
+function stubDefaultToString(?Node\Expr $default): string
+{
+    if ($default === null) {
+        return 'required';
+    }
+
+    if ($default instanceof Node\Expr\Array_ && $default->items === []) {
+        return 'array()';
+    }
+
+    return \strtolower((new Standard())->prettyPrintExpr($default)) === 'null'
+        ? 'null'
+        : (new Standard())->prettyPrintExpr($default);
+}
+
+function reflectionDefaultToString(\ReflectionParameter $parameter): string
+{
+    if ($parameter->isDefaultValueConstant()) {
+        return (string) $parameter->getDefaultValueConstantName();
+    }
+
+    $value = $parameter->getDefaultValue();
+    if ($value === null) {
+        return 'null';
+    }
+    if ($value === true) {
+        return 'true';
+    }
+    if ($value === false) {
+        return 'false';
+    }
+    if (\is_array($value) && $value === []) {
+        return 'array()';
+    }
+
+    return \var_export($value, true);
 }
 
 /**

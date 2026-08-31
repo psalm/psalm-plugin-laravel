@@ -28,9 +28,15 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         use Laravel\Ai\Approvals\Decisions;
         use Laravel\Ai\Enums\Lab;
         use Laravel\Ai\Responses\AgentResponse;
+        use Laravel\Ai\Responses\QueuedAgentResponse;
+        use Laravel\Ai\Responses\StreamableAgentResponse;
+        use Laravel\Ai\Gateway\FakeTextGateway;
+        use Closure;
 
         trait Promptable
         {
+            public static function make(mixed ...$arguments): static {}
+
             public function prompt(
                 Decisions|string $prompt,
                 array $attachments = [],
@@ -38,6 +44,56 @@ final class LaravelAiStubParityCheckerTest extends TestCase
                 ?string $model = null,
                 ?int $timeout = null,
             ): AgentResponse {}
+
+            public function stream(
+                Decisions|string $prompt,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+                ?int $timeout = null,
+            ): StreamableAgentResponse {}
+
+            public function queue(
+                Decisions|string $prompt,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): QueuedAgentResponse {}
+
+            public function broadcast(
+                Decisions|string $prompt,
+                Channel|array $channels,
+                array $attachments = [],
+                bool $now = false,
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): StreamableAgentResponse {}
+
+            public function broadcastNow(
+                Decisions|string $prompt,
+                Channel|array $channels,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): StreamableAgentResponse {}
+
+            public function broadcastOnQueue(
+                Decisions|string $prompt,
+                Channel|array $channels,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): QueuedAgentResponse {}
+
+            public static function fake(Closure|array $responses = []): FakeTextGateway {}
+            public static function assertPrompted(Closure|string $callback): void {}
+            public static function assertPromptedTimes(int $times = 1): void {}
+            public static function assertNotPrompted(Closure|string $callback): void {}
+            public static function assertNeverPrompted(): void {}
+            public static function assertQueued(Closure|string $callback): void {}
+            public static function assertNotQueued(Closure|string $callback): void {}
+            public static function assertNeverQueued(): void {}
+            public static function isFaked(): bool {}
         }
         PHP;
 
@@ -93,6 +149,50 @@ final class LaravelAiStubParityCheckerTest extends TestCase
 
         $this->assertSame(1, $exitCode, $output);
         $this->assertStringContainsString('stub says "string"', $output);
+    }
+
+    #[Test]
+    public function by_reference_drift_fails(): void
+    {
+        $stub = \str_replace('Decisions|string $prompt,', 'Decisions|string &$prompt,', self::CLEAN_STUB);
+
+        [$exitCode, $output] = $this->check($stub);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('by-reference metadata differs', $output);
+    }
+
+    #[Test]
+    public function variadic_drift_fails(): void
+    {
+        $stub = \str_replace('Decisions|string $prompt,', 'Decisions|string ...$prompt,', self::CLEAN_STUB);
+
+        [$exitCode, $output] = $this->check($stub);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('variadic metadata differs', $output);
+    }
+
+    #[Test]
+    public function default_value_drift_fails(): void
+    {
+        $stub = \str_replace('?int $timeout = null,', '?int $timeout = 30,', self::CLEAN_STUB);
+
+        [$exitCode, $output] = $this->check($stub);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('default/optionality differs', $output);
+    }
+
+    #[Test]
+    public function a_vendor_only_public_method_fails(): void
+    {
+        $stub = \str_replace("public static function assertNeverQueued(): void {}\n", '', self::CLEAN_STUB);
+
+        [$exitCode, $output] = $this->check($stub);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('assertNeverQueued(): public method exists', $output);
     }
 
     /** @return array{int, string} exit code and combined output */

@@ -2,6 +2,8 @@
 
 namespace Laravel\Ai;
 
+use Closure;
+use Laravel\Ai\Gateway\FakeImageGateway;
 use Laravel\Ai\PendingResponses\PendingImageGeneration;
 
 class Image
@@ -14,4 +16,20 @@ class Image
      * @psalm-taint-sink llm_prompt $prompt
      */
     public static function of(string $prompt): PendingImageGeneration {}
+
+    public static function fake(Closure|array $responses = []): FakeImageGateway {}
+
+    public static function assertGenerated(Closure $callback): void {}
+
+    public static function assertNotGenerated(Closure $callback): void {}
+
+    public static function assertNothingGenerated(): void {}
+
+    public static function assertQueued(Closure $callback): void {}
+
+    public static function assertNotQueued(Closure $callback): void {}
+
+    public static function assertNothingQueued(): void {}
+
+    public static function isFaked(): bool {}
 }

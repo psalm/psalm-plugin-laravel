@@ -20,6 +20,14 @@ use Laravel\Ai\Contracts\Tool;
  */
 class SimilaritySearch implements Tool
 {
+    protected ?string $description = null;
+
+    protected bool $rerank = false;
+
+    protected Closure|array|string|null $rerankBy = null;
+
+    protected ?int $rerankLimit = null;
+
     public function __construct(public Closure $using) {}
 
     public static function usingModel(

@@ -3,6 +3,7 @@
 namespace Laravel\Ai\Responses;
 
 use Illuminate\Support\Collection;
+use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
 
@@ -29,6 +30,8 @@ use Laravel\Ai\Responses\Data\Usage;
  */
 class TextResponse
 {
+    use Concerns\HasRawResponse;
+
     public Collection $messages;
 
     public Collection $toolCalls;
@@ -37,6 +40,9 @@ class TextResponse
 
     public Collection $steps;
 
+    /** @var Collection<int, PendingApproval> */
+    public Collection $pendingApprovals;
+
     public function __construct(public string $text, public Usage $usage, public Meta $meta) {}
 
     public function withMessages(Collection $messages): self {}
@@ -44,6 +50,10 @@ class TextResponse
     public function withToolCallsAndResults(Collection $toolCalls, Collection $toolResults): self {}
 
     public function withSteps(Collection $steps): self {}
+
+    public function withPendingApprovals(Collection $pendingApprovals): self {}
+
+    public function hasPendingApprovals(): bool {}
 
     /** @psalm-taint-source input */
     public function __toString(): string {}

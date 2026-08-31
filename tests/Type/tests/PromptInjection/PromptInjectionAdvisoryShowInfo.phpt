@@ -9,15 +9,18 @@ if (!trait_exists(\Laravel\Ai\Promptable::class)) {
     echo 'skip needs laravel/ai package (optional integration, not in composer.json)';
 }
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --show-info=true --config=./tests/Type/psalm-prompt-injection-default.xml --taint-analysis
 --FILE--
 <?php declare(strict_types=1);
 
-function indexUserText(\Illuminate\Http\Request $request): \Laravel\Ai\PendingResponses\PendingEmbeddingsGeneration {
-    // Query embeddings are sent to a vector-search provider, not a generative
-    // model. This ordinary search path must remain clean; Embeddings::for()
-    // is intentionally not an llm_prompt sink.
-    return \Laravel\Ai\Embeddings::for([(string) $request->input('note')]);
+final class AdvisoryInfoAgent
+{
+    use \Laravel\Ai\Promptable;
+}
+
+function showAdvisoryPromptInfo(\Illuminate\Http\Request $request): void {
+    (new AdvisoryInfoAgent)->prompt((string) $request->input('message'));
 }
 ?>
 --EXPECTF--
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt

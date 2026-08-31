@@ -257,7 +257,7 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function laravelAiIntegrationEnabled(): bool
     {
-        return $this->isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0');
+        return $this->isInstalledAndSatisfies('laravel/ai', '>=0.11.0 <1.0.0');
     }
 
     /**

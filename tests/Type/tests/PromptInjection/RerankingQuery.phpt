@@ -13,11 +13,15 @@ if (!trait_exists(\Laravel\Ai\Promptable::class)) {
 --FILE--
 <?php declare(strict_types=1);
 
-function indexUserText(\Illuminate\Http\Request $request): \Laravel\Ai\PendingResponses\PendingEmbeddingsGeneration {
-    // Query embeddings are sent to a vector-search provider, not a generative
-    // model. This ordinary search path must remain clean; Embeddings::for()
-    // is intentionally not an llm_prompt sink.
-    return \Laravel\Ai\Embeddings::for([(string) $request->input('note')]);
+use Laravel\Ai\Reranking;
+
+function rerankUserQuery(\Illuminate\Http\Request $request): void {
+    Reranking::of(['A document'])->rerank((string) $request->input('query'));
+}
+
+function rerankConstantQuery(): void {
+    Reranking::of(['A document'])->rerank('trusted query');
 }
 ?>
 --EXPECTF--
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt

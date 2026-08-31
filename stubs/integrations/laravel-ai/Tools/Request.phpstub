@@ -45,6 +45,10 @@ class Request implements Arrayable, ArrayAccess
         protected ?string $toolInvocationId = null,
     ) {}
 
+    public function toolCallId(): ?string {}
+
+    public function toolInvocationId(): ?string {}
+
     /**
      * @return array<string, mixed>
      *

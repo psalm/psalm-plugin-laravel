@@ -125,7 +125,7 @@ jobs:
   type_tests:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         php: [ 8.5, 8.4, 8.3, 8.2 ]
         laravel: [ ^13.3, ^12.14 ]
@@ -178,8 +178,15 @@ jobs:
   # tests/Unit/Ci/LaravelAiStubParityCheckerTest.php, because a gap in the guard
   # looks exactly like a clean run.
   type_tests_laravel_ai:
-    name: Type test (laravel/ai)
+    name: Type test (laravel/ai ${{ matrix.laravel_ai_version }})
     runs-on: ubuntu-latest
+    strategy:
+      # Keep the exact floor and floating stable legs independently visible.
+      fail-fast: false
+      matrix:
+        include:
+          - laravel_ai_version: '0.11.0'
+          - laravel_ai_version: '>=0.11.0 <1.0.0'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -204,9 +211,15 @@ jobs:
 
       # laravel/ai is optional (not a root composer.json dependency, see #937) and requires PHP
       # ^8.3, so it is installed here rather than in composer.json to keep it off the PHP 8.2
-      # lanes. This is the only leg where the PromptInjection PHPT suite actually runs.
+      # lanes. Both stable matrix legs run the PromptInjection PHPT suite.
       - name: Install optional laravel/ai integration
-        run: composer require --dev "laravel/ai:>=0.10.0 <1.0.0" --no-interaction --no-progress
+        run: composer require --dev "laravel/ai:${{ matrix.laravel_ai_version }}" --no-interaction --no-progress
+
+      - name: Verify pinned laravel/ai release
+        if: matrix.laravel_ai_version == '0.11.0'
+        run: >-
+          php -r 'require "vendor/autoload.php";
+          exit(Composer\InstalledVersions::getPrettyVersion("laravel/ai") === "0.11.0" ? 0 : 1);'
 
       - name: Check laravel/ai stub-vs-vendor signature parity
         # Psalm's registered stubs win over the real vendor class during analysis
@@ -215,7 +228,8 @@ jobs:
         # app-leg check below silently: Psalm never notices, because it never looks at
         # the vendor source once a stub claims the class. This step is the missing
         # check: it reflects the installed classes directly and diffs parameter count,
-        # parameter names, and native types against the stub source, independent of
+        # names, optionality/defaults, by-reference/variadic flags, and native types
+        # against the stub source, independent of
         # Psalm.
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
@@ -234,7 +248,7 @@ jobs:
         run: |
           echo "::error::Type-test suite failed against the newest installed laravel/ai release." \
             "See the psalm-tester diff above for the exact failure. Reproduce locally with:" \
-            "composer require --dev 'laravel/ai:>=0.10.0 <1.0.0' && composer test:type"
+            "composer require --dev 'laravel/ai:${{ matrix.laravel_ai_version }}' && composer test:type"
 
       - name: Verify the PromptInjection phpt suite actually ran
         # Every PromptInjection phpt carries a --taint-analysis ARGS section and a
@@ -247,3 +261,46 @@ jobs:
         # discovered phpt through Psalm in setUpBeforeClass() regardless of PHPUnit's
         # --filter, so a filtered re-run pays the same ~1 minute for no benefit.
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-junit.xml PromptInjection
+
+  # This intentionally separate job avoids evaluating a matrix-dependent job
+  # condition before GitHub has expanded the matrix. It is visible only on the
+  # scheduled/manual workflow paths and never blocks a change when unreleased
+  # laravel/ai APIs drift ahead of the stable 0.11 contract.
+  type_tests_laravel_ai_dev:
+    name: Type test (laravel/ai 0.x-dev canary)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2
+        with:
+          php-version: 8.4
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
+          coverage: none
+          tools: composer
+
+      - name: Install dependencies from composer.json
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Install unreleased laravel/ai canary
+        run: composer require --dev 'laravel/ai:0.x-dev' --no-interaction --no-progress
+
+      - name: Check laravel/ai stub-vs-vendor signature parity
+        run: php bin/ci/check-laravel-ai-stub-parity.php
+
+      - name: Run Psalm/Type tests
+        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-dev-junit.xml --no-progress
+
+      - name: Verify the PromptInjection phpt suite actually ran
+        run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-dev-junit.xml PromptInjection

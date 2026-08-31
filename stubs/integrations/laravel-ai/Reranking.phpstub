@@ -2,7 +2,9 @@
 
 namespace Laravel\Ai;
 
+use Closure;
 use Illuminate\Support\Collection;
+use Laravel\Ai\Gateway\FakeRerankingGateway;
 use Laravel\Ai\PendingResponses\PendingReranking;
 
 class Reranking
@@ -17,4 +19,14 @@ class Reranking
      * @psalm-taint-sink llm_prompt $documents
      */
     public static function of(Collection|array $documents): PendingReranking {}
+
+    public static function fake(Closure|array $responses = []): FakeRerankingGateway {}
+
+    public static function assertReranked(Closure $callback): void {}
+
+    public static function assertNotReranked(Closure $callback): void {}
+
+    public static function assertNothingReranked(): void {}
+
+    public static function isFaked(): bool {}
 }

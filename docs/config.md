@@ -193,7 +193,7 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 **default**: `false`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, `Embeddings::for()`, and the other sinks listed in [Security checks](security.md)). Only relevant to projects that install `laravel/ai`; the plugin leaves the level alone otherwise.
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). Only relevant to projects that install `laravel/ai`; the plugin leaves the level alone otherwise.
 
 - default (element omitted, or `value="false"`): advisory. The finding is computed and visible with `--show-info=true`, and never fails the build.
 - `value="true"`: enforced. `TaintedLlmPrompt` is reported as an error like every other taint finding.

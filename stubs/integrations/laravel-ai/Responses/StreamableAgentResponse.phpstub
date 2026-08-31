@@ -36,15 +36,25 @@ class StreamableAgentResponse implements IteratorAggregate, Responsable
 {
     use Concerns\CanStreamUsingVercelProtocol;
 
-    public ?string $text;
+    public ?string $text = null;
 
-    public ?Usage $usage;
+    public ?Usage $usage = null;
 
     public Collection $events;
 
     public ?string $conversationId = null;
 
     public ?object $conversationUser = null;
+
+    protected array $thenCallbacks = [];
+
+    protected bool $usesVercelProtocol = false;
+
+    protected ?string $vercelProtocolMessageId = null;
+
+    protected ?StreamedAgentResponse $streamedResponse = null;
+
+    protected bool $hasYielded = false;
 
     public function __construct(public string $invocationId, protected Closure $generator, protected ?Meta $meta = null) {}
 
@@ -61,4 +71,6 @@ class StreamableAgentResponse implements IteratorAggregate, Responsable
     public function toResponse($request): Response {}
 
     public function getIterator(): Traversable {}
+
+    public function hasYielded(): bool {}
 }

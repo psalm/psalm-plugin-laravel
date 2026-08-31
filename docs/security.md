@@ -17,7 +17,7 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` agents: `Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, `Embeddings::for()` (advisory unless [`findPromptInjection`](config.md#findpromptinjection) is enabled) |
+| Prompt injection | LLM01:2025 | `laravel/ai` agents: `Agent::prompt()`, `stream()`, `queue()`, `broadcast*()` (advisory unless [`findPromptInjection`](config.md#findpromptinjection) is enabled) |
 | LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
@@ -59,7 +59,7 @@ Treat any such finding from this plugin as a timing issue and fix it with
 ### LLM prompt injection (OWASP LLM01:2025)
 
 Applies to projects using `laravel/ai`. The stubs and the LLM-output handler load
-only when that package is installed and satisfies `>=0.10.0 <1.0.0`, so projects
+only when that package is installed and satisfies `>=0.11.0 <1.0.0`, so projects
 without it pay nothing.
 
 Two directions are covered, and they ship at different reporting levels.
@@ -75,7 +75,8 @@ Two directions are covered, and they ship at different reporting levels.
   documents, scraped pages, webhook bodies, tool results. Sinks are
   `Promptable::prompt()` / `stream()` / `queue()` / `broadcast*()`, the
   `Laravel\Ai\agent()` helper, `AgentPrompt::prepend()` / `append()` / `revise()`,
-  `Embeddings::for()`, `Tools\Document::fromString()` / `fromBase64()`, and the
+  `Files\Document::fromString()` / `fromBase64()`,
+  `PendingReranking::rerank()`, and the
   `Messages\UserMessage` / `Messages\Message` constructors.
 * Model output is itself a taint source, reported as an error out of the box and
   unaffected by `findPromptInjection`: these findings have the ordinary fix

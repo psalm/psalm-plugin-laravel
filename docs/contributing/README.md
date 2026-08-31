@@ -98,7 +98,7 @@ Rules:
 
 ### The `laravel/ai` integration gate
 
-Three things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (`isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0')`), and they must stay in lockstep:
+Three things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (`isInstalledAndSatisfies('laravel/ai', '>=0.11.0 <1.0.0')`), and they must stay in lockstep:
 
 1. `stubs/integrations/laravel-ai/` via `Plugin::optionalIntegrationStubs()`.
 2. `Handlers\Ai\LlmOutputTaintHandler` via `Plugin::registerHandlers()`.

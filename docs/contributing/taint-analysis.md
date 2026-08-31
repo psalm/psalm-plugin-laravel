@@ -35,7 +35,7 @@ Version difference that bites when testing: Psalm 6 runs in exactly one mode per
 Stubs for packages that ship outside `laravel/framework` (currently: `laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only when the host application has the package installed. The plugin probes Composer's runtime metadata in `Plugin::optionalIntegrationStubs()`:
 
 ```php
-if (self::isInstalledAndSatisfies('laravel/ai', '>=0.10.0 <1.0.0')) {
+if (self::isInstalledAndSatisfies('laravel/ai', '>=0.11.0 <1.0.0')) {
     \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
 }
 ```
@@ -47,7 +47,7 @@ Two reasons for the version range:
 
 When adding a new integration, gate it on both `isInstalled()` (cheap presence check) and `satisfies()` (range guard), then drop the stubs into a new directory under `stubs/integrations/`.
 
-**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from drift. Two CI legs compensate, both running weekly (Friday 06:00 UTC) and via `workflow_dispatch` regardless of which files changed, both against the newest installed `laravel/ai` release: `type_tests_laravel_ai` (`.github/workflows/tests.yml`) and the PHP >= 8.3 cells of `test-laravel-app.yml`.
+**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from drift. The dedicated `type_tests_laravel_ai` job runs exact `0.11.0` and floating `>=0.11.0 <1.0.0` stable legs weekly (Friday 06:00 UTC), on `workflow_dispatch`, and on relevant changes. It also has a scheduled/manual-only `0.x-dev` leg marked non-blocking. The PHP >= 8.3 cells of `test-laravel-app.yml` independently exercise the floating stable release.
 
 What they catch:
 
@@ -56,7 +56,7 @@ What they catch:
 - The plugin's own regressions, via the normal test suite.
 - A stubbed method's native parameter/return type drifting on a `laravel/ai` release, via `bin/ci/check-laravel-ai-stub-parity.php` (run from `type_tests_laravel_ai`). Nothing else here can see this: Psalm resolves calls against a redeclaration stub's signature, not the vendor's, and a registered stub is never diffed against the real class it redeclares, so the phpt and app-leg checks above stay green through it. This script parses the stub source with php-parser, reflects the installed classes directly, and diffs native types independent of Psalm. Confirmed to catch a synthetic vendor-only mutation; see [psalm/psalm-plugin-laravel#1331](https://github.com/psalm/psalm-plugin-laravel/issues/1331) for the reproduction that motivated it.
 
-A `KNOWN_GAPS` allowlist inside that script covers pre-existing mismatches found while building it (currently one: `Contracts\CanActAsTool::description()`'s return type, widened upstream to `Stringable|string`), so the job fails only on genuinely new drift. An allowlisted entry that stops reproducing (its stub gets fixed) prints a loud warning to remove the entry rather than silently passing forever.
+`KNOWN_GAPS` covers declaration mismatches only when a narrow exception is unavoidable; `INTENTIONAL_OMISSIONS` covers a deliberately un-restated public/protected member when full parity is out of scope. Both allowlists report consumed entries and warn when an entry becomes stale, so they cannot silently mask future drift. The current stable v0.11.0 surface has no entries in either list.
 
 ## Annotations quick reference
 
@@ -727,7 +727,7 @@ trait Promptable
 }
 ```
 
-Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\Laravel\Ai\agent()` factory, `AgentPrompt::prepend()`/`append()`/`revise()`, `Embeddings::for()`, `Tools\Document::fromString()/fromBase64()`, `Messages\UserMessage`, and `Messages\Message::__construct()`.
+Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\Laravel\Ai\agent()` factory, `AgentPrompt::prepend()`/`append()`/`revise()`, `Files\Document::fromString()`/`fromBase64()`, `PendingReranking::rerank()`, `Messages\UserMessage`, and `Messages\Message::__construct()`.
 
 ### Property-source pattern: `$response->text` (handler required)
 
