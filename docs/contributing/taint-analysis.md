@@ -337,11 +337,17 @@ is no fallthrough to the other one on a missing annotation, because runtime has 
 
 **Both the receiver and the declared element type are BOUNDS**, not exact runtime classes: the
 journey label names the static receiver while `gatherMiddlewareFor()` calls `middleware()` on the
-actual object, and `list<Guard>` is satisfied by any subclass. The handler therefore walks
-`ClassLikeStorage::$dependent_classlikes`, the transitively closed set of analysed classlikes
-depending on one, which is populated before analysis and still readable at emission. A receiver
-declines when any descendant resolves `middleware()` to a different DECLARING id; a guard qualifies
-only when it and every descendant carry the escape on their own dispatched method.
+actual object, and `list<Guard>` is satisfied by any subclass. The handler therefore walks the analysed classlikes below each, reading
+`ClassLikeStorage::$dependent_classlikes`, which is populated before analysis and still readable at
+emission. A receiver declines when any descendant resolves `middleware()` to a different DECLARING
+id; a guard qualifies only when it and every descendant carry the escape on their own dispatched
+method.
+
+That walk recurses to a fixpoint, with a visited set, because the stored property is not the
+closure its name suggests. `Populator::populateClassLikeStorage()` records DIRECT links and
+`populateCodebase()` then makes a SINGLE merge pass with no fixpoint, so a chain `A < B < C < D`
+leaves `A` listing `B` and `C` and never `D`. Executed on 7.0.0-beta19: a four-level agent
+hierarchy whose deepest class stripped the stack was invisible and kept its ancestor's exemption.
 
 Comparing declaring ids beats reading `MethodStorage::$overridden_downstream`:
 `Populator::populateClassLikeStorage()` only sets that flag for a method stored directly on the

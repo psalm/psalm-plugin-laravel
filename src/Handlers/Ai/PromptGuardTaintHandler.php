@@ -267,15 +267,13 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
      * exposes `$this->prompt()`, a subclass returns an empty stack, and the label still says the
      * base.
      *
-     * `ClassLikeStorage::$dependent_classlikes` is the transitively closed set of analysed
-     * classlikes that depend on this one, populated before analysis begins and still readable at
-     * emission time. Comparing DECLARING method ids rather than reading
-     * `MethodStorage::$overridden_downstream` is deliberate: that flag is only set for a method
-     * stored directly on the child (`Populator::populateClassLikeStorage()`), so a child that
-     * replaces the stack by importing a TRAIT never sets it, while its declaring id changes to the
-     * trait's and is caught here. A descendant that does not override at all keeps the ancestor's
-     * declaring id and costs nothing. A `final` class has no dependents, so it needs no special
-     * case.
+     * Descendants come from {@see descendantsOf()}. Comparing DECLARING method ids rather than
+     * reading `MethodStorage::$overridden_downstream` is deliberate: that flag is only set for a
+     * method stored directly on the child (`Populator::populateClassLikeStorage()`), so a child
+     * that replaces the stack by importing a TRAIT never sets it, while its declaring id changes
+     * to the trait's and is caught here. A descendant that does not override at all keeps the
+     * ancestor's declaring id and costs nothing. A `final` class has no descendants, so it needs
+     * no special case.
      *
      * ACCEPTED GAP: only analysed code is visible. A subclass shipped by a downstream consumer of
      * an analysed library is not in the set, so a library's exemption can still be inherited by an
@@ -291,14 +289,13 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             return false;
         }
 
-        foreach (\array_keys($storage->dependent_classlikes) as $descendantName) {
-            $descendant = self::classStorage($codebase, $descendantName);
+        $descendants = self::descendantsOf($codebase, $storage);
 
-            if (!$descendant instanceof ClassLikeStorage) {
-                // A dependent whose storage cannot be read is not proven to keep the stack.
-                return true;
-            }
+        if ($descendants === null) {
+            return true;
+        }
 
+        foreach ($descendants as $descendant) {
             $descendantDeclared = $descendant->declaring_method_ids[$methodName] ?? null;
 
             if ($descendantDeclared === null || (string) $descendantDeclared !== (string) $declared) {
@@ -307,6 +304,52 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
         }
 
         return false;
+    }
+
+    /**
+     * Every analysed classlike below `$storage`, keyed by lowercased name, or null when one of
+     * them cannot be read (which proves nothing, so callers must fail toward a retained finding).
+     *
+     * `ClassLikeStorage::$dependent_classlikes` is NOT the closure it looks like.
+     * `Populator::populateClassLikeStorage()` records DIRECT links, and `populateCodebase()` then
+     * makes a SINGLE merge pass over them with no fixpoint, so the stored set reaches about two
+     * levels: in a chain `A < B < C < D`, `A` lists `B` and `C` and never `D`. Executed on
+     * 7.0.0-beta19 with a four-level agent hierarchy; the level-four override was invisible and
+     * silently kept its ancestor's exemption. Hence the fixpoint walk here, with a visited set so
+     * a diamond or a `+=`-induced cycle terminates.
+     *
+     * @return array<string, ClassLikeStorage>|null
+     *
+     * @psalm-mutation-free
+     */
+    private static function descendantsOf(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        $found = [];
+        $queue = \array_keys($storage->dependent_classlikes);
+
+        while ($queue !== []) {
+            $name = \array_pop($queue);
+
+            if (isset($found[$name])) {
+                continue;
+            }
+
+            $descendant = self::classStorage($codebase, $name);
+
+            if (!$descendant instanceof ClassLikeStorage) {
+                return null;
+            }
+
+            $found[$name] = $descendant;
+
+            foreach (\array_keys($descendant->dependent_classlikes) as $next) {
+                if (!isset($found[$next])) {
+                    $queue[] = $next;
+                }
+            }
+        }
+
+        return $found;
     }
 
     /**
@@ -409,10 +452,14 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             return false;
         }
 
-        foreach (\array_keys($guard->dependent_classlikes) as $descendantName) {
-            $descendant = self::classStorage($codebase, $descendantName);
+        $descendants = self::descendantsOf($codebase, $guard);
 
-            if (!$descendant instanceof ClassLikeStorage || !self::dispatchedMethodEscapes($codebase, $descendant, $asObject)) {
+        if ($descendants === null) {
+            return false;
+        }
+
+        foreach ($descendants as $descendant) {
+            if (!self::dispatchedMethodEscapes($codebase, $descendant, $asObject)) {
                 return false;
             }
         }
