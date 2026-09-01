@@ -305,6 +305,37 @@ The pruning is by node id, not by sink id, so it also swallows intermediate hops
 
 **A negative assertion against a shared sink is unfalsifiable.** This is the sharper edge of the same behavior, and it has already produced one fixture that asserted the exact opposite of the truth. An empty `--EXPECTF--` reads as "the plugin does not detect this flow", but a flow reaching an already-visited node is dropped whether or not the edge exists, so the fixture stays green in both worlds. Any phpt whose point is that nothing is reported must route through a per-file local sink AND carry a positive control in the same file that does report, otherwise it proves nothing. `StructuredResponseArrayAccessKnownLimitation.phpt` and `SubAgentToolDelegationKnownLimitation.phpt` are the worked examples.
 
+## Marking an app-level prompt-injection guard
+
+`@psalm-taint-escape` works on a plain instance method in application code, not only in a stub, and
+`PromptGuardTaintHandler` (`src/Handlers/Ai/PromptGuardTaintHandler.php`) reads it back as the
+opt-in marker for a `laravel/ai` agent middleware guard. A guard annotates its own `handle()`:
+
+```php
+final class PromptGuard
+{
+    /**
+     * @psalm-taint-escape llm_prompt
+     * @psalm-flow ($prompt) -> return
+     */
+    public function handle(string $prompt, \Closure $next): mixed
+    {
+        return $next($prompt);
+    }
+}
+```
+
+`@psalm-flow` matters here for the same reason it does everywhere else: a bare escape strips every
+taint kind from `handle()`'s return, so a caller that invokes the guard directly would see a fully
+clean value. It does not affect the marker, which reads `FunctionLikeStorage::$removed_taints`, a
+field `@psalm-flow` never touches.
+
+The handler then exempts `prompt()` / `stream()` on an agent that implements
+`Laravel\Ai\Contracts\HasMiddleware` and declares `middleware(): array` with a return type naming
+that guard (`@return list<PromptGuard>`). The exact gate list and the trust model are in the
+handler's docblock; the user-facing shape is in [`docs/security.md`](../security.md). Nothing in
+the plugin names a guard package, so an app-local guard and a third-party one are treated alike.
+
 ## Stub patterns by annotation type
 
 ### Source stubs

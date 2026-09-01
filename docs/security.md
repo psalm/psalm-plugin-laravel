@@ -17,7 +17,7 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings) |
+| Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
 | LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
@@ -152,6 +152,26 @@ suppresses the D-in `TaintedLlmPrompt` issue.
   `$structured` property, `toArray()`, `toJson()`, `jsonSerialize()`, the string
   cast, and an explicit `offsetGet()` call. The keys come from the application's
   schema, the values come from the model.
+
+`prompt()` and `stream()` are exempted on an agent whose middleware stack declares a
+guard, so a project that already runs a prompt-injection filter is not asked to
+suppress the finding by hand. The provable shape, all four parts required:
+
+1. The agent class implements `Laravel\Ai\Contracts\HasMiddleware` (inherited counts).
+   Without the interface `laravel/ai` never calls `middleware()`, so the stack is dead code.
+2. Its `middleware()` has a declared return type naming the element class, e.g.
+   `@return list<PromptGuard>`. A bare `array` proves nothing and keeps the finding.
+3. That element class declares `handle()`, the one method the middleware pipeline invokes.
+4. That `handle()` carries `@psalm-taint-escape llm_prompt`.
+
+Part 4 is the opt-in: nothing is exempted until a guard's author (or the application,
+on its own guard) writes that line, and no guard package is named in the plugin. It is a
+policy, not a proof, on the same trust model as every other `@psalm-taint-escape`: it
+records that a mitigation is attached, not that a given payload is neutralised. Whether
+the guard blocks or only logs is usually runtime configuration and is not statically
+distinguishable, and the middleware list is read from the declared return type rather than
+the method body. `queue()` and `broadcast*()` run the same pipeline but are not exempted
+yet, so they keep reporting.
 
 Two shapes are not covered. Each is an upstream limitation rather than a
 judgement that the flow is safe, so treat them as blind spots when reviewing.

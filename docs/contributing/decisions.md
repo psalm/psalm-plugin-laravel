@@ -225,6 +225,27 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 - `new Illuminate\Http\Response(...)` is a second route to the same sink. Its journey tail (dumped empirically) matches `make()`'s shape, so the matcher trusts the label and needs no class gate.
 - A safe `Content-Type` is proven by a denylist, not the whitelist the issue proposed: deny types containing `html`, `xml` (an XML document can carry an XHTML-namespaced script) or `script` (the WHATWG JavaScript group; `application/postscript` is accepted collateral), plus `multipart/*` and the sniffing escapes `unknown/unknown` and `application/unknown`. Every other well-formed literal type is exempt, so vendor download types need no maintenance list.
 
+**Second application (#1435, `PromptGuardTaintHandler`):** the same mechanism exempts a
+`TaintedLlmPrompt` at a `laravel/ai` `prompt()` / `stream()` call site. Two facts made it cheaper
+than #1348:
+
+- The journey tail label carries the RECEIVER class, not the declaring trait or base
+  (`Internal/Codebase/Methods::getCasedMethodId()` returns the original fq class name unless it is
+  all-lowercase). Dumped empirically on 7.0.0-beta19 with a child class inheriting `middleware()`
+  from an abstract base: the label named the child. So the class is free at emission time, no AST
+  read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
+- The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s
+  declared return type whose `handle()` populates `FunctionLikeStorage::$removed_taints` with
+  `TaintKind::INPUT_LLM_PROMPT`, which is what `@psalm-taint-escape llm_prompt` already writes.
+
+**Trust the tag, do not prove the body.** An AST proof of `middleware()`'s body was designed and
+rejected: it would hardcode one guard vendor's FQN and constructor parameter names (a pre-1.0
+signature that has already moved), it could not distinguish a blocking guard from a logging one
+anyway, and it would exempt nothing for an app-local or second-vendor guard. Reading an escape
+annotation instead keeps the plugin package-agnostic and makes the exemption opt-in by the guard
+author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
+records that a mitigation is attached, not that a payload is neutralised.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in
