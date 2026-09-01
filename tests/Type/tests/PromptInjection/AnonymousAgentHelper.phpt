@@ -21,4 +21,4 @@ function configurableSystemAgent(\Illuminate\Http\Request $request): \Laravel\Ai
 }
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedCustom on line %d: Detected tainted llm_prompt

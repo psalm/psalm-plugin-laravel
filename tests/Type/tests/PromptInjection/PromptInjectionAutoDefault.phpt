@@ -37,5 +37,5 @@ function llmOutputStillReachesSqlAtDefaultLevel(\Laravel\Ai\Responses\AgentRespo
 }
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedCustom on line %d: Detected tainted llm_prompt
 TaintedSql on line %d: Detected tainted SQL

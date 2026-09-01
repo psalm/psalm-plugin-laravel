@@ -154,11 +154,20 @@ suppresses the D-in `TaintedLlmPrompt` issue.
   schema, the values come from the model.
 
 **On this branch (Psalm 6):** `TaintedLlmPrompt` does not exist as a Psalm 6 issue
-type. The D-in finding above still fires, but under the generic `TaintedCustom`
-issue (Psalm 6's fallback for any sink kind it does not recognize), shared with
-this plugin's `html_url` sink. `findPromptInjection` has no effect here — see
-[`findPromptInjection`](config.md#findpromptinjection) for the mechanics. The
-D-out direction (model output as a source) is unaffected and reports normally.
+type, so the D-in finding above reports as the generic `TaintedCustom` issue
+instead (Psalm 6's fallback for any sink kind it does not recognize), shared
+with this plugin's `html_url` sink. Detection itself is faithful — see
+[`findPromptInjection`](config.md#findpromptinjection) for the mechanics and how
+the opt-out works differently here. The D-out direction (model output as a
+source) is unaffected and reports normally.
+
+A value already fully escaped/validated for ordinary input taint (SQL, HTML,
+shell, ...) is also treated as `llm_prompt`-clean, mirroring how a single shared
+"all input" bitmask on Psalm 7/master means an ordinary `@psalm-taint-escape
+input` strips the `llm_prompt` bit along with the rest — even though escaping
+for HTML/SQL does not, on its own, actually neutralize a prompt injection
+payload. This is an existing property of the upstream feature this branch
+faithfully reproduces, not something introduced by this port.
 
 Two shapes are not covered. Each is an upstream limitation rather than a
 judgement that the flow is safe, so treat them as blind spots when reviewing.

@@ -15,10 +15,13 @@ if (!\Psalm\LaravelPlugin\Internal\LaravelAiIntegration::isEnabled() || !trait_e
 
 function runLlmSuggestedCommand(\Laravel\Ai\Responses\AgentResponse $response): void {
     // Agentic-coding pattern: the model returns a shell line, the wrapper runs it.
+    // `new PendingProcess()` under-supplies the mandatory $factory constructor arg;
+    // Psalm 7/master flags that as TooFewArguments, Psalm 6 does not (confirmed
+    // empirically, an argument-count-checking core difference unrelated to this
+    // plugin) — TaintedShell alone is the correct, complete finding on this branch.
     $process = new \Illuminate\Process\PendingProcess();
     $process->run($response->text);
 }
 ?>
 --EXPECTF--
-TooFewArguments on line %d: Too few arguments for Illuminate\Process\PendingProcess::__construct - expecting factory to be passed
 TaintedShell on line %d: Detected tainted shell code

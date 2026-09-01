@@ -25,7 +25,7 @@ final class ResearchSubAgent
  * agent exposes another agent as a tool, and the task text the parent model chose
  * is forwarded verbatim into the sub-agent's prompt. `Tools\Request::offsetGet()`
  * carries `@psalm-taint-source input` and `Promptable::prompt()` is an
- * `llm_prompt` sink, so the composition should report `TaintedLlmPrompt`.
+ * `llm_prompt` sink, so the composition should report `TaintedCustom`.
  *
  * It does not, because Psalm discards the taint edge when it resolves the
  * `$request['task']` sugar into an `offsetGet()` call
@@ -39,7 +39,8 @@ final class ResearchSubAgent
  * only difference.
  *
  * When upstream lands, this test fails loudly. Replace it then with the positive
- * assertion (`TaintedLlmPrompt on line %d: Detected tainted LLM prompt`) and
+ * assertion (`TaintedCustom on line %d: Detected tainted llm_prompt` on this Psalm
+ * 6 branch — see LlmPromptTaintBridge; `TaintedLlmPrompt` on Psalm 7/master) and
  * delete the caveat in LlmOutputTaintHandler's docblock.
  */
 final class ResearchDelegationTool implements \Laravel\Ai\Contracts\Tool
@@ -72,4 +73,4 @@ function delegateExplicitly(\Laravel\Ai\Tools\Request $request): void {
 }
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedCustom on line %d: Detected tainted llm_prompt

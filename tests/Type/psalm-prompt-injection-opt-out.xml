@@ -23,7 +23,8 @@
         </pluginClass>
     </plugins>
     <issueHandlers>
-        <MissingPureAnnotation errorLevel="info" />
+        <!-- MissingPureAnnotation does not exist on Psalm 6 (Psalm 7 core issue, absent
+             from config.xsd's issueHandlers), so there is nothing to downgrade here. -->
         <PluginIssue name="NoEnvOutsideConfig" errorLevel="info" />
     </issueHandlers>
 </psalm>

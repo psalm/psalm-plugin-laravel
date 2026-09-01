@@ -27,4 +27,4 @@ function askSupport(\Illuminate\Http\Request $request): \Laravel\Ai\Responses\Ag
 }
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedCustom on line %d: Detected tainted llm_prompt

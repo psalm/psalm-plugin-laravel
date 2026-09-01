@@ -21,12 +21,20 @@ use Psalm\Config;
  * an ordinary fix.
  *
  * Psalm 6 has no `TaintedLlmPrompt` issue type or `llm_prompt` taint kind: both
- * are Psalm 7 core additions. Psalm 6's taint engine folds any sink kind it does
- * not recognize into the generic `TaintedCustom` issue (shared with this plugin's
- * `html_url` sink), so the D-in finding still fires, but this class's effect on
- * Psalm 6 is a no-op — it configures a level for an issue type Psalm 6 never
- * emits, and Psalm 6's config XSD rejects an explicit `<TaintedLlmPrompt />`
- * issueHandler outright. See `docs/config.md#findpromptinjection`.
+ * are Psalm 7 core additions, and Psalm 6's config XSD rejects an explicit
+ * `<TaintedLlmPrompt />` issueHandler outright. This class's OWN effect on Psalm 6
+ * is therefore a no-op — it configures a level for an issue type Psalm 6 never
+ * emits under this name.
+ *
+ * The D-in finding still fires faithfully on Psalm 6, just under the generic
+ * `TaintedCustom` issue (shared with this plugin's `html_url` sink): see
+ * {@see \Psalm\LaravelPlugin\Handlers\Ai\LlmPromptTaintBridge}, which does the
+ * actual detection work this class cannot on Psalm 6. The opt-out this class
+ * would apply via `Config::setCustomErrorLevel()` is instead implemented by
+ * `Plugin::registerHandlers()` skipping that bridge's registration entirely on
+ * `findPromptInjection=false` — avoiding suppressing `TaintedCustom` wholesale,
+ * which would also silence the unrelated `html_url` sink. See
+ * `docs/config.md#findpromptinjection`.
  *
  * @internal
  */

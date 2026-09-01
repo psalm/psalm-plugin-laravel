@@ -575,6 +575,16 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
         }
 
+        // Psalm 6 only: bridges the `llm_prompt` D-in sink stubs to a real Psalm 6 taint kind
+        // (see LlmPromptTaintBridge's docblock for why Psalm 6's own ALL_INPUT group can never
+        // match them otherwise). Not registered on an explicit findPromptInjection=false opt-out,
+        // so the D-in direction produces zero llm_prompt-tainted sources at all — cleaner than
+        // suppressing the resulting TaintedCustom issue, which is shared with the html_url sink.
+        if ($this->laravelAiIntegrationEnabled() && $pluginConfig->findPromptInjection !== false) {
+            require_once __DIR__ . '/Handlers/Ai/LlmPromptTaintBridge.php';
+            $registration->registerHooksFromClass(Handlers\Ai\LlmPromptTaintBridge::class);
+        }
+
         // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
         // forceFill/update) — the #699 typo case. It is always registered and self-silences on any
         // model whose column schema is unknown (migrations disabled), so it never floods.
