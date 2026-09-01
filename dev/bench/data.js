@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788210019163,
+  "lastUpdate": 1788249522403,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -10980,6 +10980,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.6,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa88923b1db05427495bccf011bbdcfa607ed117",
+          "message": "Extend MissingView to mailable and composer methods (#1431)\n\n* feat(views): cover mailable and composer view names #1404\n\n* docs(views): list the added MissingView surfaces #1404",
+          "timestamp": "2026-09-01T09:55:39+02:00",
+          "tree_id": "ee559e23c7647c89aa97775746a2fb14e78b044f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/aa88923b1db05427495bccf011bbdcfa607ed117"
+        },
+        "date": 1788249521217,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.8,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
