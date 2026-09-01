@@ -13,5 +13,8 @@ final class ConcreteController extends \Illuminate\Routing\Controller
         \assert(\is_object($dependency));
     }
 
-    public function show(): void {}
+    public function show(): string
+    {
+        return self::class;
+    }
 }
