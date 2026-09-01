@@ -87,7 +87,7 @@ jobs:
           ignore: 'blacksmith-.* is non default'
 
       - name: Upload SARIF file to GitHub
-        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         env:
           SARIF_FILE: ${{ steps.octoscan.outputs.sarif_output }}
         with:
@@ -116,7 +116,7 @@ jobs:
         uses: boostsecurityio/poutine-action@e240ebd3eff8b2db5a8e5f6b28f58739d7db2247 # v1.1.4
 
       - name: Upload poutine SARIF file
-        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: results.sarif
           category: poutine
@@ -150,7 +150,7 @@ jobs:
         run: uvx zizmor@1.20.0 --persona=auditor --format=sarif --strict-collection . > results.sarif
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: results.sarif
           category: zizmor
