@@ -330,6 +330,28 @@ taint kind from `handle()`'s return, so a caller that invokes the guard directly
 clean value. It does not affect the marker, which reads `FunctionLikeStorage::$removed_taints`, a
 field `@psalm-flow` never touches.
 
+**Annotate the method the pipeline actually invokes.** `laravel/ai` runs prompt middleware through a
+bare `Illuminate\Pipeline\Pipeline`, whose `carry()` tests `is_callable($pipe)` before it looks for
+`handle()`, so which method runs depends on how the entry is written:
+
+| `middleware()` returns | Method the pipeline calls |
+|---|---|
+| an OBJECT (`[new Guard()]`) whose class declares `__invoke` | `__invoke` (`handle()` is never reached) |
+| an OBJECT with no `__invoke` | `handle` |
+| a class-STRING (`[Guard::class]`, resolved from the container) | `handle`, falling back to `__invoke` when absent |
+
+The handler mirrors that order exactly, so an escape parked on a method the pipeline skips does not
+exempt anything. An invokable guard annotates `__invoke`, everything else annotates `handle`.
+
+Both middleware shapes are supported, and the declared return type has to name the element class
+either way: `@return list<Guard>` for objects, `@return list<class-string<Guard>>` (or a
+`Guard::class` literal) for class-strings.
+
+**Closure middleware can never be exempted.** `@return list<\Closure>` names no class, and the guard
+would live in the closure's body, which no declared type describes; an escape docblock above the
+closure literal is ignored. Use a class. Pinned by
+`tests/Type/tests/PromptInjection/PromptGuardClosureMiddlewareKnownLimitation.phpt`.
+
 The handler then exempts `prompt()` / `stream()` on an agent that implements
 `Laravel\Ai\Contracts\HasMiddleware` and declares `middleware(): array` with a return type naming
 that guard (`@return list<PromptGuard>`). The exact gate list and the trust model are in the

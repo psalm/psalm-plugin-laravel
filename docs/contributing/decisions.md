@@ -235,8 +235,18 @@ than #1348:
   from an abstract base: the label named the child. So the class is free at emission time, no AST
   read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
 - The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s
-  declared return type whose `handle()` populates `FunctionLikeStorage::$removed_taints` with
+  declared return type (as an object, a `class-string<Guard>`, or a `Guard::class` literal) whose
+  dispatched method populates `FunctionLikeStorage::$removed_taints` with
   `TaintKind::INPUT_LLM_PROMPT`, which is what `@psalm-taint-escape llm_prompt` already writes.
+
+**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision, not a fixed `handle`.**
+`Pipeline::carry()` tests `is_callable($pipe)` before `method_exists($pipe, 'handle')`, so an object
+entry with `__invoke` never reaches its own `handle()`, while a class-string entry is not callable,
+takes the container branch, and lands on `handle()` even when `__invoke` exists. The handler mirrors
+both orders per candidate rather than assuming one, and consults only the first method that exists:
+runtime has no fallthrough to the other one, so neither does the exemption. Confirmed against PHP's
+`is_callable()` semantics directly. A closure entry is unprovable by construction and always keeps
+the finding.
 
 **Trust the tag, do not prove the body.** An AST proof of `middleware()`'s body was designed and
 rejected: it would hardcode one guard vendor's FQN and constructor parameter names (a pre-1.0

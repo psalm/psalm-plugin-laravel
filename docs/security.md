@@ -159,10 +159,13 @@ suppress the finding by hand. The provable shape, all four parts required:
 
 1. The agent class implements `Laravel\Ai\Contracts\HasMiddleware` (inherited counts).
    Without the interface `laravel/ai` never calls `middleware()`, so the stack is dead code.
-2. Its `middleware()` has a declared return type naming the element class, e.g.
-   `@return list<PromptGuard>`. A bare `array` proves nothing and keeps the finding.
-3. That element class declares `handle()`, the one method the middleware pipeline invokes.
-4. That `handle()` carries `@psalm-taint-escape llm_prompt`.
+2. Its `middleware()` has a declared return type naming the element class, as an object
+   (`@return list<PromptGuard>`) or as a class-string (`@return list<class-string<PromptGuard>>`).
+   A bare `array` proves nothing and keeps the finding.
+3. That element class declares the method `Illuminate\Pipeline\Pipeline` would actually call on it:
+   `__invoke` for an object entry that has one, `handle` otherwise.
+4. That method carries `@psalm-taint-escape llm_prompt`. An escape on a method the pipeline skips
+   does not count.
 
 Part 4 is the opt-in: nothing is exempted until a guard's author (or the application,
 on its own guard) writes that line, and no guard package is named in the plugin. It is a
@@ -170,7 +173,8 @@ policy, not a proof, on the same trust model as every other `@psalm-taint-escape
 records that a mitigation is attached, not that a given payload is neutralised. Whether
 the guard blocks or only logs is usually runtime configuration and is not statically
 distinguishable, and the middleware list is read from the declared return type rather than
-the method body. `queue()` and `broadcast*()` run the same pipeline but are not exempted
+the method body. A closure middleware is never exempted: the guard would live in the closure's
+body, which no declared type describes, so write the guard as a class. `queue()` and `broadcast*()` run the same pipeline but are not exempted
 yet, so they keep reporting.
 
 Two shapes are not covered. Each is an upstream limitation rather than a
