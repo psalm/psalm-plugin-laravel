@@ -10,6 +10,7 @@ use Psalm\Issue\TaintedLlmPrompt;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TClosure;
@@ -38,6 +39,10 @@ use Psalm\Type\Union;
  *   value.
  * - The middleware ARRAY is read from the declared return type of `middleware()`, never from its
  *   body. A body that returns the declared guard only on some branch still counts.
+ * - The verdict is keyed on the receiver's STATIC type, because that is what the call site names.
+ *   An in-project subclass overriding `middleware()` is detected and declines the whole call site
+ *   ({@see overridableStack()}), but a subclass OUTSIDE the analysed project is invisible: a
+ *   library's exemption can be inherited by an override the analysis never saw.
  *
  * Suppression is therefore opt-in by annotation; a project that writes no such docblock is
  * unaffected, so no plugin config flag gates it.
@@ -68,7 +73,8 @@ use Psalm\Type\Union;
  *    (`Providers/Concerns/GeneratesText::gatherMiddlewareFor()`), so a class that declares
  *    `middleware()` without the interface has a stack that is dead code at runtime. Matched
  *    against `class_implements`, which is transitive, so an inherited implementation passes.
- * 5. A `middleware()` method is resolvable. Inherited is accepted: the runtime inherits it too.
+ * 5. A `middleware()` method is resolvable, and no in-project subclass overrides it unless the
+ *    receiver is `final`. Inherited without an override is accepted: the runtime inherits it too.
  * 6. `middleware()` carries a declared return type naming its element type, as an object
  *    (`list<Guard>`) or as a class-string (`list<class-string<Guard>>`, `list<Guard::class>`).
  *    A bare native `array` (or `mixed`) yields no candidates and declines, and so does a closure
@@ -134,13 +140,17 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        $middleware = self::declaredReturnType($codebase, $receiver, self::MIDDLEWARE_METHOD);
+        $middleware = self::methodStorage($codebase, $receiver, self::MIDDLEWARE_METHOD);
 
-        if (!$middleware instanceof Union) {
+        if (!$middleware instanceof MethodStorage || self::overridableStack($receiver, $middleware)) {
             return null;
         }
 
-        foreach (self::middlewareCandidates($middleware) as $candidate) {
+        if (!$middleware->return_type instanceof Union) {
+            return null;
+        }
+
+        foreach (self::middlewareCandidates($middleware->return_type) as $candidate) {
             if (self::escapesPromptTaint($codebase, $candidate['name'], $candidate['as_object'])) {
                 return false;
             }
@@ -185,14 +195,13 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * The DECLARED return type of `$methodName` as resolved for `$storage`, inherited declarations
-     * included. Never an inferred one: `declaring_method_ids` reaches the storage of whichever
-     * class actually declares the method, and `$return_type` there is what its signature and
-     * docblock said.
+     * The storage of `$methodName` as resolved for `$storage`, inherited declarations included:
+     * `declaring_method_ids` reaches whichever class actually declares the method, and its
+     * `$return_type` is what that signature and docblock said, never an inferred type.
      *
      * @psalm-mutation-free
      */
-    private static function declaredReturnType(Codebase $codebase, ClassLikeStorage $storage, string $methodName): ?Union
+    private static function methodStorage(Codebase $codebase, ClassLikeStorage $storage, string $methodName): ?MethodStorage
     {
         $methodId = $storage->declaring_method_ids[$methodName] ?? null;
 
@@ -201,10 +210,35 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
         }
 
         try {
-            return $codebase->methods->getStorage($methodId)->return_type;
+            return $codebase->methods->getStorage($methodId);
         } catch (\UnexpectedValueException) {
             return null;
         }
+    }
+
+    /**
+     * True when a subclass could be running a different middleware stack than the one just read.
+     *
+     * The journey label names the receiver's STATIC type, but `gatherMiddlewareFor()` calls
+     * `middleware()` on the actual object, so a subclass that overrides it substitutes its own
+     * stack while the exemption was proven against the ancestor's. `$this->prompt()` inside a
+     * non-final guarded base is the shape that needs no adversarial author: a subclass strips the
+     * guard, inherits the base's entry point, and the label still says the base.
+     *
+     * `Populator::populateClassLikeStorage()` sets `$overridden_downstream` on the DECLARING
+     * method storage for every override it sees, so the flag answers "is this stack still the one
+     * that runs" for the whole analysed project in one read. A `final` receiver cannot be
+     * subclassed at all and skips the check.
+     *
+     * ACCEPTED GAP: the flag only sees code in the analysed project. A subclass shipped by a
+     * downstream consumer of an analysed library is invisible here, so a library's exemption can
+     * still be inherited by an override the analysis never saw.
+     *
+     * @psalm-mutation-free
+     */
+    private static function overridableStack(ClassLikeStorage $receiver, MethodStorage $middleware): bool
+    {
+        return !$receiver->final && $middleware->overridden_downstream;
     }
 
     /**
