@@ -575,6 +575,12 @@ final class Plugin implements PluginEntryPointInterface
         if ($this->laravelAiIntegrationEnabled()) {
             require_once __DIR__ . '/Handlers/Ai/LlmOutputTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\LlmOutputTaintHandler::class);
+
+            // Exempts prompt()/stream() call sites whose receiver declares a middleware
+            // stack containing a guard that annotates its handle() with
+            // `@psalm-taint-escape llm_prompt`. Emission-time only, never a graph write.
+            require_once __DIR__ . '/Handlers/Ai/PromptGuardTaintHandler.php';
+            $registration->registerHooksFromClass(Handlers\Ai\PromptGuardTaintHandler::class);
         }
 
         // Flags unknown attribute keys passed to mass-assignment methods (create/forceCreate/fill/
