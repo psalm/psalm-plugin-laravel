@@ -20,7 +20,7 @@ namespace GuardBasic\Guards {
          * @psalm-taint-escape llm_prompt
          * @psalm-flow ($prompt) -> return
          */
-        public function handle(string $prompt, \Closure $next): mixed
+        public function handle(\Laravel\Ai\Prompts\AgentPrompt $prompt, \Closure $next): mixed
         {
             return $next($prompt);
         }

@@ -171,6 +171,7 @@ Two annotations, both phpdoc:
 ```php
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Promptable;
+use Laravel\Ai\Prompts\AgentPrompt;
 
 final class PromptGuard
 {
@@ -178,7 +179,7 @@ final class PromptGuard
      * @psalm-taint-escape llm_prompt
      * @psalm-flow ($prompt) -> return
      */
-    public function handle(string $prompt, \Closure $next): mixed
+    public function handle(AgentPrompt $prompt, \Closure $next): mixed
     {
         return $next($prompt);
     }
@@ -200,9 +201,13 @@ What it does: `TaintedLlmPrompt` stops being reported for `prompt()` and `stream
 Every other taint kind keeps flowing, so the same value reaching SQL, HTML, or a shell command is
 still reported.
 
-The `@psalm-flow` line is optional but recommended. A bare escape drops every taint kind from the
-annotated method's return value, so a caller invoking the guard directly would see a fully clean
-value; the flow line removes only `llm_prompt`.
+The `@psalm-flow` line does not affect the exemption, which reads only the escape. Include it
+anyway: an escape with no `@psalm-flow` beside it leaves the return value carrying no taint at all,
+not just no `llm_prompt` (see
+[the pairing rule](contributing/taint-analysis.md#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow)),
+so anything calling the guard directly would read a fully clean value. Psalm can often infer the
+same flow from a body that returns the argument, which is why omitting it usually costs nothing;
+the line makes the contract hold when the body is not visible.
 
 Caveats:
 
@@ -215,6 +220,12 @@ Caveats:
   also declares `__invoke()` is never reached at runtime, so it never exempts.
 * The agent must implement `HasMiddleware` (inherited counts). Without it `laravel/ai` never calls
   `middleware()` at all.
+* An agent whose `middleware()` some subclass in the project overrides is not exempted at all: the
+  subclass could be running a different stack, and the call site only names the parent. Mark the
+  agent `final`, or accept the finding on the parent.
+* The subclass check only sees analysed code. If you ship an agent as a library, a consumer's own
+  subclass overriding `middleware()` inherits your exemption, because the analysis of your package
+  never saw it.
 * `queue()` and `broadcast*()` run the same pipeline but are not exempted yet, so they keep
   reporting.
 

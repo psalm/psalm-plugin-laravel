@@ -335,6 +335,14 @@ middleware through a bare pipeline, and `carry()` tests `is_callable($pipe)` bef
 The handler mirrors both orders per candidate and consults only the first method that exists: there
 is no fallthrough to the other one on a missing annotation, because runtime has none either.
 
+**The verdict is keyed on the STATIC receiver type**, which is what the journey label names, while
+`gatherMiddlewareFor()` calls `middleware()` on the actual object. So the handler declines outright
+when the receiver is not `final` and the resolved `middleware()` storage carries
+`MethodStorage::$overridden_downstream`, the flag `Populator::populateClassLikeStorage()` sets on a
+declaring method for every override it sees. That covers the `$this->prompt()`-in-a-guarded-base
+shape, where a subclass strips the stack and inherits the entry point. It cannot cover a subclass
+outside the analysed project; that gap is documented in the recipe's caveats.
+
 Candidates are collected from the array VALUE position of `middleware()`'s declared return type:
 `TNamedObject` for the object form, `TClassString::$as_type` and `TLiteralClassString` for the
 class-string form. A bare `array` degenerates to a `mixed` value type and names nothing.
