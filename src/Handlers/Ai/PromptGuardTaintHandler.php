@@ -11,7 +11,10 @@ use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TClassString;
+use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
@@ -66,11 +69,14 @@ use Psalm\Type\Union;
  *    `middleware()` without the interface has a stack that is dead code at runtime. Matched
  *    against `class_implements`, which is transitive, so an inherited implementation passes.
  * 5. A `middleware()` method is resolvable. Inherited is accepted: the runtime inherits it too.
- * 6. `middleware()` carries a declared return type naming its element type. A bare native `array`
- *    (or `mixed`) yields no candidates and declines.
- * 7. Some element type's own `handle()` removes `llm_prompt`. The method name is fixed at
- *    `handle` because that is the only method laravel/ai's middleware pipeline invokes; an escape
- *    annotation parked on any other method is not the guard's entry point.
+ * 6. `middleware()` carries a declared return type naming its element type, as an object
+ *    (`list<Guard>`) or as a class-string (`list<class-string<Guard>>`, `list<Guard::class>`).
+ *    A bare native `array` (or `mixed`) yields no candidates and declines, and so does a closure
+ *    entry, whose body no declared type can describe.
+ * 7. Some candidate removes `llm_prompt` on the method `Illuminate\Pipeline\Pipeline` would
+ *    actually invoke on it — `__invoke` for an object entry that has one, `handle` otherwise; see
+ *    {@see escapesPromptTaint()} for the exact mirror. An escape parked on a method the pipeline
+ *    never reaches is not the guard's entry point and does not qualify.
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  *
@@ -90,8 +96,14 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
 
     private const MIDDLEWARE_METHOD = 'middleware';
 
-    /** The single method laravel/ai's prompt middleware pipeline invokes on each entry. */
+    /**
+     * `Illuminate\Pipeline\Pipeline::$method`, the name it calls on a pipe it resolved from a
+     * class-string, or on an object that is not itself callable.
+     */
     private const GUARD_METHOD = 'handle';
+
+    /** The method `Pipeline` reaches instead whenever it invokes the pipe directly. */
+    private const INVOKE_METHOD = '__invoke';
 
     /**
      * Reads storage and returns a verdict; it writes nothing, here or into the taint graph. The
@@ -128,8 +140,8 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        foreach (self::elementClasses($middleware) as $guardName) {
-            if (self::escapesPromptTaint($codebase, $guardName)) {
+        foreach (self::middlewareCandidates($middleware) as $candidate) {
+            if (self::escapesPromptTaint($codebase, $candidate['name'], $candidate['as_object'])) {
                 return false;
             }
         }
@@ -196,17 +208,34 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * Class names appearing in the VALUE position of an array-shaped type. `list<Guard>` and
-     * `array{Guard}` arrive as `TKeyedArray`, `array<int, Guard>` as `TArray`; a bare `array`
-     * degenerates to a `mixed` value type and yields nothing, which is the intended decline.
+     * The middleware entries named by the VALUE position of an array-shaped type, each tagged with
+     * the form it is written in, because `Illuminate\Pipeline\Pipeline` dispatches the two forms
+     * differently (see {@see escapesPromptTaint()}):
      *
-     * @return list<string>
+     * - `list<Guard>` / `array<int, Guard>` — an OBJECT entry (`as_object: true`).
+     * - `list<class-string<Guard>>` and `list<Guard::class>` — a class-STRING entry, resolved out
+     *   of the container before dispatch (`as_object: false`).
+     *
+     * `list<Guard>` and `array{Guard}` arrive as `TKeyedArray`, `array<int, Guard>` as `TArray`; a
+     * bare `array` degenerates to a `mixed` value type and yields nothing, which is the intended
+     * decline.
+     *
+     * ACCEPTED LIMITATION: a closure entry contributes NOTHING and can never be exempted. A
+     * closure's body is where the guard would live, and no declared type can carry an escape
+     * annotation for it, so the claim is unprovable by construction; an escape docblock written
+     * above the closure literal is ignored. Pinned by
+     * `PromptGuardClosureMiddlewareKnownLimitation.phpt`, documented in
+     * `docs/contributing/taint-analysis.md`. The explicit `TClosure` skip below states that
+     * intent: `TClosure` extends `TNamedObject`, so without it a closure would be read as a class
+     * named `Closure` — which declines anyway, since `Closure::__invoke()` carries no escape.
+     *
+     * @return list<array{name: string, as_object: bool}>
      *
      * @psalm-mutation-free
      */
-    private static function elementClasses(Union $type): array
+    private static function middlewareCandidates(Union $type): array
     {
-        $names = [];
+        $candidates = [];
 
         foreach ($type->getAtomicTypes() as $atomic) {
             $values = match (true) {
@@ -220,23 +249,60 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             }
 
             foreach ($values->getAtomicTypes() as $value) {
+                if ($value instanceof TClosure) {
+                    continue;
+                }
+
                 if ($value instanceof TNamedObject) {
-                    $names[] = $value->value;
+                    $candidates[] = ['name' => $value->value, 'as_object' => true];
+
+                    continue;
+                }
+
+                if ($value instanceof TLiteralClassString) {
+                    $candidates[] = ['name' => $value->value, 'as_object' => false];
+
+                    continue;
+                }
+
+                // `class-string<Guard>` keeps the bound in `$as_type`; a bare `class-string` leaves
+                // it null and names no candidate.
+                if ($value instanceof TClassString
+                    && $value->as_type instanceof TNamedObject
+                    && !$value->as_type instanceof TClosure
+                ) {
+                    $candidates[] = ['name' => $value->as_type->value, 'as_object' => false];
                 }
             }
         }
 
-        return $names;
+        return $candidates;
     }
 
     /**
-     * True when `$guardName::handle()` carries `@psalm-taint-escape llm_prompt`. Psalm folds that
-     * docblock into `FunctionLikeStorage::$removed_taints` during the scan phase, so reading the
-     * bitmask back here needs no annotation machinery of our own.
+     * True when the method `Illuminate\Pipeline\Pipeline` would actually call on this middleware
+     * carries `@psalm-taint-escape llm_prompt`. Psalm folds that docblock into
+     * `FunctionLikeStorage::$removed_taints` during the scan phase, so reading the bitmask back
+     * here needs no annotation machinery of our own.
+     *
+     * The method is chosen by mirroring `Pipeline::carry()`
+     * (`vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php`), whose order differs by
+     * entry form and was confirmed against PHP's own `is_callable()`:
+     *
+     * - An OBJECT entry hits `is_callable($pipe)` first, which is true exactly when the class has
+     *   `__invoke`, so `__invoke` WINS over a `handle()` sitting next to it. Without `__invoke`,
+     *   the object branch falls through to `method_exists($pipe, 'handle')`.
+     * - A class-STRING entry is not callable, so it takes the container branch, and the
+     *   `method_exists($pipe, 'handle')` test then makes `handle()` win over `__invoke`.
+     *
+     * Only the FIRST method that exists is consulted; there is no fallthrough to the other one on
+     * a missing annotation, because runtime has no such fallthrough either. So an annotated
+     * `handle()` on an object entry whose class also declares an unannotated `__invoke()` does not
+     * qualify: that `handle()` is never reached.
      *
      * @psalm-mutation-free
      */
-    private static function escapesPromptTaint(Codebase $codebase, string $guardName): bool
+    private static function escapesPromptTaint(Codebase $codebase, string $guardName, bool $asObject): bool
     {
         $guard = self::classStorage($codebase, $guardName);
 
@@ -244,18 +310,26 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             return false;
         }
 
-        $methodId = $guard->declaring_method_ids[self::GUARD_METHOD] ?? null;
+        $dispatchOrder = $asObject
+            ? [self::INVOKE_METHOD, self::GUARD_METHOD]
+            : [self::GUARD_METHOD, self::INVOKE_METHOD];
 
-        if ($methodId === null) {
-            return false;
+        foreach ($dispatchOrder as $methodName) {
+            $methodId = $guard->declaring_method_ids[$methodName] ?? null;
+
+            if ($methodId === null) {
+                continue;
+            }
+
+            try {
+                $dispatched = $codebase->methods->getStorage($methodId);
+            } catch (\UnexpectedValueException) {
+                return false;
+            }
+
+            return ($dispatched->removed_taints & TaintKind::INPUT_LLM_PROMPT) !== 0;
         }
 
-        try {
-            $handle = $codebase->methods->getStorage($methodId);
-        } catch (\UnexpectedValueException) {
-            return false;
-        }
-
-        return ($handle->removed_taints & TaintKind::INPUT_LLM_PROMPT) !== 0;
+        return false;
     }
 }
