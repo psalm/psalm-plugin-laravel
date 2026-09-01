@@ -49,6 +49,7 @@ final class PluginConfigTest extends TestCase
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
+        $this->assertNull($config->findPromptInjection);
         $this->assertTrue($config->resolveDynamicWhereClauses);
         $this->assertTrue($config->resolveConfigReturnTypes);
         $this->assertSame([], $config->configDirectories);
@@ -229,6 +230,48 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->findMissingViews);
+    }
+
+    #[Test]
+    public function find_prompt_injection_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findPromptInjection);
+    }
+
+    #[Test]
+    public function find_prompt_injection_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findPromptInjection);
+    }
+
+    #[Test]
+    public function find_prompt_injection_without_value_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('findPromptInjection> requires a `value` attribute');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_prompt_injection_invalid_value_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findPromptInjection value 'yes'");
+
+        PluginConfig::fromXml($xml);
     }
 
     #[Test]

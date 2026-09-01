@@ -6,7 +6,13 @@ nav_order: 4
 
 # MissingView
 
-Emitted when `view()`, `Factory::make()` (e.g., `view()->make()`), or the `View::make()` facade call references a Blade template that does not exist on disk.
+Emitted when a view name passed to any of the following does not correspond to an existing Blade template on disk:
+
+- `view()` helper, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()`, and their `View` facade forms (concrete, contract-typed, and aliases)
+- `ResponseFactory::view()` (`response()->view()`, `Illuminate\Contracts\Routing\ResponseFactory`, and the `Response` facade)
+- `Router::view()` and the `Route` facade
+- `Illuminate\Notifications\Messages\MailMessage::view()`/`markdown()`
+- `Illuminate\Testing\TestResponse::assertViewIs()`
 
 ## Why this is a problem
 
@@ -55,3 +61,5 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 - Namespaced views (e.g., `mail::html.header`) are skipped
 - Only `.blade.php` and `.php` extensions are checked
 - Only view paths known at boot time are searched (`config('view.paths')` plus paths added by service providers)
+- `Factory::first()` and `ResponseFactory::view()`'s array form only flag the call when every candidate is a literal AND all of them are missing. A non-literal candidate anywhere in the list, or one that resolves, skips the check
+- `renderEach()`'s `$empty` argument is skipped when it starts with `raw|` (Laravel treats that as raw text, not a view name)

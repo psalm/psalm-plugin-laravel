@@ -27,6 +27,7 @@ Full config example:
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
         <findOctaneIncompatibleBinding value="true" />
+        <findPromptInjection value="true" />
         <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
@@ -158,7 +159,7 @@ See [MissingTranslation](issues/MissingTranslation.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin checks that `view()` and `Factory::make()` calls reference Blade templates that exist on disk.
+When enabled, the plugin checks that a view name passed to `view()`, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()` (and the `View` facade), `ResponseFactory::view()`/`response()->view()` (and the `Response` facade), `Router::view()` (and the `Route` facade), `MailMessage::view()`/`markdown()`, or `TestResponse::assertViewIs()` references a Blade template that exists on disk.
 Only string literal view names are validated — dynamic names and namespaced views (e.g., `mail::html.header`) are skipped.
 
 See [MissingView](issues/MissingView.md) for details.
@@ -202,6 +203,28 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 ```xml
 <findOctaneIncompatibleBinding value="true" />
+```
+
+## `findPromptInjection`
+
+**default**: `auto`
+
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). It is only relevant when the supported `laravel/ai` integration is installed; the plugin leaves the level alone otherwise.
+
+- element omitted (`auto`): enforced when the supported `laravel/ai` integration is installed (`>=0.11.0 <1.0.0`). The plugin leaves the issue at Psalm's normal error level.
+- `value="false"`: explicit opt-out. Only `TaintedLlmPrompt` is suppressed; model-output taint sources and their ordinary SQL/HTML/shell findings remain errors.
+- `value="true"`: enforced inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
+
+Use the explicit opt-out only where direct prompt flows are intentional. In security-sensitive applications, the default auto mode reports prompts assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). An explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
+
+This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.
+
+**On this branch (Psalm 6):** `TaintedLlmPrompt` is a Psalm 7 core issue type with no Psalm 6 equivalent, so the D-in finding reports as the generic `TaintedCustom` issue instead (shared with this plugin's other custom sink, `html_url`, see [Security checks](security.md)) — message `Detected tainted llm_prompt` rather than a dedicated one. Detection itself is unaffected: the plugin widens ordinary "any untrusted input" sources with the `llm_prompt` kind so the existing sink stubs match (see `LlmPromptTaintBridge`). `findPromptInjection=false` still fully disables it, by skipping that widening rather than suppressing `TaintedCustom` wholesale — suppressing `TaintedCustom` directly would also silence `html_url`, and an explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` is rejected outright (not a recognized element) on this branch.
+
+### Example
+
+```xml
+<findPromptInjection value="false" />
 ```
 
 ## Cache directory

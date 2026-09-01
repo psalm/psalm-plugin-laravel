@@ -19,6 +19,15 @@
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
             <resolveDynamicWhereClauses value="true" />
+            <!-- Explicitly enforce TaintedLlmPrompt here. The shipped auto default is
+                 also enforced when the integration gate is available; this explicit
+                 setting keeps these integration fixtures intentionally unambiguous. The
+                 taint batch
+                 is co-analyzed, and Psalm's BFS prunes nodes already visited with the
+                 same mask, so splitting it silently changes which flows reach a shared
+                 sink. The shipped auto default is pinned by PromptInjectionAutoDefault.phpt
+                 against ./psalm-prompt-injection-default.xml. -->
+            <findPromptInjection value="true" />
         </pluginClass>
     </plugins>
     <stubs>

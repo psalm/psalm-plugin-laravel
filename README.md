@@ -9,7 +9,7 @@
 
 Laravel static analysis with built-in security scanning.
 
-The only free tool that combines deep Laravel static analysis with taint-based vulnerability detection that traces user input from request to sink: SQL injection, XSS, shell injection, file traversal, SSRF, open redirects, and timing-unsafe secret comparisons.
+The only free tool that combines deep Laravel static analysis with taint-based vulnerability detection that traces user input from request to sink: SQL injection, XSS, shell injection, file traversal, SSRF, open redirects, timing-unsafe secret comparisons, and LLM prompt injection (`laravel/ai` agents).
 Everything runs inside your project and your CI. No account, no cloud upload, no code leaves your machine.
 
 ```php

@@ -244,6 +244,28 @@ quiet_run "composer require psalm/plugin-laravel" \
     composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n --dev \
         "psalm/plugin-laravel:*" --update-with-all-dependencies
 
+# Install laravel/ai so the integration stubs are loaded under real reflection.
+# The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=0.11.0 <1.0.0')`,
+# so without this install the application-level integration tests would silently
+# skip the entire laravel/ai surface — including the next-release drift detector
+# (a stub method signature that no longer matches the real source surfaces as a
+# real Psalm error here before it ships).
+# laravel/ai requires PHP ^8.3 on every released version, and illuminate/console
+# ^12.0|^13.0 (its own composer.json, not this plugin's constraint) — skip on a
+# PHP 8.2 leg or an older-Laravel leg (this script also runs against Laravel 11 on
+# 3.x, unlike master/4.x) rather than fail the whole app-test job over an optional
+# integration. The illuminate/console check reads the ALREADY-INSTALLED version via
+# Composer\InstalledVersions (a capability probe, not a LARAVEL_INSTALLER_VERSION
+# string match), so it stays correct if laravel/ai's own floor ever changes.
+if php -r 'exit(version_compare(PHP_VERSION, "8.3.0", "<") ? 1 : 0);' \
+    && php -r 'require "vendor/autoload.php"; exit(\Composer\InstalledVersions::satisfies(new \Composer\Semver\VersionParser(), "illuminate/console", "^12.0|^13.0") ? 0 : 1);'; then
+    quiet_run "composer require laravel/ai" \
+        composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n \
+            "laravel/ai:>=0.11.0 <1.0.0"
+else
+    info "Skipping laravel/ai install: requires PHP >=8.3 and illuminate/console ^12.0|^13.0, have PHP $(php -r 'echo PHP_VERSION;') and Laravel ${LARAVEL_INSTALLER_VERSION}"
+fi
+
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
 PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 

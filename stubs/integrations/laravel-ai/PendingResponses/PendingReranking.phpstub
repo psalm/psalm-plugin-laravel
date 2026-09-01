@@ -1,0 +1,27 @@
+<?php
+
+namespace Laravel\Ai\PendingResponses;
+
+use Illuminate\Support\Traits\Conditionable;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Responses\RerankingResponse;
+
+/**
+ * Pending reranking request. The query is supplied to the reranking model and
+ * is therefore an LLM prompt boundary; retain the complete v0.11 public
+ * surface while adding that one taint annotation.
+ */
+class PendingReranking
+{
+    use Conditionable;
+
+    protected ?int $limit = null;
+
+    /** @param array<int, string> $documents */
+    public function __construct(protected array $documents) {}
+
+    public function limit(?int $limit): self {}
+
+    /** @psalm-taint-sink llm_prompt $query */
+    public function rerank(string $query, Lab|array|string|null $provider = null, ?string $model = null): RerankingResponse {}
+}
