@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\Mail\Mailables\Content;
 use Illuminate\View\Factory;
 use Illuminate\View\View;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\New_;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingView;
+use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -25,8 +30,8 @@ use Psalm\Type\Union;
  * (make/first/renderWhen/renderUnless/renderEach/composer/creator) and its View facade,
  * ResponseFactory::view() (concrete, contract, and Response facade),
  * Router::view(), MailMessage::view()/markdown(), Mailable::view()/markdown()/text(),
- * and TestResponse::assertViewIs() — and narrows the view() helper's return type
- * past the stub's contract fallback to a concrete class.
+ * Mailables\Content's constructor, and TestResponse::assertViewIs() — and narrows
+ * the view() helper's return type past the stub's contract fallback to a concrete class.
  *
  * The receiver classes for the method-call families are {@see ViewNameSignatures},
  * which also resolves a receiver back to a role so this handler knows which
@@ -48,7 +53,7 @@ use Psalm\Type\Union;
  *
  * @see https://laravel.com/docs/views
  */
-final class MissingViewHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
+final class MissingViewHandler implements AfterExpressionAnalysisInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /** @var list<string> Absolute paths to view directories */
     private static array $viewPaths = [];
@@ -272,6 +277,40 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
             ViewNameSignatures::ROLE_MAILABLE => self::checkMailableCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_TEST_RESPONSE => self::checkTestResponseCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
         };
+
+        return null;
+    }
+
+    /**
+     * Mailables\Content carries four view-name constructor arguments. This is a
+     * syntax-level hook because constructors do not participate in method
+     * return-type provider dispatch. The separate $htmlString argument is raw
+     * rendered HTML and must never be treated as a template name.
+     */
+    #[\Override]
+    public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
+    {
+        $expr = $event->getExpr();
+        if (!$expr instanceof New_ || !$expr->class instanceof Name || $expr->isFirstClassCallable()) {
+            return null;
+        }
+
+        /** @psalm-var ?string $resolvedName */
+        $resolvedName = $expr->class->getAttribute('resolvedName');
+        $className = $resolvedName ?? $expr->class->toString();
+        if (\strcasecmp($className, Content::class) !== 0) {
+            return null;
+        }
+
+        $callArgs = \array_values($expr->getArgs());
+        $source = $event->getStatementsSource();
+        $codeLocation = new CodeLocation($source, $expr);
+        $suppressedIssues = $source->getSuppressedIssues();
+
+        self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+        self::checkArgViewName($callArgs, 1, 'html', $codeLocation, $suppressedIssues);
+        self::checkArgViewName($callArgs, 2, 'text', $codeLocation, $suppressedIssues);
+        self::checkArgViewName($callArgs, 3, 'markdown', $codeLocation, $suppressedIssues);
 
         return null;
     }
