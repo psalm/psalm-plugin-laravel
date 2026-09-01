@@ -305,58 +305,46 @@ The pruning is by node id, not by sink id, so it also swallows intermediate hops
 
 **A negative assertion against a shared sink is unfalsifiable.** This is the sharper edge of the same behavior, and it has already produced one fixture that asserted the exact opposite of the truth. An empty `--EXPECTF--` reads as "the plugin does not detect this flow", but a flow reaching an already-visited node is dropped whether or not the edge exists, so the fixture stays green in both worlds. Any phpt whose point is that nothing is reported must route through a per-file local sink AND carry a positive control in the same file that does report, otherwise it proves nothing. `StructuredResponseArrayAccessKnownLimitation.phpt` and `SubAgentToolDelegationKnownLimitation.phpt` are the worked examples.
 
-## Marking an app-level prompt-injection guard
+## How the prompt-guard exemption reads an escape annotation
 
-`@psalm-taint-escape` works on a plain instance method in application code, not only in a stub, and
-`PromptGuardTaintHandler` (`src/Handlers/Ai/PromptGuardTaintHandler.php`) reads it back as the
-opt-in marker for a `laravel/ai` agent middleware guard. A guard annotates its own `handle()`:
+The copy-paste recipe for middleware authors lives in
+[`docs/security.md`, "Marking prompt-guard middleware as trusted"](../security.md#marking-prompt-guard-middleware-as-trusted).
+This section is the mechanics behind it.
 
-```php
-final class PromptGuard
-{
-    /**
-     * @psalm-taint-escape llm_prompt
-     * @psalm-flow ($prompt) -> return
-     */
-    public function handle(string $prompt, \Closure $next): mixed
-    {
-        return $next($prompt);
-    }
-}
-```
+`@psalm-taint-escape` works on a plain instance method in application code, not only in a stub.
+Psalm folds it into `FunctionLikeStorage::$removed_taints` during the scan phase, and
+`PromptGuardTaintHandler` (`src/Handlers/Ai/PromptGuardTaintHandler.php`) reads that bitmask back at
+issue-emission time as the opt-in marker for a `laravel/ai` middleware guard. No custom tag, no AST
+read, and no guard package is named anywhere in the plugin, so an app-local guard and a third-party
+one are treated alike.
 
-`@psalm-flow` matters here for the same reason it does everywhere else: a bare escape strips every
-taint kind from `handle()`'s return, so a caller that invokes the guard directly would see a fully
-clean value. It does not affect the marker, which reads `FunctionLikeStorage::$removed_taints`, a
-field `@psalm-flow` never touches.
+`@psalm-flow` does not affect the marker (it never touches `removed_taints`), which is why the
+recipe calls it recommended rather than required. It still matters for the ordinary reason: a bare
+escape strips every taint kind from the annotated method's return value.
 
-**Annotate the method the pipeline actually invokes.** `laravel/ai` runs prompt middleware through a
-bare `Illuminate\Pipeline\Pipeline`, whose `carry()` tests `is_callable($pipe)` before it looks for
-`handle()`, so which method runs depends on how the entry is written:
+**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision.** `laravel/ai` runs prompt
+middleware through a bare pipeline, and `carry()` tests `is_callable($pipe)` before it looks for
+`handle()`, so the dispatched method depends on how the entry is written:
 
-| `middleware()` returns | Method the pipeline calls |
-|---|---|
-| an OBJECT (`[new Guard()]`) whose class declares `__invoke` | `__invoke` (`handle()` is never reached) |
-| an OBJECT with no `__invoke` | `handle` |
-| a class-STRING (`[Guard::class]`, resolved from the container) | `handle`, falling back to `__invoke` when absent |
+| `middleware()` returns | Method the pipeline calls | Why |
+|---|---|---|
+| an OBJECT (`[new Guard()]`) whose class declares `__invoke` | `__invoke` | `is_callable($object)` is true, so the pipe is invoked directly and `handle()` is never reached |
+| an OBJECT with no `__invoke` | `handle` | not callable, so the object branch falls through to `method_exists($pipe, 'handle')` |
+| a class-STRING (`[Guard::class]`, `class-string<Guard>`) | `handle`, falling back to `__invoke` | a class-string is not callable, so it takes the container branch and then hits the same `method_exists` test |
 
-The handler mirrors that order exactly, so an escape parked on a method the pipeline skips does not
-exempt anything. An invokable guard annotates `__invoke`, everything else annotates `handle`.
+The handler mirrors both orders per candidate and consults only the first method that exists: there
+is no fallthrough to the other one on a missing annotation, because runtime has none either.
 
-Both middleware shapes are supported, and the declared return type has to name the element class
-either way: `@return list<Guard>` for objects, `@return list<class-string<Guard>>` (or a
-`Guard::class` literal) for class-strings.
+Candidates are collected from the array VALUE position of `middleware()`'s declared return type:
+`TNamedObject` for the object form, `TClassString::$as_type` and `TLiteralClassString` for the
+class-string form. A bare `array` degenerates to a `mixed` value type and names nothing.
 
 **Closure middleware can never be exempted.** `@return list<\Closure>` names no class, and the guard
-would live in the closure's body, which no declared type describes; an escape docblock above the
-closure literal is ignored. Use a class. Pinned by
+would live in the closure's body, which no declared type describes, so an escape docblock above the
+closure literal is ignored. Pinned by
 `tests/Type/tests/PromptInjection/PromptGuardClosureMiddlewareKnownLimitation.phpt`.
 
-The handler then exempts `prompt()` / `stream()` on an agent that implements
-`Laravel\Ai\Contracts\HasMiddleware` and declares `middleware(): array` with a return type naming
-that guard (`@return list<PromptGuard>`). The exact gate list and the trust model are in the
-handler's docblock; the user-facing shape is in [`docs/security.md`](../security.md). Nothing in
-the plugin names a guard package, so an app-local guard and a third-party one are treated alike.
+The full gate list and the trust model are in the handler's own docblock.
 
 ## Stub patterns by annotation type
 

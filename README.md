@@ -71,6 +71,8 @@ Unlike pattern-matching tools, Psalm follows dataflow across function boundaries
 
 You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 
+Writing `laravel/ai` prompt middleware that blocks injection? Annotate it so the plugin stops reporting a mitigation you already ship: [Marking prompt-guard middleware as trusted](docs/security.md#marking-prompt-guard-middleware-as-trusted).
+
 ## Custom checks
 
 13 Laravel-aware checks on top of Psalm's built-in diagnostics, each with a docs page explaining what it detects and how to fix it:

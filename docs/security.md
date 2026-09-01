@@ -153,29 +153,75 @@ suppresses the D-in `TaintedLlmPrompt` issue.
   cast, and an explicit `offsetGet()` call. The keys come from the application's
   schema, the values come from the model.
 
-`prompt()` and `stream()` are exempted on an agent whose middleware stack declares a
-guard, so a project that already runs a prompt-injection filter is not asked to
-suppress the finding by hand. The provable shape, all four parts required:
+#### Marking prompt-guard middleware as trusted
 
-1. The agent class implements `Laravel\Ai\Contracts\HasMiddleware` (inherited counts).
-   Without the interface `laravel/ai` never calls `middleware()`, so the stack is dead code.
-2. Its `middleware()` has a declared return type naming the element class, as an object
-   (`@return list<PromptGuard>`) or as a class-string (`@return list<class-string<PromptGuard>>`).
-   A bare `array` proves nothing and keeps the finding.
-3. That element class declares the method `Illuminate\Pipeline\Pipeline` would actually call on it:
-   `__invoke` for an object entry that has one, `handle` otherwise.
-4. That method carries `@psalm-taint-escape llm_prompt`. An escape on a method the pipeline skips
-   does not count.
+For middleware authors (a guard library, or an app with its own guard). Use this when your
+middleware genuinely stops prompt injection before the prompt reaches the provider. It tells the
+plugin to stop reporting a mitigation you already ship, instead of asking your users to suppress
+the finding by hand.
 
-Part 4 is the opt-in: nothing is exempted until a guard's author (or the application,
-on its own guard) writes that line, and no guard package is named in the plugin. It is a
-policy, not a proof, on the same trust model as every other `@psalm-taint-escape`: it
-records that a mitigation is attached, not that a given payload is neutralised. Whether
-the guard blocks or only logs is usually runtime configuration and is not statically
-distinguishable, and the middleware list is read from the declared return type rather than
-the method body. A closure middleware is never exempted: the guard would live in the closure's
-body, which no declared type describes, so write the guard as a class. `queue()` and `broadcast*()` run the same pipeline but are not exempted
-yet, so they keep reporting.
+Two annotations, both phpdoc:
+
+1. On the guard, annotate the method `Illuminate\Pipeline\Pipeline` actually invokes, which is
+   `__invoke()` when your class has one and `handle()` otherwise:
+   `@psalm-taint-escape llm_prompt`.
+2. On the agent's `middleware()`, declare a `@return` naming your guard class:
+   `@return list<PromptGuard>` (a `@return list<class-string<PromptGuard>>` entry works too).
+
+```php
+use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Promptable;
+
+final class PromptGuard
+{
+    /**
+     * @psalm-taint-escape llm_prompt
+     * @psalm-flow ($prompt) -> return
+     */
+    public function handle(string $prompt, \Closure $next): mixed
+    {
+        return $next($prompt);
+    }
+}
+
+final class SupportAgent implements HasMiddleware
+{
+    use Promptable;
+
+    /** @return list<PromptGuard> */
+    public function middleware(): array
+    {
+        return [new PromptGuard()];
+    }
+}
+```
+
+What it does: `TaintedLlmPrompt` stops being reported for `prompt()` and `stream()` on that agent.
+Every other taint kind keeps flowing, so the same value reaching SQL, HTML, or a shell command is
+still reported.
+
+The `@psalm-flow` line is optional but recommended. A bare escape drops every taint kind from the
+annotated method's return value, so a caller invoking the guard directly would see a fully clean
+value; the flow line removes only `llm_prompt`.
+
+Caveats:
+
+* This is a trust declaration, not a proof. It records that a mitigation is attached, not that a
+  given payload is neutralised, the same as every other `@psalm-taint-escape`.
+* Closure middleware is never exempted. The guard lives in the closure body, which no declared type
+  describes. Write the guard as a class.
+* No `@return` on `middleware()` means no exemption. A bare `array` names nothing to check.
+* An escape on a method the pipeline skips does not count. An annotated `handle()` on a class that
+  also declares `__invoke()` is never reached at runtime, so it never exempts.
+* The agent must implement `HasMiddleware` (inherited counts). Without it `laravel/ai` never calls
+  `middleware()` at all.
+* `queue()` and `broadcast*()` run the same pipeline but are not exempted yet, so they keep
+  reporting.
+
+Whether a guard blocks or only logs is usually runtime configuration and is not statically
+distinguishable, and the middleware list is read from the declared return type rather than from the
+method body. Deeper mechanics, including the exact `Pipeline` dispatch order, are in
+[`docs/contributing/taint-analysis.md`](contributing/taint-analysis.md).
 
 Two shapes are not covered. Each is an upstream limitation rather than a
 judgement that the flow is safe, so treat them as blind spots when reviewing.
