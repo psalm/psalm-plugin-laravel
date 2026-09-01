@@ -13,5 +13,15 @@ final class ConcreteController extends \Illuminate\Routing\Controller
         \assert(\is_object($dependency));
     }
 
-    public function show(): void {}
+    public function show(): string
+    {
+        $this->discardedHelper();
+
+        return self::class;
+    }
+
+    private function discardedHelper(): string
+    {
+        return self::class;
+    }
 }
