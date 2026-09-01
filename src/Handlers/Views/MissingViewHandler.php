@@ -22,11 +22,11 @@ use Psalm\Type\Union;
 /**
  * Detects a view name that does not correspond to an existing template file,
  * across every Laravel API that accepts one — the view() helper, Factory
- * (make/first/renderWhen/renderUnless/renderEach) and its View facade,
+ * (make/first/renderWhen/renderUnless/renderEach/composer/creator) and its View facade,
  * ResponseFactory::view() (concrete, contract, and Response facade),
- * Router::view(), MailMessage::view()/markdown(), and TestResponse::assertViewIs()
- * — and narrows the view() helper's return type past the stub's contract
- * fallback to a concrete class.
+ * Router::view(), MailMessage::view()/markdown(), Mailable::view()/markdown()/text(),
+ * and TestResponse::assertViewIs() — and narrows the view() helper's return type
+ * past the stub's contract fallback to a concrete class.
  *
  * The receiver classes for the method-call families are {@see ViewNameSignatures},
  * which also resolves a receiver back to a role so this handler knows which
@@ -269,6 +269,7 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
             ViewNameSignatures::ROLE_RESPONSE_FACTORY => self::checkResponseFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_ROUTER => self::checkRouterCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_MAILABLE => self::checkMailableCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_TEST_RESPONSE => self::checkTestResponseCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
         };
 
@@ -331,7 +332,58 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
                 }
 
                 break;
+
+            case 'composer':
+            case 'creator':
+                self::checkViewPatternArg($callArgs, $codeLocation, $suppressedIssues);
+
+                break;
         }
+    }
+
+    /**
+     * Factory::composer()/creator() accept one view name or a list. Each entry
+     * is registered independently, unlike first()'s fallback semantics, so a
+     * missing literal is reported even when another entry exists. Wildcards
+     * are event patterns rather than concrete templates and remain unchecked.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkViewPatternArg(array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        $arg = self::argByNameOrPosition($callArgs, 0, 'views');
+        if (!$arg instanceof Arg) {
+            return;
+        }
+
+        if ($arg->value instanceof Array_) {
+            $viewNames = self::extractLiteralStringArrayArg($arg);
+            if ($viewNames === null) {
+                return;
+            }
+
+            foreach ($viewNames as $viewName) {
+                self::checkConcreteViewPattern($viewName, $codeLocation, $suppressedIssues);
+            }
+
+            return;
+        }
+
+        $viewName = self::extractLiteralStringArg($arg);
+        if ($viewName !== null) {
+            self::checkConcreteViewPattern($viewName, $codeLocation, $suppressedIssues);
+        }
+    }
+
+    /** @param array<array-key, string> $suppressedIssues */
+    private static function checkConcreteViewPattern(string $viewName, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if (\str_contains($viewName, '*')) {
+            return;
+        }
+
+        self::checkViewExists($viewName, $codeLocation, $suppressedIssues);
     }
 
     /**
@@ -402,6 +454,26 @@ final class MissingViewHandler implements FunctionReturnTypeProviderInterface, M
         }
 
         self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * Mailable::view()/markdown() take $view while text() calls the equivalent
+     * parameter $textView. All three are resolved through the same view finder.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkMailableCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if ($methodNameLower === 'view' || $methodNameLower === 'markdown') {
+            self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+
+            return;
+        }
+
+        if ($methodNameLower === 'text') {
+            self::checkArgViewName($callArgs, 0, 'textview', $codeLocation, $suppressedIssues);
+        }
     }
 
     /**
