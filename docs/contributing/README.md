@@ -98,13 +98,14 @@ Rules:
 
 ### The `laravel/ai` integration gate
 
-Three things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (the shared `LaravelAiIntegration::isEnabled()` check for `>=0.11.0 <1.0.0`), and they must stay in lockstep:
+Four things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (the shared `LaravelAiIntegration::isEnabled()` check for `>=0.11.0 <1.0.0`), and they must stay in lockstep:
 
 1. `stubs/integrations/laravel-ai/` via `Plugin::optionalIntegrationStubs()`.
 2. `Handlers\Ai\LlmOutputTaintHandler` via `Plugin::registerHandlers()`.
-3. `Internal\PromptInjectionIssuePolicy` via `Plugin::__invoke()`, which preserves Psalm's normal `TaintedLlmPrompt` error by default and applies a narrow D-in suppression only for `<findPromptInjection value="false" />`.
+3. `Handlers\Ai\PromptGuardTaintHandler` via `Plugin::registerHandlers()`, which exempts a `prompt()` / `stream()` call site whose agent middleware declares a guard annotated `@psalm-taint-escape llm_prompt` on whichever method `Illuminate\Pipeline\Pipeline` dispatches to it (`__invoke` for an object entry that has one, `handle` otherwise). Emission-time only (`BeforeAddIssueInterface`), stateless, so it needs no `resetInvocationState()` entry.
+4. `Internal\PromptInjectionIssuePolicy` via `Plugin::__invoke()`, which preserves Psalm's normal `TaintedLlmPrompt` error by default and applies a narrow D-in suppression only for `<findPromptInjection value="false" />`.
 
-Half of that set is a silent half-integration: stubs without the handler lose the property sources, and the issue policy without the stubs could suppress a project's own `llm_prompt` annotations. Adding a fourth site means adding it to that method's callers, not writing a fourth copy of the version check.
+Part of that set is a silent half-integration: stubs without the handlers lose the property sources and the guard exemption, and the issue policy without the stubs could suppress a project's own `llm_prompt` annotations. Adding a fifth site means adding it to that method's callers, not writing a fifth copy of the version check.
 
 Stub-versus-vendor drift is invisible to Psalm here (a registered stub wins over the reflected class), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks.
 
