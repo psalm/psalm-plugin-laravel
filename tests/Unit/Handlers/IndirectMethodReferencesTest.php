@@ -123,9 +123,10 @@ final class IndirectMethodReferencesTest extends TestCase
             );
         }
 
-        $this->assertTrue(
-            $this->containsFinding($findings, 'app/Controllers/ConcreteController.php', 23),
-            'Expected the discarded-return control at ConcreteController::discardedHelper to remain reportable.',
+        $this->assertSame(
+            'PossiblyUnusedReturnValue',
+            $this->findingType($findings, 'app/Dependencies/Dependencies.php', 147),
+            'Expected the discarded-return control at PublicControl::discarded to remain reportable as PossiblyUnusedReturnValue.',
         );
     }
 
@@ -134,13 +135,21 @@ final class IndirectMethodReferencesTest extends TestCase
      */
     private function containsFinding(array $findings, string $fileSuffix, int $line): bool
     {
+        return $this->findingType($findings, $fileSuffix, $line) !== null;
+    }
+
+    /**
+     * @param list<array{type: string, file_name: string, line_from: int}> $findings
+     */
+    private function findingType(array $findings, string $fileSuffix, int $line): ?string
+    {
         foreach ($findings as $finding) {
             if (\str_ends_with($finding['file_name'], $fileSuffix) && $finding['line_from'] === $line) {
-                return true;
+                return $finding['type'];
             }
         }
 
-        return false;
+        return null;
     }
 
     /**

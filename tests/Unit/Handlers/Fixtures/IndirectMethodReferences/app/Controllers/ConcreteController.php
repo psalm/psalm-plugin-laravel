@@ -15,13 +15,6 @@ final class ConcreteController extends \Illuminate\Routing\Controller
 
     public function show(): string
     {
-        $this->discardedHelper();
-
-        return self::class;
-    }
-
-    private function discardedHelper(): string
-    {
         return self::class;
     }
 }
