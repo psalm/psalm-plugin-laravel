@@ -22,80 +22,42 @@ use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Suppresses `TaintedLlmPrompt` on a `prompt()` / `stream()` call whose receiver class declares an
- * agent middleware stack containing a guard that claims to neutralize prompt injection.
+ * Suppresses `TaintedLlmPrompt` on a `prompt()`/`stream()` call whose receiver declares an agent
+ * middleware stack containing a guard annotated `@psalm-taint-escape llm_prompt` on its dispatched
+ * method. Psalm parses that natively into `MethodStorage::$removed_taints`; nothing here names a
+ * specific guard package, so any library or app-local guard opts in with that one docblock line.
  *
- * The claim is the guard author's, written as `@psalm-taint-escape llm_prompt` on the middleware's
- * `handle()` method. Psalm parses that natively into `FunctionLikeStorage::$removed_taints`, so no
- * custom annotation, no vendor FQN, and no AST read is involved: any guard library, and any
- * app-local guard, opts in by adding that one docblock line. Nothing in this file names a specific
- * guard package.
+ * TRUST MODEL: this is a policy, not a proof, same as any `@psalm-taint-escape`. Accepted
+ * consequences: block-vs-log is not statically distinguishable; the middleware array is read from
+ * `middleware()`'s DECLARED return type, never its body (an empty-array body still exempts);
+ * receiver and guard are BOUNDS, checked against every analysed subclass ({@see
+ * substitutedInDescendant()}, {@see guardEscapesEverywhere()}) but not against subclasses outside
+ * the analysed project; a class-string entry can be container-rebound to something else at runtime.
+ * Suppression is opt-in by annotation, so no plugin config flag gates it.
  *
- * TRUST MODEL — this is a policy, not a proof. The annotation says a mitigation is attached, not
- * that any given payload is neutralized, exactly like every other `@psalm-taint-escape`. Two
- * consequences are accepted deliberately:
+ * MECHANISM: applied at issue emission, never by editing the taint graph, so no decision here leaks
+ * onto an unrelated flow (`docs/contributing/decisions.md`, "Call-site sink exemptions..."). The
+ * handler is stateless — `BeforeAddIssueEvent` fires in the main process after workers exit — so no
+ * `reset()` registration is needed.
  *
- * - Whether the guard blocks or merely logs is not statically distinguishable (the action is
- *   typically constructor state resolved from runtime config), so the annotation is taken at face
- *   value.
- * - The middleware ARRAY is read from the declared return type of `middleware()`, never from its
- *   body. A body that returns the declared guard only on some branch still counts.
- * - `list<Guard>` says the entries are Guards, not that there IS one: a body returning `[]`
- *   satisfies the declared type and still exempts. The declaration is the author's claim, exactly
- *   as with the escape itself.
- * - Both the receiver and the declared element type are BOUNDS, not exact runtime classes. Every
- *   analysed subclass of each is checked ({@see substitutedInDescendant()},
- *   {@see guardEscapesEverywhere()}), but a subclass OUTSIDE the analysed project is invisible, so
- *   a library's exemption can be inherited by an override the analysis never saw.
- * - A class-string entry is resolved through the container at runtime, so a binding can swap the
- *   named guard for something else entirely. Not provable statically, same trust layer as the
- *   guard's own configuration.
- *
- * Suppression is therefore opt-in by annotation; a project that writes no such docblock is
- * unaffected, so no plugin config flag gates it.
- *
- * MECHANISM. The verdict is applied when the issue is emitted, and the taint graph is never
- * edited, so no decision made here can leak onto an unrelated flow — see
- * `docs/contributing/decisions.md`, "Call-site sink exemptions are applied at issue emission".
- * The handler is stateless: `BeforeAddIssueEvent` is dispatched from the main process after the
- * analysis workers exit, so nothing recorded during analysis would survive anyway, and every fact
- * below is re-derived from the issue plus classlike storage. No `reset()` registration is needed.
- *
- * WHAT IS ENFORCED (each miss returns null, which retains the finding):
- *
- * 1. The issue is a `TaintedLlmPrompt`. `TaintKind::INPUT_LLM_PROMPT` maps to exactly one issue
- *    class, so suppressing it is exactly "strip only llm_prompt": a `TaintedSql` or `TaintedHtml`
- *    on the same value is a different issue object and never reaches gate 2.
- * 2. The journey tail label is `call to <class>::prompt|stream`. Empirically confirmed on Psalm
- *    7.0.0-beta19: the tail is the ARGUMENT node feeding the sink, and `<class>` is the RECEIVER
- *    class, not the declaring trait or base (`Internal/Codebase/Methods::getCasedMethodId()`
- *    returns the original fq class name whenever it is not all-lowercase). An interface- or
- *    union-typed receiver therefore labels the interface, whose storage fails gate 4 or 5 for
- *    free. A receiver class whose FQN is entirely lowercase would label the DECLARING class
- *    instead; pathological, and it fails toward a retained finding on the union case.
- * 3. That class has classlike storage. A lookup made before the classlike is populated proves
- *    nothing, so it is treated as "not proven" rather than thrown.
- * 4. The sink method resolves to a declaration on `Laravel\Ai\Promptable`, so the call really is
- *    into laravel/ai's pipeline ({@see declaredBy()}). A userland class is free to name a method
- *    `prompt()`, annotate it `@psalm-taint-sink llm_prompt`, and implement `HasMiddleware`; its
- *    middleware never runs, and exempting it would be suppressing someone else's sink.
- * 5. The class implements `Laravel\Ai\Contracts\HasMiddleware`. laravel/ai only ever calls
- *    `middleware()` behind an `instanceof HasMiddleware` check
- *    (`Providers/Concerns/GeneratesText::gatherMiddlewareFor()`), so a class that declares
- *    `middleware()` without the interface has a stack that is dead code at runtime. Matched
- *    against `class_implements`, which is transitive, so an inherited implementation passes.
- * 6. A `middleware()` method is resolvable, and every analysed subclass resolves it to the SAME
- *    declaration ({@see substitutedInDescendant()}). Inherited without a substitution is accepted:
- *    the runtime inherits it too.
- * 7. `middleware()` carries a declared return type naming its element type, as an object
- *    (`list<Guard>`) or as a class-string (`list<class-string<Guard>>`, `list<Guard::class>`).
- *    A bare native `array` (or `mixed`) yields no candidates and declines, and so do a closure
- *    entry and a template bound, neither of which names the class that actually runs.
- * 8. Some candidate, AND every analysed subclass of it, removes `llm_prompt` on the method
- *    `Illuminate\Pipeline\Pipeline` would invoke on it: `__invoke` for an object entry that has
- *    one, `handle` otherwise ({@see dispatchedMethodEscapes()} for the mirror,
- *    {@see guardEscapesEverywhere()} for the hierarchy walk). An escape parked on a method the
- *    pipeline never reaches is not the guard's entry point and does not qualify.
+ * Each gate below misses toward null (finding retained):
+ * 1. Issue is `TaintedLlmPrompt` (`TaintKind::INPUT_LLM_PROMPT` maps to exactly this issue class).
+ * 2. Journey tail label is `call to <class>::prompt|stream`. Confirmed on 7.0.0-beta19: `<class>`
+ *    is the call's RECEIVER, not the declaring trait/base (`Methods::getCasedMethodId()` returns
+ *    the fq name whenever it's not all-lowercase) — so an interface/union receiver labels the
+ *    interface, which fails gate 4/5 for free.
+ * 3. Receiver has classlike storage (unpopulated = not proven, not thrown).
+ * 4. The sink method is declared by `Laravel\Ai\Promptable` ({@see declaredBy()}) — otherwise a
+ *    userland class could self-declare a `prompt()` sink and borrow an unrelated guard stack.
+ * 5. Receiver implements `Laravel\Ai\Contracts\HasMiddleware` — laravel/ai only calls
+ *    `middleware()` behind that check, so without it the stack is dead code at runtime.
+ * 6. `middleware()` resolves, and every analysed subclass resolves it to the SAME declaration
+ *    ({@see substitutedInDescendant()}).
+ * 7. `middleware()`'s declared return type names an element as an object or class-string; a bare
+ *    `array`/`mixed`, a closure entry, or a template bound yields no candidate.
+ * 8. Some candidate, and every analysed subclass of it, escapes `llm_prompt` on whichever method
+ *    `Illuminate\Pipeline\Pipeline` would actually invoke ({@see dispatchedMethodEscapes()}, {@see
+ *    guardEscapesEverywhere()}).
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  *
@@ -103,17 +65,10 @@ use Psalm\Type\Union;
  */
 final class PromptGuardTaintHandler implements BeforeAddIssueInterface
 {
-    /**
-     * The sink methods this exemption covers, as they appear in the journey tail label. Only the
-     * two synchronous entry points are listed. `queue()` / `broadcast*()` route through the same
-     * middleware pipeline at runtime and are deliberately left reporting for now.
-     */
+    /** `queue()`/`broadcast*()` share the same pipeline but are deliberately left reporting for now. */
     private const SINK_CALL_LABEL_PATTERN = '/^call to (.+)::(prompt|stream)$/i';
 
-    /**
-     * Lowercased FQN of the trait that declares the covered sinks. The exemption is only about
-     * laravel/ai's middleware pipeline, so the call has to actually be into that pipeline.
-     */
+    /** Lowercased FQN; gate 4 requires the sink to actually be laravel/ai's pipeline. */
     private const PROMPTABLE_TRAIT = 'laravel\ai\promptable';
 
     /** Lowercased, matching the key spelling in `ClassLikeStorage::$class_implements`. */
@@ -121,19 +76,14 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
 
     private const MIDDLEWARE_METHOD = 'middleware';
 
-    /**
-     * `Illuminate\Pipeline\Pipeline::$method`, the name it calls on a pipe it resolved from a
-     * class-string, or on an object that is not itself callable.
-     */
+    /** `Illuminate\Pipeline\Pipeline::$method` — dispatched for a class-string or non-callable object pipe. */
     private const GUARD_METHOD = 'handle';
 
     /** The method `Pipeline` reaches instead whenever it invokes the pipe directly. */
     private const INVOKE_METHOD = '__invoke';
 
     /**
-     * Reads storage and returns a verdict; it writes nothing, here or into the taint graph. The
-     * annotation is what self-analysis demands once every helper below is mutation-free, and it
-     * also states the ADR's constraint in a form the analyzer enforces.
+     * Reads storage only, enforcing the "never edit the taint graph" ADR constraint.
      *
      * @psalm-mutation-free
      */
@@ -181,9 +131,6 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * The receiver class and sink method named by the journey's tail label, when that tail is the
-     * argument node of a covered prompt sink call.
-     *
      * @param list<array{location: ?\Psalm\CodeLocation, label: string, entry_path_type: string}> $journey
      *
      * @return array{class: string, method: lowercase-string}|null
@@ -202,12 +149,8 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * True when `$methodName` on `$storage` resolves to a declaration on `$declaringClassLc`.
-     *
-     * The label alone proves nothing about provenance: any class may name a method `prompt()` and
-     * annotate it `@psalm-taint-sink llm_prompt`, and such a class can implement `HasMiddleware`
-     * and declare a perfectly good guard stack while never running laravel/ai's pipeline at all.
-     * Exempting it would be suppressing someone else's sink on evidence about ours.
+     * True when `$methodName` resolves to a declaration on `$declaringClassLc` — the label alone
+     * doesn't prove provenance, since any class can self-declare a same-named sink (gate 4).
      *
      * @psalm-mutation-free
      */
@@ -220,9 +163,7 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * A classlike Psalm has not populated yet answers no question here, and neither does one it
-     * never saw, so both are "not proven" rather than a throw. Mirrors the storage-lookup idiom
-     * used by the Eloquent handlers.
+     * An unpopulated or unseen classlike is "not proven", not a throw — the Eloquent handlers' idiom.
      *
      * @psalm-mutation-free
      */
@@ -236,9 +177,8 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * The storage of `$methodName` as resolved for `$storage`, inherited declarations included:
-     * `declaring_method_ids` reaches whichever class actually declares the method, and its
-     * `$return_type` is what that signature and docblock said, never an inferred type.
+     * Resolves `$methodName` via `declaring_method_ids`, inherited declarations included; the
+     * returned storage's `$return_type` is the declared signature, never an inferred type.
      *
      * @psalm-mutation-free
      */
@@ -258,26 +198,17 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * True when some analysed subclass of `$storage` resolves `$methodName` to a different
-     * declaration than `$storage` does, so the verdict just proven does not describe every object
-     * the call site could receive.
+     * True when some analysed subclass resolves `$methodName` to a different declaration than
+     * `$storage` — the journey label names the receiver's STATIC type, but the real call dispatches
+     * on the runtime object, so an unguarded subclass would otherwise inherit the base's exemption.
      *
-     * The journey label names the receiver's STATIC type, but `gatherMiddlewareFor()` calls
-     * `middleware()` on the actual object. The shape needs no adversarial author: a guarded base
-     * exposes `$this->prompt()`, a subclass returns an empty stack, and the label still says the
-     * base.
+     * Compares DECLARING method ids ({@see descendantsOf()}) rather than
+     * `MethodStorage::$overridden_downstream`: that flag is only set for a method stored directly
+     * on the child, so a child that swaps the method via a TRAIT import never sets it but does
+     * change its declaring id, which this catches.
      *
-     * Descendants come from {@see descendantsOf()}. Comparing DECLARING method ids rather than
-     * reading `MethodStorage::$overridden_downstream` is deliberate: that flag is only set for a
-     * method stored directly on the child (`Populator::populateClassLikeStorage()`), so a child
-     * that replaces the stack by importing a TRAIT never sets it, while its declaring id changes
-     * to the trait's and is caught here. A descendant that does not override at all keeps the
-     * ancestor's declaring id and costs nothing. A `final` class has no descendants, so it needs
-     * no special case.
-     *
-     * ACCEPTED GAP: only analysed code is visible. A subclass shipped by a downstream consumer of
-     * an analysed library is not in the set, so a library's exemption can still be inherited by an
-     * override the analysis never saw.
+     * ACCEPTED GAP: a subclass outside the analysed project is invisible and can still inherit the
+     * exemption undetected.
      *
      * @psalm-mutation-free
      */
@@ -307,16 +238,11 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * Every analysed classlike below `$storage`, keyed by lowercased name, or null when one of
-     * them cannot be read (which proves nothing, so callers must fail toward a retained finding).
-     *
-     * `ClassLikeStorage::$dependent_classlikes` is NOT the closure it looks like.
-     * `Populator::populateClassLikeStorage()` records DIRECT links, and `populateCodebase()` then
-     * makes a SINGLE merge pass over them with no fixpoint, so the stored set reaches about two
-     * levels: in a chain `A < B < C < D`, `A` lists `B` and `C` and never `D`. Executed on
-     * 7.0.0-beta19 with a four-level agent hierarchy; the level-four override was invisible and
-     * silently kept its ancestor's exemption. Hence the fixpoint walk here, with a visited set so
-     * a diamond or a `+=`-induced cycle terminates.
+     * Every analysed classlike below `$storage`, or null if one is unreadable (fails toward a
+     * retained finding). `ClassLikeStorage::$dependent_classlikes` is NOT transitively closed —
+     * `Populator` records only direct links and merges once, no fixpoint, so it reaches ~2 levels
+     * (`A < B < C < D`: `A` lists `B`, `C`, never `D`; confirmed on 7.0.0-beta19 with a 4-level
+     * hierarchy). Hence the worklist walk here, with a visited set for cycle safety.
      *
      * @return array<string, ClassLikeStorage>|null
      *
@@ -353,26 +279,14 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * The middleware entries named by the VALUE position of an array-shaped type, each tagged with
-     * the form it is written in, because `Illuminate\Pipeline\Pipeline` dispatches the two forms
-     * differently (see {@see dispatchedMethodEscapes()}):
+     * Middleware entries from the VALUE position of `middleware()`'s declared array type, tagged
+     * by form since `Pipeline` dispatches them differently ({@see dispatchedMethodEscapes()}):
+     * `list<Guard>`/`array<int, Guard>` is an OBJECT entry, `class-string<Guard>`/`Guard::class` is
+     * resolved through the container first. A bare `array`/`mixed` value type yields nothing.
      *
-     * - `list<Guard>` / `array<int, Guard>` — an OBJECT entry (`as_object: true`).
-     * - `list<class-string<Guard>>` and `list<Guard::class>` — a class-STRING entry, resolved out
-     *   of the container before dispatch (`as_object: false`).
-     *
-     * `list<Guard>` and `array{Guard}` arrive as `TKeyedArray`, `array<int, Guard>` as `TArray`; a
-     * bare `array` degenerates to a `mixed` value type and yields nothing, which is the intended
-     * decline.
-     *
-     * ACCEPTED LIMITATION: a closure entry contributes NOTHING and can never be exempted. A
-     * closure's body is where the guard would live, and no declared type can carry an escape
-     * annotation for it, so the claim is unprovable by construction; an escape docblock written
-     * above the closure literal is ignored. Pinned by
-     * `PromptGuardClosureMiddlewareKnownLimitation.phpt`, documented in
-     * `docs/contributing/taint-analysis.md`. The explicit `TClosure` skip below states that
-     * intent: `TClosure` extends `TNamedObject`, so without it a closure would be read as a class
-     * named `Closure` — which declines anyway, since `Closure::__invoke()` carries no escape.
+     * ACCEPTED LIMITATION: a closure entry contributes nothing — its body is where the guard would
+     * live, and no declared type can carry an escape annotation for it. Pinned by
+     * `PromptGuardClosureMiddlewareKnownLimitation.phpt`.
      *
      * @return list<array{name: string, as_object: bool}>
      *
@@ -394,10 +308,8 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             }
 
             foreach ($values->getAtomicTypes() as $value) {
-                // `class-string<T of Guard>` is a BOUND standing in for a class the caller picks,
-                // so the bound's annotation says nothing about what actually runs.
-                // `TTemplateParamClass` extends `TClassString`, so it would otherwise be read as
-                // the bound itself.
+                // TClosure extends TNamedObject; TTemplateParamClass (a class-string<T> bound)
+                // extends TClassString — both must be skipped explicitly or they'd be misread.
                 if ($value instanceof TClosure || $value instanceof TTemplateParamClass) {
                     continue;
                 }
@@ -414,8 +326,7 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
                     continue;
                 }
 
-                // `class-string<Guard>` keeps the bound in `$as_type`; a bare `class-string` leaves
-                // it null and names no candidate.
+                // Bare `class-string` leaves `$as_type` null and names no candidate.
                 if ($value instanceof TClassString
                     && $value->as_type instanceof TNamedObject
                     && !$value->as_type instanceof TClosure
@@ -429,18 +340,11 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * True when `$guardName` AND every analysed subclass of it removes `llm_prompt` on the method
-     * `Illuminate\Pipeline\Pipeline` would dispatch to it.
-     *
-     * The declared element type is a BOUND, not the exact runtime class: `@return list<Guard>` is
-     * satisfied by any subclass, including one that overrides the annotated method without the
-     * escape, or one that merely ADDS `__invoke` and so moves an object entry onto a different
-     * dispatch path. Requiring the whole analysed hierarchy to hold the claim covers both without
-     * forcing guard classes to be `final`. A subclass that overrides nothing inherits the
-     * annotated method and passes for free.
-     *
-     * Same open-world gap as {@see substitutedInDescendant()}: a subclass outside the analysed
-     * project is invisible.
+     * True when `$guardName` and every analysed subclass escapes `llm_prompt` on the dispatched
+     * method. `@return list<Guard>` is a BOUND, satisfied by any subclass — including one that
+     * overrides without the escape, or one that adds `__invoke` and shifts the dispatch path — so
+     * the whole analysed hierarchy must hold the claim. Same open-world gap as
+     * {@see substitutedInDescendant()}.
      *
      * @psalm-mutation-free
      */
@@ -468,25 +372,12 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * True when the method `Illuminate\Pipeline\Pipeline` would actually call on this middleware
-     * carries `@psalm-taint-escape llm_prompt`. Psalm folds that docblock into
-     * `FunctionLikeStorage::$removed_taints` during the scan phase, so reading the bitmask back
-     * here needs no annotation machinery of our own.
-     *
-     * The method is chosen by mirroring `Pipeline::carry()`
-     * (`vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php`), whose order differs by
-     * entry form and was confirmed against PHP's own `is_callable()`:
-     *
-     * - An OBJECT entry hits `is_callable($pipe)` first, which is true exactly when the class has
-     *   `__invoke`, so `__invoke` WINS over a `handle()` sitting next to it. Without `__invoke`,
-     *   the object branch falls through to `method_exists($pipe, 'handle')`.
-     * - A class-STRING entry is not callable, so it takes the container branch, and the
-     *   `method_exists($pipe, 'handle')` test then makes `handle()` win over `__invoke`.
-     *
-     * Only the FIRST method that exists is consulted; there is no fallthrough to the other one on
-     * a missing annotation, because runtime has no such fallthrough either. So an annotated
-     * `handle()` on an object entry whose class also declares an unannotated `__invoke()` does not
-     * qualify: that `handle()` is never reached.
+     * True when the method `Pipeline::carry()` would actually invoke carries the escape. Dispatch
+     * order mirrors `carry()` (`vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php`),
+     * which differs by entry form: an OBJECT entry hits `is_callable()` first, so `__invoke` wins
+     * over an adjacent `handle()`; a class-STRING entry isn't callable and takes the container
+     * branch, where `handle()` wins. Only the first method that EXISTS is consulted — no fallback
+     * to the other on a missing annotation, since runtime has none either.
      *
      * @psalm-mutation-free
      */
