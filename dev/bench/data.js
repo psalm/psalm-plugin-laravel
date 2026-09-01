@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788250195906,
+  "lastUpdate": 1788269444930,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11050,6 +11050,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 34.09,
             "range": "± 0.78",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "394830be5b6fc3af40f643421d70e94ce424f3b3",
+          "message": "chore(deps): bump shivammathur/setup-php from 2.37.1 to 2.37.2 (#1437)\n\nBumps [shivammathur/setup-php](https://github.com/shivammathur/setup-php) from 2.37.1 to 2.37.2.\n- [Release notes](https://github.com/shivammathur/setup-php/releases)\n- [Commits](https://github.com/shivammathur/setup-php/compare/7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc...f3e473d116dcccaddc5834248c87452386958240)\n\n---\nupdated-dependencies:\n- dependency-name: shivammathur/setup-php\n  dependency-version: 2.37.2\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-09-01T15:26:21+02:00",
+          "tree_id": "00854819a98a0ae3f91df18ef8900c25d4096934",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/394830be5b6fc3af40f643421d70e94ce424f3b3"
+        },
+        "date": 1788269443452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.91,
+            "range": "± 0.09",
             "unit": "s"
           },
           {
