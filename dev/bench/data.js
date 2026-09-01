@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788249522403,
+  "lastUpdate": 1788250195906,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11015,6 +11015,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.8,
             "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "89fb9ef63ec96b180f2dc7db081cee61841fcc0b",
+          "message": "Detect missing views in Mailables Content constructors (#1432)\n\n* feat(views): cover mailable and composer view names #1404\n\n* feat(views): validate mailable content templates #1404\n\n* docs(views): list the added MissingView surfaces #1404\n\n* docs(views): document Content constructor coverage #1404",
+          "timestamp": "2026-09-01T10:06:28+02:00",
+          "tree_id": "285ea882e15dd54214884fbf3d9d0a44491a2b89",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/89fb9ef63ec96b180f2dc7db081cee61841fcc0b"
+        },
+        "date": 1788250194470,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.09,
+            "range": "± 0.78",
             "unit": "s"
           },
           {
