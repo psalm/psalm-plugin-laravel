@@ -162,9 +162,12 @@ the finding by hand.
 
 Two annotations, both phpdoc:
 
-1. On the guard, annotate the method `Illuminate\Pipeline\Pipeline` actually invokes, which is
-   `__invoke()` when your class has one and `handle()` otherwise:
-   `@psalm-taint-escape llm_prompt`.
+1. On the guard, annotate the method `Illuminate\Pipeline\Pipeline` actually invokes with
+   `@psalm-taint-escape llm_prompt`. Which method that is depends on how the agent lists the entry:
+   an OBJECT entry (`[new PromptGuard()]`) dispatches `__invoke()` when your class has one and
+   `handle()` otherwise, while a class-STRING entry (`[PromptGuard::class]`) dispatches `handle()`
+   first and only falls back to `__invoke()` when there is no `handle()`. A guard with just
+   `handle()` is correct for both.
 2. On the agent's `middleware()`, declare a `@return` naming your guard class:
    `@return list<PromptGuard>` (a `@return list<class-string<PromptGuard>>` entry works too).
 
@@ -220,12 +223,20 @@ Caveats:
   also declares `__invoke()` is never reached at runtime, so it never exempts.
 * The agent must implement `HasMiddleware` (inherited counts). Without it `laravel/ai` never calls
   `middleware()` at all.
-* An agent whose `middleware()` some subclass in the project overrides is not exempted at all: the
-  subclass could be running a different stack, and the call site only names the parent. Mark the
-  agent `final`, or accept the finding on the parent.
-* The subclass check only sees analysed code. If you ship an agent as a library, a consumer's own
-  subclass overriding `middleware()` inherits your exemption, because the analysis of your package
-  never saw it.
+* An agent whose `middleware()` some subclass in the project replaces is not exempted at all: the
+  subclass could be running a different stack, and the call site only names the parent. Calling on
+  the subclass directly is still exempt when that subclass keeps the guarded stack.
+* The subclass checks only see analysed code. If you ship an agent or a guard as a library, a
+  consumer's own subclass can replace the stack or drop the escape without the analysis of your
+  package ever seeing it.
+* A guard class that some subclass in the project extends is only trusted when every one of those
+  subclasses also carries the escape on its own dispatched method. The declared type is a bound, so
+  a subclass could otherwise drop the mitigation or move dispatch onto an unannotated `__invoke()`.
+* A template bound (`@return list<class-string<T>>`) names no concrete guard and is not exempted.
+* `@return list<PromptGuard>` says what the entries are, not that there is one. A body returning
+  `[]` still exempts: the declaration is your claim, the same as the escape itself.
+* A class-string entry is resolved through the container, so a binding that swaps your guard for
+  another pipe is invisible here. This is the same trust layer as the guard's own configuration.
 * `queue()` and `broadcast*()` run the same pipeline but are not exempted yet, so they keep
   reporting.
 

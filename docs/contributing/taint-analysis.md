@@ -335,17 +335,30 @@ middleware through a bare pipeline, and `carry()` tests `is_callable($pipe)` bef
 The handler mirrors both orders per candidate and consults only the first method that exists: there
 is no fallthrough to the other one on a missing annotation, because runtime has none either.
 
-**The verdict is keyed on the STATIC receiver type**, which is what the journey label names, while
-`gatherMiddlewareFor()` calls `middleware()` on the actual object. So the handler declines outright
-when the receiver is not `final` and the resolved `middleware()` storage carries
-`MethodStorage::$overridden_downstream`, the flag `Populator::populateClassLikeStorage()` sets on a
-declaring method for every override it sees. That covers the `$this->prompt()`-in-a-guarded-base
-shape, where a subclass strips the stack and inherits the entry point. It cannot cover a subclass
-outside the analysed project; that gap is documented in the recipe's caveats.
+**Both the receiver and the declared element type are BOUNDS**, not exact runtime classes: the
+journey label names the static receiver while `gatherMiddlewareFor()` calls `middleware()` on the
+actual object, and `list<Guard>` is satisfied by any subclass. The handler therefore walks
+`ClassLikeStorage::$dependent_classlikes`, the transitively closed set of analysed classlikes
+depending on one, which is populated before analysis and still readable at emission. A receiver
+declines when any descendant resolves `middleware()` to a different DECLARING id; a guard qualifies
+only when it and every descendant carry the escape on their own dispatched method.
+
+Comparing declaring ids beats reading `MethodStorage::$overridden_downstream`:
+`Populator::populateClassLikeStorage()` only sets that flag for a method stored directly on the
+child, so a child that replaces the stack by importing a TRAIT never sets it, while its declaring id
+changes to the trait's and is caught. A `final` class has no dependents and needs no special case.
+Neither walk covers a subclass outside the analysed project; that gap is in the recipe's caveats.
+
+**Provenance is checked before any of that.** The label proves only that some `prompt()` or
+`stream()` was called, so the handler requires the receiver's declaring id for that method to sit on
+`Laravel\Ai\Promptable`. A userland class with its own `@psalm-taint-sink llm_prompt` `prompt()`
+never runs the pipeline, and exempting it would be suppressing an unrelated sink.
 
 Candidates are collected from the array VALUE position of `middleware()`'s declared return type:
 `TNamedObject` for the object form, `TClassString::$as_type` and `TLiteralClassString` for the
 class-string form. A bare `array` degenerates to a `mixed` value type and names nothing.
+`TTemplateParamClass` is skipped even though it extends `TClassString`: a template bound stands in
+for a class the caller picks, so the bound's annotation says nothing about what runs.
 
 **Closure middleware can never be exempted.** `@return list<\Closure>` names no class, and the guard
 would live in the closure's body, which no declared type describes, so an escape docblock above the
