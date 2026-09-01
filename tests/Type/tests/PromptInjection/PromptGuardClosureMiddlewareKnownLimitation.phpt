@@ -29,9 +29,7 @@ namespace GuardClosure\Agents {
         public function middleware(): array
         {
             return [
-                /**
-                 * @psalm-taint-escape llm_prompt
-                 */
+                /** @psalm-taint-escape llm_prompt */
                 static fn(string $prompt, \Closure $next): mixed => $next($prompt),
             ];
         }
