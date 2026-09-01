@@ -17,7 +17,7 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings) |
+| Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
 | LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
@@ -152,6 +152,98 @@ suppresses the D-in `TaintedLlmPrompt` issue.
   `$structured` property, `toArray()`, `toJson()`, `jsonSerialize()`, the string
   cast, and an explicit `offsetGet()` call. The keys come from the application's
   schema, the values come from the model.
+
+#### Marking prompt-guard middleware as trusted
+
+For middleware authors (a guard library, or an app with its own guard). Use this when your
+middleware genuinely stops prompt injection before the prompt reaches the provider. It tells the
+plugin to stop reporting a mitigation you already ship, instead of asking your users to suppress
+the finding by hand.
+
+Two annotations, both phpdoc:
+
+1. On the guard, annotate the method `Illuminate\Pipeline\Pipeline` actually invokes with
+   `@psalm-taint-escape llm_prompt`. Which method that is depends on how the agent lists the entry:
+   an OBJECT entry (`[new PromptGuard()]`) dispatches `__invoke()` when your class has one and
+   `handle()` otherwise, while a class-STRING entry (`[PromptGuard::class]`) dispatches `handle()`
+   first and only falls back to `__invoke()` when there is no `handle()`. A guard with just
+   `handle()` is correct for both.
+2. On the agent's `middleware()`, declare a `@return` naming your guard class:
+   `@return list<PromptGuard>` (a `@return list<class-string<PromptGuard>>` entry works too).
+
+```php
+use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Promptable;
+use Laravel\Ai\Prompts\AgentPrompt;
+
+final class PromptGuard
+{
+    /**
+     * @psalm-taint-escape llm_prompt
+     * @psalm-flow ($prompt) -> return
+     */
+    public function handle(AgentPrompt $prompt, \Closure $next): mixed
+    {
+        return $next($prompt);
+    }
+}
+
+final class SupportAgent implements HasMiddleware
+{
+    use Promptable;
+
+    /** @return list<PromptGuard> */
+    public function middleware(): array
+    {
+        return [new PromptGuard()];
+    }
+}
+```
+
+What it does: `TaintedLlmPrompt` stops being reported for `prompt()` and `stream()` on that agent.
+Every other taint kind keeps flowing, so the same value reaching SQL, HTML, or a shell command is
+still reported.
+
+The `@psalm-flow` line does not affect the exemption, which reads only the escape. Include it
+anyway: an escape with no `@psalm-flow` beside it leaves the return value carrying no taint at all,
+not just no `llm_prompt` (see
+[the pairing rule](contributing/taint-analysis.md#critical-rule-always-pair-psalm-taint-escape-with-psalm-flow)),
+so anything calling the guard directly would read a fully clean value. Psalm can often infer the
+same flow from a body that returns the argument, which is why omitting it usually costs nothing;
+the line makes the contract hold when the body is not visible.
+
+Caveats:
+
+* This is a trust declaration, not a proof. It records that a mitigation is attached, not that a
+  given payload is neutralised, the same as every other `@psalm-taint-escape`.
+* Closure middleware is never exempted. The guard lives in the closure body, which no declared type
+  describes. Write the guard as a class.
+* No `@return` on `middleware()` means no exemption. A bare `array` names nothing to check.
+* An escape on a method the pipeline skips does not count. An annotated `handle()` on a class that
+  also declares `__invoke()` is never reached at runtime, so it never exempts.
+* The agent must implement `HasMiddleware` (inherited counts). Without it `laravel/ai` never calls
+  `middleware()` at all.
+* An agent whose `middleware()` some subclass in the project replaces is not exempted at all: the
+  subclass could be running a different stack, and the call site only names the parent. Calling on
+  the subclass directly is still exempt when that subclass keeps the guarded stack.
+* The subclass checks only see analysed code. If you ship an agent or a guard as a library, a
+  consumer's own subclass can replace the stack or drop the escape without the analysis of your
+  package ever seeing it.
+* A guard class that some subclass in the project extends is only trusted when every one of those
+  subclasses also carries the escape on its own dispatched method. The declared type is a bound, so
+  a subclass could otherwise drop the mitigation or move dispatch onto an unannotated `__invoke()`.
+* A template bound (`@return list<class-string<T>>`) names no concrete guard and is not exempted.
+* `@return list<PromptGuard>` says what the entries are, not that there is one. A body returning
+  `[]` still exempts: the declaration is your claim, the same as the escape itself.
+* A class-string entry is resolved through the container, so a binding that swaps your guard for
+  another pipe is invisible here. This is the same trust layer as the guard's own configuration.
+* `queue()` and `broadcast*()` run the same pipeline but are not exempted yet, so they keep
+  reporting.
+
+Whether a guard blocks or only logs is usually runtime configuration and is not statically
+distinguishable, and the middleware list is read from the declared return type rather than from the
+method body. Deeper mechanics, including the exact `Pipeline` dispatch order, are in
+[`docs/contributing/taint-analysis.md`](contributing/taint-analysis.md).
 
 Two shapes are not covered. Each is an upstream limitation rather than a
 judgement that the flow is safe, so treat them as blind spots when reviewing.
