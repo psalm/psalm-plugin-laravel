@@ -318,6 +318,38 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $this->assertStringContainsString('neverShipped(): declared in the stub but not found on the installed class', $output);
     }
 
+    #[Test]
+    public function a_stub_declaring_every_real_interface_has_no_interface_gap(): void
+    {
+        $stub = \str_replace(
+            'class Request',
+            'class Request implements \Illuminate\Contracts\Support\Arrayable, \ArrayAccess',
+            self::CLEAN_REQUEST_STUB,
+        );
+
+        [, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+
+        $this->assertStringNotContainsString('implements', $output);
+    }
+
+    #[Test]
+    public function a_stub_missing_a_real_interface_fails(): void
+    {
+        $stub = \str_replace(
+            'class Request',
+            'class Request implements \ArrayAccess',
+            self::CLEAN_REQUEST_STUB,
+        );
+
+        [$exitCode, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString(
+            'Request: implements Illuminate\Contracts\Support\Arrayable in the installed laravel/ai, but the stub\'s `implements` clause omits it',
+            $output,
+        );
+    }
+
     /** @return array{int, string} exit code and combined output */
     private function check(string $stubSource): array
     {
