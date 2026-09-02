@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788342301911,
+  "lastUpdate": 1788345466201,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11225,6 +11225,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.56,
             "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b724b969c06beee8bcde9d511db60c7c9b0f381a",
+          "message": "Fix: laravel-ai stub-parity checker's erasure claim, add interface check (#1447)\n\n* fix(ci): correct the laravel-ai parity checker's erasure claim #0\n\nResearch (empirical repro against Psalm 6.16.1 and 7.0.0-beta19, plus\nsource citation in ClassLikeNodeScanner) showed a bare-redeclaration\nstub does NOT erase omitted public/protected methods/properties:\nPsalm merges the stub into the already-scanned real class, and an\nomitted member keeps its real signature. The \"missing from stub\"\nfinding for methods/properties was documented as preventing\nUndefinedMethod false positives, which is wrong; its real value is\nforcing a taint review of new upstream API surface (validate()\nshipping without @psalm-taint-source input, from #1446, is exactly\nthis failure mode). Corrected the docblocks accordingly.\n\nThe interface list IS genuinely wiped on redeclaration and the\nchecker never diffed it. Added that check: a class's own `implements`\nclause is compared against the installed class's real interfaces,\nminus whatever its real parent already supplies (Psalm re-derives\nparent-inherited interfaces without the stub repeating them).\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8\n\n* fix(ci): fix interface-parity false positives ChatGPT review found\n\nTwo P1s in the new interface check: getInterfaceNames() is transitive\n(includes interfaces an implemented interface itself extends, and PHP's\nimplicit Stringable on any __toString() class), but the comparison was\nagainst literal AST names only. IteratorAggregate would have flagged\nTraversable, and __toString()-declaring classes like TextResponse would\nhave flagged Stringable, on the very first real run.\n\n- declaredInterfaceClosure() expands each declared name via its own\n  getInterfaceNames() before comparing.\n- Stringable is exempt when the stub declares __toString().\n- Added the missing reverse direction: a stub interface the real class\n  no longer implements is now a hard mismatch, not silently accepted.\n- Fixed the diagnostic wording for `interface X extends Y` stubs (was\n  always \"implements clause\" even when the AST clause is `extends`).\n- Corrected the same erasure claim in TextResponse.phpstub's own\n  docblock while touching this area.\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8",
+          "timestamp": "2026-09-02T12:35:11+02:00",
+          "tree_id": "65115d6fc993d007c3b59cd66be571287cadbb82",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b724b969c06beee8bcde9d511db60c7c9b0f381a"
+        },
+        "date": 1788345465332,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.85,
+            "range": "± 0.45",
             "unit": "s"
           },
           {
