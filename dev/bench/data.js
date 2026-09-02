@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788293187779,
+  "lastUpdate": 1788340623085,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11125,6 +11125,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1115,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d336114c026a1e92ed154eaabf1227332e23a200",
+          "message": "fix(stubs): accept Closure replacements in __() $replace (#1444)\n\nTranslator::makeReplacements() branches on `$value instanceof Closure` and\ninvokes it with the matched inner text, so a closure value is valid at\nruntime on every supported Laravel version. The stub's\n`array<string, scalar|null>` rejected it.\n\n`\\Closure`, not `callable`: a callable string or array falls through to the\n`is_object()` / string cast path and never reaches the callback branch.\n\nRefs #1442\n\nClaude-Session: https://claude.ai/code/session_01UrUS4yh7GAVC1uoyoJY85L",
+          "timestamp": "2026-09-02T11:13:57+02:00",
+          "tree_id": "61c7c97ab75dc773ba3e811478db8e09dfdf5e2a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d336114c026a1e92ed154eaabf1227332e23a200"
+        },
+        "date": 1788340622194,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.82,
+            "range": "± 0.02",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
             "unit": "MB"
           }
         ]
