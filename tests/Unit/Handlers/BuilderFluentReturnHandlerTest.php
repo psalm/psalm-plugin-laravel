@@ -11,9 +11,9 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderFluentReturnHandler;
 use Symfony\Component\Process\Process;
 
 /**
- * Whole-project regression coverage for #1448. Psalm's dead-code consolidation does not inspect
- * an explicitly passed file, so this runs a real fixture project with findUnusedCode enabled
- * (see repo memory reference_findunusedcode_test_limits — a phpt cannot exercise this).
+ * Whole-project regression coverage for #1448. A phpt only analyzes the one file it is passed,
+ * but findUnusedCode needs Psalm's whole-project dead-code consolidation, so this runs a real
+ * fixture project as a subprocess instead.
  */
 #[CoversClass(BuilderFluentReturnHandler::class)]
 final class BuilderFluentReturnHandlerTest extends TestCase
@@ -28,10 +28,12 @@ final class BuilderFluentReturnHandlerTest extends TestCase
 
         $notReported = [
             ['app/Models/PostBuilder.php', 15], // publishedSelf(): self
-            ['app/Models/PostBuilder.php', 20], // publishedStaticNative(): static
-            ['app/Models/PostBuilder.php', 26], // publishedStaticDocblock() @return static
-            ['app/Models/PostBuilder.php', 33], // publishedOwnClassName(): PostBuilder
-            ['app/Models/PostBuilder.php', 51], // forGuest(): static — already exempt, is_static
+            ['app/Models/PostBuilder.php', 27], // publishedIntersectionBuilderPrimary() @return self&FluentContract
+            ['app/Models/PostBuilder.php', 39], // publishedIntersectionBuilderSecondary() @return FluentContract&self
+            ['app/Models/PostBuilder.php', 46], // publishedStaticNative(): static
+            ['app/Models/PostBuilder.php', 52], // publishedStaticDocblock() @return static
+            ['app/Models/PostBuilder.php', 59], // publishedOwnClassName(): PostBuilder
+            ['app/Models/PostBuilder.php', 78], // forGuest(): static — static, always checked, unaffected either way
         ];
         foreach ($notReported as [$fileSuffix, $line]) {
             $this->assertNull(
@@ -42,8 +44,16 @@ final class BuilderFluentReturnHandlerTest extends TestCase
 
         $this->assertSame(
             'PossiblyUnusedReturnValue',
-            $this->findingType($findings, 'app/Models/PostBuilder.php', 41),
+            $this->findingType($findings, 'app/Models/PostBuilder.php', 67),
             'Expected the non-fluent discardedControl() control to remain reportable.',
+        );
+
+        // The spot checks above only assert on specific lines; without this, a regression that
+        // adds a spurious finding anywhere else in the fixture would pass silently.
+        $this->assertCount(
+            1,
+            $findings,
+            'Expected exactly one unused-return-value finding (the discardedControl control): ' . \json_encode($findings),
         );
     }
 

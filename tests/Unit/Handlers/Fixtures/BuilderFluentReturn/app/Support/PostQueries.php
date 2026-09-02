@@ -12,6 +12,8 @@ final class PostQueries
     public function run(PostBuilder $query, QueryBuilder $queryBuilder): void
     {
         $query->publishedSelf();
+        $query->publishedIntersectionBuilderPrimary();
+        $query->publishedIntersectionBuilderSecondary();
         $query->publishedStaticNative();
         $query->publishedStaticDocblock();
         $query->publishedOwnClassName();

@@ -38,8 +38,11 @@ final class BuilderFluentReturnHandler implements AfterCodebasePopulatedInterfac
             $ownNameLower = \strtolower($storage->name);
 
             foreach ($storage->methods as $method_storage) {
-                // is_static is already exempt in ClassLikes::checkMethodReferences(), and an
-                // already-fluent method (Psalm's own `return $this;` detection) needs no help.
+                // ClassLikes::checkMethodReferences() gates on `is_static || !probably_fluent`:
+                // a static method is ALWAYS subject to the unused-return check regardless of
+                // probably_fluent (is_static short-circuits the OR to true), so setting the flag
+                // on one would be a pure no-op — skip them. An already-fluent method (Psalm's own
+                // `return $this;` detection) needs no help either.
                 if ($method_storage->is_static || $method_storage->probably_fluent) {
                     continue;
                 }
@@ -58,21 +61,41 @@ final class BuilderFluentReturnHandler implements AfterCodebasePopulatedInterfac
                         continue;
                     }
 
-                    // is_static covers native `: static` (reflected with the declaring class's
-                    // own FQN and is_static=true); the literal value check covers `self`,
-                    // docblock-only `@return static` (parses to value='static', is_static=false),
-                    // and the builder's own class name spelled out explicitly.
-                    $value_lower = \strtolower($atomic->value);
-                    if ($atomic->is_static
-                        || $value_lower === 'self'
-                        || $value_lower === 'static'
-                        || $value_lower === $ownNameLower
-                    ) {
+                    // An intersection type (`Foo&Bar`) stores only its first-listed member as
+                    // the top-level atomic; the rest live in that atomic's own `extra_types`
+                    // (TypeParser::getTypeFromIntersectionTree()), so `Contract&self` needs the
+                    // same match applied there too — the builder type can be either side.
+                    if (self::matchesFluentReturn($atomic, $ownNameLower)) {
                         $method_storage->probably_fluent = true;
                         break;
+                    }
+
+                    foreach ($atomic->extra_types as $extra_type) {
+                        if ($extra_type instanceof TNamedObject && self::matchesFluentReturn($extra_type, $ownNameLower)) {
+                            $method_storage->probably_fluent = true;
+                            break 2;
+                        }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * is_static covers native `: static` (reflected with the declaring class's own FQN and
+     * is_static=true); the literal value check covers `self`, docblock-only `@return static`
+     * (parses to value='static', is_static=false), and the builder's own class name spelled out
+     * explicitly.
+     *
+     * @psalm-pure
+     */
+    private static function matchesFluentReturn(TNamedObject $atomic, string $ownNameLower): bool
+    {
+        $value_lower = \strtolower($atomic->value);
+
+        return $atomic->is_static
+            || $value_lower === 'self'
+            || $value_lower === 'static'
+            || $value_lower === $ownNameLower;
     }
 }
