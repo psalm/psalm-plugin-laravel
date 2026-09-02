@@ -50,6 +50,6 @@ final class PostBuilder extends Builder
      */
     public static function forGuest(\Illuminate\Database\Query\Builder $query): static
     {
-        return new static($query);
+        return new self($query);
     }
 }
