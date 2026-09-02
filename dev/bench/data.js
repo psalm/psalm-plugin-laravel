@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788340623085,
+  "lastUpdate": 1788340844370,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11155,6 +11155,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.82,
             "range": "± 0.02",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a5e3415115c58e56f45554dea66d25be01281f9",
+          "message": "Fix: MissingView not detected for InteractsWithViews::view() (#1445)\n\n* fix(views): detect MissingView through InteractsWithViews::view() #1443\n\nInteractsWithViews::view() is declared on a trait InteractsWithViews,\nnot on the test case that uses it. Populator propagates\ndeclaring_method_ids['view'] up from the trait, so MethodReturnTypeProvider\nfires with the trait's own FQCN as the receiver — registering the trait\nFQCN directly in ViewNameSignatures::FAMILIES (same pattern as\nConditionable/Tappable) makes resolveRole() find it without any trait-walk\ncode. blade() and component() on the same trait are excluded since they\ntake raw template source and a class string, not a view name.\n\nClaude-Session: https://claude.ai/code/session_01Xa67vtPPVyrNJxUY5cAXng\n\n* fix(views): correct trait dispatch comment direction\n\ngetFqClasslikeName() reports the declaring class (the trait), not the\nusing class; the using class arrives via getCalledFqClasslikeName().\nresolveRole() is a plain array lookup, unrelated to class storage.\n\nClaude-Session: https://claude.ai/code/session_01Xa67vtPPVyrNJxUY5cAXng",
+          "timestamp": "2026-09-02T11:17:59+02:00",
+          "tree_id": "5d21ecdaffcfa924624b46181f595d56106f1f8c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3a5e3415115c58e56f45554dea66d25be01281f9"
+        },
+        "date": 1788340843463,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.77,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
