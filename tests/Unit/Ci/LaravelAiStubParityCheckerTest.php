@@ -123,6 +123,17 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         }
         PHP;
 
+    private const CLEAN_TEXT_RESPONSE_STUB = <<<'PHP'
+        <?php
+
+        namespace Laravel\Ai\Responses;
+
+        class TextResponse
+        {
+            public function __toString(): string {}
+        }
+        PHP;
+
     protected function setUp(): void
     {
         if (!\trait_exists(\Laravel\Ai\Promptable::class)) {
@@ -329,7 +340,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
 
         [, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
 
-        $this->assertStringNotContainsString('implements', $output);
+        $this->assertStringNotContainsString('Laravel\Ai\Tools\Request: implements', $output);
     }
 
     #[Test]
@@ -348,6 +359,59 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             'Request: implements Illuminate\Contracts\Support\Arrayable in the installed laravel/ai, but the stub\'s `implements` clause omits it',
             $output,
         );
+    }
+
+    #[Test]
+    public function a_stub_declaring_a_stale_interface_fails(): void
+    {
+        $stub = \str_replace(
+            'class Request',
+            'class Request implements \Illuminate\Contracts\Support\Arrayable, \ArrayAccess, \Countable',
+            self::CLEAN_REQUEST_STUB,
+        );
+
+        [$exitCode, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString(
+            "Request: stub's `implements` clause declares Countable, but the installed class doesn't implement it",
+            $output,
+        );
+    }
+
+    /**
+     * `IteratorAggregate` extends `Traversable`, so Reflection reports both
+     * for a class that only writes `implements IteratorAggregate`. The
+     * checker must not treat the implied `Traversable` as a gap.
+     */
+    #[Test]
+    public function an_interface_extending_another_does_not_flag_the_implied_parent(): void
+    {
+        $stub = \str_replace(
+            'class StreamableAgentResponse',
+            'class StreamableAgentResponse implements \IteratorAggregate',
+            self::CLEAN_STREAMABLE_RESPONSE_STUB,
+        );
+
+        [, $output] = $this->checkFiles(['StreamableAgentResponse.phpstub' => $stub]);
+
+        // The real class implements more than just IteratorAggregate (e.g.
+        // Responsable), so other "implements" findings are expected here —
+        // only the implied Traversable must not be one of them.
+        $this->assertStringNotContainsString('implements Traversable', $output);
+    }
+
+    /**
+     * PHP grants `Stringable` implicitly to any class declaring
+     * `__toString()`, on the real class and (were it loadable) the stub
+     * alike — it never needs to be written in an `implements` clause.
+     */
+    #[Test]
+    public function a_class_with_tostring_is_not_flagged_for_implicit_stringable(): void
+    {
+        [, $output] = $this->checkFiles(['TextResponse.phpstub' => self::CLEAN_TEXT_RESPONSE_STUB]);
+
+        $this->assertStringNotContainsString('Laravel\Ai\Responses\TextResponse: implements', $output);
     }
 
     /** @return array{int, string} exit code and combined output */

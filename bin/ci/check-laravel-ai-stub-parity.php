@@ -34,8 +34,12 @@ declare(strict_types=1);
  * input` is exactly this failure mode.
  *
  * The interface list IS genuinely wiped on redeclaration, unlike
- * methods/properties, so a stub `implements` clause missing one really does
- * break `instanceof`/type-hint compatibility. Checked separately below.
+ * methods/properties, so a stub `implements`/`extends` clause missing one
+ * really does break `instanceof`/type-hint compatibility. Checked separately
+ * below, both directions (missing and stale), against each declared name's
+ * own interface-extends-interface closure (Reflection can't distinguish an
+ * explicit name from one only reachable through it) and exempting
+ * `Stringable`, which PHP grants implicitly to any `__toString()` class.
  *
  * Docblock-only precision (`@param non-empty-string`) is unaffected and
  * deliberately out of scope (see docs/contributing/README.md, "Stub merging":
@@ -219,24 +223,54 @@ foreach (findStubFiles($stubsDir) as $file) {
 
         // Unlike methods/properties, this one is real erasure (file docblock).
         // `parent_classes` isn't wiped, so Psalm still derives interfaces
-        // inherited from the real parent without the stub repeating them;
-        // only the class's OWN `implements` clause needs to match.
-        $declaredInterfaceNames = declaredInterfaceNames($classLike);
+        // inherited from the real parent without the stub repeating them.
+        // Each literal name in the stub's clause is expanded to its own
+        // interface-extends-interface closure (e.g. `IteratorAggregate`
+        // implies `Traversable`) before comparing, matching what a real
+        // `implements IteratorAggregate` in the stub would also grant.
+        // `Stringable` is PHP-implicit on any class with `__toString()`, on
+        // both the real class and the stub, so it's exempt rather than
+        // needing to be spelled out.
+        $clauseWord = $classLike instanceof Node\Stmt\Interface_ ? 'extends' : 'implements';
+        $declaredInterfaceClosure = declaredInterfaceClosure($classLike);
+        if (isset($declaredMethodNames['__toString'])) {
+            $declaredInterfaceClosure['Stringable'] = true;
+        }
+
         $parentClass = $reflectionClass->getParentClass();
         $inheritedInterfaceNames = $parentClass !== false ? \array_flip($parentClass->getInterfaceNames()) : [];
 
         foreach ($reflectionClass->getInterfaceNames() as $interfaceName) {
-            if (isset($declaredInterfaceNames[$interfaceName]) || isset($inheritedInterfaceNames[$interfaceName])) {
+            if (isset($declaredInterfaceClosure[$interfaceName]) || isset($inheritedInterfaceNames[$interfaceName])) {
                 continue;
             }
 
             reportOmission(
                 "{$fqcn} implements {$interfaceName}",
-                "{$fqcn}: implements {$interfaceName} in the installed laravel/ai, but the stub's `implements` clause omits it (Psalm wipes the interface list on redeclaration)",
+                "{$fqcn}: implements {$interfaceName} in the installed laravel/ai, but the stub's `{$clauseWord}` clause omits it (Psalm wipes the interface list on redeclaration)",
                 $mismatches,
                 $knownGaps,
                 $consumedGapKeys,
                 $consumedOmissionKeys,
+            );
+        }
+
+        // The reverse direction: a stale interface the stub still claims but
+        // the installed class no longer implements (removed/renamed
+        // upstream). This is a hard mismatch, not an omission — Psalm would
+        // let a project treat the class as that type when it no longer is.
+        $realInterfaceNames = \array_flip($reflectionClass->getInterfaceNames());
+        foreach (declaredInterfaceNames($classLike) as $interfaceName => $_) {
+            if (isset($realInterfaceNames[$interfaceName])) {
+                continue;
+            }
+
+            report(
+                "{$fqcn} implements {$interfaceName} (stale)",
+                "{$fqcn}: stub's `{$clauseWord}` clause declares {$interfaceName}, but the installed class doesn't implement it (renamed or removed upstream?)",
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
             );
         }
     }
@@ -460,6 +494,30 @@ function declaredInterfaceNames(Node\Stmt\ClassLike $classLike): array
     }
 
     return $interfaces;
+}
+
+/**
+ * Each literal name expanded to include the interfaces it itself extends
+ * (e.g. `IteratorAggregate` implies `Traversable`), matching what Reflection
+ * reports for a real `implements IteratorAggregate` — Reflection can't tell
+ * the difference between a name explicitly written and one only reachable
+ * through it.
+ *
+ * @return array<string, true>
+ */
+function declaredInterfaceClosure(Node\Stmt\ClassLike $classLike): array
+{
+    $closure = declaredInterfaceNames($classLike);
+
+    foreach (\array_keys($closure) as $interfaceName) {
+        if (\interface_exists($interfaceName)) {
+            foreach ((new \ReflectionClass($interfaceName))->getInterfaceNames() as $inherited) {
+                $closure[$inherited] = true;
+            }
+        }
+    }
+
+    return $closure;
 }
 
 /** @return array<string, true> */
