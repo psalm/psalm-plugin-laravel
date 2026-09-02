@@ -107,7 +107,7 @@ Four things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegra
 
 Part of that set is a silent half-integration: stubs without the handlers lose the property sources and the guard exemption, and the issue policy without the stubs could suppress a project's own `llm_prompt` annotations. Adding a fifth site means adding it to that method's callers, not writing a fifth copy of the version check.
 
-Stub-versus-vendor drift is invisible to Psalm here (a registered stub wins over the reflected class), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks.
+Stub-versus-vendor drift is invisible to Psalm here (a registered stub wins over the reflected class), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks. A stub method added after the `>=0.11.0` floor gets tagged `@since X.Y.Z`; the checker reads that tag and exempts the method for an older installed release instead of reporting it as drift.
 
 ### Stub merging: how Psalm combines annotations
 
