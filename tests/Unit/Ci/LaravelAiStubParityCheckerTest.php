@@ -282,10 +282,13 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             self::CLEAN_REQUEST_STUB,
         );
 
-        [$exitCode, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+        [, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
 
-        $this->assertSame(0, $exitCode, $output);
+        // CLEAN_REQUEST_STUB is a minimal fixture (only declares data()), so
+        // it always drifts against the real class regardless of the gate;
+        // assert the gate suppressed its own finding, not overall exit code.
         $this->assertStringContainsString('notYetShipped() (@since 999.0.0)', $output);
+        $this->assertStringNotContainsString('notYetShipped(): declared in the stub but not found on the installed class', $output);
     }
 
     /**
