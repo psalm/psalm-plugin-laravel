@@ -29,7 +29,7 @@ final class BuilderFluentReturnHandlerTest extends TestCase
         $notReported = [
             ['app/Models/PostBuilder.php', 15], // publishedSelf(): self
             ['app/Models/PostBuilder.php', 20], // publishedStaticNative(): static
-            ['app/Models/PostBuilder.php', 28], // publishedStaticDocblock() @return static
+            ['app/Models/PostBuilder.php', 26], // publishedStaticDocblock() @return static
             ['app/Models/PostBuilder.php', 33], // publishedOwnClassName(): PostBuilder
             ['app/Models/PostBuilder.php', 51], // forGuest(): static — already exempt, is_static
         ];
