@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788340844370,
+  "lastUpdate": 1788342301911,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11190,6 +11190,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.77,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a64b40ea0402048edd02bd4878d94a6f3cd20fd",
+          "message": "Fix: missing Tools\\Request::validate() in laravel/ai stub (#1446)\n\n* fix(stubs): add missing Tools\\Request::validate() to laravel/ai stub #0\n\nCI stub-parity checker caught drift: newer laravel/ai releases added\nvalidate() to Tools\\Request, absent from the redeclaration stub.\nTainted as input source since validation constrains shape, not\nattacker-controlled content.\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8\n\n* ci(laravel-ai): allowlist Request::validate() 0.11.0 floor gap #0\n\nvalidate() landed in laravel/ai 0.11.1, not the 0.11.0 floor the\nintegration's composer constraint accepts, so the exact-0.11.0 CI\nleg reports it as stub-only drift. The laravel-ai integration has no\nversion-gated stub loading (unlike Carbon's pre-3.12/), so allowlist\nthe gap in KNOWN_GAPS rather than build that infra under this fix.\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8\n\n* docs(stubs): add @since to Tools\\Request::validate() #0\n\nPoints at the KNOWN_GAPS entry explaining why 0.11.0 lacks it.\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8\n\n* feat(ci): honor @since on laravel-ai stub-parity checker #0\n\nThe exact-0.11.0 CI leg needed a manual KNOWN_GAPS entry to accept\nRequest::validate() (added in laravel/ai 0.11.1, after the floor pin\nthis integration supports). Generalize instead: the checker now reads\nan @since tag off a stub method and skips the \"declared in the stub\nbut not found on the installed class\" finding while the installed\nlaravel/ai predates it, so the next such addition is self-documenting\nin the stub rather than needing a script edit. Reverts KNOWN_GAPS back\nto empty and adds positive/negative coverage for the gate.\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8\n\n* fix(tests): assert the gate itself, not overall exit code #0\n\nCLEAN_REQUEST_STUB is a minimal fixture (declares only data()), so it\nalways drifts against the real installed class independent of the\n@since gate. The exit-code-0 assertion was wrong and failed CI\nagainst a real laravel/ai install; assert the gated finding is absent\ninstead.\n\nClaude-Session: https://claude.ai/code/session_01PpW33Ca5ERR5UvY9dJ5dZ8",
+          "timestamp": "2026-09-02T11:42:08+02:00",
+          "tree_id": "ea95418af289ad7430ac5f7e78be38c5a530d538",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6a64b40ea0402048edd02bd4878d94a6f3cd20fd"
+        },
+        "date": 1788342300997,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.56,
+            "range": "± 0.15",
             "unit": "s"
           },
           {
