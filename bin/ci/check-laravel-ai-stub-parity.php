@@ -66,7 +66,9 @@ require dirname(__DIR__, 2) . '/vendor/autoload.php';
  *
  * @var array<string, string>
  */
-const KNOWN_GAPS = [];
+const KNOWN_GAPS = [
+    'Laravel\Ai\Tools\Request::validate' => 'added in laravel/ai 0.11.1 (#1446); the >=0.11.0 floor pin legitimately predates it. The integration has no version-gated stub loading yet (unlike Carbon\'s pre-3.12/), so the method stays declared for newer installs and this leg is allowlisted until that infra exists.',
+];
 
 /**
  * Public/protected vendor members intentionally omitted from a redeclaration.
