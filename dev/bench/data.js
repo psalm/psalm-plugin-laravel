@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788345466201,
+  "lastUpdate": 1788350542463,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11260,6 +11260,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 22.85,
             "range": "± 0.45",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "c436b467f231ba82c201a4a32b319deaa86738da",
+          "message": "Merge remote-tracking branch 'origin/master'",
+          "timestamp": "2026-09-02T13:59:27+02:00",
+          "tree_id": "849950ea87e4c310bbc6d0434871af972870ca49",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c436b467f231ba82c201a4a32b319deaa86738da"
+        },
+        "date": 1788350541304,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.15,
+            "range": "± 0.24",
             "unit": "s"
           },
           {
