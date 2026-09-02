@@ -70,4 +70,4 @@ namespace GuardTrait\Agents {
 
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
+TaintedCustom on line %d: Detected tainted llm_prompt
