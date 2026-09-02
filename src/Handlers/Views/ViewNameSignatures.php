@@ -90,10 +90,10 @@ final class ViewNameSignatures
             'facade' => null,
             'extra' => [],
         ],
-        // A trait, not a class: Populator propagates its declaring_method_ids['view']
-        // to every class that uses it, so getFqClasslikeName() reports the USING
-        // class — but resolveRole() looks up the receiver's declaring class storage,
-        // which stays the trait. See MissingViewHandler::checkInteractsWithViewsCall().
+        // A trait, not a class: Psalm dispatches a method return-type provider on the
+        // DECLARING class, which for a trait method is the trait itself (the using class
+        // arrives as getCalledFqClasslikeName()), so one entry covers every TestCase.
+        // Same registration shape as ConditionableWhenHandler/TappableTapHandler.
         self::ROLE_INTERACTS_WITH_VIEWS => [
             'concrete' => \Illuminate\Foundation\Testing\Concerns\InteractsWithViews::class,
             'facade' => null,
