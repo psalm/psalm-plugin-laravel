@@ -35,6 +35,15 @@ declare(strict_types=1);
  * script is blind to, because both sides are natively `array`. Fixtures cover
  * those, e.g. tests/Type/tests/PromptInjection/EmbeddingsAcceptsFileInputs.phpt.
  *
+ * A stub method tagged `@since X.Y.Z` is exempt from the "declared in the
+ * stub but not found on the installed class" finding while the installed
+ * laravel/ai is older than X.Y.Z: the method genuinely doesn't exist yet on
+ * that floor, so it isn't drift. The gate only reads dotted-numeric versions
+ * on both sides (an unpinned `dev-master`/`x-dev` install falls through to
+ * the normal check instead of being silently exempted), and once the
+ * installed version reaches X.Y.Z the tag stops helping, so a real rename or
+ * removal upstream is still caught.
+ *
  * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]
  * Exit codes: 0 = no drift found (beyond KNOWN_GAPS below), 1 = new drift
  * found or a stubbed class/method is missing from the installed vendor
@@ -83,11 +92,14 @@ if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
 }
 
 $stubsDir = $argv[1] ?? dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai';
+$installedVersion = installedLaravelAiVersion();
 
 /** @var list<string> $mismatches */
 $mismatches = [];
 /** @var list<string> $knownGaps */
 $knownGaps = [];
+/** @var list<string> $versionGated */
+$versionGated = [];
 /** @var array<string, true> $consumedGapKeys */
 $consumedGapKeys = [];
 $consumedOmissionKeys = [];
@@ -128,6 +140,10 @@ foreach (findStubFiles($stubsDir) as $file) {
             $key = "{$fqcn}::{$methodName}";
 
             if (!$reflectionClass->hasMethod($methodName)) {
+                if (versionGateApplies($method->getDocComment(), $installedVersion, $key, $versionGated)) {
+                    continue;
+                }
+
                 report($key, "{$key}(): declared in the stub but not found on the installed class (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
                 continue;
             }
@@ -217,6 +233,13 @@ if ($knownGaps !== []) {
     }
 }
 
+if ($versionGated !== []) {
+    echo "\nVersion-gated (installed laravel/ai {$installedVersion} predates the stub method's @since tag):\n";
+    foreach ($versionGated as $gated) {
+        echo " - {$gated}\n";
+    }
+}
+
 // Stale KNOWN_GAPS entries: an entry that never matched anything this run
 // means the mismatch it described no longer reproduces (its stub was fixed,
 // the method was removed, or the entry was mistyped). That is good news,
@@ -293,6 +316,58 @@ function reportOmission(string $key, string $message, array &$mismatches, array 
 function isLaravelAiSource(?string $file): bool
 {
     return $file !== null && \str_contains(\str_replace('\\', '/', $file), '/vendor/laravel/ai/');
+}
+
+function installedLaravelAiVersion(): ?string
+{
+    if (!\class_exists(\Composer\InstalledVersions::class) || !\Composer\InstalledVersions::isInstalled('laravel/ai')) {
+        return null;
+    }
+
+    $version = \Composer\InstalledVersions::getPrettyVersion('laravel/ai');
+
+    return $version !== null ? \ltrim($version, 'v') : null;
+}
+
+/**
+ * Only a plain dotted-numeric version (`0.11.0`, `1.2`) is comparable against
+ * an `@since` tag. A branch alias or dev version (`dev-master`, `0.x-dev`)
+ * sorts unpredictably under version_compare(), so treat those as "not
+ * gateable" rather than risk silently exempting a method that a bleeding-edge
+ * install is expected to have.
+ */
+function isPatchVersion(string $version): bool
+{
+    return \preg_match('/^\d+(\.\d+){1,3}$/', $version) === 1;
+}
+
+/**
+ * @param list<string> $versionGated
+ */
+function versionGateApplies(?\PhpParser\Comment\Doc $docComment, ?string $installedVersion, string $key, array &$versionGated): bool
+{
+    $since = sinceTag($docComment);
+
+    if ($since === null || $installedVersion === null || !isPatchVersion($since) || !isPatchVersion($installedVersion)) {
+        return false;
+    }
+
+    if (\version_compare($installedVersion, $since, '<')) {
+        $versionGated[] = "{$key}() (@since {$since})";
+
+        return true;
+    }
+
+    return false;
+}
+
+function sinceTag(?\PhpParser\Comment\Doc $docComment): ?string
+{
+    if ($docComment === null || \preg_match('/@since\s+(\S+)/', $docComment->getText(), $matches) !== 1) {
+        return null;
+    }
+
+    return $matches[1];
 }
 
 function traitProvidesConcreteMethod(Node\Stmt\ClassLike $classLike, string $methodName): bool
