@@ -54,6 +54,9 @@ class Request implements Arrayable, ArrayAccess
      * `required|string` argument still passes through arbitrary attacker text
      * verbatim, so the validated result stays tainted.
      *
+     * @since 0.11.1 — absent from the 0.11.0 floor pin, see KNOWN_GAPS in
+     *   bin/ci/check-laravel-ai-stub-parity.php.
+     *
      * @param  array<string, mixed>  $rules
      * @param  array<string, mixed>  $messages
      * @param  array<string, mixed>  $attributes
