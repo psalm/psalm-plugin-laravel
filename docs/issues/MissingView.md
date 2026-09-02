@@ -8,10 +8,12 @@ nav_order: 4
 
 Emitted when a view name passed to any of the following does not correspond to an existing Blade template on disk:
 
-- `view()` helper, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()`, and their `View` facade forms (concrete, contract-typed, and aliases)
+- `view()` helper, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()`/`composer()`/`creator()`, and their `View` facade forms (concrete, contract-typed, and aliases)
 - `ResponseFactory::view()` (`response()->view()`, `Illuminate\Contracts\Routing\ResponseFactory`, and the `Response` facade)
 - `Router::view()` and the `Route` facade
 - `Illuminate\Notifications\Messages\MailMessage::view()`/`markdown()`
+- `Illuminate\Mail\Mailable::view()`/`markdown()`/`text()`
+- `Illuminate\Mail\Mailables\Content`'s `view`, `html`, `text`, and `markdown` constructor arguments
 - `Illuminate\Testing\TestResponse::assertViewIs()`
 
 ## Why this is a problem
@@ -63,3 +65,4 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 - Only view paths known at boot time are searched (`config('view.paths')` plus paths added by service providers)
 - `Factory::first()` and `ResponseFactory::view()`'s array form only flag the call when every candidate is a literal AND all of them are missing. A non-literal candidate anywhere in the list, or one that resolves, skips the check
 - `renderEach()`'s `$empty` argument is skipped when it starts with `raw|` (Laravel treats that as raw text, not a view name)
+- `Factory::composer()`/`creator()` wildcard patterns are skipped because they are event patterns, not concrete template names

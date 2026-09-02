@@ -14,6 +14,13 @@ use Psalm\Internal\MethodIdentifier;
  * accidentally mark a method as a return-value reference or to mutate Psalm's method
  * storage instead of its supported reference graph.
  *
+ * The two edge kinds carry different `inside_return` truth: {@see record()} is a synthetic
+ * method-to-method edge for a container-resolved constructor, whose return value (the
+ * constructed instance) Laravel discards after injecting it, so it stays `false`. {@see
+ * recordFileReference()} is used only for relationship methods and already-proven framework
+ * entrypoints, whose return value Laravel's dispatcher (eager-loading, the router, the console
+ * kernel) actually consumes, so it is `true`.
+ *
  * @internal
  */
 final class IndirectMethodReferenceRecorder
@@ -50,7 +57,7 @@ final class IndirectMethodReferenceRecorder
         $codebase->file_reference_provider->addFileReferenceToClassMember(
             __FILE__,
             strtolower((string) $methodId),
-            false,
+            true,
         );
     }
 }

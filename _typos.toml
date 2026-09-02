@@ -87,3 +87,8 @@ encrypter = "encrypter"
 # appears in WhereColumnTaintHandler's docblock and the where-family taint docs/tests.
 # typos tokenizes the `Wheres` sub-word and flags it as a typo of "Whereas".
 Wheres = "Wheres"
+# Same as the Encrypter bare-word entry above: "Invokable" appears as a sub-word inside
+# compound identifiers (`PromptGuardInvokableMiddleware`, `InvokableAgent`, `askInvokable`,
+# ...) that the extend-identifiers entries above don't cover one by one.
+Invokable = "Invokable"
+invokable = "invokable"
