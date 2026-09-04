@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * Laravel's own `App` facade carries a native, unconditional
+ * `@method static string|bool environment(string|array ...$environments)` tag, which
+ * FacadeMethodHandler defers to over the correctly-conditional
+ * Illuminate\Foundation\Application::environment() stub. Redeclaring the method here as a
+ * REAL static method (not `@method`) wins Psalm's native method resolution outright, since
+ * `naive_method_exists` resolves real methods before any `@method` tag is consulted.
+ */
+class App extends Facade
+{
+    /**
+     * Get or check the current application environment.
+     * @param string|list<string> ...$environments
+     * @return string|bool
+     * @psalm-return ($environments is null ? string : bool)
+     */
+    public static function environment(...$environments) {}
+}
