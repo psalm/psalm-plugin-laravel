@@ -4,11 +4,11 @@
 use Illuminate\Support\Facades\App;
 
 // Illuminate\Support\Facades\App declares a native, unconditional
-// `@method static string|bool environment(...)` tag. FacadeMethodHandler defers to a facade's
-// own `@method` over the root Illuminate\Foundation\Application::environment() stub, which
-// types the same method conditionally (list of names -> bool, no args -> string). That union
-// leaked through App::environment() until the facade redeclared it as a REAL static method,
-// which Psalm resolves natively before ever consulting `@method`.
+// `@method static string|bool environment(...)` tag, which shadows the correctly-conditional
+// Illuminate\Foundation\Application::environment() stub (list of names -> bool, no args ->
+// string). That union leaked through App::environment() until the facade redeclared it as a
+// REAL static method: FacadeStubPrecedenceHandler removes the shadowing pseudo-method after
+// population, so Psalm resolves this native stub signature instead of the vendor annotation.
 
 function environment_check_narrows_to_bool(): bool
 {
