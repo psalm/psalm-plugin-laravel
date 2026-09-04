@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788350542463,
+  "lastUpdate": 1788528060678,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11295,6 +11295,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.15,
             "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a187239ae3278378b68b8f9530cd3fdca12e220b",
+          "message": "Fix App::environment() return type narrowing (#1453)\n\n* fix(facades): redeclare App::environment() as real method to unshadow conditional return\n\nFacadeMethodHandler defers to a facade's own native @method tag over our\ncorrectly-conditional Application::environment() stub. Redeclaring the\nmethod as a real static method on the App facade wins Psalm's native\nnaive_method_exists resolution outright, before @method is ever\nconsulted, restoring the ($environments is null ? string : bool)\nnarrowing. Fixes #1452.\n\nClaude-Session: https://claude.ai/code/session_01Mske9sZJ7cTSupd7ZXf7Qg\n\n* fix: correct App::environment() shadowing mechanism claim\n\nThe real mechanism is FacadeStubPrecedenceHandler removing the\nshadowing pseudo-method after population, not native method\nresolution outracing @method tags.\n\nClaude-Session: https://claude.ai/code/session_01Mske9sZJ7cTSupd7ZXf7Qg",
+          "timestamp": "2026-09-04T15:18:12+02:00",
+          "tree_id": "99d455246772efcb9c4768f70c6014126d6cb809",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a187239ae3278378b68b8f9530cd3fdca12e220b"
+        },
+        "date": 1788528058971,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.53,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
