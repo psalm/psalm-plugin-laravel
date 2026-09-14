@@ -207,25 +207,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             : $methodName === '__invoke' || $methodName !== '__construct';
     }
 
-    /** @psalm-mutation-free */
-    private static function injectedConstructor(Codebase $codebase, FunctionLikeParameter $parameter): ?MethodIdentifier
-    {
-        $target = self::resolveParameterClass($codebase, $parameter);
-        if (!$target instanceof \Psalm\Storage\ClassLikeStorage) {
-            return null;
-        }
-
-        return self::publicMethod($codebase, $target, '__construct');
-    }
-
     /**
-     * Extracts the single concrete class a constructor-injectable parameter is typed to, using
-     * Laravel's own reflection rules: it sees the native signature, not a Psalm-only docblock
-     * type, so nullable, variadic, union, and intersection parameters are deliberately ambiguous.
+     * Resolves the constructor of the single concrete class a constructor-injectable parameter is
+     * typed to, using Laravel's own reflection rules: it sees the native signature, not a
+     * Psalm-only docblock type, so nullable, variadic, union, and intersection parameters are
+     * deliberately ambiguous.
      *
      * @psalm-mutation-free
      */
-    private static function resolveParameterClass(Codebase $codebase, FunctionLikeParameter $parameter): ?ClassLikeStorage
+    private static function injectedConstructor(Codebase $codebase, FunctionLikeParameter $parameter): ?MethodIdentifier
     {
         if ($parameter->is_nullable || $parameter->is_variadic) {
             return null;
@@ -251,7 +241,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             return null;
         }
 
-        return $target;
+        return self::publicMethod($codebase, $target, '__construct');
     }
 
     /** @psalm-mutation-free */
