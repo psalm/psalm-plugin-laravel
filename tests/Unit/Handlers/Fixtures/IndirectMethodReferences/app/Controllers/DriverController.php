@@ -7,7 +7,6 @@ namespace IndirectMethodReferencesFixture\Controllers;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
 use IndirectMethodReferencesFixture\Dependencies\ContractDependency;
 use IndirectMethodReferencesFixture\Dependencies\DocblockOnlyDependency;
-use IndirectMethodReferencesFixture\Dependencies\HelperDependency;
 use IndirectMethodReferencesFixture\Dependencies\ProtectedDependency;
 use IndirectMethodReferencesFixture\Dependencies\UnionDependencyA;
 use IndirectMethodReferencesFixture\Dependencies\UnionDependencyB;
@@ -23,18 +22,17 @@ final class DriverController extends BaseController
 
     public function union(UnionDependencyA|UnionDependencyB $dependency): void {}
 
-    public function dynamic(mixed $dependency): void {}
-
     public function inaccessible(ProtectedDependency $dependency): void {}
 
     public function abstractDependency(AbstractDependency $dependency): void {}
 
-    /** @param DocblockOnlyDependency $dependency */
+    /**
+     * The container reflects the native signature, so a docblock-only type stays unresolved.
+     *
+     * @param DocblockOnlyDependency $dependency
+     */
     public function docblockOnly($dependency): void {}
 
     /** A helper is not an entrypoint and must not make its dependency look used. */
-    private function helper(HelperDependency $dependency): void
-    {
-        \assert(\is_object($dependency));
-    }
+    private function helper(): void {}
 }

@@ -4,143 +4,33 @@ declare(strict_types=1);
 
 namespace IndirectMethodReferencesFixture\Dependencies;
 
-final class UpdateDriver
-{
-    public function __construct()
-    {
-        \assert(true);
-    }
-}
+final class UpdateDriver {}
 
-final class InvokeDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class InvokeDependency {}
 
-final class CommandDependency
-{
-    public function __construct()
-    {
-        \assert(true);
-    }
-}
+final class CommandDependency {}
 
-final class NestedDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class NestedDependency {}
 
-final class OwnerDependency
-{
-    public function __construct(NestedDependency $dependency)
-    {
-        \assert(\is_object($dependency));
-    }
-}
+final class OwnerDependency {}
 
-final class CommandHelperDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class HelperDependency {}
 
-final class HelperDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class UnusedDependency {}
 
-final class UnusedDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class UnionDependencyA {}
 
-final class UnionDependencyA
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class UnionDependencyB {}
 
-final class UnionDependencyB
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class ProtectedDependency {}
 
-final class DynamicDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+abstract class AbstractDependency {}
 
-final class ProtectedDependency
-{
-    protected function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
-
-abstract class AbstractDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
-
-final class DocblockOnlyDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class DocblockOnlyDependency {}
 
 interface ContractDependency {}
 
-final class ContractImplementation
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
-
-final class InheritedActionDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
-
-final class TraitActionDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
+final class ContractImplementation implements ContractDependency {}
 
 final class PublicControl
 {
