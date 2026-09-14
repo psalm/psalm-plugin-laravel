@@ -153,7 +153,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * argument. Returns null when the argument is absent or unpacked (`...$args`), where the
      * position can no longer be determined statically.
      *
-     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder> $args
+     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\ArgPlaceholder> $args
      *
      * @psalm-mutation-free
      */
@@ -170,6 +170,19 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         // positional args before named ones, so the n-th unnamed arg is at parameter position n.
         $index = 0;
         foreach ($args as $arg) {
+            // A positional placeholder (first-class callable syntax, e.g. `hash_equals(...)`)
+            // still occupies its slot: consume the position but decline rather than guess, so a
+            // later concrete argument is never misidentified as sitting at this position.
+            if ($arg instanceof \PhpParser\Node\ArgPlaceholder) {
+                if ($index === $position) {
+                    return null;
+                }
+
+                $index++;
+
+                continue;
+            }
+
             if (!$arg instanceof Arg || $arg->name instanceof \PhpParser\Node\Identifier) {
                 continue;
             }
@@ -277,13 +290,15 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return;
         }
 
+        // getForTaintSink() (the only public sink factory) uses one string as both the node id
+        // and its display label, so $sinkId doubles as the label shown in taint flow traces.
+        // Keeping locationId in it is still required: sinks are keyed by id in the graph, so two
+        // comparison sites reusing the bare $sinkLabel would collide and drop one site's sink.
         $sinkId = $sinkLabel . '-' . $locationId;
 
-        $sink = DataFlowNode::make(
+        $sink = DataFlowNode::getForTaintSink(
             $sinkId,
-            $sinkLabel,
             $codeLocation,
-            null,
             self::SECRET_TAINTS,
         );
 

@@ -563,7 +563,10 @@ final class RelationMethodParser
      */
     private static function resolveTypeNames(string $typeString, array $useMap, string $namespace): ?Union
     {
-        $names = \array_map(\trim(...), \explode('|', $typeString));
+        // Closure, not \trim(...): Psalm 7.0.0-beta20's FunctionCallReturnTypeFetcher::taintReturnType()
+        // unconditionally calls CallLike::getArgs() for taint-source params, which php-parser's partial-
+        // application node for first-class callables doesn't provide, crashing self-analysis. Upstream bug.
+        $names = \array_map(static fn(string $name): string => \trim($name), \explode('|', $typeString));
         $atomics = [];
 
         foreach ($names as $name) {

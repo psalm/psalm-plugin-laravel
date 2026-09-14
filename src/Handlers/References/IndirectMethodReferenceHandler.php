@@ -34,7 +34,7 @@ use Psalm\Type\Union;
  * The codebase event queues edges after ModelRegistrationHandler has warmed the model metadata.
  * The file-analysis event replays them after Psalm has invalidated incremental references but before
  * dead-code consolidation. It never boots or queries Laravel's container, and only writes through
- * FileReferenceProvider's supported reference API.
+ * Codebase's supported reference API ({@see Codebase::addReferenceToFunctionLike()}).
  *
  * Discovery is intentionally limited to Illuminate's Controller and Command base classes. Arbitrary
  * non-Illuminate route classes are not treated as dispatched without a statically proven Laravel
@@ -89,8 +89,6 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
      * once for every analyzed file, but the queue is drained only once per process. In a forked
      * analysis worker this hook runs after the worker's reference-provider reset and its result is
      * merged by Psalm's normal worker consolidation.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterAnalyzeFile(AfterFileAnalysisEvent $event): void
@@ -212,8 +210,23 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     /** @psalm-mutation-free */
     private static function injectedConstructor(Codebase $codebase, FunctionLikeParameter $parameter): ?MethodIdentifier
     {
-        // Laravel's reflection sees the native signature, not a Psalm-only docblock type.
-        // Nullable, variadic, union, and intersection parameters are deliberately ambiguous.
+        $target = self::resolveParameterClass($codebase, $parameter);
+        if (!$target instanceof \Psalm\Storage\ClassLikeStorage) {
+            return null;
+        }
+
+        return self::publicMethod($codebase, $target, '__construct');
+    }
+
+    /**
+     * Extracts the single concrete class a constructor-injectable parameter is typed to, using
+     * Laravel's own reflection rules: it sees the native signature, not a Psalm-only docblock
+     * type, so nullable, variadic, union, and intersection parameters are deliberately ambiguous.
+     *
+     * @psalm-mutation-free
+     */
+    private static function resolveParameterClass(Codebase $codebase, FunctionLikeParameter $parameter): ?ClassLikeStorage
+    {
         if ($parameter->is_nullable || $parameter->is_variadic) {
             return null;
         }
@@ -238,7 +251,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             return null;
         }
 
-        return self::publicMethod($codebase, $target, '__construct');
+        return $target;
     }
 
     /** @psalm-mutation-free */

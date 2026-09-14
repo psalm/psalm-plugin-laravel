@@ -56,8 +56,6 @@ final class IndirectMethodReferencesTest extends TestCase
 
         foreach ([
             'UnusedDependency::__construct',
-            'HelperDependency::__construct',
-            'CommandHelperDependency::__construct',
             'UnionDependencyA::__construct',
             'UnionDependencyB::__construct',
             'ContractImplementation::__construct',
@@ -69,6 +67,30 @@ final class IndirectMethodReferencesTest extends TestCase
             'User::ordinaryUnused',
         ] as $marker) {
             $this->assertStringContainsString($marker, $joined, "Expected {$marker} to remain reportable.");
+        }
+
+        // A helper-only dependency (seen only through a non-entrypoint method's parameter, with
+        // no other reference in the codebase) is genuinely unreachable: Psalm folds its entire
+        // class, not just its constructor, into one UnusedClass finding instead of reporting
+        // per-member dead code for a class it never proved reachable.
+        $classFindings = $this->runPsalmAndCollectFindings(
+            __DIR__ . '/Fixtures/IndirectMethodReferences',
+            false,
+            ['UnusedClass'],
+        );
+        $classMessages = \implode(
+            "\n",
+            \array_map(static fn(array $finding): string => $finding['message'], $classFindings),
+        );
+        foreach ([
+            'HelperDependency',
+            'CommandHelperDependency',
+        ] as $marker) {
+            $this->assertStringContainsString(
+                $marker,
+                $classMessages,
+                "Expected {$marker} to be reported as an unused class.",
+            );
         }
     }
 
@@ -282,7 +304,11 @@ final class IndirectMethodReferencesTest extends TestCase
                 $contents . "\n// incremental model change {$processId}\n",
             ));
 
-            $findingsAfterRelationChange = $this->runPsalmAndCollectUnusedMethodFindings($fixtureDir, true);
+            $findingsAfterRelationChange = $this->runPsalmAndCollectFindings(
+                $fixtureDir,
+                true,
+                ['PossiblyUnusedMethod', 'UnusedMethod', 'PossiblyUnusedReturnValue', 'UnusedReturnValue'],
+            );
             $messages = \implode(
                 "\n",
                 \array_map(static fn(array $finding): string => $finding['message'], $findingsAfterRelationChange),
@@ -291,6 +317,15 @@ final class IndirectMethodReferencesTest extends TestCase
             $this->assertStringNotContainsString('User::ordinaryRelation', $messages);
             $this->assertStringContainsString('User::privateTeam', $messages);
             $this->assertStringContainsString('User::ordinaryUnused', $messages);
+
+            // The relation method is a stable file reference (recordFileReference()), so its
+            // return value must still read as used after this file's own cache invalidation —
+            // proving beta20's living-context graph replays the file-anchored edge, not just the
+            // method-used edge already covered above.
+            $this->assertFalse(
+                $this->containsFinding($findingsAfterRelationChange, 'app/Models/User.php', 13),
+                'Expected User::team return value to remain marked used after the model file changed.',
+            );
         } finally {
             $this->removeDirectory($fixtureDir);
         }

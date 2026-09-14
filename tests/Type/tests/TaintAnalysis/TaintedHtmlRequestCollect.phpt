@@ -14,6 +14,6 @@ function renderCollectRequestData(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-MixedArgument on line %d: Argument 1 of echo cannot be mixed|null, expecting string
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+MixedArgument on line %d: Argument 1 of echo cannot be mixed|null, expecting string
