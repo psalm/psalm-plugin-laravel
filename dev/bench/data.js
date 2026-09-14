@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788528060678,
+  "lastUpdate": 1789428311906,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11335,6 +11335,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1113,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ece3ad4cdf0b9e781676c0ef4ebcdb2bd33cf5e1",
+          "message": "feat: support psalm/psalm-plugin-api 0.2.0 (#1455)\n\n* feat: support psalm plugin api 0.2.0\n\n* refactor: drop unreachable partial-application handling, cite upstream psalm bug\n\n* refactor: inline single-use parameter class resolver\n\n* test: close vacuous assertions in indirect method reference coverage\n\n* test: restore entrypoint dependency wiring in reference fixture",
+          "timestamp": "2026-09-15T01:22:01+02:00",
+          "tree_id": "9df585c7f2d44ab1d6bb295f46beeb6da5d73354",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ece3ad4cdf0b9e781676c0ef4ebcdb2bd33cf5e1"
+        },
+        "date": 1789428310903,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.63,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1163,
             "unit": "MB"
           }
         ]
