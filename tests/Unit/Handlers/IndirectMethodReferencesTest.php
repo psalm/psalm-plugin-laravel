@@ -55,6 +55,8 @@ final class IndirectMethodReferencesTest extends TestCase
             'Dependencies\CommandDependency',   // handle() parameter
             'Dependencies\OwnerDependency',     // controller constructor parameter
             'Dependencies\NestedDependency',    // resolved recursively out of OwnerDependency
+            'Dependencies\InheritedActionDependency', // parameter of an inherited action
+            'Dependencies\TraitActionDependency',     // parameter of a trait-provided action
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -80,6 +82,14 @@ final class IndirectMethodReferencesTest extends TestCase
             'Dependencies\HelperDependency',
             $this->report($findings, ['UnusedClass']),
             'Expected HelperDependency to remain an unused class.',
+        );
+
+        // A public command method other than handle() is not an entrypoint either; its
+        // parameter staying an unused class proves the restriction applies beyond controllers.
+        $this->assertStringContainsString(
+            'Dependencies\CommandHelperDependency',
+            $this->report($findings, ['UnusedClass']),
+            'Expected CommandHelperDependency to remain an unused class.',
         );
 
         // Laravel consumes what an entrypoint and a relationship return (the router, the console

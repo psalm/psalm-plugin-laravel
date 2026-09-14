@@ -6,6 +6,7 @@ namespace IndirectMethodReferencesFixture\Commands;
 
 use Illuminate\Console\Command;
 use IndirectMethodReferencesFixture\Dependencies\CommandDependency;
+use IndirectMethodReferencesFixture\Dependencies\CommandHelperDependency;
 
 final class ReferenceCommand extends Command
 {
@@ -15,7 +16,7 @@ final class ReferenceCommand extends Command
     }
 
     /** Only handle() is a console entrypoint; a public helper stays reportable. */
-    public function helper(): int
+    public function helper(CommandHelperDependency $dependency): int
     {
         return self::SUCCESS;
     }
