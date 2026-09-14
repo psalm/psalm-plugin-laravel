@@ -168,21 +168,10 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         // Otherwise count only positional (unnamed) arguments in source order. PHP requires
         // positional args before named ones, so the n-th unnamed arg is at parameter position n.
+        // Placeholder nodes (`...`, `?`) need no handling here: Psalm asserts on getArgs() before
+        // any plugin hook runs. @see https://github.com/vimeo/psalm/issues/11949
         $index = 0;
         foreach ($args as $arg) {
-            // A positional placeholder (first-class callable syntax, e.g. `hash_equals(...)`)
-            // still occupies its slot: consume the position but decline rather than guess, so a
-            // later concrete argument is never misidentified as sitting at this position.
-            if ($arg instanceof \PhpParser\Node\ArgPlaceholder) {
-                if ($index === $position) {
-                    return null;
-                }
-
-                $index++;
-
-                continue;
-            }
-
             if (!$arg instanceof Arg || $arg->name instanceof \PhpParser\Node\Identifier) {
                 continue;
             }

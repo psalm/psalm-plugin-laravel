@@ -563,9 +563,8 @@ final class RelationMethodParser
      */
     private static function resolveTypeNames(string $typeString, array $useMap, string $namespace): ?Union
     {
-        // Closure, not \trim(...): Psalm 7.0.0-beta20's FunctionCallReturnTypeFetcher::taintReturnType()
-        // unconditionally calls CallLike::getArgs() for taint-source params, which php-parser's partial-
-        // application node for first-class callables doesn't provide, crashing self-analysis. Upstream bug.
+        // Closure, not \trim(...): first-class callables crash Psalm 7.0.0-beta20's taint analysis
+        // (regression from beta19). @see https://github.com/vimeo/psalm/issues/11949
         $names = \array_map(static fn(string $name): string => \trim($name), \explode('|', $typeString));
         $atomics = [];
 
