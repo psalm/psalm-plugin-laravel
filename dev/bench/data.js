@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789428311906,
+  "lastUpdate": 1789508750606,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11370,6 +11370,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1163,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bfc5fbec501ecf4c503832984b62f51a02a6def4",
+          "message": "Adopt `DataFlowNode::getForTaint()` and require Psalm `7.0.0-beta21` (#1456)\n\n* fix: adopt DataFlowNode::getForTaint(), require Psalm 7.0.0-beta21\n\nPsalm 7.0.0-beta21 renamed `DataFlowNode::getForTaintSink()` to\n`getForTaint()` and dropped its fourth parameter: source and sink share one\nfactory now, and the direction is decided by whether the node is handed to\n`TaintFlowGraph::addSource()` or `addSink()`. The location is always derived\nfrom `$code_location`, so `id -> location` stays a pure function (an\nindependent specialization location let one node id resolve to different\nlocations per forked worker, making taint findings shift between runs).\n\n`getForTaintSink()` only ever existed in beta20, so the floor moves to\nbeta21 rather than widening the constraint: the class lives under\n`Psalm\\Internal\\`, outside the stable plugin API, and changes there ship\nwithout a deprecation cycle.\n\nThe first three arguments are unchanged, so the call site is a rename.\n\n* ci: hold laravel/framework below 13.32 until Psalm can parse its docblocks\n\nlaravel/framework v13.32.0 added a `@phpstan-this-out` whose type is a\nconditional keyed on a parameter, on `Collection::prepend()`:\n\n    @phpstan-this-out ($key is null ? static<TKey|int, TValue> : $this)\n\nPsalm 7 cannot parse that shape. It throws an uncaught\n`TypeParseTreeException: Unrecognized template '$key'` from `TypeParser` during\nthe scan phase, before a single issue is reported, so every job that analyses a\nproject resolving laravel/framework >= 13.32 dies outright. `$key` is a declared\nparameter of `prepend()`, and the same conditional in `@return` parses, so the\ndocblock is not at fault.\n\nThe crash reproduces on 7.0.0-beta20 as well, so it is neither a beta21\nregression nor caused by this plugin: it is upstream, newly reachable because\nLaravel shipped the first docblock of that shape.\n\nTwo places pin it:\n\n- composer.json's require-dev constraint, which covers self-analysis and the\n  unit and type suites. require/ is untouched, so nothing is imposed on users.\n- the fresh-app leg, via a new LARAVEL_FRAMEWORK_CONSTRAINT hook in\n  laravel-test.sh, applied only to the dev-master cells. The 12.12.2 cells keep\n  resolving exactly what laravel/laravel pins.\n\nBoth are temporary and carry the rationale inline; drop them once Psalm parses\nthe tag.\n\n* Revert the laravel/framework constraint in composer.json\n\nKeeps the pin confined to the fresh-app workflow cells. composer.json's\nrequire-dev is what contributors install locally, and holding the framework\nback there hides the crash from anyone developing the plugin rather than only\nfrom CI.\n\nThe fresh-app hook in laravel-test.sh stays: that leg builds its own app and is\nnot covered by this constraint either way.\n\n* Point the fresh-app framework gate at the upstream issue it waits on\n\nThe gate is temporary, so the thing a reader needs first is what has to happen\nupstream before it can go. Linked at the variable and at the gate itself, since\neither is a plausible entry point.\n\n* ci: hold laravel/framework below 13.32 in the test workflow\n\nlaravel/framework v13.32.0 added a `@phpstan-this-out` whose type is a\nconditional keyed on a parameter, on `Collection::prepend()`. Psalm cannot\nparse that shape and throws an uncaught TypeParseTreeException from TypeParser\nduring the scan phase, before a single issue is reported, so every cell\nresolving 13.32 analyses nothing at all. Upstream: vimeo/psalm#11958. It\nreproduces on Psalm 6.17.2 too, so it is neither a beta21 regression nor\nplugin-caused.\n\nHeld in the workflow rather than in composer.json, so that a contributor\ninstalling locally still meets the crash instead of having it papered over.\nThree cells needed it, each reaching 13.32 by a different route:\n\n- type tests, via the matrix constraint\n- unit tests, in the lockfile cells that install straight from composer.json\n- both laravel/ai legs, same plain install\n\nThe cells pinned to an exact framework version already resolve below 13.32 and\nare untouched.\n\nThe type-test job names now carry the bounded constraint instead of ^13.3.\nRestore the matrix to ^13.3 when the pin goes.\n\n* ci: hold laravel/framework below 13.32 in the self-analysis workflow too\n\nMissed in the previous commit. This job installs straight from composer.json,\nso it reaches v13.32.0 and crashes in Psalm's scan phase before analysing\nanything, same as the test cells. Upstream: vimeo/psalm#11958.\n\nPlaced ahead of the cache restore deliberately: the cache key hashes\ncomposer.lock, which this step rewrites, so pinning afterwards would key the\nsnapshot on a resolution that never ran.\n\ninstall-smoke.yml installs the same way and will hit the same crash, but it\nruns weekly rather than per pull request, so it is left for the upstream fix.\n\n* test: gate the taint fixtures broken by Psalm 7.0.0-beta21\n\nbeta21 drops one of two taint flows that reach the same sink method from two\ndifferent files in a co-analyzed batch. Eleven fixtures lose their finding that\nway, and TaintedShellWhereValueFlowPreserved reports its finding twice; with\nlaravel/ai installed the batch shifts and two PromptInjection fixtures join\nthem. Each still passes when analysed on its own. Upstream: vimeo/psalm#11959.\n\nGated through a new PsalmVersion::skipOnRange(), not the existing\nLaravelVersion-style one-sided gate. Both bounds are required on purpose: the\nskip covers exactly 7.0.0-beta21, so the next Psalm release re-enables all\nthirteen and they go red again if the bug survived. A one-sided skipFrom would\ngo stale silently and quietly cost the coverage for good.\n\nEvery gate carries a @todo-by 2026-10-01 and the issue link.\n\nThe PromptInjection pair keeps its existing laravel/ai guard first, now with an\nexplicit return so only one skip reason is printed.",
+          "timestamp": "2026-09-15T23:43:10+02:00",
+          "tree_id": "b3504a0eb120625dbc76421f991aa0a1fcafd4ab",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bfc5fbec501ecf4c503832984b62f51a02a6def4"
+        },
+        "date": 1789508749439,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.29,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
             "unit": "MB"
           }
         ]
