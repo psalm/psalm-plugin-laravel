@@ -25,4 +25,3 @@ AGENTS.md
 
 # local benchmark app registry (private app names)
 /bin/ci/test-apps.override.yml
-node_modules
