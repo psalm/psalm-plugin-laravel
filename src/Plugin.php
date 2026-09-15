@@ -211,7 +211,7 @@ final class Plugin implements PluginEntryPointInterface
         PluginConfig $pluginConfig,
         \Psalm\Progress\Progress $output,
     ): void {
-        $stubsRoot = \dirname(__DIR__) . '/stubs';
+        $stubsRoot = __DIR__ . '/../stubs';
 
         $stubs = \array_merge(
             StubFileFinder::commonStubs($stubsRoot, $output),
