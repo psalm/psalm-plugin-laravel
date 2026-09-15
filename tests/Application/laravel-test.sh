@@ -18,7 +18,9 @@ LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-dev-master}"
 
 # Optional Composer constraint applied to laravel/framework after the project is scaffolded.
 # Empty means whatever laravel/laravel resolves. Set it to hold the framework back when a
-# release breaks the analysis itself rather than the plugin.
+# release breaks the analysis itself rather than the plugin. Currently set by the workflow to
+# dodge the Psalm scan-phase crash on laravel/framework >= 13.32.
+# @see https://github.com/vimeo/psalm/issues/11958
 LARAVEL_FRAMEWORK_CONSTRAINT="${LARAVEL_FRAMEWORK_CONSTRAINT:-}"
 
 # Terminal colors
@@ -182,6 +184,7 @@ quiet_run "composer create-project" \
         laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
+# @see https://github.com/vimeo/psalm/issues/11958
 if [ -n "$LARAVEL_FRAMEWORK_CONSTRAINT" ]; then
     info "Forcing laravel/framework:${LARAVEL_FRAMEWORK_CONSTRAINT}"
     quiet_run "composer require laravel/framework" \

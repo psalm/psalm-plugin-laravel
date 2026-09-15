@@ -81,6 +81,7 @@ jobs:
       # issue is reported, so the whole fresh-app leg is unanalysable. The crash predates
       # 7.0.0-beta21 and is not caused by the plugin. Only the dev-master cells reach it; the
       # pinned 12.12.2 cells resolve laravel/framework ^12. Drop this once Psalm parses it.
+      # @see https://github.com/vimeo/psalm/issues/11958
       - name: Build a Laravel project and run Psalm on it
         env:
           # Only the dev-master cells resolve laravel/framework 13.x; leaving this empty on the
