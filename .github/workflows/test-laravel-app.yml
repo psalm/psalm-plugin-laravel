@@ -74,7 +74,18 @@ jobs:
           php-version: ${{ matrix.php-version }}
           coverage: none
 
+      # TEMPORARY: laravel/framework v13.32.0 added a `@phpstan-this-out` docblock carrying a
+      # parameter conditional (Collection::prepend(), "($key is null ? ... : $this)"). Psalm 7
+      # cannot parse that shape and dies with an uncaught
+      # TypeParseTreeException: Unrecognized template '$key' during its scan phase, before any
+      # issue is reported, so the whole fresh-app leg is unanalysable. The crash predates
+      # 7.0.0-beta21 and is not caused by the plugin. Only the dev-master cells reach it; the
+      # pinned 12.12.2 cells resolve laravel/framework ^12. Drop this once Psalm parses it.
       - name: Build a Laravel project and run Psalm on it
+        env:
+          # Only the dev-master cells resolve laravel/framework 13.x; leaving this empty on the
+          # 12.12.2 cells keeps them resolving exactly what laravel/laravel pins.
+          LARAVEL_FRAMEWORK_CONSTRAINT: ${{ matrix.laravel-installer-version == 'dev-master' && '>=13.3 <13.32' || '' }}
         run: |
           LARAVEL_INSTALLER_VERSION=${{ matrix.laravel-installer-version }} ./tests/Application/laravel-test.sh --verbose
 
