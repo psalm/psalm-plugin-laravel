@@ -98,6 +98,18 @@ jobs:
         if: ${{ !matrix.laravel }}
         run: composer install
 
+      # TEMPORARY: laravel/framework v13.32.0 added a `@phpstan-this-out` carrying a parameter
+      # conditional (Collection::prepend()). Psalm cannot parse that shape and dies with an
+      # uncaught TypeParseTreeException during its scan phase, before any issue is reported, so
+      # these cells cannot analyse anything at all. Held here rather than in composer.json so
+      # contributors installing locally still see the crash. Drop this once Psalm parses the tag.
+      # @see https://github.com/vimeo/psalm/issues/11958
+      - name: Hold laravel/framework below 13.32
+        if: ${{ !matrix.laravel }}
+        run: >-
+          composer update --with="laravel/framework:>=13.3 <13.32" --with-all-dependencies
+          --no-interaction --no-progress --prefer-dist
+
       - name: Install with Laravel constraint
         # Floors may have published advisories; this isolated test install is never deployed.
         if: matrix.laravel
@@ -131,11 +143,14 @@ jobs:
       fail-fast: false
       matrix:
         php: [ 8.5, 8.4, 8.3, 8.2 ]
-        laravel: [ ^13.3, ^12.14 ]
+        # TEMPORARY upper bound on the 13.x cell: laravel/framework v13.32.0 crashes Psalm's
+        # scan phase outright. Restore this to ^13.3 once Psalm parses the tag.
+        # @see https://github.com/vimeo/psalm/issues/11958
+        laravel: [ '>=13.3 <13.32', ^12.14 ]
         dependencies: [ highest ]
         exclude:
           - php: 8.2
-            laravel: ^13.3
+            laravel: '>=13.3 <13.32'
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -211,6 +226,17 @@ jobs:
 
       - name: Install dependencies from composer.json
         run: composer install --no-interaction --no-progress --prefer-dist
+
+      # TEMPORARY: laravel/framework v13.32.0 added a `@phpstan-this-out` carrying a parameter
+      # conditional (Collection::prepend()). Psalm cannot parse that shape and dies with an
+      # uncaught TypeParseTreeException during its scan phase, before any issue is reported, so
+      # these cells cannot analyse anything at all. Held here rather than in composer.json so
+      # contributors installing locally still see the crash. Drop this once Psalm parses the tag.
+      # @see https://github.com/vimeo/psalm/issues/11958
+      - name: Hold laravel/framework below 13.32
+        run: >-
+          composer update --with="laravel/framework:>=13.3 <13.32" --with-all-dependencies
+          --no-interaction --no-progress --prefer-dist
 
       # laravel/ai is optional (not a root composer.json dependency, see #937) and requires PHP
       # ^8.3, so it is installed here rather than in composer.json to keep it off the PHP 8.2
@@ -298,6 +324,17 @@ jobs:
 
       - name: Install dependencies from composer.json
         run: composer install --no-interaction --no-progress --prefer-dist
+
+      # TEMPORARY: laravel/framework v13.32.0 added a `@phpstan-this-out` carrying a parameter
+      # conditional (Collection::prepend()). Psalm cannot parse that shape and dies with an
+      # uncaught TypeParseTreeException during its scan phase, before any issue is reported, so
+      # these cells cannot analyse anything at all. Held here rather than in composer.json so
+      # contributors installing locally still see the crash. Drop this once Psalm parses the tag.
+      # @see https://github.com/vimeo/psalm/issues/11958
+      - name: Hold laravel/framework below 13.32
+        run: >-
+          composer update --with="laravel/framework:>=13.3 <13.32" --with-all-dependencies
+          --no-interaction --no-progress --prefer-dist
 
       - name: Install unreleased laravel/ai canary
         run: composer require --dev 'laravel/ai:0.x-dev' --no-interaction --no-progress
