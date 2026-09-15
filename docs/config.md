@@ -215,6 +215,8 @@ Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input 
 - `value="false"`: explicit opt-out. Only `TaintedLlmPrompt` is suppressed; model-output taint sources and their ordinary SQL/HTML/shell findings remain errors.
 - `value="true"`: enforced inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
 
+If your agents already run prompt-injection middleware, annotate the guard instead of opting out globally: [Marking prompt-guard middleware as trusted](security.md#marking-prompt-guard-middleware-as-trusted).
+
 Use the explicit opt-out only where direct prompt flows are intentional. In security-sensitive applications, the default auto mode reports prompts assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). An explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
 
 This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.

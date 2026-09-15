@@ -40,10 +40,12 @@ final class ViewNameSignatures
 
     public const ROLE_MAIL_MESSAGE = 'mail-message';
 
+    public const ROLE_MAILABLE = 'mailable';
+
     public const ROLE_TEST_RESPONSE = 'test-response';
 
     /**
-     * @var array<'view-factory'|'response-factory'|'router'|'mail-message'|'test-response', array{
+     * @var array<'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response', array{
      *     concrete: class-string,
      *     facade: class-string|null,
      *     extra: list<class-string>,
@@ -75,6 +77,11 @@ final class ViewNameSignatures
             'facade' => null,
             'extra' => [],
         ],
+        self::ROLE_MAILABLE => [
+            'concrete' => \Illuminate\Mail\Mailable::class,
+            'facade' => null,
+            'extra' => [],
+        ],
         self::ROLE_TEST_RESPONSE => [
             'concrete' => \Illuminate\Testing\TestResponse::class,
             'facade' => null,
@@ -82,7 +89,7 @@ final class ViewNameSignatures
         ],
     ];
 
-    /** @var array<lowercase-string, 'view-factory'|'response-factory'|'router'|'mail-message'|'test-response'>|null */
+    /** @var array<lowercase-string, 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'>|null */
     private static ?array $classToRole = null;
 
     /**
@@ -120,7 +127,7 @@ final class ViewNameSignatures
     }
 
     /**
-     * @return 'view-factory'|'response-factory'|'router'|'mail-message'|'test-response'|null
+     * @return 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'|null
      * @psalm-external-mutation-free
      */
     public static function resolveRole(string $fqClasslikeName): ?string

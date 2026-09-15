@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use PhpParser;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -150,7 +151,7 @@ final class RelationMethodParser
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName): ?array
     {
-        $context = self::findClassMethodWithStatements($codebase, $className, $methodName);
+        $context = ClassMethodResolver::resolve($codebase, MethodIdentifier::wrap($className . '::' . $methodName));
         if ($context === null) {
             return null;
         }
@@ -161,10 +162,9 @@ final class RelationMethodParser
         }
 
         // Resolve the parent FQCN once so `parent::class` in factory args can be substituted
-        // without re-querying class storage per occurrence. `findClassMethodWithStatements`
-        // searches the file by `$className`, so a successful lookup means the method body
-        // lives in `$className` itself — `self::class` and (conservatively) `static::class`
-        // both resolve to `$className`. See {@see resolveClassConstFetch} for the trade-off.
+        // without re-querying class storage per occurrence. ClassMethodResolver searches
+        // the file by `$className`, so a successful lookup means the method body lives in
+        // `$className` itself. See resolveClassConstFetch() for the trade-off.
         $parentClass = self::resolveParentClass($codebase, $className);
 
         return self::parseMethodBody($classMethod->stmts, $className, $parentClass);
@@ -438,7 +438,7 @@ final class RelationMethodParser
      */
     public static function extractDocblockRelatedModelType(Codebase $codebase, string $className, string $methodName): ?Union
     {
-        $context = self::findClassMethodWithStatements($codebase, $className, $methodName);
+        $context = ClassMethodResolver::resolve($codebase, MethodIdentifier::wrap($className . '::' . $methodName));
         if ($context === null) {
             return null;
         }
@@ -459,60 +459,6 @@ final class RelationMethodParser
         $namespace = self::extractNamespace($className);
 
         return self::resolveTypeNames($firstParam, $useMap, $namespace);
-    }
-
-    /**
-     * Locate a ClassMethod node and its enclosing file statements.
-     *
-     * Shared by both parse() and extractDocblockRelatedModelType() to avoid
-     * duplicating the method-storage → file-statements → findMethod sequence.
-     *
-     * @return ?array{classMethod: PhpParser\Node\Stmt\ClassMethod, fileStmts: list<PhpParser\Node\Stmt>}
-     */
-    private static function findClassMethodWithStatements(Codebase $codebase, string $className, string $methodName): ?array
-    {
-        $methodId = $className . '::' . $methodName;
-        $methodIdentifier = MethodIdentifier::wrap($methodId);
-
-        // Pre-check via the non-throwing API. The new ModelRelationReturnTypeHandler
-        // (see https://github.com/psalm/psalm-plugin-laravel/issues/760) calls this
-        // path for every method dispatch on every Model subclass — including Builder
-        // forwards (find/where/save/etc.) that aren't declared on the subclass at all.
-        // Falling through to getStorage() and catching the resulting UnexpectedValueException
-        // for each cold miss adds a real cost per (class, method) pair on first analysis.
-        if (!$codebase->methods->hasStorage($methodIdentifier)) {
-            return null;
-        }
-
-        try {
-            $methodStorage = $codebase->methods->getStorage($methodIdentifier);
-        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-            $codebase->progress->debug(
-                "Laravel plugin: could not get method storage for {$methodId}: {$e->getMessage()}\n",
-            );
-            return null;
-        }
-
-        $location = $methodStorage->location;
-        if (!$location instanceof \Psalm\CodeLocation) {
-            return null;
-        }
-
-        try {
-            $stmts = $codebase->getStatementsForFile($location->file_path);
-        } catch (\InvalidArgumentException|\UnexpectedValueException $e) {
-            $codebase->progress->debug(
-                "Laravel plugin: could not get statements for {$location->file_path}: {$e->getMessage()}\n",
-            );
-            return null;
-        }
-
-        $classMethod = self::findMethod($stmts, $className, $methodName);
-        if (!$classMethod instanceof PhpParser\Node\Stmt\ClassMethod) {
-            return null;
-        }
-
-        return ['classMethod' => $classMethod, 'fileStmts' => $stmts];
     }
 
     /**
@@ -650,64 +596,4 @@ final class RelationMethodParser
         return new Union($atomics);
     }
 
-    /**
-     * Walk the AST (namespace → class → method) to find a specific method in a specific class.
-     *
-     * @param list<PhpParser\Node\Stmt> $stmts
-     * @psalm-mutation-free
-     */
-    private static function findMethod(array $stmts, string $className, string $methodName): ?PhpParser\Node\Stmt\ClassMethod
-    {
-        $lowerMethodName = \strtolower($methodName);
-        $lowerClassName = \strtolower($className);
-
-        foreach ($stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\Namespace_) {
-                $namespaceName = $stmt->name?->toString() ?? '';
-
-                foreach ($stmt->stmts as $nsStmt) {
-                    if (!$nsStmt instanceof PhpParser\Node\Stmt\Class_) {
-                        continue;
-                    }
-
-                    $shortName = $nsStmt->name?->toString() ?? '';
-                    $fqcn = $namespaceName !== '' ? $namespaceName . '\\' . $shortName : $shortName;
-
-                    if (\strtolower($fqcn) !== $lowerClassName) {
-                        continue;
-                    }
-
-                    return self::findMethodInClass($nsStmt, $lowerMethodName);
-                }
-
-                continue;
-            }
-
-            // Top-level class (no namespace)
-            if (!$stmt instanceof PhpParser\Node\Stmt\Class_) {
-                continue;
-            }
-
-            $shortName = $stmt->name?->toString() ?? '';
-            if (\strtolower($shortName) !== $lowerClassName) {
-                continue;
-            }
-
-            return self::findMethodInClass($stmt, $lowerMethodName);
-        }
-
-        return null;
-    }
-
-    /** @psalm-mutation-free */
-    private static function findMethodInClass(PhpParser\Node\Stmt\Class_ $class, string $lowerMethodName): ?PhpParser\Node\Stmt\ClassMethod
-    {
-        foreach ($class->stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\ClassMethod && \strtolower($stmt->name->name) === $lowerMethodName) {
-                return $stmt;
-            }
-        }
-
-        return null;
-    }
 }

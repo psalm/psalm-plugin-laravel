@@ -101,12 +101,83 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertStringContainsString('User::ordinaryUnused', $joined);
     }
 
+    #[Test]
+    public function it_marks_framework_consumed_returns_as_used(): void
+    {
+        $findings = $this->runPsalmAndCollectFindings(
+            __DIR__ . '/Fixtures/IndirectMethodReferences',
+            false,
+            ['PossiblyUnusedReturnValue', 'UnusedReturnValue'],
+        );
+
+        $consumed = [
+            // [file suffix, return-type declaration line]
+            ['app/Models/User.php', 13],
+            ['app/Commands/ReferenceCommand.php', 13],
+            ['app/Controllers/ConcreteController.php', 16],
+        ];
+        foreach ($consumed as [$fileSuffix, $line]) {
+            $this->assertFalse(
+                $this->containsFinding($findings, $fileSuffix, $line),
+                "Expected no unused-return-value finding at {$fileSuffix}:{$line}.",
+            );
+        }
+
+        $this->assertSame(
+            'PossiblyUnusedReturnValue',
+            $this->findingType($findings, 'app/Dependencies/Dependencies.php', 147),
+            'Expected the discarded-return control at PublicControl::discarded to remain reportable as PossiblyUnusedReturnValue.',
+        );
+    }
+
+    /**
+     * @param list<array{type: string, file_name: string, line_from: int}> $findings
+     */
+    private function containsFinding(array $findings, string $fileSuffix, int $line): bool
+    {
+        return $this->findingType($findings, $fileSuffix, $line) !== null;
+    }
+
+    /**
+     * @param list<array{type: string, file_name: string, line_from: int}> $findings
+     */
+    private function findingType(array $findings, string $fileSuffix, int $line): ?string
+    {
+        foreach ($findings as $finding) {
+            if (\str_ends_with($finding['file_name'], $fileSuffix) && $finding['line_from'] === $line) {
+                return $finding['type'];
+            }
+        }
+
+        return null;
+    }
+
     /**
      * @return list<array{type: string, message: string}>
      */
     private function runPsalmAndCollectUnusedMethodFindings(
         string $fixtureDir,
         bool $useCache,
+        string $config = 'psalm.xml',
+        array $extraArguments = [],
+    ): array {
+        return $this->runPsalmAndCollectFindings(
+            $fixtureDir,
+            $useCache,
+            ['PossiblyUnusedMethod', 'UnusedMethod'],
+            $config,
+            $extraArguments,
+        );
+    }
+
+    /**
+     * @param list<string> $types
+     * @return list<array{type: string, message: string, file_name: string, line_from: int}>
+     */
+    private function runPsalmAndCollectFindings(
+        string $fixtureDir,
+        bool $useCache,
+        array $types,
         string $config = 'psalm.xml',
         array $extraArguments = [],
     ): array {
@@ -150,21 +221,25 @@ final class IndirectMethodReferencesTest extends TestCase
         $decoded = \json_decode($stdout, true);
         $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}");
 
-        $unusedMethodFindings = [];
+        $matchedFindings = [];
         foreach ($decoded as $finding) {
-            if (!\is_array($finding) || !isset($finding['type'], $finding['message'])) {
+            if (!\is_array($finding)
+                || !isset($finding['type'], $finding['message'], $finding['file_name'], $finding['line_from'])
+            ) {
                 continue;
             }
 
-            if ($finding['type'] === 'PossiblyUnusedMethod' || $finding['type'] === 'UnusedMethod') {
-                $unusedMethodFindings[] = [
+            if (\in_array($finding['type'], $types, true)) {
+                $matchedFindings[] = [
                     'type' => $finding['type'],
                     'message' => (string) $finding['message'],
+                    'file_name' => (string) $finding['file_name'],
+                    'line_from' => (int) $finding['line_from'],
                 ];
             }
         }
 
-        return $unusedMethodFindings;
+        return $matchedFindings;
     }
 
     #[Test]

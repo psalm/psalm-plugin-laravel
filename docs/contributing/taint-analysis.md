@@ -305,6 +305,74 @@ The pruning is by node id, not by sink id, so it also swallows intermediate hops
 
 **A negative assertion against a shared sink is unfalsifiable.** This is the sharper edge of the same behavior, and it has already produced one fixture that asserted the exact opposite of the truth. An empty `--EXPECTF--` reads as "the plugin does not detect this flow", but a flow reaching an already-visited node is dropped whether or not the edge exists, so the fixture stays green in both worlds. Any phpt whose point is that nothing is reported must route through a per-file local sink AND carry a positive control in the same file that does report, otherwise it proves nothing. `StructuredResponseArrayAccessKnownLimitation.phpt` and `SubAgentToolDelegationKnownLimitation.phpt` are the worked examples.
 
+## How the prompt-guard exemption reads an escape annotation
+
+The copy-paste recipe for middleware authors lives in
+[`docs/security.md`, "Marking prompt-guard middleware as trusted"](../security.md#marking-prompt-guard-middleware-as-trusted).
+This section is the mechanics behind it.
+
+`@psalm-taint-escape` works on a plain instance method in application code, not only in a stub.
+Psalm folds it into `FunctionLikeStorage::$removed_taints` during the scan phase, and
+`PromptGuardTaintHandler` (`src/Handlers/Ai/PromptGuardTaintHandler.php`) reads that bitmask back at
+issue-emission time as the opt-in marker for a `laravel/ai` middleware guard. No custom tag, no AST
+read, and no guard package is named anywhere in the plugin, so an app-local guard and a third-party
+one are treated alike.
+
+`@psalm-flow` does not affect the marker (it never touches `removed_taints`), which is why the
+recipe calls it recommended rather than required. It still matters for the ordinary reason: a bare
+escape strips every taint kind from the annotated method's return value.
+
+**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision.** `laravel/ai` runs prompt
+middleware through a bare pipeline, and `carry()` tests `is_callable($pipe)` before it looks for
+`handle()`, so the dispatched method depends on how the entry is written:
+
+| `middleware()` returns | Method the pipeline calls | Why |
+|---|---|---|
+| an OBJECT (`[new Guard()]`) whose class declares `__invoke` | `__invoke` | `is_callable($object)` is true, so the pipe is invoked directly and `handle()` is never reached |
+| an OBJECT with no `__invoke` | `handle` | not callable, so the object branch falls through to `method_exists($pipe, 'handle')` |
+| a class-STRING (`[Guard::class]`, `class-string<Guard>`) | `handle`, falling back to `__invoke` | a class-string is not callable, so it takes the container branch and then hits the same `method_exists` test |
+
+The handler mirrors both orders per candidate and consults only the first method that exists: there
+is no fallthrough to the other one on a missing annotation, because runtime has none either.
+
+**Both the receiver and the declared element type are BOUNDS**, not exact runtime classes: the
+journey label names the static receiver while `gatherMiddlewareFor()` calls `middleware()` on the
+actual object, and `list<Guard>` is satisfied by any subclass. The handler therefore walks the analysed classlikes below each, reading
+`ClassLikeStorage::$dependent_classlikes`, which is populated before analysis and still readable at
+emission. A receiver declines when any descendant resolves `middleware()` to a different DECLARING
+id; a guard qualifies only when it and every descendant carry the escape on their own dispatched
+method.
+
+That walk recurses to a fixpoint, with a visited set, because the stored property is not the
+closure its name suggests. `Populator::populateClassLikeStorage()` records DIRECT links and
+`populateCodebase()` then makes a SINGLE merge pass with no fixpoint, so a chain `A < B < C < D`
+leaves `A` listing `B` and `C` and never `D`. Executed on 7.0.0-beta19: a four-level agent
+hierarchy whose deepest class stripped the stack was invisible and kept its ancestor's exemption.
+
+Comparing declaring ids beats reading `MethodStorage::$overridden_downstream`:
+`Populator::populateClassLikeStorage()` only sets that flag for a method stored directly on the
+child, so a child that replaces the stack by importing a TRAIT never sets it, while its declaring id
+changes to the trait's and is caught. A `final` class has no dependents and needs no special case.
+Neither walk covers a subclass outside the analysed project; that gap is in the recipe's caveats.
+
+**Provenance is checked before any of that.** The label proves only that some `prompt()` or
+`stream()` was called, so the handler requires the receiver's declaring id for that method to sit on
+`Laravel\Ai\Promptable`. A userland class with its own `@psalm-taint-sink llm_prompt` `prompt()`
+never runs the pipeline, and exempting it would be suppressing an unrelated sink.
+
+Candidates are collected from the array VALUE position of `middleware()`'s declared return type:
+`TNamedObject` for the object form, `TClassString::$as_type` and `TLiteralClassString` for the
+class-string form. A bare `array` degenerates to a `mixed` value type and names nothing.
+`TTemplateParamClass` is skipped even though it extends `TClassString`: a template bound stands in
+for a class the caller picks, so the bound's annotation says nothing about what runs.
+
+**Closure middleware can never be exempted.** `@return list<\Closure>` names no class, and the guard
+would live in the closure's body, which no declared type describes, so an escape docblock above the
+closure literal is ignored. Pinned by
+`tests/Type/tests/PromptInjection/PromptGuardClosureMiddlewareKnownLimitation.phpt`.
+
+The full gate list and the trust model are in the handler's own docblock.
+
 ## Stub patterns by annotation type
 
 ### Source stubs

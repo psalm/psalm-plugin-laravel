@@ -50,6 +50,24 @@ class Request implements Arrayable, ArrayAccess
     public function toolInvocationId(): ?string {}
 
     /**
+     * Validation rules constrain shape and format, not content: a
+     * `required|string` argument still passes through arbitrary attacker text
+     * verbatim, so the validated result stays tainted.
+     *
+     * @since 0.11.1 — absent from the >=0.11.0 floor pin; the stub-parity
+     *   checker (bin/ci/check-laravel-ai-stub-parity.php) reads this tag and
+     *   exempts the method until the installed laravel/ai reaches it.
+     *
+     * @param  array<string, mixed>  $rules
+     * @param  array<string, mixed>  $messages
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     *
+     * @psalm-taint-source input
+     */
+    public function validate(array $rules, array $messages = [], array $attributes = []): array {}
+
+    /**
      * @return array<string, mixed>
      *
      * @psalm-taint-source input

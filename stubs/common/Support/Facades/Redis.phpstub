@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+class Redis extends Facade
+{
+    /**
+     * Execute commands in a pipeline.
+     *
+     * @param  (callable(mixed): mixed)|null  $callback
+     * @return ($callback is null ? (object|false) : (list<mixed>|false))
+     */
+    public static function pipeline(?callable $callback = null) {}
+
+    /**
+     * Execute commands in a transaction.
+     *
+     * @param  (callable(mixed): mixed)|null  $callback
+     * @return ($callback is null ? (object|false) : (list<mixed>|false|null))
+     */
+    public static function transaction(?callable $callback = null) {}
+}

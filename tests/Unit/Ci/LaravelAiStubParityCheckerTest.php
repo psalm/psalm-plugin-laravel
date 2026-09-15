@@ -266,6 +266,58 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $this->assertStringContainsString('syncConversationFromStreamedResponse(): protected method exists', $output);
     }
 
+    #[Test]
+    public function an_at_since_tagged_method_ahead_of_the_installed_version_is_not_drift(): void
+    {
+        $stub = \str_replace(
+            "    protected function data(mixed \$key = null, mixed \$default = null): mixed {}\n",
+            <<<'PHP'
+                protected function data(mixed $key = null, mixed $default = null): mixed {}
+
+                /**
+                 * @since 999.0.0
+                 */
+                public function notYetShipped(): void {}
+            PHP,
+            self::CLEAN_REQUEST_STUB,
+        );
+
+        [, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+
+        // CLEAN_REQUEST_STUB is a minimal fixture (only declares data()), so
+        // it always drifts against the real class regardless of the gate;
+        // assert the gate suppressed its own finding, not overall exit code.
+        $this->assertStringContainsString('notYetShipped() (@since 999.0.0)', $output);
+        $this->assertStringNotContainsString('notYetShipped(): declared in the stub but not found on the installed class', $output);
+    }
+
+    /**
+     * The tag only exempts a method while the installed release predates it.
+     * Once the requirement is satisfied and the method still isn't there,
+     * that is a real rename/removal and must fail like any other drift.
+     */
+    #[Test]
+    public function an_at_since_tagged_method_already_due_still_fails(): void
+    {
+        $stub = \str_replace(
+            "    protected function data(mixed \$key = null, mixed \$default = null): mixed {}\n",
+            <<<'PHP'
+                protected function data(mixed $key = null, mixed $default = null): mixed {}
+
+                /**
+                 * @since 0.0.1
+                 */
+                public function neverShipped(): void {}
+            PHP,
+            self::CLEAN_REQUEST_STUB,
+        );
+
+        [$exitCode, $output] = $this->checkFiles(['Request.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('neverShipped(): declared in the stub but not found on the installed class', $output);
+    }
+
     /** @return array{int, string} exit code and combined output */
     private function check(string $stubSource): array
     {

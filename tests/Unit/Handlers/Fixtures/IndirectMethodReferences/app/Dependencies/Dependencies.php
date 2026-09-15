@@ -141,3 +141,11 @@ final class TraitActionDependency
         \assert(\class_exists(self::class));
     }
 }
+
+final class PublicControl
+{
+    public function discarded(): string
+    {
+        return self::class;
+    }
+}
