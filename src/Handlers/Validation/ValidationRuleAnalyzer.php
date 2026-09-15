@@ -1431,7 +1431,7 @@ final class ValidationRuleAnalyzer
      * (the facade-method map and the constructor-FQN map), not duplicate the
      * AST walk.
      *
-     * @return array{0: 'in'|'not_in', 1: list<Node\Arg|Node\VariadicPlaceholder>}|null
+     * @return array{0: 'in'|'not_in', 1: list<Node\Arg|Node\VariadicPlaceholder|Node\ArgPlaceholder>}|null
      */
     private static function detectInLikeRuleRoot(Node\Expr $expr): ?array
     {
@@ -1533,7 +1533,7 @@ final class ValidationRuleAnalyzer
      * shapes (`Rule::enum(...)` or `new Illuminate\Validation\Rules\Enum(...)`).
      * Returns null when the expression isn't an enum-rule root.
      *
-     * @return list<Node\Arg|Node\VariadicPlaceholder>|null
+     * @return list<Node\Arg|Node\VariadicPlaceholder|Node\ArgPlaceholder>|null
      */
     private static function detectEnumRuleArgs(Node\Expr $expr): ?array
     {
@@ -1599,7 +1599,7 @@ final class ValidationRuleAnalyzer
      * spread, associative key, empty list) or when any value would lose
      * fidelity through the `'in:a,b,c'` segment encoding.
      *
-     * @param list<Node\Arg|Node\VariadicPlaceholder> $args
+     * @param list<Node\Arg|Node\VariadicPlaceholder|Node\ArgPlaceholder> $args
      * @return non-empty-list<string>|null
      *
      * @psalm-mutation-free

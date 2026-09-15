@@ -163,7 +163,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * argument. Returns null when the argument is absent or unpacked (`...$args`), where the
      * position can no longer be determined statically.
      *
-     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder> $args
+     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\ArgPlaceholder> $args
      *
      * @psalm-mutation-free
      */
