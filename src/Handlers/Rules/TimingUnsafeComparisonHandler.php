@@ -279,13 +279,13 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return;
         }
 
-        // getForTaintSink() (the only public sink factory) uses one string as both the node id
-        // and its display label, so $sinkId doubles as the label shown in taint flow traces.
+        // getForTaint() uses one string as both the node id and its display label, so $sinkId
+        // doubles as the label shown in taint flow traces.
         // Keeping locationId in it is still required: sinks are keyed by id in the graph, so two
         // comparison sites reusing the bare $sinkLabel would collide and drop one site's sink.
         $sinkId = $sinkLabel . '-' . $locationId;
 
-        $sink = DataFlowNode::getForTaintSink(
+        $sink = DataFlowNode::getForTaint(
             $sinkId,
             $codeLocation,
             self::SECRET_TAINTS,
