@@ -18,6 +18,7 @@ final class PostQueries
         $query->publishedStaticDocblock();
         $query->publishedOwnClassName();
         $query->discardedControl();
+        $query->maybeCollection(true);
         PostBuilder::forGuest($queryBuilder);
     }
 }

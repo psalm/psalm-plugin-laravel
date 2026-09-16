@@ -72,8 +72,21 @@ final class PostBuilder extends Builder implements FluentContract
     }
 
     /**
-     * Static control: static methods are always checked regardless of probably_fluent — setting
-     * it would be a no-op, so this must remain unaffected either way.
+     * Union negative control: one non-builder arm means discarding the return can lose a real
+     * result (the Collection branch), so the handler must decline and Psalm must keep reporting.
+     */
+    public function maybeCollection(bool $asCollection): self|Collection
+    {
+        return $asCollection ? $this->get() : $this->where('published', true);
+    }
+
+    /**
+     * Static control: setting probably_fluent on a static method would be a no-op, because
+     * ClassLikes::isStorageMethodOverridingUnused()'s `is_static || !probably_fluent` gate
+     * short-circuits to true for statics regardless. The handler therefore skips statics
+     * entirely — this element pins that it leaves them alone and does not crash on them, not
+     * that statics are still checked (empirically, no static in this fixture shape ever
+     * produces a discarded-return finding at all).
      */
     public static function forGuest(\Illuminate\Database\Query\Builder $query): static
     {

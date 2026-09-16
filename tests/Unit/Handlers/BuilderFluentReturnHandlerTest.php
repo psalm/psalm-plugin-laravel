@@ -19,7 +19,7 @@ use Symfony\Component\Process\Process;
 final class BuilderFluentReturnHandlerTest extends TestCase
 {
     #[Test]
-    public function it_treats_self_static_and_own_class_returns_as_fluent(): void
+    public function it_treats_self_static_and_own_class_returns_as_fluent_and_declines_on_non_builder_union(): void
     {
         $findings = $this->runPsalmAndCollectFindings(
             __DIR__ . '/Fixtures/BuilderFluentReturn',
@@ -33,7 +33,7 @@ final class BuilderFluentReturnHandlerTest extends TestCase
             ['app/Models/PostBuilder.php', 46], // publishedStaticNative(): static
             ['app/Models/PostBuilder.php', 52], // publishedStaticDocblock() @return static
             ['app/Models/PostBuilder.php', 59], // publishedOwnClassName(): PostBuilder
-            ['app/Models/PostBuilder.php', 78], // forGuest(): static — static, always checked, unaffected either way
+            ['app/Models/PostBuilder.php', 91], // forGuest(): static — static methods are skipped, not checked
         ];
         foreach ($notReported as [$fileSuffix, $line]) {
             $this->assertNull(
@@ -48,12 +48,18 @@ final class BuilderFluentReturnHandlerTest extends TestCase
             'Expected the non-fluent discardedControl() control to remain reportable.',
         );
 
+        $this->assertSame(
+            'PossiblyUnusedReturnValue',
+            $this->findingType($findings, 'app/Models/PostBuilder.php', 78),
+            'Expected the self|Collection union control to remain reportable: one non-builder arm means discarding the return can lose a real result.',
+        );
+
         // The spot checks above only assert on specific lines; without this, a regression that
         // adds a spurious finding anywhere else in the fixture would pass silently.
         $this->assertCount(
-            1,
+            2,
             $findings,
-            'Expected exactly one unused-return-value finding (the discardedControl control): ' . \json_encode($findings),
+            'Expected exactly two unused-return-value findings (discardedControl and the union control): ' . \json_encode($findings),
         );
     }
 
