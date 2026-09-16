@@ -3,10 +3,18 @@
 Psalm plugin for Laravel. It boots a real Laravel application (the analyzed project's own `bootstrap/app.php`, with Orchestra Testbench as the package fallback), then hooks Psalm's event system and registers stubs to type Laravel's magic. It also ships taint sources, sinks, and escapes for security analysis.
 
 Active majors:
-- `master` is 4.x (PHP 8.2+, Laravel `^12.14 || ^13.3`, Psalm 7 beta)
+- `4.x` is the Psalm 7 line (PHP 8.2+, Laravel `^12.14 || ^13.3`, Psalm 7 beta)
 - `3.x` is the Psalm 6 line (Laravel `^11.35+`), backports only
 
 Taint: Psalm 6 runs in exactly one mode per invocation: plain `psalm` reports type issues only, `psalm --taint-analysis` reports taint issues only, so full coverage takes two runs. Psalm 7 runs taint BY DEFAULT and emits type and taint issues together in one run, on a rewritten engine with different internals; `psalm-laravel init` additionally writes `runTaintAnalysis="true"` to make that explicit.
+On `3.x`, `psalm-laravel init` deliberately omits `runTaintAnalysis` (on Psalm 6 it switches to taint-only mode and silently drops type analysis, #1139), and self-analysis CI runs type mode only, so run `vendor/bin/psalm --taint-analysis` locally before touching taint handlers or stubs.
+
+Psalm 6 and Psalm 7 diverge in API, so a `4.x` change backported to `3.x` must translate:
+- `$statements_source->taint_flow_graph` is Psalm 7 only; Psalm 6 exposes `$data_flow_graph` on the analyzer. `$codebase->taint_flow_graph` exists on both.
+- `DataFlowNode::make()` and `TKeyedArray::make()` are Psalm 7 only; Psalm 6 uses `new TaintSink()`, `new TaintSource()`, and the atomic constructors.
+- `TaintKind` is an int bitmask on Psalm 7 (`TaintKind::ALL_INPUT`, `1 << n`) and a set of strings (`'sql'`, `'html'`) on Psalm 6.
+- Psalm 6 rejects `@psalm-mutation-free`, `@psalm-external-mutation-free`, and `@psalm-pure` when a callee lacks the annotation; Psalm 7 accepts more.
+- Issue message wording differs; a phpt `--EXPECT--` copied across majors needs re-checking.
 
 ## Read before re-deriving
 
@@ -53,10 +61,10 @@ Gotchas:
 
 ## Git and PRs
 
-- Base PRs on `master`. Psalm-6-only bugs base on `3.x`.
+- Base PRs on `4.x`. Psalm-6-only bugs base on `3.x`.
 - The `style: auto-fix` workflow commits style fixes back to pushed branches. Run `composer rector` and `composer cs` locally BEFORE pushing, and `git pull --ff-only` before any further local edits after a push.
-- Worktrees: the symlinked `vendor/` PSR-4 autoloader points at the primary checkout's `src/` and `stubs/`. Edits in a worktree are invisible to Psalm until `composer install` runs inside that worktree. Write and Edit tools must target worktree-absolute paths, never the primary root.
-- Commits follow Conventional Commits. The subject describes the change, not the issue it closes; issue ref is required in PR body and optional in commit message body.
+- Worktrees: run `composer install` inside the worktree; never symlink `vendor/` from the primary checkout. Write and Edit tools must target worktree-absolute paths, never the primary root.
+- Commits follow Conventional Commits. The subject describes the change, not the issue it closes; issue ref is required in the PR body and optional in the commit message body.
 
 ## Hard rules
 
@@ -122,8 +130,8 @@ Regression phpts use minimal abstracted fixtures (house style), but reduce towar
 - Every new class in `src/Issues/` ships its `docs/issues/<Name>.md` page plus an entry in `docs/issues/index.md` in the same PR. Opt-in issues also document their `PluginConfig` flag in `docs/config.md`; severity defaults go through the experimental lifecycle (contributing README).
 - Taint source/sink/escape changes update the detection table in `docs/security.md` in the same PR.
 - Code style is delegated to tooling: `composer rector` + `composer cs`.
-  - When Rector strips a `@var` needed for type coverage, use `@psalm-var` (Rector ignores `@psalm-` prefixed annotations).
-  - Unit test method names are exempt from camelCase.
+    - When Rector strips a `@var` needed for type coverage, use `@psalm-var` (Rector ignores `@psalm-` prefixed annotations).
+    - Unit test method names are exempt from camelCase.
 - Comments state the non-obvious WHY that a reader cannot get from the code, keep them concise (written for senior engineers).
 - PR bodies and docs use short engineering bullets over prose.
 - "I do not understand why X is needed" from a reviewer or user is a request to investigate whether X is still needed, not to defend it.
