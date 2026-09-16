@@ -27,7 +27,7 @@ use JsonSerializable;
  * `Iterator` MUST appear in the explicit `implements` clause for the `@implements` template to
  * bind: Psalm's `ClassLikeNodeScanner::implementTemplatedType()` validates `@implements` against
  * `class_implements` at scan time, and a class declaration wipes the reflected `class_implements`
- * (CLAUDE.md). So the `implements` / `use` clauses are copied verbatim from Carbon 2 source;
+ * (AGENTS.md). So the `implements` / `use` clauses are copied verbatim from Carbon 2 source;
  * methods not redeclared here continue to come from reflection of the real class.
  *
  * @implements Iterator<int, CarbonInterface>
