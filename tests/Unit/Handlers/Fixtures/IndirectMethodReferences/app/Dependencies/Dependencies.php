@@ -84,14 +84,6 @@ final class UnionDependencyB
     }
 }
 
-final class DynamicDependency
-{
-    public function __construct()
-    {
-        \assert(\class_exists(self::class));
-    }
-}
-
 final class ProtectedDependency
 {
     protected function __construct()

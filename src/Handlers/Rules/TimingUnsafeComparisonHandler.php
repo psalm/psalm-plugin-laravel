@@ -153,7 +153,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * argument. Returns null when the argument is absent or unpacked (`...$args`), where the
      * position can no longer be determined statically.
      *
-     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder> $args
+     * @param array<Arg|\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\ArgPlaceholder> $args
      *
      * @psalm-mutation-free
      */
@@ -168,6 +168,8 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         // Otherwise count only positional (unnamed) arguments in source order. PHP requires
         // positional args before named ones, so the n-th unnamed arg is at parameter position n.
+        // Placeholder nodes (`...`, `?`) need no handling here: Psalm asserts on getArgs() before
+        // any plugin hook runs. @see https://github.com/vimeo/psalm/issues/11949
         $index = 0;
         foreach ($args as $arg) {
             if (!$arg instanceof Arg || $arg->name instanceof \PhpParser\Node\Identifier) {
@@ -277,13 +279,15 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return;
         }
 
+        // getForTaint() uses one string as both the node id and its display label, so $sinkId
+        // doubles as the label shown in taint flow traces.
+        // Keeping locationId in it is still required: sinks are keyed by id in the graph, so two
+        // comparison sites reusing the bare $sinkLabel would collide and drop one site's sink.
         $sinkId = $sinkLabel . '-' . $locationId;
 
-        $sink = DataFlowNode::make(
+        $sink = DataFlowNode::getForTaint(
             $sinkId,
-            $sinkLabel,
             $codeLocation,
-            null,
             self::SECRET_TAINTS,
         );
 

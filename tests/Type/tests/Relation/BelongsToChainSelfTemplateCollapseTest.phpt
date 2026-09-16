@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * the `$this` template argument when the returned relation is chained, so the intermediate
  * type degraded to mixed.
  *
- * The fix has two halves (see the stub-authoring rules in CLAUDE.md and Relation.phpstub):
+ * The fix has two halves (see the stub-authoring rules in AGENTS.md and Relation.phpstub):
  *  1. belongsTo() returns BelongsTo<TRelatedModel, static> (static IS substituted on chaining).
  *  2. TDeclaringModel is @template-covariant across the relation stubs, so the inferred
  *     BelongsTo<Customer, Order&static> on a non-final model satisfies the call-site

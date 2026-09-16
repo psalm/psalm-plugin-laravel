@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
 final class DocumentationPathsTest extends TestCase
 {
     private const DOCS = [
-        'CLAUDE.md',
+        'AGENTS.md',
         'docs/contributing/code-patterns.md',
         'docs/contributing/type-coverage.md',
     ];

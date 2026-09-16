@@ -15,6 +15,7 @@ final class ReferenceCommand extends Command
         return self::SUCCESS;
     }
 
+    /** Only handle() is a console entrypoint; a public helper stays reportable. */
     public function helper(CommandHelperDependency $dependency): int
     {
         return self::SUCCESS;

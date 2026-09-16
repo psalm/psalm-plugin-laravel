@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * Laravel's own `App` facade carries a native, unconditional
+ * `@method static string|bool environment(string|array ...$environments)` tag, which shadows
+ * the correctly-conditional Illuminate\Foundation\Application::environment() stub.
+ *
+ * FacadeStubPrecedenceHandler removes that shadowing pseudo-method after population, so Psalm
+ * resolves this native stub signature instead of the vendor annotation.
+ */
+class App extends Facade
+{
+    /**
+     * Get or check the current application environment.
+     * @param string|list<string> ...$environments
+     * @return string|bool
+     * @psalm-return ($environments is null ? string : bool)
+     */
+    public static function environment(...$environments) {}
+}

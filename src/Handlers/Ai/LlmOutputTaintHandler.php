@@ -176,8 +176,8 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         $taintedType = $codebase->addTaintSource(
             $exprType,
             $taintId,
-            TaintKind::ALL_INPUT,
             new CodeLocation($source, $expr),
+            TaintKind::ALL_INPUT,
         );
 
         $nodeTypeProvider->setType($expr, $taintedType);
