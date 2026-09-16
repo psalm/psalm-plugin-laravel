@@ -33,7 +33,8 @@ final class BuilderFluentReturnHandlerTest extends TestCase
             ['app/Models/PostBuilder.php', 46], // publishedStaticNative(): static
             ['app/Models/PostBuilder.php', 52], // publishedStaticDocblock() @return static
             ['app/Models/PostBuilder.php', 59], // publishedOwnClassName(): PostBuilder
-            ['app/Models/PostBuilder.php', 91], // forGuest(): static — static methods are skipped, not checked
+            ['app/Models/PostBuilder.php', 89], // clonedQuery(): self — known limitation: a fresh builder is exempted too
+            ['app/Models/PostBuilder.php', 102], // forGuest(): static — statics are skipped, not checked
         ];
         foreach ($notReported as [$fileSuffix, $line]) {
             $this->assertNull(

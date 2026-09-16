@@ -21,6 +21,12 @@ use Psalm\Type\Union;
  * Scoped to every class transitively extending Eloquent\Builder (matches
  * {@see BuilderNativeStaticReturnTypeHandler}), declared (not inherited) methods only.
  *
+ * Accepted soundness gap: the exemption keys on the declared return type, never on the body,
+ * so a method returning a FRESH builder (`return clone $this;`) is exempted as well, and a
+ * discarded return there really is a bug Psalm will no longer report. Telling that apart from
+ * mutate-and-return-$this needs body analysis, and every real-world custom builder method is
+ * the latter; pinned by the clonedQuery() element of the BuilderFluentReturn fixture.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1448
  */
 final class BuilderFluentReturnHandler implements AfterCodebasePopulatedInterface

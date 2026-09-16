@@ -19,6 +19,7 @@ final class PostQueries
         $query->publishedOwnClassName();
         $query->discardedControl();
         $query->maybeCollection(true);
+        $query->clonedQuery();
         PostBuilder::forGuest($queryBuilder);
     }
 }

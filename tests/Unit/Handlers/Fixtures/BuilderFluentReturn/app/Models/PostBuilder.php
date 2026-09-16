@@ -81,12 +81,23 @@ final class PostBuilder extends Builder implements FluentContract
     }
 
     /**
+     * Known-limitation element (see the handler's accepted-soundness-gap note): the exemption
+     * keys on the declared return type, so a method handing back a FRESH builder is exempted
+     * too, even though discarding that return is a genuine bug. Pins the gap deliberately — if
+     * a future change starts reporting this, the gap closed and this expectation should flip.
+     */
+    public function clonedQuery(): self
+    {
+        return clone $this;
+    }
+
+    /**
      * Static control: setting probably_fluent on a static method would be a no-op, because
-     * ClassLikes::isStorageMethodOverridingUnused()'s `is_static || !probably_fluent` gate
-     * short-circuits to true for statics regardless. The handler therefore skips statics
-     * entirely — this element pins that it leaves them alone and does not crash on them, not
-     * that statics are still checked (empirically, no static in this fixture shape ever
-     * produces a discarded-return finding at all).
+     * ClassLikes::checkMethodReferences()'s `is_static || !probably_fluent` gate short-circuits
+     * to true for statics regardless. The handler therefore skips statics entirely — this
+     * element pins that it leaves them alone and does not crash on them, not that statics are
+     * still checked (empirically, no static in this fixture shape ever produces a
+     * discarded-return finding at all).
      */
     public static function forGuest(\Illuminate\Database\Query\Builder $query): static
     {
