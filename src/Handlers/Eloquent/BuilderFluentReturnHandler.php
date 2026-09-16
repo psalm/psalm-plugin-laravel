@@ -9,6 +9,7 @@ use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Union;
 
 /**
  * A custom Eloquent\Builder method that returns self/static/its own class name is fluent by
@@ -56,29 +57,52 @@ final class BuilderFluentReturnHandler implements AfterCodebasePopulatedInterfac
                     continue;
                 }
 
-                foreach ($return_type->getAtomicTypes() as $atomic) {
-                    if (!$atomic instanceof TNamedObject) {
-                        continue;
-                    }
-
-                    // An intersection type (`Foo&Bar`) stores only its first-listed member as
-                    // the top-level atomic; the rest live in that atomic's own `extra_types`
-                    // (TypeParser::getTypeFromIntersectionTree()), so `Contract&self` needs the
-                    // same match applied there too — the builder type can be either side.
-                    if (self::matchesFluentReturn($atomic, $ownNameLower)) {
-                        $method_storage->probably_fluent = true;
-                        break;
-                    }
-
-                    foreach ($atomic->extra_types as $extra_type) {
-                        if ($extra_type instanceof TNamedObject && self::matchesFluentReturn($extra_type, $ownNameLower)) {
-                            $method_storage->probably_fluent = true;
-                            break 2;
-                        }
-                    }
+                if (self::isFluentReturnType($return_type, $ownNameLower)) {
+                    $method_storage->probably_fluent = true;
                 }
             }
         }
+    }
+
+    /**
+     * A union (`self|Collection`) describes DIFFERENT possible returned objects depending on
+     * which path was taken, so one non-builder arm means discarding the return can lose a real
+     * result — every arm must match before the whole method is exempted. An intersection
+     * (`Foo&Bar`) instead describes the SAME returned object under multiple types, so a single
+     * builder member already proves the returned value is the builder.
+     *
+     * An intersection type (`Foo&Bar`) stores only its first-listed member as the top-level
+     * atomic; the rest live in that atomic's own `extra_types`
+     * (TypeParser::getTypeFromIntersectionTree()), so `Contract&self` needs the same match
+     * applied there too — the builder type can be either side.
+     *
+     * @psalm-pure
+     */
+    private static function isFluentReturnType(Union $return_type, string $ownNameLower): bool
+    {
+        foreach ($return_type->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                return false;
+            }
+
+            if (self::matchesFluentReturn($atomic, $ownNameLower)) {
+                continue;
+            }
+
+            $matchedExtra = false;
+            foreach ($atomic->extra_types as $extra_type) {
+                if ($extra_type instanceof TNamedObject && self::matchesFluentReturn($extra_type, $ownNameLower)) {
+                    $matchedExtra = true;
+                    break;
+                }
+            }
+
+            if (!$matchedExtra) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
