@@ -17,11 +17,9 @@ phpunit.xml
 
 # AI
 .claude
-CLAUDE.local.md
 
 ## Codex agents
 .agents/
-AGENTS.md
 
 # local benchmark app registry (private app names)
 /bin/ci/test-apps.override.yml
