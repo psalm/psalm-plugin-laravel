@@ -11,8 +11,6 @@ use Illuminate\View\Compilers\BladeCompiler;
  * line map back to the original template and `{{-- @psalm-suppress --}}`
  * comments carried across. Contract extraction (what `$contractVars` should
  * be for a given template) is the caller's responsibility.
- *
- * @psalm-api not yet wired into Plugin::registerHandlers(); no caller exists yet
  */
 final class ShadowCompiler
 {
