@@ -1,0 +1,206 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
+
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\View\Compilers\BladeCompiler;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\BladeCompileError;
+use Psalm\LaravelPlugin\Blade\ShadowCompiler;
+use Psalm\LaravelPlugin\Blade\ShadowResult;
+
+#[CoversClass(ShadowCompiler::class)]
+final class ShadowCompilerTest extends TestCase
+{
+    private ShadowCompiler $compiler;
+
+    protected function setUp(): void
+    {
+        $this->compiler = new ShadowCompiler(new BladeCompiler(new Filesystem(), \sys_get_temp_dir()));
+    }
+
+    /** @return array<int, int> shadow line numbers (values) that map to $bladeLine */
+    private function shadowLinesMappedTo(ShadowResult $result, int $bladeLine): array
+    {
+        return \array_keys(\array_filter($result->lineMap, static fn(int $v): bool => $v === $bladeLine));
+    }
+
+    #[Test]
+    public function compiles_a_plain_echo(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "Hello {{ \$name }}\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('echo e($name)', $result->contents);
+    }
+
+    #[Test]
+    public function compiles_a_raw_echo(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "Hello {!! \$name !!}\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('echo $name;', $result->contents);
+    }
+
+    #[Test]
+    public function echo_at_end_of_line_doubles_the_trailing_newline_but_both_map_to_the_same_source_line(): void
+    {
+        // Acceptance (a): Blade's echo compiler doubles the trailing newline;
+        // both resulting shadow lines must still map back to source line 1.
+        $result = $this->compiler->compile('view.blade.php', "Hello {{ \$name }}\n");
+
+        $this->assertCount(3, $this->shadowLinesMappedTo($result, 1));
+    }
+
+    #[Test]
+    public function compiles_foreach(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "@foreach(\$items as \$item)\n{{ \$item }}\n@endforeach\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('foreach($__currentLoopData as $item)', $result->contents);
+        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 2));
+    }
+
+    #[Test]
+    public function compiles_if(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "@if(\$cond)\nyes\n@endif\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('if($cond):', $result->contents);
+    }
+
+    #[Test]
+    public function compiles_include(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "before\n@include('partial')\nafter\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString("\$__env->make('partial'", $result->contents);
+    }
+
+    #[Test]
+    public function extends_footer_maps_to_the_extends_line(): void
+    {
+        // Acceptance (b): addFooters() appends the `@extends` footer at the very
+        // end of the compiled output; it must still map to the @extends line.
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "@extends('layout')\n@section('content')\nhi\n@endsection\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame(1, $result->extendsLine);
+
+        $lastShadowLine = \array_key_last($result->lineMap);
+        $this->assertSame(1, $result->lineMap[$lastShadowLine]);
+    }
+
+    #[Test]
+    public function extends_line_is_null_without_extends(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "hello\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertNull($result->extendsLine);
+    }
+
+    #[Test]
+    public function compiles_props_with_named_and_bare_entries(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "@props(['title' => 'Default', 'count'])\n<div>{{ \$title }}</div>\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('extractPropNames', $result->contents);
+        // The @props preamble collapses to the opening line; the div is its own line.
+        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 1));
+        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 2));
+    }
+
+    #[Test]
+    public function php_block_body_maps_to_its_opening_line(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "@php\n\$x = 1;\n\$y = 2;\n@endphp\ndone\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        // Every line of the @php body (opening line + 2 statements + @endphp) maps to line 1.
+        $this->assertGreaterThanOrEqual(4, \count($this->shadowLinesMappedTo($result, 1)));
+        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 5));
+    }
+
+    #[Test]
+    public function compiles_verbatim(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "@verbatim\n{{ raw }}\nstill raw\n@endverbatim\ndone\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('{{ raw }}', $result->contents);
+        $this->assertStringContainsString('still raw', $result->contents);
+    }
+
+    #[Test]
+    public function undeclared_variable_gets_var_mixed_in_the_prelude(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "Hello {{ \$foo }}\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('@var mixed $foo */', $result->contents);
+    }
+
+    #[Test]
+    public function contract_vars_are_typed_in_the_prelude_instead_of_mixed(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "Hello {{ \$user }}\n",
+            ['user' => '\App\Models\User'],
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('@var \App\Models\User $user */', $result->contents);
+        $this->assertStringNotContainsString('@var mixed $user', $result->contents);
+    }
+
+    #[Test]
+    public function suppress_comment_lands_inside_the_next_statements_php_block(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "{{-- @psalm-suppress UndefinedVariable --}}\n{{ \$foo }}\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('@psalm-suppress UndefinedVariable', $result->contents);
+        $this->assertLessThan(
+            \strpos($result->contents, 'echo e($foo)'),
+            \strpos($result->contents, '@psalm-suppress UndefinedVariable'),
+        );
+    }
+
+    #[Test]
+    public function component_tag_yields_a_compile_error(): void
+    {
+        // A bare BladeCompiler has no container to resolve the view factory
+        // component tags need — this IS the compile-error case, not a bug.
+        $result = $this->compiler->compile('view.blade.php', "<x-alert/>\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('view.blade.php', $result->templatePath);
+        $this->assertStringContainsString('BindingResolutionException', $result->message);
+    }
+}
