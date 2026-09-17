@@ -97,9 +97,12 @@ final class ShadowManifest
 
     public function isFresh(string $templatePath, string $source): bool
     {
-        $entry = $this->entries[$this->shadowPath($templatePath)] ?? null;
+        $shadowPath = $this->shadowPath($templatePath);
+        $entry = $this->entries[$shadowPath] ?? null;
 
-        return $entry !== null && $entry[3] === $this->fingerprint($source);
+        return $entry !== null
+            && $entry[3] === $this->fingerprint($source)
+            && \is_file($shadowPath);
     }
 
     /** Writes the shadow file to disk and records it. Call flush() to persist the manifest itself. */

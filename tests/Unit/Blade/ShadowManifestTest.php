@@ -85,6 +85,23 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function not_fresh_when_the_shadow_file_was_deleted_out_from_under_the_manifest(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null));
+        $manifest->flush();
+
+        \unlink($shadowPath);
+
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $this->assertFalse($reloaded->isFresh('/app/views/foo.blade.php', 'source v1'));
+    }
+
+    #[Test]
     public function prune_unlinks_orphan_shadows_and_drops_their_entries(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
