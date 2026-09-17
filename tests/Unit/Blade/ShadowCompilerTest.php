@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeCompileError;
+use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\ShadowCompiler;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
 
@@ -202,5 +203,27 @@ final class ShadowCompilerTest extends TestCase
         $this->assertInstanceOf(BladeCompileError::class, $result);
         $this->assertSame('view.blade.php', $result->templatePath);
         $this->assertStringContainsString('BindingResolutionException', $result->message);
+    }
+
+    #[Test]
+    public function multiline_component_tag_is_still_recognized_and_yields_a_compile_error(): void
+    {
+        // The naive failure mode: a marker landing between the tag's attribute
+        // lines would defeat ComponentTagCompiler's match, leaving the tag as
+        // literal text instead — a SILENT no-op, not this compile error.
+        $result = $this->compiler->compile('view.blade.php', "<x-alert\n    type=\"error\"\n/>\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertStringContainsString('BindingResolutionException', $result->message);
+    }
+
+    #[Test]
+    public function marker_pre_pass_never_splits_a_multiline_component_tag(): void
+    {
+        $marked = MarkerPrePass::inject("<x-alert\n    type=\"error\"\n/>\n");
+
+        $this->assertStringContainsString('blade:1 */', $marked);
+        $this->assertStringNotContainsString('blade:2 */', $marked);
+        $this->assertStringNotContainsString('blade:3 */', $marked);
     }
 }
