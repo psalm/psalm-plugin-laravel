@@ -1,0 +1,173 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Blade;
+
+use Composer\InstalledVersions;
+use Illuminate\Foundation\Application;
+
+/**
+ * Tracks compiled shadow files on disk against a fingerprint of the Blade
+ * source that produced them, so an unchanged template can skip recompiling.
+ *
+ * Never fingerprints compiled output: directives such as `@once` mint a
+ * fresh UUID on every compile, so two compiles of the SAME source are never
+ * byte-identical — only the source and the compiler inputs are stable.
+ *
+ * @psalm-api not yet wired into Plugin::registerHandlers(); no caller exists yet
+ */
+final class ShadowManifest
+{
+    private const MANIFEST_FILE = 'manifest.php';
+
+    /** Bump when MarkerPrePass changes in a way that changes shadow output for the same source. */
+    private const MARKER_PASS_VERSION = 1;
+
+    /** @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string}> shadow path => [template path, lineMap, extendsLine, fingerprint] */
+    private array $entries = [];
+
+    public function __construct(private readonly string $shadowDir) {}
+
+    /** Tolerates an absent or corrupt manifest file: starts empty either way. */
+    public function load(): void
+    {
+        $path = $this->manifestPath();
+
+        if (!\is_file($path)) {
+            $this->entries = [];
+
+            return;
+        }
+
+        try {
+            $this->entries = $this->normalizeEntries(@include $path);
+        } catch (\Throwable) {
+            $this->entries = [];
+        }
+    }
+
+    /**
+     * Validates the shape of whatever `include` handed back — a var_export'd
+     * array from a version of this same class, or arbitrary garbage if the
+     * file was corrupted mid-write. Individually malformed entries are
+     * dropped rather than failing the whole load.
+     *
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string}>
+     */
+    private function normalizeEntries(mixed $data): array
+    {
+        if (!\is_array($data)) {
+            return [];
+        }
+
+        $entries = [];
+
+        foreach ($data as $shadowPath => $entry) {
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 4) {
+                continue;
+            }
+
+            [$templatePath, $lineMap, $extendsLine, $hash] = \array_values($entry);
+
+            if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
+                continue;
+            }
+
+            if ($extendsLine !== null && !\is_int($extendsLine)) {
+                continue;
+            }
+
+            $validLineMap = [];
+
+            /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+            foreach ($lineMap as $shadowLine => $bladeLine) {
+                if (!\is_int($shadowLine) || !\is_int($bladeLine)) {
+                    continue 2;
+                }
+
+                $validLineMap[$shadowLine] = $bladeLine;
+            }
+
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash];
+        }
+
+        return $entries;
+    }
+
+    public function isFresh(string $templatePath, string $source): bool
+    {
+        $shadowPath = $this->shadowPath($templatePath);
+        $entry = $this->entries[$shadowPath] ?? null;
+
+        return $entry !== null
+            && $entry[3] === $this->fingerprint($source)
+            && \is_file($shadowPath);
+    }
+
+    /** Writes the shadow file to disk and records it. Call flush() to persist the manifest itself. */
+    public function store(string $templatePath, string $source, ShadowResult $shadow): string
+    {
+        $shadowPath = $this->shadowPath($templatePath);
+
+        if (@\file_put_contents($shadowPath, $shadow->contents) === false) {
+            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'");
+        }
+
+        $this->entries[$shadowPath] = [$templatePath, $shadow->lineMap, $shadow->extendsLine, $this->fingerprint($source)];
+
+        return $shadowPath;
+    }
+
+    /**
+     * Removes shadow files (and their entries) for templates that no longer exist.
+     *
+     * @param list<string> $liveTemplatePaths
+     */
+    public function prune(array $liveTemplatePaths): void
+    {
+        $live = \array_flip($liveTemplatePaths);
+
+        foreach ($this->entries as $shadowPath => $entry) {
+            if (isset($live[$entry[0]])) {
+                continue;
+            }
+
+            @\unlink($shadowPath);
+            unset($this->entries[$shadowPath]);
+        }
+    }
+
+    /** Atomic write: temp file + rename, so a crash mid-write never corrupts the manifest. */
+    public function flush(): void
+    {
+        $path = $this->manifestPath();
+        $pid = \getmypid();
+        $tmpPath = $path . '.tmp.' . ($pid !== false ? $pid : 'unknown');
+
+        if (@\file_put_contents($tmpPath, "<?php\n\nreturn " . \var_export($this->entries, true) . ";\n") === false) {
+            return;
+        }
+
+        if (!@\rename($tmpPath, $path)) {
+            @\unlink($tmpPath);
+        }
+    }
+
+    private function shadowPath(string $templatePath): string
+    {
+        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '.php';
+    }
+
+    private function manifestPath(): string
+    {
+        return $this->shadowDir . \DIRECTORY_SEPARATOR . self::MANIFEST_FILE;
+    }
+
+    private function fingerprint(string $source): string
+    {
+        $pluginVersion = InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown';
+
+        return \hash('xxh128', $source . '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|' . $pluginVersion);
+    }
+}
