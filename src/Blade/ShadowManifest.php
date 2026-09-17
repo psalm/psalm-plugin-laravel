@@ -14,6 +14,8 @@ use Illuminate\Foundation\Application;
  * Never fingerprints compiled output: directives such as `@once` mint a
  * fresh UUID on every compile, so two compiles of the SAME source are never
  * byte-identical — only the source and the compiler inputs are stable.
+ *
+ * @psalm-api not yet wired into Plugin::registerHandlers(); no caller exists yet
  */
 final class ShadowManifest
 {

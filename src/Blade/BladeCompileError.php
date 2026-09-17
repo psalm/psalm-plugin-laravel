@@ -7,6 +7,8 @@ namespace Psalm\LaravelPlugin\Blade;
 /**
  * A Blade template that failed to compile. Never thrown — returned as a
  * value so a caller can decide how to degrade (skip analysis, log, etc.).
+ *
+ * @psalm-api not yet wired into Plugin::registerHandlers(); no caller exists yet
  */
 final readonly class BladeCompileError
 {
