@@ -43,6 +43,19 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function extracts_a_var_whose_type_contains_spaces(): void
+    {
+        $contract = $this->parse(
+            "{{-- @var \\Illuminate\\Support\\Collection<int, \\App\\Models\\User> \$users --}}\n{{ \$users->count() }}\n",
+        );
+
+        $this->assertSame(
+            '\Illuminate\Support\Collection<int, \App\Models\User>',
+            $contract->vars['users']->typeString ?? null,
+        );
+    }
+
+    #[Test]
     public function a_template_with_no_contract_comments_declares_nothing_but_still_reads_variables(): void
     {
         $contract = $this->parse("Hello {{ \$name }}\n");
@@ -113,6 +126,17 @@ final class ContractParserTest extends TestCase
         $this->assertContains('groups', $contract->readVariables);
         $this->assertNotContains('group', $contract->readVariables);
         $this->assertNotContains('item', $contract->readVariables);
+    }
+
+    #[Test]
+    public function outer_read_shadowed_by_a_later_loop_alias_is_dropped_known_limitation(): void
+    {
+        // Pins the documented gap: loop aliases are excluded template-wide,
+        // so the genuine outer read of $user before the loop is lost too.
+        $contract = $this->parse("{{ \$user }}\n@foreach(\$rows as \$user)\n{{ \$user }}\n@endforeach\n");
+
+        $this->assertContains('rows', $contract->readVariables);
+        $this->assertNotContains('user', $contract->readVariables);
     }
 
     #[Test]

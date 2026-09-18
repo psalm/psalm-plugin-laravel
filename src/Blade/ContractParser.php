@@ -25,7 +25,7 @@ use Stillat\BladeParser\Nodes\Position;
  */
 final class ContractParser
 {
-    private const VAR_PATTERN = '/^\s*@var\s+(\S+)\s+\$(\w+)\s*$/';
+    private const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(\w+)\s*$/';
 
     private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(\S+)\s*$/';
 
@@ -183,7 +183,14 @@ final class ContractParser
         return $props;
     }
 
-    /** @return list<string> variable names (without $) */
+    /**
+     * Loop aliases are excluded template-wide, not per scope: an outer read of
+     * a name that a later loop re-binds as its alias is dropped from the read
+     * set. The cost is one missing `mixed` declaration for a shadowed name;
+     * scope-aware tracking is not worth it for v1.
+     *
+     * @return list<string> variable names (without $)
+     */
     private function readVariables(string $compiled): array
     {
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
