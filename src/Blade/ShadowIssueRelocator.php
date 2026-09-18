@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
 
@@ -34,19 +33,14 @@ final class ShadowIssueRelocator
     private const UNMAPPED_SUFFIX = ' (unmapped)';
 
     /**
-     * @param string $templateSource the template's bytes, which a `Raw` location indexes into
-     * @param string $templateName   the display name Psalm's reporters print for the template
+     * @param ShadowTarget $target the shadow the issue was found in
      *
      * @return CodeIssue|false|null the issue to re-emit on the template, `false` to drop it, `null`
      *                              to decline and leave Psalm's own handling of the original alone
      */
-    public static function relocate(
-        CodeIssue $issue,
-        ShadowEntry $entry,
-        string $templateSource,
-        string $templateName,
-    ): CodeIssue|false|null {
-        $templateLine = $entry->lineMap[$issue->code_location->getLineNumber()] ?? 0;
+    public static function relocate(CodeIssue $issue, ShadowTarget $target): CodeIssue|false|null
+    {
+        $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
         $message = $issue->message;
 
         if ($templateLine < 1) {
@@ -62,52 +56,22 @@ final class ShadowIssueRelocator
             $message .= self::UNMAPPED_SUFFIX;
         }
 
-        $bounds = self::lineBounds($templateSource, $templateLine);
+        $location = $target->locationFor($templateLine);
 
-        if ($bounds === null) {
+        if (!$location instanceof Raw) {
             return null;
         }
 
-        [$start, $end] = $bounds;
-
-        return self::rebuild(
-            $issue,
-            new Raw($templateSource, $entry->templatePath, $templateName, $start, $end),
-            $message,
-        );
+        return self::rebuild($issue, ['code_location' => $location, 'message' => $message]);
     }
 
     /**
-     * Byte offsets of a 1-based line, or null when the source has no such line.
+     * Null when any constructor parameter cannot be resolved from the original issue.
      *
-     * @return array{int, int}|null
+     * @param array<string, mixed> $overrides constructor parameter name => value to use instead of
+     *                                        the original issue's own
      */
-    private static function lineBounds(string $source, int $line): ?array
-    {
-        $start = 0;
-
-        for ($current = 1; $current < $line; $current++) {
-            $newline = \strpos($source, "\n", $start);
-
-            if ($newline === false) {
-                return null;
-            }
-
-            $start = $newline + 1;
-        }
-
-        if ($start > \strlen($source)) {
-            return null;
-        }
-
-        $newline = \strpos($source, "\n", $start);
-        $end = $newline === false ? \strlen($source) : $newline;
-
-        return [$start, \max($start, $end - 1)];
-    }
-
-    /** Null when any constructor parameter cannot be resolved from the original issue. */
-    private static function rebuild(CodeIssue $issue, CodeLocation $location, string $message): ?CodeIssue
+    private static function rebuild(CodeIssue $issue, array $overrides): ?CodeIssue
     {
         try {
             $reflection = new \ReflectionClass($issue);
@@ -119,7 +83,7 @@ final class ShadowIssueRelocator
 
             $arguments = \array_map(
                 static fn(\ReflectionParameter $parameter): mixed
-                    => self::argumentFor($issue, $reflection, $parameter, $location, $message),
+                    => self::argumentFor($issue, $reflection, $parameter, $overrides),
                 $constructor->getParameters(),
             );
 
@@ -130,13 +94,15 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * One constructor argument, taken from the original issue's same-named property.
+     * One constructor argument: an override when there is one, otherwise the original issue's
+     * same-named property.
      *
      * Declines by throwing rather than returning a sentinel: `rebuild()` already turns any
      * `Throwable` into a decline, and every legitimate value here is `mixed`, so no sentinel could
      * be told apart from a real argument.
      *
      * @param \ReflectionClass<CodeIssue> $reflection
+     * @param array<string, mixed>        $overrides
      *
      * @throws \RuntimeException when the parameter maps to no readable property and has no default
      */
@@ -144,17 +110,12 @@ final class ShadowIssueRelocator
         CodeIssue $issue,
         \ReflectionClass $reflection,
         \ReflectionParameter $parameter,
-        CodeLocation $location,
-        string $message,
+        array $overrides,
     ): mixed {
         $name = $parameter->getName();
 
-        if ($name === 'code_location') {
-            return $location;
-        }
-
-        if ($name === 'message') {
-            return $message;
+        if (\array_key_exists($name, $overrides)) {
+            return $overrides[$name];
         }
 
         $property = $reflection->hasProperty($name) ? $reflection->getProperty($name) : null;

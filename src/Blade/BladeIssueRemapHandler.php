@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 use Psalm\Config;
-use Psalm\Internal\Codebase\TaintFlowGraph;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
@@ -46,35 +45,29 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         }
 
         $issue = $event->getIssue();
-        $entry = ShadowRegistry::entryFor($issue->getFilePath());
 
         // The overwhelmingly common case, and the cheapest bail: this hook sees every issue in
         // the run, almost none of which come from a shadow.
-        if (!$entry instanceof ShadowEntry) {
+        if (!ShadowRegistry::entryFor($issue->getFilePath()) instanceof ShadowEntry) {
             return null;
         }
 
         // Psalm 6 runs taint exclusively — under a taint graph `IssueBuffer::add()` discards every
         // non-Tainted* issue. Relocating one would only move it to the template to be discarded
         // there, while costing a rebuild per issue.
-        if ($event->getCodebase()->taint_flow_graph instanceof TaintFlowGraph
+        if (PsalmBridge::isTaintRun($event->getCodebase())
             && !\str_starts_with($issue::getIssueType(), 'Tainted')
         ) {
             return null;
         }
 
-        $templateSource = ShadowRegistry::templateSource($entry->templatePath);
+        $target = self::target($issue->getFilePath());
 
-        if ($templateSource === null) {
+        if (!$target instanceof ShadowTarget) {
             return null;
         }
 
-        $relocated = ShadowIssueRelocator::relocate(
-            $issue,
-            $entry,
-            $templateSource,
-            Config::getInstance()->shortenFileName($entry->templatePath),
-        );
+        $relocated = ShadowIssueRelocator::relocate($issue, $target);
 
         // Null is a decline, not a drop: Psalm keeps handling the original, which for a shadow
         // means it stays invisible — but nothing is ever silently thrown away here.
@@ -89,11 +82,36 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         self::$remapping = true;
 
         try {
-            IssueBuffer::accepts($relocated, $entry->suppressions[$relocated->code_location->getLineNumber()] ?? []);
+            IssueBuffer::accepts(
+                $relocated,
+                $target->entry->suppressions[$relocated->code_location->getLineNumber()] ?? [],
+            );
         } finally {
             self::$remapping = false;
         }
 
         return false;
+    }
+
+    /** Null for any path that is not a registered shadow with a readable template. */
+    private static function target(string $shadowPath): ?ShadowTarget
+    {
+        $entry = ShadowRegistry::entryFor($shadowPath);
+
+        if (!$entry instanceof ShadowEntry) {
+            return null;
+        }
+
+        $templateSource = ShadowRegistry::templateSource($entry->templatePath);
+
+        if ($templateSource === null) {
+            return null;
+        }
+
+        return new ShadowTarget(
+            $entry,
+            $templateSource,
+            Config::getInstance()->shortenFileName($entry->templatePath),
+        );
     }
 }

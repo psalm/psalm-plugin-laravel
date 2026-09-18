@@ -14,6 +14,7 @@ use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
+use Psalm\LaravelPlugin\Blade\ShadowTarget;
 
 #[CoversClass(ShadowIssueRelocator::class)]
 final class ShadowIssueRelocatorTest extends TestCase
@@ -38,7 +39,10 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private function relocate(CodeIssue $issue, ShadowEntry $entry): CodeIssue|false|null
     {
-        return ShadowIssueRelocator::relocate($issue, $entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php');
+        return ShadowIssueRelocator::relocate(
+            $issue,
+            new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php'),
+        );
     }
 
     #[Test]
