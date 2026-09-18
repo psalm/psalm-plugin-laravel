@@ -64,7 +64,7 @@ final class BladeShadowCacheCanaryTest extends TestCase
     }
 
     /**
-     * @return list<array{type: string, file_path: string, line_from: int}>
+     * @return array{raw: string, issues: list<array{type: string, file_path: string, line_from: int}>}
      */
     private function analyze(): array
     {
@@ -80,8 +80,9 @@ final class BladeShadowCacheCanaryTest extends TestCase
         $process->setTimeout(300);
         $process->run();
 
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
+        $raw = $process->getOutput();
+        $decoded = \json_decode($raw, true);
+        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$raw}\n{$process->getErrorOutput()}");
 
         $issues = [];
 
@@ -94,7 +95,7 @@ final class BladeShadowCacheCanaryTest extends TestCase
             ];
         }
 
-        return $issues;
+        return ['raw' => $raw, 'issues' => $issues];
     }
 
     #[Test]
@@ -103,14 +104,14 @@ final class BladeShadowCacheCanaryTest extends TestCase
         $first = $this->analyze();
         $second = $this->analyze();
 
-        foreach (['first' => $first, 'second' => $second] as $label => $issues) {
+        foreach (['first' => $first, 'second' => $second] as $label => $run) {
             $lines = [];
 
-            foreach ($issues as $issue) {
+            foreach ($run['issues'] as $issue) {
                 $this->assertStringNotContainsString(
                     'blade-shadows-canary',
                     $issue['file_path'],
-                    "{$label} run leaked a shadow path.\n" . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                    "{$label} run leaked a shadow path.\n" . \json_encode($run['issues'], \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
                 );
 
                 if ($issue['type'] === self::ISSUE && \str_ends_with($issue['file_path'], 'resources/views/broken.blade.php')) {
@@ -121,8 +122,17 @@ final class BladeShadowCacheCanaryTest extends TestCase
             $this->assertSame(
                 [2],
                 $lines,
-                "{$label} run did not report the template issue.\n" . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                "{$label} run did not report the template issue.\n" . \json_encode($run['issues'], \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
             );
         }
+
+        // Beyond file_path: a shadow path could still leak into an issue's message, code
+        // snippet, or a taint trail entry, none of which the per-issue checks above inspect.
+        // The raw report is the only place that catches all of those at once.
+        $this->assertStringNotContainsString(
+            'blade-shadows-canary',
+            $second['raw'],
+            "second run's raw output leaked a shadow path.\n{$second['raw']}",
+        );
     }
 }
