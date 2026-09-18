@@ -81,7 +81,13 @@ Everything in the pipeline that reads a Psalm internal whose shape differs betwe
 
 Shadows live under the `cacheDir` resolved by `PluginConfig::resolveBladeCacheDir()` (default: `blade/` inside the [plugin cache directory](../config.md#cache-directory)). Each template gets one file named `sha1($templatePath) . '.php'` (`ShadowManifest::shadowPath()`), alongside a single `manifest.php` that records, per shadow, the template path, line map, extends line, source fingerprint, and inline suppressions. Delete the whole `cacheDir` (or pass `--clear-cache`) to force every template to recompile.
 
-To inspect a shadow, run once so the cache is warm, find the file by hashing the template path yourself (`sha1('resources/views/profile.blade.php')`, for example), then open it directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output.
+To inspect a shadow, run once so the cache is warm, then find the file by hashing the template's real (absolute) path, not its project-relative path: `findTemplates()` registers each template by `SplFileInfo::getRealPath()`, and `ShadowManifest::shadowPath()` hashes that same string. For example:
+
+```bash
+php -r "echo sha1(realpath('resources/views/profile.blade.php')), \"\n\";"
+```
+
+Open the resulting `<hash>.php` in the `cacheDir` directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output.
 
 Two flags matter when working on this pipeline:
 

@@ -74,7 +74,7 @@ These template variables are typed automatically, without any annotation:
 | `$attributes`  | `Illuminate\View\ComponentAttributeBag`                                                                                  |
 | `$slot`        | `Illuminate\View\ComponentSlot`                                                                                          |
 | `$component`   | `Illuminate\View\Component`                                                                                              |
-| `$loop`        | `object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}` |
+| `$loop`        | `object{index: int, iteration: int, remaining: int\|null, count: int\|null, first: bool, last: bool\|null, odd: bool, even: bool, depth: int, parent: object\|null}` |
 
 Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped, so a typo in a variable name will not be caught this way.
 
@@ -99,7 +99,7 @@ Psalm 6 runs taint analysis exclusively: a plain run reports type issues only, a
 
 ## Degradation
 
-Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause.
+Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
 A template that fails to compile (see [Known limits](#known-limits)) is skipped rather than aborting the run. Up to three failing template paths are named directly in the warning; beyond that, run with `--debug` for every individual cause.
 
