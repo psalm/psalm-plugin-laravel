@@ -169,6 +169,34 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     #[Test]
+    public function a_directory_scan_failure_does_not_prune_a_shadow_it_could_not_rediscover(): void
+    {
+        $nested = $this->viewDir . '/protected';
+        \mkdir($nested, 0o777, true);
+        $this->writeTemplate('protected/still-here.blade.php', "{{ \$x }}\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+        $shadow = $first->analyzedShadows[0];
+        $this->assertFileExists($shadow);
+
+        // The template is untouched, but a transient permission failure hides it from this
+        // run's scan: findTemplates() cannot tell that apart from the template being gone, so
+        // it must record a failure instead of silently returning an incomplete list.
+        \chmod($nested, 0o000);
+
+        try {
+            $second = new RecordingShadowRegistrar();
+            $this->bootstrapper($this->app(), $second)->boot();
+
+            $this->assertFileExists($shadow, 'a transient scan failure must not prune a shadow it never confirmed as gone');
+            $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
+            $this->assertStringContainsString('could not be read', \implode("\n", $this->progress->debugMessages));
+        } finally {
+            \chmod($nested, 0o777);
+        }
+    }
+
+    #[Test]
     public function degrades_when_the_blade_compiler_is_unbound(): void
     {
         $app = new Container();
@@ -264,6 +292,32 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('writable', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
+    }
+
+    #[Test]
+    public function reports_a_discovery_failure_even_when_the_shadow_directory_cannot_be_prepared(): void
+    {
+        $nested = $this->viewDir . '/protected';
+        \mkdir($nested, 0o777, true);
+        $this->writeTemplate('protected/unreachable.blade.php', "{{ \$x }}\n");
+        \chmod($nested, 0o000);
+
+        // A regular file where the shadow directory should go: mkdir cannot win. This failure
+        // happens after findTemplates() has already recorded the scan failure above, so both
+        // causes must reach the user even though the run bails out early.
+        \mkdir(\dirname($this->shadowDir), 0o777, true);
+        \file_put_contents($this->shadowDir, 'in the way');
+        $registrar = new RecordingShadowRegistrar();
+
+        try {
+            $this->bootstrapper($this->app(), $registrar)->boot();
+        } finally {
+            \chmod($nested, 0o777);
+        }
+
+        $this->assertCount(2, $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringContainsString($this->shadowDir, $this->progress->warningText());
+        $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
     }
 
     #[Test]
