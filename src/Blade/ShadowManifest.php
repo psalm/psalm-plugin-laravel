@@ -14,8 +14,6 @@ use Illuminate\Foundation\Application;
  * Never fingerprints compiled output: directives such as `@once` mint a
  * fresh UUID on every compile, so two compiles of the SAME source are never
  * byte-identical — only the source and the compiler inputs are stable.
- *
- * @psalm-api not yet wired into Plugin::registerHandlers(); no caller exists yet
  */
 final class ShadowManifest
 {
@@ -103,6 +101,15 @@ final class ShadowManifest
         return $entry !== null
             && $entry[3] === $this->fingerprint($source)
             && \is_file($shadowPath);
+    }
+
+    /**
+     * Where a template's shadow lives, whether or not it has been compiled yet. A caller that
+     * skipped recompiling a fresh template still has to register the shadow with Psalm.
+     */
+    public function shadowPathFor(string $templatePath): string
+    {
+        return $this->shadowPath($templatePath);
     }
 
     /** Writes the shadow file to disk and records it. Call flush() to persist the manifest itself. */

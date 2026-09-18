@@ -48,6 +48,10 @@ final readonly class PluginConfig
          */
         public ?bool $findPromptInjection,
         public string $cachePath,
+        /** Opt-in Blade template analysis (`<blade enabled="true" />`). */
+        public bool $bladeEnabled,
+        /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
+        public string $bladeCacheDir,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -81,6 +85,8 @@ final readonly class PluginConfig
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
+        $bladeEnabled = self::xmlBoolAttr($config?->blade, 'blade enabled', false, 'enabled');
+        $cachePath = self::resolveCachePath();
 
         return new self(
             modelPropertiesColumnFallback: $columnFallback,
@@ -93,7 +99,9 @@ final readonly class PluginConfig
             findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             findPromptInjection: $findPromptInjection,
-            cachePath: self::resolveCachePath(),
+            cachePath: $cachePath,
+            bladeEnabled: $bladeEnabled,
+            bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );
@@ -158,18 +166,18 @@ final readonly class PluginConfig
     }
 
     /**
-     * Read the `value` attribute of an XML element as a boolean.
+     * Read a boolean attribute of an XML element, `value` unless $attribute says otherwise.
      * Expects `<element value="true" />` or `<element value="false" />`.
-     * Returns $default when the element is absent.
+     * Returns $default when the element or the attribute is absent.
      * @psalm-pure
      */
-    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false): bool
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false, string $attribute = 'value'): bool
     {
         if (!$element instanceof \SimpleXMLElement) {
             return $default;
         }
 
-        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
+        $value = (string) ($element[$attribute] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
@@ -238,6 +246,26 @@ final readonly class PluginConfig
         }
 
         return $value === 'true';
+    }
+
+    /**
+     * Shadow files default to a subdirectory of the plugin's own cache directory, alongside the
+     * generated alias stub and the migration schema cache: `--clear-cache` then drops them too.
+     *
+     * Deliberately outside the project tree. A shadow that a `<projectFiles>` glob picks up
+     * becomes reportable, which both leaks compiled-template issues at their compiled locations
+     * and makes Psalm skip taint flows whose source sits in a reportable file. A `cacheDir`
+     * pointing inside the project must therefore be excluded from `<projectFiles>` by the user.
+     */
+    private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
+    {
+        $configured = \rtrim(self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
+
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        return $cachePath . \DIRECTORY_SEPARATOR . 'blade';
     }
 
     private static function resolveCachePath(): string
