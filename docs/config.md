@@ -31,6 +31,7 @@ Full config example:
         <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
+        <blade enabled="true" />
     </pluginClass>
 </plugins>
 ```
@@ -228,6 +229,42 @@ This governs the prompt sink direction only. Model output as a taint source (an 
 ```xml
 <findPromptInjection value="false" />
 ```
+
+## `blade`
+
+**default**: off. Omit the element, or write `<blade enabled="false" />`.
+
+```xml
+<blade enabled="true" />
+```
+
+Opt in to analyzing Blade templates. The plugin compiles every `*.blade.php` file under the view paths of the booted application (`config('view.paths')` plus whatever service providers added) into a PHP "shadow" file, and adds those shadows to the Psalm run. The templates themselves are never handed to Psalm as PHP; only the compiled shadows are analyzed.
+
+Opt-in because the compile pass costs time proportional to the number of templates, and because template analysis is new.
+
+Notes on this release:
+
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. Contract annotations (`{{-- @var \App\Models\User $user --}}`, `@props([...])`) are read by a later release.
+- Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
+- `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
+
+### `cacheDir`
+
+**default**: `blade/` inside the [plugin cache directory](#cache-directory)
+
+```xml
+<blade enabled="true" cacheDir="build/blade-shadows" />
+```
+
+Where the compiled shadows and their manifest are written. Absolute, or relative to the directory Psalm runs in. The plugin creates the directory, reuses a shadow whose template has not changed, and deletes shadows whose template is gone.
+
+The default deliberately sits outside your project tree. A shadow file that one of your `<projectFiles>` patterns happens to match is treated by Psalm as a file of your own, which both reports issues at their compiled locations instead of the template's and makes Psalm drop taint flows that start in it. If you point `cacheDir` inside the project, exclude it from `<projectFiles>` (and from version control).
+
+### Degradation
+
+Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. Templates that fail to compile are skipped and summarized in a single warning; run with `--debug` for the individual causes.
+
+Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
 ## Cache directory
 

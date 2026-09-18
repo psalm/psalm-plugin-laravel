@@ -96,6 +96,10 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
 
+            if ($pluginConfig->bladeEnabled) {
+                $this->initBladeAnalysis($pluginConfig, $output);
+            }
+
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
             $this->registerHandlers($registration, $pluginConfig);
@@ -832,6 +836,29 @@ final class Plugin implements PluginEntryPointInterface
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
         Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
+    }
+
+    /**
+     * Compile the analyzed application's Blade templates into shadow PHP files and add them to this
+     * run: the shadows for analysis, the templates for reporting.
+     *
+     * Runs synchronously inside `__invoke()` because that is the only window in which a file can
+     * still join the analysis — Psalm calls `Config::initializePlugins()` after it has queued the
+     * project files and before it starts scanning them.
+     *
+     * Holds no static state, so there is nothing to reset between invocations: every run recompiles
+     * from the manifest on disk, whose fingerprints carry the Laravel and plugin versions.
+     */
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
+    {
+        $bootstrapper = new Blade\BladeBootstrapper(
+            ApplicationProvider::getApp(),
+            new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance()),
+            $output,
+            $pluginConfig->bladeCacheDir,
+        );
+
+        $bootstrapper->boot();
     }
 
     /**
