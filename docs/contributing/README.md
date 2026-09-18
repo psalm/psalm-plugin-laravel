@@ -63,6 +63,19 @@ Both halves degrade rather than throw. Every cause (no `blade.compiler` binding,
 
 The `ProjectFileInjector` guards (`property_exists`, `is_array`, `catch (Throwable)`, and no `setAccessible()`, which is a no-op since PHP 8.1 and whose deprecation Psalm's error handler promotes to an exception) are what keep a Psalm rename from crashing a run. Re-probe them on each Psalm release, not just each major.
 
+#### Remapping a shadow issue onto its template
+
+Neither registration makes a finding visible by itself: an issue Psalm raises in a shadow is located in a file that is deliberately unreportable, so it dies in the reportability gate. `Blade\BladeIssueRemapHandler` (`BeforeAddIssueInterface`, registered from `registerHandlers()` under the same `bladeEnabled` gate as the compile step) is the only channel from shadow analysis to user-visible output.
+
+- `Blade\ShadowRegistry` maps shadow path to template path, line map and per-template-line suppressions. `BladeBootstrapper` fills it for every shadow it registers, including templates fresh enough to skip recompiling (those facts come off the manifest). It is static because Psalm instantiates event handlers itself, so it is reset in `Plugin::resetInvocationState()`.
+- On a registry hit the handler rebuilds the issue on the `.blade.php` path (`Blade\ShadowIssueRelocator`), re-emits it through `IssueBuffer::accepts()`, and returns `false` to kill the shadow-path original. `BeforeAddIssue` is the only hook that can do this: Psalm dispatches it before both the reportability gate and `IssueBuffer::isSuppressed()`.
+- The rebuild walks the constructor reflectively. 95 of Psalm 6's 313 concrete issue classes declare a required third parameter, so `new $class($message, $location)` throws for them, and inside an event handler that is a finding lost without a trace. A parameter that cannot be resolved declines with `null` (Psalm keeps the shadow-path original, invisible but not swallowed) rather than dropping the issue.
+- `accepts()` is handed the suppressions recorded for the mapped template line, which is what makes `{{-- @psalm-suppress X --}}` work: the event carries the issue but not the suppressed-issue list Psalm was about to check it against. An `<issueHandlers>` suppression scoped to the view directory needs nothing extra, because `accepts()` consults `Config::reportIssueInFile()` on the new path itself.
+- A shadow line that maps to no template line (the prelude) is re-emitted on line 1 with an ` (unmapped)` suffix. `Mixed*` issues are dropped instead, because the prelude types every unresolved template variable as `mixed` and those findings say nothing about the template.
+- Under a taint flow graph the handler declines every non-`Tainted*` issue: Psalm 6 runs taint exclusively and `IssueBuffer::add()` discards them anyway.
+
+Known gap: a `TaintedInput` journey is carried across verbatim, so its individual steps still name the shadow even when the sink has been relocated.
+
 ## Getting started
 
 ```bash

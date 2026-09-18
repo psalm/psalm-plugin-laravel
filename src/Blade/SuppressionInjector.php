@@ -19,26 +19,66 @@ final class SuppressionInjector
      */
     public function inject(string $shadowContent, string $bladeSource, array $lineMap): string
     {
-        $suppressions = $this->findSuppressions($bladeSource);
-
-        if ($suppressions === []) {
-            return $shadowContent;
-        }
-
         $lines = \preg_split('/(?<=\n)/', $shadowContent);
         \assert($lines !== false);
 
-        foreach ($suppressions as $bladeLine => $rule) {
+        $targets = $this->findTargets($lines, $bladeSource, $lineMap);
+
+        if ($targets === []) {
+            return $shadowContent;
+        }
+
+        foreach ($targets as $target) {
+            $lines[$target['index']] = $this->insertAfterOpenTag($lines[$target['index']], $target['rule']);
+        }
+
+        return \implode('', $lines);
+    }
+
+    /**
+     * The same suppressions keyed by the TEMPLATE line of the statement they attach to, for the
+     * issue remap: a relocated issue lands on that line, and Psalm's own docblock suppression
+     * inside the shadow only covers issues it raises at that statement.
+     *
+     * @param array<int, int> $lineMap shadow line => blade source line (0 = prelude)
+     *
+     * @return array<int, list<string>> blade line => suppressed rules
+     */
+    public function resolve(string $shadowContent, string $bladeSource, array $lineMap): array
+    {
+        $lines = \preg_split('/(?<=\n)/', $shadowContent);
+        \assert($lines !== false);
+
+        $resolved = [];
+
+        foreach ($this->findTargets($lines, $bladeSource, $lineMap) as $target) {
+            $resolved[$lineMap[$target['index'] + 1] ?? 0][] = $target['rule'];
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * @param list<string>    $lines
+     * @param array<int, int> $lineMap
+     *
+     * @return list<array{index: int, rule: string}> shadow line index (0-based) => suppressed rule
+     */
+    private function findTargets(array $lines, string $bladeSource, array $lineMap): array
+    {
+        $targets = [];
+
+        foreach ($this->findSuppressions($bladeSource) as $bladeLine => $rule) {
             $targetIndex = $this->findTargetLine($lines, $lineMap, $bladeLine);
 
             if ($targetIndex === null) {
                 continue; // no following statement — nothing to attach to
             }
 
-            $lines[$targetIndex] = $this->insertAfterOpenTag($lines[$targetIndex], $rule);
+            $targets[] = ['index' => $targetIndex, 'rule' => $rule];
         }
 
-        return \implode('', $lines);
+        return $targets;
     }
 
     /** @return array<int, string> blade line => suppressed rule */
