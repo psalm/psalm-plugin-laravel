@@ -82,7 +82,7 @@ final class BladeBootstrapper
         $manifest = new ShadowManifest($shadowDir);
         $manifest->load();
 
-        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $failures);
+        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $viewPaths, $failures);
 
         if ($templatesFullyDiscovered) {
             $manifest->prune($templates);
@@ -121,6 +121,8 @@ final class BladeBootstrapper
 
     /**
      * @param list<string>          $templates
+     * @param list<string>          $viewPaths in finder order, which decides which template wins a
+     *                                         view name two roots both define
      * @param array<string, string> $failures  template path => reason, appended to
      *
      * @return array<string, string> template path => shadow path
@@ -129,9 +131,12 @@ final class BladeBootstrapper
         ShadowCompiler $compiler,
         ShadowManifest $manifest,
         array $templates,
+        array $viewPaths,
         array &$failures,
     ): array {
         $shadows = [];
+        $roots = $this->resolveRoots($viewPaths);
+        $parser = new ContractParser();
 
         foreach ($templates as $template) {
             $source = @\file_get_contents($template);
@@ -143,13 +148,18 @@ final class BladeBootstrapper
             }
 
             if ($manifest->isFresh($template, $source)) {
-                $shadows[$template] = $manifest->shadowPathFor($template);
+                $shadowPath = $manifest->shadowPathFor($template);
+                $shadows[$template] = $shadowPath;
+                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath));
 
                 continue;
             }
 
-            // Contract variables arrive with the extraction slice; until then every template
-            // variable is mixed.
+            $contract = $parser->parseDeclarations($source);
+
+            // Deliberately NOT fed into compile(): contract types in the prelude would change every
+            // shadow's content and fingerprint. Declarations are read here as a side channel for
+            // call-site validation only.
             $shadow = $compiler->compile($template, $source);
 
             if ($shadow instanceof BladeCompileError) {
@@ -159,13 +169,64 @@ final class BladeBootstrapper
             }
 
             try {
-                $shadows[$template] = $manifest->store($template, $source, $shadow);
+                $shadows[$template] = $manifest->store($template, $source, $shadow, $contract);
+                $this->registerContract($template, $roots, $contract);
             } catch (\RuntimeException $throwable) {
                 $failures[$template] = $throwable->getMessage();
             }
         }
 
         return $shadows;
+    }
+
+    /**
+     * View roots as realpaths, in finder order, skipping the ones that do not resolve. The template
+     * paths this is matched against are realpaths too, so both sides have to be normalized or a
+     * symlinked root never matches its own templates.
+     *
+     * @param list<string> $viewPaths
+     *
+     * @return list<string>
+     */
+    private function resolveRoots(array $viewPaths): array
+    {
+        $roots = [];
+
+        foreach ($viewPaths as $viewPath) {
+            $resolved = \realpath($viewPath);
+
+            if ($resolved !== false) {
+                $roots[] = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            }
+        }
+
+        return $roots;
+    }
+
+    /**
+     * @param list<string> $roots
+     */
+    private function registerContract(string $templatePath, array $roots, ?ViewDataContract $contract): void
+    {
+        if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract || $contract->vars === []) {
+            return;
+        }
+
+        foreach ($roots as $index => $root) {
+            $prefix = $root . \DIRECTORY_SEPARATOR;
+
+            if (!\str_starts_with($templatePath, $prefix)) {
+                continue;
+            }
+
+            // Mirrors FileViewFinder: the first root that holds the file owns the name, and the
+            // name is the path under it with the extension dropped and separators as dots.
+            $relative = \substr($templatePath, \strlen($prefix), -\strlen('.blade.php'));
+
+            ContractRegistry::register(\str_replace(\DIRECTORY_SEPARATOR, '.', $relative), $index, $contract);
+
+            return;
+        }
     }
 
     private function resolveCompiler(): ?BladeCompiler

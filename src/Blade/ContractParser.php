@@ -37,6 +37,20 @@ final class ContractParser
     }
 
     /**
+     * The declaration half of {@see self::parse()}, from the template source alone.
+     *
+     * A side channel for call-site validation: it must not touch the compiled output, because
+     * feeding contract types into shadow compilation would change every shadow's content and
+     * fingerprint, which is a separate decision from reading the declarations.
+     */
+    public function parseDeclarations(string $source): ViewDataContract
+    {
+        [$vars, , $propsUnknown] = $this->parseSource($source);
+
+        return new ViewDataContract($vars, $propsUnknown);
+    }
+
+    /**
      * @return array{0: array<string, ContractVar>, 1: array<int, list<string>>, 2: bool}
      */
     private function parseSource(string $source): array
