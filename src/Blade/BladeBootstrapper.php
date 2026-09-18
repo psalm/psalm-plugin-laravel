@@ -61,13 +61,11 @@ final class BladeBootstrapper
         $failures = [];
         $templates = $this->findTemplates($viewPaths, $failures);
 
-        // No templates is the normal state of a package or an API-only application, not a failure.
-        if ($templates === []) {
-            $this->reportFailures($failures);
-
-            return;
-        }
-
+        // No templates is the normal state of a package or an API-only application, not a
+        // failure, but it still has to reach prune() below: a template deleted since the
+        // previous run leaves its shadow and manifest entry behind otherwise, permanently,
+        // since a run with no templates is exactly the run that would never come back to
+        // clean them up.
         $shadowDir = $this->prepareShadowDir();
 
         if ($shadowDir === null) {
