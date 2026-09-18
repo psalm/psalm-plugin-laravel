@@ -37,6 +37,7 @@
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
         "psalm/psalm-plugin-api": "^0.2.0",
+        "stillat/blade-parser": "~2.1.0",
         "symfony/console": "^7.2 || ^8.0",
         "vimeo/psalm": "^7.0.0-beta21 || dev-master"
     },
