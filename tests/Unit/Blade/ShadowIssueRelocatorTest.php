@@ -14,6 +14,7 @@ use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
+use Psalm\LaravelPlugin\Blade\ShadowTarget;
 
 #[CoversClass(ShadowIssueRelocator::class)]
 final class ShadowIssueRelocatorTest extends TestCase
@@ -38,7 +39,11 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private function relocate(CodeIssue $issue, ShadowEntry $entry): CodeIssue|false|null
     {
-        return ShadowIssueRelocator::relocate($issue, $entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php');
+        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php');
+
+        // No other shadow: none of these cases is a taint issue, so the journey resolver is never
+        // reached. {@see JourneyRemapperTest} covers it.
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
     }
 
     #[Test]
