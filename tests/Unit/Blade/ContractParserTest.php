@@ -56,6 +56,14 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function extra_spaces_before_the_variable_name_do_not_leak_into_the_type(): void
+    {
+        $contract = $this->parse("{{-- @var \\App\\Models\\User  \$user --}}\n{{ \$user->name }}\n");
+
+        $this->assertSame('\App\Models\User', $contract->vars['user']->typeString ?? null);
+    }
+
+    #[Test]
     public function a_template_with_no_contract_comments_declares_nothing_but_still_reads_variables(): void
     {
         $contract = $this->parse("Hello {{ \$name }}\n");
@@ -171,6 +179,15 @@ final class ContractParserTest extends TestCase
     public function a_write_only_local_never_read_again_is_excluded(): void
     {
         $contract = $this->parse("@php\n\$temp = \$input;\n@endphp\ndone\n");
+
+        $this->assertContains('input', $contract->readVariables);
+        $this->assertNotContains('temp', $contract->readVariables);
+    }
+
+    #[Test]
+    public function a_write_only_reference_assignment_target_is_excluded(): void
+    {
+        $contract = $this->parse("@php\n\$temp =& \$input;\n@endphp\ndone\n");
 
         $this->assertContains('input', $contract->readVariables);
         $this->assertNotContains('temp', $contract->readVariables);

@@ -48,7 +48,9 @@ final class ContractParser
             // nextStatementLine() below needs genuine int keys to walk forward from one.
             $nodes = \array_values(Document::fromText($source)->getNodeArray());
         } catch (\Throwable) {
-            return [[], [], false];
+            // Parse failure means any @props the template may carry is
+            // unknowable; flag it rather than claiming "no props".
+            return [[], [], true];
         }
 
         $vars = [];
@@ -60,7 +62,9 @@ final class ContractParser
                 $line = $this->nodeLine($node, $source, $mbLines);
 
                 if (\preg_match(self::VAR_PATTERN, $node->innerContent, $matches) === 1) {
-                    $vars[$matches[2]] = new ContractVar($matches[2], $matches[1], $line, false);
+                    // Greedy capture keeps a separator space when several precede the
+                    // variable name; the type string must not carry it.
+                    $vars[$matches[2]] = new ContractVar($matches[2], \rtrim($matches[1]), $line, false);
                 }
 
                 if (\preg_match(self::SUPPRESS_PATTERN, $node->innerContent, $matches) === 1) {
@@ -211,7 +215,9 @@ final class ContractParser
             #[\Override]
             public function enterNode(Node $node): null
             {
-                if ($node instanceof Node\Expr\Assign && $node->var instanceof Node\Expr\Variable) {
+                if (($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef)
+                    && $node->var instanceof Node\Expr\Variable
+                ) {
                     $node->var->setAttribute('contractSkip', true);
                 }
 
