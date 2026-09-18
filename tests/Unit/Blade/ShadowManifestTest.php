@@ -102,6 +102,47 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function the_line_map_and_suppressions_survive_a_reload(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store(
+            '/app/views/foo.blade.php',
+            'source',
+            new ShadowResult('<?php ?>', [1 => 0, 2 => 4], null, [4 => ['UndefinedPropertyFetch']]),
+        );
+        $manifest->flush();
+
+        // The remap reads both off the manifest for any template fresh enough to skip recompiling,
+        // so a shape that does not survive `var_export` + `include` silently loses suppressions.
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $entry = $reloaded->shadowEntry($shadowPath);
+
+        $this->assertNotNull($entry);
+        $this->assertSame('/app/views/foo.blade.php', $entry->templatePath);
+        $this->assertSame([1 => 0, 2 => 4], $entry->lineMap);
+        $this->assertSame([4 => ['UndefinedPropertyFetch']], $entry->suppressions);
+    }
+
+    #[Test]
+    public function an_entry_written_by_an_older_shape_is_dropped_rather_than_half_read(): void
+    {
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash']];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertNull($manifest->shadowEntry('/shadow.php'));
+        $this->assertFalse($manifest->isFresh('/a.blade.php', 'a'));
+    }
+
+    #[Test]
     public function prune_unlinks_orphan_shadows_and_drops_their_entries(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
