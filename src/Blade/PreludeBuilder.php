@@ -21,7 +21,7 @@ use PhpParser\ParserFactory;
 final class PreludeBuilder
 {
     /** @var array<string, string> variable name (without $) => FQCN, always present in a compiled view */
-    private const AMBIENT_TYPES = [
+    public const AMBIENT_TYPES = [
         '__env' => '\Illuminate\View\Factory',
         'errors' => '\Illuminate\Support\ViewErrorBag',
         'attributes' => '\Illuminate\View\ComponentAttributeBag',
