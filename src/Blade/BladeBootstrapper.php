@@ -61,6 +61,11 @@ final class BladeBootstrapper
         $failures = [];
         $templates = $this->findTemplates($viewPaths, $failures);
 
+        // A view root that failed to scan can hide templates that still exist on disk; pruning
+        // against an incomplete list would delete their shadows for nothing more than a
+        // transient read failure, so pruning is only safe once discovery is known-complete.
+        $templatesFullyDiscovered = $failures === [];
+
         // No templates is the normal state of a package or an API-only application, not a
         // failure, but it still has to reach prune() below: a template deleted since the
         // previous run leaves its shadow and manifest entry behind otherwise, permanently,
@@ -69,6 +74,8 @@ final class BladeBootstrapper
         $shadowDir = $this->prepareShadowDir();
 
         if ($shadowDir === null) {
+            $this->reportFailures($failures);
+
             return;
         }
 
@@ -77,7 +84,10 @@ final class BladeBootstrapper
 
         $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $failures);
 
-        $manifest->prune($templates);
+        if ($templatesFullyDiscovered) {
+            $manifest->prune($templates);
+        }
+
         $manifest->flush();
         $this->reportFailures($failures);
 
