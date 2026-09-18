@@ -22,7 +22,7 @@ final class ShadowManifest
     /** Bump when MarkerPrePass changes in a way that changes shadow output for the same source. */
     private const MARKER_PASS_VERSION = 1;
 
-    /** @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string}> shadow path => [template path, lineMap, extendsLine, fingerprint] */
+    /** @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>}> shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions] */
     private array $entries = [];
 
     public function __construct(private readonly string $shadowDir) {}
@@ -51,7 +51,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>}>
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -62,17 +62,23 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 4) {
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 5) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash] = \array_values($entry);
+            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions] = \array_values($entry);
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
                 continue;
             }
 
             if ($extendsLine !== null && !\is_int($extendsLine)) {
+                continue;
+            }
+
+            $validSuppressions = $this->normalizeSuppressions($suppressions);
+
+            if ($validSuppressions === null) {
                 continue;
             }
 
@@ -87,10 +93,55 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions];
         }
 
         return $entries;
+    }
+
+    /**
+     * @return array<int, list<string>>|null null when the shape is wrong, which drops the entry
+     */
+    private function normalizeSuppressions(mixed $data): ?array
+    {
+        if (!\is_array($data)) {
+            return null;
+        }
+
+        $suppressions = [];
+
+        /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+        foreach ($data as $bladeLine => $rules) {
+            if (!\is_int($bladeLine) || !\is_array($rules)) {
+                return null;
+            }
+
+            $validRules = [];
+
+            /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+            foreach ($rules as $rule) {
+                if (!\is_string($rule)) {
+                    return null;
+                }
+
+                $validRules[] = $rule;
+            }
+
+            $suppressions[$bladeLine] = $validRules;
+        }
+
+        return $suppressions;
+    }
+
+    /**
+     * The facts the issue remap needs about a shadow, including for a template that was fresh
+     * enough to skip recompiling this run.
+     */
+    public function shadowEntry(string $shadowPath): ?ShadowEntry
+    {
+        $entry = $this->entries[$shadowPath] ?? null;
+
+        return $entry === null ? null : new ShadowEntry($entry[0], $entry[1], $entry[4]);
     }
 
     public function isFresh(string $templatePath, string $source): bool
@@ -121,7 +172,13 @@ final class ShadowManifest
             throw new \RuntimeException("cannot write shadow file '{$shadowPath}'");
         }
 
-        $this->entries[$shadowPath] = [$templatePath, $shadow->lineMap, $shadow->extendsLine, $this->fingerprint($source)];
+        $this->entries[$shadowPath] = [
+            $templatePath,
+            $shadow->lineMap,
+            $shadow->extendsLine,
+            $this->fingerprint($source),
+            $shadow->suppressions,
+        ];
 
         return $shadowPath;
     }

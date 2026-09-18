@@ -24,6 +24,9 @@ return (new Config())
         (new Finder())
             ->in(__DIR__ . '/src')
             ->in(__DIR__ . '/tests')
+            // Laravel writes packages.php/services.php into fixture bootstrap/cache dirs when
+            // subprocess tests boot the app; those generated files must never be style-checked.
+            ->notPath('#Fixtures/.+/bootstrap/cache/#')
             ->in(__DIR__ . '/bin/ci')
             ->append([
                 __FILE__,

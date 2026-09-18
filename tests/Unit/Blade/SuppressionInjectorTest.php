@@ -54,6 +54,30 @@ final class SuppressionInjectorTest extends TestCase
     }
 
     #[Test]
+    public function resolve_keys_a_suppression_by_the_template_line_it_lands_on(): void
+    {
+        // Not by line 1, where the comment sits: the issue remap matches suppressions against the
+        // template line an issue was mapped to, and Blade compiles the comment itself away.
+        $shadow = "prelude\n<?php /* blade:2 */ ?><?php echo e(\$foo); ?>\n";
+        $bladeSource = "{{-- @psalm-suppress UndefinedVariable --}}\n{{ \$foo }}\n";
+        $lineMap = [1 => 0, 2 => 2];
+
+        $this->assertSame(
+            [2 => ['UndefinedVariable']],
+            (new SuppressionInjector())->resolve($shadow, $bladeSource, $lineMap),
+        );
+    }
+
+    #[Test]
+    public function resolve_drops_a_suppression_with_nothing_to_attach_to(): void
+    {
+        $shadow = "<?php /* blade:1 */ ?>content\n";
+        $bladeSource = "content\n{{-- @psalm-suppress Foo --}}\n";
+
+        $this->assertSame([], (new SuppressionInjector())->resolve($shadow, $bladeSource, [1 => 1]));
+    }
+
+    #[Test]
     public function never_targets_the_markers_own_open_tag(): void
     {
         // The marker itself opens with `<?php`; the negative lookahead in the
