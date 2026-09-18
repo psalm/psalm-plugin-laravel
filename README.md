@@ -66,10 +66,15 @@ Unlike pattern-matching tools, Psalm follows dataflow across function boundaries
 | SSRF                    | A10:2021 | `Http::withOptions()->get()` and the rest of `PendingRequest`                              |
 | Crypto misuse           | A02:2021 | encryption and hashing taint escape or unescape                                            |
 | Timing attack (CWE-208) | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                         |
+| XSS in Blade templates, opt-in | A03:2021 | `{!! $userInput !!}`                                                                |
 
 You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 
 Writing `laravel/ai` prompt middleware that blocks injection? Annotate it so the plugin stops reporting a mitigation you already ship: [Marking prompt-guard middleware as trusted](docs/security.md#marking-prompt-guard-middleware-as-trusted).
+
+## Blade template analysis
+
+Opt-in static analysis of `.blade.php` templates: type issues and, with `--taint-analysis`, `TaintedHtml` findings on unescaped output, reported directly at the template's own file and line. Enable it with `<blade enabled="true" />`. See [docs/blade.md](docs/blade.md) for setup, suppression, and known limits.
 
 ## Custom checks
 
