@@ -148,15 +148,24 @@ final class BladeShadowPruneTest extends TestCase
     #[Test]
     public function deleting_one_template_prunes_only_its_own_shadow(): void
     {
-        $this->analyze();
+        $before = $this->analyze();
+
+        // broken.blade.php, not suppressed.blade.php: the latter's inline @psalm-suppress
+        // means it never reports an issue whether or not its shadow gets pruned, which would
+        // make the "no issue after deletion" assertion below true regardless of the fix.
+        $this->assertNotSame(
+            [],
+            \array_filter($before, static fn(array $issue): bool => \str_ends_with($issue['file_path'], 'broken.blade.php')),
+            'sanity: the template being deleted should report an issue before deletion',
+        );
         $this->assertCount(2, $this->shadowFiles(), 'sanity: two templates should compile to two shadows');
 
-        \unlink($this->scratchDir . '/resources/views/suppressed.blade.php');
+        \unlink($this->scratchDir . '/resources/views/broken.blade.php');
 
         $issues = $this->analyze();
 
         foreach ($issues as $issue) {
-            $this->assertStringNotContainsString('suppressed.blade.php', $issue['file_path']);
+            $this->assertStringNotContainsString('broken.blade.php', $issue['file_path']);
         }
 
         $this->assertCount(1, $this->shadowFiles(), "the surviving template's shadow should remain alone");
