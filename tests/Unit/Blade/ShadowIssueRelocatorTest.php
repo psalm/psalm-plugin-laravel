@@ -39,10 +39,11 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private function relocate(CodeIssue $issue, ShadowEntry $entry): CodeIssue|false|null
     {
-        return ShadowIssueRelocator::relocate(
-            $issue,
-            new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php'),
-        );
+        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php');
+
+        // No other shadow: none of these cases is a taint issue, so the journey resolver is never
+        // reached. {@see JourneyRemapperTest} covers it.
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
     }
 
     #[Test]

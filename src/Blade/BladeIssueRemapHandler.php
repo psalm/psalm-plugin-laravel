@@ -67,7 +67,9 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        $relocated = ShadowIssueRelocator::relocate($issue, $target);
+        // The resolver, not just the issue's own target: a taint journey hops between files, and
+        // any of those hops can be another template's shadow.
+        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...));
 
         // Null is a decline, not a drop: Psalm keeps handling the original, which for a shadow
         // means it stays invisible — but nothing is ever silently thrown away here.

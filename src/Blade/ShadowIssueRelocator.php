@@ -23,8 +23,9 @@ use Psalm\Issue\CodeIssue;
  * `newInstanceWithoutConstructor()` plus property writes is not an option: `CodeIssue::$message` and
  * `$code_location` are readonly and cannot be initialised from outside the declaring scope.
  *
- * Known gap: a `TaintedInput` journey is carried across verbatim, so its individual steps still name
- * the shadow file even though the sink is relocated.
+ * A taint issue carries two further arguments describing how the taint travelled; those are
+ * remapped by {@see JourneyRemapper} and overridden here, so a relocated taint issue's trace names
+ * the template throughout.
  *
  * @internal
  */
@@ -33,12 +34,15 @@ final class ShadowIssueRelocator
     private const UNMAPPED_SUFFIX = ' (unmapped)';
 
     /**
-     * @param ShadowTarget $target the shadow the issue was found in
+     * @param ShadowTarget                    $target  the shadow the issue was found in
+     * @param \Closure(string): ?ShadowTarget $resolve any OTHER shadow a taint journey passes
+     *                                                 through; a journey crosses files, so one
+     *                                                 target is not enough
      *
      * @return CodeIssue|false|null the issue to re-emit on the template, `false` to drop it, `null`
      *                              to decline and leave Psalm's own handling of the original alone
      */
-    public static function relocate(CodeIssue $issue, ShadowTarget $target): CodeIssue|false|null
+    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve): CodeIssue|false|null
     {
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
         $message = $issue->message;
@@ -62,7 +66,20 @@ final class ShadowIssueRelocator
             return null;
         }
 
-        return self::rebuild($issue, ['code_location' => $location, 'message' => $message]);
+        $overrides = ['code_location' => $location, 'message' => $message];
+        $taint = PsalmBridge::taintArguments($issue);
+
+        if ($taint !== null) {
+            $journey = JourneyRemapper::remap($taint['journey'], $taint['journey_text'], $issue->code_location, $resolve);
+
+            if ($journey === null) {
+                return null;
+            }
+
+            $overrides += $journey;
+        }
+
+        return self::rebuild($issue, $overrides);
     }
 
     /**
