@@ -99,6 +99,16 @@ final class BladeBootstrapper
         }
 
         $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
+
+        // Only now, with both registrations done: the registry is what turns a shadow-path issue
+        // into a template-path one, and a shadow Psalm never analyzes has nothing to remap.
+        foreach ($shadows as $shadowPath) {
+            $entry = $manifest->shadowEntry($shadowPath);
+
+            if ($entry instanceof ShadowEntry) {
+                ShadowRegistry::register($shadowPath, $entry);
+            }
+        }
     }
 
     /**

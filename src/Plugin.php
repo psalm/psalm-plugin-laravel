@@ -208,6 +208,8 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Validation\ValidationRuleAnalyzer::reset();
         Handlers\Views\MissingViewHandler::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
+        Blade\BladeIssueRemapHandler::reset();
+        Blade\ShadowRegistry::reset();
     }
 
     private function registerStubs(
@@ -701,6 +703,18 @@ final class Plugin implements PluginEntryPointInterface
         // registration order. Enabled by default; silence via the issueHandlers config.
         require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
+
+        // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
+        // nothing the shadow analysis finds is visible without it. Registered LAST of the
+        // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
+        // returns a bool, so the taint exemptions above get to drop an issue before the remap pays
+        // to rebuild it. Only meaningful when templates were compiled, hence the same gate as
+        // initBladeAnalysis() — with Blade off the shadow registry is empty and every issue would
+        // take the (cheap, but pointless) miss path.
+        if ($pluginConfig->bladeEnabled) {
+            require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
+            $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
+        }
     }
 
     /**
