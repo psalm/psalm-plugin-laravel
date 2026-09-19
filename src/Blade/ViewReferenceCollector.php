@@ -36,10 +36,15 @@ use PhpParser\ParserFactory;
  *    an unresolvable template reference and turns the whole rule off. The `$__env` receiver check is
  *    load-bearing: without it, an unrelated `$items->first(fn ...)` in a template would disable the
  *    rule project-wide.
- *  - {@see self::collect()} walks a plain project file. An arbitrary `$obj->make($x)` proves nothing
- *    about Blade, so only the unambiguous `view()` helper and `View::make()` facade forms are read
- *    there; over-collection (treating more calls as references than strictly proven) is the safe
- *    direction for an "unused" rule, but tripping the off-switch on an unrelated method call is not.
+ *  - {@see self::collect()} walks a plain project file. The `view()` helper and the `View` facade's
+ *    `make()` (concrete, contract, or an aliased `use ... as X` import — classified by Psalm's
+ *    resolved FQCN, falling back to the bare class name when unavailable) are read as ADD-and-MAYBE-
+ *    DYNAMIC, the same as the compiled shadow. Every other `->make()`/`->view()` call, on any
+ *    receiver — `Factory::make()`, `response()->view()`, `Mailable::view()`, and the rest — is
+ *    ADD-ONLY: an arbitrary `$obj->make($x)` proves nothing about Blade, so a non-literal argument
+ *    there is silently skipped rather than tripping the off-switch. Over-collection (treating more
+ *    calls as references than strictly proven) is the safe direction for an "unused" rule; a false
+ *    "everything is dynamic" is not.
  */
 final class ViewReferenceCollector
 {
@@ -90,9 +95,27 @@ final class ViewReferenceCollector
                 $call->name instanceof Identifier
                 && \strtolower($call->name->toString()) === 'make'
                 && $call->class instanceof Name
-                && \strtolower($call->class->getLast()) === 'view'
+                && $this->isViewFacadeClass($call->class)
             ) {
                 $this->applyLiteral($call->args, 0, 'view', $names, $dynamic);
+            }
+        }
+
+        // Plain-PHP instance calls: Factory::make(), response()->view(), Mailable::view(), and any
+        // other ->make()/->view() on an arbitrary receiver. Add-only — see the class docblock for
+        // why an unrelated method call must never trip the off-switch here, unlike the compiled
+        // shadow's $__env-gated branch below.
+        if (!$compiledShadow) {
+            foreach ($finder->findInstanceOf($stmts, MethodCall::class) as $call) {
+                if (!$call->name instanceof Identifier) {
+                    continue;
+                }
+
+                $method = \strtolower($call->name->toString());
+
+                if ($method === 'make' || $method === 'view') {
+                    $this->applyLiteralAddOnly($call->args, 0, 'view', $names);
+                }
             }
         }
 
@@ -182,6 +205,41 @@ final class ViewReferenceCollector
         }
 
         return $expr instanceof Plus ? $this->unwrapArray($expr->left) : null;
+    }
+
+    /**
+     * Whether a `StaticCall`'s class name refers to the `View` facade, by Psalm's own resolved FQCN
+     * when available (so `use Illuminate\Support\Facades\View as ViewFacade;` classifies correctly),
+     * falling back to the bare class name otherwise — a raw parse of a compiled shadow (no import
+     * table to resolve against) never carries the `resolvedName` attribute, and Blade's own compiled
+     * output never aliases anyway.
+     */
+    private function isViewFacadeClass(Name $class): bool
+    {
+        /** @psalm-suppress MixedAssignment Node::getAttribute() is untyped by design */
+        $resolved = $class->getAttribute('resolvedName');
+
+        if (\is_string($resolved)) {
+            return \strtolower(\ltrim($resolved, '\\')) === 'illuminate\support\facades\view';
+        }
+
+        return \strtolower($class->getLast()) === 'view';
+    }
+
+    /**
+     * Same as {@see self::applyLiteral()} but never trips the off-switch: for a plain-PHP method
+     * call on an arbitrary receiver, a non-literal argument proves nothing about Blade.
+     *
+     * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
+     * @param array<string, true>                                     $names
+     */
+    private function applyLiteralAddOnly(array $args, int $position, ?string $paramName, array &$names): void
+    {
+        $arg = $this->findArg($args, $position, $paramName);
+
+        if ($arg instanceof Arg && $arg->value instanceof String_) {
+            $names[$arg->value->value] = true;
+        }
     }
 
     /**

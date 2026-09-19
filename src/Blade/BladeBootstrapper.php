@@ -32,6 +32,12 @@ final class BladeBootstrapper
         private readonly ShadowRegistrar $registrar,
         private readonly Progress $output,
         private readonly string $shadowDir,
+        /**
+         * Opt-in for UnusedView (`reportUnusedViews`). Gates the compile-time reference collection
+         * pass: off by default so the AST walk and the manifest's references slot are pure cost paid
+         * only by projects that turned the rule on.
+         */
+        private readonly bool $collectViewReferences = false,
     ) {}
 
     public function boot(): void
@@ -138,7 +144,7 @@ final class BladeBootstrapper
         $shadows = [];
         $roots = $this->resolveRoots($viewPaths);
         $parser = new ContractParser();
-        $collector = new ViewReferenceCollector();
+        $collector = $this->collectViewReferences ? new ViewReferenceCollector() : null;
 
         foreach ($templates as $template) {
             $source = @\file_get_contents($template);
@@ -150,11 +156,14 @@ final class BladeBootstrapper
                 continue;
             }
 
-            if ($manifest->isFresh($template, $source)) {
+            if ($manifest->isFresh($template, $source, $this->collectViewReferences)) {
                 $shadowPath = $manifest->shadowPathFor($template);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $shadowPath);
-                $this->applyReferences($manifest->referencesFor($shadowPath));
+
+                if ($this->collectViewReferences) {
+                    $this->applyReferences($manifest->referencesFor($shadowPath) ?? [[], false]);
+                }
 
                 continue;
             }
@@ -174,14 +183,19 @@ final class BladeBootstrapper
             }
 
             // Read from the compiled output, not the raw template: Laravel has already resolved
-            // component namespaces and anonymous-component candidates by this point.
-            $references = $collector->collectFromSource($shadow->contents);
+            // component namespaces and anonymous-component candidates by this point. Null (not an
+            // empty pair) when the rule is off, so a later flag flip cannot mistake "never
+            // collected" for "collected, found nothing" — see ShadowManifest::isFresh().
+            $references = $collector?->collectFromSource($shadow->contents);
 
             try {
                 $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract($template, $roots, $contract, $shadowPath);
-                $this->applyReferences($references);
+
+                if ($references !== null) {
+                    $this->applyReferences($references);
+                }
             } catch (\RuntimeException $throwable) {
                 $failures[$template] = $throwable->getMessage();
                 $this->claimNameOnly($template, $roots);

@@ -41,6 +41,12 @@ final class UnusedViewTest extends TestCase
 
     private const SUPPRESSED_FIXTURE = __DIR__ . '/Fixtures/UnusedViewSuppressed';
 
+    private const INSTANCE_CALL_FIXTURE = __DIR__ . '/Fixtures/UnusedViewInstanceCall';
+
+    private const FACADE_ALIAS_FIXTURE = __DIR__ . '/Fixtures/UnusedViewFacadeAlias';
+
+    private const FACADE_ALIAS_DYNAMIC_FIXTURE = __DIR__ . '/Fixtures/UnusedViewFacadeAliasDynamic';
+
     private const ISSUE = 'UnusedView';
 
     /** @var list<string> */
@@ -52,6 +58,9 @@ final class UnusedViewTest extends TestCase
         self::FIRST_CALL_FIXTURE,
         self::PARSE_FAILURE_FIXTURE,
         self::SUPPRESSED_FIXTURE,
+        self::INSTANCE_CALL_FIXTURE,
+        self::FACADE_ALIAS_FIXTURE,
+        self::FACADE_ALIAS_DYNAMIC_FIXTURE,
     ];
 
     protected function setUp(): void
@@ -274,5 +283,93 @@ final class UnusedViewTest extends TestCase
             static fn(array $issue): bool => $issue['file'] === 'unsuppressed.blade.php',
         ));
         $this->assertCount(1, $unsuppressed, 'an identical template without the comment must still be reported: ' . \var_export($issues, true));
+    }
+
+    /**
+     * `Factory::make()` and `response()->view()` are instance method calls on an arbitrary receiver,
+     * not the `view()` helper or the `View` facade's static form — both must still be collected
+     * (add-only), or the docs claiming `Factory::make()` support are simply wrong.
+     */
+    #[Test]
+    public function instance_make_and_view_calls_are_collected(): void
+    {
+        $issues = $this->unusedViewIssues(self::INSTANCE_CALL_FIXTURE, 'psalm.xml');
+
+        foreach (['used.blade.php', 'viewed.blade.php'] as $file) {
+            $this->assertSame([], \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => $issue['file'] === $file,
+            )), "{$file} must not be reported unused");
+        }
+
+        $orphaned = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'orphan.blade.php',
+        ));
+        $this->assertCount(1, $orphaned, 'the rule must still catch a genuine orphan in the same run: ' . \var_export($issues, true));
+    }
+
+    /**
+     * `use Illuminate\Support\Facades\View as ViewFacade; ViewFacade::make('used')` has to classify
+     * by Psalm's resolved FQCN, not the bare (aliased) class name in the source — `getLast()` alone
+     * would see "ViewFacade", never "View".
+     */
+    #[Test]
+    public function an_aliased_view_facade_import_is_collected(): void
+    {
+        $issues = $this->unusedViewIssues(self::FACADE_ALIAS_FIXTURE, 'psalm.xml');
+
+        $this->assertSame([], \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'used.blade.php',
+        )), \var_export($issues, true));
+
+        $orphaned = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'orphan.blade.php',
+        ));
+        $this->assertCount(1, $orphaned, 'the rule must still catch a genuine orphan in the same run: ' . \var_export($issues, true));
+    }
+
+    /**
+     * The other direction of the same alias-classification fix: a dynamic argument through the
+     * ALIASED form must still trip the off-switch. Before the resolved-FQCN classification, an
+     * aliased `ViewFacade::make($name)` matched no branch at all — neither collected nor flagged
+     * dynamic — which is the false negative half of the bug.
+     */
+    #[Test]
+    public function an_aliased_view_facade_call_with_a_dynamic_argument_turns_the_check_off(): void
+    {
+        $issues = $this->unusedViewIssues(self::FACADE_ALIAS_DYNAMIC_FIXTURE, 'psalm.xml');
+
+        $this->assertSame([], $issues, \var_export($issues, true));
+    }
+
+    /**
+     * A shadow cache warmed while `reportUnusedViews` was off stores a null references slot for
+     * every template (collection never ran). Flipping the flag on against that SAME cache must not
+     * leave every template "fresh" with no references forever: each one has to recompile once so the
+     * collector actually runs.
+     */
+    #[Test]
+    public function a_cache_warmed_with_the_flag_off_is_recompiled_once_the_flag_turns_on(): void
+    {
+        // Warm the shadow cache with reference collection off — every template's manifest entry gets
+        // a null references slot.
+        $this->unusedViewIssues(self::FIXTURE, 'psalm-unused-off.xml');
+
+        // Same fixture, same cache directory, flag now on, deliberately without deleting the cache
+        // between the two runs.
+        $issues = $this->unusedViewIssues(self::FIXTURE, 'psalm.xml');
+
+        $this->assertCount(1, $issues, \var_export($issues, true));
+        $this->assertSame('orphan.blade.php', $issues[0]['file']);
+
+        foreach (['layout.blade.php', 'partial.blade.php'] as $file) {
+            $this->assertSame([], \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => $issue['file'] === $file,
+            )), "{$file} must not be reported unused after the flag turns on");
+        }
     }
 }

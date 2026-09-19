@@ -23,8 +23,9 @@ final class ShadowManifest
     private const MARKER_PASS_VERSION = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}, 6: array{0: list<string>, 1: bool}}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}, 6: array{0: list<string>, 1: bool}|null}>
      *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract, references]
+     *      references is null when the entry was written with reference collection disabled
      */
     private array $entries = [];
 
@@ -54,7 +55,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}, 6: array{0: list<string>, 1: bool}}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}, 6: array{0: list<string>, 1: bool}|null}>
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -95,7 +96,7 @@ final class ShadowManifest
 
             $validReferences = $this->normalizeReferences($references);
 
-            if ($validReferences === null) {
+            if ($validReferences === false) {
                 continue;
             }
 
@@ -117,18 +118,25 @@ final class ShadowManifest
     }
 
     /**
-     * @return array{0: list<string>, 1: bool}|null null when the shape is wrong, which drops the entry
+     * Null is a valid value here ("reference collection was off when this entry was written"),
+     * distinct from `false` ("the shape is wrong"), which drops the whole entry.
+     *
+     * @return array{0: list<string>, 1: bool}|null|false
      */
-    private function normalizeReferences(mixed $data): ?array
+    private function normalizeReferences(mixed $data): array|false|null
     {
-        if (!\is_array($data) || \count($data) !== 2) {
+        if ($data === null) {
             return null;
+        }
+
+        if (!\is_array($data) || \count($data) !== 2) {
+            return false;
         }
 
         [$viewNames, $dynamic] = \array_values($data);
 
         if (!\is_array($viewNames) || !\is_bool($dynamic)) {
-            return null;
+            return false;
         }
 
         $validNames = [];
@@ -136,7 +144,7 @@ final class ShadowManifest
         /** @psalm-suppress MixedAssignment untyped data straight from an included file */
         foreach ($viewNames as $viewName) {
             if (!\is_string($viewName)) {
-                return null;
+                return false;
             }
 
             $validNames[] = $viewName;
@@ -226,14 +234,22 @@ final class ShadowManifest
         return $entry === null ? null : new ShadowEntry($entry[0], $entry[1], $entry[4]);
     }
 
-    public function isFresh(string $templatePath, string $source): bool
+    /**
+     * @param bool $requireReferences when true, an entry written with reference collection disabled
+     *             (a null slot 6) is treated as NOT fresh, forcing a recompile so the collector
+     *             actually runs for it. Flipping `reportUnusedViews` on against a cache warmed while
+     *             it was off must not leave every template permanently "fresh with no references".
+     */
+    public function isFresh(string $templatePath, string $source, bool $requireReferences = false): bool
     {
         $shadowPath = $this->shadowPath($templatePath);
         $entry = $this->entries[$shadowPath] ?? null;
 
-        return $entry !== null
-            && $entry[3] === $this->fingerprint($source)
-            && \is_file($shadowPath);
+        if ($entry === null || $entry[3] !== $this->fingerprint($source) || !\is_file($shadowPath)) {
+            return false;
+        }
+
+        return !$requireReferences || $entry[6] !== null;
     }
 
     /**
@@ -271,11 +287,11 @@ final class ShadowManifest
     /**
      * Writes the shadow file to disk and records it. Call flush() to persist the manifest itself.
      *
-     * @param array{0: list<string>, 1: bool} $references view names the compiled shadow references,
-     *                                                     and whether it also holds one this plugin
-     *                                                     could not resolve statically
+     * @param array{0: list<string>, 1: bool}|null $references view names the compiled shadow
+     *        references, and whether it also holds one this plugin could not resolve statically;
+     *        null when reference collection is disabled for this run
      */
-    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, array $references): string
+    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $references): string
     {
         $shadowPath = $this->shadowPath($templatePath);
 
@@ -304,13 +320,14 @@ final class ShadowManifest
 
     /**
      * The template-side view-name references collected from the compiled shadow, including for a
-     * template that was fresh enough to skip recompiling this run.
+     * template that was fresh enough to skip recompiling this run. Null for an unknown shadow path
+     * or one whose entry was written with reference collection disabled.
      *
-     * @return array{0: list<string>, 1: bool}
+     * @return array{0: list<string>, 1: bool}|null
      */
-    public function referencesFor(string $shadowPath): array
+    public function referencesFor(string $shadowPath): ?array
     {
-        return $this->entries[$shadowPath][6] ?? [[], false];
+        return $this->entries[$shadowPath][6] ?? null;
     }
 
     /**

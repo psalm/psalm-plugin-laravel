@@ -894,6 +894,7 @@ final class Plugin implements PluginEntryPointInterface
             new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance()),
             $output,
             $pluginConfig->bladeCacheDir,
+            $pluginConfig->bladeReportUnusedViews,
         );
 
         $bootstrapper->boot();
