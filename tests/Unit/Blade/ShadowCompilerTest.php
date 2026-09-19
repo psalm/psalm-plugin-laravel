@@ -246,4 +246,31 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertNotNull($stmts);
     }
+
+    #[Test]
+    public function switch_yields_a_parseable_shadow(): void
+    {
+        // Blade's compileSwitch() opens PHP mode for the switch statement without closing it;
+        // PHP mode stays open until the first @case closes it, since compileCase() relies on
+        // the switch's still-open tag instead of opening its own. A marker injected anywhere in
+        // between lands inside open PHP code and breaks the shadow's syntax outright, exactly
+        // like the raw-php-block case above.
+        $source = "@switch(\$type)\n\n{{-- comment --}}\n@case('a')\nfoo\n@break\n@endswitch\n";
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+
+        try {
+            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($result->contents);
+        } catch (PhpParserError $phpParserError) {
+            $this->fail('shadow is not parseable PHP: ' . $phpParserError->getMessage());
+        }
+
+        $this->assertNotNull($stmts);
+
+        // Gated lines (the blank line, the comment, and the @case line itself) have no marker
+        // of their own; LineMapBuilder's $last carry-forward makes them fall back to the
+        // nearest preceding marker, which is the @switch line.
+        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 1));
+    }
 }

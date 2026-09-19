@@ -70,6 +70,7 @@ final class MarkerPrePass
         $masked = self::maskedRanges($source);
 
         self::markSkipLines($source, $masked, $skip);
+        self::markSwitchGapLines($source, $masked, $skip);
 
         // A lazy match (echo, directive args, component tags) can START inside a masked range and
         // run past its end into live source: e.g. a raw PHP block containing a literal `{{` with
@@ -90,6 +91,56 @@ final class MarkerPrePass
         }
 
         return $skip;
+    }
+
+    /**
+     * Blade's compileSwitch() opens PHP mode for the switch statement without closing it; PHP
+     * mode stays open until the first @case closes it, since compileCase() relies on the
+     * switch's still-open tag instead of opening its own. Every line from the @switch line's
+     * successor through the @case line ITSELF therefore sits inside open PHP code, including the
+     * @case line's own leading marker, so the whole span is gated (unlike every other gate in
+     * this class, which skips continuation lines only and leaves the opening line marked).
+     *
+     * $firstCaseInSwitch in Laravel is a single bool, not a stack, so nesting is mirrored with a
+     * single pending-line variable rather than a stack: an inner @switch re-arms it and the next
+     * @case at ANY depth disarms it, matching the compiler exactly. A @switch with no following
+     * @case leaves Blade's own output unterminated already; nothing is marked for it. Consequence:
+     * the first @case line (and everything gated before it) inherits the @switch line's marker
+     * via LineMapBuilder's carry-forward fallback, same as every other gated span.
+     *
+     * @param list<array{0: string, 1: int}> $masked
+     * @param array<int, true> $skip
+     */
+    private static function markSwitchGapLines(string $source, array $masked, array &$skip): void
+    {
+        if (\preg_match_all('/(?<!@)@(switch|case)[ \t]*\(/', $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+            return;
+        }
+
+        $pendingLine = null;
+
+        foreach ($matches[0] as $i => [, $offset]) {
+            if (self::isMasked($offset, $masked)) {
+                continue;
+            }
+
+            $name = $matches[1][$i][0];
+            $line = 1 + \substr_count($source, "\n", 0, $offset);
+
+            if ($name === 'switch') {
+                $pendingLine = $line;
+
+                continue;
+            }
+
+            if ($pendingLine !== null) {
+                for ($l = $pendingLine + 1; $l <= $line; $l++) {
+                    $skip[$l] = true;
+                }
+
+                $pendingLine = null;
+            }
+        }
     }
 
     /**
