@@ -11,11 +11,15 @@ namespace Psalm\LaravelPlugin\Blade;
  * php block a separate `<?php ?>` block does not suppress anything.
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class SuppressionInjector
 {
     /**
      * @param array<int, int> $lineMap shadow line => blade source line (0 = prelude)
+     *
+     * @psalm-mutation-free
      */
     public function inject(string $shadowContent, string $bladeSource, array $lineMap): string
     {
@@ -43,6 +47,8 @@ final class SuppressionInjector
      * @param array<int, int> $lineMap shadow line => blade source line (0 = prelude)
      *
      * @return array<int, list<string>> blade line => suppressed rules
+     *
+     * @psalm-mutation-free
      */
     public function resolve(string $shadowContent, string $bladeSource, array $lineMap): array
     {
@@ -66,6 +72,8 @@ final class SuppressionInjector
      * the target-keyed map {@see self::resolve()} builds.
      *
      * @return list<string>
+     *
+     * @psalm-mutation-free
      */
     public function suppressedRules(string $bladeSource): array
     {
@@ -77,6 +85,8 @@ final class SuppressionInjector
      * @param array<int, int> $lineMap
      *
      * @return list<array{index: int, rule: string}> shadow line index (0-based) => suppressed rule
+     *
+     * @psalm-mutation-free
      */
     private function findTargets(array $lines, string $bladeSource, array $lineMap): array
     {
@@ -95,7 +105,11 @@ final class SuppressionInjector
         return $targets;
     }
 
-    /** @return array<int, string> blade line => suppressed rule */
+    /**
+     * @return array<int, string> blade line => suppressed rule
+     *
+     * @psalm-pure
+     */
     private function findSuppressions(string $bladeSource): array
     {
         $suppressions = [];
@@ -113,6 +127,8 @@ final class SuppressionInjector
     /**
      * @param list<string> $lines
      * @param array<int, int> $lineMap
+     *
+     * @psalm-pure
      */
     private function findTargetLine(array $lines, array $lineMap, int $afterBladeLine): ?int
     {
@@ -134,6 +150,9 @@ final class SuppressionInjector
         return null;
     }
 
+    /**
+     * @psalm-pure
+     */
     private function insertAfterOpenTag(string $line, string $rule): string
     {
         return (string) \preg_replace(

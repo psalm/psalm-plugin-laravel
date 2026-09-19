@@ -27,6 +27,9 @@ final class BladeBootstrapper
     /** Templates named in the aggregated skip warning before it degrades to a count. */
     private const FAILURES_TO_NAME = 3;
 
+    /**
+     * @psalm-mutation-free
+     */
     public function __construct(
         private readonly Container $app,
         private readonly ShadowRegistrar $registrar,
@@ -223,7 +226,11 @@ final class BladeBootstrapper
         return $shadows;
     }
 
-    /** @param array{0: list<string>, 1: bool} $references */
+    /**
+     * @param array{0: list<string>, 1: bool} $references
+     *
+     * @psalm-external-mutation-free
+     */
     private function applyReferences(array $references): void
     {
         foreach ($references[0] as $viewName) {
@@ -268,6 +275,8 @@ final class BladeBootstrapper
      * blocks that without asserting anything about a template we failed on.
      *
      * @param list<string> $roots
+     *
+     * @psalm-external-mutation-free
      */
     private function claimNameOnly(string $templatePath, array $roots): void
     {
@@ -287,6 +296,8 @@ final class BladeBootstrapper
      *
      * @param list<string>                         $roots
      * @param array{0: list<string>, 1: bool}|null $dataIncludes null when the collection pass was off
+     *
+     * @psalm-external-mutation-free
      */
     private function registerContract(
         string $templatePath,
@@ -378,17 +389,25 @@ final class BladeBootstrapper
     /**
      * The container is documented as returning `mixed`, so each binding gets narrowed at exactly
      * one place instead of assigning `mixed` into a variable first.
+     *
+     * @psalm-pure
      */
     private function asCompiler(mixed $resolved): ?BladeCompiler
     {
         return $resolved instanceof BladeCompiler ? $resolved : null;
     }
 
+    /**
+     * @psalm-pure
+     */
     private function asFinder(mixed $resolved): ?FileViewFinder
     {
         return $resolved instanceof FileViewFinder ? $resolved : null;
     }
 
+    /**
+     * @psalm-mutation-free
+     */
     private function asFactoryFinder(mixed $resolved): ?FileViewFinder
     {
         return $resolved instanceof Factory ? $this->asFinder($resolved->getFinder()) : null;

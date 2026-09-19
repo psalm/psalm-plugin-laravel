@@ -18,6 +18,9 @@ final class ShadowCompiler
 
     private readonly SuppressionInjector $suppressionInjector;
 
+    /**
+     * @psalm-mutation-free
+     */
     public function __construct(private readonly BladeCompiler $compiler)
     {
         $this->preludeBuilder = new PreludeBuilder();

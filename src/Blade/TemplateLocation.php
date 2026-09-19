@@ -13,9 +13,14 @@ use Psalm\CodeLocation\Raw;
  * compiled at all, which have no shadow to relocate from.
  *
  * @internal
+ *
+ * @psalm-pure
  */
 final class TemplateLocation
 {
+    /**
+     * @psalm-pure
+     */
     public static function atLine(string $templatePath, string $templateName, string $source, int $line): ?Raw
     {
         $bounds = self::lineBounds($source, $line);
@@ -31,6 +36,8 @@ final class TemplateLocation
      * Byte offsets of a 1-based line, or null when the source has no such line.
      *
      * @return array{int, int}|null
+     *
+     * @psalm-pure
      */
     public static function lineBounds(string $source, int $line): ?array
     {

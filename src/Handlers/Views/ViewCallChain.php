@@ -47,6 +47,8 @@ final class ViewCallChain
      * @param array<string, Union> $data     supplied variable name => the type passed for it
      * @param bool                 $complete every contribution was proven, so a name absent from
      *                                       $data is provably not supplied
+     *
+     * @psalm-mutation-free
      */
     private function __construct(
         public readonly string $viewName,

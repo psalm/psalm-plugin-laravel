@@ -73,6 +73,9 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $found = [];
 
+            /**
+             * @psalm-external-mutation-free
+             */
             #[\Override]
             public function enterNode(Node $node): null
             {

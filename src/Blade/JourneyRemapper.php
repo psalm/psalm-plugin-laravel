@@ -104,6 +104,8 @@ final class JourneyRemapper
      * @param array<string, array{path: string, target: ShadowTarget}>                     $targets
      *
      * @return list<array{location: ?CodeLocation, label: string, entry_path_type: string}>|null
+     *
+     * @psalm-mutation-free
      */
     private static function remapSteps(array $journey, array $targets): ?array
     {

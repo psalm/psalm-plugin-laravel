@@ -11,6 +11,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * recovers the original line numbers by reading these markers back out.
  *
  * @internal
+ *
+ * @psalm-pure
  */
 final class MarkerPrePass
 {
@@ -22,6 +24,8 @@ final class MarkerPrePass
      * when that line's marker decision is made).
      *
      * @return array<int, true>
+     *
+     * @psalm-pure
      */
     public static function computeSkipLines(string $source): array
     {
@@ -72,6 +76,8 @@ final class MarkerPrePass
      * `@extends` footer after everything else, so without it the footer
      * would inherit the LAST content line's marker instead of the line the
      * `@extends` directive actually appears on.
+     *
+     * @psalm-pure
      */
     public static function inject(string $source): string
     {
@@ -100,7 +106,11 @@ final class MarkerPrePass
         return $out;
     }
 
-    /** The source line of an `@extends`/`@extendsFirst` directive, if any. */
+    /**
+     * The source line of an `@extends`/`@extendsFirst` directive, if any.
+     *
+     * @psalm-pure
+     */
     public static function extendsLine(string $source): ?int
     {
         if (\preg_match('/@extends(First)?\s*\(/', $source, $match, \PREG_OFFSET_CAPTURE)) {

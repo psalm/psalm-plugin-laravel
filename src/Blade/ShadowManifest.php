@@ -36,6 +36,9 @@ final class ShadowManifest
      */
     private array $entries = [];
 
+    /**
+     * @psalm-mutation-free
+     */
     public function __construct(private readonly string $shadowDir) {}
 
     /** Tolerates an absent or corrupt manifest file: starts empty either way. */
@@ -63,6 +66,8 @@ final class ShadowManifest
      * dropped rather than failing the whole load.
      *
      * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
+     *
+     * @psalm-mutation-free
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -136,6 +141,8 @@ final class ShadowManifest
      * entry was written"), distinct from `false` ("the shape is wrong"), which drops the whole entry.
      *
      * @return array{0: list<string>, 1: bool}|null|false
+     *
+     * @psalm-pure
      */
     private function normalizeViewNames(mixed $data): array|false|null
     {
@@ -170,6 +177,8 @@ final class ShadowManifest
     /**
      * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool}|null
      *         null when the shape is wrong, which drops the entry
+     *
+     * @psalm-pure
      */
     private function normalizeContract(mixed $data): ?array
     {
@@ -216,6 +225,8 @@ final class ShadowManifest
 
     /**
      * @return array<int, list<string>>|null null when the shape is wrong, which drops the entry
+     *
+     * @psalm-pure
      */
     private function normalizeSuppressions(mixed $data): ?array
     {
@@ -251,6 +262,8 @@ final class ShadowManifest
     /**
      * The facts the issue remap needs about a shadow, including for a template that was fresh
      * enough to skip recompiling this run.
+     *
+     * @psalm-mutation-free
      */
     public function shadowEntry(string $shadowPath): ?ShadowEntry
     {
@@ -285,6 +298,8 @@ final class ShadowManifest
     /**
      * Where a template's shadow lives, whether or not it has been compiled yet. A caller that
      * skipped recompiling a fresh template still has to register the shadow with Psalm.
+     *
+     * @psalm-mutation-free
      */
     public function shadowPathFor(string $templatePath): string
     {
@@ -294,6 +309,8 @@ final class ShadowManifest
     /**
      * The template's declared variables, including for a template that was fresh enough to skip
      * recompiling this run — which is why the contract is persisted rather than re-parsed.
+     *
+     * @psalm-mutation-free
      */
     public function contractFor(string $shadowPath): ?ViewDataContract
     {
@@ -358,6 +375,8 @@ final class ShadowManifest
      * or one whose entry was written with reference collection disabled.
      *
      * @return array{0: list<string>, 1: bool}|null
+     *
+     * @psalm-mutation-free
      */
     public function referencesFor(string $shadowPath): ?array
     {
@@ -370,6 +389,8 @@ final class ShadowManifest
      * was written with data-include collection disabled.
      *
      * @return array{0: list<string>, 1: bool}|null
+     *
+     * @psalm-mutation-free
      */
     public function dataIncludesFor(string $shadowPath): ?array
     {
@@ -411,11 +432,17 @@ final class ShadowManifest
         }
     }
 
+    /**
+     * @psalm-mutation-free
+     */
     private function shadowPath(string $templatePath): string
     {
         return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '.php';
     }
 
+    /**
+     * @psalm-mutation-free
+     */
     private function manifestPath(): string
     {
         return $this->shadowDir . \DIRECTORY_SEPARATOR . self::MANIFEST_FILE;

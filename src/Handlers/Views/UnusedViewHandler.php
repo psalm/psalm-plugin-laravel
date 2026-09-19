@@ -41,11 +41,17 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
 {
     private static ?Progress $output = null;
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function init(Progress $output): void
     {
         self::$output = $output;
     }
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function reset(): void
     {
         self::$output = null;

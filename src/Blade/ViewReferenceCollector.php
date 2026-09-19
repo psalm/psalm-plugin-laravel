@@ -129,6 +129,8 @@ final class ViewReferenceCollector
      * into `$mergeData`), so the whole argument list is scanned rather than one pinned index.
      *
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
+     *
+     * @psalm-mutation-free
      */
     private function passesWholeScope(array $args): bool
     {
@@ -279,6 +281,8 @@ final class ViewReferenceCollector
      * `X::resolve()`'s single argument compiles as `[...] + (isset($attributes) ? ... : [])`
      * (`CompilesComponents::compileClassComponentOpening()`), so the literal array is the left
      * operand of a `+`, not the argument value itself.
+     *
+     * @psalm-mutation-free
      */
     private function unwrapArray(Node $expr): ?Array_
     {
@@ -298,7 +302,7 @@ final class ViewReferenceCollector
      */
     private function isViewFacadeClass(Name $class): bool
     {
-        /** @psalm-suppress MixedAssignment Node::getAttribute() is untyped by design */
+        /** @psalm-var ?string $resolved Node::getAttribute() is untyped by design */
         $resolved = $class->getAttribute('resolvedName');
 
         if (\is_string($resolved)) {
@@ -374,7 +378,11 @@ final class ViewReferenceCollector
         }
     }
 
-    /** @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args */
+    /**
+     * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
+     *
+     * @psalm-mutation-free
+     */
     private function findArg(array $args, int $position, ?string $paramName): ?Arg
     {
         $positionsReliable = true;

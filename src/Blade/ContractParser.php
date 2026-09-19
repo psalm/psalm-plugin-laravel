@@ -129,6 +129,8 @@ final class ContractParser
 
     /**
      * @param list<AbstractNode> $nodes
+     *
+     * @psalm-mutation-free
      */
     private function nextStatementLine(array $nodes, int $afterIndex, string $source, bool $mbLines): ?int
     {
@@ -146,6 +148,9 @@ final class ContractParser
         return null;
     }
 
+    /**
+     * @psalm-mutation-free
+     */
     private function nodeLine(AbstractNode $node, string $source, bool $mbLines): int
     {
         $position = $node->position;
@@ -251,6 +256,8 @@ final class ContractParser
      * @param array<string, true> $excluded
      *
      * @return list<string>
+     *
+     * @psalm-pure
      */
     private function filterNames(array $names, array $excluded): array
     {
@@ -334,7 +341,11 @@ final class ContractParser
                 return null;
             }
 
-            /** @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args */
+            /**
+             * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
+             *
+             * @psalm-external-mutation-free
+             */
             private function enterCall(string $name, array $args): void
             {
                 if ($name === 'extract') {

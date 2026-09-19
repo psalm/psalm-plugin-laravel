@@ -13,6 +13,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * a byte-for-byte mismatch between the two makes every UnusedView verdict a false positive.
  *
  * @internal
+ *
+ * @psalm-pure
  */
 final class ViewName
 {
@@ -20,6 +22,8 @@ final class ViewName
      * @param list<string> $roots realpaths, in finder order
      *
      * @return array{0: int, 1: string}|null null when the path is under none of the roots
+     *
+     * @psalm-pure
      */
     public static function resolve(string $templatePath, array $roots): ?array
     {

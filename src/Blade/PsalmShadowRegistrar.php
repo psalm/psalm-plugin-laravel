@@ -23,6 +23,9 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
  */
 final class PsalmShadowRegistrar implements ShadowRegistrar
 {
+    /**
+     * @psalm-mutation-free
+     */
     public function __construct(private readonly ProjectAnalyzer $projectAnalyzer) {}
 
     /** @inheritDoc */
@@ -32,7 +35,11 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         return ProjectFileInjector::inject($this->projectAnalyzer, $templatePaths);
     }
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     *
+     * @psalm-external-mutation-free
+     */
     #[\Override]
     public function registerShadowsForAnalysis(array $shadowPaths): void
     {

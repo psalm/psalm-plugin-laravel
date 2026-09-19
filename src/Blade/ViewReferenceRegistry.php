@@ -12,6 +12,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * Psalm instantiates itself and hands nothing but the event.
  *
  * @internal
+ *
+ * @psalm-external-mutation-free
  */
 final class ViewReferenceRegistry
 {
@@ -23,17 +25,27 @@ final class ViewReferenceRegistry
     /** @var array<string, array{0: int, 1: string, 2: string|null}> view name => [view root index, template path, shadow path] */
     private static array $templates = [];
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function addReference(string $viewName): void
     {
         self::$references[$viewName] = true;
     }
 
-    /** One unresolvable reference anywhere makes the whole enumerated set untrustworthy. */
+    /**
+     * One unresolvable reference anywhere makes the whole enumerated set untrustworthy.
+     *
+     * @psalm-external-mutation-free
+     */
     public static function markDynamic(): void
     {
         self::$dynamic = true;
     }
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function isDynamic(): bool
     {
         return self::$dynamic;
@@ -42,6 +54,8 @@ final class ViewReferenceRegistry
     /**
      * A template claims its view name the same way {@see ContractRegistry} does: the lowest root
      * index wins, because that is the file Laravel actually renders for that name.
+     *
+     * @psalm-external-mutation-free
      */
     public static function registerTemplate(string $viewName, int $rootIndex, string $templatePath, ?string $shadowPath): void
     {
@@ -54,7 +68,11 @@ final class ViewReferenceRegistry
         self::$templates[$viewName] = [$rootIndex, $templatePath, $shadowPath];
     }
 
-    /** @return array<string, array{0: string, 1: string|null}> view name => [template path, shadow path] */
+    /**
+     * @return array<string, array{0: string, 1: string|null}> view name => [template path, shadow path]
+     *
+     * @psalm-external-mutation-free
+     */
     public static function unusedTemplates(): array
     {
         $unused = [];
@@ -68,6 +86,9 @@ final class ViewReferenceRegistry
         return $unused;
     }
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function reset(): void
     {
         self::$references = [];

@@ -22,12 +22,19 @@ final class ShadowRegistry
     /** @var array<string, string|false> template path => contents, or false when unreadable */
     private static array $sources = [];
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function register(string $shadowPath, ShadowEntry $entry): void
     {
         self::$entries[$shadowPath] = $entry;
     }
 
-    /** Null for any path that is not a registered shadow, which is every normal project file. */
+    /**
+     * Null for any path that is not a registered shadow, which is every normal project file.
+     *
+     * @psalm-external-mutation-free
+     */
     public static function entryFor(string $shadowPath): ?ShadowEntry
     {
         return self::$entries[$shadowPath] ?? null;
@@ -48,6 +55,9 @@ final class ShadowRegistry
         return $source === false ? null : $source;
     }
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function reset(): void
     {
         self::$entries = [];

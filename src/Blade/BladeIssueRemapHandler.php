@@ -32,6 +32,9 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 {
     private static bool $remapping = false;
 
+    /**
+     * @psalm-external-mutation-free
+     */
     public static function reset(): void
     {
         self::$remapping = false;

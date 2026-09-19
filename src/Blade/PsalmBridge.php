@@ -23,6 +23,8 @@ use Psalm\Issue\TaintedInput;
  * taint is off (`IssueBuffer.php:168-174`) — so on this line there is no mode to short-circuit on.
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class PsalmBridge
 {
@@ -35,6 +37,8 @@ final class PsalmBridge
      * parameter names double as the property names a reflective rebuild reads.
      *
      * @return array{journey: list<array{location: ?CodeLocation, label: string, entry_path_type: string}>, journey_text: string}|null
+     *
+     * @psalm-mutation-free
      */
     public static function taintArguments(CodeIssue $issue): ?array
     {
@@ -54,6 +58,8 @@ final class PsalmBridge
      * rather than an expression (a stubbed taint source, for one).
      *
      * @param array{location: ?CodeLocation, label: string, entry_path_type: string} $step
+     *
+     * @psalm-pure
      */
     public static function stepLocation(array $step): ?CodeLocation
     {
@@ -66,6 +72,8 @@ final class PsalmBridge
      * @param array{location: ?CodeLocation, label: string, entry_path_type: string} $step
      *
      * @return array{location: ?CodeLocation, label: string, entry_path_type: string}
+     *
+     * @psalm-pure
      */
     public static function withStepLocation(array $step, CodeLocation $location): array
     {
@@ -81,6 +89,8 @@ final class PsalmBridge
      * `file_name:line:column` half being `CodeLocation::getShortSummary()`
      * (`vendor/vimeo/psalm/src/Psalm/CodeLocation.php:434-437`), assembled by
      * `TaintFlowGraph::getPredecessorPath()` and `getSuccessorPath()` (same file, lines 148-211).
+     *
+     * @psalm-pure
      */
     public static function locationSummary(string $fileName, int $line, int $column): string
     {
@@ -95,6 +105,8 @@ final class PsalmBridge
      * which the journey array stops short of, so it cannot be regenerated from that array.
      *
      * @return non-empty-string
+     *
+     * @psalm-pure
      */
     public static function locationSummaryPattern(string $fileName): string
     {
