@@ -69,3 +69,32 @@ The check declines rather than guess. It is silent when:
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them.
 - Psalm is running `--taint-analysis`, which on Psalm 6 reports taint issues only.
+
+### Known false positive: variables bound outside the call site
+
+The check reads the data one call site passes. It does not know about the ways Laravel binds a
+variable into a view somewhere else entirely:
+
+- `View::composer('profile', ...)` and `View::creator(...)`, which bind at render time from a service provider.
+- `View::share('siteName', ...)`, which binds into every view in the application.
+- `@inject('metrics', 'App\Services\Metrics')` inside the template, which resolves from the container rather than from the data array.
+
+A variable that arrives one of those ways is declared by the template but never passed by the call
+site, so it is reported. Either drop its `{{-- @var --}}` declaration, or silence the rule for the
+call sites it affects:
+
+```php
+/** @psalm-suppress MissingViewVariable */
+return view('profile', []);
+```
+
+Application wide, suppress it through `issueHandlers` in your `psalm.xml`:
+
+```xml
+<issueHandlers>
+    <MissingViewVariable errorLevel="suppress" />
+</issueHandlers>
+```
+
+Teaching the check to read `composer()`, `creator()`, `share()` and `@inject` bindings is tracked
+as a follow-up.
