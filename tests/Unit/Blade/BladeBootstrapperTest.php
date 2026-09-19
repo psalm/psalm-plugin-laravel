@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 
 #[CoversClass(BladeBootstrapper::class)]
 final class BladeBootstrapperTest extends TestCase
@@ -35,6 +36,10 @@ final class BladeBootstrapperTest extends TestCase
         $this->viewDir = $root . '/views';
         $this->shadowDir = $root . '/cache/blade';
         $this->progress = new RecordingProgress();
+
+        // This suite calls BladeBootstrapper directly, bypassing Plugin::resetInvocationState(), so
+        // the registry has to be reset here or an earlier test's compile failure leaks into this one.
+        ViewReferenceRegistry::reset();
     }
 
     protected function tearDown(): void
@@ -323,7 +328,7 @@ final class BladeBootstrapperTest extends TestCase
     #[Test]
     public function a_template_that_fails_to_compile_is_reported_once_and_the_rest_still_register(): void
     {
-        $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
+        $broken = $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
         $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
         $registrar = new RecordingShadowRegistrar();
 
@@ -335,8 +340,27 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings, 'one aggregated warning, never one per template');
         $this->assertStringContainsString('broken.blade.php', $this->progress->warningText());
-        $this->assertSame([$healthy], $registrar->reportableTemplates);
+        // Every discovered template is reportable, not only the ones that compiled: UnusedView has
+        // to be able to report on a template that failed to compile too (#1477).
+        $this->assertSame([$broken, $healthy], $registrar->reportableTemplates);
         $this->assertCount(1, $registrar->analyzedShadows);
+    }
+
+    /**
+     * A template that fails to compile has unknown @include/@extends references, not empty ones:
+     * treating them as empty would cascade into false UnusedView positives on everything it renders.
+     */
+    #[Test]
+    public function a_template_that_fails_to_compile_marks_the_reference_set_dynamic(): void
+    {
+        $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
+
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertTrue(ViewReferenceRegistry::isDynamic());
     }
 
     #[Test]

@@ -278,6 +278,18 @@ Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` fa
 
 Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
 
+### `reportUnusedViews`
+
+**default**: off
+
+```xml
+<blade enabled="true" reportUnusedViews="true" />
+```
+
+Report a template ([UnusedView](issues/UnusedView.md)) that no statically-provable `view()` / `View::make()` call site and no `@include` / `@extends` from another template ever names.
+
+One reference this plugin cannot resolve statically (a dynamic `view($name)` or `@include($name)`) anywhere in the project turns the check off for the whole run, printed as one warning: a lower bound on "used" is not enough to prove a template unused. See the issue page for the full list of call shapes this release recognizes.
+
 Needs `enabled="true"`: the contracts only exist once the compile pass has read the templates.
 
 ### Degradation
