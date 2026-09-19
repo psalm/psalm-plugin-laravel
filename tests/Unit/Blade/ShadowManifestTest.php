@@ -360,6 +360,10 @@ final class ShadowManifestTest extends TestCase
         $this->assertInstanceOf(\RuntimeException::class, $thrown);
         $this->assertSame('original', \file_get_contents($shadowPath));
         $this->assertSame([], \glob($this->shadowDir . '/*.tmp.*'));
+        // The bare path is not actionable on its own; the OS's own reason (e.g. permission
+        // denied) must be appended so this doesn't read the same as every other failure mode.
+        $this->assertStringContainsString(': ', $thrown->getMessage());
+        $this->assertGreaterThan(\strlen("cannot write shadow file '{$shadowPath}'"), \strlen($thrown->getMessage()));
     }
 
     #[Test]
