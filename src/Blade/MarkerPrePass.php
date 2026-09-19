@@ -67,11 +67,19 @@ final class MarkerPrePass
         ];
 
         $skip = [];
+        $masked = self::maskedRanges($source);
 
-        self::markSkipLines($source, self::maskedRanges($source), $skip);
+        self::markSkipLines($source, $masked, $skip);
+
+        // A lazy match (echo, directive args, component tags) can START inside a masked range and
+        // run past its end into live source: e.g. a raw PHP block containing a literal `{{` with
+        // no `}}` of its own would otherwise let the echo pattern consume every line up to the
+        // next REAL `}}`. Scan a same-length copy with masked ranges blanked out (newlines kept,
+        // so line numbers stay correct) instead of the original source.
+        $scanSource = self::blankRanges($source, $masked);
 
         foreach ($patterns as $pattern) {
-            if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+            if (\preg_match_all($pattern, $scanSource, $matches, \PREG_OFFSET_CAPTURE) === false) {
                 continue;
             }
 
@@ -82,6 +90,24 @@ final class MarkerPrePass
         }
 
         return $skip;
+    }
+
+    /**
+     * Replaces each given range with spaces, keeping newlines intact so line numbers and byte
+     * offsets stay identical to $source.
+     *
+     * @param list<array{0: string, 1: int}> $ranges
+     */
+    private static function blankRanges(string $source, array $ranges): string
+    {
+        foreach ($ranges as [$text, $offset]) {
+            $blanked = \preg_replace('/[^\n]/', ' ', $text);
+            \assert($blanked !== null);
+
+            $source = \substr_replace($source, $blanked, $offset, \strlen($text));
+        }
+
+        return $source;
     }
 
     /**

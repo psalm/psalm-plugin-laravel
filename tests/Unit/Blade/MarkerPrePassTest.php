@@ -159,4 +159,16 @@ final class MarkerPrePassTest extends TestCase
         $this->assertArrayHasKey(3, $skip);
         $this->assertArrayNotHasKey(4, $skip);
     }
+
+    #[Test]
+    public function a_literal_double_brace_inside_a_masked_raw_php_block_does_not_swallow_live_lines(): void
+    {
+        // The echo pattern must not be free to start matching INSIDE a masked raw-PHP block and
+        // run past its end into live source: a literal `{{` with no matching `}}` of its own
+        // inside the block would otherwise let it lazily consume every line up to the next REAL
+        // `}}`, marking live lines in between as skipped and dropping their markers.
+        $skip = MarkerPrePass::computeSkipLines("<?php \$s = '{{'; ?>\n<div>live</div>\n{{ \$x }}\n");
+
+        $this->assertArrayNotHasKey(2, $skip);
+    }
 }
