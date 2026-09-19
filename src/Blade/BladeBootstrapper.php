@@ -110,9 +110,12 @@ final class BladeBootstrapper
             return;
         }
 
-        // Every discovered template, not just the compiled ones: UnusedView has to be able to report
-        // on a template that failed to compile too, and Config::reportIssueInFile() only ever
-        // consults this project-file list (see ViewReferenceRegistry / UnusedViewHandler).
+        // Reached only with at least one shadow, because nothing can be reported on a template path
+        // without one: a remap needs a ShadowRegistry entry, and a template that failed to compile
+        // has already turned UnusedView off for the whole run (claimNameOnly() marks the reference
+        // set dynamic). The list is the discovered set rather than the compiled one because the two
+        // differ only by those failures, which are harmless extras here, and
+        // Config::reportIssueInFile() consults nothing but this project-file list.
         if (!$this->registrar->markTemplatesReportable($templates)) {
             $this->degrade(
                 "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
