@@ -24,29 +24,22 @@ final class MarkerPrePass
      */
     private static function maskedRanges(string $source): array
     {
-        $patterns = [
-            '/@verbatim.*?@endverbatim/s',
-            '/@php.*?@endphp/s',
-            '/\{\{--.*?--\}\}/s',
-            // The `.*\z` alternative covers a raw PHP block left unclosed at end of
-            // template, which Blade permits.
-            '/<\?(?:php\b|=)(?:.*?\?>|.*\z)/s',
-        ];
+        // A single alternation, so an earlier-starting construct consumes its own body instead of
+        // each pattern re-scanning the whole source independently: a raw PHP open tag typed inside
+        // a Blade comment must not let the raw-PHP branch re-match past the comment's own close and
+        // mask everything to EOF via the `.*\z` fallback below. Keep the comment branch before the
+        // raw-PHP one. `(?i:php\b|=)` matches the case-insensitive PHP open tag; the `.*\z`
+        // alternative covers a raw PHP block left unclosed at end of template, which Blade permits.
+        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)(?:.*?\?>|.*\z)/s';
 
-        $ranges = [];
-
-        foreach ($patterns as $pattern) {
-            if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
-                continue;
-            }
-
-            /** @var list<array{0: string, 1: int}> $wholeMatches */
-            $wholeMatches = $matches[0];
-
-            \array_push($ranges, ...$wholeMatches);
+        if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+            return [];
         }
 
-        return $ranges;
+        /** @var list<array{0: string, 1: int}> $wholeMatches */
+        $wholeMatches = $matches[0];
+
+        return $wholeMatches;
     }
 
     /**

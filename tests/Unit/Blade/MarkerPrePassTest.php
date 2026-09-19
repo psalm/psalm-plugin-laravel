@@ -135,4 +135,28 @@ final class MarkerPrePassTest extends TestCase
     {
         $this->assertSame(3, MarkerPrePass::extendsLine("{{-- @extends('old') --}}\n\n@extends('real')\n"));
     }
+
+    #[Test]
+    public function an_unclosed_php_tag_inside_a_comment_does_not_mask_the_rest_of_the_template(): void
+    {
+        // Independent preg_match_all() passes let the raw-PHP pattern re-scan text the comment
+        // pattern already claimed: a raw PHP open tag typed inside a Blade comment, with no
+        // closing tag of its own, would otherwise mask everything to EOF via the `.*\z` fallback.
+        $source = "{{-- <?php --}}\n<div>a</div>\n<div>b</div>\n@extends('real')\n";
+
+        $this->assertSame([], MarkerPrePass::computeSkipLines($source));
+        $this->assertSame(4, MarkerPrePass::extendsLine($source));
+    }
+
+    #[Test]
+    public function skips_an_uppercase_raw_php_block(): void
+    {
+        // `<?PHP` is a legal, case-insensitive PHP open tag.
+        $skip = MarkerPrePass::computeSkipLines("<?PHP\n\$x = 1;\n?>\nhi\n");
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
 }
