@@ -189,4 +189,41 @@ final class BladeIssueRemapTest extends TestCase
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
+
+    #[Test]
+    public function the_mixed_issue_family_is_suppressed_by_default(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'MixedArgument', 'resources/views/untyped.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        foreach ($issues as $issue) {
+            if (\str_starts_with($issue['type'], 'Mixed')) {
+                $this->assertStringNotContainsString(
+                    '.blade.php',
+                    $issue['file_path'],
+                    \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                );
+            }
+        }
+    }
+
+    #[Test]
+    public function reportmixedissues_reinstates_the_family_on_a_warm_manifest(): void
+    {
+        // Warm the manifest with the default (off) config first: reusing it under the opt-in config
+        // is itself the proof that the flag needs no cache invalidation.
+        $this->analyze('psalm.xml');
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'MixedArgument', 'resources/views/untyped.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
 }

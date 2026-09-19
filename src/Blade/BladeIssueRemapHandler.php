@@ -32,9 +32,18 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 {
     private static bool $remapping = false;
 
+    private static bool $reportMixedIssues = false;
+
+    /** @psalm-external-mutation-free */
+    public static function init(bool $reportMixedIssues): void
+    {
+        self::$reportMixedIssues = $reportMixedIssues;
+    }
+
     public static function reset(): void
     {
         self::$remapping = false;
+        self::$reportMixedIssues = false;
     }
 
     #[\Override]
@@ -69,7 +78,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
         // The resolver, not just the issue's own target: a taint journey hops between files, and
         // any of those hops can be another template's shadow.
-        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...));
+        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...), self::$reportMixedIssues);
 
         // Null is a decline, not a drop: Psalm keeps handling the original, which for a shadow
         // means it stays invisible — but nothing is ever silently thrown away here.

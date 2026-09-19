@@ -37,13 +37,13 @@ final class ShadowIssueRelocatorTest extends TestCase
         return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
     }
 
-    private function relocate(CodeIssue $issue, ShadowEntry $entry): CodeIssue|false|null
+    private function relocate(CodeIssue $issue, ShadowEntry $entry, bool $reportMixed = false): CodeIssue|false|null
     {
         $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php');
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
-        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null, $reportMixed);
     }
 
     #[Test]
@@ -84,10 +84,44 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function it_drops_an_unmapped_mixed_issue(): void
     {
         // Prelude lines map to 0: the prelude types every unresolved template variable as mixed,
-        // so a Mixed* issue there says nothing about the template.
+        // so a Mixed* issue there says nothing about the template. Run with the flag ON so this
+        // keeps pinning the unmapped-line path specifically, not the new default-off behavior.
         $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2));
 
-        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0]), reportMixed: true));
+    }
+
+    #[Test]
+    public function a_mapped_mixed_issue_is_dropped_by_default(): void
+    {
+        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function a_mapped_mixed_issue_is_rebuilt_when_reportmixed_is_on(): void
+    {
+        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
+
+        $this->assertInstanceOf(MixedAssignment::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    #[Test]
+    public function a_mapped_non_mixed_issue_is_unaffected_by_the_flag(): void
+    {
+        $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
+
+        $off = $this->relocate($issue, $this->entry([9 => 3]));
+        $on = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
+
+        $this->assertInstanceOf(CodeIssue::class, $off);
+        $this->assertInstanceOf(CodeIssue::class, $on);
+        $this->assertSame(3, $off->code_location->getLineNumber());
+        $this->assertSame(3, $on->code_location->getLineNumber());
     }
 
     #[Test]
