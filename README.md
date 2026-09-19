@@ -76,7 +76,7 @@ Writing `laravel/ai` prompt middleware that blocks injection? Annotate it so the
 
 ## Blade template analysis
 
-Opt-in static analysis of `.blade.php` templates: type issues and, with `--taint-analysis`, `TaintedHtml` findings on unescaped output, reported directly at the template's own file and line. Enable it with `<blade enabled="true" />`. See [docs/blade.md](docs/blade.md) for setup, suppression, and known limits.
+Opt-in static analysis of `.blade.php` templates: type issues and `TaintedHtml` findings on unescaped output, reported directly at the template's own file and line. Enable it with `<blade enabled="true" />`. See [docs/blade.md](docs/blade.md) for setup, suppression, and known limits.
 
 ## Custom checks
 

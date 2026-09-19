@@ -68,7 +68,6 @@ The check declines rather than guess. It is silent when:
 - The `@props` entry carries a literal default, which Blade fills in itself.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them.
-- Psalm is running `--taint-analysis`, which on Psalm 6 reports taint issues only.
 
 ### Known false positive: variables bound outside the call site
 

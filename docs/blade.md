@@ -5,7 +5,7 @@ nav_order: 8
 
 # Blade Template Analysis
 
-Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports type issues, and with `--taint-analysis`, security findings, at the exact template file and line, not just in your PHP.
+Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports type issues and security findings at the exact template file and line, not just in your PHP.
 
 ## What is analyzed
 
@@ -80,21 +80,14 @@ Every other variable a template uses without a type the plugin can prove gets `m
 
 ## What gets reported
 
-* **Type analysis** (a plain `psalm` run): the same issue types Psalm reports anywhere else, at the template's file and line.
-* **Taint analysis** (`psalm --taint-analysis`): `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged.
+One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
+
+* **Type analysis**: the same issue types Psalm reports anywhere else, at the template's file and line.
+* **Taint analysis**: `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged.
 
 ```blade
 {{ request()->input('q') }}   {{-- escaped: not flagged --}}
 {!! request()->input('q') !!} {{-- unescaped: TaintedHtml --}}
-```
-
-### Two runs on Psalm 6
-
-Psalm 6 runs taint analysis exclusively: a plain run reports type issues only, and `--taint-analysis` reports taint issues only. Blade templates follow the same split, so covering both needs two runs, same as the rest of the plugin:
-
-```bash
-./vendor/bin/psalm                  # type issues, including Blade templates
-./vendor/bin/psalm --taint-analysis # taint issues, including Blade templates
 ```
 
 ## Degradation
