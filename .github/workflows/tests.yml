@@ -72,6 +72,12 @@ jobs:
           # Highest 12.x: the enum $connection path is live since 12.28.
           - php: '8.2'
             laravel: '^12.14'
+          # The only cell where Eloquent cannot dispatch a #[Scope] attribute, so the sole guard
+          # that the scope-attribute tests stay capability-gated rather than asserting it exists.
+          # Held at PHP 8.4: the Testbench release this line resolves configures PDO with constants
+          # PHP 8.5 deprecates, and the notices break the subprocess tests that assert clean stderr.
+          - php: '8.4'
+            laravel: '^11.35'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
