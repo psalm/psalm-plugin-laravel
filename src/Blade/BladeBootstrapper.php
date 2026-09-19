@@ -95,9 +95,10 @@ final class BladeBootstrapper
             return;
         }
 
-        // Templates first: a shadow Psalm cannot report on is pure analysis cost, so a failed write
-        // cancels the whole registration rather than half of it.
-        if (!$this->registrar->markTemplatesReportable(\array_keys($shadows))) {
+        // Every discovered template, not just the compiled ones: UnusedView has to be able to report
+        // on a template that failed to compile too, and Config::reportIssueInFile() only ever
+        // consults this project-file list (see ViewReferenceRegistry / UnusedViewHandler).
+        if (!$this->registrar->markTemplatesReportable($templates)) {
             $this->degrade(
                 "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
                 . 'list is not writable on this Psalm version)',
@@ -137,6 +138,7 @@ final class BladeBootstrapper
         $shadows = [];
         $roots = $this->resolveRoots($viewPaths);
         $parser = new ContractParser();
+        $collector = new ViewReferenceCollector();
 
         foreach ($templates as $template) {
             $source = @\file_get_contents($template);
@@ -151,7 +153,8 @@ final class BladeBootstrapper
             if ($manifest->isFresh($template, $source)) {
                 $shadowPath = $manifest->shadowPathFor($template);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath));
+                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $shadowPath);
+                $this->applyReferences($manifest->referencesFor($shadowPath));
 
                 continue;
             }
@@ -170,9 +173,15 @@ final class BladeBootstrapper
                 continue;
             }
 
+            // Read from the compiled output, not the raw template: Laravel has already resolved
+            // component namespaces and anonymous-component candidates by this point.
+            $references = $collector->collectFromSource($shadow->contents);
+
             try {
-                $shadows[$template] = $manifest->store($template, $source, $shadow, $contract);
-                $this->registerContract($template, $roots, $contract);
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references);
+                $shadows[$template] = $shadowPath;
+                $this->registerContract($template, $roots, $contract, $shadowPath);
+                $this->applyReferences($references);
             } catch (\RuntimeException $throwable) {
                 $failures[$template] = $throwable->getMessage();
                 $this->claimNameOnly($template, $roots);
@@ -180,6 +189,18 @@ final class BladeBootstrapper
         }
 
         return $shadows;
+    }
+
+    /** @param array{0: list<string>, 1: bool} $references */
+    private function applyReferences(array $references): void
+    {
+        foreach ($references[0] as $viewName) {
+            ViewReferenceRegistry::addReference($viewName);
+        }
+
+        if ($references[1]) {
+            ViewReferenceRegistry::markDynamic();
+        }
     }
 
     /**
@@ -218,38 +239,35 @@ final class BladeBootstrapper
      */
     private function claimNameOnly(string $templatePath, array $roots): void
     {
-        $this->registerContract($templatePath, $roots, new ViewDataContract([], false));
+        $this->registerContract($templatePath, $roots, new ViewDataContract([], false), null);
     }
 
     /**
      * A template that declares nothing is registered too, with an empty contract. Skipping it would
      * leave its view name unclaimed, and a same-named template in a LATER view root would then own
      * the name and have its declarations checked against callers that Laravel resolves to this
-     * file instead.
+     * file instead. The view name is claimed as an UnusedView CANDIDATE unconditionally, even for a
+     * template this pass could not process — see {@see claimNameOnly()}.
      *
      * @param list<string> $roots
      */
-    private function registerContract(string $templatePath, array $roots, ?ViewDataContract $contract): void
+    private function registerContract(string $templatePath, array $roots, ?ViewDataContract $contract, ?string $shadowPath): void
     {
+        $resolved = ViewName::resolve($templatePath, $roots);
+
+        if ($resolved === null) {
+            return;
+        }
+
+        [$rootIndex, $viewName] = $resolved;
+
+        ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath, $shadowPath);
+
         if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
             return;
         }
 
-        foreach ($roots as $index => $root) {
-            $prefix = $root . \DIRECTORY_SEPARATOR;
-
-            if (!\str_starts_with($templatePath, $prefix)) {
-                continue;
-            }
-
-            // Mirrors FileViewFinder: the first root that holds the file owns the name, and the
-            // name is the path under it with the extension dropped and separators as dots.
-            $relative = \substr($templatePath, \strlen($prefix), -\strlen('.blade.php'));
-
-            ContractRegistry::register(\str_replace(\DIRECTORY_SEPARATOR, '.', $relative), $index, $contract);
-
-            return;
-        }
+        ContractRegistry::register($viewName, $rootIndex, $contract);
     }
 
     private function resolveCompiler(): ?BladeCompiler

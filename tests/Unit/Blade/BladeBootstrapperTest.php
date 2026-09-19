@@ -323,7 +323,7 @@ final class BladeBootstrapperTest extends TestCase
     #[Test]
     public function a_template_that_fails_to_compile_is_reported_once_and_the_rest_still_register(): void
     {
-        $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
+        $broken = $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
         $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
         $registrar = new RecordingShadowRegistrar();
 
@@ -335,7 +335,9 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings, 'one aggregated warning, never one per template');
         $this->assertStringContainsString('broken.blade.php', $this->progress->warningText());
-        $this->assertSame([$healthy], $registrar->reportableTemplates);
+        // Every discovered template is reportable, not only the ones that compiled: UnusedView has
+        // to be able to report on a template that failed to compile too (#1477).
+        $this->assertSame([$broken, $healthy], $registrar->reportableTemplates);
         $this->assertCount(1, $registrar->analyzedShadows);
     }
 

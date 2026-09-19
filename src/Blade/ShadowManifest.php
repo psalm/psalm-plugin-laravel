@@ -23,8 +23,8 @@ final class ShadowManifest
     private const MARKER_PASS_VERSION = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}}>
-     *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract]
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}, 6: array{0: list<string>, 1: bool}}>
+     *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract, references]
      */
     private array $entries = [];
 
@@ -54,7 +54,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}, 6: array{0: list<string>, 1: bool}}>
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -65,11 +65,13 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 6) {
+            // Arity 7 gates every entry written before the references slot was added: one full
+            // recompile on upgrade, rather than a manifest carrying entries of two different shapes.
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 7) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract] = \array_values($entry);
+            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $references] = \array_values($entry);
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
                 continue;
@@ -91,6 +93,12 @@ final class ShadowManifest
                 continue;
             }
 
+            $validReferences = $this->normalizeReferences($references);
+
+            if ($validReferences === null) {
+                continue;
+            }
+
             $validLineMap = [];
 
             /** @psalm-suppress MixedAssignment untyped data straight from an included file */
@@ -102,10 +110,39 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validReferences];
         }
 
         return $entries;
+    }
+
+    /**
+     * @return array{0: list<string>, 1: bool}|null null when the shape is wrong, which drops the entry
+     */
+    private function normalizeReferences(mixed $data): ?array
+    {
+        if (!\is_array($data) || \count($data) !== 2) {
+            return null;
+        }
+
+        [$viewNames, $dynamic] = \array_values($data);
+
+        if (!\is_array($viewNames) || !\is_bool($dynamic)) {
+            return null;
+        }
+
+        $validNames = [];
+
+        /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+        foreach ($viewNames as $viewName) {
+            if (!\is_string($viewName)) {
+                return null;
+            }
+
+            $validNames[] = $viewName;
+        }
+
+        return [$validNames, $dynamic];
     }
 
     /**
@@ -231,8 +268,14 @@ final class ShadowManifest
         return new ViewDataContract($contractVars, $propsUnknown);
     }
 
-    /** Writes the shadow file to disk and records it. Call flush() to persist the manifest itself. */
-    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract): string
+    /**
+     * Writes the shadow file to disk and records it. Call flush() to persist the manifest itself.
+     *
+     * @param array{0: list<string>, 1: bool} $references view names the compiled shadow references,
+     *                                                     and whether it also holds one this plugin
+     *                                                     could not resolve statically
+     */
+    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, array $references): string
     {
         $shadowPath = $this->shadowPath($templatePath);
 
@@ -253,9 +296,21 @@ final class ShadowManifest
             $this->fingerprint($source),
             $shadow->suppressions,
             [$vars, $contract->propsUnknown],
+            $references,
         ];
 
         return $shadowPath;
+    }
+
+    /**
+     * The template-side view-name references collected from the compiled shadow, including for a
+     * template that was fresh enough to skip recompiling this run.
+     *
+     * @return array{0: list<string>, 1: bool}
+     */
+    public function referencesFor(string $shadowPath): array
+    {
+        return $this->entries[$shadowPath][6] ?? [[], false];
     }
 
     /**
