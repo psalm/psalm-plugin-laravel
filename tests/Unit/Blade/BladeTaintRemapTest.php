@@ -109,6 +109,20 @@ final class BladeTaintRemapTest extends TestCase
         ));
     }
 
+    /**
+     * Taint issues only. Psalm 7 emits type and taint findings from one run, so a template that is
+     * taint-clean still carries whatever type issues its prelude and its expressions earn.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function taintIssuesFor(string $template): array
+    {
+        return \array_values(\array_filter(
+            $this->issuesFor($template),
+            static fn(array $issue): bool => \str_starts_with((string) $issue['type'], 'Tainted'),
+        ));
+    }
+
     #[Test]
     public function an_unescaped_echo_of_request_input_is_tainted_on_the_template_line(): void
     {
@@ -142,12 +156,12 @@ final class BladeTaintRemapTest extends TestCase
     #[Test]
     public function an_escaped_echo_reports_no_taint(): void
     {
-        $this->assertSame([], $this->issuesFor('resources/views/escaped.blade.php'), $this->report()[0]);
+        $this->assertSame([], $this->taintIssuesFor('resources/views/escaped.blade.php'), $this->report()[0]);
     }
 
     #[Test]
     public function an_echo_of_a_template_literal_reports_no_taint(): void
     {
-        $this->assertSame([], $this->issuesFor('resources/views/literal.blade.php'), $this->report()[0]);
+        $this->assertSame([], $this->taintIssuesFor('resources/views/literal.blade.php'), $this->report()[0]);
     }
 }

@@ -90,16 +90,21 @@ final class BladeIssueRemapHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_declines_a_non_taint_issue_under_a_taint_flow_graph(): void
+    public function a_taint_flow_graph_is_not_a_decline_reason(): void
     {
-        // The template is readable and the line maps, so without this gate the handler would go on
-        // to re-emit. Psalm 6 runs taint exclusively — `IssueBuffer::add()` discards every
-        // non-Tainted* issue once a taint graph exists, so that would only pay for a rebuild.
+        // Psalm 7 runs taint by default and emits type and taint issues from the same run, so a
+        // non-taint issue on a shadow still has to be relocated. (Psalm 6 runs taint exclusively and
+        // discards non-Tainted* issues under a graph, which is why 3.x declines here instead.)
+        // Proof that nothing short-circuits on the graph: the handler runs past it into target
+        // resolution, which reaches for the live Config this bare harness deliberately has none of.
         $this->registerShadow();
 
-        $this->assertNull(BladeIssueRemapHandler::beforeAddIssue(
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('No config initialized');
+
+        BladeIssueRemapHandler::beforeAddIssue(
             $this->event($this->issueOn(self::SHADOW), new TaintFlowGraph()),
-        ));
+        );
     }
 
     #[Test]

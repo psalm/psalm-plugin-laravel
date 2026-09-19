@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Psalm\Progress\Phase;
 use Psalm\Progress\Progress;
 
 /**
@@ -29,6 +30,21 @@ final class RecordingProgress extends Progress
     {
         $this->debugMessages[] = $message;
     }
+
+    #[\Override]
+    public function startPhase(Phase $phase, int $threads = 1): void {}
+
+    #[\Override]
+    public function expand(int $number_of_tasks): void {}
+
+    #[\Override]
+    public function taskDone(int $level): void {}
+
+    #[\Override]
+    public function finish(): void {}
+
+    #[\Override]
+    public function alterFileDone(string $file_name): void {}
 
     public function warningText(): string
     {
