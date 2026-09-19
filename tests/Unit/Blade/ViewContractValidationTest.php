@@ -203,6 +203,19 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
     }
 
+    /**
+     * A template that declares nothing still claims its view name. Two view roots both hold
+     * `dup.blade.php`; the first root's file declares nothing and is the one Laravel renders, so the
+     * second root's `@var $x` must never reach this call site.
+     */
+    #[Test]
+    public function a_declaration_less_template_shadows_a_declaring_one_in_a_later_view_root(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'ShadowedTemplate.php'), \var_export($issues, true));
+    }
+
     /** Each of these pins a different decline gate, with everything else about the call held equal. */
     #[Test]
     public function every_decline_gate_stays_silent(): void

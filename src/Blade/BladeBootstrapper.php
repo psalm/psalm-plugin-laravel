@@ -204,11 +204,16 @@ final class BladeBootstrapper
     }
 
     /**
+     * A template that declares nothing is registered too, with an empty contract. Skipping it would
+     * leave its view name unclaimed, and a same-named template in a LATER view root would then own
+     * the name and have its declarations checked against callers that Laravel resolves to this
+     * file instead.
+     *
      * @param list<string> $roots
      */
     private function registerContract(string $templatePath, array $roots, ?ViewDataContract $contract): void
     {
-        if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract || $contract->vars === []) {
+        if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
             return;
         }
 
