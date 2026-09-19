@@ -11,10 +11,13 @@ use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
+use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\PsalmBridge;
+use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
+use Psalm\LaravelPlugin\Issues\UnusedViewData;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
@@ -33,35 +36,42 @@ use Psalm\Type;
  * missing. A statement is visited once, and {@see ViewCallChain} walks it outermost-first, so the
  * whole chain is in hand before anything is reported.
  *
- * Both checks are conservative in the same direction: anything that cannot be proven declines.
+ * Also reports, under its own independent flag, a data key the template never reads
+ * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
+ *
+ * Every check is conservative in the same direction: anything that cannot be proven declines.
  * A missing variable needs the supplied key set to be provably closed, so an open data array
  * (a spread, a dynamic key, `$mergeData`) silences it while leaving the type check on the keys that
  * ARE known.
  */
 final class ViewContractHandler implements AfterStatementAnalysisInterface
 {
-    private static bool $enabled = false;
+    private static bool $validateViewData = false;
+
+    private static bool $reportUnusedViewData = false;
 
     /** @var array<string, Type\Union|null> declared type string => parsed union, null when unparseable */
     private static array $declaredTypes = [];
 
     /** @psalm-external-mutation-free */
-    public static function init(): void
+    public static function init(bool $validateViewData, bool $reportUnusedViewData): void
     {
-        self::$enabled = true;
+        self::$validateViewData = $validateViewData;
+        self::$reportUnusedViewData = $reportUnusedViewData;
     }
 
     /** @psalm-external-mutation-free */
     public static function reset(): void
     {
-        self::$enabled = false;
+        self::$validateViewData = false;
+        self::$reportUnusedViewData = false;
         self::$declaredTypes = [];
     }
 
     #[\Override]
     public static function afterStatementAnalysis(AfterStatementAnalysisEvent $event): ?bool
     {
-        if (!self::$enabled) {
+        if (!self::$validateViewData && !self::$reportUnusedViewData) {
             return null;
         }
 
@@ -111,16 +121,63 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        foreach ($contract->vars as $name => $var) {
-            $supplied = $chain->data[$name] ?? null;
+        if (self::$validateViewData) {
+            foreach ($contract->vars as $name => $var) {
+                $supplied = $chain->data[$name] ?? null;
 
-            if ($supplied === null) {
-                self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
+                if ($supplied === null) {
+                    self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
 
+                    continue;
+                }
+
+                self::checkType($chain, $var, $supplied, $codeLocation, $source, $suppressedIssues);
+            }
+        }
+
+        if (self::$reportUnusedViewData) {
+            self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
+        }
+    }
+
+    /**
+     * Deliberately not gated on `$chain->complete`: an open key set only means there may be MORE keys
+     * than these, and every key in `$chain->data` was still proven passed.
+     *
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function reportUnusedData(
+        ViewCallChain $chain,
+        ViewDataContract $contract,
+        CodeLocation $codeLocation,
+        array $suppressedIssues,
+    ): void {
+        // An unreadable `@props` array makes the declared set a lower bound, so "not declared, not
+        // read" proves nothing about whether the template wants the key.
+        if ($contract->propsUnknown) {
+            return;
+        }
+
+        $reads = ReadSetResolver::reads($chain->viewName);
+
+        if ($reads === null) {
+            return;
+        }
+
+        foreach (\array_keys($chain->data) as $name) {
+            // Ambient names are stripped from the read set as Blade's own, so the passed side has to
+            // re-check them: a call site that supplies `errors` is not wrong about the template.
+            if (isset($reads[$name]) || isset($contract->vars[$name]) || isset(PreludeBuilder::AMBIENT_TYPES[$name])) {
                 continue;
             }
 
-            self::checkType($chain, $var, $supplied, $codeLocation, $source, $suppressedIssues);
+            IssueBuffer::accepts(
+                new UnusedViewData(
+                    "View '{$chain->viewName}' never reads \${$name}, but the call site passes '{$name}' to it",
+                    $codeLocation,
+                ),
+                $suppressedIssues,
+            );
         }
     }
 

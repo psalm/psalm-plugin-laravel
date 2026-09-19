@@ -56,6 +56,8 @@ final readonly class PluginConfig
         public bool $bladeValidateViewData,
         /** Opt-in reporting of a template no statically-provable reference renders (`<blade reportUnusedViews="true" />`). */
         public bool $bladeReportUnusedViews,
+        /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
+        public bool $bladeReportUnusedViewData,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -92,6 +94,7 @@ final readonly class PluginConfig
         $bladeEnabled = self::xmlBoolAttr($config?->blade, 'blade enabled', false, 'enabled');
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViews = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViews', false, 'reportUnusedViews');
+        $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -110,6 +113,7 @@ final readonly class PluginConfig
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $bladeValidateViewData,
             bladeReportUnusedViews: $bladeReportUnusedViews,
+            bladeReportUnusedViewData: $bladeReportUnusedViewData,
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );
