@@ -18,9 +18,12 @@ use Psalm\Issue\TaintedInput;
  *
  * No taint-mode probe lives here. Psalm 6 runs one mode per invocation and `IssueBuffer::add()`
  * discards every non-`Tainted*` issue under `--taint-analysis`, which is why the 3.x pipeline asks.
- * Psalm 7 runs taint by default (`Config::$run_taint_analysis = true`, `Config.php:409`) and emits
- * both kinds from one run — `IssueBuffer::add()` only ever drops `Tainted*` issues, and only when
- * taint is off (`IssueBuffer.php:168-174`) — so on this line there is no mode to short-circuit on.
+ * Psalm 7 has no such mode: `Config::$run_taint_analysis` defaults to true (`Config.php:409`), which
+ * is what builds the graph (`Internal/Cli/Psalm.php:1332-1333` into
+ * `ProjectAnalyzer::trackTaintedInputs()`, `Internal/Analyzer/ProjectAnalyzer.php:542-545`), and
+ * `IssueBuffer::add()` filters nothing on taint — its `$is_tainted` (`IssueBuffer.php:281`) only
+ * exempts `Tainted*` issues from the `alreadyEmitted()` dedupe (same file, :308 and :336). One run
+ * therefore emits both kinds, and there is nothing on this line to short-circuit on.
  *
  * @internal
  *
