@@ -327,8 +327,16 @@ final class ShadowManifest
     public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $references, ?array $dataIncludes = null): string
     {
         $shadowPath = $this->shadowPath($templatePath);
+        $pid = \getmypid();
+        $tmpPath = $shadowPath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
 
-        if (@\file_put_contents($shadowPath, $shadow->contents) === false) {
+        if (@\file_put_contents($tmpPath, $shadow->contents) === false) {
+            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'");
+        }
+
+        if (!@\rename($tmpPath, $shadowPath)) {
+            @\unlink($tmpPath);
+
             throw new \RuntimeException("cannot write shadow file '{$shadowPath}'");
         }
 
