@@ -324,6 +324,16 @@ final class ShadowManifestTest extends TestCase
     #[Test]
     public function store_throws_and_leaves_a_pre_existing_shadow_untouched_when_the_directory_is_unwritable(): void
     {
+        // Mode bits are a noop on Windows and a no-effect guard when running as root, so skip
+        // there rather than false-pass (matches AddCommandTest::write_fails_and_preserves_error_when_tmp_cannot_be_written()).
+        if (\DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX mode bits are required to force file_put_contents failure.');
+        }
+
+        if (\function_exists('posix_geteuid') && \posix_geteuid() === 0) {
+            $this->markTestSkipped('Running as root bypasses directory write permissions.');
+        }
+
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
