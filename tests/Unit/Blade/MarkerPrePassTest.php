@@ -103,4 +103,72 @@ final class MarkerPrePassTest extends TestCase
     {
         $this->assertSame(2, MarkerPrePass::extendsLine("line one\n@extends('layout')\n"));
     }
+
+    #[Test]
+    public function skips_raw_php_block_body_lines(): void
+    {
+        $skip = MarkerPrePass::computeSkipLines("<?php\n\$x = 1;\n?>\nhello\n");
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function skips_raw_php_block_body_lines_when_unclosed_at_eof(): void
+    {
+        $skip = MarkerPrePass::computeSkipLines("<?php\n\$x = 1;\n");
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+    }
+
+    #[Test]
+    public function extends_line_returns_null_for_a_commented_out_extends(): void
+    {
+        $this->assertNull(MarkerPrePass::extendsLine("{{-- @extends('layout') --}}\nhello\n"));
+    }
+
+    #[Test]
+    public function extends_line_skips_a_commented_out_extends_and_finds_the_live_one(): void
+    {
+        $this->assertSame(3, MarkerPrePass::extendsLine("{{-- @extends('old') --}}\n\n@extends('real')\n"));
+    }
+
+    #[Test]
+    public function an_unclosed_php_tag_inside_a_comment_does_not_mask_the_rest_of_the_template(): void
+    {
+        // Independent preg_match_all() passes let the raw-PHP pattern re-scan text the comment
+        // pattern already claimed: a raw PHP open tag typed inside a Blade comment, with no
+        // closing tag of its own, would otherwise mask everything to EOF via the `.*\z` fallback.
+        $source = "{{-- <?php --}}\n<div>a</div>\n<div>b</div>\n@extends('real')\n";
+
+        $this->assertSame([], MarkerPrePass::computeSkipLines($source));
+        $this->assertSame(4, MarkerPrePass::extendsLine($source));
+    }
+
+    #[Test]
+    public function skips_an_uppercase_raw_php_block(): void
+    {
+        // `<?PHP` is a legal, case-insensitive PHP open tag.
+        $skip = MarkerPrePass::computeSkipLines("<?PHP\n\$x = 1;\n?>\nhi\n");
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function a_literal_double_brace_inside_a_masked_raw_php_block_does_not_swallow_live_lines(): void
+    {
+        // The echo pattern must not be free to start matching INSIDE a masked raw-PHP block and
+        // run past its end into live source: a literal `{{` with no matching `}}` of its own
+        // inside the block would otherwise let it lazily consume every line up to the next REAL
+        // `}}`, marking live lines in between as skipped and dropping their markers.
+        $skip = MarkerPrePass::computeSkipLines("<?php \$s = '{{'; ?>\n<div>live</div>\n{{ \$x }}\n");
+
+        $this->assertArrayNotHasKey(2, $skip);
+    }
 }

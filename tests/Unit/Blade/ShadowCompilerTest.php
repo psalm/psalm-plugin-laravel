@@ -6,6 +6,8 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
+use PhpParser\Error as PhpParserError;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -225,5 +227,23 @@ final class ShadowCompilerTest extends TestCase
         $this->assertStringContainsString('blade:1 */', $marked);
         $this->assertStringNotContainsString('blade:2 */', $marked);
         $this->assertStringNotContainsString('blade:3 */', $marked);
+    }
+
+    #[Test]
+    public function multiline_raw_php_block_yields_a_parseable_shadow(): void
+    {
+        // A marker injected mid-block (while PHP mode is already open) breaks the shadow's
+        // syntax outright; this must lint clean, matching Laravel's own compiler.
+        $result = $this->compiler->compile('view.blade.php', "<?php\n\$x = 1;\n?>\nhello {{ \$x }}\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+
+        try {
+            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($result->contents);
+        } catch (PhpParserError $phpParserError) {
+            $this->fail('shadow is not parseable PHP: ' . $phpParserError->getMessage());
+        }
+
+        $this->assertNotNull($stmts);
     }
 }

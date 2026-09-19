@@ -322,6 +322,62 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function store_throws_and_leaves_a_pre_existing_shadow_untouched_when_the_directory_is_unwritable(): void
+    {
+        // Mode bits are a noop on Windows and a no-effect guard when running as root, so skip
+        // there rather than false-pass (matches AddCommandTest::write_fails_and_preserves_error_when_tmp_cannot_be_written()).
+        if (\DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX mode bits are required to force file_put_contents failure.');
+        }
+
+        if (\function_exists('posix_geteuid') && \posix_geteuid() === 0) {
+            $this->markTestSkipped('Running as root bypasses directory write permissions.');
+        }
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $templatePath = '/app/views/foo.blade.php';
+        $shadowPath = $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '.php';
+
+        // The pre-existing shadow file is directly writable; only CREATING a fresh file in
+        // the directory is blocked. A non-atomic write truncates the existing file in place
+        // and succeeds silently; the temp-then-rename pattern must fail up front instead,
+        // before touching the file store() is about to replace.
+        \file_put_contents($shadowPath, 'original');
+        \chmod($this->shadowDir, 0o555);
+
+        $thrown = null;
+
+        try {
+            $manifest->store($templatePath, 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
+        } catch (\RuntimeException $runtimeException) {
+            $thrown = $runtimeException;
+        } finally {
+            \chmod($this->shadowDir, 0o777);
+        }
+
+        $this->assertInstanceOf(\RuntimeException::class, $thrown);
+        $this->assertSame('original', \file_get_contents($shadowPath));
+        $this->assertSame([], \glob($this->shadowDir . '/*.tmp.*'));
+        // The bare path is not actionable on its own; the OS's own reason (e.g. permission
+        // denied) must be appended so this doesn't read the same as every other failure mode.
+        $this->assertStringContainsString(': ', $thrown->getMessage());
+        $this->assertGreaterThan(\strlen("cannot write shadow file '{$shadowPath}'"), \strlen($thrown->getMessage()));
+    }
+
+    #[Test]
+    public function store_leaves_no_temp_file_behind_after_a_successful_write(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
+
+        $this->assertSame([], \glob($this->shadowDir . '/*.tmp.*'));
+    }
+
+    #[Test]
     public function prune_unlinks_orphan_shadows_and_drops_their_entries(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
