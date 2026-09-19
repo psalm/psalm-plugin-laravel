@@ -8,7 +8,6 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Config;
 use Psalm\Internal\Provider\FileStorageProvider;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Blade\PsalmBridge;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Blade\SuppressionInjector;
 use Psalm\LaravelPlugin\Blade\TemplateLocation;
@@ -24,8 +23,8 @@ use Psalm\Progress\Progress;
  * statically-provable reference — a `view()`/`View::make()` call site, or an `@include`/`@extends`
  * from another template — ever names.
  *
- * Collection cannot happen during analysis: Psalm 6 forks analysis workers, and plugin statics never
- * return from a fork (`Internal/Codebase/Analyzer.php`). `AfterCodebasePopulated` runs once in the
+ * Collection cannot happen during analysis: Psalm runs analysis in worker processes, and plugin
+ * statics never return from one (`Internal/Codebase/Analyzer.php`). `AfterCodebasePopulated` runs once in the
  * parent, before that fork, with the full project file list already known, so the call-site half of
  * collection (every plain project file's `view()`/`View::make()`) happens here; the template-side
  * half (`@include`/`@extends`) already ran at compile time, in `BladeBootstrapper::compileAll()`.
@@ -56,13 +55,6 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
         $codebase = $event->getCodebase();
-
-        // Psalm 6 runs one mode per invocation and discards every non-taint issue under
-        // --taint-analysis, so the whole walk would be paid for nothing.
-        if (PsalmBridge::isTaintRun($codebase)) {
-            return;
-        }
-
         $config = Config::getInstance();
         $collector = new ViewReferenceCollector();
 

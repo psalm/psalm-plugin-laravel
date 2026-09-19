@@ -4,42 +4,33 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use Psalm\Codebase;
 use Psalm\CodeLocation;
-use Psalm\Internal\Codebase\TaintFlowGraph;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\TaintedInput;
 
 /**
  * The single place the Blade pipeline touches Psalm internals that differ between Psalm 6 and
  * Psalm 7. Every other Blade class works in terms of these methods, so porting the pipeline to the
- * Psalm 7 line is a rewrite of this file rather than a hunt through the package.
+ * other Psalm line is a rewrite of this file rather than a hunt through the package.
  *
- * Each method carries the Psalm 6 file:line it was read off. Citations are against the Psalm the
- * branch requires (`vendor/vimeo/psalm`, 6.17.x); re-read them before trusting one on another line.
+ * Each method carries the file:line it was read off. Citations are against the Psalm the branch
+ * requires (`vendor/vimeo/psalm`, 7.0.0-beta21); re-read them before trusting one on another line.
+ *
+ * No taint-mode probe lives here. Psalm 6 runs one mode per invocation and `IssueBuffer::add()`
+ * discards every non-`Tainted*` issue under `--taint-analysis`, which is why the 3.x pipeline asks.
+ * Psalm 7 runs taint by default (`Config::$run_taint_analysis = true`, `Config.php:409`) and emits
+ * both kinds from one run — `IssueBuffer::add()` only ever drops `Tainted*` issues, and only when
+ * taint is off (`IssueBuffer.php:168-174`) — so on this line there is no mode to short-circuit on.
  *
  * @internal
  */
 final class PsalmBridge
 {
     /**
-     * Whether Psalm is running taint analysis.
-     *
-     * Psalm 6 builds `Codebase::$taint_flow_graph` only under `--taint-analysis`
-     * (`vendor/vimeo/psalm/src/Psalm/Codebase.php:173`, nullable and null by default), and in that
-     * mode `IssueBuffer::add()` discards every non-`Tainted*` issue. Psalm 7 runs taint by default
-     * and reports both kinds from one run, so there the answer is not a mode at all.
-     */
-    public static function isTaintRun(Codebase $codebase): bool
-    {
-        return $codebase->taint_flow_graph instanceof TaintFlowGraph;
-    }
-
-    /**
      * The two extra constructor arguments of a taint issue, keyed by PARAMETER name, or null when
      * the issue is not one.
      *
-     * `Psalm\Issue\TaintedInput` (`vendor/vimeo/psalm/src/Psalm/Issue/TaintedInput.php:16-26`) is the
+     * `Psalm\Issue\TaintedInput` (`vendor/vimeo/psalm/src/Psalm/Issue/TaintedInput.php:13-29`) is the
      * base of every `Tainted*` class and promotes both to public readonly properties, so the
      * parameter names double as the property names a reflective rebuild reads.
      *
@@ -58,7 +49,7 @@ final class PsalmBridge
      * The location of one journey step, or null for a step that has none.
      *
      * Step shape is fixed by `TaintFlowGraph::getIssueTrace()`
-     * (`vendor/vimeo/psalm/src/Psalm/Internal/Codebase/TaintFlowGraph.php:184-202`): the `location`
+     * (`vendor/vimeo/psalm/src/Psalm/Internal/Codebase/TaintFlowGraph.php:217-236`): the `location`
      * key mirrors `DataFlowNode::$code_location`, which is null for nodes that stand for a symbol
      * rather than an expression (a stubbed taint source, for one).
      *
@@ -88,8 +79,8 @@ final class PsalmBridge
      *
      * `journey_text` is a ` -> `-joined chain of `label (file_name:line:column)` descriptors, the
      * `file_name:line:column` half being `CodeLocation::getShortSummary()`
-     * (`vendor/vimeo/psalm/src/Psalm/CodeLocation.php:408-411`), assembled by
-     * `TaintFlowGraph::getPredecessorPath()` and `getSuccessorPath()` (same file, lines 119-177).
+     * (`vendor/vimeo/psalm/src/Psalm/CodeLocation.php:434-437`), assembled by
+     * `TaintFlowGraph::getPredecessorPath()` and `getSuccessorPath()` (same file, lines 148-211).
      */
     public static function locationSummary(string $fileName, int $line, int $column): string
     {

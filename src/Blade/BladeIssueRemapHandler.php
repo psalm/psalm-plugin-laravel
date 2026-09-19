@@ -52,15 +52,6 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        // Psalm 6 runs taint exclusively — under a taint graph `IssueBuffer::add()` discards every
-        // non-Tainted* issue. Relocating one would only move it to the template to be discarded
-        // there, while costing a rebuild per issue.
-        if (PsalmBridge::isTaintRun($event->getCodebase())
-            && !\str_starts_with($issue::getIssueType(), 'Tainted')
-        ) {
-            return null;
-        }
-
         $target = self::target($issue->getFilePath());
 
         if (!$target instanceof ShadowTarget) {

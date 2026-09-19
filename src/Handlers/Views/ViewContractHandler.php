@@ -12,7 +12,6 @@ use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
-use Psalm\LaravelPlugin\Blade\PsalmBridge;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
@@ -72,12 +71,6 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     public static function afterStatementAnalysis(AfterStatementAnalysisEvent $event): ?bool
     {
         if (!self::$validateViewData && !self::$reportUnusedViewData) {
-            return null;
-        }
-
-        // Psalm 6 runs one mode per invocation and discards every non-taint issue under
-        // --taint-analysis, so the whole walk would be paid for nothing.
-        if (PsalmBridge::isTaintRun($event->getCodebase())) {
             return null;
         }
 
