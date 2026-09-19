@@ -70,7 +70,6 @@ final class MarkerPrePass
         $masked = self::maskedRanges($source);
 
         self::markSkipLines($source, $masked, $skip);
-        self::markSwitchGapLines($source, $masked, $skip);
 
         // A lazy match (echo, directive args, component tags) can START inside a masked range and
         // run past its end into live source: e.g. a raw PHP block containing a literal `{{` with
@@ -78,6 +77,8 @@ final class MarkerPrePass
         // next REAL `}}`. Scan a same-length copy with masked ranges blanked out (newlines kept,
         // so line numbers stay correct) instead of the original source.
         $scanSource = self::blankRanges($source, $masked);
+
+        self::markSwitchGapLines($source, $scanSource, $skip);
 
         foreach ($patterns as $pattern) {
             if (\preg_match_all($pattern, $scanSource, $matches, \PREG_OFFSET_CAPTURE) === false) {
@@ -108,23 +109,35 @@ final class MarkerPrePass
      * the first @case line (and everything gated before it) inherits the @switch line's marker
      * via LineMapBuilder's carry-forward fallback, same as every other gated span.
      *
-     * @param list<array{0: string, 1: int}> $masked
+     * Walks $scanSource, not $source: compileStatements() dispatches directives via
+     * `compile{$name}`, and PHP method names are case-insensitive, so `@SWITCH`/`@CASE` compile
+     * identically to lowercase (hence the `i` modifier); and Blade strips its own comments
+     * BEFORE directive recognition, so `@switch{{-- note --}}($x)` also compiles like `@switch($x)`
+     * — the blanked scan source (masked ranges replaced with spaces) makes both of those visible
+     * to `[ \t]*` while a masked directive simply can't match at all, so no separate isMasked()
+     * guard is needed here. The argument is captured as a balanced-paren group (mirroring the
+     * directive-arg pattern above) so literal directive-shaped text inside a quoted argument, e.g.
+     * `@switch(str_contains($x, "@case(1)"))`, is consumed as part of the SAME match and can't be
+     * mistaken for a real directive that arms or disarms the gate.
+     *
+     * Known limitation: a MULTI-line comment between the directive name and its `(` still isn't
+     * recognized, because blanking preserves newlines and `[ \t]*` doesn't span them. Not chased
+     * here; Blade joins it same as a single-line one.
+     *
      * @param array<int, true> $skip
      */
-    private static function markSwitchGapLines(string $source, array $masked, array &$skip): void
+    private static function markSwitchGapLines(string $source, string $scanSource, array &$skip): void
     {
-        if (\preg_match_all('/(?<!@)@(switch|case)[ \t]*\(/', $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+        $pattern = '/(?<!@)@(switch|case)[ \t]*(\((?:[^()\'"]|\'[^\']*\'|"[^"]*"|(?2))*\))/is';
+
+        if (\preg_match_all($pattern, $scanSource, $matches, \PREG_OFFSET_CAPTURE) === false) {
             return;
         }
 
         $pendingLine = null;
 
         foreach ($matches[0] as $i => [, $offset]) {
-            if (self::isMasked($offset, $masked)) {
-                continue;
-            }
-
-            $name = $matches[1][$i][0];
+            $name = \strtolower($matches[1][$i][0]);
             $line = 1 + \substr_count($source, "\n", 0, $offset);
 
             if ($name === 'switch') {

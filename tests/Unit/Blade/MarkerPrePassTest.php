@@ -248,4 +248,43 @@ final class MarkerPrePassTest extends TestCase
 
         $this->assertSame([], $skip);
     }
+
+    #[Test]
+    public function mixed_case_switch_and_case_directives_are_recognized(): void
+    {
+        // Blade dispatches directives via `compile{$name}`, and PHP method names are
+        // case-insensitive, so `@SWITCH`/`@CASE` compile identically to their lowercase form.
+        $skip = MarkerPrePass::computeSkipLines("@SWITCH(\$x)\n\n@CASE('a')\nfoo\n@endswitch\n");
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function a_quoted_case_directive_inside_a_switch_argument_does_not_disarm_the_gate(): void
+    {
+        // The literal text "@case(1)" inside a STRING argument to @switch must not be mistaken
+        // for a real @case directive that consumes the pending switch: the walk regex has to
+        // consume the entire balanced-paren argument as one match, not just up to the first "(".
+        $source = "@switch(str_contains(\$x, \"@case(1)\"))\nreal text\n@case('a')\nfoo\n@endswitch\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip); // the real @case line
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function a_comment_between_the_directive_name_and_its_parenthesis_still_arms_the_gate(): void
+    {
+        // Blade strips Blade comments before directive recognition, so `@switch{{-- note --}}($x)`
+        // compiles exactly like `@switch($x)`. The gate walks the same blanked scan source the
+        // sibling patterns use, so a masked comment there still leaves `[ \t]*` free to match.
+        $source = "@switch{{-- note --}}(\$x)\nreal text\n@case('a')\nfoo\n@endswitch\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+    }
 }

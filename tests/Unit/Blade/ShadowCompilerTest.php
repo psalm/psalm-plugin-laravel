@@ -268,9 +268,16 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertNotNull($stmts);
 
-        // Gated lines (the blank line, the comment, and the @case line itself) have no marker
-        // of their own; LineMapBuilder's $last carry-forward makes them fall back to the
-        // nearest preceding marker, which is the @switch line.
-        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 1));
+        // Gated lines (the blank line, the comment, and the @case line itself) have no marker of
+        // their own; LineMapBuilder's $last carry-forward makes them fall back to the nearest
+        // preceding marker, which is the @switch line. An exact count of 4 pins that the fallback
+        // spans blade lines 1-4 (switch through the @case line itself) and no further; line 4
+        // never appearing as a mapped VALUE confirms the @case line's own marker was suppressed,
+        // not merely coincident with the switch line's.
+        $this->assertCount(4, $this->shadowLinesMappedTo($result, 1));
+        $this->assertNotContains(4, $result->lineMap);
+
+        // Once the @case line closes PHP mode, the body line right after it maps to its own line.
+        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 5));
     }
 }
