@@ -31,18 +31,35 @@ final class UnusedViewTest extends TestCase
 
     private const DYNAMIC_FIXTURE = __DIR__ . '/Fixtures/UnusedViewDynamic';
 
+    private const DIRECTIVES_FIXTURE = __DIR__ . '/Fixtures/UnusedViewDirectives';
+
+    private const COMPONENT_TAG_FIXTURE = __DIR__ . '/Fixtures/UnusedViewComponentTag';
+
+    private const FIRST_CALL_FIXTURE = __DIR__ . '/Fixtures/UnusedViewFirstCall';
+
     private const ISSUE = 'UnusedView';
+
+    /** @var list<string> */
+    private const FIXTURES = [
+        self::FIXTURE,
+        self::DYNAMIC_FIXTURE,
+        self::DIRECTIVES_FIXTURE,
+        self::COMPONENT_TAG_FIXTURE,
+        self::FIRST_CALL_FIXTURE,
+    ];
 
     protected function setUp(): void
     {
-        $this->deleteShadowDir(self::FIXTURE);
-        $this->deleteShadowDir(self::DYNAMIC_FIXTURE);
+        foreach (self::FIXTURES as $fixture) {
+            $this->deleteShadowDir($fixture);
+        }
     }
 
     protected function tearDown(): void
     {
-        $this->deleteShadowDir(self::FIXTURE);
-        $this->deleteShadowDir(self::DYNAMIC_FIXTURE);
+        foreach (self::FIXTURES as $fixture) {
+            $this->deleteShadowDir($fixture);
+        }
     }
 
     private function deleteShadowDir(string $fixture): void
@@ -158,5 +175,61 @@ final class UnusedViewTest extends TestCase
         $issues = $this->unusedViewIssues(self::FIXTURE, 'psalm-unused-off.xml');
 
         $this->assertSame([], $issues, \var_export($issues, true));
+    }
+
+    /**
+     * Templates referenced only through `@each`, `@component`, or `@includeWhen` must not be
+     * reported, AND the rule must stay ON for the rest of the run: an unrelated orphan template in
+     * the same project is still flagged. A bare "zero issues" assertion here would pass just as well
+     * if these directives accidentally disabled the whole rule, which is exactly the bug this
+     * fixture pins.
+     */
+    #[Test]
+    public function templates_reached_only_through_each_component_or_includewhen_are_not_reported(): void
+    {
+        $issues = $this->unusedViewIssues(self::DIRECTIVES_FIXTURE, 'psalm.xml');
+
+        foreach (['row.blade.php', 'card.blade.php', 'whenp.blade.php'] as $file) {
+            $this->assertSame([], \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => $issue['file'] === $file,
+            )), "{$file} must not be reported unused");
+        }
+
+        $orphaned = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'orphan.blade.php',
+        ));
+        $this->assertCount(1, $orphaned, 'the rule must still catch a genuine orphan in the same run: ' . \var_export($issues, true));
+    }
+
+    /**
+     * A component tag (`<x-alert>`) resolves its view through `$component->resolveView()`, never a
+     * literal, in the compiled shadow — this plugin cannot statically resolve it, so the whole check
+     * declines for the run rather than risk reporting the component's own view as unused.
+     */
+    #[Test]
+    public function a_component_tag_turns_the_check_off_for_the_whole_run(): void
+    {
+        $issues = $this->unusedViewIssues(self::COMPONENT_TAG_FIXTURE, 'psalm.xml');
+
+        $this->assertSame([], $issues, \var_export($issues, true));
+    }
+
+    /**
+     * `$items->first(fn ...)` in a template is not Blade — only a `$__env->first()` compiled from
+     * `@includeFirst` counts. The rule must both stay silent about it AND stay ON: the fixture's
+     * orphan template is still reported.
+     */
+    #[Test]
+    public function an_unrelated_first_call_on_a_non_env_receiver_does_not_disable_the_rule(): void
+    {
+        $issues = $this->unusedViewIssues(self::FIRST_CALL_FIXTURE, 'psalm.xml');
+
+        $orphaned = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'orphan.blade.php',
+        ));
+        $this->assertCount(1, $orphaned, 'an unrelated ->first() call must not disable the rule: ' . \var_export($issues, true));
     }
 }

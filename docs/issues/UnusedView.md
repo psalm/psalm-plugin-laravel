@@ -43,6 +43,10 @@ This check is disabled by default. Enable it alongside Blade analysis in your `p
 </plugins>
 ```
 
+## Suppressing it
+
+`{{-- @psalm-suppress UnusedView --}}` anywhere in the template suppresses it — this is a file-level issue with no single call site to attach a comment to, so the position of the comment inside the template does not matter. An `<issueHandlers>` entry scoped to the view directory works too, as for any other issue.
+
 ## Limitations
 
 - Only the `view()` helper and the static `View::make()` / `Factory::make()` forms are read from plain PHP files. `response()->view()`, `Route::view()`, Mailable and `MailMessage` view bindings, and any other method-call form are not recognized as references in this release.

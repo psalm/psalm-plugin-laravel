@@ -9,6 +9,7 @@ use Psalm\Config;
 use Psalm\Internal\Provider\FileStorageProvider;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\PsalmBridge;
+use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Blade\TemplateLocation;
 use Psalm\LaravelPlugin\Blade\ViewReferenceCollector;
@@ -116,7 +117,25 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
 
         IssueBuffer::accepts(
             new UnusedView("View '{$viewName}' is never rendered.", $location),
-            $entry?->suppressions[1] ?? [],
+            self::suppressedIssues($entry),
         );
+    }
+
+    /**
+     * Every rule suppressed ANYWHERE in the template, not just on line 1: `suppressions` is keyed by
+     * the template line of the statement FOLLOWING each `{{-- @psalm-suppress --}}` comment
+     * (`SuppressionInjector::resolve()`), which for a file-level issue with no single call site to
+     * attach to is never the line this issue is reported at. Unioning is the honest reading of "the
+     * user asked to suppress this rule in this template" for an issue that has no better line to key on.
+     *
+     * @return array<array-key, string>
+     */
+    private static function suppressedIssues(?ShadowEntry $entry): array
+    {
+        if (!$entry instanceof \Psalm\LaravelPlugin\Blade\ShadowEntry || $entry->suppressions === []) {
+            return [];
+        }
+
+        return \array_merge(...\array_values($entry->suppressions));
     }
 }

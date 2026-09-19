@@ -240,6 +240,10 @@ final class BladeBootstrapper
     private function claimNameOnly(string $templatePath, array $roots): void
     {
         $this->registerContract($templatePath, $roots, new ViewDataContract([], false), null);
+
+        // Its own @include/@extends references are unknown, not empty: treating them as empty would
+        // cascade into false UnusedView positives on everything this template actually renders.
+        ViewReferenceRegistry::markDynamic();
     }
 
     /**

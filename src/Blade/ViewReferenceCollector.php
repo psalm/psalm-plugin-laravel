@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArgPlaceholder;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\BinaryOp\Plus;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
@@ -25,19 +28,18 @@ use PhpParser\ParserFactory;
  * the type-aware sibling used by call-site validation).
  *
  * Two callers, two literalness expectations:
- *  - {@see self::collectFromSource()} walks a COMPILED SHADOW at compile time. Its `$__env->make()` /
- *    `->first()` calls are Laravel's own compiled output of `@include`/`@extends`/`@includeFirst`,
- *    never arbitrary userland code, so a non-literal argument there really does mean an unresolvable
- *    template reference and turns the whole rule off.
+ *  - {@see self::collectFromSource()} walks a COMPILED SHADOW at compile time. Its `$__env->`
+ *    method calls (`make`, `first`, `renderEach`, `renderWhen`, `renderUnless`, `startComponent`)
+ *    and component `X::resolve([...])` calls are Laravel's own compiled output of `@include`,
+ *    `@extends`, `@includeFirst`, `@each`, `@includeWhen`/`@includeUnless`, `@component`, and
+ *    component tags, never arbitrary userland code, so a non-literal argument there really does mean
+ *    an unresolvable template reference and turns the whole rule off. The `$__env` receiver check is
+ *    load-bearing: without it, an unrelated `$items->first(fn ...)` in a template would disable the
+ *    rule project-wide.
  *  - {@see self::collect()} walks a plain project file. An arbitrary `$obj->make($x)` proves nothing
  *    about Blade, so only the unambiguous `view()` helper and `View::make()` facade forms are read
  *    there; over-collection (treating more calls as references than strictly proven) is the safe
  *    direction for an "unused" rule, but tripping the off-switch on an unrelated method call is not.
- *
- * Deliberately does not follow anonymous or class-based component tags, `@component`, `@each`,
- * `@includeWhen`, or `@includeUnless` (see `docs/blade.md` for the accepted v1 gap): a project using
- * any of them keeps the rule's true positives (`view()`/`@include`/`@extends`) but may see stale
- * false positives, one direction safer than an over-broad off-switch.
  */
 final class ViewReferenceCollector
 {
@@ -91,25 +93,92 @@ final class ViewReferenceCollector
             }
         }
 
-        // Only the compiled shadow's own `$__env->make()`/`->first()` calls are trusted this far;
-        // see the class docblock for why a plain project file skips this branch entirely.
+        // Only the compiled shadow's own `$__env->` calls are trusted this far; see the class
+        // docblock for why a plain project file skips this branch entirely. Gated on the receiver
+        // being the `$__env` variable specifically: an arbitrary `$items->first(fn ...)` in a
+        // template is not Blade and must never disable the rule project-wide.
         if ($compiledShadow) {
             foreach ($finder->findInstanceOf($stmts, MethodCall::class) as $call) {
-                if (!$call->name instanceof Identifier) {
+                if (!$call->name instanceof Identifier || !$call->var instanceof Variable || $call->var->name !== '__env') {
                     continue;
                 }
 
                 $method = \strtolower($call->name->toString());
 
-                if ($method === 'make') {
+                if ($method === 'make' || $method === 'startcomponent') {
                     $this->applyLiteral($call->args, 0, null, $names, $dynamic);
                 } elseif ($method === 'first') {
                     $this->applyLiteralList($call->args, $names, $dynamic);
+                } elseif ($method === 'rendereach') {
+                    // @each($view, $data, $iterVar, $empty): both the item view and the fallback are
+                    // template references.
+                    $this->applyLiteral($call->args, 0, null, $names, $dynamic);
+                    $this->applyLiteral($call->args, 3, null, $names, $dynamic);
+                } elseif ($method === 'renderwhen' || $method === 'renderunless') {
+                    $this->applyLiteral($call->args, 1, null, $names, $dynamic);
+                }
+            }
+
+            // A component tag (`<x-foo>`, `<x-dynamic-component>`) compiles its view name into an
+            // `X::resolve([...])` call rather than a `$__env->` one; the `AnonymousComponent` case
+            // carries a literal `'view'` key, everything else (including a dynamic component, whose
+            // key is `'component'` instead) has none and falls through to `startComponent()`'s own
+            // `$component->resolveView()` argument, never a literal, tripping the branch above.
+            foreach ($finder->findInstanceOf($stmts, StaticCall::class) as $call) {
+                if ($call->name instanceof Identifier && \strtolower($call->name->toString()) === 'resolve') {
+                    $this->applyComponentView($call->args, $names, $dynamic);
                 }
             }
         }
 
         return [\array_keys($names), $dynamic];
+    }
+
+    /**
+     * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
+     * @param array<string, true>                                     $names
+     */
+    private function applyComponentView(array $args, array &$names, bool &$dynamic): void
+    {
+        $arg = $this->findArg($args, 0, null);
+
+        if (!$arg instanceof Arg) {
+            return;
+        }
+
+        $array = $this->unwrapArray($arg->value);
+
+        if (!$array instanceof Array_) {
+            return;
+        }
+
+        foreach ($array->items as $item) {
+            if ($item === null || !$item->key instanceof String_ || $item->key->value !== 'view') {
+                continue;
+            }
+
+            if ($item->value instanceof String_) {
+                $names[$item->value->value] = true;
+            } else {
+                $dynamic = true;
+            }
+
+            return;
+        }
+    }
+
+    /**
+     * `X::resolve()`'s single argument compiles as `[...] + (isset($attributes) ? ... : [])`
+     * (`CompilesComponents::compileClassComponentOpening()`), so the literal array is the left
+     * operand of a `+`, not the argument value itself.
+     */
+    private function unwrapArray(Node $expr): ?Array_
+    {
+        if ($expr instanceof Array_) {
+            return $expr;
+        }
+
+        return $expr instanceof Plus ? $this->unwrapArray($expr->left) : null;
     }
 
     /**
