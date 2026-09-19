@@ -58,6 +58,8 @@ final readonly class PluginConfig
         public bool $bladeReportUnusedViews,
         /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
         public bool $bladeReportUnusedViewData,
+        /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
+        public bool $bladeReportMixedIssues,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -95,6 +97,7 @@ final readonly class PluginConfig
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViews = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViews', false, 'reportUnusedViews');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
+        $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -114,6 +117,7 @@ final readonly class PluginConfig
             bladeValidateViewData: $bladeValidateViewData,
             bladeReportUnusedViews: $bladeReportUnusedViews,
             bladeReportUnusedViewData: $bladeReportUnusedViewData,
+            bladeReportMixedIssues: $bladeReportMixedIssues,
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );

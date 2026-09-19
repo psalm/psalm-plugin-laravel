@@ -97,6 +97,7 @@ final class IssueUrlGenerator
             '- bladeValidateViewData: ' . self::formatBool($pluginConfig->bladeValidateViewData),
             '- bladeReportUnusedViews: ' . self::formatBool($pluginConfig->bladeReportUnusedViews),
             '- bladeReportUnusedViewData: ' . self::formatBool($pluginConfig->bladeReportUnusedViewData),
+            '- bladeReportMixedIssues: ' . self::formatBool($pluginConfig->bladeReportMixedIssues),
             '- experimental: ' . self::formatBool($pluginConfig->experimental),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
