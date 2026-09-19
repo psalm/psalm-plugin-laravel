@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -25,7 +26,8 @@ use Symfony\Component\Process\Process;
  * The fixture hosts all four scope shapes (trait/direct x modern #[Scope]/legacy scopeXxx), a
  * trait + direct legacy accessor, and a trait boot/initialize hook pair (#1069), plus one plain
  * control method. Without the suppressors each indirectly-dispatched method leaks as
- * PossiblyUnusedMethod; with them, only the control remains.
+ * PossiblyUnusedMethod; with them, only the control remains — plus the two `#[Scope]` shapes where
+ * Eloquent cannot dispatch the attribute, which stay reported because there they are truly unused.
  *
  * Placement note: this is the suite's only test that forks a real `vendor/bin/psalm` subprocess
  * (it boots Laravel via the plugin, ~6s), because whole-program dead-code detection cannot be
@@ -42,19 +44,29 @@ final class SuppressScopeUnusedCodeTest extends TestCase
      * unflaggable on a Model (see runtime note below), so asserting its absence would prove nothing.
      */
     private const SUPPRESSED_MARKERS = [
-        '::active',               // trait #[Scope]
         '::scopeFlagged',         // trait legacy
         '::getComputedAttribute', // trait legacy accessor
         '::bootHasInlineScopes',       // trait boot hook (#1069)
         '::initializeHasInlineScopes', // trait initialize hook (#1069)
-        '::published',            // direct #[Scope]
         '::scopeArchived',        // direct legacy
         '::getDisplayNameAttribute', // direct legacy accessor
+    ];
+
+    /**
+     * The `#[Scope]` shapes in the fixture. Eloquent only dispatches them where the attribute class
+     * exists; where it does not, the two methods have no dispatch path at all and Psalm is RIGHT to
+     * report them unused, so they move from the suppressed set to the expected-reported set.
+     */
+    private const SCOPE_ATTRIBUTE_MARKERS = [
+        '::active',    // trait #[Scope]
+        '::published', // direct #[Scope]
     ];
 
     #[Test]
     public function it_suppresses_indirectly_dispatched_eloquent_methods_but_not_a_plain_unused_method(): void
     {
+        $attributeScopesDispatch = \class_exists(Scope::class);
+
         $unusedMethodFindings = $this->runPsalmAndCollectUnusedMethodFindings();
 
         $messages = \array_map(
@@ -63,15 +75,31 @@ final class SuppressScopeUnusedCodeTest extends TestCase
         );
         $joined = \implode("\n", $messages);
 
-        // Surgical control: the one plain method that is genuinely never called must stay reported,
-        // proving the suppressor narrows to indirectly-dispatched methods rather than silencing every
-        // unused method on the model. assertCount(1) also guarantees nothing else leaks — including
-        // the private `secret` scope, which Psalm never emits for a __call class anyway.
-        $this->assertCount(1, $unusedMethodFindings, "Expected exactly one unused-method finding (the plain control), got:\n{$joined}");
-        $this->assertStringContainsString('TraitScopeModel::helperNonScope', $messages[0]);
+        $suppressed = self::SUPPRESSED_MARKERS;
+        // The plain control method is genuinely never called and must stay reported, proving the
+        // suppressor narrows to indirectly-dispatched methods rather than silencing every unused
+        // method on the model. The exact count also guarantees nothing else leaks — including the
+        // private `secret` scope, which Psalm never emits for a __call class anyway.
+        $expectedReported = ['TraitScopeModel::helperNonScope'];
+
+        if ($attributeScopesDispatch) {
+            $suppressed = [...$suppressed, ...self::SCOPE_ATTRIBUTE_MARKERS];
+        } else {
+            $expectedReported = [...$expectedReported, ...self::SCOPE_ATTRIBUTE_MARKERS];
+        }
+
+        $this->assertCount(
+            \count($expectedReported),
+            $unusedMethodFindings,
+            \sprintf("Expected %d unused-method finding(s), got:\n%s", \count($expectedReported), $joined),
+        );
+
+        foreach ($expectedReported as $marker) {
+            $this->assertStringContainsString($marker, $joined, "Method {$marker} has no dispatch path here and must stay reported as unused.");
+        }
 
         // Every indirectly-dispatched method must be suppressed rather than reported as unused.
-        foreach (self::SUPPRESSED_MARKERS as $marker) {
+        foreach ($suppressed as $marker) {
             $this->assertStringNotContainsString($marker, $joined, "Indirectly-dispatched method {$marker} must be suppressed, not reported as unused.");
         }
     }
