@@ -137,25 +137,32 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /** The prelude's ambient Blade variables, see PreludeBuilder::AMBIENT_TYPES. */
+    private const AMBIENT_CLASSES = [
+        'Illuminate\View\Factory',
+        'Illuminate\Support\ViewErrorBag',
+        'Illuminate\View\ComponentAttributeBag',
+        'Illuminate\View\ComponentSlot',
+        'Illuminate\View\Component',
+    ];
+
     #[Test]
-    public function an_issue_with_no_template_line_lands_on_line_one_and_says_so(): void
+    public function ambient_prelude_classes_never_report_undefined(): void
     {
         $issues = $this->analyze('psalm.xml');
 
-        // The shadow's prelude declares the ambient Blade variables, and this fixture has no
-        // `vendor/` of its own for Psalm to resolve `Illuminate\…` through — so the prelude, which
-        // maps to no template line at all, is what produces the issue.
-        $unmapped = \array_values(\array_filter(
-            $issues,
-            static fn(array $issue): bool => $issue['type'] === 'UndefinedDocblockClass'
-                && \str_ends_with($issue['file_path'], 'resources/views/broken.blade.php'),
-        ));
+        foreach ($issues as $issue) {
+            if ($issue['type'] !== 'UndefinedDocblockClass') {
+                continue;
+            }
 
-        $this->assertNotSame([], $unmapped, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-
-        foreach ($unmapped as $issue) {
-            $this->assertSame(1, $issue['line_from']);
-            $this->assertStringEndsWith(' (unmapped)', $issue['message']);
+            foreach (self::AMBIENT_CLASSES as $ambientClass) {
+                $this->assertStringNotContainsString(
+                    $ambientClass,
+                    $issue['message'],
+                    \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                );
+            }
         }
     }
 

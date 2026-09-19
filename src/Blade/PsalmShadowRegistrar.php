@@ -44,4 +44,17 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
 
         $this->projectAnalyzer->getCodebase()->addFilesToAnalyze($files);
     }
+
+    /** @inheritDoc */
+    #[\Override]
+    public function queueClassLikesForScanning(array $classNames): void
+    {
+        $codebase = $this->projectAnalyzer->getCodebase();
+
+        foreach ($classNames as $className) {
+            // store_failure=false: these are queued speculatively on every run, not because project
+            // code proved the class exists, so an unresolvable name must not be recorded as missing.
+            $codebase->queueClassLikeForScanning($className, false, false);
+        }
+    }
 }

@@ -56,6 +56,21 @@ final class PreludeBuilder
     }
 
     /**
+     * The AMBIENT_TYPES entries that name a real class, for a caller that must queue them for
+     * scanning (BladeBootstrapper) rather than read their docblock type. Excludes `loop`, whose
+     * value is an inline object shape, not a class name.
+     *
+     * @return list<string>
+     */
+    public static function ambientClassNames(): array
+    {
+        return \array_values(\array_filter(
+            self::AMBIENT_TYPES,
+            static fn(string $type): bool => $type[0] === '\\',
+        ));
+    }
+
+    /**
      * @param array<string, string> $declared
      * @return list<string> variable names (without $), sorted, deduplicated
      */

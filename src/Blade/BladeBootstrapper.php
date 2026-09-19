@@ -121,6 +121,12 @@ final class BladeBootstrapper
 
         $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
 
+        // Every shadow's prelude carries the ambient classes only in stacked docblocks Psalm's
+        // scanner otherwise can't see past the first one (see ShadowRegistrar::queueClassLikesForScanning);
+        // queue them here, once per run, so a warm-manifest run (which skips ShadowCompiler entirely)
+        // still gets them.
+        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
+
         // Only now, with both registrations done: the registry is what turns a shadow-path issue
         // into a template-path one, and a shadow Psalm never analyzes has nothing to remap.
         foreach ($shadows as $shadowPath) {
