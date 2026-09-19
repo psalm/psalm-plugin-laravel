@@ -31,6 +31,7 @@ Full config example:
         <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
+        <blade enabled="true" />
     </pluginClass>
 </plugins>
 ```
@@ -226,6 +227,90 @@ This governs the prompt sink direction only. Model output as a taint source (an 
 ```xml
 <findPromptInjection value="false" />
 ```
+
+## `blade`
+
+See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, ambient variables, taint reporting, and known limits).
+
+**default**: off. Omit the element, or write `<blade enabled="false" />`.
+
+```xml
+<blade enabled="true" />
+```
+
+Opt in to analyzing Blade templates. The plugin compiles every `*.blade.php` file under the view paths of the booted application (`config('view.paths')` plus whatever service providers added) into a PHP "shadow" file, and adds those shadows to the Psalm run. The templates themselves are never handed to Psalm as PHP; only the compiled shadows are analyzed.
+
+Opt-in because the compile pass costs time proportional to the number of templates, and because template analysis is new.
+
+Notes on this release:
+
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. Contract annotations (`{{-- @var \App\Models\User $user --}}`, `@props([...])`) do not type the template's own body yet; they are read for the call-site checks below.
+- Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
+- `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
+
+### `cacheDir`
+
+**default**: `blade/` inside the [plugin cache directory](#cache-directory)
+
+```xml
+<blade enabled="true" cacheDir="build/blade-shadows" />
+```
+
+Where the compiled shadows and their manifest are written. Absolute, or relative to the directory Psalm runs in. The plugin creates the directory, reuses a shadow whose template has not changed, and deletes shadows whose template is gone.
+
+The default deliberately sits outside your project tree. A shadow file that one of your `<projectFiles>` patterns happens to match is treated by Psalm as a file of your own, which both reports issues at their compiled locations instead of the template's and makes Psalm drop taint flows that start in it. If you point `cacheDir` inside the project, exclude it from `<projectFiles>` (and from version control).
+
+### `validateViewData`
+
+**default**: off
+
+```xml
+<blade enabled="true" validateViewData="true" />
+```
+
+Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
+
+A template declares its variables with `{{-- @var \App\Models\User $user --}}` comments and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
+
+Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
+
+Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
+
+### `reportUnusedViews`
+
+**default**: off
+
+```xml
+<blade enabled="true" reportUnusedViews="true" />
+```
+
+Report a template ([UnusedView](issues/UnusedView.md)) that no statically-provable `view()` / `View::make()` call site and no `@include` / `@extends` from another template ever names.
+
+One reference this plugin cannot resolve statically (a dynamic `view($name)` or `@include($name)`) anywhere in the project turns the check off for the whole run, printed as one warning: a lower bound on "used" is not enough to prove a template unused. See the issue page for the full list of call shapes this release recognizes.
+
+Needs `enabled="true"`: the contracts only exist once the compile pass has read the templates.
+
+### `reportUnusedViewData`
+
+**default**: off
+
+```xml
+<blade enabled="true" reportUnusedViewData="true" />
+```
+
+Report a data key ([UnusedViewData](issues/UnusedViewData.md)) that the rendered template neither reads nor declares. Independent of `validateViewData`: same call shapes, opposite direction (that rule checks what the template asks for, this one checks what the call site hands over).
+
+A key that a template reached through `@include` or `@extends` reads or declares counts as consumed, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run.
+
+Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
+
+Needs `enabled="true"`: the read sets only exist once the compile pass has read the templates.
+
+### Degradation
+
+Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. Templates that fail to compile are skipped and summarized in a single warning; run with `--debug` for the individual causes.
+
+Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
 ## Cache directory
 

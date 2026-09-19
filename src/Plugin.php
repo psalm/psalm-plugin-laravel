@@ -96,6 +96,10 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
 
+            if ($pluginConfig->bladeEnabled) {
+                $this->initBladeAnalysis($pluginConfig, $output);
+            }
+
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
             $this->registerHandlers($registration, $pluginConfig);
@@ -205,7 +209,13 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Validation\FormRequestPropertyHandler::reset();
         Handlers\Validation\ValidationRuleAnalyzer::reset();
         Handlers\Views\MissingViewHandler::reset();
+        Handlers\Views\ViewContractHandler::reset();
+        Handlers\Views\UnusedViewHandler::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
+        Blade\BladeIssueRemapHandler::reset();
+        Blade\ContractRegistry::reset();
+        Blade\ShadowRegistry::reset();
+        Blade\ViewReferenceRegistry::reset();
     }
 
     private function registerStubs(
@@ -689,6 +699,43 @@ final class Plugin implements PluginEntryPointInterface
         // registration order. Enabled by default; silence via the issueHandlers config.
         require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
+
+        // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
+        // nothing the shadow analysis finds is visible without it. Registered LAST of the
+        // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
+        // returns a bool, so the taint exemptions above get to drop an issue before the remap pays
+        // to rebuild it. Only meaningful when templates were compiled, hence the same gate as
+        // initBladeAnalysis() — with Blade off the shadow registry is empty and every issue would
+        // take the (cheap, but pointless) miss path.
+        if ($pluginConfig->bladeEnabled) {
+            require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
+            $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
+        }
+
+        // Checks view() call sites against the contracts the compiled templates declare, and reports
+        // data keys the template never reads (#1478). Needs the compile pass to have populated
+        // ContractRegistry, hence the bladeEnabled half of the gate; the two flags are independent
+        // opt-ins for the checks themselves, sharing one walk of the statement.
+        if ($pluginConfig->bladeEnabled && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
+            require_once __DIR__ . '/Blade/ReadSetResolver.php';
+            require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+            require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
+            Handlers\Views\ViewContractHandler::init(
+                $pluginConfig->bladeValidateViewData,
+                $pluginConfig->bladeReportUnusedViewData,
+            );
+            $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
+        }
+
+        // Reports a template BladeBootstrapper discovered that no statically-provable call site or
+        // @include/@extends ever names (#1477). Needs the enumerate-and-collect pass initBladeAnalysis()
+        // already ran into ViewReferenceRegistry, hence the bladeEnabled half of the gate;
+        // bladeReportUnusedViews is the opt-in for the check itself. UnusedViewHandler::init() was
+        // already called in initBladeAnalysis(), where a Progress handle is in scope.
+        if ($pluginConfig->bladeEnabled && $pluginConfig->bladeReportUnusedViews) {
+            require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
+            $registration->registerHooksFromClass(Handlers\Views\UnusedViewHandler::class);
+        }
     }
 
     /**
@@ -824,6 +871,38 @@ final class Plugin implements PluginEntryPointInterface
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
         Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
+    }
+
+    /**
+     * Compile the analyzed application's Blade templates into shadow PHP files and add them to this
+     * run: the shadows for analysis, the templates for reporting.
+     *
+     * Runs synchronously inside `__invoke()` because that is the only window in which a file can
+     * still join the analysis — Psalm calls `Config::initializePlugins()` after it has queued the
+     * project files and before it starts scanning them.
+     *
+     * Holds no static state, so there is nothing to reset between invocations: every run recompiles
+     * from the manifest on disk, whose fingerprints carry the Laravel and plugin versions.
+     */
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
+    {
+        $bootstrapper = new Blade\BladeBootstrapper(
+            ApplicationProvider::getApp(),
+            new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance()),
+            $output,
+            $pluginConfig->bladeCacheDir,
+            $pluginConfig->bladeReportUnusedViews,
+            $pluginConfig->bladeReportUnusedViewData,
+        );
+
+        $bootstrapper->boot();
+
+        // Progress is only available here, not in registerHandlers() below, hence the split: init()
+        // (captures the handle for the one-time dynamic-reference warning) here, registration there.
+        if ($pluginConfig->bladeReportUnusedViews) {
+            require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
+            Handlers\Views\UnusedViewHandler::init($output);
+        }
     }
 
     /**

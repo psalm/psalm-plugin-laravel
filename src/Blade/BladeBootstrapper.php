@@ -1,0 +1,528 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Blade;
+
+use Illuminate\Contracts\Container\Container;
+use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
+use Psalm\Progress\Progress;
+
+/**
+ * Compiles every Blade template of the analyzed application into a shadow PHP file and hands both
+ * sides to Psalm: the shadow for analysis, the template for reporting.
+ *
+ * Must run synchronously inside the plugin entry point. Shadows can only join the analysis while
+ * `Config::initializePlugins()` is on the stack, before Psalm starts scanning.
+ *
+ * Nothing here throws. Every failure disables Blade analysis for the run with one warning naming
+ * the cause, because an opt-in extra is never worth failing an analysis over.
+ *
+ * @internal
+ */
+final class BladeBootstrapper
+{
+    /** Templates named in the aggregated skip warning before it degrades to a count. */
+    private const FAILURES_TO_NAME = 3;
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function __construct(
+        private readonly Container $app,
+        private readonly ShadowRegistrar $registrar,
+        private readonly Progress $output,
+        private readonly string $shadowDir,
+        /**
+         * Opt-in for UnusedView (`reportUnusedViews`). Gates the compile-time reference collection
+         * pass: off by default so the AST walk and the manifest's references slot are pure cost paid
+         * only by projects that turned the rule on.
+         */
+        private readonly bool $collectViewReferences = false,
+        /**
+         * Opt-in for UnusedViewData (`reportUnusedViewData`). Gates both the read-set extraction and
+         * the data-include collection that closes it over the `@include` chain: two extra AST walks
+         * per template, paid only by projects that turned the rule on.
+         */
+        private readonly bool $collectDataIncludes = false,
+    ) {}
+
+    public function boot(): void
+    {
+        try {
+            $this->run();
+        } catch (\Throwable $throwable) {
+            $this->degrade($throwable::class . ': ' . $throwable->getMessage());
+        }
+    }
+
+    private function run(): void
+    {
+        $compiler = $this->resolveCompiler();
+
+        if (!$compiler instanceof BladeCompiler) {
+            return;
+        }
+
+        $viewPaths = $this->resolveViewPaths();
+
+        if ($viewPaths === null) {
+            return;
+        }
+
+        /** @var array<string, string> $failures template path => reason */
+        $failures = [];
+        $templates = $this->findTemplates($viewPaths, $failures);
+
+        // A view root that failed to scan can hide templates that still exist on disk; pruning
+        // against an incomplete list would delete their shadows for nothing more than a
+        // transient read failure, so pruning is only safe once discovery is known-complete.
+        $templatesFullyDiscovered = $failures === [];
+
+        // No templates is the normal state of a package or an API-only application, not a
+        // failure, but it still has to reach prune() below: a template deleted since the
+        // previous run leaves its shadow and manifest entry behind otherwise, permanently,
+        // since a run with no templates is exactly the run that would never come back to
+        // clean them up.
+        $shadowDir = $this->prepareShadowDir();
+
+        if ($shadowDir === null) {
+            $this->reportFailures($failures);
+
+            return;
+        }
+
+        $manifest = new ShadowManifest($shadowDir);
+        $manifest->load();
+
+        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $viewPaths, $failures);
+
+        if ($templatesFullyDiscovered) {
+            $manifest->prune($templates);
+        }
+
+        $manifest->flush();
+        $this->reportFailures($failures);
+
+        if ($shadows === []) {
+            return;
+        }
+
+        // Reached only with at least one shadow, because nothing can be reported on a template path
+        // without one: a remap needs a ShadowRegistry entry, and a template that failed to compile
+        // has already turned UnusedView off for the whole run (claimNameOnly() marks the reference
+        // set dynamic). The list is the discovered set rather than the compiled one because the two
+        // differ only by those failures, which are harmless extras here, and
+        // Config::reportIssueInFile() consults nothing but this project-file list.
+        if (!$this->registrar->markTemplatesReportable($templates)) {
+            $this->degrade(
+                "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
+                . 'list is not writable on this Psalm version)',
+            );
+
+            return;
+        }
+
+        $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
+
+        // Only now, with both registrations done: the registry is what turns a shadow-path issue
+        // into a template-path one, and a shadow Psalm never analyzes has nothing to remap.
+        foreach ($shadows as $shadowPath) {
+            $entry = $manifest->shadowEntry($shadowPath);
+
+            if ($entry instanceof ShadowEntry) {
+                ShadowRegistry::register($shadowPath, $entry);
+            }
+        }
+    }
+
+    /**
+     * @param list<string>          $templates
+     * @param list<string>          $viewPaths in finder order, which decides which template wins a
+     *                                         view name two roots both define
+     * @param array<string, string> $failures  template path => reason, appended to
+     *
+     * @return array<string, string> template path => shadow path
+     */
+    private function compileAll(
+        ShadowCompiler $compiler,
+        ShadowManifest $manifest,
+        array $templates,
+        array $viewPaths,
+        array &$failures,
+    ): array {
+        $shadows = [];
+        $roots = $this->resolveRoots($viewPaths);
+        $parser = new ContractParser();
+        $collector = $this->collectViewReferences || $this->collectDataIncludes ? new ViewReferenceCollector() : null;
+        $requiredSlots = ($this->collectViewReferences ? ShadowManifest::SLOT_REFERENCES : 0)
+            | ($this->collectDataIncludes ? ShadowManifest::SLOT_DATA_INCLUDES : 0);
+
+        foreach ($templates as $template) {
+            $source = @\file_get_contents($template);
+
+            if ($source === false) {
+                $failures[$template] = 'the template could not be read';
+                $this->claimNameOnly($template, $roots);
+
+                continue;
+            }
+
+            if ($manifest->isFresh($template, $source, $requiredSlots)) {
+                $shadowPath = $manifest->shadowPathFor($template);
+                $shadows[$template] = $shadowPath;
+                $this->registerContract(
+                    $template,
+                    $roots,
+                    $manifest->contractFor($shadowPath),
+                    $shadowPath,
+                    $manifest->dataIncludesFor($shadowPath),
+                );
+
+                if ($this->collectViewReferences) {
+                    $this->applyReferences($manifest->referencesFor($shadowPath) ?? [[], false]);
+                }
+
+                continue;
+            }
+
+            // Deliberately NOT fed into compile(): contract types in the prelude would change every
+            // shadow's content and fingerprint. Declarations are read as a side channel for
+            // call-site validation only — which is also why the contract is built AFTER the compile,
+            // so the read set can be taken off the compiled output without reaching compile().
+            $shadow = $compiler->compile($template, $source);
+
+            if ($shadow instanceof BladeCompileError) {
+                $failures[$shadow->templatePath] = $shadow->message;
+                $this->claimNameOnly($template, $roots);
+
+                continue;
+            }
+
+            $contract = $this->collectDataIncludes
+                ? $parser->parseDataContract($source, $shadow->contents)
+                : $parser->parseDeclarations($source);
+
+            // Read from the compiled output, not the raw template: Laravel has already resolved
+            // component namespaces and anonymous-component candidates by this point. Null (not an
+            // empty pair) when the rule is off, so a later flag flip cannot mistake "never
+            // collected" for "collected, found nothing" — see ShadowManifest::isFresh().
+            $references = $this->collectViewReferences ? $collector?->collectFromSource($shadow->contents) : null;
+            $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+
+            try {
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references, $dataIncludes);
+                $shadows[$template] = $shadowPath;
+                $this->registerContract($template, $roots, $contract, $shadowPath, $dataIncludes);
+
+                if ($references !== null) {
+                    $this->applyReferences($references);
+                }
+            } catch (\RuntimeException $throwable) {
+                $failures[$template] = $throwable->getMessage();
+                $this->claimNameOnly($template, $roots);
+            }
+        }
+
+        return $shadows;
+    }
+
+    /**
+     * @param array{0: list<string>, 1: bool} $references
+     *
+     * @psalm-external-mutation-free
+     */
+    private function applyReferences(array $references): void
+    {
+        foreach ($references[0] as $viewName) {
+            ViewReferenceRegistry::addReference($viewName);
+        }
+
+        if ($references[1]) {
+            ViewReferenceRegistry::markDynamic();
+        }
+    }
+
+    /**
+     * View roots as realpaths, in finder order, skipping the ones that do not resolve. The template
+     * paths this is matched against are realpaths too, so both sides have to be normalized or a
+     * symlinked root never matches its own templates.
+     *
+     * @param list<string> $viewPaths
+     *
+     * @return list<string>
+     */
+    private function resolveRoots(array $viewPaths): array
+    {
+        $roots = [];
+
+        foreach ($viewPaths as $viewPath) {
+            $resolved = \realpath($viewPath);
+
+            if ($resolved !== false) {
+                $roots[] = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            }
+        }
+
+        return $roots;
+    }
+
+    /**
+     * Claim a view name for a template this pass could not process, with no declarations attached.
+     *
+     * Laravel renders the first root's file whether or not the plugin could read or compile it, so
+     * leaving the name unclaimed hands it to a same-named template in a later root, whose
+     * declarations would then be checked against callers that never reach it. An empty contract
+     * blocks that without asserting anything about a template we failed on.
+     *
+     * @param list<string> $roots
+     *
+     * @psalm-external-mutation-free
+     */
+    private function claimNameOnly(string $templatePath, array $roots): void
+    {
+        $this->registerContract($templatePath, $roots, new ViewDataContract([], false), null);
+
+        // Its own @include/@extends references are unknown, not empty: treating them as empty would
+        // cascade into false UnusedView positives on everything this template actually renders.
+        ViewReferenceRegistry::markDynamic();
+    }
+
+    /**
+     * A template that declares nothing is registered too, with an empty contract. Skipping it would
+     * leave its view name unclaimed, and a same-named template in a LATER view root would then own
+     * the name and have its declarations checked against callers that Laravel resolves to this
+     * file instead. The view name is claimed as an UnusedView CANDIDATE unconditionally, even for a
+     * template this pass could not process — see {@see claimNameOnly()}.
+     *
+     * @param list<string>                         $roots
+     * @param array{0: list<string>, 1: bool}|null $dataIncludes null when the collection pass was off
+     *
+     * @psalm-external-mutation-free
+     */
+    private function registerContract(
+        string $templatePath,
+        array $roots,
+        ?ViewDataContract $contract,
+        ?string $shadowPath,
+        ?array $dataIncludes = null,
+    ): void {
+        $resolved = ViewName::resolve($templatePath, $roots);
+
+        if ($resolved === null) {
+            return;
+        }
+
+        [$rootIndex, $viewName] = $resolved;
+
+        ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath, $shadowPath);
+
+        if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
+            return;
+        }
+
+        ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
+    }
+
+    private function resolveCompiler(): ?BladeCompiler
+    {
+        if (!$this->app->bound('blade.compiler')) {
+            // Normal for a package analyzed through the Testbench fallback without the view
+            // service provider, and for any bootstrap that trims it.
+            $this->degrade("the 'blade.compiler' service is not bound in the analyzed application");
+
+            return null;
+        }
+
+        try {
+            $compiler = $this->asCompiler($this->app->make('blade.compiler'));
+        } catch (\Throwable $throwable) {
+            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage());
+
+            return null;
+        }
+
+        if (!$compiler instanceof BladeCompiler) {
+            $this->degrade("the 'blade.compiler' service is not an " . BladeCompiler::class);
+
+            return null;
+        }
+
+        return $compiler;
+    }
+
+    /**
+     * View roots, or null when the finder cannot be resolved. Mirrors the fallback chain the
+     * MissingView diagnostic uses: a boot may bind 'view' without 'view.finder'.
+     *
+     * @return list<string>|null
+     */
+    private function resolveViewPaths(): ?array
+    {
+        $finder = $this->resolveFinder();
+
+        if (!$finder instanceof FileViewFinder) {
+            $this->degrade('the view finder could not be resolved to an ' . FileViewFinder::class);
+
+            return null;
+        }
+
+        return \array_values($finder->getPaths());
+    }
+
+    private function resolveFinder(): ?FileViewFinder
+    {
+        try {
+            if ($this->app->bound('view.finder')) {
+                return $this->asFinder($this->app->make('view.finder'));
+            }
+
+            if ($this->app->bound('view')) {
+                return $this->asFactoryFinder($this->app->make('view'));
+            }
+        } catch (\Throwable $throwable) {
+            $this->output->debug('Laravel plugin: resolving the view finder threw: ' . $throwable->getMessage() . "\n");
+        }
+
+        return null;
+    }
+
+    /**
+     * The container is documented as returning `mixed`, so each binding gets narrowed at exactly
+     * one place instead of assigning `mixed` into a variable first.
+     *
+     * @psalm-pure
+     */
+    private function asCompiler(mixed $resolved): ?BladeCompiler
+    {
+        return $resolved instanceof BladeCompiler ? $resolved : null;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private function asFinder(mixed $resolved): ?FileViewFinder
+    {
+        return $resolved instanceof FileViewFinder ? $resolved : null;
+    }
+
+    /**
+     * @psalm-mutation-free
+     */
+    private function asFactoryFinder(mixed $resolved): ?FileViewFinder
+    {
+        return $resolved instanceof Factory ? $this->asFinder($resolved->getFinder()) : null;
+    }
+
+    /**
+     * Every `*.blade.php` file under the view roots, realpath'd and deduplicated: a path registered
+     * with Psalm has to be the same string Psalm itself would use, and view roots overlap in
+     * applications that add a package path twice.
+     *
+     * @param list<string>          $viewPaths
+     * @param array<string, string> $failures  appended to, keyed by the directory that failed
+     *
+     * @return list<string>
+     */
+    private function findTemplates(array $viewPaths, array &$failures): array
+    {
+        $templates = [];
+
+        foreach ($viewPaths as $viewPath) {
+            if (!\is_dir($viewPath)) {
+                // A configured-but-absent view root (a package path, a not-yet-published vendor
+                // directory) is not an error for Laravel either.
+                continue;
+            }
+
+            try {
+                /** @var iterable<\SplFileInfo> $files */
+                $files = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($viewPath, \FilesystemIterator::SKIP_DOTS),
+                );
+
+                foreach ($files as $file) {
+                    if (!$file->isFile() || !\str_ends_with($file->getFilename(), '.blade.php')) {
+                        continue;
+                    }
+
+                    $real = $file->getRealPath();
+
+                    if ($real !== false) {
+                        $templates[$real] = true;
+                    }
+                }
+            } catch (\Throwable $throwable) {
+                $failures[$viewPath] = 'the directory could not be read: ' . $throwable->getMessage();
+            }
+        }
+
+        $templates = \array_keys($templates);
+        \sort($templates);
+
+        return $templates;
+    }
+
+    /**
+     * The shadow directory, created if absent, as an absolute path: a relative `cacheDir` would
+     * otherwise reach Psalm as a relative file path, which nothing downstream of it expects.
+     */
+    private function prepareShadowDir(): ?string
+    {
+        if (!\is_dir($this->shadowDir) && !@\mkdir($this->shadowDir, 0o777, true) && !\is_dir($this->shadowDir)) {
+            $this->degrade("the shadow cache directory '{$this->shadowDir}' could not be created");
+
+            return null;
+        }
+
+        if (!\is_writable($this->shadowDir)) {
+            $this->degrade("the shadow cache directory '{$this->shadowDir}' is not writable");
+
+            return null;
+        }
+
+        $resolved = \realpath($this->shadowDir);
+
+        if ($resolved === false) {
+            $this->degrade("the shadow cache directory '{$this->shadowDir}' could not be resolved");
+
+            return null;
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * One warning for the whole run, however many templates failed: the individual causes go to
+     * `--debug`, because a broken template is a per-template fact and the run-level fact is that
+     * some templates are not covered.
+     *
+     * @param array<string, string> $failures
+     */
+    private function reportFailures(array $failures): void
+    {
+        if ($failures === []) {
+            return;
+        }
+
+        foreach ($failures as $path => $reason) {
+            $this->output->debug("Laravel plugin: skipped Blade template '{$path}': {$reason}\n");
+        }
+
+        $count = \count($failures);
+        $named = \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME);
+        $suffix = $count > \count($named) ? ', ...' : '';
+
+        $this->output->warning(
+            "Laravel plugin: {$count} Blade template(s) were skipped and are not analyzed ("
+            . \implode(', ', $named) . $suffix . '). Run with --debug for the individual causes.',
+        );
+    }
+
+    private function degrade(string $cause): void
+    {
+        $this->output->warning('Laravel plugin: Blade template analysis is disabled for this run, because ' . $cause . '.');
+    }
+}
