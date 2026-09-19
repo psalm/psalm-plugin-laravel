@@ -15,10 +15,45 @@ namespace Psalm\LaravelPlugin\Blade;
 final class MarkerPrePass
 {
     /**
+     * Byte-offset ranges of source that are not "live" Blade code: verbatim bodies,
+     * `@php...@endphp` blocks, Blade comments, and raw `<?php ... ?>` / `<?= ... ?>`
+     * tags. Shared by computeSkipLines() (these bodies get no per-line marker) and
+     * extendsLine() (an `@extends` found inside one of these is not a live directive).
+     *
+     * @return list<array{0: string, 1: int}>
+     */
+    private static function maskedRanges(string $source): array
+    {
+        $patterns = [
+            '/@verbatim.*?@endverbatim/s',
+            '/@php.*?@endphp/s',
+            '/\{\{--.*?--\}\}/s',
+            // The `.*\z` alternative covers a raw PHP block left unclosed at end of
+            // template, which Blade permits.
+            '/<\?(?:php\b|=)(?:.*?\?>|.*\z)/s',
+        ];
+
+        $ranges = [];
+
+        foreach ($patterns as $pattern) {
+            if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+                continue;
+            }
+
+            /** @var list<array{0: string, 1: int}> $wholeMatches */
+            $wholeMatches = $matches[0];
+
+            \array_push($ranges, ...$wholeMatches);
+        }
+
+        return $ranges;
+    }
+
+    /**
      * Lines that are pure continuations of a multi-line construct (verbatim
-     * body, php-block body, blade comment body, multi-line echo body,
-     * multi-line directive argument list body) get NO marker. The line that
-     * OPENS the construct still gets a marker (state hasn't switched yet
+     * body, php-block body, blade comment body, raw-php body, multi-line echo
+     * body, multi-line directive argument list body) get NO marker. The line
+     * that OPENS the construct still gets a marker (state hasn't switched yet
      * when that line's marker decision is made).
      *
      * @return array<int, true>
@@ -26,9 +61,6 @@ final class MarkerPrePass
     public static function computeSkipLines(string $source): array
     {
         $patterns = [
-            '/@verbatim.*?@endverbatim/s',
-            '/@php.*?@endphp/s',
-            '/\{\{--.*?--\}\}/s',
             '/\{\{\{.*?\}\}\}/s',
             '/\{!!.*?!!\}/s',
             '/\{\{.*?\}\}/s',
@@ -43,6 +75,8 @@ final class MarkerPrePass
 
         $skip = [];
 
+        self::markSkipLines($source, self::maskedRanges($source), $skip);
+
         foreach ($patterns as $pattern) {
             if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
                 continue;
@@ -51,17 +85,26 @@ final class MarkerPrePass
             /** @var list<array{0: string, 1: int}> $wholeMatches */
             $wholeMatches = $matches[0];
 
-            foreach ($wholeMatches as [$text, $offset]) {
-                $startLine = 1 + \substr_count($source, "\n", 0, $offset);
-                $endLine = $startLine + \substr_count($text, "\n");
-
-                for ($line = $startLine + 1; $line <= $endLine; $line++) {
-                    $skip[$line] = true;
-                }
-            }
+            self::markSkipLines($source, $wholeMatches, $skip);
         }
 
         return $skip;
+    }
+
+    /**
+     * @param list<array{0: string, 1: int}> $matches
+     * @param array<int, true> $skip
+     */
+    private static function markSkipLines(string $source, array $matches, array &$skip): void
+    {
+        foreach ($matches as [$text, $offset]) {
+            $startLine = 1 + \substr_count($source, "\n", 0, $offset);
+            $endLine = $startLine + \substr_count($text, "\n");
+
+            for ($line = $startLine + 1; $line <= $endLine; $line++) {
+                $skip[$line] = true;
+            }
+        }
     }
 
     /**
@@ -100,13 +143,42 @@ final class MarkerPrePass
         return $out;
     }
 
-    /** The source line of an `@extends`/`@extendsFirst` directive, if any. */
+    /**
+     * The source line of an `@extends`/`@extendsFirst` directive, if any. A match
+     * inside a Blade comment, `@verbatim` body or raw PHP block is not a live
+     * directive and is skipped in favor of the next candidate, if any.
+     */
     public static function extendsLine(string $source): ?int
     {
-        if (\preg_match('/@extends(First)?\s*\(/', $source, $match, \PREG_OFFSET_CAPTURE)) {
-            return 1 + \substr_count($source, "\n", 0, $match[0][1]);
+        $matchCount = \preg_match_all('/@extends(First)?\s*\(/', $source, $matches, \PREG_OFFSET_CAPTURE);
+
+        if ($matchCount === false || $matchCount === 0) {
+            return null;
+        }
+
+        $masked = self::maskedRanges($source);
+
+        /** @var list<array{0: string, 1: int}> $candidates */
+        $candidates = $matches[0];
+
+        foreach ($candidates as [, $offset]) {
+            if (!self::isMasked($offset, $masked)) {
+                return 1 + \substr_count($source, "\n", 0, $offset);
+            }
         }
 
         return null;
+    }
+
+    /** @param list<array{0: string, 1: int}> $ranges */
+    private static function isMasked(int $offset, array $ranges): bool
+    {
+        foreach ($ranges as [$text, $rangeStart]) {
+            if ($offset >= $rangeStart && $offset < $rangeStart + \strlen($text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

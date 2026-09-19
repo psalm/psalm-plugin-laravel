@@ -103,4 +103,36 @@ final class MarkerPrePassTest extends TestCase
     {
         $this->assertSame(2, MarkerPrePass::extendsLine("line one\n@extends('layout')\n"));
     }
+
+    #[Test]
+    public function skips_raw_php_block_body_lines(): void
+    {
+        $skip = MarkerPrePass::computeSkipLines("<?php\n\$x = 1;\n?>\nhello\n");
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function skips_raw_php_block_body_lines_when_unclosed_at_eof(): void
+    {
+        $skip = MarkerPrePass::computeSkipLines("<?php\n\$x = 1;\n");
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+    }
+
+    #[Test]
+    public function extends_line_returns_null_for_a_commented_out_extends(): void
+    {
+        $this->assertNull(MarkerPrePass::extendsLine("{{-- @extends('layout') --}}\nhello\n"));
+    }
+
+    #[Test]
+    public function extends_line_skips_a_commented_out_extends_and_finds_the_live_one(): void
+    {
+        $this->assertSame(3, MarkerPrePass::extendsLine("{{-- @extends('old') --}}\n\n@extends('real')\n"));
+    }
 }
