@@ -192,12 +192,25 @@ final class MarkerPrePassTest extends TestCase
     #[Test]
     public function a_masked_switch_does_not_arm_the_case_gate(): void
     {
-        // A `@switch(` typed inside a Blade comment is not a live directive; it must not
-        // suppress markers on the real, unrelated lines that follow it.
-        $skip = MarkerPrePass::computeSkipLines("{{-- @switch(\$x) --}}\nline two\nline three\n");
+        // A `@switch(` typed inside a Blade comment is not a live directive; it must not arm
+        // the gate for the real @case that follows, so that @case finds nothing pending and
+        // suppresses nothing.
+        $skip = MarkerPrePass::computeSkipLines("{{-- @switch(\$x) --}}\nline two\n@case('a')\nline four\n");
 
-        $this->assertArrayNotHasKey(2, $skip);
-        $this->assertArrayNotHasKey(3, $skip);
+        $this->assertSame([], $skip);
+    }
+
+    #[Test]
+    public function a_masked_case_does_not_disarm_a_live_switchs_gate(): void
+    {
+        // A `@case(` typed inside a Blade comment must not consume the pending switch: the real
+        // @case that follows still needs its own gate, or the ParseError from #1496 comes back.
+        $source = "@switch(\$x)\n{{-- @case(9) --}}\nreal text\n@case('a')\nfoo\n@endswitch\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayHasKey(4, $skip); // the real @case line: still inside open PHP
     }
 
     #[Test]
