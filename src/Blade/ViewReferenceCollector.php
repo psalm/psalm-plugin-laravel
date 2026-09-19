@@ -49,7 +49,10 @@ final class ViewReferenceCollector
         try {
             $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($php);
         } catch (\Throwable) {
-            return [[], false];
+            // Unparseable, not empty: a shadow this plugin's own compiler produced but cannot itself
+            // parse says nothing about what the template includes, so treating it as "no references"
+            // would cascade into false UnusedView positives on everything it actually renders.
+            return [[], true];
         }
 
         return $this->walk(\array_values($stmts ?? []), true);

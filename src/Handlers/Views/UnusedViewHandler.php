@@ -9,8 +9,8 @@ use Psalm\Config;
 use Psalm\Internal\Provider\FileStorageProvider;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\PsalmBridge;
-use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
+use Psalm\LaravelPlugin\Blade\SuppressionInjector;
 use Psalm\LaravelPlugin\Blade\TemplateLocation;
 use Psalm\LaravelPlugin\Blade\ViewReferenceCollector;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
@@ -94,12 +94,12 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => [$templatePath, $shadowPath]) {
-            self::report($viewName, $templatePath, $shadowPath);
+        foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => [$templatePath]) {
+            self::report($viewName, $templatePath);
         }
     }
 
-    private static function report(string $viewName, string $templatePath, ?string $shadowPath): void
+    private static function report(string $viewName, string $templatePath): void
     {
         $source = ShadowRegistry::templateSource($templatePath);
 
@@ -113,29 +113,13 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        $entry = $shadowPath !== null ? ShadowRegistry::entryFor($shadowPath) : null;
-
+        // Read straight off the raw template source, not the shadow's line-keyed suppression map: a
+        // static-HTML-only template (the likeliest orphan shape) has no PHP statement for a
+        // `{{-- @psalm-suppress --}}` comment to attach to, so that map is empty for it even when the
+        // comment is present. This file-level issue has no call site of its own to key on either way.
         IssueBuffer::accepts(
             new UnusedView("View '{$viewName}' is never rendered.", $location),
-            self::suppressedIssues($entry),
+            (new SuppressionInjector())->suppressedRules($source),
         );
-    }
-
-    /**
-     * Every rule suppressed ANYWHERE in the template, not just on line 1: `suppressions` is keyed by
-     * the template line of the statement FOLLOWING each `{{-- @psalm-suppress --}}` comment
-     * (`SuppressionInjector::resolve()`), which for a file-level issue with no single call site to
-     * attach to is never the line this issue is reported at. Unioning is the honest reading of "the
-     * user asked to suppress this rule in this template" for an issue that has no better line to key on.
-     *
-     * @return array<array-key, string>
-     */
-    private static function suppressedIssues(?ShadowEntry $entry): array
-    {
-        if (!$entry instanceof \Psalm\LaravelPlugin\Blade\ShadowEntry || $entry->suppressions === []) {
-            return [];
-        }
-
-        return \array_merge(...\array_values($entry->suppressions));
     }
 }

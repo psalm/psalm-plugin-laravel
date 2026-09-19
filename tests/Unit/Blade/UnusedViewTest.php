@@ -37,6 +37,10 @@ final class UnusedViewTest extends TestCase
 
     private const FIRST_CALL_FIXTURE = __DIR__ . '/Fixtures/UnusedViewFirstCall';
 
+    private const PARSE_FAILURE_FIXTURE = __DIR__ . '/Fixtures/UnusedViewParseFailure';
+
+    private const SUPPRESSED_FIXTURE = __DIR__ . '/Fixtures/UnusedViewSuppressed';
+
     private const ISSUE = 'UnusedView';
 
     /** @var list<string> */
@@ -46,6 +50,8 @@ final class UnusedViewTest extends TestCase
         self::DIRECTIVES_FIXTURE,
         self::COMPONENT_TAG_FIXTURE,
         self::FIRST_CALL_FIXTURE,
+        self::PARSE_FAILURE_FIXTURE,
+        self::SUPPRESSED_FIXTURE,
     ];
 
     protected function setUp(): void
@@ -231,5 +237,42 @@ final class UnusedViewTest extends TestCase
             static fn(array $issue): bool => $issue['file'] === 'orphan.blade.php',
         ));
         $this->assertCount(1, $orphaned, 'an unrelated ->first() call must not disable the rule: ' . \var_export($issues, true));
+    }
+
+    /**
+     * A shadow that BLADE compiles without error can still fail to re-parse as PHP (a stray
+     * `@endif` compiles to a bare `endif;` with no matching alternative-syntax `if:`, which is a
+     * genuine PHP parse error). That failure must mark the reference set dynamic, the same as a
+     * BladeCompileError: the template's own `@extends`/`@include` targets are unknown, not empty, so
+     * they must not be reported unused, and neither should anything else in the run.
+     */
+    #[Test]
+    public function a_shadow_that_fails_to_reparse_turns_the_check_off_for_the_whole_run(): void
+    {
+        $issues = $this->unusedViewIssues(self::PARSE_FAILURE_FIXTURE, 'psalm.xml');
+
+        $this->assertSame([], $issues, \var_export($issues, true));
+    }
+
+    /**
+     * `{{-- @psalm-suppress UnusedView --}}` has no following PHP statement to attach to in a
+     * static-HTML-only template — the likeliest shape for a genuinely unused view — so suppression
+     * has to be read straight off the template source, not the shadow's per-statement map.
+     */
+    #[Test]
+    public function a_static_html_only_template_can_suppress_the_issue(): void
+    {
+        $issues = $this->unusedViewIssues(self::SUPPRESSED_FIXTURE, 'psalm.xml');
+
+        $this->assertSame([], \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'suppressed.blade.php',
+        )), \var_export($issues, true));
+
+        $unsuppressed = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'unsuppressed.blade.php',
+        ));
+        $this->assertCount(1, $unsuppressed, 'an identical template without the comment must still be reported: ' . \var_export($issues, true));
     }
 }
