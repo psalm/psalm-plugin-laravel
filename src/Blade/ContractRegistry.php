@@ -20,10 +20,18 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class ContractRegistry
 {
-    /** @var array<string, array{0: int, 1: ViewDataContract}> view name => [view root index, contract] */
+    /**
+     * @var array<string, array{0: int, 1: ViewDataContract, 2: array{0: list<string>, 1: bool}|null}>
+     *      view name => [view root index, contract, data includes]
+     */
     private static array $contracts = [];
 
-    public static function register(string $viewName, int $rootIndex, ViewDataContract $contract): void
+    /**
+     * @param array{0: list<string>, 1: bool}|null $dataIncludes view names the template hands its
+     *        whole scope to, and whether one of them could not be resolved; null when the collection
+     *        pass was off for this run, which {@see ReadSetResolver} treats as "not proven"
+     */
+    public static function register(string $viewName, int $rootIndex, ViewDataContract $contract, ?array $dataIncludes = null): void
     {
         $existing = self::$contracts[$viewName] ?? null;
 
@@ -31,13 +39,19 @@ final class ContractRegistry
             return;
         }
 
-        self::$contracts[$viewName] = [$rootIndex, $contract];
+        self::$contracts[$viewName] = [$rootIndex, $contract, $dataIncludes];
     }
 
     /** Null for a view name no template declared — which is every view outside the compiled set. */
     public static function contractFor(string $viewName): ?ViewDataContract
     {
         return self::$contracts[$viewName][1] ?? null;
+    }
+
+    /** @return array{0: list<string>, 1: bool}|null */
+    public static function dataIncludesFor(string $viewName): ?array
+    {
+        return self::$contracts[$viewName][2] ?? null;
     }
 
     public static function reset(): void
