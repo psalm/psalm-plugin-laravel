@@ -121,8 +121,8 @@ final class BladeBootstrapper
 
         $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
 
-        // Every shadow's prelude carries the ambient classes only in stacked docblocks Psalm's
-        // scanner otherwise can't see past the first one (see ShadowRegistrar::queueClassLikesForScanning);
+        // Every shadow's prelude carries the ambient classes only in stacked docblocks, and Psalm's
+        // scanner only ever sees the last one (see ShadowRegistrar::queueClassLikesForScanning);
         // queue them here, once per run, so a warm-manifest run (which skips ShadowCompiler entirely)
         // still gets them.
         $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
