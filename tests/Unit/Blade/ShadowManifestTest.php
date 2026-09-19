@@ -255,6 +255,73 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function an_entry_from_before_the_read_set_is_dropped(): void
+    {
+        // The seven-slot shape this plugin wrote before UnusedViewData widened the contract and added
+        // the data-includes slot. Keeping it would leave the template permanently fresh with an empty
+        // read set, silently reporting every key its callers pass.
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', [], [[], false], [[], false]]];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertNull($manifest->shadowEntry('/shadow.php'));
+        $this->assertFalse($manifest->isFresh('/a.blade.php', 'a'));
+    }
+
+    #[Test]
+    public function the_read_set_and_the_data_includes_survive_a_reload(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store(
+            '/app/views/foo.blade.php',
+            'source',
+            new ShadowResult('<?php ?>', [], null),
+            new ViewDataContract([], false, ['name', 'title'], false),
+            $this->emptyReferences(),
+            [['partial'], false],
+        );
+        $manifest->flush();
+
+        // A template fresh enough to skip recompiling is never re-parsed, so a read set that does not
+        // survive `var_export` + `include` reports every key its callers pass.
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $contract = $reloaded->contractFor($shadowPath);
+
+        $this->assertNotNull($contract);
+        $this->assertSame(['name', 'title'], $contract->readVariables);
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertSame([['partial'], false], $reloaded->dataIncludesFor($shadowPath));
+    }
+
+    /**
+     * Flipping the rule on against a cache warmed while it was off must not leave every template
+     * permanently "fresh with no data includes collected".
+     */
+    #[Test]
+    public function an_entry_stored_without_data_includes_is_not_fresh_when_they_are_required(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null), $this->emptyContract(), $this->emptyReferences());
+        $manifest->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $this->assertTrue($reloaded->isFresh('/a.blade.php', 'a'));
+        $this->assertFalse($reloaded->isFresh('/a.blade.php', 'a', ShadowManifest::SLOT_DATA_INCLUDES));
+    }
+
+    #[Test]
     public function prune_unlinks_orphan_shadows_and_drops_their_entries(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);

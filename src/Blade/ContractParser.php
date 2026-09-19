@@ -37,6 +37,21 @@ final class ContractParser
     }
 
     /**
+     * {@see self::parseDeclarations()} plus the read set, for the UnusedViewData rule: a key the
+     * call site passes that neither `$vars` nor `$readVariables` mentions is passed for nothing.
+     *
+     * Same side-channel rule as parseDeclarations(): the compiled output is read here, never fed
+     * back into it.
+     */
+    public function parseDataContract(string $source, string $compiled): ViewDataContract
+    {
+        [$vars, , $propsUnknown] = $this->parseSource($source);
+        [$reads, $readsUnknown] = $this->parseReads($compiled);
+
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown);
+    }
+
+    /**
      * The declaration half of {@see self::parse()}, from the template source alone.
      *
      * A side channel for call-site validation: it must not touch the compiled output, because
@@ -211,12 +226,69 @@ final class ContractParser
      */
     private function readVariables(string $compiled): array
     {
+        [$names, $loopLocals] = $this->walkReads($compiled);
+
+        return $this->filterNames($names, $loopLocals);
+    }
+
+    /**
+     * The read set the UnusedViewData rule consumes. Two differences from {@see self::readVariables()}:
+     * loop aliases stay in (the question is "does the template use this name at all", and dropping
+     * the alias would report the very name a `@foreach` binds), and an unknowable body is flagged
+     * rather than reported as an empty set.
+     *
+     * @return array{0: list<string>, 1: bool} names read, and whether the set is only a lower bound
+     */
+    private function parseReads(string $compiled): array
+    {
+        [$names, , $unknown] = $this->walkReads($compiled);
+
+        return [$this->filterNames($names, []), $unknown];
+    }
+
+    /**
+     * @param array<string, true> $names
+     * @param array<string, true> $excluded
+     *
+     * @return list<string>
+     */
+    private function filterNames(array $names, array $excluded): array
+    {
+        $filtered = [];
+
+        foreach (\array_keys($names) as $name) {
+            if ($name === 'this'
+                || \str_starts_with($name, '__')
+                || isset(PreludeBuilder::AMBIENT_TYPES[$name])
+                || isset($excluded[$name])
+            ) {
+                continue;
+            }
+
+            $filtered[] = $name;
+        }
+
+        \sort($filtered);
+
+        return $filtered;
+    }
+
+    /**
+     * One walk of the compiled body, feeding both read-set consumers.
+     *
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the loop
+     *         aliases among them, and whether the body hides which names it reads
+     */
+    private function walkReads(string $compiled): array
+    {
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
         try {
             $ast = $parser->parse($compiled) ?? [];
         } catch (\Throwable) {
-            return [];
+            // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
+            // would turn every key a call site passes into a false positive.
+            return [[], [], true];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -225,6 +297,8 @@ final class ContractParser
 
             /** @var array<string, true> */
             public array $loopLocals = [];
+
+            public bool $unknown = false;
 
             #[\Override]
             public function enterNode(Node $node): null
@@ -243,14 +317,47 @@ final class ContractParser
                     }
                 }
 
-                if ($node instanceof Node\Expr\Variable
-                    && \is_string($node->name)
-                    && $node->getAttribute('contractSkip') !== true
-                ) {
-                    $this->names[$node->name] = true;
+                if ($node instanceof Node\Expr\Variable) {
+                    if (!\is_string($node->name)) {
+                        // `$$name`: what Blade's own `@props` / `@aware` output compiles to, and the
+                        // one shape that reads (or injects) a name no static walk can enumerate.
+                        $this->unknown = true;
+                    } elseif ($node->getAttribute('contractSkip') !== true) {
+                        $this->names[$node->name] = true;
+                    }
+                }
+
+                if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
+                    $this->enterCall(\strtolower($node->name->toString()), $node->args);
                 }
 
                 return null;
+            }
+
+            /** @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args */
+            private function enterCall(string $name, array $args): void
+            {
+                if ($name === 'extract') {
+                    $this->unknown = true;
+
+                    return;
+                }
+
+                // `get_defined_vars()` is deliberately not in this list: Blade compiles it into every
+                // `@include`, so reading it as unknown would turn the rule off almost everywhere.
+                if ($name !== 'compact') {
+                    return;
+                }
+
+                foreach ($args as $arg) {
+                    if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
+                        $this->names[$arg->value->value] = true;
+
+                        continue;
+                    }
+
+                    $this->unknown = true;
+                }
             }
         };
 
@@ -258,22 +365,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        $names = [];
-
-        foreach (\array_keys($visitor->names) as $name) {
-            if ($name === 'this'
-                || \str_starts_with($name, '__')
-                || isset(PreludeBuilder::AMBIENT_TYPES[$name])
-                || isset($visitor->loopLocals[$name])
-            ) {
-                continue;
-            }
-
-            $names[] = $name;
-        }
-
-        \sort($names);
-
-        return $names;
+        return [$visitor->names, $visitor->loopLocals, $visitor->unknown];
     }
 }

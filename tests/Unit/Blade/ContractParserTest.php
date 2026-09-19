@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\TemplateContract;
+use Psalm\LaravelPlugin\Blade\ViewDataContract;
 
 #[CoversClass(ContractParser::class)]
 final class ContractParserTest extends TestCase
@@ -28,6 +29,11 @@ final class ContractParserTest extends TestCase
     private function parse(string $source): TemplateContract
     {
         return $this->parser->parse($source, $this->compiler->compileString($source));
+    }
+
+    private function dataContract(string $source): ViewDataContract
+    {
+        return $this->parser->parseDataContract($source, $this->compiler->compileString($source));
     }
 
     #[Test]
@@ -215,5 +221,86 @@ final class ContractParserTest extends TestCase
         $contract = $this->parse($source);
 
         $this->assertSame(['UndefinedVariable'], $contract->suppressions[3] ?? null);
+    }
+
+    #[Test]
+    public function the_data_contract_carries_a_known_read_set(): void
+    {
+        $contract = $this->dataContract("{{-- @var string \$name --}}\n{{ \$name }}{{ \$extra }}\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertSame(['extra', 'name'], $contract->readVariables);
+    }
+
+    /**
+     * The opposite of {@see self::foreach_subject_is_read_but_its_alias_is_local()}: the read set the
+     * UnusedViewData rule consumes adds loop aliases back, because dropping them template-wide would
+     * report a key the template provably uses as the loop's own subject.
+     */
+    #[Test]
+    public function a_loop_alias_counts_as_a_read_for_the_data_contract(): void
+    {
+        $contract = $this->dataContract("@foreach(\$items as \$item)\n{{ \$item }}\n@endforeach\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertContains('item', $contract->readVariables);
+    }
+
+    #[Test]
+    public function compact_literal_args_count_as_reads(): void
+    {
+        $contract = $this->dataContract("@php\n\$out = compact('first', 'second');\n@endphp\n{{ \$out }}\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertContains('first', $contract->readVariables);
+        $this->assertContains('second', $contract->readVariables);
+    }
+
+    #[Test]
+    public function a_non_literal_compact_arg_makes_the_read_set_unknown(): void
+    {
+        $contract = $this->dataContract("@php\n\$out = compact(\$names);\n@endphp\n{{ \$out }}\n");
+
+        $this->assertTrue($contract->readsUnknown);
+    }
+
+    #[Test]
+    public function extract_makes_the_read_set_unknown(): void
+    {
+        $contract = $this->dataContract("@php\nextract(\$bag);\n@endphp\ndone\n");
+
+        $this->assertTrue($contract->readsUnknown);
+    }
+
+    /** `@props` compiles to `$$__key = ...` writes, so every component template lands here. */
+    #[Test]
+    public function a_variable_variable_makes_the_read_set_unknown(): void
+    {
+        $contract = $this->dataContract("@props(['heading'])\n{{ \$heading }}\n");
+
+        $this->assertTrue($contract->readsUnknown);
+    }
+
+    /**
+     * A parse failure returning an empty read set would read as "the template reads nothing", turning
+     * every key the call site passes into a false positive.
+     */
+    #[Test]
+    public function a_parse_failure_makes_the_read_set_unknown(): void
+    {
+        $contract = $this->parser->parseDataContract("{{ \$name }}\n", '<?php $oops = ; ?>');
+
+        $this->assertTrue($contract->readsUnknown);
+        $this->assertSame([], $contract->readVariables);
+    }
+
+    /** `@include` compiles `get_defined_vars()` into every call, so it can never mean "unknown". */
+    #[Test]
+    public function get_defined_vars_does_not_make_the_read_set_unknown(): void
+    {
+        $contract = $this->dataContract("@include('partial')\n{{ \$name }}\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertSame(['name'], $contract->readVariables);
     }
 }
