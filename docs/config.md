@@ -246,7 +246,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. Contract annotations (`{{-- @var \App\Models\User $user --}}`, `@props([...])`) are read by a later release.
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. Contract annotations (`{{-- @var \App\Models\User $user --}}`, `@props([...])`) do not type the template's own body yet; they are read for the call-site checks below.
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -261,6 +261,24 @@ Notes on this release:
 Where the compiled shadows and their manifest are written. Absolute, or relative to the directory Psalm runs in. The plugin creates the directory, reuses a shadow whose template has not changed, and deletes shadows whose template is gone.
 
 The default deliberately sits outside your project tree. A shadow file that one of your `<projectFiles>` patterns happens to match is treated by Psalm as a file of your own, which both reports issues at their compiled locations instead of the template's and makes Psalm drop taint flows that start in it. If you point `cacheDir` inside the project, exclude it from `<projectFiles>` (and from version control).
+
+### `validateViewData`
+
+**default**: off
+
+```xml
+<blade enabled="true" validateViewData="true" />
+```
+
+Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
+
+A template declares its variables with `{{-- @var \App\Models\User $user --}}` comments and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
+
+Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
+
+Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
+
+Needs `enabled="true"`: the contracts only exist once the compile pass has read the templates.
 
 ### Degradation
 

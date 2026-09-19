@@ -52,6 +52,8 @@ final readonly class PluginConfig
         public bool $bladeEnabled,
         /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
         public string $bladeCacheDir,
+        /** Opt-in checking of `view()` call sites against template contracts (`<blade validateViewData="true" />`). */
+        public bool $bladeValidateViewData,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -86,6 +88,7 @@ final readonly class PluginConfig
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $bladeEnabled = self::xmlBoolAttr($config?->blade, 'blade enabled', false, 'enabled');
+        $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -102,6 +105,7 @@ final readonly class PluginConfig
             cachePath: $cachePath,
             bladeEnabled: $bladeEnabled,
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
+            bladeValidateViewData: $bladeValidateViewData,
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );

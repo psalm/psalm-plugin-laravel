@@ -22,5 +22,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()` that matches no known attribute
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
+- [MissingViewVariable](MissingViewVariable.md) — a Blade template declares a variable (`{{-- @var --}}`, `@props`) that the `view()` call site rendering it never passes (opt-in)
+- [InvalidViewVariableType](InvalidViewVariableType.md) — the value passed for a Blade template variable does not satisfy the type that template declares for it (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.
