@@ -22,4 +22,16 @@ interface ShadowRegistrar
 
     /** @param list<string> $shadowPaths compiled PHP files, never `.blade.php` paths */
     public function registerShadowsForAnalysis(array $shadowPaths): void;
+
+    /**
+     * Queues classes for scanning that no project file may ever reference in code position: the
+     * shadow prelude names them only in stacked one-line `@var` docblocks on a single statement, and
+     * PhpParser attaches every stacked docblock to one `Doc` node, so `Node::getDocComment()` — all
+     * Psalm's scanner reads to queue docblock classes — returns only the last one. Without this,
+     * every ambient class but the last-declared one is invisible to the scanner and reports
+     * UndefinedDocblockClass the first time nothing else in the project names it in code.
+     *
+     * @param list<string> $classNames fully-qualified, `\`-prefixed or not
+     */
+    public function queueClassLikesForScanning(array $classNames): void;
 }

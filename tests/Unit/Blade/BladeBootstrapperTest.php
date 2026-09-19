@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 
 #[CoversClass(BladeBootstrapper::class)]
@@ -108,6 +109,31 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertFileExists($shadow);
         $this->assertStringContainsString('echo e($name)', (string) \file_get_contents($shadow));
         $this->assertFileExists($this->shadowDir . '/manifest.php');
+    }
+
+    #[Test]
+    public function queues_the_ambient_prelude_classes_for_scanning_on_a_fresh_compile(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+    }
+
+    #[Test]
+    public function queues_the_ambient_prelude_classes_for_scanning_on_a_warm_manifest_run(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $this->bootstrapper($this->app(), new RecordingShadowRegistrar())->boot();
+
+        // Second run against the same shadow dir: every template is a manifest freshness hit, so
+        // ShadowCompiler never runs, and the queueing still has to happen (see BladeBootstrapper::run()).
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertSame(PreludeBuilder::ambientClassNames(), $second->queuedClassLikes);
     }
 
     #[Test]
