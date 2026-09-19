@@ -143,6 +143,7 @@ final class BladeBootstrapper
 
             if ($source === false) {
                 $failures[$template] = 'the template could not be read';
+                $this->claimNameOnly($template, $roots);
 
                 continue;
             }
@@ -164,6 +165,7 @@ final class BladeBootstrapper
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
+                $this->claimNameOnly($template, $roots);
 
                 continue;
             }
@@ -173,6 +175,7 @@ final class BladeBootstrapper
                 $this->registerContract($template, $roots, $contract);
             } catch (\RuntimeException $throwable) {
                 $failures[$template] = $throwable->getMessage();
+                $this->claimNameOnly($template, $roots);
             }
         }
 
@@ -201,6 +204,21 @@ final class BladeBootstrapper
         }
 
         return $roots;
+    }
+
+    /**
+     * Claim a view name for a template this pass could not process, with no declarations attached.
+     *
+     * Laravel renders the first root's file whether or not the plugin could read or compile it, so
+     * leaving the name unclaimed hands it to a same-named template in a later root, whose
+     * declarations would then be checked against callers that never reach it. An empty contract
+     * blocks that without asserting anything about a template we failed on.
+     *
+     * @param list<string> $roots
+     */
+    private function claimNameOnly(string $templatePath, array $roots): void
+    {
+        $this->registerContract($templatePath, $roots, new ViewDataContract([], false));
     }
 
     /**

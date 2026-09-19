@@ -216,6 +216,47 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'ShadowedTemplate.php'), \var_export($issues, true));
     }
 
+    /**
+     * A template the compile pass could not process still claims its view name. Laravel renders the
+     * first root's file whether or not this plugin could compile it, so a same-named template in a
+     * later root must not inherit the name through the failure branch.
+     */
+    #[Test]
+    public function a_template_that_fails_to_compile_still_claims_its_view_name(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'UncompilableFirstRoot.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Every binder is resolved by name as well as by position, and so is `with()`. The lookup keys
+     * are Laravel's own parameter names (`$view`, `$data`, `$key`, `$value`), so a rename upstream
+     * silently stops resolving the argument and this is the only thing that would catch it.
+     */
+    #[Test]
+    public function named_arguments_resolve_on_the_binder_and_on_the_chain(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'NamedArguments.php');
+
+        $this->assertCount(2, $reported, \var_export($issues, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+        }
+    }
+
+    #[Test]
+    public function the_static_facade_form_is_checked_like_the_helper(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'StaticFacadeForm.php');
+
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+    }
+
     /** Each of these pins a different decline gate, with everything else about the call held equal. */
     #[Test]
     public function every_decline_gate_stays_silent(): void
@@ -228,6 +269,8 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'DynamicName.php'));
         // Same shape as MissingVariable.php, but the template declares nothing.
         $this->assertSame([], $this->forFile($issues, 'NoContract.php'));
+        // A spread shifts every position after it, so no argument can be read by position.
+        $this->assertSame([], $this->forFile($issues, 'SpreadArgs.php'));
     }
 
     #[Test]
