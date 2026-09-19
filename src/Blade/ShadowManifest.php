@@ -22,7 +22,10 @@ final class ShadowManifest
     /** Bump when MarkerPrePass changes in a way that changes shadow output for the same source. */
     private const MARKER_PASS_VERSION = 1;
 
-    /** @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>}> shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions] */
+    /**
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}}>
+     *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract]
+     */
     private array $entries = [];
 
     public function __construct(private readonly string $shadowDir) {}
@@ -51,7 +54,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}}>
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -62,11 +65,11 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 5) {
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 6) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions] = \array_values($entry);
+            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract] = \array_values($entry);
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
                 continue;
@@ -82,6 +85,12 @@ final class ShadowManifest
                 continue;
             }
 
+            $validContract = $this->normalizeContract($contract);
+
+            if ($validContract === null) {
+                continue;
+            }
+
             $validLineMap = [];
 
             /** @psalm-suppress MixedAssignment untyped data straight from an included file */
@@ -93,10 +102,46 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract];
         }
 
         return $entries;
+    }
+
+    /**
+     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool}|null null when the
+     *         shape is wrong, which drops the entry
+     */
+    private function normalizeContract(mixed $data): ?array
+    {
+        if (!\is_array($data) || \count($data) !== 2) {
+            return null;
+        }
+
+        [$vars, $propsUnknown] = \array_values($data);
+
+        if (!\is_array($vars) || !\is_bool($propsUnknown)) {
+            return null;
+        }
+
+        $validVars = [];
+
+        /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+        foreach ($vars as $name => $var) {
+            if (!\is_string($name) || !\is_array($var) || \count($var) !== 3) {
+                return null;
+            }
+
+            [$typeString, $line, $optional] = \array_values($var);
+
+            if (!\is_string($typeString) || !\is_int($line) || !\is_bool($optional)) {
+                return null;
+            }
+
+            $validVars[$name] = [$typeString, $line, $optional];
+        }
+
+        return [$validVars, $propsUnknown];
     }
 
     /**
@@ -163,13 +208,42 @@ final class ShadowManifest
         return $this->shadowPath($templatePath);
     }
 
+    /**
+     * The template's declared variables, including for a template that was fresh enough to skip
+     * recompiling this run — which is why the contract is persisted rather than re-parsed.
+     */
+    public function contractFor(string $shadowPath): ?ViewDataContract
+    {
+        $entry = $this->entries[$shadowPath] ?? null;
+
+        if ($entry === null) {
+            return null;
+        }
+
+        [$vars, $propsUnknown] = $entry[5];
+
+        $contractVars = [];
+
+        foreach ($vars as $name => [$typeString, $line, $optional]) {
+            $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional);
+        }
+
+        return new ViewDataContract($contractVars, $propsUnknown);
+    }
+
     /** Writes the shadow file to disk and records it. Call flush() to persist the manifest itself. */
-    public function store(string $templatePath, string $source, ShadowResult $shadow): string
+    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract): string
     {
         $shadowPath = $this->shadowPath($templatePath);
 
         if (@\file_put_contents($shadowPath, $shadow->contents) === false) {
             throw new \RuntimeException("cannot write shadow file '{$shadowPath}'");
+        }
+
+        $vars = [];
+
+        foreach ($contract->vars as $name => $var) {
+            $vars[$name] = [$var->typeString, $var->declarationLine, $var->optional];
         }
 
         $this->entries[$shadowPath] = [
@@ -178,6 +252,7 @@ final class ShadowManifest
             $shadow->extendsLine,
             $this->fingerprint($source),
             $shadow->suppressions,
+            [$vars, $contract->propsUnknown],
         ];
 
         return $shadowPath;

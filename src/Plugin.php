@@ -209,8 +209,10 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Validation\FormRequestPropertyHandler::reset();
         Handlers\Validation\ValidationRuleAnalyzer::reset();
         Handlers\Views\MissingViewHandler::reset();
+        Handlers\Views\ViewContractHandler::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
         Blade\BladeIssueRemapHandler::reset();
+        Blade\ContractRegistry::reset();
         Blade\ShadowRegistry::reset();
     }
 
@@ -706,6 +708,16 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->bladeEnabled) {
             require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
+        }
+
+        // Checks view() call sites against the contracts the compiled templates declare. Needs the
+        // compile pass to have populated ContractRegistry, hence the bladeEnabled half of the gate;
+        // the validateViewData half is the opt-in for the check itself.
+        if ($pluginConfig->bladeEnabled && $pluginConfig->bladeValidateViewData) {
+            require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+            require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
+            Handlers\Views\ViewContractHandler::init();
+            $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
         }
     }
 

@@ -7,13 +7,20 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\ShadowManifest;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
+use Psalm\LaravelPlugin\Blade\ViewDataContract;
 
 #[CoversClass(ShadowManifest::class)]
 final class ShadowManifestTest extends TestCase
 {
     private string $shadowDir;
+
+    private function emptyContract(): ViewDataContract
+    {
+        return new ViewDataContract([], false);
+    }
 
     protected function setUp(): void
     {
@@ -60,7 +67,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null));
+        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null), $this->emptyContract());
 
         $this->assertStringContainsString(\sha1('/app/views/foo.blade.php'), $shadowPath);
         $this->assertFileExists($shadowPath);
@@ -73,7 +80,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null));
+        $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
         $manifest->flush();
 
         $reloaded = new ShadowManifest($this->shadowDir);
@@ -90,7 +97,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null));
+        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
         $manifest->flush();
 
         \unlink($shadowPath);
@@ -111,6 +118,7 @@ final class ShadowManifestTest extends TestCase
             '/app/views/foo.blade.php',
             'source',
             new ShadowResult('<?php ?>', [1 => 0, 2 => 4], null, [4 => ['UndefinedPropertyFetch']]),
+            $this->emptyContract(),
         );
         $manifest->flush();
 
@@ -143,13 +151,68 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function the_template_contract_survives_a_reload(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store(
+            '/app/views/foo.blade.php',
+            'source',
+            new ShadowResult('<?php ?>', [], null),
+            new ViewDataContract(
+                [
+                    'user' => new ContractVar('user', '\App\Models\User', 3, false),
+                    'title' => new ContractVar('title', 'mixed', 1, true),
+                ],
+                true,
+            ),
+        );
+        $manifest->flush();
+
+        // A template fresh enough to skip recompiling is never re-parsed, so a contract that does
+        // not survive `var_export` + `include` silently stops validating that template's callers.
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $contract = $reloaded->contractFor($shadowPath);
+
+        $this->assertNotNull($contract);
+        $this->assertTrue($contract->propsUnknown);
+        $this->assertSame(['user', 'title'], \array_keys($contract->vars));
+        $this->assertSame('\App\Models\User', $contract->vars['user']->typeString);
+        $this->assertSame(3, $contract->vars['user']->declarationLine);
+        $this->assertFalse($contract->vars['user']->optional);
+        $this->assertTrue($contract->vars['title']->optional);
+    }
+
+    #[Test]
+    public function an_entry_from_before_the_contract_slot_is_dropped(): void
+    {
+        // The five-slot shape this plugin wrote before contracts existed. Keeping it would leave
+        // the template permanently fresh and permanently contract-less; dropping it costs one
+        // recompile.
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', []]];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertNull($manifest->shadowEntry('/shadow.php'));
+        $this->assertNull($manifest->contractFor('/shadow.php'));
+        $this->assertFalse($manifest->isFresh('/a.blade.php', 'a'));
+    }
+
+    #[Test]
     public function prune_unlinks_orphan_shadows_and_drops_their_entries(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowA = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null));
-        $shadowB = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', [], null));
+        $shadowA = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
+        $shadowB = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
         $manifest->flush();
 
         $manifest->prune(['/a.blade.php']);
