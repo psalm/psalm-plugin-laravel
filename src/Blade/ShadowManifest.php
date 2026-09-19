@@ -20,7 +20,7 @@ final class ShadowManifest
     private const MANIFEST_FILE = 'manifest.php';
 
     /** Bump when MarkerPrePass changes in a way that changes shadow output for the same source. */
-    private const MARKER_PASS_VERSION = 1;
+    private const MARKER_PASS_VERSION = 2;
 
     /** {@see self::isFresh()}: the references slot must have been collected for the entry to count as fresh. */
     public const SLOT_REFERENCES = 1;
@@ -327,9 +327,24 @@ final class ShadowManifest
     public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $references, ?array $dataIncludes = null): string
     {
         $shadowPath = $this->shadowPath($templatePath);
+        $pid = \getmypid();
+        $tmpPath = $shadowPath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
 
-        if (@\file_put_contents($shadowPath, $shadow->contents) === false) {
-            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'");
+        if (@\file_put_contents($tmpPath, $shadow->contents) === false) {
+            // Capture the reason before the cleanup unlink() below, which fails and overwrites it
+            // whenever the temp file was never created (only a partial write, e.g. disk full mid-
+            // write, actually leaves one behind for that unlink to remove).
+            $detail = $this->lastErrorDetail();
+            @\unlink($tmpPath);
+
+            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'{$detail}");
+        }
+
+        if (!@\rename($tmpPath, $shadowPath)) {
+            $detail = $this->lastErrorDetail();
+            @\unlink($tmpPath);
+
+            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'{$detail}");
         }
 
         $vars = [];
@@ -414,6 +429,14 @@ final class ShadowManifest
     private function shadowPath(string $templatePath): string
     {
         return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '.php';
+    }
+
+    /** The OS-level reason for the most recently suppressed warning, if any, as ": <message>". */
+    private function lastErrorDetail(): string
+    {
+        $error = \error_get_last();
+
+        return $error !== null ? ": {$error['message']}" : '';
     }
 
     private function manifestPath(): string
