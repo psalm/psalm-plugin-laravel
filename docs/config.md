@@ -318,9 +318,9 @@ Needs `enabled="true"`: the read sets only exist once the compile pass has read 
 
 Every template variable the plugin cannot prove a type for is `mixed` (see the notes above), so `MixedArgument`, `MixedAssignment`, and the rest of Psalm's `MixedIssue` family are overwhelmingly noise about the prelude's own fallback rather than a real template bug. They are dropped at the point issues are relocated onto the template, before Psalm's own suppression accounting sees them.
 
-Set `reportMixedIssues="true"` to opt back in and see them at the template's file and line, same as any other issue type. No recompile needed either way: the flag changes only which issues are reported, never what the compile pass collects, so flipping it reuses a warm shadow cache.
+Set `reportMixedIssues="true"` to opt back in and see them at the template's file and line, same as any other issue type. Opting in restores only findings that map to a real template line: a `Mixed*` finding on an unmapped line (the prelude that declares the fallback types) stays dropped unconditionally, because it can only ever describe the fallback itself. No recompile needed either way: the flag changes only which issues are reported, never what the compile pass collects, so flipping it reuses a warm shadow cache.
 
-A narrower alternative is silencing individual `Mixed*` types over `resources/views` with [an `issueHandlers` entry](blade.md#suppressing-issues) — useful if you want some but not all of the family back.
+For some but not all of the family back, first set `reportMixedIssues="true"`, then silence the unwanted `Mixed*` types over `resources/views` with [an `issueHandlers` entry](blade.md#suppressing-issues). An `issueHandlers` entry alone cannot bring anything back: with the flag off the plugin drops the whole family before Psalm's issue handlers are consulted.
 
 ### Degradation
 
