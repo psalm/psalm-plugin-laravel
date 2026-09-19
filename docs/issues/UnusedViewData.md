@@ -27,7 +27,7 @@ view('profile', ['name' => $user->name, 'subtitle' => $this->expensiveSubtitle()
 view('profile', ['name' => $user->name]);
 ```
 
-A key read by an included partial counts as read, because the include inherits the whole scope:
+A key an included partial reads — or declares, since `{{-- @var --}}` and `@props` state that template's interface just as they do at the top of the chain — counts as consumed, because the include inherits the whole scope:
 
 ```blade
 {{-- resources/views/page.blade.php --}}

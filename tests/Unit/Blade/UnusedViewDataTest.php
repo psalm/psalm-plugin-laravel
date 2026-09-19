@@ -180,6 +180,19 @@ final class UnusedViewDataTest extends TestCase
     }
 
     /**
+     * The same rule one level down the include chain: "declares" has to count as consumed wherever a
+     * contract is declared, or the check contradicts its own semantics for a partial that states its
+     * interface with `{{-- @var --}}` and leaves the body to a later revision.
+     */
+    #[Test]
+    public function a_key_declared_by_an_included_template_is_not_reported(): void
+    {
+        $issues = $this->unusedDataIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'DeclaredInInclude.php'), \var_export($issues, true));
+    }
+
+    /**
      * Loop aliases are dropped from the read set template-wide (a documented ContractParser gap), so
      * they are added back for this rule: over-counting a name as read is the safe direction.
      */

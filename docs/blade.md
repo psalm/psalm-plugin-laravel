@@ -109,7 +109,7 @@ With [`reportUnusedViews`](config.md#reportunusedviews) enabled, the plugin also
 
 ## Unused view data
 
-With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). The read set is taken from the compiled template, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it.
+With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares (`{{-- @var --}}`, `@props`) are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it.
 
 The check declines for a call site instead of guessing, and the gate that matters most in practice is that a template whose compiled body hides which names it reads is never checked. `@props` and `@aware` both compile to `$$name` writes, which means component templates are outside this release's reach. The issue page lists the rest.
 

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * Closes a template's read set over its `@include` / `@extends` chain: every scope-passing directive
- * hands the whole of the including template's data down, so a variable a partial reads is a variable
- * the outermost `view()` call site legitimately passes.
+ * Closes a template's consumed-variable set over its `@include` / `@extends` chain: every
+ * scope-passing directive hands the whole of the including template's data down, so a variable a
+ * partial reads — or declares — is a variable the outermost `view()` call site legitimately passes.
  *
  * Declines (null) the moment any template in the chain leaves its own contribution a lower bound —
  * an unknowable read set, a dynamic include, an include naming a template the compile pass never
@@ -19,8 +19,8 @@ namespace Psalm\LaravelPlugin\Blade;
 final class ReadSetResolver
 {
     /**
-     * @return array<string, true>|null variable names the chain reads, or null when nothing about it
-     *                                  is provable
+     * @return array<string, true>|null variable names the chain reads or declares, or null when
+     *                                  nothing about it is provable
      */
     public static function reads(string $viewName): ?array
     {
@@ -56,7 +56,13 @@ final class ReadSetResolver
             return null;
         }
 
-        $reads = \array_fill_keys($contract->readVariables, true);
+        // Declared names count as consumed wherever they are declared, not just at the top of the
+        // chain: `{{-- @var --}}` / `@props` is a template's stated interface, and reporting a key an
+        // included partial declares but has not got round to reading yet would contradict the
+        // "neither reads nor declares" semantics the call-site check already applies to the outermost
+        // template.
+        $reads = \array_fill_keys($contract->readVariables, true)
+            + \array_fill_keys(\array_keys($contract->vars), true);
 
         foreach ($dataIncludes[0] as $included) {
             $nested = self::walk($included, $visited);

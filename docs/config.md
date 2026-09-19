@@ -302,7 +302,7 @@ Needs `enabled="true"`: the contracts only exist once the compile pass has read 
 
 Report a data key ([UnusedViewData](issues/UnusedViewData.md)) that the rendered template neither reads nor declares. Independent of `validateViewData`: same call shapes, opposite direction (that rule checks what the template asks for, this one checks what the call site hands over).
 
-A key read by a template reached through `@include` or `@extends` counts as read, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run.
+A key that a template reached through `@include` or `@extends` reads or declares counts as consumed, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run.
 
 Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
 
