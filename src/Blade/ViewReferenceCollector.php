@@ -45,6 +45,9 @@ use PhpParser\ParserFactory;
  *    there is silently skipped rather than tripping the off-switch. Over-collection (treating more
  *    calls as references than strictly proven) is the safe direction for an "unused" rule; a false
  *    "everything is dynamic" is not.
+ *
+ * {@see self::collectDataIncludes()} narrows the first of those to the references that also inherit
+ * the including template's scope, which is a different question with the same off-switch discipline.
  */
 final class ViewReferenceCollector
 {
@@ -71,6 +74,85 @@ final class ViewReferenceCollector
     public function collect(array $stmts): array
     {
         return $this->walk($stmts, false);
+    }
+
+    /**
+     * The subset of {@see self::collectFromSource()}'s references that the template hands its WHOLE
+     * scope to, so a variable one of them reads is a variable the caller's data key feeds. That is
+     * the propagation channel the UnusedViewData read set closes over.
+     *
+     * Membership is decided by the data argument, not the directive: `@includeIsolated` and `@each`
+     * compile to the same `$__env->` methods but pass no parent scope, and must not launder a read.
+     *
+     * @return array{0: list<string>, 1: bool} view names, and whether one could not be resolved
+     */
+    public function collectDataIncludes(string $php): array
+    {
+        try {
+            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($php);
+        } catch (\Throwable) {
+            return [[], true];
+        }
+
+        $names = [];
+        $dynamic = false;
+
+        foreach ((new NodeFinder())->findInstanceOf(\array_values($stmts ?? []), MethodCall::class) as $call) {
+            if (!$call->name instanceof Identifier || !$call->var instanceof Variable || $call->var->name !== '__env') {
+                continue;
+            }
+
+            $method = \strtolower($call->name->toString());
+
+            if (!$this->passesWholeScope($call->args)) {
+                continue;
+            }
+
+            match ($method) {
+                // @include, @includeIf, @extends, and the aliased-include directives.
+                'make' => $this->applyLiteral($call->args, 0, null, $names, $dynamic),
+                // @includeFirst / @extendsFirst take a list of candidate names, any of which renders.
+                'first' => $this->applyLiteralList($call->args, $names, $dynamic),
+                // @includeWhen / @includeUnless put the condition first.
+                'renderwhen', 'renderunless' => $this->applyLiteral($call->args, 1, null, $names, $dynamic),
+                default => null,
+            };
+        }
+
+        return [\array_keys($names), $dynamic];
+    }
+
+    /**
+     * Whether one of the call's arguments is the `array_diff_key(get_defined_vars(), ['__data' => 1,
+     * '__path' => 1])` that every scope-passing Blade directive compiles its data argument to. The
+     * position shifts with the directive's own optional data array (`@include('x', [...])` pushes it
+     * into `$mergeData`), so the whole argument list is scanned rather than one pinned index.
+     *
+     * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
+     */
+    private function passesWholeScope(array $args): bool
+    {
+        foreach ($args as $arg) {
+            if (!$arg instanceof Arg
+                || !$arg->value instanceof FuncCall
+                || !$arg->value->name instanceof Name
+                || \strtolower($arg->value->name->toString()) !== 'array_diff_key'
+            ) {
+                continue;
+            }
+
+            $inner = $arg->value->args[0] ?? null;
+
+            if ($inner instanceof Arg
+                && $inner->value instanceof FuncCall
+                && $inner->value->name instanceof Name
+                && \strtolower($inner->value->name->toString()) === 'get_defined_vars'
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

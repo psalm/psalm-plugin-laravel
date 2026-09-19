@@ -712,13 +712,18 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
         }
 
-        // Checks view() call sites against the contracts the compiled templates declare. Needs the
-        // compile pass to have populated ContractRegistry, hence the bladeEnabled half of the gate;
-        // the validateViewData half is the opt-in for the check itself.
-        if ($pluginConfig->bladeEnabled && $pluginConfig->bladeValidateViewData) {
+        // Checks view() call sites against the contracts the compiled templates declare, and reports
+        // data keys the template never reads (#1478). Needs the compile pass to have populated
+        // ContractRegistry, hence the bladeEnabled half of the gate; the two flags are independent
+        // opt-ins for the checks themselves, sharing one walk of the statement.
+        if ($pluginConfig->bladeEnabled && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
+            require_once __DIR__ . '/Blade/ReadSetResolver.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
-            Handlers\Views\ViewContractHandler::init();
+            Handlers\Views\ViewContractHandler::init(
+                $pluginConfig->bladeValidateViewData,
+                $pluginConfig->bladeReportUnusedViewData,
+            );
             $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
         }
 
@@ -887,6 +892,7 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViews,
+            $pluginConfig->bladeReportUnusedViewData,
         );
 
         $bootstrapper->boot();

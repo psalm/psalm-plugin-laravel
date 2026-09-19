@@ -38,6 +38,12 @@ final class BladeBootstrapper
          * only by projects that turned the rule on.
          */
         private readonly bool $collectViewReferences = false,
+        /**
+         * Opt-in for UnusedViewData (`reportUnusedViewData`). Gates both the read-set extraction and
+         * the data-include collection that closes it over the `@include` chain: two extra AST walks
+         * per template, paid only by projects that turned the rule on.
+         */
+        private readonly bool $collectDataIncludes = false,
     ) {}
 
     public function boot(): void
@@ -144,7 +150,9 @@ final class BladeBootstrapper
         $shadows = [];
         $roots = $this->resolveRoots($viewPaths);
         $parser = new ContractParser();
-        $collector = $this->collectViewReferences ? new ViewReferenceCollector() : null;
+        $collector = $this->collectViewReferences || $this->collectDataIncludes ? new ViewReferenceCollector() : null;
+        $requiredSlots = ($this->collectViewReferences ? ShadowManifest::SLOT_REFERENCES : 0)
+            | ($this->collectDataIncludes ? ShadowManifest::SLOT_DATA_INCLUDES : 0);
 
         foreach ($templates as $template) {
             $source = @\file_get_contents($template);
@@ -156,10 +164,16 @@ final class BladeBootstrapper
                 continue;
             }
 
-            if ($manifest->isFresh($template, $source, $this->collectViewReferences)) {
+            if ($manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $shadowPath);
+                $this->registerContract(
+                    $template,
+                    $roots,
+                    $manifest->contractFor($shadowPath),
+                    $shadowPath,
+                    $manifest->dataIncludesFor($shadowPath),
+                );
 
                 if ($this->collectViewReferences) {
                     $this->applyReferences($manifest->referencesFor($shadowPath) ?? [[], false]);
@@ -168,11 +182,10 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $contract = $parser->parseDeclarations($source);
-
             // Deliberately NOT fed into compile(): contract types in the prelude would change every
-            // shadow's content and fingerprint. Declarations are read here as a side channel for
-            // call-site validation only.
+            // shadow's content and fingerprint. Declarations are read as a side channel for
+            // call-site validation only — which is also why the contract is built AFTER the compile,
+            // so the read set can be taken off the compiled output without reaching compile().
             $shadow = $compiler->compile($template, $source);
 
             if ($shadow instanceof BladeCompileError) {
@@ -182,16 +195,21 @@ final class BladeBootstrapper
                 continue;
             }
 
+            $contract = $this->collectDataIncludes
+                ? $parser->parseDataContract($source, $shadow->contents)
+                : $parser->parseDeclarations($source);
+
             // Read from the compiled output, not the raw template: Laravel has already resolved
             // component namespaces and anonymous-component candidates by this point. Null (not an
             // empty pair) when the rule is off, so a later flag flip cannot mistake "never
             // collected" for "collected, found nothing" — see ShadowManifest::isFresh().
-            $references = $collector?->collectFromSource($shadow->contents);
+            $references = $this->collectViewReferences ? $collector?->collectFromSource($shadow->contents) : null;
+            $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
 
             try {
-                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references);
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references, $dataIncludes);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract($template, $roots, $contract, $shadowPath);
+                $this->registerContract($template, $roots, $contract, $shadowPath, $dataIncludes);
 
                 if ($references !== null) {
                     $this->applyReferences($references);
@@ -267,10 +285,16 @@ final class BladeBootstrapper
      * file instead. The view name is claimed as an UnusedView CANDIDATE unconditionally, even for a
      * template this pass could not process — see {@see claimNameOnly()}.
      *
-     * @param list<string> $roots
+     * @param list<string>                         $roots
+     * @param array{0: list<string>, 1: bool}|null $dataIncludes null when the collection pass was off
      */
-    private function registerContract(string $templatePath, array $roots, ?ViewDataContract $contract, ?string $shadowPath): void
-    {
+    private function registerContract(
+        string $templatePath,
+        array $roots,
+        ?ViewDataContract $contract,
+        ?string $shadowPath,
+        ?array $dataIncludes = null,
+    ): void {
         $resolved = ViewName::resolve($templatePath, $roots);
 
         if ($resolved === null) {
@@ -285,7 +309,7 @@ final class BladeBootstrapper
             return;
         }
 
-        ContractRegistry::register($viewName, $rootIndex, $contract);
+        ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
     }
 
     private function resolveCompiler(): ?BladeCompiler
