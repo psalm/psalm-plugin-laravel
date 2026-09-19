@@ -246,7 +246,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. Contract annotations (`{{-- @var \App\Models\User $user --}}`, `@props([...])`) do not type the template's own body yet; they are read for the call-site checks below.
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. Contract annotations (`{{-- @var \App\Models\User $user --}}`, `@props([...])`) do not type the template's own body yet; they are read for the call-site checks below. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -307,6 +307,20 @@ A key that a template reached through `@include` or `@extends` reads or declares
 Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
 
 Needs `enabled="true"`: the read sets only exist once the compile pass has read the templates.
+
+### `reportMixedIssues`
+
+**default**: off (the `Mixed*` family is suppressed)
+
+```xml
+<blade enabled="true" reportMixedIssues="true" />
+```
+
+Every template variable the plugin cannot prove a type for is `mixed` (see the notes above), so `MixedArgument`, `MixedAssignment`, and the rest of Psalm's `MixedIssue` family are overwhelmingly noise about the prelude's own fallback rather than a real template bug. They are dropped at the point issues are relocated onto the template, before Psalm's own suppression accounting sees them.
+
+Set `reportMixedIssues="true"` to opt back in and see them at the template's file and line, same as any other issue type. No recompile needed either way: the flag changes only which issues are reported, never what the compile pass collects, so flipping it reuses a warm shadow cache.
+
+A narrower alternative is silencing individual `Mixed*` types over `resources/views` with [an `issueHandlers` entry](blade.md#suppressing-issues) — useful if you want some but not all of the family back.
 
 ### Degradation
 

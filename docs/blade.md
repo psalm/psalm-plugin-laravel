@@ -76,11 +76,11 @@ These template variables are typed automatically, without any annotation:
 | `$component`   | `Illuminate\View\Component`                                                                                              |
 | `$loop`        | `object{index: int, iteration: int, remaining: int\|null, count: int\|null, first: bool, last: bool\|null, odd: bool, even: bool, depth: int, parent: object\|null}` |
 
-Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped, so a typo in a variable name will not be caught this way.
+Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so a typo in a variable name will not be caught this way.
 
 ## What gets reported
 
-* **Type analysis** (a plain `psalm` run): the same issue types Psalm reports anywhere else, at the template's file and line.
+* **Type analysis** (a plain `psalm` run): the same issue types Psalm reports anywhere else, at the template's file and line — except Psalm's `MixedIssue` family (`MixedArgument`, `MixedAssignment`, and the rest), which is suppressed by default because an undeclared template variable typing as `mixed` produces it constantly. Opt back in with [`reportMixedIssues`](config.md#reportmixedissues).
 * **Taint analysis** (`psalm --taint-analysis`): `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged.
 
 ```blade
@@ -117,7 +117,8 @@ The check declines for a call site instead of guessing, and the gate that matter
 
 * **No cross-template following for analysis.** Each template is compiled and analyzed as if it stood alone; `@include`, `@extends`, and component recursion are resolved only for the reference and read-set graphs the two opt-in rules above use, never to type a template's body.
 * **Component tags can fail to compile.** A component tag (`<x-...>`) needs the full application container to resolve, which the standalone compile pass does not always provide. A template that fails this way is skipped and reported once in the degradation warning; other templates are unaffected.
-* **Undeclared variables are silently `mixed`.** There is no way, yet, to catch a typo'd variable name this way.
+* **Undeclared variables are silently `mixed`.** There is no way, yet, to catch a typo'd variable name this way, and the `Mixed*` issues that fallback produces are suppressed by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so they cannot be used to spot one either unless you opt back in.
 * **No HTML context awareness.** The plugin does not distinguish an attribute position from a script position from ordinary markup; taint detection is about escaped versus unescaped output, not where in the HTML that output lands.
 * **Dynamic view names are not resolved.** `view($name)` with a non-literal `$name` is not connected back to a template file.
-* **Contract annotations do not type the template body.** `{{-- @var \App\Models\User $user --}}` and `@props([...])` are read, but only to check the `view()` call sites that render the template (see [`validateViewData`](config.md#validateviewdata)). Inside the compiled template every variable they would type still falls back to `mixed`, because typing the body would change every shadow's content and its cache fingerprint.
+* **Contract annotations do not type the template body.** `{{-- @var \App\Models\User $user --}}` and `@props([...])` are read, but only to check the `view()` call sites that render the template (see [`validateViewData`](config.md#validateviewdata)). Inside the compiled template every variable they would type still falls back to `mixed`, because typing the body would change every shadow's content and its cache fingerprint — and the resulting `Mixed*` issues are suppressed by default regardless (see [`reportMixedIssues`](config.md#reportmixedissues)).
+* **`Mixed*` suppression can orphan a template's own `@psalm-suppress`.** A `{{-- @psalm-suppress MixedArgument --}}` comment in a template is carried into the compiled shadow, but with `reportMixedIssues` at its default (off) the issue it would have silenced is already dropped before that comment is ever checked against it. Under `--find-unused-psalm-suppress` this reports `UnusedPsalmSuppress` on the template line. Either drop the now-redundant comment, or run with `reportMixedIssues="true"` when checking for unused suppressions.

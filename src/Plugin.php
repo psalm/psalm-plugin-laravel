@@ -717,6 +717,7 @@ final class Plugin implements PluginEntryPointInterface
         // take the (cheap, but pointless) miss path.
         if ($pluginConfig->bladeEnabled) {
             require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
+            Blade\BladeIssueRemapHandler::init($pluginConfig->bladeReportMixedIssues);
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
         }
 

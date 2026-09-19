@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\MixedIssue;
 
 /**
  * Rebuilds an issue Psalm found in a shadow file as the same issue positioned on the Blade template
@@ -34,25 +35,37 @@ final class ShadowIssueRelocator
     private const UNMAPPED_SUFFIX = ' (unmapped)';
 
     /**
-     * @param ShadowTarget                    $target  the shadow the issue was found in
-     * @param \Closure(string): ?ShadowTarget $resolve any OTHER shadow a taint journey passes
-     *                                                 through; a journey crosses files, so one
-     *                                                 target is not enough
+     * @param ShadowTarget                    $target      the shadow the issue was found in
+     * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
+     *                                                     through; a journey crosses files, so one
+     *                                                     target is not enough
+     * @param bool                            $reportMixed `<blade reportMixedIssues="true" />`; false
+     *                                                      drops the whole `MixedIssue` family instead
+     *                                                      of relocating it (#1495)
      *
      * @return CodeIssue|false|null the issue to re-emit on the template, `false` to drop it, `null`
      *                              to decline and leave Psalm's own handling of the original alone
      */
-    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve): CodeIssue|false|null
+    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
     {
+        // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
+        // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
+        // by default, both on a mapped template line and on the prelude's own unmapped lines below.
+        if ($issue instanceof MixedIssue && !$reportMixed) {
+            return false;
+        }
+
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
         $message = $issue->message;
 
         if ($templateLine < 1) {
-            // The prelude and any line the marker pass could not map have no template position.
-            // A Mixed* issue there is an artifact of the prelude typing every template variable it
-            // cannot resolve as `mixed`, so it is dropped rather than parked on line 1; anything
-            // else is worth showing even without an exact line.
-            if (\str_starts_with($issue::getIssueType(), 'Mixed')) {
+            // The prelude and any line the marker pass could not map have no template position. A
+            // `MixedIssue` there is an artifact of the prelude typing every unresolved template
+            // variable as `mixed`, so it is dropped rather than parked on line 1 regardless of
+            // $reportMixed: opting back in is about seeing the family on real template lines, not
+            // about the prelude's own noise. Anything else is worth showing even without an exact
+            // line.
+            if ($issue instanceof MixedIssue) {
                 return false;
             }
 
