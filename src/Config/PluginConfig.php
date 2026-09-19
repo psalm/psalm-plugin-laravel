@@ -54,6 +54,8 @@ final readonly class PluginConfig
         public string $bladeCacheDir,
         /** Opt-in checking of `view()` call sites against template contracts (`<blade validateViewData="true" />`). */
         public bool $bladeValidateViewData,
+        /** Opt-in reporting of a template no statically-provable reference renders (`<blade reportUnusedViews="true" />`). */
+        public bool $bladeReportUnusedViews,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -89,6 +91,7 @@ final readonly class PluginConfig
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $bladeEnabled = self::xmlBoolAttr($config?->blade, 'blade enabled', false, 'enabled');
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
+        $bladeReportUnusedViews = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViews', false, 'reportUnusedViews');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -106,6 +109,7 @@ final readonly class PluginConfig
             bladeEnabled: $bladeEnabled,
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $bladeValidateViewData,
+            bladeReportUnusedViews: $bladeReportUnusedViews,
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,
         );

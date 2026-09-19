@@ -103,6 +103,10 @@ Blade analysis never fails a run. If the compiler or view finder cannot be resol
 
 A template that fails to compile (see [Known limits](#known-limits)) is skipped rather than aborting the run. Up to three failing template paths are named directly in the warning; beyond that, run with `--debug` for every individual cause.
 
+## Unused templates
+
+With [`reportUnusedViews`](config.md#reportunusedviews) enabled, the plugin also reports a template that no statically-provable reference ever names ([UnusedView](issues/UnusedView.md)). References are gathered from two places: the `view()` helper and `View::make()` in plain project files, and `@include` / `@extends` inside every compiled template. One reference this plugin cannot resolve statically — a dynamic `view($name)` or `@include($name)` anywhere in the project — turns the check off for the whole run.
+
 ## Known limits
 
 * **No cross-template following.** `@include`, `@extends`, and component recursion are not resolved. Each template is compiled and analyzed as if it stood alone.

@@ -37,47 +37,6 @@ final class ShadowTarget
     /** A location covering that template line, or null when the template has no such line. */
     public function locationFor(int $templateLine): ?Raw
     {
-        $bounds = $this->lineBounds($templateLine);
-
-        if ($bounds === null) {
-            return null;
-        }
-
-        return new Raw(
-            $this->templateSource,
-            $this->entry->templatePath,
-            $this->templateName,
-            $bounds[0],
-            $bounds[1],
-        );
-    }
-
-    /**
-     * Byte offsets of a 1-based line, or null when the source has no such line.
-     *
-     * @return array{int, int}|null
-     */
-    private function lineBounds(int $line): ?array
-    {
-        $start = 0;
-
-        for ($current = 1; $current < $line; $current++) {
-            $newline = \strpos($this->templateSource, "\n", $start);
-
-            if ($newline === false) {
-                return null;
-            }
-
-            $start = $newline + 1;
-        }
-
-        if ($start > \strlen($this->templateSource)) {
-            return null;
-        }
-
-        $newline = \strpos($this->templateSource, "\n", $start);
-        $end = $newline === false ? \strlen($this->templateSource) : $newline;
-
-        return [$start, \max($start, $end - 1)];
+        return TemplateLocation::atLine($this->entry->templatePath, $this->templateName, $this->templateSource, $templateLine);
     }
 }

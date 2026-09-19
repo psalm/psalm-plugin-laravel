@@ -22,6 +22,12 @@ final class ShadowManifestTest extends TestCase
         return new ViewDataContract([], false);
     }
 
+    /** @return array{0: list<string>, 1: bool} */
+    private function emptyReferences(): array
+    {
+        return [[], false];
+    }
+
     protected function setUp(): void
     {
         $this->shadowDir = \sys_get_temp_dir() . '/psalm-shadow-manifest-test-' . \getmypid();
@@ -67,7 +73,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null), $this->emptyContract());
+        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
 
         $this->assertStringContainsString(\sha1('/app/views/foo.blade.php'), $shadowPath);
         $this->assertFileExists($shadowPath);
@@ -80,7 +86,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
         $manifest->flush();
 
         $reloaded = new ShadowManifest($this->shadowDir);
@@ -97,7 +103,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
         $manifest->flush();
 
         \unlink($shadowPath);
@@ -119,6 +125,7 @@ final class ShadowManifestTest extends TestCase
             'source',
             new ShadowResult('<?php ?>', [1 => 0, 2 => 4], null, [4 => ['UndefinedPropertyFetch']]),
             $this->emptyContract(),
+            $this->emptyReferences(),
         );
         $manifest->flush();
 
@@ -167,6 +174,7 @@ final class ShadowManifestTest extends TestCase
                 ],
                 true,
             ),
+            $this->emptyReferences(),
         );
         $manifest->flush();
 
@@ -206,13 +214,54 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function an_entry_from_before_the_references_slot_is_dropped(): void
+    {
+        // The six-slot shape this plugin wrote before UnusedView references existed. Keeping it
+        // would leave the template permanently fresh with no references ever collected for it,
+        // silently making it look unused forever.
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', [], [[], false]]];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertNull($manifest->shadowEntry('/shadow.php'));
+        $this->assertFalse($manifest->isFresh('/a.blade.php', 'a'));
+    }
+
+    #[Test]
+    public function references_survive_a_reload(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store(
+            '/app/views/foo.blade.php',
+            'source',
+            new ShadowResult('<?php ?>', [], null),
+            $this->emptyContract(),
+            [['partial', 'layout'], false],
+        );
+        $manifest->flush();
+
+        // A template fresh enough to skip recompiling is never re-parsed, so references that do not
+        // survive `var_export` + `include` would resurrect it as UnusedView on the very next run.
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $this->assertSame([['partial', 'layout'], false], $reloaded->referencesFor($shadowPath));
+    }
+
+    #[Test]
     public function prune_unlinks_orphan_shadows_and_drops_their_entries(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowA = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
-        $shadowB = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
+        $shadowA = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null), $this->emptyContract(), $this->emptyReferences());
+        $shadowB = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', [], null), $this->emptyContract(), $this->emptyReferences());
         $manifest->flush();
 
         $manifest->prune(['/a.blade.php']);
