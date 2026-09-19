@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * The two registrations a compiled template needs from Psalm, kept behind an interface because the
+ * The three registrations a compiled template needs from Psalm, kept behind an interface because the
  * real implementation needs a live `ProjectAnalyzer` that a unit test cannot build.
  */
 interface ShadowRegistrar
@@ -22,4 +22,16 @@ interface ShadowRegistrar
 
     /** @param list<string> $shadowPaths compiled PHP files, never `.blade.php` paths */
     public function registerShadowsForAnalysis(array $shadowPaths): void;
+
+    /**
+     * Queues classes for scanning that no project file may ever reference in code position: the
+     * shadow prelude names them only in stacked one-line `@var` docblocks, and PhpParser attaches
+     * every stacked comment to one `Stmt\Nop`, whose `Node::getDocComment()` searches backward and
+     * returns only the last comment. The last ambient entry declares `$loop`, an object shape naming
+     * no class, and further `@var mixed` lines can follow it — so all five ambient FQCNs go unqueued
+     * and report UndefinedDocblockClass the first time nothing else in the project names them in code.
+     *
+     * @param list<string> $classNames fully-qualified, `\`-prefixed or not
+     */
+    public function queueClassLikesForScanning(array $classNames): void;
 }
