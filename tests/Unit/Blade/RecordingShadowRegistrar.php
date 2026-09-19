@@ -18,6 +18,9 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     /** @var list<string> */
     public array $analyzedShadows = [];
 
+    /** @var list<string> */
+    public array $queuedClassLikes = [];
+
     public int $markCalls = 0;
 
     public function __construct(private readonly bool $markSucceeds = true) {}
@@ -40,5 +43,11 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     public function registerShadowsForAnalysis(array $shadowPaths): void
     {
         $this->analyzedShadows = $shadowPaths;
+    }
+
+    #[\Override]
+    public function queueClassLikesForScanning(array $classNames): void
+    {
+        $this->queuedClassLikes = $classNames;
     }
 }

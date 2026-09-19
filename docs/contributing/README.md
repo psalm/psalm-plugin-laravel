@@ -54,10 +54,11 @@ Bootstrap failures are a special case: `ApplicationProvider` swallows a `bootstr
 
 Behind [`<blade enabled="true" />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
 
-Two registrations, deliberately asymmetric (`Blade\PsalmShadowRegistrar`):
+Three registrations, deliberately asymmetric (`Blade\PsalmShadowRegistrar`):
 
 - the **shadow** is added via `Codebase::addFilesToAnalyze()`, which both deep-scans and analyzes it. It must stay out of `ProjectAnalyzer`'s project-file list: `TaintFlowGraph` drops a flow whose source sits in a reportable file that suppresses `TaintedInput`, and Psalm's own `addFilesToShowResults()` is redundant here because `Analyzer::addFilesToAnalyze()` already writes the same map.
 - the **template** is written into `ProjectAnalyzer::$project_files` by reflection (`Blade\ProjectFileInjector`), because that private list is built from psalm.xml before plugins initialize and is all `canReportIssues()` reads. Without the write, nothing found in a template can ever be reported. The template is never queued for analysis: it is not PHP.
+- the **ambient prelude classes** (`\Illuminate\View\Factory`, `ComponentAttributeBag`, `ComponentSlot`, `Component`, `Support\ViewErrorBag`) are queued via `Codebase::queueClassLikeForScanning()`. Every shadow declares them as stacked one-line `@var` docblocks, and PhpParser attaches every stacked comment to one node's comment list, so `Node::getDocComment()` — all Psalm's scanner reads to queue docblock classes — returns only the last one. The last declared entry is `$loop`, an object shape naming no class, so left unqueued, all five ambient FQCNs report `UndefinedDocblockClass` the first time nothing else in the project names them in code position (#1494).
 
 Both halves degrade rather than throw. Every cause (no `blade.compiler` binding, no view finder, an unwritable cache directory, a Psalm internal that moved) turns the feature off for that run with one warning; per-template compile failures are collected into a single warning with `--debug` detail. `BladeBootstrapper` holds no static state, so it needs no entry in `resetInvocationState()`.
 
