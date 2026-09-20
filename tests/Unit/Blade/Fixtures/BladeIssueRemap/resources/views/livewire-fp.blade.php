@@ -1,4 +1,4 @@
 <div>
   @@livewireStubMarker@@
-  <?php (new \BladeIssueRemapFixture\LivewireMountTarget())->mount('a', 'b', 'c'); ?>
+  <?php (new \BladeIssueRemapFixture\LivewireMountTarget())->mount('a', 'b', 'c', 'd'); ?>
 </div>
