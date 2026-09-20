@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * Turns a template's absolute path into the view name Laravel would resolve it under, mirroring
- * `FileViewFinder`: the first root that contains the file owns the name, and the name is the path
- * under that root with the extension dropped and separators turned into dots.
+ * Turns a template's absolute path into every view name Laravel would resolve it under, mirroring
+ * `FileViewFinder`: a root's name is the path under it with the extension dropped and separators
+ * turned into dots, namespace-qualified (`ns::dot.path`) when the root came from a finder hint.
+ *
+ * A template can legitimately own more than one name at once: a published override
+ * (`resources/views/vendor/pkg/x.blade.php`) sits under both the default root (`vendor.pkg.x`) and
+ * the namespace's own hint root (`pkg::x`), so every matching root is resolved, not just the first.
  *
  * Extracted so template-side name resolution and reference-side name resolution can never drift —
  * a byte-for-byte mismatch between the two makes every UnusedView verdict a false positive.
@@ -17,13 +21,15 @@ namespace Psalm\LaravelPlugin\Blade;
 final class ViewName
 {
     /**
-     * @param list<string> $roots realpaths, in finder order
+     * @param list<array{0: string, 1: string|null}> $roots realpath, namespace pairs, in finder order
      *
-     * @return array{0: int, 1: string}|null null when the path is under none of the roots
+     * @return list<array{0: int, 1: string}> empty when the path is under none of the roots
      */
-    public static function resolve(string $templatePath, array $roots): ?array
+    public static function resolve(string $templatePath, array $roots): array
     {
-        foreach ($roots as $index => $root) {
+        $names = [];
+
+        foreach ($roots as $index => [$root, $namespace]) {
             $prefix = $root . \DIRECTORY_SEPARATOR;
 
             if (!\str_starts_with($templatePath, $prefix)) {
@@ -31,10 +37,10 @@ final class ViewName
             }
 
             $relative = \substr($templatePath, \strlen($prefix), -\strlen('.blade.php'));
-
-            return [$index, \str_replace(\DIRECTORY_SEPARATOR, '.', $relative)];
+            $dotted = \str_replace(\DIRECTORY_SEPARATOR, '.', $relative);
+            $names[] = [$index, $namespace === null ? $dotted : $namespace . '::' . $dotted];
         }
 
-        return null;
+        return $names;
     }
 }

@@ -54,15 +54,46 @@ final class ViewReferenceRegistry
         self::$templates[$viewName] = [$rootIndex, $templatePath, $shadowPath];
     }
 
-    /** @return array<string, array{0: string, 1: string|null}> view name => [template path, shadow path] */
+    /**
+     * A template can be claimed under more than one name at once — a published override owns both
+     * its default-root name and its namespace's qualified name (see {@see ViewName}), both pointing
+     * at the same file. A reference through EITHER name means the file is rendered, so "unused" is a
+     * property of the template PATH, not of any one of its names; a file with two names is reported
+     * once, not once per unreferenced name.
+     *
+     * @return array<string, array{0: string, 1: string|null}> view name => [template path, shadow path]
+     */
     public static function unusedTemplates(): array
     {
+        $referencedPaths = [];
+
+        foreach (self::$templates as $viewName => [, $templatePath]) {
+            if (isset(self::$references[$viewName])) {
+                $referencedPaths[$templatePath] = true;
+            }
+        }
+
+        /** @var array<string, array{0: int, 1: string, 2: string|null}> $canonical template path => [root index, view name, shadow path] */
+        $canonical = [];
+
+        foreach (self::$templates as $viewName => [$rootIndex, $templatePath, $shadowPath]) {
+            if (isset($referencedPaths[$templatePath])) {
+                continue;
+            }
+
+            $existing = $canonical[$templatePath] ?? null;
+
+            if ($existing !== null && $existing[0] <= $rootIndex) {
+                continue;
+            }
+
+            $canonical[$templatePath] = [$rootIndex, $viewName, $shadowPath];
+        }
+
         $unused = [];
 
-        foreach (self::$templates as $viewName => [, $templatePath, $shadowPath]) {
-            if (!isset(self::$references[$viewName])) {
-                $unused[$viewName] = [$templatePath, $shadowPath];
-            }
+        foreach ($canonical as $templatePath => [, $viewName, $shadowPath]) {
+            $unused[$viewName] = [$templatePath, $shadowPath];
         }
 
         return $unused;

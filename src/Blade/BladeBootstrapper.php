@@ -44,7 +44,27 @@ final class BladeBootstrapper
          * per template, paid only by projects that turned the rule on.
          */
         private readonly bool $collectDataIncludes = false,
+        /**
+         * Test seam: the Composer vendor directory used by the hint-root filter. Null derives it
+         * from laravel/framework's install path, which in a unit test is the plugin's own vendor.
+         */
+        private readonly ?string $vendorDirOverride = null,
     ) {}
+
+    /**
+     * The finder the roots came from, kept for name-ownership checks against namespaces that lost
+     * a root to the vendor filter. Set by {@see resolveViewPaths()}, once per run instance.
+     */
+    private ?FileViewFinder $finder = null;
+
+    /**
+     * Namespaces with at least one hint root dropped by the vendor filter. For these, root order
+     * alone no longer mirrors Laravel's resolution — the dropped root still wins names in Laravel —
+     * so each surviving root's claim is verified against the finder. @see templateOwnsName()
+     *
+     * @var array<string, true>
+     */
+    private array $vendorShadowedNamespaces = [];
 
     public function boot(): void
     {
@@ -72,6 +92,15 @@ final class BladeBootstrapper
         /** @var array<string, string> $failures template path => reason */
         $failures = [];
         $templates = $this->findTemplates($viewPaths, $failures);
+
+        if ($templates === [] && $failures === []) {
+            // Not a failure (an API-only app or a package with no views is normal), but silent under
+            // --no-progress: worth stating because it is the shape of #1497 — a real view tree the
+            // plugin nonetheless discovered nothing from.
+            $this->output->warning(
+                'Laravel plugin: Blade template analysis is enabled, but no Blade templates were discovered.',
+            );
+        }
 
         // A view root that failed to scan can hide templates that still exist on disk; pruning
         // against an incomplete list would delete their shadows for nothing more than a
@@ -139,10 +168,11 @@ final class BladeBootstrapper
     }
 
     /**
-     * @param list<string>          $templates
-     * @param list<string>          $viewPaths in finder order, which decides which template wins a
-     *                                         view name two roots both define
-     * @param array<string, string> $failures  template path => reason, appended to
+     * @param list<string>                              $templates
+     * @param list<array{0: string, 1: string|null}>     $viewPaths path, namespace pairs in finder
+     *                                                     order, which decides which template wins a
+     *                                                     view name two roots both define
+     * @param array<string, string>                      $failures  template path => reason, appended to
      *
      * @return array<string, string> template path => shadow path
      */
@@ -242,24 +272,38 @@ final class BladeBootstrapper
     }
 
     /**
-     * View roots as realpaths, in finder order, skipping the ones that do not resolve. The template
+     * View roots as realpaths, in finder order, skipping the ones that do not resolve, deduped by
+     * (path, namespace): a published override's directory is both the last segment of the default
+     * root AND a namespace's own hint root, and both names it earns have to survive. The template
      * paths this is matched against are realpaths too, so both sides have to be normalized or a
      * symlinked root never matches its own templates.
      *
-     * @param list<string> $viewPaths
+     * @param list<array{0: string, 1: string|null}> $viewPaths
      *
-     * @return list<string>
+     * @return list<array{0: string, 1: string|null}>
      */
     private function resolveRoots(array $viewPaths): array
     {
         $roots = [];
+        $seen = [];
 
-        foreach ($viewPaths as $viewPath) {
+        foreach ($viewPaths as [$viewPath, $namespace]) {
             $resolved = \realpath($viewPath);
 
-            if ($resolved !== false) {
-                $roots[] = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            if ($resolved === false) {
+                continue;
             }
+
+            $resolved = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            // "\0" never occurs in a namespace, so a null (default-root) marker cannot collide.
+            $key = ($namespace ?? "\0") . "\0" . $resolved;
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $roots[] = [$resolved, $namespace];
         }
 
         return $roots;
@@ -273,7 +317,7 @@ final class BladeBootstrapper
      * declarations would then be checked against callers that never reach it. An empty contract
      * blocks that without asserting anything about a template we failed on.
      *
-     * @param list<string> $roots
+     * @param list<array{0: string, 1: string|null}> $roots
      */
     private function claimNameOnly(string $templatePath, array $roots): void
     {
@@ -291,8 +335,8 @@ final class BladeBootstrapper
      * file instead. The view name is claimed as an UnusedView CANDIDATE unconditionally, even for a
      * template this pass could not process — see {@see claimNameOnly()}.
      *
-     * @param list<string>                         $roots
-     * @param array{0: list<string>, 1: bool}|null $dataIncludes null when the collection pass was off
+     * @param list<array{0: string, 1: string|null}> $roots
+     * @param array{0: list<string>, 1: bool}|null   $dataIncludes null when the collection pass was off
      */
     private function registerContract(
         string $templatePath,
@@ -301,21 +345,22 @@ final class BladeBootstrapper
         ?string $shadowPath,
         ?array $dataIncludes = null,
     ): void {
-        $resolved = ViewName::resolve($templatePath, $roots);
+        // A published override's file matches more than one root (its default-root name AND its
+        // namespace's own name) — every match gets registered, or one of the two names a call site
+        // can legitimately use resolves to nothing.
+        foreach (ViewName::resolve($templatePath, $roots) as [$rootIndex, $viewName]) {
+            if (!$this->templateOwnsName($viewName, $templatePath)) {
+                continue;
+            }
 
-        if ($resolved === null) {
-            return;
+            ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath, $shadowPath);
+
+            if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
+                continue;
+            }
+
+            ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
-
-        [$rootIndex, $viewName] = $resolved;
-
-        ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath, $shadowPath);
-
-        if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
-            return;
-        }
-
-        ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
     }
 
     private function resolveCompiler(): ?BladeCompiler
@@ -346,10 +391,26 @@ final class BladeBootstrapper
     }
 
     /**
-     * View roots, or null when the finder cannot be resolved. Mirrors the fallback chain the
-     * MissingView diagnostic uses: a boot may bind 'view' without 'view.finder'.
+     * View roots paired with their namespace (null for the default, unqualified roots), or null when
+     * the finder cannot be resolved. `getPaths()` roots come first, in finder order — deciding which
+     * template wins a name two roots both define — followed by each `getHints()` namespace's own
+     * paths, in the finder's own order (a namespace's published override before its package
+     * fallback, see `ServiceProvider::loadViewsFrom()`). `loadViewsFrom()` populates hints via a
+     * `callAfterResolving('view')` callback, so `resolveFinder()` touches the `'view'` binding itself
+     * rather than depending on some earlier, unrelated resolve to have already fired it.
      *
-     * @return list<string>|null
+     * Hint roots inside the analyzed project's Composer vendor directory are dropped:
+     * `ViewServiceProvider`, `NotificationServiceProvider`, and `PaginationServiceProvider` all
+     * register their OWN internal templates this exact same way, on every application,
+     * unconditionally. `notifications::email` alone carries a `<x-mail::…>` component tag, which the
+     * reference collector cannot resolve — unioning it in would disable UnusedView, permanently, for
+     * every project the moment Blade analysis is enabled. A project's own published override
+     * (`resources/views/vendor/<namespace>`, see {@see ViewName}) is NOT inside the vendor
+     * directory — the boundary is the Composer install root, not the literal substring "vendor" —
+     * so that case is unaffected. `getPaths()` roots are never filtered: Laravel never configures one
+     * inside the vendor directory.
+     *
+     * @return list<array{0: string, 1: string|null}>|null
      */
     private function resolveViewPaths(): ?array
     {
@@ -361,21 +422,130 @@ final class BladeBootstrapper
             return null;
         }
 
-        return \array_values($finder->getPaths());
+        $roots = [];
+
+        foreach (\array_values($finder->getPaths()) as $path) {
+            $roots[] = [$path, null];
+        }
+
+        $vendorDir = $this->vendorDirectory();
+
+        // FileViewFinder's own docblock says only `array<string, array>`, but addNamespace()
+        // casts to a string list; narrowed here because Psalm cannot see through the cast.
+        /** @psalm-var array<string, list<string>> $hints */
+        $hints = $finder->getHints();
+
+        foreach ($hints as $namespace => $hintPaths) {
+            foreach ($hintPaths as $hint) {
+                if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
+                    $this->vendorShadowedNamespaces[$namespace] = true;
+
+                    continue;
+                }
+
+                $roots[] = [$hint, $namespace];
+            }
+        }
+
+        $this->finder = $finder;
+
+        return $roots;
     }
 
+    /**
+     * Whether Laravel itself would resolve `$viewName` to `$templatePath`. Only consulted for
+     * qualified names in a namespace that lost a hint root to the vendor filter: there, an earlier
+     * (dropped) root can still own the name, and letting a surviving root's same-named template
+     * claim it would cover the file with references that never reach it and check callers against
+     * a contract Laravel never renders. Everywhere else root order mirrors the finder exactly, so
+     * no filesystem probe is spent. A finder failure keeps the claim (the pre-check behavior).
+     */
+    private function templateOwnsName(string $viewName, string $templatePath): bool
+    {
+        $namespace = \strstr($viewName, '::', true);
+
+        if ($namespace === false || !isset($this->vendorShadowedNamespaces[$namespace]) || !$this->finder instanceof FileViewFinder) {
+            return true;
+        }
+
+        try {
+            $winner = \realpath($this->finder->find($viewName));
+        } catch (\Throwable) {
+            return true;
+        }
+
+        return $winner === $templatePath;
+    }
+
+    /**
+     * The analyzed project's own Composer vendor directory, derived from where it installed
+     * laravel/framework — every booted Laravel app has one — rather than assuming the conventional
+     * `vendor/` name, which `config/vendor-dir` can rename. Null when it cannot be determined
+     * (`composer/composer` runtime API missing or laravel/framework not resolvable), in which case
+     * the vendor filter above is skipped rather than guessed at.
+     */
+    private function vendorDirectory(): ?string
+    {
+        if ($this->vendorDirOverride !== null) {
+            return $this->vendorDirOverride;
+        }
+
+        if (!\class_exists(\Composer\InstalledVersions::class)) {
+            return null;
+        }
+
+        try {
+            $installPath = \Composer\InstalledVersions::getInstallPath('laravel/framework');
+        } catch (\Throwable) {
+            return null;
+        }
+
+        // vendor/laravel/framework -> vendor
+        return $installPath === null ? null : \dirname($installPath, 2);
+    }
+
+    private function isUnderVendorDirectory(string $path, string $vendorDir): bool
+    {
+        $resolvedPath = \realpath($path);
+        $resolvedVendorDir = \realpath($vendorDir);
+
+        if ($resolvedPath === false || $resolvedVendorDir === false) {
+            return false;
+        }
+
+        return \str_starts_with($resolvedPath, \rtrim($resolvedVendorDir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * `ViewServiceProvider::registerViewFinder()` binds 'view.finder' with `bind()`, not
+     * `singleton()` — every `make('view.finder')` constructs a BRAND NEW `FileViewFinder`, none of
+     * which carries the namespace hints `loadViewsFrom()` added to the ONE finder instance the
+     * 'view' Factory singleton captured at its own construction. Resolving 'view' and reading
+     * `getFinder()` off it is therefore the only path that ever sees hints; 'view.finder' is kept
+     * only as a fallback for a boot that bound it directly without a Factory at all.
+     */
     private function resolveFinder(): ?FileViewFinder
     {
-        try {
-            if ($this->app->bound('view.finder')) {
-                return $this->asFinder($this->app->make('view.finder'));
-            }
+        // Each branch catches on its own: a 'view' closure that throws under the plugin's partial
+        // boot (documented boot shape) must fall through to 'view.finder', not disable the feature.
+        if ($this->app->bound('view')) {
+            try {
+                $finder = $this->asFactoryFinder($this->app->make('view'));
 
-            if ($this->app->bound('view')) {
-                return $this->asFactoryFinder($this->app->make('view'));
+                if ($finder instanceof FileViewFinder) {
+                    return $finder;
+                }
+            } catch (\Throwable $throwable) {
+                $this->output->debug('Laravel plugin: resolving the view factory threw: ' . $throwable->getMessage() . "\n");
             }
-        } catch (\Throwable $throwable) {
-            $this->output->debug('Laravel plugin: resolving the view finder threw: ' . $throwable->getMessage() . "\n");
+        }
+
+        if ($this->app->bound('view.finder')) {
+            try {
+                return $this->asFinder($this->app->make('view.finder'));
+            } catch (\Throwable $throwable) {
+                $this->output->debug('Laravel plugin: resolving the view finder threw: ' . $throwable->getMessage() . "\n");
+            }
         }
 
         return null;
@@ -405,8 +575,9 @@ final class BladeBootstrapper
      * with Psalm has to be the same string Psalm itself would use, and view roots overlap in
      * applications that add a package path twice.
      *
-     * @param list<string>          $viewPaths
-     * @param array<string, string> $failures  appended to, keyed by the directory that failed
+     * @param list<array{0: string, 1: string|null}> $viewPaths
+     * @param array<string, string>                  $failures appended to, keyed by the directory
+     *                                                that failed
      *
      * @return list<string>
      */
@@ -414,7 +585,7 @@ final class BladeBootstrapper
     {
         $templates = [];
 
-        foreach ($viewPaths as $viewPath) {
+        foreach ($viewPaths as [$viewPath]) {
             if (!\is_dir($viewPath)) {
                 // A configured-but-absent view root (a package path, a not-yet-published vendor
                 // directory) is not an error for Laravel either.
