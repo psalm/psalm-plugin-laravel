@@ -198,13 +198,28 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     #[Test]
-    public function an_unevaluated_code_issue_is_dropped_unconditionally(): void
+    public function the_trailing_inline_html_after_break_shape_is_dropped(): void
     {
         // A `@switch` arm's `@break` leaves Psalm treating the following `@case`/`@default` line
-        // as unreachable (#1500).
+        // as unreachable (#1500). This is the exact message StatementsAnalyzer::processStmt() uses
+        // for that shape.
         $issue = new UnevaluatedCode('Expressions after return/throw/continue', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function the_gettype_impossible_value_shape_still_relocates(): void
+    {
+        // `UnevaluatedCode` is not one shape: AssertionFinder reports this SAME class, ungated by
+        // find_unused_variables, for a `gettype()` comparison against a value it cannot return —
+        // a genuine author typo, not compiler bookkeeping, so the drop must not catch it (#1500).
+        $issue = new UnevaluatedCode('gettype cannot return this value', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(UnevaluatedCode::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     #[Test]

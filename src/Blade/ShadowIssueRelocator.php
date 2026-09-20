@@ -68,16 +68,24 @@ final class ShadowIssueRelocator
         // Compiled bookkeeping the template author never wrote and cannot read back: the
         // `$__componentOriginal*`/`$__attributesOriginal*` tail restores around a `<x-...>` tag and
         // the `$loop = $__env->getLastLoop();` reassignment at the end of `@foreach`/`@forelse` are
-        // both standalone writes with no later read, and a `@switch` arm's `@break` leaves Psalm
-        // treating the rest of the compiled switch body as unreachable, flagging the following
-        // `@case`/`@default` line (#1500). Dropped unconditionally rather than snippet-gated:
-        // there is no family interface, so both concrete classes are listed. `UnusedForeachValue`
-        // is NOT included here — it fires only on the author-named foreach variable, which is real
-        // signal.
+        // both standalone writes with no later read (#1500). Dropped unconditionally: there is no
+        // narrower signal to gate on, and `UnusedForeachValue` is NOT included here — it fires only
+        // on the author-named foreach variable, which is real signal.
         //
         // Trade-off: an author's own dead store inside `@php` and an unused foreach KEY report as
         // `UnusedVariable` too and are silenced along with the compiler noise.
-        if ($issue instanceof UnusedVariable || $issue instanceof UnevaluatedCode) {
+        if ($issue instanceof UnusedVariable) {
+            return false;
+        }
+
+        // `UnevaluatedCode` is not one shape: a `@switch` arm's `@break` leaves Psalm treating the
+        // rest of the compiled switch body as unreachable, flagging the following `@case`/`@default`
+        // line with this exact message (StatementsAnalyzer::processStmt(), gated on
+        // find_unused_variables) — that shape is compiler noise and dropped. The OTHER shape sharing
+        // this class, `'gettype cannot return this value'` (AssertionFinder, ungated), is a genuine
+        // author typo in a `gettype()` comparison and must keep reporting, so the drop is gated on
+        // the message rather than the class.
+        if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
             return false;
         }
 
