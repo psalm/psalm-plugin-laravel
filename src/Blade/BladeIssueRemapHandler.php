@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use PhpParser\Comment\Doc;
+use PhpParser\Node;
+use PhpParser\NodeFinder;
 use Psalm\Config;
+use Psalm\DocComment;
+use Psalm\Exception\DocblockParseException;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
@@ -18,7 +23,7 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * gate and `IssueBuffer::isSuppressed()`. The handler kills the shadow-path original by returning
  * false and re-emits the rebuilt issue through `IssueBuffer::accepts()`, which is also what applies
  * the template's own suppressions: the event carries the issue but not the suppressed-issue list
- * that was about to be checked against it, so the list has to be rebuilt from the registry.
+ * that was about to be checked against it, so the list is rebuilt from the compiled AST and the Blade-comment registry.
  *
  * Re-entrancy is guarded twice. Structurally, the re-emitted issue sits on the `.blade.php` path,
  * which is never a registry key, so the second pass declines on the lookup; the flag additionally
@@ -103,13 +108,57 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         try {
             IssueBuffer::accepts(
                 $relocated,
-                $target->entry->suppressions[$relocated->code_location->getLineNumber()] ?? [],
+                [
+                    ...self::phpSuppressions($event),
+                    ...($target->entry->suppressions[$relocated->code_location->getLineNumber()] ?? []),
+                ],
             );
         } finally {
             self::$remapping = false;
         }
 
         return false;
+    }
+
+    /** @return list<string> */
+    private static function phpSuppressions(BeforeAddIssueEvent $event): array
+    {
+        $issue = $event->getIssue();
+        $location = $issue->code_location;
+        try {
+            $statements = $event->getCodebase()->getStatementsForFile($issue->getFilePath());
+        } catch (\Throwable) {
+            return [];
+        }
+
+        // The event omits Psalm's suppression list. Only enclosing statements can contribute it;
+        // a sibling's docblock must never become a template-wide suppression.
+        $enclosing = (new NodeFinder())->find($statements, static fn(Node $node): bool
+            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike)
+            && $node->getStartFilePos() <= $location->raw_file_start
+            && $node->getEndFilePos() >= $location->raw_file_end);
+        $rules = [];
+        foreach ($enclosing as $node) {
+            foreach ($node->getComments() as $comment) {
+                if (!$comment instanceof Doc) {
+                    continue;
+                }
+
+                try {
+                    $parsed = DocComment::parsePreservingLength($comment);
+                } catch (DocblockParseException) {
+                    continue;
+                }
+
+                foreach ($parsed->tags['psalm-suppress'] ?? [] as $entry) {
+                    foreach (DocComment::parseSuppressList($entry) as $rule) {
+                        $rules[] = $rule;
+                    }
+                }
+            }
+        }
+
+        return $rules;
     }
 
     /** Null for any path that is not a registered shadow with a readable template. */
