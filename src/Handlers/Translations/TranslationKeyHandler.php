@@ -12,19 +12,25 @@ use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\MissingTranslation;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
+use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNonEmptyArray;
 use Psalm\Type\Union;
 
 /**
- * Resolves return types for __() and trans() translation helpers.
+ * Resolves return types for __() and trans() translation helpers, and for
+ * Translator::get() called directly on the concrete class (the shape Blade's
+ * @lang compiles to — see CompilesTranslations::compileLang()).
  *
  * For literal string keys, uses Laravel's Translator to determine
  * whether the key exists and returns a precise type (non-empty-string,
  * non-empty-array, or string for missing keys). Optionally emits
- * MissingTranslation issues for keys not found in language files.
+ * MissingTranslation issues for keys not found in language files
+ * (function surface only — see below).
  *
  * For dynamic keys (variables, sprintf, concatenation), returns string
  * as a safe fallback — avoids the string|array union that causes
@@ -48,9 +54,18 @@ use Psalm\Type\Union;
  * MissingTranslation issues are emitted — type narrowing is always
  * active when the translator is available.
  *
+ * The method surface only registers on the concrete `Illuminate\Translation\Translator`,
+ * never on the `Illuminate\Contracts\Translation\Translator` contract: Psalm's method
+ * return-type providers key on the called fqcln, so a contract-typed receiver (e.g. a
+ * type-hinted constructor param) is untouched and stays `mixed` per the vendor contract
+ * docblock — see TransNarrowingBoundariesTest.phpt. It also never emits MissingTranslation:
+ * that issue documents itself (docs/issues/MissingTranslation.md) as reachable only through
+ * __()/trans(), and opt-in users scanning method calls they don't own (e.g. through a DI
+ * container) would otherwise see a new, unexpected emission surface.
+ *
  * @see https://laravel.com/docs/localization
  */
-final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
+final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     private static ?Translator $translator = null;
 
@@ -130,14 +145,75 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
             return Type::combineUnionTypes(Type::getString(), Type::getNull());
         }
 
+        return self::resolveKeyArgReturnType(
+            $callArgs,
+            $event->getStatementsSource(),
+            $event->getCodeLocation(),
+            emitMissingTranslation: true,
+        );
+    }
+
+    /**
+     * @inheritDoc
+     * @psalm-pure
+     */
+    #[\Override]
+    public static function getClassLikeNames(): array
+    {
+        return [Translator::class];
+    }
+
+    /**
+     * Narrows `Illuminate\Translation\Translator::get()` — the call Blade's
+     * `@lang('key')` / `@lang('key', $replace)` compiles to
+     * (`CompilesTranslations::compileLang()`) — using the same literal-key
+     * lookup as the __()/trans() function surface. Fixes the `array|string`
+     * `PossiblyInvalidArgument` FP on the compiled echo for a resolvable key,
+     * without hiding the genuine array case for a key that resolves to a
+     * translation group (that becomes a precise `InvalidArgument` instead).
+     */
+    #[\Override]
+    public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        if ($event->getMethodNameLowercase() !== 'get') {
+            return null;
+        }
+
+        $callArgs = $event->getCallArgs();
+
+        if ($callArgs === [] || $callArgs[0]->unpack) {
+            return null;
+        }
+
+        return self::resolveKeyArgReturnType(
+            $callArgs,
+            $event->getSource(),
+            $event->getCodeLocation(),
+            emitMissingTranslation: false,
+        );
+    }
+
+    /**
+     * Shared literal-key-lookup + string-fallback logic for both the
+     * __()/trans() function surface and the Translator::get() method surface.
+     *
+     * @param list<Arg> $args
+     */
+    private static function resolveKeyArgReturnType(
+        array $args,
+        StatementsSource $source,
+        CodeLocation $codeLocation,
+        bool $emitMissingTranslation,
+    ): ?Union {
         // Try to resolve literal string keys precisely via the Translator
-        $translationKey = self::extractLiteralStringArg($callArgs[0]);
+        $translationKey = self::extractLiteralStringArg($args[0]);
 
         if ($translationKey !== null) {
             $resolved = self::resolveTranslationType(
                 $translationKey,
-                $event->getCodeLocation(),
-                $event->getStatementsSource()->getSuppressedIssues(),
+                $codeLocation,
+                $source->getSuppressedIssues(),
+                $emitMissingTranslation,
             );
 
             if ($resolved instanceof \Psalm\Type\Union) {
@@ -147,7 +223,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Dynamic keys (variables, sprintf, concatenation) or missing literal keys:
         // return string to avoid PossiblyInvalidCast noise from string|array union
-        $firstArgType = ArgUtil::typeAt($callArgs, $event->getStatementsSource(), 0);
+        $firstArgType = ArgUtil::typeAt($args, $source, 0);
 
         if ($firstArgType instanceof \Psalm\Type\Union) {
             if ($firstArgType->isString()) {
@@ -225,6 +301,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         string $translationKey,
         CodeLocation $codeLocation,
         array $suppressedIssues,
+        bool $emitMissingTranslation = true,
     ): ?Union {
         if (!self::$translator instanceof \Illuminate\Translation\Translator) {
             return null;
@@ -248,7 +325,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Key does not exist — emit the issue only when findMissingTranslations
         // is enabled, then fall through to TransHandler for the fallback type
-        if (self::$reportMissing) {
+        if (self::$reportMissing && $emitMissingTranslation) {
             IssueBuffer::accepts(
                 new MissingTranslation(
                     "Translation key '{$translationKey}' not found in language files",
