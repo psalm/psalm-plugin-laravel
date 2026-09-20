@@ -55,8 +55,9 @@ final class ViewReferenceCollector
     private ?Parser $parser = null;
 
     /**
-     * @var array{0: string, 1: list<Stmt>}|null last source and its statements; the two shadow
-     *      walks run back to back on the same contents, so one slot halves the pass's parsing
+     * @var array{0: string, 1: list<Stmt>|null}|null last source and its statements, null in the
+     *      second slot for a source that does not parse; the two shadow walks run back to back on
+     *      the same contents, so one slot halves the pass's parsing either way
      */
     private ?array $parsed = null;
 
@@ -89,7 +90,7 @@ final class ViewReferenceCollector
         try {
             $stmts = \array_values($this->parser->parse($php) ?? []);
         } catch (\Throwable) {
-            return null;
+            $stmts = null;
         }
 
         $this->parsed = [$php, $stmts];
