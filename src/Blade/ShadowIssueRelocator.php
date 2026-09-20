@@ -11,6 +11,8 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\TooManyArguments;
+use Psalm\Issue\UnevaluatedCode;
+use Psalm\Issue\UnusedVariable;
 
 /**
  * Rebuilds an issue Psalm found in a shadow file as the same issue positioned on the Blade template
@@ -60,6 +62,22 @@ final class ShadowIssueRelocator
         // Accepted because it is a signature warning on code that is never called from outside the
         // template, against a family that is otherwise pure precompiler noise (#1498).
         if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
+            return false;
+        }
+
+        // Compiled bookkeeping the template author never wrote and cannot read back: the
+        // `$__componentOriginal*`/`$__attributesOriginal*` tail restores around a `<x-...>` tag and
+        // the `$loop = $__env->getLastLoop();` reassignment at the end of `@foreach`/`@forelse` are
+        // both standalone writes with no later read, and a `@switch` arm's `@break` leaves Psalm
+        // treating the rest of the compiled switch body as unreachable, flagging the following
+        // `@case`/`@default` line (#1500). Dropped unconditionally rather than snippet-gated:
+        // there is no family interface, so both concrete classes are listed. `UnusedForeachValue`
+        // is NOT included here — it fires only on the author-named foreach variable, which is real
+        // signal.
+        //
+        // Trade-off: an author's own dead store inside `@php` and an unused foreach KEY report as
+        // `UnusedVariable` too and are silenced along with the compiler noise.
+        if ($issue instanceof UnusedVariable || $issue instanceof UnevaluatedCode) {
             return false;
         }
 

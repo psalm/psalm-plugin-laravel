@@ -15,6 +15,9 @@ use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedVariable;
+use Psalm\Issue\UnevaluatedCode;
+use Psalm\Issue\UnusedForeachValue;
+use Psalm\Issue\UnusedVariable;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
 use Psalm\LaravelPlugin\Blade\ShadowTarget;
@@ -182,6 +185,39 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new MissingClosureReturnType('Closure does not have a return type', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function an_unused_variable_is_dropped_unconditionally(): void
+    {
+        // Compiler bookkeeping ($__componentOriginal*, the tail $loop reassignment) the template
+        // author never wrote and cannot read back (#1500).
+        $issue = new UnusedVariable('$loop is never referenced or the value is not used', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function an_unevaluated_code_issue_is_dropped_unconditionally(): void
+    {
+        // A `@switch` arm's `@break` leaves Psalm treating the following `@case`/`@default` line
+        // as unreachable (#1500).
+        $issue = new UnevaluatedCode('Expressions after return/throw/continue', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function an_unused_foreach_value_still_relocates(): void
+    {
+        // The author-named foreach variable is real signal, unlike the compiler's own $loop
+        // bookkeeping dropped above, and must still be rebuilt on the template line.
+        $issue = new UnusedForeachValue('$item is never referenced or the value is not used', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(UnusedForeachValue::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     #[Test]
