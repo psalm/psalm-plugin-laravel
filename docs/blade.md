@@ -93,8 +93,10 @@ Every other variable a template uses without a type the plugin can prove gets `m
 
 A registered Blade precompiler (Livewire's component tags are the common case, `<livewire:x />`) can rewrite a template into PHP the author never wrote and has no position in the source to annotate. Two issue families are dropped at shadow emission rather than relocated to the template:
 
-* `MissingClosureParamType` and `MissingClosureReturnType`, unconditionally. An untyped closure a precompiler injects has no docblock position in the template for the author to give it a type.
-* `TooManyArguments`, only when the exact call the issue points at does not occur anywhere in the raw template source. A call the author actually wrote in the template survives this check (it may be a real bug), and the gate applies to `TooManyArguments` alone: a compiled `@include` or `@extends` chain also expands into calls (`$__env->make()`), and dropping there too would silently hide a real `MissingView`.
+* `MissingClosureParamType` and `MissingClosureReturnType`, unconditionally. A template has no docblock position to give a closure a type, so the issue is unactionable wherever the closure came from. The accepted cost is losing the same signature warning for a closure the author did write inside a raw PHP block.
+* `TooManyArguments`, only when the **call expression** the issue points at does not occur anywhere in the raw template source. Blade rewrites the lines it compiles (`{{ $x->f(1) }}` becomes an `echo e(...)` statement), so the comparison is the call itself, cut out of the compiled line at the issue's own position, not the compiled line: an author's over-arity call survives inside `{{ }}`, `{!! !!}`, `@php` and a raw PHP block alike, because Blade copies the expression verbatim and only wraps around it.
+
+The arity gate applies to `TooManyArguments` alone. A compiled `@include` or `@extends` chain also expands into calls (`$__env->make()`), and gating the whole family on the same rule would silently hide a real `MissingView`. Anything the gate cannot read or cannot recognise as a plain call keeps its issue, so the failure direction is extra noise rather than a lost finding.
 
 ### Two runs on Psalm 6
 

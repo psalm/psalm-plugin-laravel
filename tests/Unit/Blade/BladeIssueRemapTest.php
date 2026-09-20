@@ -262,11 +262,43 @@ final class BladeIssueRemapTest extends TestCase
         // (a broken fixture provider, BladeBootstrapper degrading), the assertions above would
         // pass for the wrong reason — nothing generated, nothing to suppress. The registry lives
         // in the subprocess that just exited, so the only thing left to inspect is the cache
-        // directory itself.
+        // directory itself. Both halves of the generated shape are pinned: the untyped closure
+        // that carries the two MissingClosure* issues, and the 5-argument call that carries the
+        // TooManyArguments the gate has to drop.
+        $shadows = $this->allShadowSources();
+
         $this->assertStringContainsString(
-            '$__split',
-            $this->allShadowSources(),
+            '$__split = function ($__id, $__params)',
+            $shadows,
             'the fixture precompiler never ran: no generated closure found in any compiled shadow',
+        );
+        $this->assertStringContainsString(
+            "->mount('id', 'params', 'key', 'extra1', 'extra2')",
+            $shadows,
+            'the fixture precompiler never ran: no generated over-arity call in any compiled shadow',
+        );
+    }
+
+    /**
+     * Blade REWRITES the lines it compiles, so a gate that matched generated shadow lines against
+     * the raw template verbatim only ever recognised `<?php ?>` blocks as author-written. Every
+     * other compiled syntax (`{{ }}`, `{!! !!}`, `@php`) turns into `echo`/`e()` text the template
+     * does not contain, and a genuine author over-arity call inside one was dropped as "generated"
+     * (#1498).
+     */
+    #[Test]
+    public function an_authored_over_arity_call_survives_in_every_compiled_blade_syntax(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        // Lines 2 and 3 are the `{{ }}` and `{!! !!}` calls. The `@php` call is written on line 5
+        // but reports on 4: a multi-line construct's continuation lines get no marker of their own
+        // (see MarkerPrePass::computeSkipLines()), so the body inherits the `@php` line. That is
+        // pre-existing line-map behaviour, not something this gate decides.
+        $this->assertSame(
+            [2, 3, 4],
+            $this->linesFor($issues, 'TooManyArguments', 'resources/views/authored-arity.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
 

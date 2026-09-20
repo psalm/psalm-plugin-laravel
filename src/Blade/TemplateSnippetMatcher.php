@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * Whitespace-insensitive substring search, split out of {@see ShadowIssueRelocator} so the
- * matching rule is testable against plain strings, without a booted Psalm codebase to satisfy
- * `CodeLocation::getSelectedText()`.
+ * Decides whether a piece of a compiled shadow was written by the template author, by looking for
+ * it in the raw template. Split out of {@see ShadowIssueRelocator} so the rule is testable against
+ * plain strings, without a booted Psalm codebase to satisfy `CodeLocation::getSnippet()`.
+ *
+ * Blade rewrites the lines it compiles — `{{ $x->f(1) }}` becomes `<?php echo e($x->f(1)); ?>` —
+ * so a whole shadow line is never author text. A call EXPRESSION is: the compiler wraps around it
+ * and never inside it. Hence {@see self::callExpressionAt()}, which cuts the expression back out of
+ * the shadow line so {@see self::occursIn()} has something the template can actually contain.
  *
  * @internal
  */
@@ -21,6 +26,88 @@ final class TemplateSnippetMatcher
     public static function occursIn(string $snippet, string $source): bool
     {
         return \str_contains(self::normalize($source), self::normalize($snippet));
+    }
+
+    /**
+     * `name(...)` starting at $offset in $snippet, argument list included, or null when $offset
+     * does not start such a call or the list is not closed within $snippet.
+     *
+     * Tokenizing rather than counting parentheses: a `)` inside a string literal or a comment must
+     * not close the list, and PHP's own lexer is the only thing that gets every quoting form
+     * (heredoc, interpolation, `#[...]`) right.
+     *
+     * Null is a decline, not "generated": the caller keeps the issue. Only a plain
+     * identifier-then-arguments call is judged here, which is the shape Psalm reports
+     * `TooManyArguments` on (its location is the callee-name node); a location pointing anywhere
+     * else is not something this class can reason about.
+     */
+    public static function callExpressionAt(string $snippet, int $offset): ?string
+    {
+        if ($offset < 0 || $offset >= \strlen($snippet)) {
+            return null;
+        }
+
+        try {
+            // The tail is a fragment, so it routinely ends mid-construct; the plain (non-
+            // TOKEN_PARSE) lexer tolerates that, but still warns on an unterminated string.
+            $tokens = @\token_get_all('<?php ' . \substr($snippet, $offset));
+        } catch (\Throwable) {
+            return null;
+        }
+
+        \array_shift($tokens);
+
+        $text = self::consumeCallee($tokens);
+
+        return $text === null ? null : self::consumeArguments($tokens, $text);
+    }
+
+    /**
+     * The callee name plus any whitespace up to its `(`, with both removed from $tokens; null when
+     * the tokens do not start that way.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private static function consumeCallee(array &$tokens): ?string
+    {
+        $head = \array_shift($tokens);
+
+        if (!\is_array($head) || !\in_array($head[0], [\T_STRING, \T_NAME_QUALIFIED, \T_NAME_FULLY_QUALIFIED], true)) {
+            return null;
+        }
+
+        $text = $head[1];
+
+        while (($next = $tokens[0] ?? null) !== null && \is_array($next) && $next[0] === \T_WHITESPACE) {
+            $text .= $next[1];
+            \array_shift($tokens);
+        }
+
+        return ($tokens[0] ?? null) === '(' ? $text : null;
+    }
+
+    /**
+     * $text extended with the balanced `(...)` the tokens open with; null when the list runs past
+     * the end of the tokens, which happens whenever the call spans more lines than the snippet.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private static function consumeArguments(array $tokens, string $text): ?string
+    {
+        $depth = 0;
+
+        foreach ($tokens as $token) {
+            $piece = \is_array($token) ? $token[1] : $token;
+            $text .= $piece;
+
+            if ($piece === '(') {
+                $depth++;
+            } elseif ($piece === ')' && --$depth === 0) {
+                return $text;
+            }
+        }
+
+        return null;
     }
 
     private static function normalize(string $text): string

@@ -187,9 +187,9 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[Test]
     public function a_toomanyarguments_issue_is_kept_when_its_snippet_cannot_be_read(): void
     {
-        // No ProjectAnalyzer is booted in this pure-unit context, so `getSelectedText()` throws
-        // for any real CodeLocation. That is exactly the "cannot be read" case the relocator must
-        // fail open on: proof the try/catch keeps the issue rather than dropping it on error.
+        // No ProjectAnalyzer is booted in this pure-unit context, so `getSnippet()` throws for any
+        // real CodeLocation. That is exactly the "cannot be read" case the relocator must fail open
+        // on: proof the try/catch keeps the issue rather than dropping it on error.
         $issue = new TooManyArguments('Too many arguments', $this->shadowLocation(9), 'Foo::bar');
 
         $relocated = $this->relocate($issue, $this->entry([9 => 3]));

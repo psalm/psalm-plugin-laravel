@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\MissingClosureParamType;
@@ -51,9 +52,11 @@ final class ShadowIssueRelocator
      */
     public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
     {
-        // A compiled directive (Livewire tags in particular) can inject an untyped closure a
-        // template author has no docblock position to annotate; every observed instance is
-        // compiler-generated, so the whole family is dropped unconditionally (#1498).
+        // A compiled directive (Livewire tags in particular) injects untyped closures, and a
+        // template has no docblock position to annotate a closure with, so the issue is
+        // unactionable wherever it came from. Dropped unconditionally rather than gated like the
+        // arity check below: the accepted cost is losing the same signature warning for a closure
+        // an author did write inside a raw PHP block in the template (#1498).
         if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
             return false;
         }
@@ -118,27 +121,55 @@ final class ShadowIssueRelocator
      * arity check would then silently drop as "generated" even when they carry a real bug such
      * as `MissingView`.
      *
-     * `getSelectedText()` is too narrow for this (just the callee name, e.g. `mount`, shared by
-     * every call to that method regardless of where it came from); `getSnippet()` returns the
-     * shadow's whole line instead, which is exactly the generated statement for a precompiled
-     * call, minus the marker comment stripped below.
+     * Generated and author-written calls are told apart by the call EXPRESSION, cut out of the
+     * shadow line at the issue's own selection offset, because neither end of the shadow line is
+     * usable on its own:
      *
-     * The check compares that snippet against the WHOLE template source (never a per-line match,
-     * so a multi-line generated call still resolves) rather than the mapped template line: a
-     * precompiler-generated call has no line of its own to be mapped from in the first place.
+     * - The whole line is compiler output. `{{ $x->f(1,2) }}` becomes `<?php echo e($x->f(1,2)); ?>`,
+     *   which no template contains, so matching the line would call every compiled syntax but a raw
+     *   `<?php ?>` block "generated" and drop real author issues.
+     * - The callee name alone (`getSelectedText()`, e.g. `mount`) is shared by every call to that
+     *   method, generated or not.
+     *
+     * Matching is against the WHOLE template source, not the mapped template line: generated code
+     * DOES inherit the injecting directive's line (the precompiler rewrites text that sits behind
+     * that line's marker), so a per-line match would compare the generated call against the very
+     * line whose directive produced it and learn nothing; and a multi-line construct gets no marker
+     * of its own ({@see MarkerPrePass::computeSkipLines()}), so an author's multi-line call maps to
+     * the line that OPENED it rather than the line the callee sits on.
      */
     private static function isGeneratedArityMismatch(TooManyArguments $issue, ShadowTarget $target): bool
     {
-        try {
-            $snippet = $issue->code_location->getSnippet();
-        } catch (\Throwable) {
-            // Fail open: an unreadable snippet is never grounds to drop the issue.
+        $call = self::callExpression($issue->code_location);
+
+        if ($call === null) {
             return false;
         }
 
-        $snippet = (string) \preg_replace(self::MARKER_PATTERN, '', $snippet);
+        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+    }
 
-        return !TemplateSnippetMatcher::occursIn($snippet, $target->templateSource);
+    /**
+     * The called expression an issue points at, read out of the shadow, or null to decline —
+     * fail open, since dropping a real author issue is the costly direction and an unreadable
+     * location is no evidence of anything.
+     */
+    private static function callExpression(CodeLocation $location): ?string
+    {
+        try {
+            $snippet = $location->getSnippet();
+            [$selectionStart] = $location->getSelectionBounds();
+            [$snippetStart] = $location->getSnippetBounds();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $call = TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
+
+        // A marker can only sit between two template lines, never inside one construct, so it
+        // survives here solely when the compiler emitted one mid-call; stripping costs nothing and
+        // keeps such a call matchable against the template.
+        return $call === null ? null : (string) \preg_replace(self::MARKER_PATTERN, '', $call);
     }
 
     /**

@@ -51,4 +51,59 @@ final class TemplateSnippetMatcherTest extends TestCase
             "<div>\n  foo('a', 'b')\n</div>\n",
         ));
     }
+
+    /**
+     * The shape Psalm hands the relocator: a whole compiled shadow line, plus the offset of the
+     * callee-name node inside it. Only the call comes back out, so what is matched against the
+     * template is text the Blade compiler copied rather than text it wrote.
+     */
+    #[Test]
+    public function a_call_is_cut_out_of_a_compiled_echo_line(): void
+    {
+        $line = '<?php /* blade:2 */ ?>  <?php echo e($x->mount(1, 2, 3)); ?>';
+
+        $this->assertSame(
+            'mount(1, 2, 3)',
+            TemplateSnippetMatcher::callExpressionAt($line, \strpos($line, 'mount(') ?: 0),
+        );
+    }
+
+    #[Test]
+    public function a_nested_call_does_not_end_the_argument_list_early(): void
+    {
+        $this->assertSame(
+            'mount(inner(1), 2)',
+            TemplateSnippetMatcher::callExpressionAt('mount(inner(1), 2);', 0),
+        );
+    }
+
+    #[Test]
+    public function a_parenthesis_inside_a_string_literal_does_not_end_the_argument_list(): void
+    {
+        // Why the lexer and not a character scan: a `)` in a quoted argument would close the list
+        // early, the truncated text would not be found in the template, and a real author issue
+        // would be dropped as generated.
+        $this->assertSame(
+            "mount('a) b', 2)",
+            TemplateSnippetMatcher::callExpressionAt("mount('a) b', 2);", 0),
+        );
+    }
+
+    #[Test]
+    public function an_offset_that_does_not_start_a_call_declines(): void
+    {
+        // A `TooManyArguments` whose location is not a plain callee-name node: unjudgeable, and the
+        // caller keeps the issue rather than guessing.
+        $this->assertNull(TemplateSnippetMatcher::callExpressionAt('$x->mount(1, 2);', 0));
+        $this->assertNull(TemplateSnippetMatcher::callExpressionAt('mount 1, 2;', 0));
+        $this->assertNull(TemplateSnippetMatcher::callExpressionAt('mount(1, 2);', 99));
+    }
+
+    #[Test]
+    public function an_argument_list_left_open_by_the_end_of_the_line_declines(): void
+    {
+        // Psalm's snippet is one line; a call continued on the next one cannot be read whole, and
+        // a partial read would not match the template.
+        $this->assertNull(TemplateSnippetMatcher::callExpressionAt('mount(1,', 0));
+    }
 }
