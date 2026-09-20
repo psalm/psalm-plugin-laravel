@@ -34,4 +34,17 @@ interface ShadowRegistrar
      * @param list<string> $classNames fully-qualified, `\`-prefixed or not
      */
     public function queueClassLikesForScanning(array $classNames): void;
+
+    /**
+     * Queues class-name CANDIDATES harvested from a shadow's string literals (#1505): a vendor
+     * directive that compiles a class name into a string argument rather than code position
+     * (`app('Vendor\Package\Class')::method()`) names a class Psalm's own scanner never sees. Unlike
+     * {@see self::queueClassLikesForScanning()}, these are speculative — most string literals name
+     * no class at all — so the implementation must gate each candidate on being independently
+     * resolvable before queueing it, never queue unconditionally.
+     *
+     * @param list<string> $candidates class-like names harvested from shadow string literals,
+     *                     `\`-prefixed or not
+     */
+    public function queueResolvableClassLikesForScanning(array $candidates): void;
 }

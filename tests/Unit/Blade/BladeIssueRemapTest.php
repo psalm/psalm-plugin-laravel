@@ -413,6 +413,107 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1505: a vendor package's compiled directive can name a class only in a PHP string literal
+     * (`app('Vendor\Package\Class')::method()`), never in code position or a docblock. Psalm's own
+     * scanner never sees a string as a class reference, so the class is reported as undefined
+     * unless the plugin queues it itself.
+     */
+    #[Test]
+    public function a_class_named_only_in_a_compiled_directives_string_literal_is_not_reported_undefined(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'UndefinedClass' || $issue['type'] === 'UndefinedDocblockClass') {
+                $this->assertStringNotContainsString(
+                    'RouteHelperFixture\RouteGenerator',
+                    $issue['message'],
+                    \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                );
+            }
+        }
+    }
+
+    /**
+     * Same fixture, second run: `ShadowCompiler` never runs on a warm manifest (see
+     * `BladeBootstrapper::compileAll()`'s `isFresh()` branch), so the literal-class extraction must
+     * come off the shadow FILE on disk, not off the fresh `ShadowResult` the first run produced.
+     */
+    #[Test]
+    public function a_warm_manifest_run_still_queues_the_literal_named_class(): void
+    {
+        $this->analyze('psalm.xml');
+        $issues = $this->analyze('psalm.xml');
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'UndefinedClass' || $issue['type'] === 'UndefinedDocblockClass') {
+                $this->assertStringNotContainsString(
+                    'RouteHelperFixture\RouteGenerator',
+                    $issue['message'],
+                    \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                );
+            }
+        }
+    }
+
+    /**
+     * Negative: a genuine miss in CODE POSITION must still report; the literal-queueing mechanism
+     * must not suppress a real UndefinedClass. (A baseline guard on the whole mechanism — the
+     * absent class never appears as a shadow literal, so the `store_failure` flag itself is
+     * defense-in-depth here, not what this test pins.)
+     */
+    #[Test]
+    public function a_genuine_undefined_class_in_code_position_still_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertNotSame(
+            [],
+            \array_filter(
+                $issues,
+                static fn(array $issue): bool => $issue['type'] === 'UndefinedClass'
+                    && \str_contains($issue['message'], 'Totally\Missing\Klass'),
+            ),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * Negative: a string literal that names no real class must change nothing — no new issue, no
+     * crash, and no UndefinedClass minted for a name nothing on disk or in the autoloader answers
+     * to.
+     */
+    #[Test]
+    public function a_non_class_string_literal_is_not_queued_or_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        foreach ($issues as $issue) {
+            $this->assertStringNotContainsString(
+                'Not\A\Real\ClassName',
+                $issue['message'],
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+    }
+
+    /**
+     * #1505 unused-code guard: queueing with `analyze_too=false` must not enrol the literal-named
+     * class in unused-code accounting the way a project-file reference would.
+     */
+    #[Test]
+    public function literal_named_class_queueing_does_not_affect_unused_code_counts(): void
+    {
+        $issues = $this->analyze('psalm-unused-code.xml');
+
+        $unusedClasses = \array_filter($issues, static fn(array $issue): bool => $issue['type'] === 'UnusedClass');
+
+        foreach ($unusedClasses as $issue) {
+            $this->assertStringNotContainsString('RouteHelperFixture\RouteGenerator', $issue['message']);
+        }
+    }
+
     /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
     private function allShadowSources(): string
     {
