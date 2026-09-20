@@ -14,6 +14,11 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class MarkerPrePass
 {
+    // Comments and strings are indivisible: their parentheses never affect argument depth.
+    private const ARGUMENT_PATTERN = <<<'REGEX'
+    (?<args>\((?>\/\*.*?\*\/|\/\/[^\r\n]*|#(?!\[)[^\r\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^()'"\/#]|\/(?![\/*])|#(?=\[)|(?&args))*\))
+    REGEX;
+
     /**
      * Byte-offset ranges of source that are not "live" Blade code: verbatim bodies,
      * `@php...@endphp` blocks, Blade comments, and raw `<?php ... ?>` / `<?= ... ?>`
@@ -71,10 +76,7 @@ final class MarkerPrePass
             '/\{\{\{.*?\}\}\}/s',
             '/\{!!.*?!!\}/s',
             '/\{\{.*?\}\}/s',
-            // Balanced-paren directive args via PCRE recursion; respects quoted strings.
-            <<<'REGEX'
-            /@[a-zA-Z_]+\s*(\((?:[^()'"]|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?1))*\))/s
-            REGEX,
+            '/@[a-zA-Z_]+\s*' . self::ARGUMENT_PATTERN . '/s',
             // Multi-line component tags. ComponentTagCompiler::compileOpeningTags()
             // matches attributes as a strict alternation separated by \s+; a marker
             // between two attributes matches no alternative and the whole tag is
@@ -143,9 +145,7 @@ final class MarkerPrePass
      */
     private static function markSwitchGapLines(string $source, string $scanSource, array &$skip): void
     {
-        $pattern = <<<'REGEX'
-        /(?<!@)@(switch|case)[ \t]*(\((?:[^()'"]|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?2))*\))/is
-        REGEX;
+        $pattern = '/(?<!@)@(switch|case)[ \t]*' . self::ARGUMENT_PATTERN . '/is';
 
         if (\preg_match_all($pattern, $scanSource, $matches, \PREG_OFFSET_CAPTURE) === false) {
             return;

@@ -35,6 +35,10 @@ final class ShadowCompilerTest extends TestCase
     /** @return iterable<string, array{string}> */
     public static function lexicalBoundaryTemplates(): iterable
     {
+        yield 'directive block comment' => ["@if(/* ) */\n true)\n{{ strlen([]) }}\n@endif\n"];
+        yield 'directive line comment' => ["@if(// )\n true)\n{{ strlen([]) }}\n@endif\n"];
+        yield 'directive hash comment' => ["@if(# )\n true)\n{{ strlen([]) }}\n@endif\n"];
+        yield 'switch argument comment' => ["@switch(/* ) @case(1) */\n 1)\n@case(1)\n{{ strlen([]) }}\n@break\n@endswitch\n"];
         yield 'raw string' => ["<?php\n\$tag = '?>';\nstrlen([]);\n?>\n"];
         yield 'raw comment' => ["<?php\n/* ?> */\nstrlen([]);\n?>\n"];
         yield 'escaped directive quote' => ["@if(str_contains('it\\'s)',\n 'x'))\n@php strlen([]); @endphp\n@endif\n"];
