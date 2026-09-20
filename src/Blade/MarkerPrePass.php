@@ -24,22 +24,31 @@ final class MarkerPrePass
      */
     private static function maskedRanges(string $source): array
     {
-        // A single alternation, so an earlier-starting construct consumes its own body instead of
-        // each pattern re-scanning the whole source independently: a raw PHP open tag typed inside
-        // a Blade comment must not let the raw-PHP branch re-match past the comment's own close and
-        // mask everything to EOF via the `.*\z` fallback below. Keep the comment branch before the
-        // raw-PHP one. `(?i:php\b|=)` matches the case-insensitive PHP open tag; the `.*\z`
-        // alternative covers a raw PHP block left unclosed at end of template, which Blade permits.
-        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)(?:.*?\?>|.*\z)/s';
+        // Consume the earliest construct first: PHP-like text inside a Blade comment is inert.
+        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)/s';
+        $ranges = [];
+        $cursor = 0;
+        while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {
+            [$text, $offset] = $match[0];
+            if (\str_starts_with($text, '<?')) {
+                $length = 0;
+                foreach (\token_get_all(\substr($source, $offset)) as $token) {
+                    if (\is_array($token) && $token[0] === \T_CLOSE_TAG) {
+                        $length += \strlen(\rtrim($token[1], "\r\n"));
+                        break;
+                    }
 
-        if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
-            return [];
+                    $length += \strlen(\is_array($token) ? $token[1] : $token);
+                }
+
+                $text = \substr($source, $offset, $length);
+            }
+
+            $ranges[] = [$text, $offset];
+            $cursor = $offset + \strlen($text);
         }
 
-        /** @var list<array{0: string, 1: int}> $wholeMatches */
-        $wholeMatches = $matches[0];
-
-        return $wholeMatches;
+        return $ranges;
     }
 
     /**
@@ -63,7 +72,9 @@ final class MarkerPrePass
             '/\{!!.*?!!\}/s',
             '/\{\{.*?\}\}/s',
             // Balanced-paren directive args via PCRE recursion; respects quoted strings.
-            '/@[a-zA-Z_]+\s*(\((?:[^()\'"]|\'[^\']*\'|"[^"]*"|(?1))*\))/s',
+            <<<'REGEX'
+            /@[a-zA-Z_]+\s*(\((?:[^()'"]|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?1))*\))/s
+            REGEX,
             // Multi-line component tags. ComponentTagCompiler::compileOpeningTags()
             // matches attributes as a strict alternation separated by \s+; a marker
             // between two attributes matches no alternative and the whole tag is
@@ -132,7 +143,9 @@ final class MarkerPrePass
      */
     private static function markSwitchGapLines(string $source, string $scanSource, array &$skip): void
     {
-        $pattern = '/(?<!@)@(switch|case)[ \t]*(\((?:[^()\'"]|\'[^\']*\'|"[^"]*"|(?2))*\))/is';
+        $pattern = <<<'REGEX'
+        /(?<!@)@(switch|case)[ \t]*(\((?:[^()'"]|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?2))*\))/is
+        REGEX;
 
         if (\preg_match_all($pattern, $scanSource, $matches, \PREG_OFFSET_CAPTURE) === false) {
             return;
