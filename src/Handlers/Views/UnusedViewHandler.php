@@ -66,13 +66,10 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
         $config = Config::getInstance();
         $collector = new ViewReferenceCollector();
 
+        // Every project file is walked even once a dynamic reference has turned the rule off:
+        // getStatementsForFile() resets the file's diff map and deletion ranges on a cache hit, so
+        // skipping the rest would change what Psalm replays on an incremental run.
         foreach (FileStorageProvider::getAll() as $storage) {
-            // One dynamic reference — possibly already recorded at boot — turns the rule off for the
-            // whole run, so the remaining files' ASTs would be walked only to be discarded.
-            if (ViewReferenceRegistry::isDynamic()) {
-                break;
-            }
-
             if (!$config->isInProjectDirs($storage->file_path)) {
                 // Excludes the compiled shadows themselves: their cache directory sits outside the
                 // project tree by construction (docs/blade.md), so this is also what stops the
