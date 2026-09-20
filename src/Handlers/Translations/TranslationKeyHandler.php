@@ -208,6 +208,13 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      * (`trans(locale: 'en', key: 'x')`) — {@see ArgUtil::byNameOrPosition()}
      * resolves the actual key argument regardless of call order.
      *
+     * The literal-key lookup below queries the booted translator's CURRENT default
+     * locale and default fallback (`true`) — it never re-runs the lookup for an
+     * explicit `$locale` (position 2) or `$fallback` (position 3, `Translator::get()`
+     * only). A key that resolves to a string in the default locale can be an array
+     * in another one, so a call naming either argument declines entirely, whether
+     * or not it also carries a literal key.
+     *
      * @param list<Arg> $args
      */
     private static function resolveKeyArgReturnType(
@@ -219,6 +226,12 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
 
         if (!$keyArg instanceof Arg) {
+            return null;
+        }
+
+        if (ArgUtil::byNameOrPosition($args, 2, 'locale') instanceof Arg
+            || ArgUtil::byNameOrPosition($args, 3, 'fallback') instanceof Arg
+        ) {
             return null;
         }
 
