@@ -36,6 +36,8 @@ final class ShadowManifest
      */
     private array $entries = [];
 
+    private ?string $fingerprintSuffix = null;
+
     public function __construct(private readonly string $shadowDir) {}
 
     /** Tolerates an absent or corrupt manifest file: starts empty either way. */
@@ -446,8 +448,11 @@ final class ShadowManifest
 
     private function fingerprint(string $source): string
     {
-        $pluginVersion = InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown';
+        // Everything but the source is fixed for the process, and the plugin version costs a
+        // Composer lookup, so the suffix is built once rather than per template.
+        $this->fingerprintSuffix ??= '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|'
+            . (InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown');
 
-        return \hash('xxh128', $source . '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|' . $pluginVersion);
+        return \hash('xxh128', $source . $this->fingerprintSuffix);
     }
 }
