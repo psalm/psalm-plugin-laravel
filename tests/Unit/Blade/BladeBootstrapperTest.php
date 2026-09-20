@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 
@@ -39,8 +40,10 @@ final class BladeBootstrapperTest extends TestCase
         $this->progress = new RecordingProgress();
 
         // This suite calls BladeBootstrapper directly, bypassing Plugin::resetInvocationState(), so
-        // the registry has to be reset here or an earlier test's compile failure leaks into this one.
+        // the registries have to be reset here or an earlier test's compile failure/registration
+        // leaks into this one.
         ViewReferenceRegistry::reset();
+        ContractRegistry::reset();
     }
 
     protected function tearDown(): void
@@ -109,6 +112,69 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertFileExists($shadow);
         $this->assertStringContainsString('echo e($name)', (string) \file_get_contents($shadow));
         $this->assertFileExists($this->shadowDir . '/manifest.php');
+    }
+
+    /**
+     * `loadViewsFrom($dir, $namespace)` puts its directory in the finder's `getHints()`, never
+     * `getPaths()` — a template that lives ONLY there was invisible to discovery entirely (#1497).
+     * It also has to register under the QUALIFIED `ns::name`, never the bare dotted name: call
+     * sites store `view('pkg::widget')` verbatim, so an unqualified registration both misses the
+     * real name and fabricates one nothing ever resolves to.
+     */
+    #[Test]
+    public function discovers_a_template_registered_only_through_a_finder_namespace_hint(): void
+    {
+        $hintDir = $this->root . '/package-views';
+        \mkdir($hintDir, 0o777, true);
+        $template = $hintDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', $hintDir);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([$template], $registrar->reportableTemplates);
+        $this->assertCount(1, $registrar->analyzedShadows);
+        $this->assertNotNull(ContractRegistry::contractFor('pkg::widget'), 'must register under the qualified name');
+        $this->assertNull(ContractRegistry::contractFor('widget'), 'must not also register unqualified');
+    }
+
+    /**
+     * A published override (`resources/views/vendor/pkg/widget.blade.php`) sits under BOTH the main
+     * root and the namespace's first hint — the same file legitimately owns two names,
+     * `vendor.pkg.widget` and `pkg::widget`. `ViewName::resolve()` used to return only the first
+     * matching root, silently dropping the qualified name a caller might use.
+     */
+    #[Test]
+    public function a_published_override_registers_under_both_its_qualified_and_unqualified_name(): void
+    {
+        $overrideDir = $this->viewDir . '/vendor/pkg';
+        \mkdir($overrideDir, 0o777, true);
+        $template = $overrideDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        \realpath($template);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', $overrideDir);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertNotNull(ContractRegistry::contractFor('pkg::widget'));
+        $this->assertNotNull(ContractRegistry::contractFor('vendor.pkg.widget'));
     }
 
     #[Test]
@@ -403,18 +469,19 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     #[Test]
-    public function stays_silent_when_there_are_no_templates(): void
+    public function warns_once_when_no_templates_are_discovered(): void
     {
         $registrar = new RecordingShadowRegistrar();
 
         $this->bootstrapper($this->app(), $registrar)->boot();
 
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertCount(1, $this->progress->warnings);
+        $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
     }
 
     #[Test]
-    public function a_missing_view_directory_is_not_a_failure(): void
+    public function a_missing_view_directory_warns_once_but_is_not_a_failure(): void
     {
         $app = new Container();
         $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
@@ -424,7 +491,8 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, $registrar)->boot();
 
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertCount(1, $this->progress->warnings);
+        $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
     }
 }
