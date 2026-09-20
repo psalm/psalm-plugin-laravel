@@ -49,19 +49,15 @@ final class MarkerPrePass
      * that OPENS the construct still gets a marker (state hasn't switched yet
      * when that line's marker decision is made).
      *
+     * @param list<array{0: string, 1: int}>|null $masked ranges already computed by the caller —
+     *        {@see self::inject()} shares one scan with {@see self::extendsLine()} — or null to
+     *        derive them here
      * @return array<int, true>
      */
-    public static function computeSkipLines(string $source): array
+    public static function computeSkipLines(string $source, ?array $masked = null): array
     {
-        return self::skipLines($source, self::maskedRanges($source));
-    }
+        $masked ??= self::maskedRanges($source);
 
-    /**
-     * @param list<array{0: string, 1: int}> $masked
-     * @return array<int, true>
-     */
-    private static function skipLines(string $source, array $masked): array
-    {
         $patterns = [
             '/\{\{\{.*?\}\}\}/s',
             '/\{!!.*?!!\}/s',
@@ -224,7 +220,7 @@ final class MarkerPrePass
     public static function inject(string $source): string
     {
         $masked = self::maskedRanges($source);
-        $skip = self::skipLines($source, $masked);
+        $skip = self::computeSkipLines($source, $masked);
         $lines = SourceLines::split($source);
 
         $out = '';
@@ -239,7 +235,7 @@ final class MarkerPrePass
             $lineNumber++;
         }
 
-        $extendsLine = self::extendsLineIn($source, $masked);
+        $extendsLine = self::extendsLine($source, $masked);
 
         if ($extendsLine !== null) {
             $out .= "<?php /* blade:{$extendsLine} */ ?>";
@@ -252,17 +248,11 @@ final class MarkerPrePass
      * The source line of an `@extends`/`@extendsFirst` directive, if any. A match
      * inside a Blade comment, `@verbatim` body or raw PHP block is not a live
      * directive and is skipped in favor of the next candidate, if any.
+     *
+     * @param list<array{0: string, 1: int}>|null $masked as in {@see self::computeSkipLines()};
+     *        a template with no `@extends` at all never needs them
      */
-    public static function extendsLine(string $source): ?int
-    {
-        return self::extendsLineIn($source, null);
-    }
-
-    /**
-     * @param list<array{0: string, 1: int}>|null $masked already-computed ranges, or null to derive
-     *        them here — a template with no `@extends` at all never needs them.
-     */
-    private static function extendsLineIn(string $source, ?array $masked): ?int
+    public static function extendsLine(string $source, ?array $masked = null): ?int
     {
         $matchCount = \preg_match_all('/@extends(?:First)?\s*\(/', $source, $matches, \PREG_OFFSET_CAPTURE);
 
