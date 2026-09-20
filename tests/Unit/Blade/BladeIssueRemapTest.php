@@ -226,4 +226,61 @@ final class BladeIssueRemapTest extends TestCase
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
+
+    /**
+     * Livewire-style precompiled tags fire an untyped `$__split` closure and an over-arity method
+     * call on the SAME (mapped) template line, both dropped at shadow emission (#1498) unless the
+     * over-arity call is one the template author actually wrote.
+     */
+    #[Test]
+    public function livewire_style_generated_closure_and_arity_issues_are_dropped_but_an_authored_one_survives(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/livewire-fp.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'MissingClosureParamType', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'MissingClosureReturnType', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // The author-written call is the one line the template actually has; the generated call
+        // has no line of its own, so both would collapse onto it if the gate failed open the
+        // wrong way. One survivor here, on the real line, is the only way to tell them apart.
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'TooManyArguments', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: if LivewireStubProvider::boot() silently failed to run
+        // (a broken fixture provider, BladeBootstrapper degrading), the assertions above would
+        // pass for the wrong reason — nothing generated, nothing to suppress. The registry lives
+        // in the subprocess that just exited, so the only thing left to inspect is the cache
+        // directory itself.
+        $this->assertStringContainsString(
+            '$__split',
+            $this->allShadowSources(),
+            'the fixture precompiler never ran: no generated closure found in any compiled shadow',
+        );
+    }
+
+    /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
+    private function allShadowSources(): string
+    {
+        $this->assertDirectoryExists(self::SHADOW_DIR, 'no shadow was ever written for this run');
+
+        $source = '';
+
+        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
+            $source .= (string) \file_get_contents(self::SHADOW_DIR . '/' . $entry);
+        }
+
+        return $source;
+    }
 }

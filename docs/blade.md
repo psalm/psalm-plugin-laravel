@@ -89,6 +89,13 @@ Every other variable a template uses without a type the plugin can prove gets `m
 {!! request()->input('q') !!} {{-- unescaped: TaintedHtml --}}
 ```
 
+### Compiler-generated code
+
+A registered Blade precompiler (Livewire's component tags are the common case, `<livewire:x />`) can rewrite a template into PHP the author never wrote and has no position in the source to annotate. Two issue families are dropped at shadow emission rather than relocated to the template:
+
+* `MissingClosureParamType` and `MissingClosureReturnType`, unconditionally. An untyped closure a precompiler injects has no docblock position in the template for the author to give it a type.
+* `TooManyArguments`, only when the exact call the issue points at does not occur anywhere in the raw template source. A call the author actually wrote in the template survives this check (it may be a real bug), and the gate applies to `TooManyArguments` alone: a compiled `@include` or `@extends` chain also expands into calls (`$__env->make()`), and dropping there too would silently hide a real `MissingView`.
+
 ### Two runs on Psalm 6
 
 Psalm 6 runs taint analysis exclusively: a plain run reports type issues only, and `--taint-analysis` reports taint issues only. Blade templates follow the same split, so covering both needs two runs, same as the rest of the plugin:
@@ -123,3 +130,4 @@ The check declines for a call site instead of guessing, and the gate that matter
 * **Dynamic view names are not resolved.** `view($name)` with a non-literal `$name` is not connected back to a template file.
 * **Contract annotations do not type the template body.** `{{-- @var \App\Models\User $user --}}` and `@props([...])` are read, but only to check the `view()` call sites that render the template (see [`validateViewData`](config.md#validateviewdata)). Inside the compiled template every variable they would type still falls back to `mixed`, because typing the body would change every shadow's content and its cache fingerprint — and the resulting `Mixed*` issues are suppressed by default regardless (see [`reportMixedIssues`](config.md#reportmixedissues)).
 * **`Mixed*` suppression can orphan a template's own `@psalm-suppress`.** A `{{-- @psalm-suppress MixedArgument --}}` comment in a template is carried into the compiled shadow, but with `reportMixedIssues` at its default (off) the issue it would have silenced is already dropped before that comment is ever checked against it. Under `--find-unused-psalm-suppress` this reports `UnusedPsalmSuppress` on the template line. Either drop the now-redundant comment, or run with `reportMixedIssues="true"` when checking for unused suppressions.
+* **Compiler-generated code suppression has the same `UnusedPsalmSuppress` caveat.** A `{{-- @psalm-suppress MissingClosureParamType --}}` or `{{-- @psalm-suppress TooManyArguments --}}` comment aimed at a precompiler-generated call is redundant once that call is dropped at shadow emission (see [Compiler-generated code](#compiler-generated-code)), and reports `UnusedPsalmSuppress` under `--find-unused-psalm-suppress` for the same reason. There is no flag to opt back in: unlike `reportMixedIssues`, this suppression is unconditional.

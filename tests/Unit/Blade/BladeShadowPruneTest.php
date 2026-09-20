@@ -25,6 +25,7 @@ final class BladeShadowPruneTest extends TestCase
 
     private const COPIED_FILES = [
         'app/Greeter.php',
+        'app/Providers/LivewireStubProvider.php',
         'bootstrap/app.php',
         'bootstrap/cache/.gitignore',
         'config/view.php',
