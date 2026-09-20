@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\MissingClosureParamType;
+use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\TooManyArguments;
 
 /**
  * Rebuilds an issue Psalm found in a shadow file as the same issue positioned on the Blade template
@@ -48,6 +52,21 @@ final class ShadowIssueRelocator
      */
     public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
     {
+        // A compiled directive (Livewire tags in particular) injects untyped closures the template
+        // author cannot reach, and they dominate this family inside a shadow. Dropped
+        // unconditionally rather than snippet-gated like the arity check below, and the trade-off
+        // is real rather than free: a closure written inside `@php` or a raw PHP block CAN carry
+        // native types and a docblock, so an author's own missing closure type is silenced too.
+        // Accepted because it is a signature warning on code that is never called from outside the
+        // template, against a family that is otherwise pure precompiler noise (#1498).
+        if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
+            return false;
+        }
+
+        if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
+            return false;
+        }
+
         // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
         // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
         // by default, both on a mapped template line and on the prelude's own unmapped lines below.
@@ -93,6 +112,64 @@ final class ShadowIssueRelocator
         }
 
         return self::rebuild($issue, $overrides);
+    }
+
+    /**
+     * `TooManyArguments` gated on the ONE class it applies to, never the whole family: a
+     * compiled `@include`/`@extends` chain also expands into calls (`$__env->make()`) that an
+     * arity check would then silently drop as "generated" even when they carry a real bug such
+     * as `MissingView`.
+     *
+     * Generated and author-written calls are told apart by the call EXPRESSION, cut out of the
+     * shadow line at the issue's own selection offset, because neither end of the shadow line is
+     * usable on its own:
+     *
+     * - The whole line is compiler output. `{{ $x->f(1,2) }}` becomes `<?php echo e($x->f(1,2)); ?>`,
+     *   which no template contains, so matching the line would call every compiled syntax but a raw
+     *   `<?php ?>` block "generated" and drop real author issues.
+     * - The callee name alone (`getSelectedText()`, e.g. `mount`) is shared by every call to that
+     *   method, generated or not.
+     *
+     * Matching is against the WHOLE template source, not the mapped template line: generated code
+     * DOES inherit the injecting directive's line (the precompiler rewrites text that sits behind
+     * that line's marker), so a per-line match would compare the generated call against the very
+     * line whose directive produced it and learn nothing; and a multi-line construct gets no marker
+     * of its own ({@see MarkerPrePass::computeSkipLines()}), so an author's multi-line call maps to
+     * the line that OPENED it rather than the line the callee sits on.
+     */
+    private static function isGeneratedArityMismatch(TooManyArguments $issue, ShadowTarget $target): bool
+    {
+        $call = self::callExpression($issue->code_location);
+
+        if ($call === null) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+    }
+
+    /**
+     * The called expression an issue points at, read out of the shadow, or null to decline —
+     * fail open, since dropping a real author issue is the costly direction and an unreadable
+     * location is no evidence of anything.
+     */
+    private static function callExpression(CodeLocation $location): ?string
+    {
+        try {
+            $snippet = $location->getSnippet();
+            [$selectionStart] = $location->getSelectionBounds();
+            [$snippetStart] = $location->getSnippetBounds();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        // No marker stripping here, deliberately. `CodeLocation::$preview_start` is the located
+        // node's own `startFilePos`, so the snippet begins AT the callee name and a line-leading
+        // marker is already behind it; a marker further along the same shadow line would need the
+        // compiler to join two template lines, and a call that does span lines declines above
+        // anyway. Stripping instead would cut marker-shaped text out of an author's own string
+        // literal, leaving text the template does not contain and dropping a real issue.
+        return TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
     }
 
     /**
