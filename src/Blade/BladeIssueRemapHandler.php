@@ -34,6 +34,13 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
     private static bool $reportMixedIssues = false;
 
+    /**
+     * @var array<string, ShadowTarget|null> resolved shadows, negatives included: target() is asked
+     *      once per issue and again per taint journey hop, over the same handful of paths, and both
+     *      the registry and the template-source cache behind it are frozen before Psalm forks
+     */
+    private static array $targets = [];
+
     /** @psalm-external-mutation-free */
     public static function init(bool $reportMixedIssues): void
     {
@@ -44,6 +51,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
     {
         self::$remapping = false;
         self::$reportMixedIssues = false;
+        self::$targets = [];
     }
 
     #[\Override]
@@ -106,6 +114,15 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
     /** Null for any path that is not a registered shadow with a readable template. */
     private static function target(string $shadowPath): ?ShadowTarget
+    {
+        if (\array_key_exists($shadowPath, self::$targets)) {
+            return self::$targets[$shadowPath];
+        }
+
+        return self::$targets[$shadowPath] = self::resolveTarget($shadowPath);
+    }
+
+    private static function resolveTarget(string $shadowPath): ?ShadowTarget
     {
         $entry = ShadowRegistry::entryFor($shadowPath);
 

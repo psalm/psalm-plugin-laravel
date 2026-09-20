@@ -12,6 +12,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\StatementsSource;
 use Psalm\Type;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
@@ -247,16 +248,13 @@ final class ViewCallChain
             return;
         }
 
-        $type = $source->getNodeTypeProvider()->getType($arg->value);
-        $atomics = $type instanceof \Psalm\Type\Union ? $type->getAtomicTypes() : [];
+        $atomic = self::soleAtomic($arg->value, $source);
 
-        if (\count($atomics) !== 1) {
+        if (!$atomic instanceof Atomic) {
             $complete = false;
 
             return;
         }
-
-        $atomic = \reset($atomics);
 
         // `[]` infers as an empty TArray rather than a keyed array, and it is the one array shape
         // that proves the data set is empty.
@@ -291,25 +289,29 @@ final class ViewCallChain
     }
 
     /**
-     * The role of a receiver expression, following its class hierarchy: a `Mailable` at a call site
-     * is almost always a userland subclass, and {@see ViewNameSignatures} keys on exact names.
+     * The one atomic an expression infers to, or null when the type is unknown or a union —
+     * a union could be any of its arms, and picking one would be a guess.
      */
-    private static function roleOfReceiver(Expr $receiver, StatementsSource $source): ?string
+    private static function soleAtomic(Expr $expr, StatementsSource $source): ?Atomic
     {
-        $type = $source->getNodeTypeProvider()->getType($receiver);
+        $type = $source->getNodeTypeProvider()->getType($expr);
 
-        if (!$type instanceof \Psalm\Type\Union) {
+        if (!$type instanceof Union) {
             return null;
         }
 
         $atomics = $type->getAtomicTypes();
 
-        if (\count($atomics) !== 1) {
-            // A union receiver could be any of its arms; picking one would be a guess.
-            return null;
-        }
+        return \count($atomics) === 1 ? \reset($atomics) : null;
+    }
 
-        $atomic = \reset($atomics);
+    /**
+     * The role of a receiver expression, following its class hierarchy: a `Mailable` at a call site
+     * is almost always a userland subclass, and {@see ViewNameSignatures} keys on exact names.
+     */
+    private static function roleOfReceiver(Expr $receiver, StatementsSource $source): ?string
+    {
+        $atomic = self::soleAtomic($receiver, $source);
 
         if (!$atomic instanceof TNamedObject) {
             return null;

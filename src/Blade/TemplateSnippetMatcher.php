@@ -19,7 +19,7 @@ namespace Psalm\LaravelPlugin\Blade;
 final class TemplateSnippetMatcher
 {
     /** `BladeCompiler::compileComments()`'s pattern, for the default `{{`/`}}` content tags. */
-    private const BLADE_COMMENT_PATTERN = '/\{\{--(.*?)--\}\}/s';
+    private const BLADE_COMMENT_PATTERN = '/\{\{--.*?--\}\}/s';
 
     /**
      * Whether $snippet appears in $source once both are collapsed to single-spaced text. A

@@ -49,10 +49,15 @@ final class MarkerPrePass
      * that OPENS the construct still gets a marker (state hasn't switched yet
      * when that line's marker decision is made).
      *
+     * @param list<array{0: string, 1: int}>|null $masked ranges already computed by the caller —
+     *        {@see self::inject()} shares one scan with {@see self::extendsLine()} — or null to
+     *        derive them here
      * @return array<int, true>
      */
-    public static function computeSkipLines(string $source): array
+    public static function computeSkipLines(string $source, ?array $masked = null): array
     {
+        $masked ??= self::maskedRanges($source);
+
         $patterns = [
             '/\{\{\{.*?\}\}\}/s',
             '/\{!!.*?!!\}/s',
@@ -67,7 +72,6 @@ final class MarkerPrePass
         ];
 
         $skip = [];
-        $masked = self::maskedRanges($source);
 
         self::markSkipLines($source, $masked, $skip);
 
@@ -136,9 +140,14 @@ final class MarkerPrePass
 
         $pendingLine = null;
 
+        // Ascending offsets (one pattern), so the source is scanned for newlines once in total.
+        $cursor = 0;
+        $line = 1;
+
         foreach ($matches[0] as $i => [, $offset]) {
             $name = \strtolower($matches[1][$i][0]);
-            $line = 1 + \substr_count($source, "\n", 0, $offset);
+            $line += \substr_count($source, "\n", $cursor, $offset - $cursor);
+            $cursor = $offset;
 
             if ($name === 'switch') {
                 $pendingLine = $line;
@@ -164,14 +173,18 @@ final class MarkerPrePass
      */
     private static function blankRanges(string $source, array $ranges): string
     {
+        $out = '';
+        $cursor = 0;
+
         foreach ($ranges as [$text, $offset]) {
             $blanked = \preg_replace('/[^\n]/', ' ', $text);
             \assert($blanked !== null);
 
-            $source = \substr_replace($source, $blanked, $offset, \strlen($text));
+            $out .= \substr($source, $cursor, $offset - $cursor) . $blanked;
+            $cursor = $offset + \strlen($text);
         }
 
-        return $source;
+        return $out . \substr($source, $cursor);
     }
 
     /**
@@ -180,8 +193,13 @@ final class MarkerPrePass
      */
     private static function markSkipLines(string $source, array $matches, array &$skip): void
     {
+        // Ascending offsets (one pattern), so the source is scanned for newlines once in total.
+        $cursor = 0;
+        $startLine = 1;
+
         foreach ($matches as [$text, $offset]) {
-            $startLine = 1 + \substr_count($source, "\n", 0, $offset);
+            $startLine += \substr_count($source, "\n", $cursor, $offset - $cursor);
+            $cursor = $offset;
             $endLine = $startLine + \substr_count($text, "\n");
 
             for ($line = $startLine + 1; $line <= $endLine; $line++) {
@@ -201,9 +219,9 @@ final class MarkerPrePass
      */
     public static function inject(string $source): string
     {
-        $skip = self::computeSkipLines($source);
-        $lines = \preg_split('/(?<=\n)/', $source);
-        \assert($lines !== false);
+        $masked = self::maskedRanges($source);
+        $skip = self::computeSkipLines($source, $masked);
+        $lines = SourceLines::split($source);
 
         $out = '';
         $lineNumber = 1;
@@ -217,7 +235,7 @@ final class MarkerPrePass
             $lineNumber++;
         }
 
-        $extendsLine = self::extendsLine($source);
+        $extendsLine = self::extendsLine($source, $masked);
 
         if ($extendsLine !== null) {
             $out .= "<?php /* blade:{$extendsLine} */ ?>";
@@ -230,16 +248,19 @@ final class MarkerPrePass
      * The source line of an `@extends`/`@extendsFirst` directive, if any. A match
      * inside a Blade comment, `@verbatim` body or raw PHP block is not a live
      * directive and is skipped in favor of the next candidate, if any.
+     *
+     * @param list<array{0: string, 1: int}>|null $masked as in {@see self::computeSkipLines()};
+     *        a template with no `@extends` at all never needs them
      */
-    public static function extendsLine(string $source): ?int
+    public static function extendsLine(string $source, ?array $masked = null): ?int
     {
-        $matchCount = \preg_match_all('/@extends(First)?\s*\(/', $source, $matches, \PREG_OFFSET_CAPTURE);
+        $matchCount = \preg_match_all('/@extends(?:First)?\s*\(/', $source, $matches, \PREG_OFFSET_CAPTURE);
 
         if ($matchCount === false || $matchCount === 0) {
             return null;
         }
 
-        $masked = self::maskedRanges($source);
+        $masked ??= self::maskedRanges($source);
 
         /** @var list<array{0: string, 1: int}> $candidates */
         $candidates = $matches[0];

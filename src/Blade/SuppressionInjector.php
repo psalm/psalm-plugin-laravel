@@ -15,14 +15,24 @@ namespace Psalm\LaravelPlugin\Blade;
 final class SuppressionInjector
 {
     /**
+     * A shadow's own `<?php`/`<?=` open tag. The negative lookahead skips a marker's open tag,
+     * which is always immediately followed by ` /* blade:N *\/`.
+     */
+    private const OPEN_TAG_PATTERN = '/<\?(php|=)(?! \/\* blade:\d+ \*\/)/';
+
+    /**
      * @param array<int, int> $lineMap shadow line => blade source line (0 = prelude)
      */
     public function inject(string $shadowContent, string $bladeSource, array $lineMap): string
     {
-        $lines = \preg_split('/(?<=\n)/', $shadowContent);
-        \assert($lines !== false);
+        $suppressions = $this->findSuppressions($bladeSource);
 
-        $targets = $this->findTargets($lines, $bladeSource, $lineMap);
+        if ($suppressions === []) {
+            return $shadowContent;
+        }
+
+        $lines = SourceLines::split($shadowContent);
+        $targets = $this->findTargets($lines, $suppressions, $lineMap);
 
         if ($targets === []) {
             return $shadowContent;
@@ -46,12 +56,16 @@ final class SuppressionInjector
      */
     public function resolve(string $shadowContent, string $bladeSource, array $lineMap): array
     {
-        $lines = \preg_split('/(?<=\n)/', $shadowContent);
-        \assert($lines !== false);
+        $suppressions = $this->findSuppressions($bladeSource);
 
+        if ($suppressions === []) {
+            return [];
+        }
+
+        $lines = SourceLines::split($shadowContent);
         $resolved = [];
 
-        foreach ($this->findTargets($lines, $bladeSource, $lineMap) as $target) {
+        foreach ($this->findTargets($lines, $suppressions, $lineMap) as $target) {
             $resolved[$lineMap[$target['index'] + 1] ?? 0][] = $target['rule'];
         }
 
@@ -73,16 +87,17 @@ final class SuppressionInjector
     }
 
     /**
-     * @param list<string>    $lines
-     * @param array<int, int> $lineMap
+     * @param list<string>      $lines
+     * @param array<int, string> $suppressions blade line => suppressed rule
+     * @param array<int, int>   $lineMap
      *
      * @return list<array{index: int, rule: string}> shadow line index (0-based) => suppressed rule
      */
-    private function findTargets(array $lines, string $bladeSource, array $lineMap): array
+    private function findTargets(array $lines, array $suppressions, array $lineMap): array
     {
         $targets = [];
 
-        foreach ($this->findSuppressions($bladeSource) as $bladeLine => $rule) {
+        foreach ($suppressions as $bladeLine => $rule) {
             $targetIndex = $this->findTargetLine($lines, $lineMap, $bladeLine);
 
             if ($targetIndex === null) {
@@ -124,9 +139,7 @@ final class SuppressionInjector
                 continue;
             }
 
-            // The negative lookahead skips the marker's own `<?php`, which is
-            // always immediately followed by ` /* blade:N */`.
-            if (\preg_match('/<\?(php|=)(?! \/\* blade:\d+ \*\/)/', $line) === 1) {
+            if (\preg_match(self::OPEN_TAG_PATTERN, $line) === 1) {
                 return $index;
             }
         }
@@ -137,7 +150,7 @@ final class SuppressionInjector
     private function insertAfterOpenTag(string $line, string $rule): string
     {
         return (string) \preg_replace(
-            '/<\?(php|=)(?! \/\* blade:\d+ \*\/)/',
+            self::OPEN_TAG_PATTERN,
             "<?\$1 /** @psalm-suppress {$rule} */",
             $line,
             1,

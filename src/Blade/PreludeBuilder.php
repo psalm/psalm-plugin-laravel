@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Blade;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
+use PhpParser\Parser;
 use PhpParser\ParserFactory;
 
 /**
@@ -30,6 +31,8 @@ final class PreludeBuilder
         // Blade's loop cursor is a plain stdClass built from an array (ManagesLoops::getLastLoop()).
         'loop' => 'object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}',
     ];
+
+    private ?Parser $parser = null;
 
     /**
      * @param array<string, string> $contractVars variable name (without $) => FQCN
@@ -70,13 +73,19 @@ final class PreludeBuilder
         ));
     }
 
+    /** One parser for every template in the pass: constructing one re-reads PHP's own token tables. */
+    private function parser(): Parser
+    {
+        return $this->parser ??= (new ParserFactory())->createForNewestSupportedVersion();
+    }
+
     /**
      * @param array<string, string> $declared
      * @return list<string> variable names (without $), sorted, deduplicated
      */
     private function undeclaredVariables(string $compiled, array $declared): array
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $parser = $this->parser();
 
         try {
             $ast = $parser->parse($compiled) ?? [];

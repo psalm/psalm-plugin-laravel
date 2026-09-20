@@ -66,6 +66,9 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
         $config = Config::getInstance();
         $collector = new ViewReferenceCollector();
 
+        // Every project file is walked even once a dynamic reference has turned the rule off:
+        // getStatementsForFile() resets the file's diff map and deletion ranges on a cache hit, so
+        // skipping the rest would change what Psalm replays on an incremental run.
         foreach (FileStorageProvider::getAll() as $storage) {
             if (!$config->isInProjectDirs($storage->file_path)) {
                 // Excludes the compiled shadows themselves: their cache directory sits outside the
@@ -94,7 +97,7 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => [$templatePath]) {
+        foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => $templatePath) {
             self::report($viewName, $templatePath);
         }
     }

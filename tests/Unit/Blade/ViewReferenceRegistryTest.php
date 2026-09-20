@@ -25,7 +25,7 @@ final class ViewReferenceRegistryTest extends TestCase
     #[Test]
     public function a_template_with_no_reference_is_unused(): void
     {
-        ViewReferenceRegistry::registerTemplate('orphan', 0, '/app/views/orphan.blade.php', null);
+        ViewReferenceRegistry::registerTemplate('orphan', 0, '/app/views/orphan.blade.php');
 
         $unused = ViewReferenceRegistry::unusedTemplates();
 
@@ -35,7 +35,7 @@ final class ViewReferenceRegistryTest extends TestCase
     #[Test]
     public function a_referenced_template_is_not_unused(): void
     {
-        ViewReferenceRegistry::registerTemplate('profile', 0, '/app/views/profile.blade.php', null);
+        ViewReferenceRegistry::registerTemplate('profile', 0, '/app/views/profile.blade.php');
         ViewReferenceRegistry::addReference('profile');
 
         $this->assertSame([], ViewReferenceRegistry::unusedTemplates());
@@ -51,8 +51,8 @@ final class ViewReferenceRegistryTest extends TestCase
     #[Test]
     public function a_template_referenced_under_one_of_its_two_names_is_not_unused_under_the_other(): void
     {
-        ViewReferenceRegistry::registerTemplate('vendor.pkg.widget', 0, '/app/views/vendor/pkg/widget.blade.php', null);
-        ViewReferenceRegistry::registerTemplate('pkg::widget', 1, '/app/views/vendor/pkg/widget.blade.php', null);
+        ViewReferenceRegistry::registerTemplate('vendor.pkg.widget', 0, '/app/views/vendor/pkg/widget.blade.php');
+        ViewReferenceRegistry::registerTemplate('pkg::widget', 1, '/app/views/vendor/pkg/widget.blade.php');
         ViewReferenceRegistry::addReference('pkg::widget');
 
         $this->assertSame([], ViewReferenceRegistry::unusedTemplates(), 'the qualified reference covers both names of the same file');
@@ -65,8 +65,8 @@ final class ViewReferenceRegistryTest extends TestCase
     #[Test]
     public function a_template_with_two_unreferenced_names_is_reported_once(): void
     {
-        ViewReferenceRegistry::registerTemplate('vendor.pkg.widget', 0, '/app/views/vendor/pkg/widget.blade.php', null);
-        ViewReferenceRegistry::registerTemplate('pkg::widget', 1, '/app/views/vendor/pkg/widget.blade.php', null);
+        ViewReferenceRegistry::registerTemplate('vendor.pkg.widget', 0, '/app/views/vendor/pkg/widget.blade.php');
+        ViewReferenceRegistry::registerTemplate('pkg::widget', 1, '/app/views/vendor/pkg/widget.blade.php');
 
         $unused = ViewReferenceRegistry::unusedTemplates();
 
@@ -76,7 +76,7 @@ final class ViewReferenceRegistryTest extends TestCase
     #[Test]
     public function reset_clears_a_previous_invocations_templates_and_references(): void
     {
-        ViewReferenceRegistry::registerTemplate('profile', 0, '/app/views/profile.blade.php', null);
+        ViewReferenceRegistry::registerTemplate('profile', 0, '/app/views/profile.blade.php');
         ViewReferenceRegistry::addReference('profile');
         ViewReferenceRegistry::markDynamic();
 
