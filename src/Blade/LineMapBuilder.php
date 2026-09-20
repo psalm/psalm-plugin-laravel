@@ -19,12 +19,10 @@ final class LineMapBuilder
     public static function build(string $content, int $preludeLines = 0, string $markerPrefix = 'blade:'): array
     {
         $markers = [];
-        $pattern = '/^\/\* ' . \preg_quote($markerPrefix, '/') . '(\d+) \*\/$/D';
         foreach (\token_get_all($content) as $token) {
-            if (\is_array($token) && $token[0] === \T_COMMENT
-                && \preg_match($pattern, $token[1], $match) === 1
-            ) {
-                $markers[$token[2]] = (int) $match[1];
+            $sourceLine = MarkerComment::sourceLine($token, $markerPrefix);
+            if (\is_array($token) && $sourceLine !== null) {
+                $markers[$token[2]] = $sourceLine;
             }
         }
 

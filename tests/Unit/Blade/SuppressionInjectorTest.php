@@ -78,10 +78,22 @@ final class SuppressionInjectorTest extends TestCase
     }
 
     #[Test]
+    public function open_tag_text_inside_a_string_is_not_a_suppression_target(): void
+    {
+        $shadow = "<?php \$text = '\n<?php echo 1; ?>'; ?>\n<?php echo 2; ?>\n";
+        $bladeSource = "{{-- @psalm-suppress Foo --}}\ntext\n{{ 2 }}\n";
+        $lineMap = [1 => 1, 2 => 2, 3 => 3];
+        $injector = new SuppressionInjector();
+
+        $this->assertSame([3 => ['Foo']], $injector->resolve($shadow, $bladeSource, $lineMap));
+        $this->assertStringContainsString("<?php echo 1; ?>'; ?>", $injector->inject($shadow, $bladeSource, $lineMap));
+        $this->assertStringContainsString('<?php /** @psalm-suppress Foo */ echo 2; ?>', $injector->inject($shadow, $bladeSource, $lineMap));
+    }
+
+    #[Test]
     public function never_targets_the_markers_own_open_tag(): void
     {
-        // The marker itself opens with `<?php`; the negative lookahead in the
-        // injector must skip past it to the REAL statement's open tag.
+        // The marker itself opens PHP but has no statement to suppress.
         $shadow = "<?php /* blade:2 */ ?><?php echo e(\$foo); ?>\n";
         $bladeSource = "{{-- @psalm-suppress Foo --}}\n{{ \$foo }}\n";
         $lineMap = [1 => 2];

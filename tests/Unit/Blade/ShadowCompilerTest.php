@@ -69,6 +69,18 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
+    public function forged_marker_comments_do_not_redirect_suppressions(): void
+    {
+        $source = "{{-- @psalm-suppress InvalidArgument --}}\n<?php /* blade:deadbeef */ strlen([]); ?>\n<?php strlen([1]); ?>\n";
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame([2 => ['InvalidArgument']], $result->suppressions);
+        $this->assertStringContainsString('<?php /** @psalm-suppress InvalidArgument */ /* blade:deadbeef */ strlen([]); ?>', $result->contents);
+        $this->assertStringContainsString('<?php strlen([1]); ?>', $result->contents);
+    }
+
+    #[Test]
     public function compiles_a_plain_echo(): void
     {
         $result = $this->compiler->compile('view.blade.php', "Hello {{ \$name }}\n");

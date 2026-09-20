@@ -49,8 +49,8 @@ final class ShadowCompiler
         $preludeLines = \substr_count($prelude, "\n");
         $lineMap = LineMapBuilder::build($content, $preludeLines, $markerPrefix);
 
-        $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap);
-        $content = $this->suppressionInjector->inject($content, $source, $lineMap);
+        $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
+        $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);
 
         return new ShadowResult($content, $lineMap, MarkerPrePass::extendsLine($source), $suppressions);
     }
