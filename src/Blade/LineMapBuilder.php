@@ -20,10 +20,7 @@ final class LineMapBuilder
     {
         $map = [];
         $last = 1;
-        $lines = \preg_split('/(?<=\n)/', $content);
-        \assert($lines !== false);
-
-        foreach ($lines as $index => $line) {
+        foreach (SourceLines::split($content) as $index => $line) {
             $lineNumber = $index + 1;
 
             if ($lineNumber <= $preludeLines) {
