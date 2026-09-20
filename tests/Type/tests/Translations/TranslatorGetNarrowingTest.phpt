@@ -52,5 +52,74 @@ $_transLocale = trans('some.other.unresolvable.key', [], 'fr');
  */
 $_transNamedReplace = trans(replace: [], key: 'some.unresolvable.literal.key');
 /** @psalm-check-type-exact $_transNamedReplace = string */
+
+/**
+ * A trailing unpack can smuggle a locale (or fallback) into the call without
+ * either named-or-positional check above ever seeing it: the AST only has two
+ * Arg nodes here (the literal key, and the spread), so neither
+ * byNameOrPosition($args, 2, 'locale') nor position 3 finds anything, even
+ * though $rest fills exactly those positions at runtime. Any unpack anywhere
+ * in the argument list must decline the lookup entirely.
+ */
+$rest = [[], 'fr'];
+$_trailingUnpack = app('translator')->get('some.other.unresolvable.key', ...$rest);
+/** @psalm-check-type-exact $_trailingUnpack = array<array-key, mixed>|string */
+
+$_transTrailingUnpack = trans('some.other.unresolvable.key', ...$rest);
+/** @psalm-check-type-exact $_transTrailingUnpack = array<array-key, mixed>|string */
+
+/**
+ * Provenance: the method surface must narrow only the container-fetched
+ * singleton (`app('translator')` / `resolve('translator')`), the exact shape
+ * Blade's @lang compiles to. This handler's static state is captured from
+ * THAT booted singleton at plugin boot — a `new Translator(...)` receiver is a
+ * different, unrelated instance with its own locale and loader, so answering
+ * from the booted singleton's lookup state would be provenance-blind. Any
+ * other receiver expression keeps the vendor `string|array` union.
+ */
+$_loader = new class implements \Illuminate\Contracts\Translation\Loader {
+    #[\Override]
+    public function load($locale, $group, $namespace = null)
+    {
+        return [];
+    }
+
+    #[\Override]
+    public function addNamespace($namespace, $hint)
+    {
+    }
+
+    #[\Override]
+    public function addJsonPath($path)
+    {
+    }
+
+    #[\Override]
+    public function namespaces()
+    {
+        return [];
+    }
+};
+$_provenance = (new \Illuminate\Translation\Translator($_loader, 'fr'))->get('some.other.unresolvable.key');
+/** @psalm-check-type-exact $_provenance = array<array-key, mixed>|string */
+
+/**
+ * A `$replace` argument runs the resolved value through Laravel's
+ * makeReplacements() interpolation, which can turn a non-empty string into ''
+ * (e.g. a placeholder replaced with an empty value) — auth.throttle is a real
+ * Laravel default translation containing `:seconds`. A resolved non-empty-string
+ * must widen to plain string when replace is present; this also covers the
+ * pre-existing hole on the __()/trans() function surface, which shares the
+ * same lookup path.
+ */
+$_replaceWidensString = app('translator')->get('auth.throttle', ['seconds' => 5]);
+/** @psalm-check-type-exact $_replaceWidensString = string */
+
+$_transReplaceWidensString = trans('auth.throttle', ['seconds' => 5]);
+/** @psalm-check-type-exact $_transReplaceWidensString = string */
+
+// No replace argument: still precise (group/array results are also unaffected by replace).
+$_noReplaceStaysNonEmpty = app('translator')->get('auth.throttle');
+/** @psalm-check-type-exact $_noReplaceStaysNonEmpty = non-empty-string */
 ?>
 --EXPECTF--

@@ -68,6 +68,16 @@ use Psalm\Type\Union;
  * __()/trans(), and opt-in users scanning method calls they don't own (e.g. through a DI
  * container) would otherwise see a new, unexpected emission surface.
  *
+ * Beyond the class match, the method surface also gates on the RECEIVER EXPRESSION:
+ * only `app('translator')->get(...)` / `resolve('translator')->get(...)` (or their
+ * `Translator::class` argument form) — the exact shape Blade's `@lang` compiles to —
+ * are narrowed ({@see isContainerTranslatorReceiver()}). This handler's static state
+ * (`self::$translator`) is captured from the booted singleton at plugin boot; a `new
+ * Translator(...)` or any other receiver is a different instance with its own locale
+ * and loader, and answering from the booted singleton's lookup state for it would be
+ * provenance-blind. A DI-typed variable, property fetch, or method chain all decline
+ * and keep the vendor union.
+ *
  * @see https://laravel.com/docs/localization
  */
 final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
@@ -176,6 +186,9 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      * `PossiblyInvalidArgument` FP on the compiled echo for a resolvable key,
      * without hiding the genuine array case for a key that resolves to a
      * translation group (that becomes a precise `InvalidArgument` instead).
+     *
+     * Only narrows the container-fetched singleton receiver — see
+     * {@see isContainerTranslatorReceiver()} and the class docblock.
      */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
@@ -184,9 +197,15 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
             return null;
         }
 
+        $stmt = $event->getStmt();
+
+        if (!$stmt instanceof \PhpParser\Node\Expr\MethodCall || !self::isContainerTranslatorReceiver($stmt->var)) {
+            return null;
+        }
+
         $callArgs = $event->getCallArgs();
 
-        if ($callArgs === [] || $callArgs[0]->unpack) {
+        if ($callArgs === []) {
             return null;
         }
 
@@ -196,6 +215,50 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
             $event->getCodeLocation(),
             emitMissingTranslation: false,
         );
+    }
+
+    /**
+     * Whether $expr is `app('translator')`, `resolve('translator')`, or either
+     * called with `Illuminate\Translation\Translator::class` instead of the string
+     * literal — the receiver shape Blade's `@lang` compiles to. No provenance API
+     * exists at a return-type provider to trace an arbitrary expression back to the
+     * booted singleton, so this AST-level match is a deliberately narrow allowlist:
+     * a variable, `new Translator(...)`, a property fetch, or a method chain all
+     * decline, even though some of those could resolve to the same instance at
+     * runtime.
+     *
+     * Not annotated mutation-free: `FuncCall::getArgs()` is not, and Psalm rejects
+     * the annotation on any caller of a method that lacks it.
+     */
+    private static function isContainerTranslatorReceiver(\PhpParser\Node\Expr $expr): bool
+    {
+        if (!$expr instanceof \PhpParser\Node\Expr\FuncCall || !$expr->name instanceof \PhpParser\Node\Name) {
+            return false;
+        }
+
+        $functionName = \strtolower($expr->name->toString());
+
+        if ($functionName !== 'app' && $functionName !== 'resolve') {
+            return false;
+        }
+
+        $args = $expr->getArgs();
+
+        if ($args === [] || $args[0]->unpack) {
+            return false;
+        }
+
+        $firstArgValue = $args[0]->value;
+
+        if ($firstArgValue instanceof String_) {
+            return $firstArgValue->value === 'translator';
+        }
+
+        return $firstArgValue instanceof \PhpParser\Node\Expr\ClassConstFetch
+            && $firstArgValue->class instanceof \PhpParser\Node\Name
+            && $firstArgValue->name instanceof \PhpParser\Node\Identifier
+            && \strtolower($firstArgValue->name->toString()) === 'class'
+            && \ltrim($firstArgValue->class->toString(), '\\') === Translator::class;
     }
 
     /**
@@ -215,6 +278,12 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      * in another one, so a call naming either argument declines entirely, whether
      * or not it also carries a literal key.
      *
+     * An unpack ANYWHERE in the argument list (not just a leading one) also declines
+     * entirely: `get('key', ...$rest)` has exactly two AST `Arg` nodes (the literal
+     * key and the spread), so a locale or fallback `$rest` fills at runtime is
+     * invisible to the by-name-or-position checks above — there is no way to tell
+     * how many parameters the spread expands into, or with what names.
+     *
      * @param list<Arg> $args
      */
     private static function resolveKeyArgReturnType(
@@ -223,6 +292,12 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         CodeLocation $codeLocation,
         bool $emitMissingTranslation,
     ): ?Union {
+        foreach ($args as $arg) {
+            if ($arg->unpack) {
+                return null;
+            }
+        }
+
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
 
         if (!$keyArg instanceof Arg) {
@@ -247,6 +322,17 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
             );
 
             if ($resolved instanceof \Psalm\Type\Union) {
+                // A $replace argument runs the resolved value through Laravel's
+                // makeReplacements() interpolation, which can turn a non-empty
+                // string into '' (e.g. ':name' replaced with an empty value) —
+                // widen to plain string. Group/array results are untouched:
+                // interpolation only ever rewrites the string branch.
+                if ($resolved->hasString() && !$resolved->hasArray()
+                    && ArgUtil::byNameOrPosition($args, 1, 'replace') instanceof Arg
+                ) {
+                    return Type::getString();
+                }
+
                 return $resolved;
             }
         }
