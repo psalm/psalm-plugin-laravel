@@ -52,11 +52,13 @@ final class ShadowIssueRelocator
      */
     public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
     {
-        // A compiled directive (Livewire tags in particular) injects untyped closures, and a
-        // template has no docblock position to annotate a closure with, so the issue is
-        // unactionable wherever it came from. Dropped unconditionally rather than gated like the
-        // arity check below: the accepted cost is losing the same signature warning for a closure
-        // an author did write inside a raw PHP block in the template (#1498).
+        // A compiled directive (Livewire tags in particular) injects untyped closures the template
+        // author cannot reach, and they dominate this family inside a shadow. Dropped
+        // unconditionally rather than snippet-gated like the arity check below, and the trade-off
+        // is real rather than free: a closure written inside `@php` or a raw PHP block CAN carry
+        // native types and a docblock, so an author's own missing closure type is silenced too.
+        // Accepted because it is a signature warning on code that is never called from outside the
+        // template, against a family that is otherwise pure precompiler noise (#1498).
         if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
             return false;
         }
@@ -112,9 +114,6 @@ final class ShadowIssueRelocator
         return self::rebuild($issue, $overrides);
     }
 
-    /** {@see MarkerPrePass::inject()}'s own per-line marker, absent from the raw template it describes. */
-    private const MARKER_PATTERN = '/<\?php\s*\/\*\s*blade:\d+\s*\*\/\s*\?>/';
-
     /**
      * `TooManyArguments` gated on the ONE class it applies to, never the whole family: a
      * compiled `@include`/`@extends` chain also expands into calls (`$__env->make()`) that an
@@ -164,12 +163,13 @@ final class ShadowIssueRelocator
             return null;
         }
 
-        $call = TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
-
-        // A marker can only sit between two template lines, never inside one construct, so it
-        // survives here solely when the compiler emitted one mid-call; stripping costs nothing and
-        // keeps such a call matchable against the template.
-        return $call === null ? null : (string) \preg_replace(self::MARKER_PATTERN, '', $call);
+        // No marker stripping here, deliberately. `CodeLocation::$preview_start` is the located
+        // node's own `startFilePos`, so the snippet begins AT the callee name and a line-leading
+        // marker is already behind it; a marker further along the same shadow line would need the
+        // compiler to join two template lines, and a call that does span lines declines above
+        // anyway. Stripping instead would cut marker-shaped text out of an author's own string
+        // literal, leaving text the template does not contain and dropping a real issue.
+        return TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
     }
 
     /**

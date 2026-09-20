@@ -90,6 +90,33 @@ final class TemplateSnippetMatcherTest extends TestCase
     }
 
     #[Test]
+    public function a_parenthesis_inside_an_interpolated_string_does_not_end_the_argument_list(): void
+    {
+        // `"$label("` lexes as several tokens, one of which is the bare text `(`. Treating token
+        // TEXT as punctuation counts that as an opening paren, and the extraction then runs one
+        // `)` too far and swallows the compiler's own closing paren for `e(`. The result is absent
+        // from the template and a real author issue is dropped.
+        $line = '<?php /* blade:2 */ ?>  <?php echo e($x->mount("$label(", 2)); ?>';
+
+        $this->assertSame(
+            'mount("$label(", 2)',
+            TemplateSnippetMatcher::callExpressionAt($line, \strpos($line, 'mount(') ?: 0),
+        );
+    }
+
+    #[Test]
+    public function a_blade_comment_between_arguments_still_occurs(): void
+    {
+        // Blade strips `{{-- --}}` before compiling, so the compiled call has no comment in it and
+        // the raw template does. The template side has to be stripped the same way, or the call is
+        // never found and the issue is dropped as generated.
+        $this->assertTrue(TemplateSnippetMatcher::occursIn(
+            "mount('a', 'b')",
+            "<div>\n  {{ \$x->mount('a', {{-- why --}} 'b') }}\n</div>\n",
+        ));
+    }
+
+    #[Test]
     public function an_offset_that_does_not_start_a_call_declines(): void
     {
         // A `TooManyArguments` whose location is not a plain callee-name node: unjudgeable, and the

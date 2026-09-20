@@ -18,13 +18,22 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class TemplateSnippetMatcher
 {
+    /** `BladeCompiler::compileComments()`'s pattern, for the default `{{`/`}}` content tags. */
+    private const BLADE_COMMENT_PATTERN = '/\{\{--(.*?)--\}\}/s';
+
     /**
      * Whether $snippet appears in $source once both are collapsed to single-spaced text. A
      * multi-line snippet (a call spanning several lines) still matches this way; comparing
      * line-by-line instead would miss it and false-drop.
+     *
+     * Blade comments come out of $source first, because Blade itself removes them before it
+     * compiles anything else: `f('a', {{-- why --}} 'b')` reaches the shadow as `f('a', 'b')`, so
+     * leaving the comment in the template would make the author's own call unfindable.
      */
     public static function occursIn(string $snippet, string $source): bool
     {
+        $source = (string) \preg_replace(self::BLADE_COMMENT_PATTERN, '', $source);
+
         return \str_contains(self::normalize($source), self::normalize($snippet));
     }
 
@@ -97,12 +106,21 @@ final class TemplateSnippetMatcher
         $depth = 0;
 
         foreach ($tokens as $token) {
-            $piece = \is_array($token) ? $token[1] : $token;
-            $text .= $piece;
+            if (\is_array($token)) {
+                // Only a single-character token IS punctuation. A T_* token's TEXT can be a bare
+                // `(` — `"$label("` lexes the tail of the string as T_ENCAPSED_AND_WHITESPACE `(`
+                // — and counting that opens a level that never closes, so the scan runs one `)`
+                // too far and swallows the enclosing `e(` the compiler wrote.
+                $text .= $token[1];
 
-            if ($piece === '(') {
+                continue;
+            }
+
+            $text .= $token;
+
+            if ($token === '(') {
                 $depth++;
-            } elseif ($piece === ')' && --$depth === 0) {
+            } elseif ($token === ')' && --$depth === 0) {
                 return $text;
             }
         }

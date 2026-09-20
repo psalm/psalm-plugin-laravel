@@ -295,9 +295,32 @@ final class BladeIssueRemapTest extends TestCase
         // but reports on 4: a multi-line construct's continuation lines get no marker of their own
         // (see MarkerPrePass::computeSkipLines()), so the body inherits the `@php` line. That is
         // pre-existing line-map behaviour, not something this gate decides.
+        //
+        // Line 7 interpolates a variable next to a `(` inside a double-quoted argument, and line 8
+        // puts a Blade comment between two arguments. Both are cases where the compiled text and
+        // the raw template text diverge INSIDE the call, not just around it.
         $this->assertSame(
-            [2, 3, 4],
+            [2, 3, 4, 7, 8],
             $this->linesFor($issues, 'TooManyArguments', 'resources/views/authored-arity.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * A generated call and an author-written call to the same method, with different arguments, on
+     * ONE compiled shadow line. Each issue must be judged by the call at its own position: a gate
+     * that searched the line for the callee name instead would read the same (first) call for both
+     * and either drop both or keep both. The multi-byte text before them is there because the
+     * position arithmetic is in bytes.
+     */
+    #[Test]
+    public function two_calls_sharing_one_shadow_line_are_judged_independently(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'TooManyArguments', 'resources/views/same-line-arity.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
