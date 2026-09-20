@@ -19,6 +19,7 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\VariadicPlaceholder;
 use PhpParser\NodeFinder;
+use PhpParser\Parser;
 use PhpParser\ParserFactory;
 
 /**
@@ -51,19 +52,50 @@ use PhpParser\ParserFactory;
  */
 final class ViewReferenceCollector
 {
+    private ?Parser $parser = null;
+
+    /**
+     * @var array{0: string, 1: list<Stmt>|null}|null last source and its statements, null in the
+     *      second slot for a source that does not parse; the two shadow walks run back to back on
+     *      the same contents, so one slot halves the pass's parsing either way
+     */
+    private ?array $parsed = null;
+
     /** @return array{0: list<string>, 1: bool} view names referenced, and whether an unresolvable reference was seen */
     public function collectFromSource(string $php): array
     {
-        try {
-            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($php);
-        } catch (\Throwable) {
+        $stmts = $this->parse($php);
+
+        if ($stmts === null) {
             // Unparseable, not empty: a shadow this plugin's own compiler produced but cannot itself
             // parse says nothing about what the template includes, so treating it as "no references"
             // would cascade into false UnusedView positives on everything it actually renders.
             return [[], true];
         }
 
-        return $this->walk(\array_values($stmts ?? []), true);
+        return $this->walk($stmts, true);
+    }
+
+    /**
+     * @return list<Stmt>|null null when the source does not parse
+     */
+    private function parse(string $php): ?array
+    {
+        if ($this->parsed !== null && $this->parsed[0] === $php) {
+            return $this->parsed[1];
+        }
+
+        $this->parser ??= (new ParserFactory())->createForNewestSupportedVersion();
+
+        try {
+            $stmts = \array_values($this->parser->parse($php) ?? []);
+        } catch (\Throwable) {
+            $stmts = null;
+        }
+
+        $this->parsed = [$php, $stmts];
+
+        return $stmts;
     }
 
     /**
@@ -88,16 +120,16 @@ final class ViewReferenceCollector
      */
     public function collectDataIncludes(string $php): array
     {
-        try {
-            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($php);
-        } catch (\Throwable) {
+        $stmts = $this->parse($php);
+
+        if ($stmts === null) {
             return [[], true];
         }
 
         $names = [];
         $dynamic = false;
 
-        foreach ((new NodeFinder())->findInstanceOf(\array_values($stmts ?? []), MethodCall::class) as $call) {
+        foreach ((new NodeFinder())->findInstanceOf($stmts, MethodCall::class) as $call) {
             if (!$call->name instanceof Identifier || !$call->var instanceof Variable || $call->var->name !== '__env') {
                 continue;
             }

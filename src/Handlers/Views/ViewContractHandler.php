@@ -52,6 +52,9 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     /** @var array<string, Type\Union|null> declared type string => parsed union, null when unparseable */
     private static array $declaredTypes = [];
 
+    /** @var array<string, array<string, true>|null> view name => include-chain read set, null when unprovable */
+    private static array $readSets = [];
+
     /** @psalm-external-mutation-free */
     public static function init(bool $validateViewData, bool $reportUnusedViewData): void
     {
@@ -65,6 +68,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         self::$validateViewData = false;
         self::$reportUnusedViewData = false;
         self::$declaredTypes = [];
+        self::$readSets = [];
     }
 
     #[\Override]
@@ -151,7 +155,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return;
         }
 
-        $reads = ReadSetResolver::reads($chain->viewName);
+        $reads = self::readsFor($chain->viewName);
 
         if ($reads === null) {
             return;
@@ -218,7 +222,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
         $declared = self::declaredType($var->typeString);
 
-        if (!$declared instanceof \Psalm\Type\Union || $declared->hasMixed()) {
+        if (!$declared instanceof Type\Union || $declared->hasMixed()) {
             return;
         }
 
@@ -234,6 +238,21 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             ),
             $suppressedIssues,
         );
+    }
+
+    /**
+     * Closing a read set re-walks the whole include chain, and one template is rendered from many
+     * call sites. ContractRegistry is frozen after the compile pass, so the answer cannot change.
+     *
+     * @return array<string, true>|null
+     */
+    private static function readsFor(string $viewName): ?array
+    {
+        if (\array_key_exists($viewName, self::$readSets)) {
+            return self::$readSets[$viewName];
+        }
+
+        return self::$readSets[$viewName] = ReadSetResolver::reads($viewName);
     }
 
     /**

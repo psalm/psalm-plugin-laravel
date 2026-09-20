@@ -238,7 +238,6 @@ final class BladeBootstrapper
                     $template,
                     $roots,
                     $manifest->contractFor($shadowPath),
-                    $shadowPath,
                     $manifest->dataIncludesFor($shadowPath),
                 );
 
@@ -276,7 +275,7 @@ final class BladeBootstrapper
             try {
                 $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references, $dataIncludes);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract($template, $roots, $contract, $shadowPath, $dataIncludes);
+                $this->registerContract($template, $roots, $contract, $dataIncludes);
 
                 if ($references !== null) {
                     $this->applyReferences($references);
@@ -356,7 +355,7 @@ final class BladeBootstrapper
      */
     private function claimNameOnly(string $templatePath, array $roots): void
     {
-        $this->registerContract($templatePath, $roots, new ViewDataContract([], false), null);
+        $this->registerContract($templatePath, $roots, new ViewDataContract([], false));
 
         // Its own @include/@extends references are unknown, not empty: treating them as empty would
         // cascade into false UnusedView positives on everything this template actually renders.
@@ -377,7 +376,6 @@ final class BladeBootstrapper
         string $templatePath,
         array $roots,
         ?ViewDataContract $contract,
-        ?string $shadowPath,
         ?array $dataIncludes = null,
     ): void {
         // A published override's file matches more than one root (its default-root name AND its
@@ -388,9 +386,9 @@ final class BladeBootstrapper
                 continue;
             }
 
-            ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath, $shadowPath);
+            ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
 
-            if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
+            if (!$contract instanceof ViewDataContract) {
                 continue;
             }
 

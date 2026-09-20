@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Blade;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
+use PhpParser\Parser;
 use PhpParser\ParserFactory;
 use Stillat\BladeParser\Document\Document;
 use Stillat\BladeParser\Nodes\AbstractNode;
@@ -28,6 +29,8 @@ final class ContractParser
     private const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(\w+)\s*$/';
 
     private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(\S+)\s*$/';
+
+    private ?Parser $parser = null;
 
     public function parse(string $source, string $compiled): TemplateContract
     {
@@ -169,6 +172,12 @@ final class ContractParser
         return 1 + \substr_count(\mb_substr($source, 0, $position->startOffset), "\n");
     }
 
+    /** One parser for every template in the pass: constructing one re-reads PHP's own token tables. */
+    private function parser(): Parser
+    {
+        return $this->parser ??= (new ParserFactory())->createForNewestSupportedVersion();
+    }
+
     /**
      * @return array<string, bool>|null prop name => has a literal default; null when the array isn't fully literal
      */
@@ -180,7 +189,7 @@ final class ContractParser
             return null;
         }
 
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $parser = $this->parser();
 
         try {
             $ast = $parser->parse("<?php {$innerContent};");
@@ -288,7 +297,7 @@ final class ContractParser
      */
     private function walkReads(string $compiled): array
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $parser = $this->parser();
 
         try {
             $ast = $parser->parse($compiled) ?? [];

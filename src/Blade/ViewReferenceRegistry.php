@@ -22,7 +22,7 @@ final class ViewReferenceRegistry
 
     private static bool $dynamic = false;
 
-    /** @var array<string, array{0: int, 1: string, 2: string|null}> view name => [view root index, template path, shadow path] */
+    /** @var array<string, array{0: int, 1: string}> view name => [view root index, template path] */
     private static array $templates = [];
 
     /**
@@ -57,7 +57,7 @@ final class ViewReferenceRegistry
      *
      * @psalm-external-mutation-free
      */
-    public static function registerTemplate(string $viewName, int $rootIndex, string $templatePath, ?string $shadowPath): void
+    public static function registerTemplate(string $viewName, int $rootIndex, string $templatePath): void
     {
         $existing = self::$templates[$viewName] ?? null;
 
@@ -65,7 +65,7 @@ final class ViewReferenceRegistry
             return;
         }
 
-        self::$templates[$viewName] = [$rootIndex, $templatePath, $shadowPath];
+        self::$templates[$viewName] = [$rootIndex, $templatePath];
     }
 
     /**
@@ -75,7 +75,7 @@ final class ViewReferenceRegistry
      * property of the template PATH, not of any one of its names; a file with two names is reported
      * once, not once per unreferenced name.
      *
-     * @return array<string, array{0: string, 1: string|null}> view name => [template path, shadow path]
+     * @return array<string, string> view name => template path
      */
     public static function unusedTemplates(): array
     {
@@ -87,10 +87,10 @@ final class ViewReferenceRegistry
             }
         }
 
-        /** @var array<string, array{0: int, 1: string, 2: string|null}> $canonical template path => [root index, view name, shadow path] */
+        /** @var array<string, array{0: int, 1: string}> $canonical template path => [root index, view name] */
         $canonical = [];
 
-        foreach (self::$templates as $viewName => [$rootIndex, $templatePath, $shadowPath]) {
+        foreach (self::$templates as $viewName => [$rootIndex, $templatePath]) {
             if (isset($referencedPaths[$templatePath])) {
                 continue;
             }
@@ -101,13 +101,13 @@ final class ViewReferenceRegistry
                 continue;
             }
 
-            $canonical[$templatePath] = [$rootIndex, $viewName, $shadowPath];
+            $canonical[$templatePath] = [$rootIndex, $viewName];
         }
 
         $unused = [];
 
-        foreach ($canonical as $templatePath => [, $viewName, $shadowPath]) {
-            $unused[$viewName] = [$templatePath, $shadowPath];
+        foreach ($canonical as $templatePath => [, $viewName]) {
+            $unused[$viewName] = $templatePath;
         }
 
         return $unused;
