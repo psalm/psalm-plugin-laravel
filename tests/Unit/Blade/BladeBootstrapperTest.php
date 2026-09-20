@@ -247,6 +247,9 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($this->app(), $registrar)->boot();
 
         $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+        // Confirm, not assume: this plain template's shadow carries no string literal at all, so it
+        // must not be mistaken for a (vacuous) pass on the #1505 wiring below.
+        $this->assertSame([], $registrar->queuedResolvableClassLikes);
     }
 
     #[Test]
@@ -261,6 +264,40 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($this->app(), $second)->boot();
 
         $this->assertSame(PreludeBuilder::ambientClassNames(), $second->queuedClassLikes);
+        $this->assertSame([], $second->queuedResolvableClassLikes);
+    }
+
+    /**
+     * #1505: a compiled shadow's PHP string literal naming a class (the shape a vendor directive
+     * that writes `app('Vendor\Package\Class')::method()` compiles to) must be handed to the
+     * registrar's speculative-queueing method, separate from the ambient list above.
+     */
+    #[Test]
+    public function literal_named_classes_in_a_compiled_shadow_are_queued_for_scanning_on_a_fresh_compile(): void
+    {
+        $this->writeTemplate('widget.blade.php', "<p>{{ \$name }}</p>\n@php\necho 'Vendor\\Package\\Widget';\n@endphp\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame(['Vendor\Package\Widget'], $registrar->queuedResolvableClassLikes);
+    }
+
+    /**
+     * Same shape, second run: `ShadowCompiler` never runs on a warm manifest hit (see
+     * `BladeBootstrapper::compileAll()`'s `isFresh()` branch), so the extraction must come off the
+     * shadow FILE on disk rather than the fresh compile result the first run produced.
+     */
+    #[Test]
+    public function literal_named_classes_are_queued_on_a_warm_manifest_run_too(): void
+    {
+        $this->writeTemplate('widget.blade.php', "<p>{{ \$name }}</p>\n@php\necho 'Vendor\\Package\\Widget';\n@endphp\n");
+        $this->bootstrapper($this->app(), new RecordingShadowRegistrar())->boot();
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertSame(['Vendor\Package\Widget'], $second->queuedResolvableClassLikes);
     }
 
     #[Test]
