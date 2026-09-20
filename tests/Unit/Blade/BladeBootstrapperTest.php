@@ -178,6 +178,42 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
+     * A namespace can carry several hint roots where an EARLIER one sits inside the Composer vendor
+     * directory (filtered from discovery) and a later, project-local one survives. Laravel still
+     * resolves `pkg::widget` to the vendor file, so the surviving root's same-named template must
+     * NOT claim the name: claiming it would mark the local file as covered by references that never
+     * reach it, and check callers against a contract Laravel never renders. The local template is
+     * still discovered and analyzed — it just owns no view name.
+     */
+    #[Test]
+    public function a_hint_template_shadowed_by_a_filtered_vendor_root_does_not_claim_the_name(): void
+    {
+        $fakeVendor = $this->root . '/fake-vendor';
+        $vendorPkgViews = $fakeVendor . '/acme/pkg/views';
+        \mkdir($vendorPkgViews, 0o777, true);
+        \file_put_contents($vendorPkgViews . '/widget.blade.php', "<p>vendor</p>\n");
+
+        $localDir = $this->root . '/extra-views';
+        \mkdir($localDir, 0o777, true);
+        $local = $localDir . '/widget.blade.php';
+        \file_put_contents($local, "<p>{{ \$name }}</p>\n");
+        $local = (string) \realpath($local);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', [$vendorPkgViews, $localDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, vendorDirOverride: $fakeVendor))->boot();
+
+        $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the filtered vendor root still owns the name');
+        $this->assertSame([$local], $registrar->reportableTemplates, 'the local template is still analyzed');
+    }
+
+    /**
      * A boot can bind 'view' with a closure that needs runtime-only state and throws under the
      * plugin's partial boot, while still binding a perfectly good 'view.finder'. The throw must
      * fall through to the fallback, not disable Blade analysis for the run.

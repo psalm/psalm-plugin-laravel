@@ -44,7 +44,27 @@ final class BladeBootstrapper
          * per template, paid only by projects that turned the rule on.
          */
         private readonly bool $collectDataIncludes = false,
+        /**
+         * Test seam: the Composer vendor directory used by the hint-root filter. Null derives it
+         * from laravel/framework's install path, which in a unit test is the plugin's own vendor.
+         */
+        private readonly ?string $vendorDirOverride = null,
     ) {}
+
+    /**
+     * The finder the roots came from, kept for name-ownership checks against namespaces that lost
+     * a root to the vendor filter. Set by {@see resolveViewPaths()}, once per run instance.
+     */
+    private ?FileViewFinder $finder = null;
+
+    /**
+     * Namespaces with at least one hint root dropped by the vendor filter. For these, root order
+     * alone no longer mirrors Laravel's resolution — the dropped root still wins names in Laravel —
+     * so each surviving root's claim is verified against the finder. @see templateOwnsName()
+     *
+     * @var array<string, true>
+     */
+    private array $vendorShadowedNamespaces = [];
 
     public function boot(): void
     {
@@ -329,6 +349,10 @@ final class BladeBootstrapper
         // namespace's own name) — every match gets registered, or one of the two names a call site
         // can legitimately use resolves to nothing.
         foreach (ViewName::resolve($templatePath, $roots) as [$rootIndex, $viewName]) {
+            if (!$this->templateOwnsName($viewName, $templatePath)) {
+                continue;
+            }
+
             ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath, $shadowPath);
 
             if (!$contract instanceof \Psalm\LaravelPlugin\Blade\ViewDataContract) {
@@ -414,6 +438,8 @@ final class BladeBootstrapper
         foreach ($hints as $namespace => $hintPaths) {
             foreach ($hintPaths as $hint) {
                 if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
+                    $this->vendorShadowedNamespaces[$namespace] = true;
+
                     continue;
                 }
 
@@ -421,7 +447,34 @@ final class BladeBootstrapper
             }
         }
 
+        $this->finder = $finder;
+
         return $roots;
+    }
+
+    /**
+     * Whether Laravel itself would resolve `$viewName` to `$templatePath`. Only consulted for
+     * qualified names in a namespace that lost a hint root to the vendor filter: there, an earlier
+     * (dropped) root can still own the name, and letting a surviving root's same-named template
+     * claim it would cover the file with references that never reach it and check callers against
+     * a contract Laravel never renders. Everywhere else root order mirrors the finder exactly, so
+     * no filesystem probe is spent. A finder failure keeps the claim (the pre-check behavior).
+     */
+    private function templateOwnsName(string $viewName, string $templatePath): bool
+    {
+        $namespace = \strstr($viewName, '::', true);
+
+        if ($namespace === false || !isset($this->vendorShadowedNamespaces[$namespace]) || !$this->finder instanceof FileViewFinder) {
+            return true;
+        }
+
+        try {
+            $winner = \realpath($this->finder->find($viewName));
+        } catch (\Throwable) {
+            return true;
+        }
+
+        return $winner === $templatePath;
     }
 
     /**
@@ -433,6 +486,10 @@ final class BladeBootstrapper
      */
     private function vendorDirectory(): ?string
     {
+        if ($this->vendorDirOverride !== null) {
+            return $this->vendorDirOverride;
+        }
+
         if (!\class_exists(\Composer\InstalledVersions::class)) {
             return null;
         }
