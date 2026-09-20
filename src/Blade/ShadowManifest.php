@@ -36,6 +36,9 @@ final class ShadowManifest
      */
     private array $entries = [];
 
+    /** @var array<string, string> template path => generation selected in this invocation */
+    private array $activeGenerations = [];
+
     private ?string $fingerprintSuffix = null;
 
     public function __construct(private readonly string $shadowDir) {}
@@ -43,6 +46,7 @@ final class ShadowManifest
     /** Tolerates an absent or corrupt manifest file: starts empty either way. */
     public function load(): void
     {
+        $this->activeGenerations = [];
         $path = $this->manifestPath();
 
         if (!\is_file($path)) {
@@ -270,7 +274,7 @@ final class ShadowManifest
      */
     public function isFresh(string $templatePath, string $source, int $requiredSlots = 0): bool
     {
-        $shadowPath = $this->shadowPath($templatePath);
+        $shadowPath = $this->shadowPath($templatePath, $source);
         $entry = $this->entries[$shadowPath] ?? null;
 
         if ($entry === null || $entry[3] !== $this->fingerprint($source) || !\is_file($shadowPath)) {
@@ -281,16 +285,22 @@ final class ShadowManifest
             return false;
         }
 
-        return ($requiredSlots & self::SLOT_DATA_INCLUDES) === 0 || $entry[7] !== null;
+        if (($requiredSlots & self::SLOT_DATA_INCLUDES) !== 0 && $entry[7] === null) {
+            return false;
+        }
+
+        $this->activeGenerations[$templatePath] = $shadowPath;
+
+        return true;
     }
 
     /**
      * Where a template's shadow lives, whether or not it has been compiled yet. A caller that
      * skipped recompiling a fresh template still has to register the shadow with Psalm.
      */
-    public function shadowPathFor(string $templatePath): string
+    public function shadowPathFor(string $templatePath, string $source): string
     {
-        return $this->shadowPath($templatePath);
+        return $this->shadowPath($templatePath, $source);
     }
 
     /**
@@ -328,7 +338,7 @@ final class ShadowManifest
      */
     public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $references, ?array $dataIncludes = null): string
     {
-        $shadowPath = $this->shadowPath($templatePath);
+        $shadowPath = $this->shadowPath($templatePath, $source);
         $pid = \getmypid();
         $tmpPath = $shadowPath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
 
@@ -355,6 +365,7 @@ final class ShadowManifest
             $vars[$name] = [$var->typeString, $var->declarationLine, $var->optional];
         }
 
+        $this->activeGenerations[$templatePath] = $shadowPath;
         $this->entries[$shadowPath] = [
             $templatePath,
             $shadow->lineMap,
@@ -394,7 +405,7 @@ final class ShadowManifest
     }
 
     /**
-     * Removes shadow files (and their entries) for templates that no longer exist.
+     * Removes deleted-template shadows and retires superseded live-template entries.
      *
      * @param list<string> $liveTemplatePaths
      */
@@ -404,6 +415,14 @@ final class ShadowManifest
 
         foreach ($this->entries as $shadowPath => $entry) {
             if (isset($live[$entry[0]])) {
+                if (isset($this->activeGenerations[$entry[0]])
+                    && $this->activeGenerations[$entry[0]] !== $shadowPath
+                ) {
+                    // Another invocation can still be analyzing these bytes. Retire metadata
+                    // now; reclaim retained generations only when the cache is explicitly cleared.
+                    unset($this->entries[$shadowPath]);
+                }
+
                 continue;
             }
 
@@ -428,9 +447,9 @@ final class ShadowManifest
         }
     }
 
-    private function shadowPath(string $templatePath): string
+    private function shadowPath(string $templatePath, string $source): string
     {
-        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '.php';
+        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '-' . $this->fingerprint($source) . '.php';
     }
 
     /** The OS-level reason for the most recently suppressed warning, if any, as ": <message>". */

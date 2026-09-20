@@ -48,6 +48,49 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function prune_retires_superseded_metadata_without_unlinking_a_readers_generation(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $old = $manifest->store('/a.blade.php', 'old', new ShadowResult('<?php echo 1;', [1 => 1], null), $this->emptyContract(), null);
+        $manifest->flush();
+        $reader = new ShadowManifest($this->shadowDir);
+        $reader->load();
+
+        $new = $manifest->store('/a.blade.php', 'new', new ShadowResult('<?php echo 2;', [1 => 2], null), $this->emptyContract(), null);
+        $manifest->prune(['/a.blade.php']);
+        $manifest->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+        $this->assertNull($reloaded->shadowEntry($old));
+        $this->assertNotNull($reloaded->shadowEntry($new));
+        $this->assertTrue($reader->isFresh('/a.blade.php', 'old'));
+        $this->assertSame('<?php echo 1;', \file_get_contents($old));
+    }
+
+    #[Test]
+    public function overlapping_writers_keep_each_generations_bytes_and_metadata_together(): void
+    {
+        $a = new ShadowManifest($this->shadowDir);
+        $b = new ShadowManifest($this->shadowDir);
+        $a->load();
+        $b->load();
+        $old = $a->store('/race.blade.php', 'old', new ShadowResult('<?php strlen([]);', [1 => 1], null), $this->emptyContract(), null);
+        $new = $b->store('/race.blade.php', 'new', new ShadowResult("<?php strlen('ok');", [1 => 2], null), $this->emptyContract(), null);
+        $b->flush();
+        $a->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+        $this->assertNotSame($old, $new);
+        $this->assertSame('<?php strlen([]);', \file_get_contents($old));
+        $this->assertSame("<?php strlen('ok');", \file_get_contents($new));
+        $this->assertTrue($reloaded->isFresh('/race.blade.php', 'old'));
+        $this->assertFalse($reloaded->isFresh('/race.blade.php', 'new'));
+        $this->assertSame([1 => 1], $reloaded->shadowEntry($old)?->lineMap);
+    }
+
+    #[Test]
     public function load_tolerates_an_absent_manifest(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
@@ -338,7 +381,7 @@ final class ShadowManifestTest extends TestCase
         $manifest->load();
 
         $templatePath = '/app/views/foo.blade.php';
-        $shadowPath = $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '.php';
+        $shadowPath = $manifest->shadowPathFor($templatePath, 'source');
 
         // The pre-existing shadow file is directly writable; only CREATING a fresh file in
         // the directory is blocked. A non-atomic write truncates the existing file in place
