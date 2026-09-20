@@ -9,7 +9,10 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\MissingClosureParamType;
+use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
+use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
@@ -161,5 +164,37 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
 
         $this->assertNull($this->relocate($issue, $this->entry([9 => 99])));
+    }
+
+    #[Test]
+    public function a_missing_closure_param_type_is_dropped_unconditionally(): void
+    {
+        // Livewire's precompiler (and others like it) inject an untyped closure a template
+        // author has no docblock position to annotate (#1498).
+        $issue = new MissingClosureParamType('Parameter $x has no provided type', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function a_missing_closure_return_type_is_dropped_unconditionally(): void
+    {
+        $issue = new MissingClosureReturnType('Closure does not have a return type', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function a_toomanyarguments_issue_is_kept_when_its_snippet_cannot_be_read(): void
+    {
+        // No ProjectAnalyzer is booted in this pure-unit context, so `getSnippet()` throws for any
+        // real CodeLocation. That is exactly the "cannot be read" case the relocator must fail open
+        // on: proof the try/catch keeps the issue rather than dropping it on error.
+        $issue = new TooManyArguments('Too many arguments', $this->shadowLocation(9), 'Foo::bar');
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(TooManyArguments::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 }
