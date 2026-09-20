@@ -133,10 +133,11 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         }
 
         // The event omits Psalm's suppression list. Only enclosing statements can contribute it;
-        // a sibling's docblock must never become a template-wide suppression.
+        // a sibling's docblock must never become a template-wide suppression. A type issue can
+        // point inside the enclosing node's own docblock, before its first code token.
         $enclosing = (new NodeFinder())->find($statements, static fn(Node $node): bool
             => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike)
-            && $node->getStartFilePos() <= $location->raw_file_start
+            && ($node->getDocComment()?->getStartFilePos() ?? $node->getStartFilePos()) <= $location->raw_file_start
             && $node->getEndFilePos() >= $location->raw_file_end);
         $rules = [];
         foreach ($enclosing as $node) {

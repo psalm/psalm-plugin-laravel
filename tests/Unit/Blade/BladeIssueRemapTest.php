@@ -105,6 +105,17 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     #[Test]
+    public function suppressions_cover_issues_inside_their_own_docblock(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $this->assertSame([], $this->linesFor($issues, 'InvalidReturnType', 'docblock-suppression.blade.php'), \json_encode($issues, \JSON_THROW_ON_ERROR));
+        $matching = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => $issue['type'] === 'InvalidReturnStatement' && \str_ends_with($issue['file_path'], 'docblock-suppression.blade.php')));
+        $this->assertCount(1, $matching, \json_encode($matching, \JSON_THROW_ON_ERROR));
+        $this->assertStringContainsString('unsuppressed', $matching[0]['message']);
+    }
+
+    #[Test]
     public function php_suppressions_remain_local_to_their_statement(): void
     {
         $issues = $this->analyze('psalm.xml');
