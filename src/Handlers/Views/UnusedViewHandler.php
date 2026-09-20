@@ -67,6 +67,12 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
         $collector = new ViewReferenceCollector();
 
         foreach (FileStorageProvider::getAll() as $storage) {
+            // One dynamic reference — possibly already recorded at boot — turns the rule off for the
+            // whole run, so the remaining files' ASTs would be walked only to be discarded.
+            if (ViewReferenceRegistry::isDynamic()) {
+                break;
+            }
+
             if (!$config->isInProjectDirs($storage->file_path)) {
                 // Excludes the compiled shadows themselves: their cache directory sits outside the
                 // project tree by construction (docs/blade.md), so this is also what stops the
@@ -94,7 +100,7 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
             return;
         }
 
-        foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => [$templatePath]) {
+        foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => $templatePath) {
             self::report($viewName, $templatePath);
         }
     }
