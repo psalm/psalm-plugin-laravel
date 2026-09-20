@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Psalm\Config;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 
 /**
@@ -56,5 +57,47 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
             // code proved the class exists, so an unresolvable name must not be recorded as missing.
             $codebase->queueClassLikeForScanning($className, false, false);
         }
+    }
+
+    /** @inheritDoc */
+    #[\Override]
+    public function queueResolvableClassLikesForScanning(array $candidates): void
+    {
+        $codebase = $this->projectAnalyzer->getCodebase();
+        $config = $codebase->config;
+
+        foreach ($candidates as $candidate) {
+            if (!$this->isIndependentlyResolvable($config, $candidate)) {
+                continue;
+            }
+
+            // store_failure=false: a string literal is speculative by nature (most name no class at
+            // all), so a name that turns out unresolvable after all must never be recorded as
+            // missing — see queueClassLikesForScanning() above for the same rationale.
+            $codebase->queueClassLikeForScanning($candidate, false, false);
+        }
+    }
+
+    /**
+     * Whether Psalm could resolve `$candidate` to a file WITHOUT this method's own queueing being
+     * the reason it can. Neither arm below triggers autoloading (`class_exists()` etc. are always
+     * called with $autoload=false), so this mirrors what Psalm's scanner will do next rather than
+     * forcing a resolution that would not otherwise happen.
+     *
+     * The composer arm alone is not enough: `Config::$composer_class_loader` is nullable (a psalm.phar
+     * run with no project autoloader, or this plugin's own test fixtures, which stub `vendor/autoload.php`
+     * as a no-op), so the class_exists()-family arm is load-bearing, not belt-and-braces, for any
+     * class a real bootstrap already declared in-process.
+     */
+    private function isIndependentlyResolvable(Config $config, string $candidate): bool
+    {
+        if ($config->getComposerFilePathForClassLike($candidate) !== false) {
+            return true;
+        }
+
+        return \class_exists($candidate, false)
+            || \interface_exists($candidate, false)
+            || \trait_exists($candidate, false)
+            || \enum_exists($candidate, false);
     }
 }

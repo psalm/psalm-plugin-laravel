@@ -26,6 +26,11 @@ final class BladeShadowPruneTest extends TestCase
     private const COPIED_FILES = [
         'app/Greeter.php',
         'app/Providers/LivewireStubProvider.php',
+        // bootstrap/app.php require_once's both of these unconditionally (#1505's
+        // RouteHelperStubProvider); the scratch copy's boot fatals without them, whether or not any
+        // copied template actually uses the @routes/@bogusroute directives they register.
+        'app/Providers/RouteHelperStubProvider.php',
+        'packages/route-helper/src/RouteGenerator.php',
         'bootstrap/app.php',
         'bootstrap/cache/.gitignore',
         'config/view.php',

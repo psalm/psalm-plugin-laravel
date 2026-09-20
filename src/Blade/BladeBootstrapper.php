@@ -156,7 +156,32 @@ final class BladeBootstrapper
         // still gets them.
         $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
 
-        // Only now, with both registrations done: the registry is what turns a shadow-path issue
+        // #1505: a vendor directive can compile a class name into a PHP string literal
+        // (`app('Vendor\Package\Class')::method()`) instead of code position or a docblock, which
+        // neither Psalm's scanner nor the ambient queue above ever sees. Read every shadow off DISK
+        // rather than the fresh compile result above: on a warm-manifest run compileAll() never
+        // invokes ShadowCompiler at all (isFresh() short-circuits per template), so the file is the
+        // only source that exists on every run, not just a fresh one. This runs for every shadow
+        // every run, fresh or warm; the per-file token scan costs single-digit milliseconds even
+        // across a thousand shadows, so no manifest slot caches the result.
+        $collector = new ClassLiteralCollector();
+        $literalCandidates = [];
+
+        foreach ($shadows as $shadowPath) {
+            $shadowSource = @\file_get_contents($shadowPath);
+
+            if ($shadowSource === false) {
+                continue;
+            }
+
+            foreach ($collector->collectFromSource($shadowSource) as $candidate) {
+                $literalCandidates[$candidate] = true;
+            }
+        }
+
+        $this->registrar->queueResolvableClassLikesForScanning(\array_keys($literalCandidates));
+
+        // Only now, with all registrations done: the registry is what turns a shadow-path issue
         // into a template-path one, and a shadow Psalm never analyzes has nothing to remap.
         foreach ($shadows as $shadowPath) {
             $entry = $manifest->shadowEntry($shadowPath);
