@@ -20,6 +20,7 @@ final class LineMapBuilder
     {
         $map = [];
         $last = 1;
+
         foreach (SourceLines::split($content) as $index => $line) {
             $lineNumber = $index + 1;
 

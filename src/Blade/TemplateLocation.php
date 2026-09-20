@@ -32,7 +32,7 @@ final class TemplateLocation
      *
      * @return array{int, int}|null
      */
-    public static function lineBounds(string $source, int $line): ?array
+    private static function lineBounds(string $source, int $line): ?array
     {
         $start = 0;
 

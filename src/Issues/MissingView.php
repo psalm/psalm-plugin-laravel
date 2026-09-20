@@ -14,5 +14,5 @@ final class MissingView extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingView/';
 
-    // No ERROR_LEVEL override: controller by the plugin setting findMissingViews
+    // No ERROR_LEVEL override: controlled by the plugin setting findMissingViews
 }
