@@ -16,9 +16,9 @@ final class SuppressionInjector
 {
     /**
      * A shadow's own `<?php`/`<?=` open tag. The negative lookahead skips a marker's open tag,
-     * which is always immediately followed by ` /* blade:N *\/`.
+     * which is always immediately followed by ` /* blade:…:N *\/`.
      */
-    private const OPEN_TAG_PATTERN = '/<\?(php|=)(?! \/\* blade:\d+ \*\/)/';
+    private const OPEN_TAG_PATTERN = '/<\?(php|=)(?! \/\* blade:[a-f0-9:]+ \*\/)/';
 
     /**
      * @param array<int, int> $lineMap shadow line => blade source line (0 = prelude)

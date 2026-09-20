@@ -33,6 +33,21 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
+    public function author_marker_text_cannot_change_the_line_map(): void
+    {
+        $source = "{!! '/* blade:999 */' . request()->input('q') !!}\n<?php /* blade:1 */ strlen([]); ?>\n/* blade:999 */\n";
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertNotContains(999, $result->lineMap);
+        foreach (\explode("\n", $result->contents) as $index => $line) {
+            if (\str_contains($line, 'strlen([])')) {
+                $this->assertSame(2, $result->lineMap[$index + 1]);
+            }
+        }
+    }
+
+    #[Test]
     public function compiles_a_plain_echo(): void
     {
         $result = $this->compiler->compile('view.blade.php', "Hello {{ \$name }}\n");
@@ -189,6 +204,7 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertStringContainsString('@psalm-suppress UndefinedVariable', $result->contents);
+        $this->assertStringContainsString('<?php /** @psalm-suppress UndefinedVariable */ echo e($foo)', $result->contents);
         $this->assertLessThan(
             \strpos($result->contents, 'echo e($foo)'),
             \strpos($result->contents, '@psalm-suppress UndefinedVariable'),

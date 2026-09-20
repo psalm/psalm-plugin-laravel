@@ -217,7 +217,7 @@ final class MarkerPrePass
      * would inherit the LAST content line's marker instead of the line the
      * `@extends` directive actually appears on.
      */
-    public static function inject(string $source): string
+    public static function inject(string $source, string $markerPrefix = 'blade:'): string
     {
         $masked = self::maskedRanges($source);
         $skip = self::computeSkipLines($source, $masked);
@@ -228,7 +228,7 @@ final class MarkerPrePass
 
         foreach ($lines as $line) {
             if (!isset($skip[$lineNumber]) && \trim($line) !== '') {
-                $out .= "<?php /* blade:{$lineNumber} */ ?>";
+                $out .= "<?php /* {$markerPrefix}{$lineNumber} */ ?>";
             }
 
             $out .= $line;
@@ -238,7 +238,7 @@ final class MarkerPrePass
         $extendsLine = self::extendsLine($source, $masked);
 
         if ($extendsLine !== null) {
-            $out .= "<?php /* blade:{$extendsLine} */ ?>";
+            $out .= "<?php /* {$markerPrefix}{$extendsLine} */ ?>";
         }
 
         return $out;
