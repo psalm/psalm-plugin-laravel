@@ -29,6 +29,8 @@ final class UnusedViewTest extends TestCase
 {
     private const FIXTURE = __DIR__ . '/Fixtures/UnusedView';
 
+    private const NAMESPACED_FIXTURE = __DIR__ . '/Fixtures/UnusedViewNamespaced';
+
     private const DYNAMIC_FIXTURE = __DIR__ . '/Fixtures/UnusedViewDynamic';
 
     private const DIRECTIVES_FIXTURE = __DIR__ . '/Fixtures/UnusedViewDirectives';
@@ -52,6 +54,7 @@ final class UnusedViewTest extends TestCase
     /** @var list<string> */
     private const FIXTURES = [
         self::FIXTURE,
+        self::NAMESPACED_FIXTURE,
         self::DYNAMIC_FIXTURE,
         self::DIRECTIVES_FIXTURE,
         self::COMPONENT_TAG_FIXTURE,
@@ -139,6 +142,29 @@ final class UnusedViewTest extends TestCase
         $this->assertCount(1, $issues, \var_export($issues, true));
         $this->assertSame('orphan.blade.php', $issues[0]['file']);
         $this->assertStringContainsString('orphan', $issues[0]['message']);
+    }
+
+    /**
+     * A template registered only through `loadViewsFrom($dir, $namespace)` — a finder namespace
+     * hint, never `getPaths()` — must be discovered at all (#1497). Before the fix it was invisible
+     * to discovery entirely, so `orphan.blade.php` under the same hint directory could never be
+     * flagged unused; that missing report is the teeth this test pins.
+     */
+    #[Test]
+    public function a_namespace_hint_orphan_is_reported_and_a_referenced_one_is_not(): void
+    {
+        $issues = $this->unusedViewIssues(self::NAMESPACED_FIXTURE, 'psalm.xml');
+
+        $orphaned = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'orphan.blade.php',
+        ));
+        $this->assertCount(1, $orphaned, 'a namespace-hint template with no call site must still be caught: ' . \var_export($issues, true));
+
+        $this->assertSame([], \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['file'] === 'widget.blade.php',
+        )), "view('pkg::widget') must be recognized as a reference to the namespaced template: " . \var_export($issues, true));
     }
 
     /**

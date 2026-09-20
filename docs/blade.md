@@ -9,10 +9,11 @@ Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports 
 
 ## What is analyzed
 
-* Every `*.blade.php` file under the booted application's view paths (`config('view.paths')` plus whatever service providers added).
+* Every `*.blade.php` file under the booted application's view paths (`config('view.paths')`), plus every namespace hint a service provider registered with `loadViewsFrom()` (`view('pkg::widget')`) — outside your Composer vendor directory. A namespace's own internal templates (Laravel's `notifications`/`pagination`/`laravel-exceptions` namespaces, or any other vendored package's) are never discovered: they ship with component tags and dynamic includes the reference collector cannot resolve, and unioning them in would disable UnusedView project-wide the moment Blade analysis is enabled.
 * Each template is compiled through the application's own Blade compiler into a standalone PHP file (a "shadow"), and the shadow is what Psalm actually scans. The template itself is never handed to Psalm as PHP.
 * Each template is analyzed on its own. `@include`, `@extends`, and component tags are not followed into the files they reference.
 * Issues found in the shadow are relocated onto the `.blade.php` path and the matching template line before they are reported. Nothing in the output points at the compiled shadow.
+* If discovery finds zero templates while Blade analysis is enabled, the plugin emits one warning — invisible under `--no-progress`, since Psalm's own `VoidProgress` drops every warning in that mode.
 
 ## Enabling it
 
