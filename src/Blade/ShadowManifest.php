@@ -20,7 +20,7 @@ final class ShadowManifest
     private const MANIFEST_FILE = 'manifest.php';
 
     /** Bump when MarkerPrePass changes in a way that changes shadow output for the same source. */
-    private const MARKER_PASS_VERSION = 2;
+    private const MARKER_PASS_VERSION = 3;
 
     /** {@see self::isFresh()}: the references slot must have been collected for the entry to count as fresh. */
     public const SLOT_REFERENCES = 1;
