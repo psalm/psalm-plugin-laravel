@@ -127,7 +127,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         $location = $issue->code_location;
         try {
             $statements = $event->getCodebase()->getStatementsForFile($issue->getFilePath());
-        } catch (\Throwable) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            // Unregistered or unreadable shadow: no suppressions provable, never a crash mid-emission.
             return [];
         }
 
