@@ -357,6 +357,62 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1500: Blade's compiled output carries its own bookkeeping — the `$__componentOriginal*` /
+     * `$__attributesOriginal*` save-and-restore pair around a `<x-...>` tag, and the tail
+     * `$loop = $__env->getLastLoop();` reassignment at `@endforeach` — that the template author
+     * never wrote and has no way to read back, plus a `@switch` arm's `@break` makes Psalm treat
+     * the following `@case`/`@default` line as unreachable. All of that must not surface as
+     * `UnusedVariable` / `UnevaluatedCode` on the template.
+     *
+     * `findUnusedVariablesAndParams` is opt-in (off by default, see `psalm.xml`'s sibling
+     * configs), so this needs its own config rather than reusing `psalm.xml`.
+     */
+    #[Test]
+    public function compiler_bookkeeping_unused_code_is_dropped(): void
+    {
+        $issues = $this->analyze('psalm-unused-code.xml');
+        $template = 'resources/views/compiler-bookkeeping.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'UnusedVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'UnevaluatedCode', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: if the `<x-alert>` tag never compiled (fixture missing
+        // composer.json breaks Application::getNamespace(), #1500's own trap), the template would
+        // report nothing and the assertions above would pass for the wrong reason.
+        $this->assertStringContainsString(
+            '$__componentOriginal',
+            $this->allShadowSources(),
+            'the fixture component never compiled: no $__componentOriginal* save found in any compiled shadow',
+        );
+    }
+
+    /**
+     * The negative case for #1500: an author-named `@foreach` variable that is never read is real
+     * signal and must keep reporting, even though the compiler's OWN `$loop` bookkeeping next to it
+     * is dropped.
+     */
+    #[Test]
+    public function an_unused_foreach_value_still_reports(): void
+    {
+        $issues = $this->analyze('psalm-unused-code.xml');
+        $template = 'resources/views/foreach-unused-value.blade.php';
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UnusedForeachValue', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
     private function allShadowSources(): string
     {

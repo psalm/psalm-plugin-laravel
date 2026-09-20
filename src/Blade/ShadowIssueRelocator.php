@@ -11,6 +11,8 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\TooManyArguments;
+use Psalm\Issue\UnevaluatedCode;
+use Psalm\Issue\UnusedVariable;
 
 /**
  * Rebuilds an issue Psalm found in a shadow file as the same issue positioned on the Blade template
@@ -60,6 +62,34 @@ final class ShadowIssueRelocator
         // Accepted because it is a signature warning on code that is never called from outside the
         // template, against a family that is otherwise pure precompiler noise (#1498).
         if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
+            return false;
+        }
+
+        // Compiled bookkeeping the template author never wrote and cannot read back: the
+        // `$__componentOriginal*`/`$__attributesOriginal*` tail restores around a `<x-...>` tag and
+        // the `$loop = $__env->getLastLoop();` reassignment at the end of `@foreach`/`@forelse` are
+        // both standalone writes with no later read (#1500). Dropped unconditionally: there is no
+        // narrower signal to gate on, and `UnusedForeachValue` is NOT included here — it fires only
+        // on the author-named foreach variable, which is real signal.
+        //
+        // Trade-off: an author's own dead store inside `@php` and an unused foreach KEY report as
+        // `UnusedVariable` too and are silenced along with the compiler noise.
+        if ($issue instanceof UnusedVariable) {
+            return false;
+        }
+
+        // `UnevaluatedCode` is not one shape: a `@switch` arm's `@break` leaves Psalm treating the
+        // rest of the compiled switch body as unreachable, flagging the following `@case`/`@default`
+        // line with this exact message (StatementsAnalyzer::processStmt(), gated on
+        // find_unused_variables) — that shape is compiler noise and dropped. The OTHER shape sharing
+        // this class, `'gettype cannot return this value'` (AssertionFinder, ungated), is a genuine
+        // author typo in a `gettype()` comparison and must keep reporting, so the drop is gated on
+        // the message rather than the class. The message names the Psalm code path that emitted it,
+        // not who wrote the unreachable code, so an author's own dead statement after a
+        // `return`/`throw`/`continue` in `@php` or raw PHP gets the same message and is silenced
+        // too; accepted as a documented limitation, since this method has only the message and
+        // location to go on, never the AST.
+        if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
             return false;
         }
 
