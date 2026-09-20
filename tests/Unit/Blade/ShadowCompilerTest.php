@@ -58,6 +58,25 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
+    public function a_false_php_opener_does_not_mask_following_template_lines(): void
+    {
+        $source = "<?php-not-php ?>\n{{ strlen([]) }}\n{{ strval(1) }}\n";
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $plain = (new BladeCompiler(new Filesystem(), \sys_get_temp_dir()))->compileString($source);
+        $this->assertNotNull($parser->parse($plain));
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertNotNull($parser->parse($result->contents));
+        $this->assertStringContainsString('<?php-not-php ?>', $result->contents);
+        foreach (['strlen([])' => 2, 'strval(1)' => 3] as $expression => $bladeLine) {
+            $matching = \array_filter(\explode("\n", $result->contents), static fn(string $line): bool => \str_contains($line, $expression));
+            $this->assertCount(1, $matching);
+            $this->assertSame($bladeLine, $result->lineMap[\array_key_first($matching) + 1]);
+        }
+    }
+
+    #[Test]
     public function author_marker_text_cannot_change_the_line_map(): void
     {
         $source = "{!! '/* blade:999 */' . request()->input('q') !!}\n<?php /* blade:1 */ strlen([]); ?>\n/* blade:999 */\n";

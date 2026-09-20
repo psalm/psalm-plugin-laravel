@@ -36,8 +36,15 @@ final class MarkerPrePass
         while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {
             [$text, $offset] = $match[0];
             if (\str_starts_with($text, '<?')) {
+                $tokens = \token_get_all(\substr($source, $offset));
+                $first = $tokens[0] ?? null;
+                if (!\is_array($first) || ($first[0] !== \T_OPEN_TAG && $first[0] !== \T_OPEN_TAG_WITH_ECHO)) {
+                    $cursor = $offset + \strlen($text);
+                    continue;
+                }
+
                 $length = 0;
-                foreach (\token_get_all(\substr($source, $offset)) as $token) {
+                foreach ($tokens as $token) {
                     if (\is_array($token) && $token[0] === \T_CLOSE_TAG) {
                         $length += \strlen(\rtrim($token[1], "\r\n"));
                         break;
