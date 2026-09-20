@@ -13,7 +13,7 @@ Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports 
 * Each template is compiled through the application's own Blade compiler into a standalone PHP file (a "shadow"), and the shadow is what Psalm actually scans. The template itself is never handed to Psalm as PHP.
 * Each template is analyzed on its own. `@include`, `@extends`, and component tags are not followed into the files they reference.
 * Issues found in the shadow are relocated onto the `.blade.php` path and the matching template line before they are reported. Nothing in the output points at the compiled shadow.
-* If discovery finds zero templates while Blade analysis is enabled, the plugin emits one warning naming the cause — invisible under `--no-progress`, since Psalm's own `VoidProgress` drops every warning in that mode.
+* If discovery finds zero templates while Blade analysis is enabled, the plugin emits one warning — invisible under `--no-progress`, since Psalm's own `VoidProgress` drops every warning in that mode.
 
 ## Enabling it
 

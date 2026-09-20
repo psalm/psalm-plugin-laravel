@@ -177,6 +177,31 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertNotNull(ContractRegistry::contractFor('vendor.pkg.widget'));
     }
 
+    /**
+     * A boot can bind 'view' with a closure that needs runtime-only state and throws under the
+     * plugin's partial boot, while still binding a perfectly good 'view.finder'. The throw must
+     * fall through to the fallback, not disable Blade analysis for the run.
+     */
+    #[Test]
+    public function a_throwing_view_binding_falls_back_to_the_view_finder_binding(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->bind('view', static function (): never {
+            throw new \RuntimeException('needs runtime-only state');
+        });
+        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
+
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([$template], $registrar->reportableTemplates);
+    }
+
     #[Test]
     public function queues_the_ambient_prelude_classes_for_scanning_on_a_fresh_compile(): void
     {

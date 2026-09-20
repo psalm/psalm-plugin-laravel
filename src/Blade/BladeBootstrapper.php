@@ -469,20 +469,26 @@ final class BladeBootstrapper
      */
     private function resolveFinder(): ?FileViewFinder
     {
-        try {
-            if ($this->app->bound('view')) {
+        // Each branch catches on its own: a 'view' closure that throws under the plugin's partial
+        // boot (documented boot shape) must fall through to 'view.finder', not disable the feature.
+        if ($this->app->bound('view')) {
+            try {
                 $finder = $this->asFactoryFinder($this->app->make('view'));
 
                 if ($finder instanceof FileViewFinder) {
                     return $finder;
                 }
+            } catch (\Throwable $throwable) {
+                $this->output->debug('Laravel plugin: resolving the view factory threw: ' . $throwable->getMessage() . "\n");
             }
+        }
 
-            if ($this->app->bound('view.finder')) {
+        if ($this->app->bound('view.finder')) {
+            try {
                 return $this->asFinder($this->app->make('view.finder'));
+            } catch (\Throwable $throwable) {
+                $this->output->debug('Laravel plugin: resolving the view finder threw: ' . $throwable->getMessage() . "\n");
             }
-        } catch (\Throwable $throwable) {
-            $this->output->debug('Laravel plugin: resolving the view finder threw: ' . $throwable->getMessage() . "\n");
         }
 
         return null;
