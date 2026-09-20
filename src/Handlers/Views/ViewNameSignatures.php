@@ -106,6 +106,25 @@ final class ViewNameSignatures
     }
 
     /**
+     * Every receiver class one family dispatches on; registration order is observable, so the
+     * concrete class stays first.
+     *
+     * @param array{concrete: class-string, facade: class-string|null, extra: list<class-string>} $family
+     * @return list<class-string>
+     * @psalm-external-mutation-free
+     */
+    private static function classesFor(array $family): array
+    {
+        $classes = [$family['concrete'], ...$family['extra']];
+
+        if ($family['facade'] !== null) {
+            $classes[] = $family['facade'];
+        }
+
+        return [...$classes, ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
+    }
+
+    /**
      * @return list<class-string>
      * @psalm-external-mutation-free
      */
@@ -114,13 +133,9 @@ final class ViewNameSignatures
         $names = [];
 
         foreach (self::FAMILIES as $family) {
-            $names = [...$names, $family['concrete'], ...$family['extra']];
-
-            if ($family['facade'] !== null) {
-                $names[] = $family['facade'];
+            foreach (self::classesFor($family) as $class) {
+                $names[] = $class;
             }
-
-            $names = [...$names, ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
         }
 
         return \array_values(\array_unique($names));
@@ -136,13 +151,7 @@ final class ViewNameSignatures
             $classToRole = [];
 
             foreach (self::FAMILIES as $role => $family) {
-                $classes = [$family['concrete'], ...$family['extra'], ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
-
-                if ($family['facade'] !== null) {
-                    $classes[] = $family['facade'];
-                }
-
-                foreach ($classes as $class) {
+                foreach (self::classesFor($family) as $class) {
                     $classToRole[\strtolower($class)] = $role;
                 }
             }

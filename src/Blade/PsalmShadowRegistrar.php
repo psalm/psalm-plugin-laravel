@@ -37,13 +37,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function registerShadowsForAnalysis(array $shadowPaths): void
     {
-        $files = [];
-
-        foreach ($shadowPaths as $shadowPath) {
-            $files[$shadowPath] = $shadowPath;
-        }
-
-        $this->projectAnalyzer->getCodebase()->addFilesToAnalyze($files);
+        $this->projectAnalyzer->getCodebase()->addFilesToAnalyze(\array_combine($shadowPaths, $shadowPaths));
     }
 
     /** @inheritDoc */
@@ -53,8 +47,10 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         $codebase = $this->projectAnalyzer->getCodebase();
 
         foreach ($classNames as $className) {
-            // store_failure=false: these are queued speculatively on every run, not because project
-            // code proved the class exists, so an unresolvable name must not be recorded as missing.
+            // store_failure=false: every name reaching here is queued speculatively — a compiled
+            // component reference on every run, or a bare string literal that most often names no
+            // class at all — never because project code proved the class exists. An unresolvable
+            // name must therefore not be recorded as missing.
             $codebase->queueClassLikeForScanning($className, false, false);
         }
     }
@@ -63,19 +59,12 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function queueResolvableClassLikesForScanning(array $candidates): void
     {
-        $codebase = $this->projectAnalyzer->getCodebase();
-        $config = $codebase->config;
+        $config = $this->projectAnalyzer->getCodebase()->config;
 
-        foreach ($candidates as $candidate) {
-            if (!$this->isIndependentlyResolvable($config, $candidate)) {
-                continue;
-            }
-
-            // store_failure=false: a string literal is speculative by nature (most name no class at
-            // all), so a name that turns out unresolvable after all must never be recorded as
-            // missing — see queueClassLikesForScanning() above for the same rationale.
-            $codebase->queueClassLikeForScanning($candidate, false, false);
-        }
+        $this->queueClassLikesForScanning(\array_values(\array_filter(
+            $candidates,
+            fn(string $candidate): bool => $this->isIndependentlyResolvable($config, $candidate),
+        )));
     }
 
     /**
