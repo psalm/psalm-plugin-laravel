@@ -84,7 +84,11 @@ final class ShadowIssueRelocator
         // find_unused_variables) — that shape is compiler noise and dropped. The OTHER shape sharing
         // this class, `'gettype cannot return this value'` (AssertionFinder, ungated), is a genuine
         // author typo in a `gettype()` comparison and must keep reporting, so the drop is gated on
-        // the message rather than the class.
+        // the message rather than the class. The message names the Psalm code path that emitted it,
+        // not who wrote the unreachable code, so an author's own dead statement after a
+        // `return`/`throw`/`continue` in `@php` or raw PHP gets the same message and is silenced
+        // too; accepted as a documented limitation, since this method has only the message and
+        // location to go on, never the AST.
         if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
             return false;
         }
