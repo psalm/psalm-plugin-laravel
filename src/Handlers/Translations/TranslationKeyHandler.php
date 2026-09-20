@@ -55,10 +55,15 @@ use Psalm\Type\Union;
  * active when the translator is available.
  *
  * The method surface only registers on the concrete `Illuminate\Translation\Translator`,
- * never on the `Illuminate\Contracts\Translation\Translator` contract: Psalm's method
- * return-type providers key on the called fqcln, so a contract-typed receiver (e.g. a
- * type-hinted constructor param) is untouched and stays `mixed` per the vendor contract
- * docblock — see TransNarrowingBoundariesTest.phpt. It also never emits MissingTranslation:
+ * never on the `Illuminate\Contracts\Translation\Translator` contract: Psalm resolves a
+ * method return-type provider against the call's receiver class first, falling back to
+ * the declaring class of the resolved method (MethodCallReturnTypeFetcher::fetch()). A
+ * contract-typed receiver (e.g. a type-hinted constructor param) resolves `get()` on the
+ * contract itself, so it never reaches this provider and stays `mixed` per the vendor
+ * contract docblock — see TransNarrowingBoundariesTest.phpt. A Translator subclass that
+ * does not override `get()` still narrows (declaring-class fallback); one that does
+ * override it does not, since the provider only covers the base class. It also never
+ * emits MissingTranslation:
  * that issue documents itself (docs/issues/MissingTranslation.md) as reachable only through
  * __()/trans(), and opt-in users scanning method calls they don't own (e.g. through a DI
  * container) would otherwise see a new, unexpected emission surface.
@@ -197,6 +202,12 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      * Shared literal-key-lookup + string-fallback logic for both the
      * __()/trans() function surface and the Translator::get() method surface.
      *
+     * `__()`, `trans()`, and `Translator::get()` all declare the key as their
+     * first parameter named `$key`, so a call can put a different argument at
+     * position 0 by naming the others ahead of it
+     * (`trans(locale: 'en', key: 'x')`) — {@see ArgUtil::byNameOrPosition()}
+     * resolves the actual key argument regardless of call order.
+     *
      * @param list<Arg> $args
      */
     private static function resolveKeyArgReturnType(
@@ -205,8 +216,14 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         CodeLocation $codeLocation,
         bool $emitMissingTranslation,
     ): ?Union {
+        $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
+
+        if (!$keyArg instanceof Arg) {
+            return null;
+        }
+
         // Try to resolve literal string keys precisely via the Translator
-        $translationKey = self::extractLiteralStringArg($args[0]);
+        $translationKey = self::extractLiteralStringArg($keyArg);
 
         if ($translationKey !== null) {
             $resolved = self::resolveTranslationType(
@@ -223,7 +240,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Dynamic keys (variables, sprintf, concatenation) or missing literal keys:
         // return string to avoid PossiblyInvalidCast noise from string|array union
-        $firstArgType = ArgUtil::typeAt($args, $source, 0);
+        $firstArgType = $source->getNodeTypeProvider()->getType($keyArg->value);
 
         if ($firstArgType instanceof \Psalm\Type\Union) {
             if ($firstArgType->isString()) {
@@ -301,7 +318,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         string $translationKey,
         CodeLocation $codeLocation,
         array $suppressedIssues,
-        bool $emitMissingTranslation = true,
+        bool $emitMissingTranslation,
     ): ?Union {
         if (!self::$translator instanceof \Illuminate\Translation\Translator) {
             return null;
