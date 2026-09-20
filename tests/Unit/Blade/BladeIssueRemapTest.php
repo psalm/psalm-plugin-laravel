@@ -325,6 +325,38 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1499: `@lang('key')` / `@lang('key', $replace)` compile to
+     * `app('translator')->get('key', $replace)`, which without a narrowing provider on
+     * `Translator::get()` falls back to the vendor docblock's `string|array` union and
+     * reports a `PossiblyInvalidArgument` FP on the compiled echo. `@choice(...)` was
+     * already clean (`choice()` returns `string`).
+     *
+     * The `messages.group` key genuinely resolves to an array (see lang/en/messages.php),
+     * so it must NOT be silenced — it becomes a precise `InvalidArgument` instead. That
+     * second assertion is the teeth check: it fails both if the fix over-suppresses
+     * (silencing instead of narrowing) and if the fixture's lang files never loaded (a
+     * vacuous pass on the first assertion alone).
+     */
+    #[Test]
+    public function lang_and_choice_directives_narrow_instead_of_reporting_possibly_invalid_argument(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/lang-echo.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyInvalidArgument', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $this->assertSame(
+            [5],
+            $this->linesFor($issues, 'InvalidArgument', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
     private function allShadowSources(): string
     {
