@@ -120,10 +120,20 @@ final class BladeBootstrapper
             return;
         }
 
-        $manifest = new ShadowManifest($shadowDir);
+        [$environmentHash, $trustedEnvironment] = CompilerEnvironment::describe($compiler);
+
+        if (!$trustedEnvironment) {
+            $this->output->warning(
+                'Laravel plugin: the Blade compiler environment (a custom directive, condition, precompiler, '
+                . 'extension, or component map) could not be fully resolved, so cached Blade shadows are not '
+                . 'trusted for this run; every template is recompiled.',
+            );
+        }
+
+        $manifest = new ShadowManifest($shadowDir, $environmentHash);
         $manifest->load();
 
-        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $viewPaths, $failures);
+        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $viewPaths, $failures, $trustedEnvironment);
 
         if ($templatesFullyDiscovered) {
             $manifest->prune($templates);
@@ -198,6 +208,11 @@ final class BladeBootstrapper
      *                                                     order, which decides which template wins a
      *                                                     view name two roots both define
      * @param array<string, string>                      $failures  template path => reason, appended to
+     * @param bool                                        $trustedEnvironment when false,
+     *                                                     {@see CompilerEnvironment::describe()} could
+     *                                                     not resolve every compiler input, so the
+     *                                                     freshness check is skipped and every template
+     *                                                     recompiles this run regardless of the manifest
      *
      * @return array<string, string> template path => shadow path
      */
@@ -207,6 +222,7 @@ final class BladeBootstrapper
         array $templates,
         array $viewPaths,
         array &$failures,
+        bool $trustedEnvironment,
     ): array {
         $shadows = [];
         $roots = $this->resolveRoots($viewPaths);
@@ -225,7 +241,7 @@ final class BladeBootstrapper
                 continue;
             }
 
-            if ($manifest->isFresh($template, $source, $requiredSlots)) {
+            if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract(
