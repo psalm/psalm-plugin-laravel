@@ -44,7 +44,26 @@ final class AnnotationWriter implements AfterAnalysisInterface
     {
         $request = self::$request;
 
-        if (!$request instanceof AnnotateRequest) {
+        if ($request instanceof AnnotateRequest) {
+            self::run($request);
+        }
+    }
+
+    /**
+     * The write itself, split from the hook so the single-threaded guard below is reachable from a
+     * test without standing up an AfterAnalysisEvent.
+     */
+    public static function run(AnnotateRequest $request): void
+    {
+        // A parent that analysed nothing is a forked run: every producer type is in a worker that
+        // has already exited, so every variable would be declared `mixed` — across the whole view
+        // tree, silently, with exit code 0. Refuse rather than write that.
+        if (!AnnotationCollector::sawAnalysis()) {
+            $request->publishError(
+                'the analysis ran in forked workers, whose results never reach the writing process. '
+                . 'Re-run with --threads=1.',
+            );
+
             return;
         }
 
@@ -121,8 +140,14 @@ final class AnnotationWriter implements AfterAnalysisInterface
 
         $plan = [];
 
+        // A `@foreach ($items as $item)` alias is read by the template and bound by it, so it stays
+        // in the read set (UnusedViewData asks "is this name used at all") but must never be
+        // declared: declaring it reports MissingViewVariable at every correct call site, which is
+        // the check this codemod exists to feed.
+        $loopAliases = \array_fill_keys($contract->loopVariables, true);
+
         foreach ($contract->readVariables as $name) {
-            if (isset($contract->vars[$name])) {
+            if (isset($contract->vars[$name]) || isset($loopAliases[$name])) {
                 continue;
             }
 

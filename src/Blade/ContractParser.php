@@ -26,7 +26,15 @@ use Stillat\BladeParser\Nodes\Position;
  */
 final class ContractParser
 {
-    private const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(\w+)\s*$/';
+    /**
+     * The `{{-- @var T $name --}}` spelling, matched against a comment's inner content. Greedy on
+     * the type, so the name it binds is the LAST `$name` in the comment — `@var Closure(Foo $f): Bar
+     * $callback` declares `$callback`, not `$f`.
+     *
+     * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises:
+     * a declaration it reads differently is one it appends a duplicate for, forever.
+     */
+    public const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(\w+)\s*$/';
 
     private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(\S+)\s*$/';
 
@@ -49,9 +57,9 @@ final class ContractParser
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
         [$vars, , $propsUnknown] = $this->parseSource($source);
-        [$reads, $readsUnknown] = $this->parseReads($compiled);
+        [$reads, $readsUnknown, $loopVariables] = $this->parseReads($compiled);
 
-        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown);
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $loopVariables);
     }
 
     /**
@@ -246,13 +254,14 @@ final class ContractParser
      * the alias would report the very name a `@foreach` binds), and an unknowable body is flagged
      * rather than reported as an empty set.
      *
-     * @return array{0: list<string>, 1: bool} names read, and whether the set is only a lower bound
+     * @return array{0: list<string>, 1: bool, 2: list<string>} names read, whether the set is only a
+     *         lower bound, and the loop aliases among the names
      */
     private function parseReads(string $compiled): array
     {
-        [$names, , $unknown] = $this->walkReads($compiled);
+        [$names, $loopLocals, $unknown] = $this->walkReads($compiled);
 
-        return [$this->filterNames($names, []), $unknown];
+        return [$this->filterNames($names, []), $unknown, $this->filterNames($loopLocals, [])];
     }
 
     /**

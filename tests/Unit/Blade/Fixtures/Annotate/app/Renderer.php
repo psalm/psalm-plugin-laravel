@@ -28,6 +28,17 @@ final class Renderer
         return view('conflict', ['flag' => $this->post()]);
     }
 
+    public function loop(): View
+    {
+        return view('loop', ['items' => $this->items()]);
+    }
+
+    /** @return list<string> */
+    private function items(): array
+    {
+        return ['a', 'b'];
+    }
+
     private function title(): string
     {
         return 'Ada';

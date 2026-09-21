@@ -29,7 +29,7 @@ final class ShadowManifest
     public const SLOT_DATA_INCLUDES = 2;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
      *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract,
      *      references, dataIncludes]. The last two are null when the entry was written with their
      *      collection pass disabled.
@@ -80,7 +80,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -186,30 +186,31 @@ final class ShadowManifest
     }
 
     /**
-     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool}|null
+     * An entry written by a plugin version with a different slot count is dropped rather than
+     * migrated, which recompiles the template — the cheap, correct answer for a derived cache.
+     *
+     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}|null
      *         null when the shape is wrong, which drops the entry
      */
     private function normalizeContract(mixed $data): ?array
     {
-        if (!\is_array($data) || \count($data) !== 4) {
+        if (!\is_array($data) || \count($data) !== 5) {
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown] = \array_values($data);
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $loopVariables] = \array_values($data);
 
-        if (!\is_array($vars) || !\is_bool($propsUnknown) || !\is_array($readVariables) || !\is_bool($readsUnknown)) {
+        if (!\is_array($vars) || !\is_bool($propsUnknown) || !\is_array($readVariables)
+            || !\is_bool($readsUnknown) || !\is_array($loopVariables)
+        ) {
             return null;
         }
 
-        $validReads = [];
+        $validReads = $this->normalizeNames($readVariables);
+        $validLoops = $this->normalizeNames($loopVariables);
 
-        /** @psalm-suppress MixedAssignment untyped data straight from an included file */
-        foreach ($readVariables as $readVariable) {
-            if (!\is_string($readVariable)) {
-                return null;
-            }
-
-            $validReads[] = $readVariable;
+        if ($validReads === null || $validLoops === null) {
+            return null;
         }
 
         $validVars = [];
@@ -229,7 +230,28 @@ final class ShadowManifest
             $validVars[$name] = [$typeString, $line, $optional];
         }
 
-        return [$validVars, $propsUnknown, $validReads, $readsUnknown];
+        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLoops];
+    }
+
+    /**
+     * @param array<array-key, mixed> $data
+     *
+     * @return list<string>|null null when anything in there is not a variable name
+     */
+    private function normalizeNames(array $data): ?array
+    {
+        $names = [];
+
+        /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+        foreach ($data as $name) {
+            if (!\is_string($name)) {
+                return null;
+            }
+
+            $names[] = $name;
+        }
+
+        return $names;
     }
 
     /**
@@ -327,7 +349,7 @@ final class ShadowManifest
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown] = $entry[5];
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $loopVariables] = $entry[5];
 
         $contractVars = [];
 
@@ -335,7 +357,7 @@ final class ShadowManifest
             $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional);
         }
 
-        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown);
+        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $loopVariables);
     }
 
     /**
@@ -384,7 +406,7 @@ final class ShadowManifest
             $shadow->extendsLine,
             $this->fingerprint($source),
             $shadow->suppressions,
-            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown],
+            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->loopVariables],
             $references,
             $dataIncludes,
         ];
