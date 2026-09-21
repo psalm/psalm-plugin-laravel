@@ -146,7 +146,7 @@ final class AnnotateCommand extends Command
             \array_shift($tokens);
         }
 
-        return \array_values($tokens);
+        return $tokens;
     }
 
     private function report(SymfonyStyle $io, string $controlFile, int $exitCode): int
