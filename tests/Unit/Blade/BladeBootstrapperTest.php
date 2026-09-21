@@ -604,7 +604,7 @@ final class BladeBootstrapperTest extends TestCase
     public function a_custom_directive_swapped_between_runs_recompiles_even_though_the_template_did_not_change(): void
     {
         $directiveFile = $this->root . '/directive.php';
-        \file_put_contents($directiveFile, "<?php\nreturn function (\$expression) { return '<?php echo \"MARK-V1\"; ?>'; };\n");
+        \file_put_contents($directiveFile, "<?php\nreturn static function (\$expression) { return '<?php echo \"MARK-V1\"; ?>'; };\n");
         $template = $this->writeTemplate('uses-directive.blade.php', "@marker\n");
 
         $app = $this->app();
@@ -619,7 +619,7 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
         $this->assertStringContainsString('MARK-V1', (string) \file_get_contents($first->analyzedShadows[0]));
 
-        \file_put_contents($directiveFile, "<?php\nreturn function (\$expression) { return '<?php echo \"MARK-V2\"; ?>'; };\n");
+        \file_put_contents($directiveFile, "<?php\nreturn static function (\$expression) { return '<?php echo \"MARK-V2\"; ?>'; };\n");
 
         $secondApp = $this->app();
         /** @var BladeCompiler $secondCompiler */
@@ -672,6 +672,42 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
+     * #1517 M1: an invokable object's constructor state is invisible to
+     * `ReflectionFunction::getStaticVariables()`, so two directive handlers that are different
+     * OBJECT INSTANCES with different behaviour must still force a recompile between runs, not
+     * just hash identically off their shared class file and go stale.
+     */
+    #[Test]
+    public function an_invokable_directive_object_swapped_between_runs_recompiles_even_though_the_template_did_not_change(): void
+    {
+        $template = $this->writeTemplate('uses-directive.blade.php', "@marker\n");
+
+        $firstApp = $this->app();
+        /** @var BladeCompiler $firstCompiler */
+        $firstCompiler = $firstApp->make('blade.compiler');
+        $firstCompiler->directive('marker', new MarkerDirective('MARK-V1'));
+
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+        $this->assertStringContainsString('MARK-V1', (string) \file_get_contents($first->analyzedShadows[0]));
+
+        $secondApp = $this->app();
+        /** @var BladeCompiler $secondCompiler */
+        $secondCompiler = $secondApp->make('blade.compiler');
+        $secondCompiler->directive('marker', new MarkerDirective('MARK-V2'));
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertSame([$template], $second->reportableTemplates);
+        $this->assertStringContainsString(
+            'MARK-V2',
+            (string) \file_get_contents($second->analyzedShadows[0]),
+            'an invokable directive object swapped between runs must recompile even though its class file did not change',
+        );
+    }
+
+    /**
      * `if()` stores the user's callback in the compiler's `$conditions` array, distinct from the
      * wrapper directives it also registers (which live in `$customDirectives` and never change).
      * Editing only the condition callback must still invalidate the cache, even though nothing in
@@ -681,7 +717,7 @@ final class BladeBootstrapperTest extends TestCase
     public function editing_a_blade_if_condition_callback_invalidates_the_cache(): void
     {
         $conditionFile = $this->root . '/condition.php';
-        \file_put_contents($conditionFile, "<?php\nreturn fn (): bool => true;\n");
+        \file_put_contents($conditionFile, "<?php\nreturn static fn (): bool => true;\n");
         $this->writeTemplate('uses-condition.blade.php', "@disco\nyes\n@endisco\n");
 
         $firstApp = $this->app();
@@ -694,7 +730,7 @@ final class BladeBootstrapperTest extends TestCase
         $first = new RecordingShadowRegistrar();
         $this->bootstrapper($firstApp, $first)->boot();
 
-        \file_put_contents($conditionFile, "<?php\nreturn fn (): bool => false;\n");
+        \file_put_contents($conditionFile, "<?php\nreturn static fn (): bool => false;\n");
 
         $secondApp = $this->app();
         /** @var BladeCompiler $secondCompiler */
@@ -710,6 +746,51 @@ final class BladeBootstrapperTest extends TestCase
             $first->analyzedShadows[0],
             $second->analyzedShadows[0],
             'an edited condition callback must produce a different shadow path even though the template did not change',
+        );
+    }
+
+    /**
+     * #1517 M3: positive-side coverage for the `$trustedEnvironment && $manifest->isFresh(...)`
+     * gate (`BladeBootstrapper::compileAll()`). An internal-function directive handler
+     * (`getFileName()` returns `false`) makes `CompilerEnvironment::describe()` report
+     * `trustworthy = false`, which must (a) emit the untrusted-environment warning every run, and
+     * (b) force a recompile even on a SECOND run against an unchanged template and an unchanged
+     * (still-untrustworthy) environment — the existing coverage only pins the negative side
+     * (`assertSame([], $this->progress->warnings)` elsewhere in this suite).
+     */
+    #[Test]
+    public function an_untrustworthy_environment_recompiles_every_run_and_warns(): void
+    {
+        $registerUntrustedDirective = static function (Container $app): void {
+            /** @var BladeCompiler $compiler */
+            $compiler = $app->make('blade.compiler');
+            $compiler->directive('shout', 'strtoupper');
+        };
+
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $firstApp = $this->app();
+        $registerUntrustedDirective($firstApp);
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+
+        $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
+        $this->assertStringContainsString('compiler environment', $this->progress->warningText());
+
+        // A marker only a recompile would overwrite.
+        $shadow = $first->analyzedShadows[0];
+        \file_put_contents($shadow, "<?php // stale\n");
+
+        $secondApp = $this->app();
+        $registerUntrustedDirective($secondApp);
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertCount(2, $this->progress->warnings, 'the second run must warn again: the environment is still untrustworthy');
+        $this->assertNotSame(
+            "<?php // stale\n",
+            (string) \file_get_contents($second->analyzedShadows[0]),
+            'an untrustworthy environment must force a recompile even though nothing else changed',
         );
     }
 }

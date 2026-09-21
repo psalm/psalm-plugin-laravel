@@ -108,6 +108,66 @@ final class CompilerEnvironmentTest extends TestCase
         $this->assertNotSame('', $hash);
     }
 
+    /**
+     * #1517 M1: `ReflectionFunction::getStaticVariables()` never sees a closure's bound `$this`,
+     * so an invokable object's own constructor state is invisible to `describeCallable()` — two
+     * instances with different state hash identically off their shared class file alone. Only
+     * `trustworthy = false` is honest here; folding in the bound object's class would still miss
+     * the actual state difference.
+     */
+    #[Test]
+    public function an_invokable_object_directive_flips_trustworthy_to_false(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', new MarkerDirective('V1'));
+
+        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
+        $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * The mirror case: two invokable-object directives with different constructor state must not
+     * describe identically, since a matching hash would let a stale shadow look fresh. Asserted
+     * defensively even though `trustworthy = false` already forces a recompile on either side.
+     */
+    #[Test]
+    public function two_invokable_object_directives_with_different_state_are_never_reported_trusted(): void
+    {
+        $withV1 = $this->compiler();
+        $withV1->directive('mine', new MarkerDirective('V1'));
+
+        $withV2 = $this->compiler();
+        $withV2->directive('mine', new MarkerDirective('V2'));
+
+        [, $v1Trusted] = CompilerEnvironment::describe($withV1);
+        [, $v2Trusted] = CompilerEnvironment::describe($withV2);
+
+        $this->assertFalse($v1Trusted);
+        $this->assertFalse($v2Trusted);
+    }
+
+    /**
+     * `bindDirective()` binds the handler to the `BladeCompiler` instance itself
+     * (`BladeCompiler::directive($name, $handler, bind: true)`), not to arbitrary state — that
+     * bound `$this` is the compiler being described, so it must stay trusted rather than joining
+     * every other object-bound callable in `trustworthy = false`.
+     */
+    #[Test]
+    public function bind_directive_stays_trustworthy_because_it_is_bound_to_the_compiler_itself(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->bindDirective('mine', function (string $expression): string {
+            return '<?php ?>';
+        });
+
+        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+
+        $this->assertTrue($trusted);
+        $this->assertNotSame('', $hash);
+    }
+
     #[Test]
     public function a_condition_registered_via_if_changes_the_hash_even_though_it_is_not_a_custom_directive(): void
     {

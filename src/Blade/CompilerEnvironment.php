@@ -14,13 +14,17 @@ use Illuminate\View\Compilers\BladeCompiler;
  * result in so an application that edits its own directives (or swaps a compiler subclass)
  * invalidates its shadow cache instead of reusing bytes compiled against a different environment.
  *
- * Two traps this specifically guards against, both in Laravel's own `BladeCompiler::if()`:
+ * Three traps this specifically guards against. Two are in Laravel's own `BladeCompiler::if()`:
  * the user's condition callback lives in the private `$conditions` array, never in
  * `getCustomDirectives()` — hashing directives alone misses an edited condition entirely. And
  * `aliasComponent()` / `include()` / `aliasInclude()` register closures DEFINED INSIDE
  * `BladeCompiler.php` itself (an unchanging vendor file), distinguished from each other only by
  * their captured `use()` variables — hashing the file alone would collapse every alias to the
- * same descriptor.
+ * same descriptor. The third is a PHP reflection gap rather than a Laravel one: `getStaticVariables()`
+ * never exposes a closure's bound `$this`, so an invokable object or array callable (`[$service,
+ * 'compile']`) contributes nothing but its class file, no matter what state the bound object
+ * holds — {@see self::describeCallable()} distrusts any bound object other than the compiler
+ * being described itself.
  *
  * Every failure degrades to `trustworthy = false` rather than guessing: a callable this class
  * cannot resolve to a readable file (an internal function, an `eval()`'d closure) or a static
@@ -47,12 +51,12 @@ final class CompilerEnvironment
             $parts = [];
 
             $parts[] = 'class:' . self::describeCompilerClass($compiler, $trustworthy);
-            $parts[] = self::describeCallableMap('customDirectives', $compiler->getCustomDirectives(), $fileHashes, $trustworthy);
-            $parts[] = self::describeCallableMap('extensions', $compiler->getExtensions(), $fileHashes, $trustworthy);
-            $parts[] = self::describeCallableMap('conditions', self::readArrayProperty($compiler, 'conditions', $trustworthy), $fileHashes, $trustworthy);
-            $parts[] = self::describeCallableMap('precompilers', self::readArrayProperty($compiler, 'precompilers', $trustworthy), $fileHashes, $trustworthy);
-            $parts[] = self::describeCallableMap('prepareStringsForCompilationUsing', self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), $fileHashes, $trustworthy);
-            $parts[] = self::describeCallableMap('echoHandlers', self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), $fileHashes, $trustworthy);
+            $parts[] = self::describeCallableMap('customDirectives', $compiler->getCustomDirectives(), $compiler, $fileHashes, $trustworthy);
+            $parts[] = self::describeCallableMap('extensions', $compiler->getExtensions(), $compiler, $fileHashes, $trustworthy);
+            $parts[] = self::describeCallableMap('conditions', self::readArrayProperty($compiler, 'conditions', $trustworthy), $compiler, $fileHashes, $trustworthy);
+            $parts[] = self::describeCallableMap('precompilers', self::readArrayProperty($compiler, 'precompilers', $trustworthy), $compiler, $fileHashes, $trustworthy);
+            $parts[] = self::describeCallableMap('prepareStringsForCompilationUsing', self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), $compiler, $fileHashes, $trustworthy);
+            $parts[] = self::describeCallableMap('echoHandlers', self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), $compiler, $fileHashes, $trustworthy);
             $parts[] = 'echoFormat:' . self::describeValue(self::readProperty($compiler, 'echoFormat', $trustworthy), $trustworthy);
             $parts[] = 'encodingOptions:' . self::describeValue(self::readProperty($compiler, 'encodingOptions', $trustworthy), $trustworthy);
             $parts[] = 'compilesComponentTags:' . self::describeValue(self::readProperty($compiler, 'compilesComponentTags', $trustworthy), $trustworthy);
@@ -103,20 +107,31 @@ final class CompilerEnvironment
      * @param array<array-key, mixed> $map
      * @param array<string, string>   $fileHashes
      */
-    private static function describeCallableMap(string $slot, array $map, array &$fileHashes, bool &$trustworthy): string
+    private static function describeCallableMap(string $slot, array $map, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): string
     {
         $parts = [];
 
         /** @psalm-suppress MixedAssignment untyped data straight from BladeCompiler's own untyped array properties */
         foreach ($map as $key => $callable) {
-            $parts[] = $key . '=' . self::describeCallable($callable, $fileHashes, $trustworthy);
+            $parts[] = $key . '=' . self::describeCallable($callable, $compiler, $fileHashes, $trustworthy);
         }
 
         return $slot . ':[' . \implode(',', $parts) . ']';
     }
 
-    /** @param array<string, string> $fileHashes */
-    private static function describeCallable(mixed $callable, array &$fileHashes, bool &$trustworthy): string
+    /**
+     * `ReflectionFunction::getStaticVariables()` never exposes a closure's bound `$this` — an
+     * invokable object (`Blade::directive('x', new SomeDirective)`), an array callable
+     * (`[$service, 'compile']`), or any `Closure::bindTo($stateObject)` therefore contributes
+     * NOTHING but its (shared, unchanging) class file to the hash, no matter what state the bound
+     * object holds. `bindDirective()` is the one exception: it always binds to the `BladeCompiler`
+     * instance being described (`BladeCompiler::directive($name, $handler, bind: true)`), which
+     * carries no state of its own beyond what the rest of this class already hashes, so that case
+     * alone stays trusted.
+     *
+     * @param array<string, string> $fileHashes
+     */
+    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): string
     {
         if (!\is_callable($callable)) {
             $trustworthy = false;
@@ -128,6 +143,14 @@ final class CompilerEnvironment
             $closure = $callable instanceof \Closure ? $callable : \Closure::fromCallable($callable);
             $reflection = new \ReflectionFunction($closure);
         } catch (\Throwable) {
+            $trustworthy = false;
+
+            return 'unresolvable';
+        }
+
+        $boundThis = $reflection->getClosureThis();
+
+        if ($boundThis !== null && $boundThis !== $compiler) {
             $trustworthy = false;
 
             return 'unresolvable';
