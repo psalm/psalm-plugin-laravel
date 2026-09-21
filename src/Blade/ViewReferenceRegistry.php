@@ -60,6 +60,20 @@ final class ViewReferenceRegistry
     }
 
     /**
+     * Every view name a discovered template claimed, and the file it claimed it with. Published
+     * unconditionally (unlike the reference set), so this answers for any run with Blade active.
+     *
+     * The key is an `array-key` for the same reason as {@see self::unusedTemplates()}: a numeric
+     * view name comes back out as the int PHP cast it to.
+     *
+     * @return array<array-key, string> view name => template path
+     */
+    public static function templates(): array
+    {
+        return \array_map(static fn(array $entry): string => $entry[1], self::$templates);
+    }
+
+    /**
      * A template can be claimed under more than one name at once — a published override owns both
      * its default-root name and its namespace's qualified name (see {@see ViewName}), both pointing
      * at the same file. A reference through EITHER name means the file is rendered, so "unused" is a
