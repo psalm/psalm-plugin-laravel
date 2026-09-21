@@ -15,15 +15,9 @@ namespace Psalm\LaravelPlugin\Blade;
 final class SuppressionInjector
 {
     /**
-     * A shadow's own `<?php`/`<?=` open tag. The negative lookahead skips a marker's open tag,
-     * which is always immediately followed by ` /* blade:N *\/`.
-     */
-    private const OPEN_TAG_PATTERN = '/<\?(php|=)(?! \/\* blade:\d+ \*\/)/';
-
-    /**
      * @param array<int, int> $lineMap shadow line => blade source line (0 = prelude)
      */
-    public function inject(string $shadowContent, string $bladeSource, array $lineMap): string
+    public function inject(string $shadowContent, string $bladeSource, array $lineMap, string $markerPrefix = 'blade:'): string
     {
         $suppressions = $this->findSuppressions($bladeSource);
 
@@ -31,18 +25,17 @@ final class SuppressionInjector
             return $shadowContent;
         }
 
-        $lines = SourceLines::split($shadowContent);
-        $targets = $this->findTargets($lines, $suppressions, $lineMap);
+        $targets = $this->findTargets($shadowContent, $suppressions, $lineMap, $markerPrefix);
 
         if ($targets === []) {
             return $shadowContent;
         }
 
-        foreach ($targets as $target) {
-            $lines[$target['index']] = $this->insertAfterOpenTag($lines[$target['index']], $target['rule']);
+        foreach (\array_reverse($targets) as $target) {
+            $shadowContent = \substr_replace($shadowContent, ' /** @psalm-suppress ' . $target['rule'] . ' */', $target['offset'], 0);
         }
 
-        return \implode('', $lines);
+        return $shadowContent;
     }
 
     /**
@@ -54,7 +47,7 @@ final class SuppressionInjector
      *
      * @return array<int, list<string>> blade line => suppressed rules
      */
-    public function resolve(string $shadowContent, string $bladeSource, array $lineMap): array
+    public function resolve(string $shadowContent, string $bladeSource, array $lineMap, string $markerPrefix = 'blade:'): array
     {
         $suppressions = $this->findSuppressions($bladeSource);
 
@@ -62,11 +55,10 @@ final class SuppressionInjector
             return [];
         }
 
-        $lines = SourceLines::split($shadowContent);
         $resolved = [];
 
-        foreach ($this->findTargets($lines, $suppressions, $lineMap) as $target) {
-            $resolved[$lineMap[$target['index'] + 1] ?? 0][] = $target['rule'];
+        foreach ($this->findTargets($shadowContent, $suppressions, $lineMap, $markerPrefix) as $target) {
+            $resolved[$lineMap[$target['line']] ?? 0][] = $target['rule'];
         }
 
         return $resolved;
@@ -87,24 +79,34 @@ final class SuppressionInjector
     }
 
     /**
-     * @param list<string>      $lines
      * @param array<int, string> $suppressions blade line => suppressed rule
-     * @param array<int, int>   $lineMap
-     *
-     * @return list<array{index: int, rule: string}> shadow line index (0-based) => suppressed rule
+     * @param array<int, int> $lineMap
+     * @return list<array{line: int, offset: int, rule: string}>
      */
-    private function findTargets(array $lines, array $suppressions, array $lineMap): array
+    private function findTargets(string $content, array $suppressions, array $lineMap, string $markerPrefix): array
     {
-        $targets = [];
-
-        foreach ($suppressions as $bladeLine => $rule) {
-            $targetIndex = $this->findTargetLine($lines, $lineMap, $bladeLine);
-
-            if ($targetIndex === null) {
-                continue; // no following statement — nothing to attach to
+        $openTags = [];
+        $offset = 0;
+        $tokens = \token_get_all($content);
+        foreach ($tokens as $index => $token) {
+            $text = \is_array($token) ? $token[1] : $token;
+            if (\is_array($token) && ($token[0] === \T_OPEN_TAG || $token[0] === \T_OPEN_TAG_WITH_ECHO)
+                && MarkerComment::sourceLine($tokens[$index + 1] ?? '', $markerPrefix) === null
+            ) {
+                $openTags[] = ['line' => $token[2], 'offset' => $offset + \strlen(\rtrim($text))];
             }
 
-            $targets[] = ['index' => $targetIndex, 'rule' => $rule];
+            $offset += \strlen($text);
+        }
+
+        $targets = [];
+        foreach ($suppressions as $bladeLine => $rule) {
+            foreach ($openTags as $openTag) {
+                if (($lineMap[$openTag['line']] ?? 0) > $bladeLine) {
+                    $targets[] = [...$openTag, 'rule' => $rule];
+                    break;
+                }
+            }
         }
 
         return $targets;
@@ -123,37 +125,5 @@ final class SuppressionInjector
         }
 
         return $suppressions;
-    }
-
-    /**
-     * @param list<string> $lines
-     * @param array<int, int> $lineMap
-     */
-    private function findTargetLine(array $lines, array $lineMap, int $afterBladeLine): ?int
-    {
-        foreach ($lines as $index => $line) {
-            $shadowLine = $index + 1;
-            $bladeLine = $lineMap[$shadowLine] ?? 0;
-
-            if ($bladeLine <= $afterBladeLine) {
-                continue;
-            }
-
-            if (\preg_match(self::OPEN_TAG_PATTERN, $line) === 1) {
-                return $index;
-            }
-        }
-
-        return null;
-    }
-
-    private function insertAfterOpenTag(string $line, string $rule): string
-    {
-        return (string) \preg_replace(
-            self::OPEN_TAG_PATTERN,
-            "<?\$1 /** @psalm-suppress {$rule} */",
-            $line,
-            1,
-        );
     }
 }

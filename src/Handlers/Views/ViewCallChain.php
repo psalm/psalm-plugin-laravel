@@ -162,6 +162,12 @@ final class ViewCallChain
             return null;
         }
 
+        if ($role === ViewNameSignatures::ROLE_VIEW_FACTORY
+            && ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg
+        ) {
+            $complete = false;
+        }
+
         return self::build($args, $source, $data, $complete);
     }
 

@@ -29,7 +29,13 @@ final class ShadowCompiler
      */
     public function compile(string $templatePath, string $source, array $contractVars = []): ShadowResult|BladeCompileError
     {
-        $marked = MarkerPrePass::inject($source);
+        // The prefix is absent from author text, including real PHP comments.
+        $markerPrefix = 'blade:' . \hash('xxh128', $source) . ':';
+        while (\str_contains($source, $markerPrefix)) {
+            $markerPrefix .= ':';
+        }
+
+        $marked = MarkerPrePass::inject($source, $markerPrefix);
 
         try {
             $compiled = $this->compiler->compileString($marked);
@@ -41,10 +47,10 @@ final class ShadowCompiler
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");
-        $lineMap = LineMapBuilder::build($content, $preludeLines);
+        $lineMap = LineMapBuilder::build($content, $preludeLines, $markerPrefix);
 
-        $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap);
-        $content = $this->suppressionInjector->inject($content, $source, $lineMap);
+        $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
+        $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);
 
         return new ShadowResult($content, $lineMap, MarkerPrePass::extendsLine($source), $suppressions);
     }

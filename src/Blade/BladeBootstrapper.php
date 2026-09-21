@@ -226,7 +226,7 @@ final class BladeBootstrapper
             }
 
             if ($manifest->isFresh($template, $source, $requiredSlots)) {
-                $shadowPath = $manifest->shadowPathFor($template);
+                $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract(
                     $template,

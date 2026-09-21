@@ -110,6 +110,15 @@ final class BladeTaintRemapTest extends TestCase
     }
 
     #[Test]
+    public function marker_shaped_literals_preserve_both_taint_findings(): void
+    {
+        $issues = $this->issuesFor('resources/views/marker.blade.php');
+        $types = \array_column($issues, 'type');
+        $this->assertContains('TaintedHtml', $types, $this->report()[0]);
+        $this->assertContains('TaintedTextWithQuotes', $types, $this->report()[0]);
+    }
+
+    #[Test]
     public function an_unescaped_echo_of_request_input_is_tainted_on_the_template_line(): void
     {
         [$raw] = $this->report();

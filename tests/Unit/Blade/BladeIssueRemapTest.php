@@ -105,6 +105,33 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     #[Test]
+    public function suppressions_cover_issues_inside_their_own_docblock(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $this->assertSame([], $this->linesFor($issues, 'InvalidReturnType', 'docblock-suppression.blade.php'), \json_encode($issues, \JSON_THROW_ON_ERROR));
+        $matching = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => $issue['type'] === 'InvalidReturnStatement' && \str_ends_with($issue['file_path'], 'docblock-suppression.blade.php')));
+        $this->assertCount(1, $matching, \json_encode($matching, \JSON_THROW_ON_ERROR));
+        $this->assertStringContainsString('unsuppressed', $matching[0]['message']);
+    }
+
+    #[Test]
+    public function php_suppressions_remain_local_to_their_statement(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        foreach (['php-suppression.blade.php', 'raw-suppression.blade.php'] as $template) {
+            $lines = $this->linesFor($issues, 'InvalidArgument', $template);
+            $this->assertCount(1, $lines, \json_encode($issues, \JSON_THROW_ON_ERROR));
+            $this->assertSame([1], $lines);
+            foreach ($issues as $issue) {
+                if ($issue['type'] === 'InvalidArgument' && \str_ends_with($issue['file_path'], $template)) {
+                    $this->assertStringContainsString('list{1}', $issue['message']);
+                }
+            }
+        }
+    }
+
+    #[Test]
     public function a_shadow_issue_is_reported_on_the_template_path_and_line(): void
     {
         $issues = $this->analyze('psalm.xml');

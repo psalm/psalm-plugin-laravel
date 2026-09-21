@@ -14,6 +14,11 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class MarkerPrePass
 {
+    // Comments and strings are indivisible: their parentheses never affect argument depth.
+    private const ARGUMENT_PATTERN = <<<'REGEX'
+    (?<args>\((?>\/\*.*?\*\/|\/\/[^\r\n]*|#(?!\[)[^\r\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^()'"\/#]|\/(?![\/*])|#(?=\[)|(?&args))*\))
+    REGEX;
+
     /**
      * Byte-offset ranges of source that are not "live" Blade code: verbatim bodies,
      * `@php...@endphp` blocks, Blade comments, and raw `<?php ... ?>` / `<?= ... ?>`
@@ -24,22 +29,38 @@ final class MarkerPrePass
      */
     private static function maskedRanges(string $source): array
     {
-        // A single alternation, so an earlier-starting construct consumes its own body instead of
-        // each pattern re-scanning the whole source independently: a raw PHP open tag typed inside
-        // a Blade comment must not let the raw-PHP branch re-match past the comment's own close and
-        // mask everything to EOF via the `.*\z` fallback below. Keep the comment branch before the
-        // raw-PHP one. `(?i:php\b|=)` matches the case-insensitive PHP open tag; the `.*\z`
-        // alternative covers a raw PHP block left unclosed at end of template, which Blade permits.
-        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)(?:.*?\?>|.*\z)/s';
+        // Consume the earliest construct first: PHP-like text inside a Blade comment is inert.
+        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)/s';
+        $ranges = [];
+        $cursor = 0;
+        while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {
+            [$text, $offset] = $match[0];
+            if (\str_starts_with($text, '<?')) {
+                $tokens = \token_get_all(\substr($source, $offset));
+                $first = $tokens[0] ?? null;
+                if (!\is_array($first) || ($first[0] !== \T_OPEN_TAG && $first[0] !== \T_OPEN_TAG_WITH_ECHO)) {
+                    $cursor = $offset + \strlen($text);
+                    continue;
+                }
 
-        if (\preg_match_all($pattern, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
-            return [];
+                $length = 0;
+                foreach ($tokens as $token) {
+                    if (\is_array($token) && $token[0] === \T_CLOSE_TAG) {
+                        $length += \strlen(\rtrim($token[1], "\r\n"));
+                        break;
+                    }
+
+                    $length += \strlen(\is_array($token) ? $token[1] : $token);
+                }
+
+                $text = \substr($source, $offset, $length);
+            }
+
+            $ranges[] = [$text, $offset];
+            $cursor = $offset + \strlen($text);
         }
 
-        /** @var list<array{0: string, 1: int}> $wholeMatches */
-        $wholeMatches = $matches[0];
-
-        return $wholeMatches;
+        return $ranges;
     }
 
     /**
@@ -62,8 +83,7 @@ final class MarkerPrePass
             '/\{\{\{.*?\}\}\}/s',
             '/\{!!.*?!!\}/s',
             '/\{\{.*?\}\}/s',
-            // Balanced-paren directive args via PCRE recursion; respects quoted strings.
-            '/@[a-zA-Z_]+\s*(\((?:[^()\'"]|\'[^\']*\'|"[^"]*"|(?1))*\))/s',
+            '/@[a-zA-Z_]+\s*' . self::ARGUMENT_PATTERN . '/s',
             // Multi-line component tags. ComponentTagCompiler::compileOpeningTags()
             // matches attributes as a strict alternation separated by \s+; a marker
             // between two attributes matches no alternative and the whole tag is
@@ -132,7 +152,7 @@ final class MarkerPrePass
      */
     private static function markSwitchGapLines(string $source, string $scanSource, array &$skip): void
     {
-        $pattern = '/(?<!@)@(switch|case)[ \t]*(\((?:[^()\'"]|\'[^\']*\'|"[^"]*"|(?2))*\))/is';
+        $pattern = '/(?<!@)@(switch|case)[ \t]*' . self::ARGUMENT_PATTERN . '/is';
 
         if (\preg_match_all($pattern, $scanSource, $matches, \PREG_OFFSET_CAPTURE) === false) {
             return;
@@ -217,7 +237,7 @@ final class MarkerPrePass
      * would inherit the LAST content line's marker instead of the line the
      * `@extends` directive actually appears on.
      */
-    public static function inject(string $source): string
+    public static function inject(string $source, string $markerPrefix = 'blade:'): string
     {
         $masked = self::maskedRanges($source);
         $skip = self::computeSkipLines($source, $masked);
@@ -228,7 +248,7 @@ final class MarkerPrePass
 
         foreach ($lines as $line) {
             if (!isset($skip[$lineNumber]) && \trim($line) !== '') {
-                $out .= "<?php /* blade:{$lineNumber} */ ?>";
+                $out .= "<?php /* {$markerPrefix}{$lineNumber} */ ?>";
             }
 
             $out .= $line;
@@ -238,7 +258,7 @@ final class MarkerPrePass
         $extendsLine = self::extendsLine($source, $masked);
 
         if ($extendsLine !== null) {
-            $out .= "<?php /* blade:{$extendsLine} */ ?>";
+            $out .= "<?php /* {$markerPrefix}{$extendsLine} */ ?>";
         }
 
         return $out;
