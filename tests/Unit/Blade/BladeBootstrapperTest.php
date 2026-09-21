@@ -586,20 +586,101 @@ final class BladeBootstrapperTest extends TestCase
     #[Test]
     public function publishes_no_template_facts_when_activation_fails(): void
     {
-        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        // The dynamic include and the enabled collection pass are what give the isDynamic()
+        // assertion below teeth: without them nothing in the fixture could set the flag either way.
+        $this->writeTemplate('profile.blade.php', "@include(\$partial)\n{{ \$name }}\n");
         $registrar = new RecordingShadowRegistrar(markSucceeds: false);
 
-        $this->bootstrapper($this->app(), $registrar)->boot();
+        $booted = $this->collectingBootstrapper($this->app(), $registrar)->boot();
 
+        $this->assertFalse($booted);
         $this->assertNull(ContractRegistry::contractFor('profile'), 'a contract nothing can remap must not reach call sites');
         $this->assertSame([], ViewReferenceRegistry::unusedTemplates());
-        $this->assertFalse(ViewReferenceRegistry::isDynamic());
+        $this->assertFalse(ViewReferenceRegistry::isDynamic(), 'the dynamic mark is a published fact too');
 
-        foreach ($this->shadowFiles() as $shadow) {
+        $shadows = $this->shadowFiles();
+        $this->assertCount(1, $shadows, 'the shadow was written to disk; only its publication is withheld');
+
+        foreach ($shadows as $shadow) {
             $this->assertNull(ShadowRegistry::entryFor($shadow));
         }
 
         $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
+    }
+
+    /**
+     * `123.blade.php` is a legal view name. `ViewReferenceCollector` hands its names back through
+     * `array_keys()`, and PHP casts a numeric-string key to int on the way in, so the name reaches
+     * the `string`-typed registry as an int and throws under strict_types. Buffered publication
+     * makes that worse than it was: the throw now lands after the shadows are already enqueued,
+     * leaving exactly the half-activated run #1518 exists to prevent.
+     */
+    #[Test]
+    public function a_numeric_view_name_does_not_break_publication(): void
+    {
+        $this->writeTemplate('dashboard.blade.php', "@include('123')\n");
+        $numeric = $this->writeTemplate('123.blade.php', "<p>ok</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $booted = $this->collectingBootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertTrue($booted, $this->progress->warningText());
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertArrayNotHasKey('123', ViewReferenceRegistry::unusedTemplates(), 'the @include is a reference');
+        $this->assertNotNull(ContractRegistry::contractFor('123'));
+        $this->assertFileExists($numeric);
+    }
+
+    /**
+     * A manifest written before the cast above still holds integer names, and its entries stay fresh
+     * across dev builds (the fingerprint carries the plugin's Composer version, which does not move
+     * between commits on a branch install). `ShadowManifest::normalizeViewNames()` is what keeps
+     * those out of the replay: it drops the whole entry rather than hand a non-string name on, which
+     * costs one recompile. Pinned because that rejection is the only thing standing between a stale
+     * manifest and the TypeError above, and it is not obvious from the bootstrapper.
+     */
+    #[Test]
+    public function a_numeric_view_name_loaded_from_an_older_manifest_does_not_break_publication(): void
+    {
+        $this->writeTemplate('dashboard.blade.php', "@include('123')\n");
+        $this->writeTemplate('123.blade.php', "<p>ok</p>\n");
+
+        $this->collectingBootstrapper($this->app(), new RecordingShadowRegistrar())->boot();
+        $this->downgradeManifestReferenceNamesToIntegers();
+
+        ViewReferenceRegistry::reset();
+        ContractRegistry::reset();
+        $this->progress = new RecordingProgress();
+        $registrar = new RecordingShadowRegistrar();
+
+        $booted = $this->collectingBootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertTrue($booted, $this->progress->warningText());
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertArrayNotHasKey('123', ViewReferenceRegistry::unusedTemplates());
+    }
+
+    /** Rewrites every stored reference name as the int a pre-fix build would have written. */
+    private function downgradeManifestReferenceNamesToIntegers(): void
+    {
+        $path = $this->shadowDir . '/manifest.php';
+        /** @var array<string, array<int, mixed>> $entries */
+        $entries = include $path;
+
+        foreach ($entries as $shadowPath => $entry) {
+            if (!\is_array($entry[6] ?? null) || !\is_array($entry[6][0])) {
+                continue;
+            }
+
+            $entries[$shadowPath][6][0] = \array_keys(\array_fill_keys($entry[6][0], true));
+        }
+
+        \file_put_contents($path, "<?php\n\nreturn " . \var_export($entries, true) . ";\n");
+    }
+
+    private function collectingBootstrapper(Container $app, RecordingShadowRegistrar $registrar): BladeBootstrapper
+    {
+        return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, collectViewReferences: true);
     }
 
     /** The reorder that makes the failure path empty must still publish everything on success. */

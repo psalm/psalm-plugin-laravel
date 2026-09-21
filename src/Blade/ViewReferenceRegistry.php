@@ -15,12 +15,17 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class ViewReferenceRegistry
 {
-    /** @var array<string, true> view name => referenced */
+    /**
+     * Keyed by `array-key`, not `string`: a numeric view name (`123.blade.php` is legal) is stored
+     * under the int PHP casts its key to, and comes back out as one.
+     *
+     * @var array<array-key, true> view name => referenced
+     */
     private static array $references = [];
 
     private static bool $dynamic = false;
 
-    /** @var array<string, array{0: int, 1: string}> view name => [view root index, template path] */
+    /** @var array<array-key, array{0: int, 1: string}> view name => [view root index, template path] */
     private static array $templates = [];
 
     public static function addReference(string $viewName): void
@@ -61,7 +66,10 @@ final class ViewReferenceRegistry
      * property of the template PATH, not of any one of its names; a file with two names is reported
      * once, not once per unreferenced name.
      *
-     * @return array<string, string> view name => template path
+     * The key is an `array-key`, not a `string`: PHP stores a numeric view name (`123.blade.php`)
+     * under the int it casts the key to, and no cast can put it back — the caller has to.
+     *
+     * @return array<array-key, string> view name => template path
      */
     public static function unusedTemplates(): array
     {
@@ -73,7 +81,7 @@ final class ViewReferenceRegistry
             }
         }
 
-        /** @var array<string, array{0: int, 1: string}> $canonical template path => [root index, view name] */
+        /** @var array<string, array{0: int, 1: array-key}> $canonical template path => [root index, view name] */
         $canonical = [];
 
         foreach (self::$templates as $viewName => [$rootIndex, $templatePath]) {

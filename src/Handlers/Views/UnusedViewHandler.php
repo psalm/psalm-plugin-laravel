@@ -98,7 +98,8 @@ final class UnusedViewHandler implements AfterCodebasePopulatedInterface
         }
 
         foreach (ViewReferenceRegistry::unusedTemplates() as $viewName => $templatePath) {
-            self::report($viewName, $templatePath);
+            // Cast: a numeric view name arrives as the int PHP keyed it under.
+            self::report((string) $viewName, $templatePath);
         }
     }
 

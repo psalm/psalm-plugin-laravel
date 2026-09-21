@@ -151,7 +151,7 @@ final class ViewReferenceCollector
             };
         }
 
-        return [\array_keys($names), $dynamic];
+        return [$this->names($names), $dynamic];
     }
 
     /**
@@ -271,7 +271,7 @@ final class ViewReferenceCollector
             }
         }
 
-        return [\array_keys($names), $dynamic];
+        return [$this->names($names), $dynamic];
     }
 
     /**
@@ -437,5 +437,19 @@ final class ViewReferenceCollector
         }
 
         return null;
+    }
+
+    /**
+     * Names are collected as array KEYS to dedupe them, and PHP casts a numeric-string key to int:
+     * `123.blade.php` is a legal view, and `@include('123')` would otherwise hand an int to every
+     * `string`-typed consumer downstream and throw under strict_types.
+     *
+     * @param array<array-key, true> $names
+     *
+     * @return list<string>
+     */
+    private function names(array $names): array
+    {
+        return \array_map(\strval(...), \array_keys($names));
     }
 }
