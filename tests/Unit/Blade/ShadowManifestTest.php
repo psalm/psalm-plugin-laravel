@@ -140,6 +140,46 @@ final class ShadowManifestTest extends TestCase
         $this->assertFalse($reloaded->isFresh('/app/views/never-stored.blade.php', 'source v1'));
     }
 
+    /**
+     * The same environment string reused across a store and a reload must stay fresh: a manifest
+     * that recomputed its own fingerprint differently on every construction would never hit.
+     */
+    #[Test]
+    public function the_same_environment_string_stays_fresh_across_a_reload(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir, 'env-a');
+        $manifest->load();
+
+        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
+        $manifest->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir, 'env-a');
+        $reloaded->load();
+
+        $this->assertTrue($reloaded->isFresh('/app/views/foo.blade.php', 'source'));
+    }
+
+    /**
+     * #1517: two manifests over the same directory that differ only in `$environment` (the
+     * compiler-environment hash) must not consider each other's entries fresh — an application
+     * whose Blade wiring changed between runs must recompile even though the template source did
+     * not.
+     */
+    #[Test]
+    public function a_different_environment_is_never_fresh_against_an_entry_written_with_another(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir, 'env-a');
+        $manifest->load();
+
+        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract(), $this->emptyReferences());
+        $manifest->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir, 'env-b');
+        $reloaded->load();
+
+        $this->assertFalse($reloaded->isFresh('/app/views/foo.blade.php', 'source'));
+    }
+
     #[Test]
     public function not_fresh_when_the_shadow_file_was_deleted_out_from_under_the_manifest(): void
     {
