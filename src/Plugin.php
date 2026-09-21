@@ -96,14 +96,24 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
 
+            // The `psalm-laravel blade:annotate` codemod, and the only thing that lets this plugin
+            // write to the source tree. Absent for every ordinary psalm run (#1524).
+            $annotate = Blade\Annotate\AnnotateRequest::fromEnvironment();
+
+            // A request force-enables Blade even for a project that has it off: the user ran the
+            // codemod, and refusing because of a config flag they never set for it would only be
+            // confusing. That is safe precisely because the request is gated on a marked control
+            // file this CLI wrote, not on the environment variable being set to something readable.
+
             // Not `bladeEnabled` alone: a boot that degraded registered no shadows, so every Blade
             // handler below would read an empty registry and, worse, report on templates whose
             // facts were never collected (#1518).
-            $bladeActive = $pluginConfig->bladeEnabled && $this->initBladeAnalysis($pluginConfig, $output);
+            $bladeActive = ($pluginConfig->bladeEnabled || $annotate instanceof Blade\Annotate\AnnotateRequest)
+                && $this->initBladeAnalysis($pluginConfig, $output, $annotate instanceof Blade\Annotate\AnnotateRequest);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
-            $this->registerHandlers($registration, $pluginConfig, $bladeActive);
+            $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
@@ -211,6 +221,8 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Views\ViewContractHandler::reset();
         Handlers\Views\UnusedViewHandler::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
+        Blade\Annotate\AnnotationCollector::reset();
+        Blade\Annotate\AnnotationWriter::reset();
         Blade\BladeIssueRemapHandler::reset();
         Blade\ContractRegistry::reset();
         Blade\ShadowRegistry::reset();
@@ -273,9 +285,16 @@ final class Plugin implements PluginEntryPointInterface
         return LaravelAiIntegration::isEnabled();
     }
 
-    /** @param bool $bladeActive whether {@see self::initBladeAnalysis()} actually put shadows into the analysis */
-    private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig, bool $bladeActive): void
-    {
+    /**
+     * @param bool $bladeActive whether {@see self::initBladeAnalysis()} actually put shadows into the analysis
+     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod's control file, null for an ordinary run
+     */
+    private function registerHandlers(
+        RegistrationInterface $registration,
+        PluginConfig $pluginConfig,
+        bool $bladeActive,
+        ?Blade\Annotate\AnnotateRequest $annotate,
+    ): void {
         // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
@@ -747,6 +766,21 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\UnusedViewHandler::class);
         }
+
+        // Writes `{{-- @var --}}` declarations into the analysed templates (#1524). Registered only
+        // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
+        // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
+        // The two hooks are one pass in two halves: the collector fills a static that only survives
+        // to the writer's AfterAnalysis because the command forces `--threads=1`.
+        if ($bladeActive && $annotate instanceof Blade\Annotate\AnnotateRequest) {
+            require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+            require_once __DIR__ . '/Blade/Annotate/AnnotationCollector.php';
+            require_once __DIR__ . '/Blade/Annotate/AnnotationWriter.php';
+            Blade\Annotate\AnnotationCollector::init();
+            Blade\Annotate\AnnotationWriter::init($annotate);
+            $registration->registerHooksFromClass(Blade\Annotate\AnnotationCollector::class);
+            $registration->registerHooksFromClass(Blade\Annotate\AnnotationWriter::class);
+        }
     }
 
     /**
@@ -897,10 +931,13 @@ final class Plugin implements PluginEntryPointInterface
      * and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
+     * @param bool $annotating the annotate codemod is driving this run, which needs the read sets
+     *                         the UnusedViewData pass collects whether or not that rule is on
+     *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
      */
-    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): bool
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
     {
         $bootstrapper = new Blade\BladeBootstrapper(
             ApplicationProvider::getApp(),
@@ -908,7 +945,7 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViews,
-            $pluginConfig->bladeReportUnusedViewData,
+            $pluginConfig->bladeReportUnusedViewData || $annotating,
         );
 
         if (!$bootstrapper->boot()) {

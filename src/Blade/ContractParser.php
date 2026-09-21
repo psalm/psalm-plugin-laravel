@@ -26,7 +26,21 @@ use Stillat\BladeParser\Nodes\Position;
  */
 final class ContractParser
 {
-    private const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(\w+)\s*$/';
+    /**
+     * The `{{-- @var T $name --}}` spelling, matched against a comment's inner content. Greedy on
+     * the type, so the name it binds is the LAST `$name` in the comment — `@var Closure(Foo $f): Bar
+     * $callback` declares `$callback`, not `$f`.
+     *
+     * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises:
+     * a declaration it reads differently is one it appends a duplicate for, forever.
+     *
+     * The name is matched as PHP matches an identifier, bytes >= 0x80 included (`$café` is a legal
+     * variable), not as `\w`, which is ASCII-only under this pattern.
+     */
+    public const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(' . self::IDENTIFIER . ')\s*$/';
+
+    /** PHP's own variable-name grammar, as bytes. */
+    public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
     private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(\S+)\s*$/';
 
@@ -49,9 +63,9 @@ final class ContractParser
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
         [$vars, , $propsUnknown] = $this->parseSource($source);
-        [$reads, $readsUnknown] = $this->parseReads($compiled);
+        [$reads, $readsUnknown, $loopVariables] = $this->parseReads($compiled);
 
-        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown);
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $loopVariables);
     }
 
     /**
@@ -246,13 +260,14 @@ final class ContractParser
      * the alias would report the very name a `@foreach` binds), and an unknowable body is flagged
      * rather than reported as an empty set.
      *
-     * @return array{0: list<string>, 1: bool} names read, and whether the set is only a lower bound
+     * @return array{0: list<string>, 1: bool, 2: list<string>} names read, whether the set is only a
+     *         lower bound, and the loop aliases among the names
      */
     private function parseReads(string $compiled): array
     {
-        [$names, , $unknown] = $this->walkReads($compiled);
+        [$names, $loopLocals, $unknown] = $this->walkReads($compiled);
 
-        return [$this->filterNames($names, []), $unknown];
+        return [$this->filterNames($names, []), $unknown, $this->filterNames($loopLocals, [])];
     }
 
     /**
@@ -319,11 +334,8 @@ final class ContractParser
                 }
 
                 if ($node instanceof Node\Stmt\Foreach_) {
-                    foreach ([$node->valueVar, $node->keyVar] as $loopVar) {
-                        if ($loopVar instanceof Node\Expr\Variable && \is_string($loopVar->name)) {
-                            $this->loopLocals[$loopVar->name] = true;
-                        }
-                    }
+                    $this->bindLoopLocals($node->valueVar);
+                    $this->bindLoopLocals($node->keyVar);
                 }
 
                 if ($node instanceof Node\Expr\Variable) {
@@ -341,6 +353,31 @@ final class ContractParser
                 }
 
                 return null;
+            }
+
+            /**
+             * Every name one `foreach` binds, list destructuring included: `as [$id, $name]` binds
+             * both, and a call site is expected to pass neither.
+             */
+            private function bindLoopLocals(?Node\Expr $target): void
+            {
+                if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
+                    $this->loopLocals[$target->name] = true;
+
+                    return;
+                }
+
+                if (!$target instanceof Node\Expr\Array_ && !$target instanceof Node\Expr\List_) {
+                    return;
+                }
+
+                foreach ($target->items as $item) {
+                    // A skipped slot (`[, $b]`) is null; the key of a keyed destructure is read, not
+                    // bound, so only the value side recurses.
+                    if ($item instanceof Node\ArrayItem) {
+                        $this->bindLoopLocals($item->value);
+                    }
+                }
             }
 
             /** @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args */
