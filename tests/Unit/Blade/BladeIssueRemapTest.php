@@ -577,11 +577,17 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringContainsString('$__componentOriginal', $this->allShadowSources());
     }
 
-    /** #1525 acceptance (c): `$attributes->merge()` and `$slot` stay typed in a plain `@props` component view. */
+    /**
+     * #1525 acceptance (c): `$attributes->merge()` and `$slot` stay typed in a plain `@props`
+     * component view. Run under `psalm-blade-report-mixed.xml`, not the default `psalm.xml`:
+     * `MixedIssue` (which `MixedMethodCall` implements) is dropped unconditionally when
+     * `reportMixedIssues` is off (#1495), so that assertion is vacuous under the default config —
+     * it would pass whether or not `$attributes`/`$slot` got a real type.
+     */
     #[Test]
     public function attributes_merge_and_slot_stay_typed_in_a_props_component_view(): void
     {
-        $issues = $this->analyze('psalm.xml');
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
         $template = 'components/typed-attributes.blade.php';
 
         foreach (['PossiblyNullReference', 'UndefinedGlobalVariable', 'MixedMethodCall'] as $family) {
@@ -607,6 +613,14 @@ final class BladeIssueRemapTest extends TestCase
      * bookkeeping re-checks `isset($attributes)`/`instanceof` after Laravel's own `??=` guard has
      * already made both provably true, which is exactly the population `ShadowIssueRelocator`'s new
      * drop targets (#1525).
+     *
+     * Asserts the WHOLE issue set on this template, not a hand-picked subset: `@props` replaces the
+     * prelude's DOCBLOCK type with an INFERRED one (`compileProps()`'s
+     * `$attributes = new ComponentAttributeBag($__newAttributes)`), so the nested tag's
+     * `isset($attributes) && $attributes instanceof ...` guard lands in Reconciler's INFERRED branch
+     * (`TypeDoesNotContainNull`/`TypeDoesNotContainType`), not the docblock branch
+     * (`RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`) —
+     * both siblings are gated, or this test cannot see the exact shape it exists to pin.
      */
     #[Test]
     public function ambient_guards_around_a_nested_component_tag_are_dropped(): void
@@ -614,12 +628,42 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $template = 'components/nested-attributes.blade.php';
 
-        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+        $gatedFamilies = [...self::AMBIENT_GUARD_FAMILIES, 'TypeDoesNotContainNull', 'TypeDoesNotContainType'];
+
+        foreach ($gatedFamilies as $family) {
             $this->assertSame(
                 [],
                 $this->linesFor($issues, $family, $template),
                 \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
             );
+        }
+
+        // `PossiblyNullReference` on the `merge()` call is a CONSEQUENCE of the impossible negative
+        // arm above, not something the message gate can drop: Psalm keeps the reconciled `null` in
+        // the never-taken branch of the nested tag's guard and re-unions it back into $attributes's
+        // type at `endif`. Confirmed pre-existing, not a #1525 regression, against a base-prelude
+        // differential (blade/integration's own non-nullable `$attributes` produces the identical
+        // TypeDoesNotContainNull + PossiblyNullReference pair on the same shadow). Left VISIBLE
+        // deliberately — an explicit allowlist, not an omission — because dropping
+        // `PossiblyNullReference` by receiver name would also hide an author's genuine
+        // `$attributes->` read before their own `@props` line (see docs/blade.md known limitations).
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Nothing else at all reports on this template — the allowlist above is exhaustive.
+        $accounted = [...$gatedFamilies, 'PossiblyNullReference'];
+
+        foreach ($issues as $issue) {
+            if (\str_ends_with($issue['file_path'], $template)) {
+                $this->assertContains(
+                    $issue['type'],
+                    $accounted,
+                    "unaccounted issue on {$template}: " . \json_encode($issue, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                );
+            }
         }
     }
 
@@ -650,12 +694,14 @@ final class BladeIssueRemapTest extends TestCase
      * #1525 §0.1: the `@component('view', [...])` directive path hands `$slot` a ComponentSlot
      * too (ManagesComponents::componentData() builds the same default slot either way), so it
      * needs no union and no weakening — `$slot->isEmpty()` must type-check exactly as it does on
-     * the `<x-*>` path.
+     * the `<x-*>` path. Run under `psalm-blade-report-mixed.xml`: see the docblock on
+     * attributes_merge_and_slot_stay_typed_in_a_props_component_view() for why the default config
+     * makes the `MixedMethodCall` half of this assertion vacuous.
      */
     #[Test]
     public function slot_is_typed_the_same_way_on_the_component_directive_path(): void
     {
-        $issues = $this->analyze('psalm.xml');
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
         $template = 'resources/views/classic-slot.blade.php';
 
         foreach (['UndefinedMethod', 'MixedMethodCall', 'PossiblyUndefinedMethod'] as $family) {

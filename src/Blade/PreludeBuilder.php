@@ -100,13 +100,19 @@ final class PreludeBuilder
     {
         $attributes = null;
 
-        if (\preg_match('/@props\s*\(/', $source) === 1) {
+        // Case-insensitive: Blade dispatches a directive via `method_exists($this,
+        // 'compile'.ucfirst($name))`, which PHP resolves case-insensitively, so `@PROPS(...)`
+        // compiles identically to `@props(...)`. `\b`-anchored: `str_contains()` would also match
+        // `$attributesFoo`/`$slots_count`, a longer identifier rather than a mention of the ambient
+        // name itself, which would misclassify a plain page as a component view and widen the
+        // relocator's drop gate on it (#1525 review).
+        if (\preg_match('/@props\s*\(/i', $source) === 1) {
             $attributes = '?' . self::COMPONENT_ATTRIBUTES_TYPE;
-        } elseif (\preg_match('/@aware\s*\(/', $source) === 1 || \str_contains($source, '$attributes')) {
+        } elseif (\preg_match('/@aware\s*\(/i', $source) === 1 || \preg_match('/\$attributes\b/', $source) === 1) {
             $attributes = self::COMPONENT_ATTRIBUTES_TYPE;
         }
 
-        $slot = \str_contains($source, '$slot') ? self::COMPONENT_SLOT_TYPE : null;
+        $slot = \preg_match('/\$slot\b/', $source) === 1 ? self::COMPONENT_SLOT_TYPE : null;
 
         return ['attributes' => $attributes, 'slot' => $slot];
     }

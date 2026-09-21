@@ -91,6 +91,43 @@ final class PreludeBuilderTest extends TestCase
     }
 
     #[Test]
+    public function a_longer_identifier_is_not_mistaken_for_the_attributes_or_slot_mention(): void
+    {
+        // `str_contains($source, '$attributes')`/`'$slot'` would match inside `$attributesFoo` and
+        // `$slots_count` too — a longer identifier, not a mention of the ambient name itself — which
+        // would flip isComponentView() to true on a plain page that merely happens to declare one.
+        $prelude = (new PreludeBuilder())->build(
+            '<?php echo 1; ?>',
+            [],
+            '<?php $attributesFoo = []; $slots_count = 0; ?>',
+        );
+
+        $this->assertStringNotContainsString('ComponentAttributeBag', $prelude);
+        $this->assertStringNotContainsString('ComponentSlot', $prelude);
+        $this->assertFalse(PreludeBuilder::isComponentView('<?php $attributesFoo = []; $slots_count = 0; ?>'));
+    }
+
+    #[Test]
+    public function directive_matching_is_case_insensitive(): void
+    {
+        // Blade dispatches a directive via method_exists($this, 'compile'.ucfirst($name)), which is
+        // case-insensitive in PHP, so `@PROPS(...)` compiles exactly like `@props(...)` — the
+        // classifier must agree, or it disagrees with the compiler about the same template.
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@PROPS(['type' => 'info'])");
+
+        $this->assertStringContainsString('@var ?\Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+    }
+
+    #[Test]
+    public function aware_directive_matching_is_case_insensitive(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@AWARE(['type'])");
+
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+        $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
+    }
+
+    #[Test]
     public function includes_contract_vars_with_given_type(): void
     {
         $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', ['user' => '\App\Models\User'], '');

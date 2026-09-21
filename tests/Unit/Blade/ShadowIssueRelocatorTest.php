@@ -16,6 +16,8 @@ use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
+use Psalm\Issue\TypeDoesNotContainNull;
+use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
@@ -277,6 +279,36 @@ final class ShadowIssueRelocatorTest extends TestCase
     {
         $issue = new DocblockTypeContradiction(
             'Cannot resolve types for $component - docblock-defined type Illuminate\View\Component does not contain null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
+    }
+
+    /**
+     * `Reconciler::triggerIssueForImpossible()`'s INFERRED-branch siblings of
+     * `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`: the
+     * shape a `@props` view's nested `<x-...>` tag actually hits, since `@props` replaces the
+     * prelude's docblock type with an inferred one before the nested tag's own guard runs.
+     */
+    #[Test]
+    public function type_does_not_contain_null_is_dropped_inside_a_component_view(): void
+    {
+        $issue = new TypeDoesNotContainNull(
+            'Cannot resolve types for $attributes - Illuminate\View\ComponentAttributeBag does not contain null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
+    }
+
+    #[Test]
+    public function type_does_not_contain_type_is_dropped_inside_a_component_view(): void
+    {
+        $issue = new TypeDoesNotContainType(
+            'Illuminate\View\ComponentAttributeBag for $attributes is never Illuminate\View\Component',
             $this->shadowLocation(9),
             null,
         );
