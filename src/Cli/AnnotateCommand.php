@@ -86,7 +86,10 @@ final class AnnotateCommand extends Command
 
         try {
             $dryRun = $input->hasParameterOption('--dry-run', true);
-            \file_put_contents($controlFile, (string) \json_encode(['dryRun' => $dryRun]));
+            \file_put_contents($controlFile, (string) \json_encode([
+                AnnotateRequest::MARKER => 1,
+                'dryRun' => $dryRun,
+            ]));
 
             $exitCode = $this->runPsalm($psalmBin, $cwd, $controlFile);
 
@@ -117,8 +120,16 @@ final class AnnotateCommand extends Command
         // The shape is this plugin's own, written back by AnnotateRequest::publish() in the child.
         // The is_array() guard below is the real check: a child that died mid-run leaves the
         // request JSON the command itself wrote, which carries no `changed` key.
-        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string}|null $result */
+        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, error?: string}|null $result */
         $result = \is_string($raw) ? \json_decode($raw, true) : null;
+
+        $error = \is_array($result) ? $result['error'] ?? null : null;
+
+        if ($error !== null) {
+            $io->error("The annotate pass wrote nothing: {$error}");
+
+            return Command::FAILURE;
+        }
 
         $changed = \is_array($result) ? $result['changed'] ?? null : null;
 

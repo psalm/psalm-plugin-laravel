@@ -100,6 +100,11 @@ final class Plugin implements PluginEntryPointInterface
             // write to the source tree. Absent for every ordinary psalm run (#1524).
             $annotate = Blade\Annotate\AnnotateRequest::fromEnvironment();
 
+            // A request force-enables Blade even for a project that has it off: the user ran the
+            // codemod, and refusing because of a config flag they never set for it would only be
+            // confusing. That is safe precisely because the request is gated on a marked control
+            // file this CLI wrote, not on the environment variable being set to something readable.
+
             // Not `bladeEnabled` alone: a boot that degraded registered no shadows, so every Blade
             // handler below would read an empty registry and, worse, report on templates whose
             // facts were never collected (#1518).

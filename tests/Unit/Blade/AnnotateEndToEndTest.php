@@ -37,6 +37,7 @@ final class AnnotateEndToEndTest extends TestCase
         'home' => "<h1>{{ \$title }}</h1>\n<p>{{ \$post->slug }}</p>\n",
         'declared' => "{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
         'conflict' => "<p>{{ \$flag }}</p>\n",
+        'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
     ];
 
     private ?string $controlFile = null;
@@ -95,6 +96,40 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
+    public function never_declares_a_loop_alias_the_template_binds_itself(): void
+    {
+        // A declared `$item` makes every correct call site report MissingViewVariable: the alias is
+        // the template's own, not something the caller is expected to pass.
+        $this->annotate();
+
+        $this->assertSame(
+            "{{-- @var list<string> \$items --}}\n" . self::TEMPLATES['loop'],
+            $this->template('loop'),
+        );
+    }
+
+    #[Test]
+    public function refuses_a_control_file_this_cli_did_not_write(): void
+    {
+        // A leaked PSALM_LARAVEL_BLADE_ANNOTATE (a stale shell, a .envrc, a CI export) must not turn
+        // an ordinary psalm run into a codemod, nor overwrite whatever the variable happens to name.
+        $decoy = \tempnam(\sys_get_temp_dir(), 'psalm-laravel-annotate-decoy');
+        $this->assertIsString($decoy);
+        $this->controlFile = $decoy;
+
+        $contents = (string) \json_encode(['name' => 'acme/project', 'require' => ['php' => '^8.2']]);
+        \file_put_contents($decoy, $contents);
+
+        $this->runPsalm($decoy);
+
+        $this->assertSame($contents, \file_get_contents($decoy), 'the named file must be left intact');
+
+        foreach (self::TEMPLATES as $name => $template) {
+            $this->assertSame($template, $this->template($name), "{$name} must be left alone");
+        }
+    }
+
+    #[Test]
     public function a_second_run_over_annotated_templates_changes_nothing(): void
     {
         $this->annotate();
@@ -115,7 +150,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(3, $result['changed']);
+        $this->assertCount(4, $result['changed']);
         $this->assertStringContainsString("+{{-- @var string \$title --}}", (string) ($result['diff'] ?? ''));
     }
 
@@ -137,7 +172,10 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertIsString($controlFile);
         $this->controlFile = $controlFile;
 
-        \file_put_contents($controlFile, (string) \json_encode(['dryRun' => $dryRun]));
+        \file_put_contents($controlFile, (string) \json_encode([
+            AnnotateRequest::MARKER => 1,
+            'dryRun' => $dryRun,
+        ]));
 
         $this->runPsalm($controlFile);
 
