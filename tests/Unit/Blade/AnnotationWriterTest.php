@@ -7,10 +7,13 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\Annotate\AnnotateRequest;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationWriter;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
+use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\Type;
 
 #[CoversClass(AnnotationWriter::class)]
@@ -21,6 +24,9 @@ final class AnnotationWriterTest extends TestCase
     protected function setUp(): void
     {
         AnnotationCollector::reset();
+        AnnotationWriter::reset();
+        ContractRegistry::reset();
+        ViewReferenceRegistry::reset();
 
         $this->tempDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-annotate-' . \uniqid('', true);
 
@@ -32,6 +38,10 @@ final class AnnotationWriterTest extends TestCase
     protected function tearDown(): void
     {
         AnnotationCollector::reset();
+        AnnotationWriter::reset();
+        ContractRegistry::reset();
+        ViewReferenceRegistry::reset();
+        \putenv(AnnotateRequest::ENV_VAR);
 
         foreach (\glob($this->tempDir . \DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
             @\unlink($file);
@@ -121,6 +131,65 @@ final class AnnotationWriterTest extends TestCase
         $this->expectException(\RuntimeException::class);
 
         AnnotationWriter::apply($this->tempDir . \DIRECTORY_SEPARATOR . 'absent.blade.php', ['t' => 'string'], true);
+    }
+
+    #[Test]
+    public function refuses_to_write_when_the_run_never_analysed_a_statement(): void
+    {
+        // Psalm forks its analysis workers once the project is big enough, and a worker's statics
+        // never reach the parent that runs AfterAnalysis. Writing then would declare `mixed` for
+        // every variable of every template, silently, with exit code 0.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $this->assertIsString($this->publishedResult()['error'] ?? null, 'the run has to report why it wrote nothing');
+    }
+
+    #[Test]
+    public function writes_once_the_run_did_analyse_statements(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame("{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n", \file_get_contents($path));
+        $this->assertArrayNotHasKey('error', $this->publishedResult());
+    }
+
+    private function registerTemplate(string $contents): string
+    {
+        $path = $this->template($contents);
+
+        ViewReferenceRegistry::registerTemplate('page', 0, $path);
+        ContractRegistry::register('page', 0, new ViewDataContract([], false, ['title'], false));
+
+        return $path;
+    }
+
+    private function request(): AnnotateRequest
+    {
+        $controlFile = $this->tempDir . \DIRECTORY_SEPARATOR . 'control.json';
+        \file_put_contents($controlFile, (string) \json_encode(['psalm-laravel-annotate' => 1, 'dryRun' => false]));
+        \putenv(AnnotateRequest::ENV_VAR . '=' . $controlFile);
+
+        $request = AnnotateRequest::fromEnvironment();
+        $this->assertInstanceOf(AnnotateRequest::class, $request);
+
+        return $request;
+    }
+
+    /** @return array<string, mixed> */
+    private function publishedResult(): array
+    {
+        $decoded = \json_decode((string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'control.json'), true);
+        $this->assertIsArray($decoded);
+
+        return $decoded;
     }
 
     private function template(string $contents): string

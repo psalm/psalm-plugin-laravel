@@ -41,6 +41,14 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     /** @var array<string, true> views at least one producer left an open data set for */
     private static array $open = [];
 
+    /**
+     * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
+     * the project is big enough, and a worker's statics never reach the parent that runs
+     * AfterAnalysis — where, seeing nothing collected, the writer would declare `mixed` for every
+     * variable of every template. False in the parent of a forked run is what discriminates it.
+     */
+    private static bool $analyzed = false;
+
     /** @psalm-external-mutation-free */
     public static function init(): void
     {
@@ -53,6 +61,24 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$enabled = false;
         self::$observed = [];
         self::$open = [];
+        self::$analyzed = false;
+    }
+
+    /**
+     * Called for every analysed statement, ahead of any filtering: the question it answers is "did
+     * analysis happen in this process", not "was a view() call found" — a project with no `view()`
+     * call at all is legitimate, a parent that analysed nothing is not.
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function markAnalyzed(): void
+    {
+        self::$analyzed = true;
+    }
+
+    public static function sawAnalysis(): bool
+    {
+        return self::$analyzed;
     }
 
     #[\Override]
@@ -61,6 +87,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         if (!self::$enabled) {
             return null;
         }
+
+        self::markAnalyzed();
 
         // The same two statement shapes, and the same outermost-first walk, that
         // {@see \Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler} checks call sites with.
