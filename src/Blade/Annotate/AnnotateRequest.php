@@ -64,6 +64,12 @@ final class AnnotateRequest
         ]);
     }
 
+    /** Whether the control file is still one this CLI wrote, re-read from disk. */
+    public function isValid(): bool
+    {
+        return self::decode($this->controlFile) !== null;
+    }
+
     /** Why the pass wrote nothing, for the CLI to report as a failure rather than an empty success. */
     public function publishError(string $reason): void
     {
@@ -86,6 +92,12 @@ final class AnnotateRequest
     /** @return array<array-key, mixed>|null the control file's contents, null when it is not one */
     private static function decode(string $path): ?array
     {
+        // A regular file on disk, never a stream wrapper: `data://text/plain,{...}` would otherwise
+        // satisfy the marker with no file at all, arming writes straight from the environment.
+        if (\preg_match('#^[a-zA-Z][a-zA-Z0-9+.-]*://#', $path) === 1 || !\is_file($path)) {
+            return null;
+        }
+
         $raw = @\file_get_contents($path);
 
         if ($raw === false) {

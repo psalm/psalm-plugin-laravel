@@ -67,6 +67,13 @@ final class AnnotationWriter implements AfterAnalysisInterface
             return;
         }
 
+        // Re-checked here, not only in publish(): the templates are written well before the result
+        // is, and the control file is named by an environment variable that can be repointed while
+        // the analysis runs.
+        if (!$request->isValid()) {
+            return;
+        }
+
         $changed = [];
         $failures = [];
         $diff = '';
@@ -148,6 +155,13 @@ final class AnnotationWriter implements AfterAnalysisInterface
 
         foreach ($contract->readVariables as $name) {
             if (isset($contract->vars[$name]) || isset($loopAliases[$name])) {
+                continue;
+            }
+
+            // A call site that renders this view with a provably closed data set NOT carrying the
+            // name proves the template works without it — it reads the name guarded (`$x ?? ''`,
+            // `@isset`), and declaring it would report MissingViewVariable at that call site.
+            if (AnnotationCollector::isOptional($viewName, $name)) {
                 continue;
             }
 
