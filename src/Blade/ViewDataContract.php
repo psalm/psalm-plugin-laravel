@@ -28,11 +28,18 @@ final class ViewDataContract
      *                                                  lower bound. Defaults to true: a caller that
      *                                                  never computed a read set must not be read as
      *                                                  one that proved the set empty.
+     * @param list<string>               $loopVariables the subset of $readVariables the compiled body
+     *                                                  binds itself, as a `@foreach` / `@forelse`
+     *                                                  alias. They stay IN $readVariables, because
+     *                                                  "does the template use this name" is the right
+     *                                                  question for UnusedViewData; they are not
+     *                                                  something a call site is expected to pass.
      */
     public function __construct(
         public readonly array $vars,
         public readonly bool $propsUnknown,
         public readonly array $readVariables = [],
         public readonly bool $readsUnknown = true,
+        public readonly array $loopVariables = [],
     ) {}
 }

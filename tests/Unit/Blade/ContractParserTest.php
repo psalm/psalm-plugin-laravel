@@ -303,4 +303,36 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($contract->readsUnknown);
         $this->assertSame(['name'], $contract->readVariables);
     }
+
+    #[Test]
+    public function collects_a_destructured_loop_binding_as_a_loop_variable(): void
+    {
+        // `@foreach ($rows as [$id, $name])`: both names are bound by the template, so neither is
+        // something a call site passes.
+        $contract = (new ContractParser())->parseDataContract(
+            '',
+            '<?php foreach ($rows as [$id, $name]): echo e($id) . e($name); endforeach;',
+        );
+
+        $this->assertSame(['id', 'name'], $contract->loopVariables);
+    }
+
+    #[Test]
+    public function collects_a_keyed_destructured_loop_binding(): void
+    {
+        $contract = (new ContractParser())->parseDataContract(
+            '',
+            '<?php foreach ($rows as $key => [\'a\' => $first]): echo e($first) . e($key); endforeach;',
+        );
+
+        $this->assertSame(['first', 'key'], $contract->loopVariables);
+    }
+
+    #[Test]
+    public function reads_a_declaration_with_a_non_ascii_variable_name(): void
+    {
+        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$caf\u{00e9} --}}\n");
+
+        $this->assertArrayHasKey("caf\u{00e9}", $contract->vars);
+    }
 }

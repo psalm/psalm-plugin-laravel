@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+    Blade-enabled config used ONLY by the `psalm-laravel blade:annotate` step of laravel-test.sh.
+    Kept apart from laravel-test-psalm.xml so the baselined run stays exactly what it was: turning
+    Blade on there would pull every compiled shadow into the analysis and rewrite the baseline.
+-->
+<psalm
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    errorLevel="1"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="false"
+    resolveFromConfigFile="false"
+    xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
+>
+    <projectFiles>
+        <directory name="app"/>
+        <directory name="routes"/>
+        <ignoreFiles>
+            <directory name="vendor"/>
+        </ignoreFiles>
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <blade enabled="true" />
+        </pluginClass>
+    </plugins>
+</psalm>
