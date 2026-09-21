@@ -70,6 +70,30 @@ final class AnnotateRequestTest extends TestCase
     }
 
     #[Test]
+    public function refuses_a_stream_wrapper_that_carries_the_marker_inline(): void
+    {
+        // `data://` satisfies the marker with no file at all, arming the codemod straight from the
+        // environment.
+        $inline = 'data://text/plain;base64,'
+            . \base64_encode((string) \json_encode(['psalm-laravel-annotate' => 1, 'dryRun' => false]));
+
+        \putenv(AnnotateRequest::ENV_VAR . '=' . $inline);
+
+        $this->assertNull(AnnotateRequest::fromEnvironment());
+    }
+
+    #[Test]
+    public function refuses_a_stream_wrapper_naming_a_control_file_this_cli_wrote(): void
+    {
+        // `file://` passes is_file() and reads back the real marked file, so the scheme check is the
+        // only thing refusing it. Without it, every wrapper is one is_file() quirk from being armed.
+        $this->control(['psalm-laravel-annotate' => 1, 'dryRun' => false]);
+        \putenv(AnnotateRequest::ENV_VAR . '=file://' . $this->controlFile);
+
+        $this->assertNull(AnnotateRequest::fromEnvironment());
+    }
+
+    #[Test]
     public function is_absent_when_the_environment_variable_is_not_set(): void
     {
         \putenv(AnnotateRequest::ENV_VAR);

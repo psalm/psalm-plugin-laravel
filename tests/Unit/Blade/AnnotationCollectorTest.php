@@ -4,10 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node\Expr;
+use PhpParser\Node\Stmt;
+use PhpParser\NodeFinder;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Internal\Provider\NodeDataProvider;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
+use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
+use Psalm\StatementsSource;
 use Psalm\Type;
 
 #[CoversClass(AnnotationCollector::class)]
@@ -185,6 +192,71 @@ final class AnnotationCollectorTest extends TestCase
         AnnotationCollector::record('home', [], false);
 
         $this->assertFalse(AnnotationCollector::isOptional('home', 'title'));
+    }
+
+    /**
+     * The confidence the direct call site alone establishes. Asserted so the companion test below
+     * cannot pass because the fixture failed to record anything.
+     */
+    #[Test]
+    public function answers_the_type_of_a_statement_the_chain_walk_resolved(): void
+    {
+        $this->analyzeStatements("view('home', ['title' => 'text']);", [['title' => Type::getString()]]);
+
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    #[Test]
+    public function marks_a_view_unreadable_when_a_nested_rendering_call_was_declined(): void
+    {
+        // The chain walk starts at the outermost expression, so the assignment is declined whole
+        // and the int it passes is invisible. Only the scan for view names nested inside a declined
+        // expression stops the string from being declared as if nothing disagreed.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\n\$v = view('home', ['title' => 42]);",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
+     * in source order: no analysis runs here, so nothing else would type the data arguments.
+     *
+     * @param list<array<string, Type\Union>> $shapes
+     */
+    private function analyzeStatements(string $code, array $shapes): void
+    {
+        AnnotationCollector::init();
+
+        $statements = (new ParserFactory())->createForHostVersion()->parse("<?php\n" . $code);
+        $this->assertIsArray($statements);
+
+        $nodeData = new NodeDataProvider();
+
+        foreach ((new NodeFinder())->findInstanceOf($statements, Expr\Array_::class) as $index => $literal) {
+            $nodeData->setType($literal, new Type\Union([new Type\Atomic\TKeyedArray($shapes[$index])]));
+        }
+
+        $source = $this->createStub(StatementsSource::class);
+        $source->method('getNodeTypeProvider')->willReturn($nodeData);
+
+        foreach ($statements as $statement) {
+            AnnotationCollector::afterStatementAnalysis($this->statementEvent($statement, $source));
+        }
+    }
+
+    /** Built field by field: the event's constructor also wants a Context and a Codebase this hook never reads. */
+    private function statementEvent(Stmt $statement, StatementsSource $source): AfterStatementAnalysisEvent
+    {
+        $class = new \ReflectionClass(AfterStatementAnalysisEvent::class);
+        $event = $class->newInstanceWithoutConstructor();
+
+        $class->getProperty('stmt')->setValue($event, $statement);
+        $class->getProperty('statements_source')->setValue($event, $source);
+
+        return $event;
     }
 
     /** Built directly: Type::getInt($value) reaches for a Config singleton no unit test boots. */
