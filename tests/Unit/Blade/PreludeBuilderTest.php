@@ -128,6 +128,85 @@ final class PreludeBuilderTest extends TestCase
     }
 
     #[Test]
+    public function a_commented_out_props_directive_is_not_a_live_directive(): void
+    {
+        // Blade strips `{{-- --}}` before compiling, so no `$attributes ??= ...` is emitted and the
+        // bag is never absent; reading the commented directive as live typed it nullable and made
+        // every `$attributes->` read in the view a false PossiblyNullReference.
+        $source = "{{-- @props(['type' => 'info']) --}}\n{{ \$attributes->merge([]) }}";
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], $source);
+
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+        $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
+    }
+
+    #[Test]
+    public function an_escaped_props_directive_is_not_a_live_directive(): void
+    {
+        // `@@props(...)` compiles to the literal text `@props(...)`: compileStatements() sees the
+        // leading `@` and echoes the rest verbatim instead of dispatching compileProps().
+        $source = "@@props(['type' => 'info'])\n{{ \$attributes->merge([]) }}";
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], $source);
+
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+        $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
+    }
+
+    #[Test]
+    public function an_escaped_aware_directive_does_not_classify_the_view(): void
+    {
+        $this->assertFalse(PreludeBuilder::isComponentView("@@aware(['type'])\n<div>plain page</div>"));
+    }
+
+    #[Test]
+    public function a_commented_out_ambient_mention_does_not_classify_a_plain_page(): void
+    {
+        // A mention inside a comment never reaches the compiled output, so treating it as evidence
+        // of a component view widens the relocator's drop gate over a template that has none.
+        $source = "{{-- {{ \$attributes }} {{ \$slot }} --}}\n<div>plain page</div>";
+
+        $this->assertFalse(PreludeBuilder::isComponentView($source));
+    }
+
+    #[Test]
+    public function a_verbatim_ambient_mention_does_not_classify_a_plain_page(): void
+    {
+        // A `@verbatim` body is emitted as literal text, never as code that could read the name.
+        $source = "@verbatim\n{{ \$attributes }} {{ \$slot }}\n@endverbatim";
+
+        $this->assertFalse(PreludeBuilder::isComponentView($source));
+    }
+
+    #[Test]
+    public function a_props_view_declares_slot_without_mentioning_it(): void
+    {
+        // Both render paths build a ComponentSlot for `$slot` whether or not the template names it
+        // (ManagesComponents::componentData()), so recognition via a live directive is enough:
+        // an indirect read must not fall through to UndefinedGlobalVariable.
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@props(['type' => 'info'])\n<div>no mention</div>");
+
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
+    }
+
+    #[Test]
+    public function an_aware_view_declares_slot_without_mentioning_it(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@aware(['type'])\n<div>no mention</div>");
+
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
+    }
+
+    #[Test]
+    public function a_bare_attributes_mention_alone_does_not_declare_slot(): void
+    {
+        // Mention-based recognition is a heuristic over a name the template merely happens to use;
+        // only a live `@props`/`@aware` directive is proof enough to declare a name never written.
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], '{{ $attributes->class(["x"]) }}');
+
+        $this->assertStringNotContainsString('ComponentSlot', $prelude);
+    }
+
+    #[Test]
     public function includes_contract_vars_with_given_type(): void
     {
         $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', ['user' => '\App\Models\User'], '');

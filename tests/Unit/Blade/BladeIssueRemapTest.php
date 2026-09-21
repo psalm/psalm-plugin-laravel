@@ -608,6 +608,26 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * A Blade COMMENT is stripped before compilation, so `{{-- @props(...) --}}` emits no
+     * `$attributes ??= new ComponentAttributeBag(...)` and the bag is never absent at runtime.
+     * Classifying the view off the raw source read the commented directive as live and typed
+     * `$attributes` nullable, turning the `merge()` call on the next line into a false
+     * `PossiblyNullReference` on a perfectly valid component.
+     */
+    #[Test]
+    public function a_commented_out_props_directive_does_not_make_attributes_nullable(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/commented-props.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * The survivor family step 3 exists for: `nested-attributes.blade.php` is a `@props` component
      * view that itself renders a NESTED `<x-alert/>` tag — the shape whose generated open/close
      * bookkeeping re-checks `isset($attributes)`/`instanceof` after Laravel's own `??=` guard has

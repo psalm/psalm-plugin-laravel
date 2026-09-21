@@ -94,25 +94,44 @@ final class PreludeBuilder
      * `Component::data()` / `AnonymousComponent::data()` already guarantees the key, so both get
      * the non-null type.
      *
+     * A live `@props`/`@aware` directive also declares `$slot` whether or not the template ever
+     * names it: both render paths always supply one, so an indirect read must not fall through to
+     * UndefinedGlobalVariable. A bare `$attributes` mention does NOT — it is a guess over a name
+     * the template merely happens to use, too weak to declare a second name never written.
+     *
      * @return array{attributes: ?string, slot: ?string}
      */
     public static function componentTypesFor(string $source): array
     {
+        // Comments and verbatim bodies never compile, so a directive or mention inside one is not
+        // evidence of anything: a commented `@props` emits no `??=` guard (typing `$attributes`
+        // nullable off it invents a PossiblyNullReference on a valid component), and a commented
+        // mention would classify a plain page as a component view.
+        $source = MarkerPrePass::blankInertText($source);
+
         $attributes = null;
+        $directive = false;
 
         // Case-insensitive: Blade dispatches a directive via `method_exists($this,
         // 'compile'.ucfirst($name))`, which PHP resolves case-insensitively, so `@PROPS(...)`
-        // compiles identically to `@props(...)`. `\b`-anchored: `str_contains()` would also match
-        // `$attributesFoo`/`$slots_count`, a longer identifier rather than a mention of the ambient
-        // name itself, which would misclassify a plain page as a component view and widen the
-        // relocator's drop gate on it (#1525 review).
-        if (\preg_match('/@props\s*\(/i', $source) === 1) {
+        // compiles identically to `@props(...)`. `(?<!@)`: `@@props(...)` is an ESCAPED directive
+        // that compiles to the literal text `@props(...)`, never to a call. `\b`-anchored:
+        // `str_contains()` would also match `$attributesFoo`/`$slots_count`, a longer identifier
+        // rather than a mention of the ambient name itself, which would misclassify a plain page as
+        // a component view and widen the relocator's drop gate on it (#1525 review).
+        if (\preg_match('/(?<!@)@props\s*\(/i', $source) === 1) {
             $attributes = '?' . self::COMPONENT_ATTRIBUTES_TYPE;
-        } elseif (\preg_match('/@aware\s*\(/i', $source) === 1 || \preg_match('/\$attributes\b/', $source) === 1) {
+            $directive = true;
+        } elseif (\preg_match('/(?<!@)@aware\s*\(/i', $source) === 1) {
+            $attributes = self::COMPONENT_ATTRIBUTES_TYPE;
+            $directive = true;
+        } elseif (\preg_match('/\$attributes\b/', $source) === 1) {
             $attributes = self::COMPONENT_ATTRIBUTES_TYPE;
         }
 
-        $slot = \preg_match('/\$slot\b/', $source) === 1 ? self::COMPONENT_SLOT_TYPE : null;
+        $slot = $directive || \preg_match('/\$slot\b/', $source) === 1
+            ? self::COMPONENT_SLOT_TYPE
+            : null;
 
         return ['attributes' => $attributes, 'slot' => $slot];
     }
