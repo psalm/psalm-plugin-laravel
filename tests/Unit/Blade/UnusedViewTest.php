@@ -49,6 +49,8 @@ final class UnusedViewTest extends TestCase
 
     private const FACADE_ALIAS_DYNAMIC_FIXTURE = __DIR__ . '/Fixtures/UnusedViewFacadeAliasDynamic';
 
+    private const NUMERIC_NAME_FIXTURE = __DIR__ . '/Fixtures/UnusedViewNumericName';
+
     private const ISSUE = 'UnusedView';
 
     /** @var list<string> */
@@ -64,6 +66,7 @@ final class UnusedViewTest extends TestCase
         self::INSTANCE_CALL_FIXTURE,
         self::FACADE_ALIAS_FIXTURE,
         self::FACADE_ALIAS_DYNAMIC_FIXTURE,
+        self::NUMERIC_NAME_FIXTURE,
     ];
 
     protected function setUp(): void
@@ -165,6 +168,20 @@ final class UnusedViewTest extends TestCase
             $issues,
             static fn(array $issue): bool => $issue['file'] === 'widget.blade.php',
         )), "view('pkg::widget') must be recognized as a reference to the namespaced template: " . \var_export($issues, true));
+    }
+
+    /**
+     * `123.blade.php` is a legal view. Every store on the path to the report is keyed by view name,
+     * and PHP casts a numeric-string key to int, so the name arrives at the `string`-typed reporter
+     * as an int: without the cast the run dies on a TypeError instead of reporting one orphan.
+     */
+    #[Test]
+    public function a_numeric_view_name_is_reported_rather_than_throwing(): void
+    {
+        $issues = $this->unusedViewIssues(self::NUMERIC_NAME_FIXTURE, 'psalm.xml');
+
+        $this->assertCount(1, $issues, \var_export($issues, true));
+        $this->assertSame('123.blade.php', $issues[0]['file']);
     }
 
     /**
