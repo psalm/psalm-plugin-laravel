@@ -131,6 +131,31 @@ With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugi
 
 The check declines for a call site instead of guessing, and the gate that matters most in practice is that a template whose compiled body hides which names it reads is never checked. `@props` and `@aware` both compile to `$$name` writes, which means component templates are outside this release's reach. The issue page lists the rest.
 
+## Annotating templates
+
+`psalm-laravel blade:annotate` writes the `{{-- @var --}}` declarations a template is missing, taking each type from the `view()` call sites that render it:
+
+```bash
+vendor/bin/psalm-laravel blade:annotate            # write them
+vendor/bin/psalm-laravel blade:annotate --dry-run  # print a unified diff instead
+```
+
+It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`, a path) are forwarded to it, and `--threads=1` is forced (plugin state collected in a forked worker never reaches the process that does the writing). Blade analysis has to be enabled and bootable, otherwise the command reports that the pass was never reached. The command is the only way in: an ordinary `vendor/bin/psalm` run never writes to a template, whatever the configuration says.
+
+What it declares, per variable the template reads:
+
+* the type itself when at least one call site was resolved, every resolved call site agreed on it, and none of them left the view's data set open (a spread, a dynamic key, a `$mergeData`). Literal precision is dropped, so two call sites passing `'draft'` and `'published'` declare `string` rather than fighting over which literal wins.
+* `mixed` otherwise, which still records that the template wants the variable.
+
+What it leaves alone:
+
+* a variable the template already declares, in either `{{-- @var --}}` or raw `<?php /** @var */ ?>` form. Existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
+* a template whose compiled body hides which names it reads. `@props` and `@aware` compile to `$$name`, so component templates are skipped whole rather than annotated in part.
+
+Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. New declarations join an existing contract block if there is one, otherwise they open one at the top of the file.
+
+Annotating changes what the other checks see, which is the point: the declarations it writes are what [`validateViewData`](config.md#validateviewdata) checks call sites against, and what [`reportUnusedViewData`](config.md#reportunusedviewdata) counts as wanted. Expect new findings on the next run, including [MissingViewVariable](issues/MissingViewVariable.md) for a variable a template reads conditionally (`{{ $flag ?? false }}`) that some call site does not pass; drop that declaration, or make the call site pass it. Annotations do **not** type the template body (see [Known limits](#known-limits)).
+
 ## Known limits
 
 * **No cross-template following for analysis.** Each template is compiled and analyzed as if it stood alone; `@include`, `@extends`, and component recursion are resolved only for the reference and read-set graphs the two opt-in rules above use, never to type a template's body.
