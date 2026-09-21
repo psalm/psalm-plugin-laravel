@@ -593,4 +593,123 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
     }
+
+    /**
+     * #1517: a custom directive's handler is a closure loaded from a separate PHP file. The
+     * template that uses the directive never changes, but the directive's own implementation
+     * does — the fingerprint has to fold in the compiler environment, not just the template
+     * source, or the second run reuses the first run's (now stale) shadow.
+     */
+    #[Test]
+    public function a_custom_directive_swapped_between_runs_recompiles_even_though_the_template_did_not_change(): void
+    {
+        $directiveFile = $this->root . '/directive.php';
+        \file_put_contents($directiveFile, "<?php\nreturn function (\$expression) { return '<?php echo \"MARK-V1\"; ?>'; };\n");
+        $template = $this->writeTemplate('uses-directive.blade.php', "@marker\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+        /** @var callable $handler */
+        $handler = include $directiveFile;
+        $compiler->directive('marker', $handler);
+
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $first)->boot();
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringContainsString('MARK-V1', (string) \file_get_contents($first->analyzedShadows[0]));
+
+        \file_put_contents($directiveFile, "<?php\nreturn function (\$expression) { return '<?php echo \"MARK-V2\"; ?>'; };\n");
+
+        $secondApp = $this->app();
+        /** @var BladeCompiler $secondCompiler */
+        $secondCompiler = $secondApp->make('blade.compiler');
+        /** @var callable $secondHandler */
+        $secondHandler = include $directiveFile;
+        $secondCompiler->directive('marker', $secondHandler);
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertSame([$template], $second->reportableTemplates);
+        $this->assertStringContainsString(
+            'MARK-V2',
+            (string) \file_get_contents($second->analyzedShadows[0]),
+            'a directive edited between runs must recompile the shadow even though the template itself is unchanged',
+        );
+    }
+
+    /**
+     * The compiler-environment hash must be stable across two runs that register the exact same
+     * directive: otherwise every project with even one custom directive would recompile on every
+     * single run and the freshness cache would never hit.
+     */
+    #[Test]
+    public function the_same_custom_directive_registered_twice_reuses_the_same_shadow(): void
+    {
+        $this->writeTemplate('uses-directive.blade.php', "@marker\n");
+
+        $registerMarker = function (Container $app): void {
+            /** @var BladeCompiler $compiler */
+            $compiler = $app->make('blade.compiler');
+            $compiler->directive('marker', static fn(string $expression): string => '<?php echo "MARK"; ?>');
+        };
+
+        $firstApp = $this->app();
+        $registerMarker($firstApp);
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+        $shadow = $first->analyzedShadows[0];
+        \file_put_contents($shadow, "<?php // reused\n");
+
+        $secondApp = $this->app();
+        $registerMarker($secondApp);
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertSame([$shadow], $second->analyzedShadows, 'the same environment must resolve to the same shadow path');
+        $this->assertSame("<?php // reused\n", (string) \file_get_contents($shadow), 'a fresh hit must not rewrite the shadow');
+    }
+
+    /**
+     * `if()` stores the user's callback in the compiler's `$conditions` array, distinct from the
+     * wrapper directives it also registers (which live in `$customDirectives` and never change).
+     * Editing only the condition callback must still invalidate the cache, even though nothing in
+     * `getCustomDirectives()` or the template moved.
+     */
+    #[Test]
+    public function editing_a_blade_if_condition_callback_invalidates_the_cache(): void
+    {
+        $conditionFile = $this->root . '/condition.php';
+        \file_put_contents($conditionFile, "<?php\nreturn fn (): bool => true;\n");
+        $this->writeTemplate('uses-condition.blade.php', "@disco\nyes\n@endisco\n");
+
+        $firstApp = $this->app();
+        /** @var BladeCompiler $firstCompiler */
+        $firstCompiler = $firstApp->make('blade.compiler');
+        /** @var callable(): bool $firstCallback */
+        $firstCallback = include $conditionFile;
+        $firstCompiler->if('disco', $firstCallback);
+
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+
+        \file_put_contents($conditionFile, "<?php\nreturn fn (): bool => false;\n");
+
+        $secondApp = $this->app();
+        /** @var BladeCompiler $secondCompiler */
+        $secondCompiler = $secondApp->make('blade.compiler');
+        /** @var callable(): bool $secondCallback */
+        $secondCallback = include $conditionFile;
+        $secondCompiler->if('disco', $secondCallback);
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertNotSame(
+            $first->analyzedShadows[0],
+            $second->analyzedShadows[0],
+            'an edited condition callback must produce a different shadow path even though the template did not change',
+        );
+    }
 }

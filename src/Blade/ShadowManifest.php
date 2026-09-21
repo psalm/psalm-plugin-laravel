@@ -41,7 +41,19 @@ final class ShadowManifest
 
     private ?string $fingerprintSuffix = null;
 
-    public function __construct(private readonly string $shadowDir) {}
+    public function __construct(
+        private readonly string $shadowDir,
+        /**
+         * {@see CompilerEnvironment::describe()}'s hash of every compiler input besides the
+         * template source (custom directives, conditions, component maps, ...). Folded into
+         * {@see self::fingerprint()} so an application that edits its own Blade wiring
+         * invalidates its cached shadows instead of reusing bytes compiled under a different
+         * environment. Empty by default: every existing call site (and every fixture in
+         * {@see \Tests\Psalm\LaravelPlugin\Unit\Blade\ShadowManifestTest}) still gets a stable,
+         * deterministic fingerprint without naming this parameter.
+         */
+        private readonly string $environment = '',
+    ) {}
 
     /** Tolerates an absent or corrupt manifest file: starts empty either way. */
     public function load(): void
@@ -470,7 +482,7 @@ final class ShadowManifest
         // Everything but the source is fixed for the process, and the plugin version costs a
         // Composer lookup, so the suffix is built once rather than per template.
         $this->fingerprintSuffix ??= '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|'
-            . (InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown');
+            . (InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown') . '|' . $this->environment;
 
         return \hash('xxh128', $source . $this->fingerprintSuffix);
     }
