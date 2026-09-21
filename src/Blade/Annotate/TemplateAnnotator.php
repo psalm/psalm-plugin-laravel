@@ -98,15 +98,44 @@ final class TemplateAnnotator
 
         if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) > 0) {
             foreach ($blocks[0] as $block) {
-                if (\preg_match_all(self::RAW_PHP_VAR, $block, $names) > 0) {
-                    foreach ($names[1] as $name) {
-                        $declared[$name] = true;
-                    }
+                foreach (self::declaredInPhp($block) as $name) {
+                    $declared[$name] = true;
                 }
             }
         }
 
         return $declared;
+    }
+
+    /**
+     * Names declared by a `@var` docblock inside one raw PHP block.
+     *
+     * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND
+     * an `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which
+     * is not declared at all, while the declared `$title` is missed. A `@var` inside a string
+     * literal is not a declaration either.
+     *
+     * @return list<string>
+     */
+    private static function declaredInPhp(string $block): array
+    {
+        $names = [];
+
+        // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
+        // not parse, so that is fine; the @ is for the warning an unterminated string emits.
+        foreach (@\token_get_all($block) as $token) {
+            if (!\is_array($token) || ($token[0] !== \T_DOC_COMMENT && $token[0] !== \T_COMMENT)) {
+                continue;
+            }
+
+            if (\preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
+                foreach ($matched[1] as $name) {
+                    $names[] = $name;
+                }
+            }
+        }
+
+        return $names;
     }
 
     /**
