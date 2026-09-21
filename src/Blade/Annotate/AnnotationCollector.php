@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
+use PhpParser\Node;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
-use Psalm\Exception\TypeParseTreeException;
+use PhpParser\NodeFinder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\Type;
+use Psalm\Type\Atomic;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -38,8 +43,17 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static array $observed = [];
 
-    /** @var array<string, true> views at least one producer left an open data set for */
+    /** @var array<string, true> views at least one producer left an open data set for, or could not be read at all */
     private static array $open = [];
+
+    /**
+     * Per view, the names EVERY provably-closed producer passed — the intersection, narrowing with
+     * each one. Absent until the first closed producer. A name missing from it is one some call site
+     * legitimately omits, so declaring it would report MissingViewVariable at that very call site.
+     *
+     * @var array<string, array<string, true>>
+     */
+    private static array $alwaysSupplied = [];
 
     /**
      * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
@@ -61,6 +75,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$enabled = false;
         self::$observed = [];
         self::$open = [];
+        self::$alwaysSupplied = [];
         self::$analyzed = false;
     }
 
@@ -107,9 +122,66 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         if ($chain instanceof ViewCallChain) {
             self::record($chain->viewName, $chain->data, $chain->complete);
+
+            return null;
+        }
+
+        // The chain declines any shape it does not fully understand — `$view = view('home', [...])`
+        // among them, since the walk starts at the outermost expression. Its data would otherwise be
+        // invisible, and a disagreement with it would read as agreement.
+        foreach (self::viewNamesIn($expr) as $viewName) {
+            self::markUnreadable($viewName);
         }
 
         return null;
+    }
+
+    /**
+     * Literal view names of every rendering call nested in an expression the chain declined. Over-
+     * marking is the safe direction: the worst it costs is a `mixed` where a type was provable.
+     *
+     * @return list<string>
+     */
+    private static function viewNamesIn(Expr $expr): array
+    {
+        $names = [];
+
+        foreach ((new NodeFinder())->find($expr, self::isViewBinder(...)) as $call) {
+            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable()) {
+                continue;
+            }
+
+            $first = $call->getArgs()[0] ?? null;
+
+            if ($first !== null && !$first->unpack && $first->value instanceof String_ && $first->value->value !== '') {
+                $names[] = $first->value->value;
+            }
+        }
+
+        return $names;
+    }
+
+    private static function isViewBinder(Node $node): bool
+    {
+        if ($node instanceof Expr\FuncCall) {
+            return $node->name instanceof Node\Name && $node->name->toLowerString() === 'view';
+        }
+
+        if (!$node instanceof Expr\MethodCall
+            && !$node instanceof Expr\NullsafeMethodCall
+            && !$node instanceof Expr\StaticCall
+        ) {
+            return false;
+        }
+
+        return $node->name instanceof Node\Identifier
+            && \in_array($node->name->toLowerString(), ['make', 'view', 'markdown'], true);
+    }
+
+    /** A producer of this view whose contribution could not be read at all. */
+    public static function markUnreadable(string $viewName): void
+    {
+        self::$open[$viewName] = true;
     }
 
     /**
@@ -118,8 +190,14 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function record(string $viewName, array $data, bool $complete): void
     {
-        if (!$complete) {
-            self::$open[$viewName] = true;
+        if ($complete) {
+            $keys = \array_fill_keys(\array_keys($data), true);
+
+            self::$alwaysSupplied[$viewName] = isset(self::$alwaysSupplied[$viewName])
+                ? \array_intersect_key(self::$alwaysSupplied[$viewName], $keys)
+                : $keys;
+        } else {
+            self::markUnreadable($viewName);
         }
 
         foreach ($data as $name => $type) {
@@ -151,19 +229,76 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        // A type that only means what it means where it was inferred — a template parameter, a
+        // conditional — would be read back in the template as something else entirely. `T` parses
+        // fine; it just parses as a class named T.
+        if (self::isContextDependent($observed)) {
+            return null;
+        }
+
         // Literal precision is dropped on purpose: two call sites passing 'draft' and 'published'
         // describe one `string` contract, and pinning either would be wrong for the other.
         $id = $observed->getId(false);
 
-        // The id is about to be written into a template comment that Psalm parses back on the next
-        // run. A type whose id does not survive that round trip (a template parameter, say) is no
-        // annotation at all.
+        // The id is about to be written between `{{--` and `--}}`. An id carrying the terminator
+        // (a literal array key can) would close the comment early and render the rest of the
+        // declaration into the page.
+        if (\str_contains($id, '--}}') || \preg_match('/[\r\n]/', $id) === 1) {
+            return null;
+        }
+
+        // The template comment is read back by Psalm on the next run. A type whose id does not
+        // survive that round trip is no annotation at all. Any throwable counts: the fallback is
+        // `mixed`, which is never wrong.
         try {
             Type::parseString($id);
-        } catch (TypeParseTreeException) {
+        } catch (\Throwable) {
             return null;
         }
 
         return $id;
+    }
+
+    /**
+     * Whether some provably-closed call site renders this view WITHOUT the name — which proves the
+     * template can be rendered without it, so declaring it would manufacture a MissingViewVariable
+     * at that call site. False while no call site has proven its key set closed.
+     */
+    public static function isOptional(string $viewName, string $name): bool
+    {
+        $supplied = self::$alwaysSupplied[$viewName] ?? null;
+
+        return $supplied !== null && !isset($supplied[$name]);
+    }
+
+    /** True for a type carrying a template parameter or a conditional, at any depth. */
+    private static function isContextDependent(Union $union): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            public bool $found = false;
+
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                if ($type instanceof Atomic\TTemplateParam
+                    || $type instanceof Atomic\TTemplateParamClass
+                    || $type instanceof Atomic\TTemplateIndexedAccess
+                    || $type instanceof Atomic\TTemplateKeyOf
+                    || $type instanceof Atomic\TTemplatePropertiesOf
+                    || $type instanceof Atomic\TTemplateValueOf
+                    || $type instanceof Atomic\TConditional
+                ) {
+                    $this->found = true;
+
+                    return self::STOP_TRAVERSAL;
+                }
+
+                return null;
+            }
+        };
+
+        $visitor->traverse($union);
+
+        return $visitor->found;
     }
 }
