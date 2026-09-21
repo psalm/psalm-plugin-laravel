@@ -30,11 +30,16 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class AnnotateCommand extends Command
 {
     /**
-     * @param string|null $workingDirectory Override the target directory; defaults to the process CWD.
-     *                                      Exposed for tests.
+     * @param string|null       $workingDirectory Override the target directory; defaults to the process CWD.
+     *                                            Exposed for tests.
+     * @param list<string>|null $argvOverride     Override the raw argv the psalm arguments are read
+     *                                            from; defaults to the process argv. Exposed for
+     *                                            tests, which run under PHPUnit's own argv.
      */
-    public function __construct(private readonly ?string $workingDirectory = null)
-    {
+    public function __construct(
+        private readonly ?string $workingDirectory = null,
+        private readonly ?array $argvOverride = null,
+    ) {
         parent::__construct();
     }
 
@@ -69,6 +74,18 @@ final class AnnotateCommand extends Command
             . \DIRECTORY_SEPARATOR . 'vendor'
             . \DIRECTORY_SEPARATOR . 'bin'
             . \DIRECTORY_SEPARATOR . 'psalm';
+
+        $pathLimiting = $this->pathLimitingArguments();
+
+        if ($pathLimiting !== []) {
+            $io->error(\sprintf(
+                'blade:annotate analyses the whole project, so it cannot take a path: %s.',
+                \implode(', ', $pathLimiting),
+            ));
+            $io->writeln('  A type is only written when every call site agrees on it, and a call site in a file the run skipped cannot disagree.');
+
+            return Command::FAILURE;
+        }
 
         if (!\is_file($psalmBin)) {
             $io->error(\sprintf('Could not find %s. Install Psalm with `composer require --dev vimeo/psalm`.', $psalmBin));
@@ -113,6 +130,25 @@ final class AnnotateCommand extends Command
         return \is_resource($process) ? \proc_close($process) : Command::FAILURE;
     }
 
+    /**
+     * The raw argv tokens addressed to psalm: everything after the script path, less the command
+     * name when it was spelled out (the default-command form has none).
+     *
+     * @param list<string>|null $argv
+     *
+     * @return list<string>
+     */
+    private function rawTokens(?array $argv): array
+    {
+        $tokens = \array_slice($argv ?? $this->argvOverride ?? $_SERVER['argv'] ?? [], 1);
+
+        if (isset($tokens[0]) && $tokens[0] === $this->getName()) {
+            \array_shift($tokens);
+        }
+
+        return \array_values($tokens);
+    }
+
     private function report(SymfonyStyle $io, string $controlFile, int $exitCode): int
     {
         $raw = @\file_get_contents($controlFile);
@@ -142,8 +178,16 @@ final class AnnotateCommand extends Command
 
         $io->newLine();
 
-        foreach ($result['failures'] ?? [] as $path => $reason) {
+        $failures = $result['failures'] ?? [];
+
+        foreach ($failures as $path => $reason) {
             $io->warning(\sprintf('Skipped %s: %s', $path, $reason));
+        }
+
+        if ($changed === [] && $failures !== []) {
+            $io->error(\sprintf('%d template(s) could not be annotated.', \count($failures)));
+
+            return Command::FAILURE;
         }
 
         if ($changed === []) {
@@ -164,9 +208,68 @@ final class AnnotateCommand extends Command
             $io->writeln(\sprintf('  %s (%s)', $path, \implode(', ', $names)));
         }
 
+        if ($failures !== []) {
+            $io->error(\sprintf(
+                '%d template(s) annotated, %d could not be.',
+                \count($changed),
+                \count($failures),
+            ));
+
+            return Command::FAILURE;
+        }
+
         $io->success(\sprintf('%d template(s) annotated.', \count($changed)));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Forwarded tokens that would limit the run to some paths: a bare path, or `-f`'s value.
+     *
+     * Producer agreement is a whole-project claim. Under `psalm app/A.php` a competing call site in
+     * `app/B.php` is never analysed, so a type two call sites disagree on is written as if they
+     * agreed — the one way this command can put a wrong annotation in a template.
+     *
+     * Public (not private) so it is unit-testable: CommandTester cannot set argv.
+     *
+     * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
+     *
+     * @return list<string>
+     */
+    public function pathLimitingArguments(?array $argv = null): array
+    {
+        $offending = [];
+        $expectsValue = false;
+
+        foreach ($this->rawTokens($argv) as $token) {
+            if ($expectsValue) {
+                $expectsValue = false;
+
+                continue;
+            }
+
+            if ($token === '-f') {
+                // Its value is not skipped: it is the path itself, and naming it in the error is
+                // more use to the caller than naming the flag alone.
+                $offending[] = $token;
+
+                continue;
+            }
+
+            // `-c psalm.xml` and `-r <root>` take a value that is not a path to check; every other
+            // bare token is one Psalm would add to its paths-to-check list.
+            if ($token === '-c' || $token === '-r') {
+                $expectsValue = true;
+
+                continue;
+            }
+
+            if (!\str_starts_with($token, '-')) {
+                $offending[] = $token;
+            }
+        }
+
+        return $offending;
     }
 
     /**
@@ -186,18 +289,10 @@ final class AnnotateCommand extends Command
      */
     public function forwardedArguments(?array $argv = null): array
     {
-        $argv ??= $_SERVER['argv'] ?? [];
-
-        $tokens = \array_slice($argv, 1);
-
-        if (isset($tokens[0]) && $tokens[0] === $this->getName()) {
-            \array_shift($tokens);
-        }
-
         $forwarded = [];
         $skipValue = false;
 
-        foreach ($tokens as $token) {
+        foreach ($this->rawTokens($argv) as $token) {
             if ($skipValue) {
                 $skipValue = false;
 
@@ -217,8 +312,8 @@ final class AnnotateCommand extends Command
             $forwarded[] = $token;
         }
 
-        $forwarded[] = '--threads=1';
-
-        return $forwarded;
+        // BEFORE the forwarded tokens, not after: PHP's getopt() stops at the first positional
+        // argument, so a --threads=1 trailing one is never parsed and the child forks.
+        return ['--threads=1', ...$forwarded];
     }
 }
