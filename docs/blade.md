@@ -140,7 +140,9 @@ vendor/bin/psalm-laravel blade:annotate            # write them
 vendor/bin/psalm-laravel blade:annotate --dry-run  # print a unified diff instead
 ```
 
-It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`, a path) are forwarded to it, and `--threads=1` is forced (plugin state collected in a forked worker never reaches the process that does the writing). Blade analysis has to be enabled and bootable, otherwise the command reports that the pass was never reached. The command is the only way in: an ordinary `vendor/bin/psalm` run never writes to a template, whatever the configuration says.
+It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`, a path) are forwarded to it, and `--threads=1` is forced, since plugin state collected in a forked worker never reaches the process that does the writing. A run that somehow ends up forked anyway refuses to write and says so, rather than declaring everything `mixed`. Blade analysis is switched on for the run whether or not your config enables it; if it cannot boot, the command reports that the pass was never reached.
+
+The command is the only way in. An ordinary `vendor/bin/psalm` run never writes to a template, whatever the configuration says, and the control file the command passes to its child carries a marker, so a `PSALM_LARAVEL_BLADE_ANNOTATE` left behind in a shell or a CI environment cannot arm the codemod or damage the file it names.
 
 What it declares, per variable the template reads:
 
@@ -150,6 +152,7 @@ What it declares, per variable the template reads:
 What it leaves alone:
 
 * a variable the template already declares, in either `{{-- @var --}}` or raw `<?php /** @var */ ?>` form. Existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
+* a variable the template binds itself: a `@foreach ($items as $item)` alias is the template's own, not something the call site passes, so `$items` is declared and `$item` is not.
 * a template whose compiled body hides which names it reads. `@props` and `@aware` compile to `$$name`, so component templates are skipped whole rather than annotated in part.
 
 Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. New declarations join an existing contract block if there is one, otherwise they open one at the top of the file.
