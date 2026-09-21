@@ -32,6 +32,20 @@ final class ViewReferenceRegistryTest extends TestCase
         $this->assertArrayHasKey('orphan', $unused);
     }
 
+    /**
+     * `123.blade.php` is a legal view name, and PHP casts a numeric-string ARRAY KEY to int — which
+     * no cast on the way out can undo, hence the `array-key` return type. Pinned because the reader
+     * takes a `string` under strict_types, so this is a TypeError waiting on whoever forgets.
+     * End-to-end proof that it is reported rather than thrown: UnusedViewTest.
+     */
+    #[Test]
+    public function a_numeric_view_name_stays_an_int_key(): void
+    {
+        ViewReferenceRegistry::registerTemplate('123', 0, '/app/views/123.blade.php');
+
+        $this->assertSame(123, \array_key_first(ViewReferenceRegistry::unusedTemplates()));
+    }
+
     #[Test]
     public function a_referenced_template_is_not_unused(): void
     {
