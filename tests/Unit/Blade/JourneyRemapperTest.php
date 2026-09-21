@@ -163,6 +163,64 @@ final class JourneyRemapperTest extends TestCase
     }
 
     #[Test]
+    public function it_remaps_a_shadow_step_even_when_the_issue_itself_sits_outside_any_shadow(): void
+    {
+        // #1519: the sink is ordinary application code (the issue's own location), but a journey
+        // step passed through a template shadow on its way there.
+        $appLocation = $this->location('/app/Sink.php', 'app/Sink.php', 13);
+
+        $remapped = JourneyRemapper::remap(
+            [$this->step($this->location(self::SHADOW, self::SHADOW_NAME, 9))],
+            '',
+            $appLocation,
+            $this->resolver([9 => 3]),
+        );
+
+        $this->assertNotNull($remapped);
+        $location = $remapped['journey'][0]['location'];
+        $this->assertInstanceOf(CodeLocation::class, $location);
+        $this->assertSame(self::TEMPLATE, $location->file_path);
+        $this->assertSame(3, $location->getLineNumber());
+    }
+
+    #[Test]
+    public function it_remaps_a_journey_that_crosses_two_shadows(): void
+    {
+        // template -> @include'd template -> PHP: resolveTargets() keys by file NAME and
+        // remapSteps() by path, so two distinct shadow files both need to resolve.
+        $includeShadow = '/app/.cache/blade-shadows/def.php';
+        $includeShadowName = '.cache/blade-shadows/def.php';
+        $includeTemplate = '/app/resources/views/included.blade.php';
+        $includeTemplateName = 'resources/views/included.blade.php';
+
+        $outerTarget = new ShadowTarget(new ShadowEntry(self::TEMPLATE, [9 => 3], []), self::TEMPLATE_SOURCE, self::TEMPLATE_NAME);
+        $includeTarget = new ShadowTarget(new ShadowEntry($includeTemplate, [5 => 2], []), "<span>\n  x\n</span>\n", $includeTemplateName);
+
+        $resolve = static fn(string $path): ?ShadowTarget => match ($path) {
+            self::SHADOW => $outerTarget,
+            $includeShadow => $includeTarget,
+            default => null,
+        };
+
+        $journey = [
+            $this->step($this->location(self::SHADOW, self::SHADOW_NAME, 9), 'call to echo'),
+            $this->step($this->location($includeShadow, $includeShadowName, 5), 'call to include'),
+        ];
+
+        $remapped = JourneyRemapper::remap($journey, '', $this->location(self::SHADOW, self::SHADOW_NAME, 9), $resolve);
+
+        $this->assertNotNull($remapped);
+        $first = $remapped['journey'][0]['location'];
+        $second = $remapped['journey'][1]['location'];
+        $this->assertInstanceOf(CodeLocation::class, $first);
+        $this->assertInstanceOf(CodeLocation::class, $second);
+        $this->assertSame(self::TEMPLATE, $first->file_path);
+        $this->assertSame(3, $first->getLineNumber());
+        $this->assertSame($includeTemplate, $second->file_path);
+        $this->assertSame(2, $second->getLineNumber());
+    }
+
+    #[Test]
     public function it_passes_a_shadow_free_journey_straight_through(): void
     {
         $journey = [$this->step($this->location('/app/Http/Controllers/ProfileController.php', 'app/Http/Controllers/ProfileController.php', 4))];

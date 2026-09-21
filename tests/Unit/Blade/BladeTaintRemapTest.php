@@ -149,6 +149,34 @@ final class BladeTaintRemapTest extends TestCase
     }
 
     #[Test]
+    public function a_journey_through_a_template_names_the_template_while_the_sink_stays_in_php(): void
+    {
+        // #1519: the sink is ordinary application code, not a shadow — only the journey hop that
+        // passed through the template should move.
+        [$raw] = $this->report();
+        $issues = $this->issuesFor('app/Sink.php');
+
+        $tainted = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['type'] === 'TaintedHtml',
+        ));
+
+        $this->assertCount(1, $tainted, $raw);
+        $this->assertSame('app/Sink.php', $tainted[0]['file_name'], $raw);
+
+        $trace = $tainted[0]['taint_trace'];
+        $this->assertIsArray($trace);
+
+        $templateSteps = \array_values(\array_filter(
+            $trace,
+            static fn(array $step): bool => ($step['file_name'] ?? null) === 'resources/views/external.blade.php',
+        ));
+
+        $this->assertCount(1, $templateSteps, $raw);
+        $this->assertSame(1, $templateSteps[0]['line_from'], $raw);
+    }
+
+    #[Test]
     public function an_escaped_echo_reports_no_taint(): void
     {
         $this->assertSame([], $this->issuesFor('resources/views/escaped.blade.php'), $this->report()[0]);

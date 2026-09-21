@@ -7,9 +7,11 @@ namespace Psalm\LaravelPlugin\Blade;
 use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
+use Psalm\CodeLocation;
 use Psalm\Config;
 use Psalm\DocComment;
 use Psalm\Exception\DocblockParseException;
+use Psalm\Issue\CodeIssue;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
@@ -28,6 +30,11 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * Re-entrancy is guarded twice. Structurally, the re-emitted issue sits on the `.blade.php` path,
  * which is never a registry key, so the second pass declines on the lookup; the flag additionally
  * covers a future change that makes templates registry keys too.
+ *
+ * A taint finding can also land on ordinary application code that a template merely handed tainted
+ * input to (#1519): the issue itself is already reported where Psalm found it, but its journey
+ * still names the compiled shadow it passed through. That case re-emits through the same
+ * `IssueBuffer::accepts()` route with only the journey rebuilt, never the issue's own location.
  *
  * @psalm-api
  *
@@ -68,12 +75,17 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
         $issue = $event->getIssue();
 
-        // The overwhelmingly common case, and the cheapest bail: this hook sees every issue in
-        // the run, almost none of which come from a shadow.
-        if (!ShadowRegistry::entryFor($issue->getFilePath()) instanceof ShadowEntry) {
-            return null;
+        if (ShadowRegistry::entryFor($issue->getFilePath()) instanceof ShadowEntry) {
+            return self::remapShadowIssue($event, $issue);
         }
 
+        // #1519: the sink is ordinary application code, but the taint reached it through a
+        // template. Only the journey moves; the issue stays where Psalm found it.
+        return self::remapJourney($issue);
+    }
+
+    private static function remapShadowIssue(BeforeAddIssueEvent $event, CodeIssue $issue): ?bool
+    {
         // Psalm 6 runs taint exclusively — under a taint graph `IssueBuffer::add()` discards every
         // non-Tainted* issue. Relocating one would only move it to the template to be discarded
         // there, while costing a rebuild per issue.
@@ -115,6 +127,64 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             );
         } finally {
             self::$remapping = false;
+        }
+
+        return false;
+    }
+
+    /**
+     * #1519: this branch runs on every issue that is NOT in a shadow — the overwhelming majority
+     * of the run — so it stays an `instanceof` check plus a handful of array lookups on the miss
+     * path, never a template read.
+     */
+    private static function remapJourney(CodeIssue $issue): ?bool
+    {
+        $taint = PsalmBridge::taintArguments($issue);
+
+        if ($taint === null || !self::journeyCrossesShadow($taint['journey'])) {
+            return null;
+        }
+
+        $remapped = JourneyRemapper::remap($taint['journey'], $taint['journey_text'], $issue->code_location, self::target(...));
+
+        // Decline, never drop: an unmappable hop leaves Psalm's own (shadow-naming) journey
+        // standing rather than losing a real finding.
+        if ($remapped === null) {
+            return null;
+        }
+
+        $rebuilt = ShadowIssueRelocator::relocateJourney($issue, $remapped);
+
+        if (!$rebuilt instanceof CodeIssue) {
+            return null;
+        }
+
+        self::$remapping = true;
+
+        try {
+            // TaintFlowGraph.php:438 emits with an EMPTY suppression list; matching it exactly is
+            // what keeps reportability identical to the un-remapped issue Psalm would have emitted.
+            IssueBuffer::accepts($rebuilt);
+        } finally {
+            self::$remapping = false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Pure array lookups — no template I/O on the hot path.
+     *
+     * @param list<array{location: ?CodeLocation, label: string, entry_path_type: string}> $journey
+     */
+    private static function journeyCrossesShadow(array $journey): bool
+    {
+        foreach ($journey as $step) {
+            $location = PsalmBridge::stepLocation($step);
+
+            if ($location instanceof CodeLocation && ShadowRegistry::entryFor($location->file_path) instanceof ShadowEntry) {
+                return true;
+            }
         }
 
         return false;
