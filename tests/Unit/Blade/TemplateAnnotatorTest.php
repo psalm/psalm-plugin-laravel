@@ -180,6 +180,16 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function recognises_a_raw_php_declaration_with_a_non_ascii_variable_name(): void
+    {
+        // A reader binding only the ASCII prefix sees `$caf` declared and `$café` undeclared, and
+        // appends a second declaration for the same variable on every run.
+        $source = "<?php /** @var string \$caf\u{00e9} */ ?>\n<p>x</p>\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ["caf\u{00e9}" => 'string']));
+    }
+
+    #[Test]
     public function does_not_read_a_var_that_only_appears_inside_a_php_string(): void
     {
         $source = "<?php echo '@var string \$user'; ?>\n<p>x</p>\n";

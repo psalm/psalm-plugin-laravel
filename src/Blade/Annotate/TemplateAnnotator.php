@@ -34,9 +34,10 @@ final class TemplateAnnotator
     /**
      * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
      * same (last) name {@see ContractParser::VAR_PATTERN} does; per line, because one block can hold
-     * several docblocks and a pattern greedy across them would see only the last.
+     * several docblocks and a pattern greedy across them would see only the last. The name grammar
+     * is shared with that pattern, so `$café` binds whole rather than as its ASCII prefix.
      */
-    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(\w+)/';
+    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . ContractParser::IDENTIFIER . ')/';
 
     /**
      * @param array<string, string> $vars variable name (without `$`) => type string
