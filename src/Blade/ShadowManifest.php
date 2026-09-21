@@ -19,8 +19,13 @@ final class ShadowManifest
 {
     private const MANIFEST_FILE = 'manifest.php';
 
-    /** Bump when MarkerPrePass changes in a way that changes shadow output for the same source. */
-    private const MARKER_PASS_VERSION = 4;
+    /**
+     * Bump when anything the plugin WRITES into a shadow changes for the same source: the marker
+     * pass, the prelude ({@see PreludeBuilder}), or suppression injection. The shadow's own
+     * compiled bytes are never fingerprinted (see class docblock), so this is the only lever that
+     * self-invalidates a plugin-side change to what gets written around them.
+     */
+    private const MARKER_PASS_VERSION = 5;
 
     /** {@see self::isFresh()}: the references slot must have been collected for the entry to count as fresh. */
     public const SLOT_REFERENCES = 1;

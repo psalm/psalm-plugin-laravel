@@ -7,10 +7,15 @@ namespace Psalm\LaravelPlugin\Blade;
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\RedundantCondition;
+use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
+use Psalm\Issue\TypeDoesNotContainNull;
+use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
 
@@ -90,6 +95,45 @@ final class ShadowIssueRelocator
         // too; accepted as a documented limitation, since this method has only the message and
         // location to go on, never the AST.
         if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
+            return false;
+        }
+
+        // Laravel's own compiled guards on `$attributes`/`$component`/`$slot` (`isset()`, `??=`,
+        // `instanceof`) exist to check what {@see PreludeBuilder::componentTypesFor()} now
+        // declares as guaranteed inside a component view — most visibly when that view itself
+        // renders a NESTED `<x-...>` tag, whose own generated bookkeeping reuses the same three
+        // names Psalm has already narrowed. `Reconciler::triggerIssueForImpossible()` picks its
+        // issue class by whether the eliminated type came from a docblock or was inferred
+        // (`$from_docblock`): `@props` REPLACES the prelude's docblock type with an inferred one
+        // (`compileProps()`'s `$attributes = new ComponentAttributeBag($__newAttributes)`), so the
+        // nested tag's guard lands in the inferred branch, not the docblock one — both branches'
+        // classes (`RedundantCondition`/`RedundantConditionGivenDocblockType`/
+        // `DocblockTypeContradiction` and `TypeDoesNotContainNull`/`TypeDoesNotContainType`) are
+        // gated, or a `@props` view with a nested tag keeps reporting the inferred-branch half.
+        //
+        // Gated on the MESSAGE, not the class: `RedundantCondition` on an author's OWN
+        // `@if(isset($range))` under their own docblock must keep reporting, and a message-only
+        // gate cannot tell that apart from this shape by class alone. `$target->isComponentView` is
+        // the second half of the gate: outside a component view none of these three names is ever
+        // declared by the prelude, so a local variable an author happens to name
+        // `$attributes`/`$slot` there is untouched (#1525).
+        //
+        // Trade-off this gate does NOT avoid: it cannot tell compiler-generated bookkeeping apart
+        // from an author's OWN `@if (isset($attributes))`/`instanceof` check written inside their
+        // own `@props`/`@aware` component view — that guard is silenced too, with no trace, because
+        // it names one of the same three ambient variables. `PossiblyNullReference` on a
+        // subsequent `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
+        // reconciliation above (Psalm keeps the reconciled null in the never-taken arm and re-unions
+        // it at the guard's `endif`) and stays visible; see docs/blade.md known limitations.
+        if (
+            ($issue instanceof RedundantCondition
+                || $issue instanceof RedundantConditionGivenDocblockType
+                || $issue instanceof DocblockTypeContradiction
+                || $issue instanceof TypeDoesNotContainNull
+                || $issue instanceof TypeDoesNotContainType)
+            && $target->isComponentView
+            && \preg_match('/ for \$(attributes|component|slot)(?=[\s,]|$)/', $issue->message) === 1
+        ) {
             return false;
         }
 

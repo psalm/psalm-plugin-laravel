@@ -287,4 +287,27 @@ final class MarkerPrePassTest extends TestCase
         $this->assertArrayHasKey(2, $skip);
         $this->assertArrayHasKey(3, $skip);
     }
+
+    #[Test]
+    public function blanking_inert_text_preserves_offsets_and_lines(): void
+    {
+        $source = "a\n{{-- @props([]) --}}\n@verbatim\n{{ \$slot }}\n@endverbatim\nb\n";
+        $blanked = MarkerPrePass::blankInertText($source);
+
+        $this->assertSame(\strlen($source), \strlen($blanked));
+        $this->assertSame(\substr_count($source, "\n"), \substr_count($blanked, "\n"));
+        $this->assertStringNotContainsString('@props', $blanked);
+        $this->assertStringNotContainsString('$slot', $blanked);
+        $this->assertSame("a\n", \substr($blanked, 0, 2));
+    }
+
+    #[Test]
+    public function blanking_inert_text_leaves_executable_php_bodies_alone(): void
+    {
+        // Narrower than maskedRanges() on purpose: a `@php` or raw `<?php` body compiles and runs,
+        // so a caller reading the source for what the template does must still see it.
+        $source = "@php \$slot = 1; @endphp\n<?php echo \$attributes; ?>\n";
+
+        $this->assertSame($source, MarkerPrePass::blankInertText($source));
+    }
 }

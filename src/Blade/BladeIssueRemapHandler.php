@@ -252,6 +252,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             $entry,
             $templateSource,
             Config::getInstance()->shortenFileName($entry->templatePath),
+            PreludeBuilder::isComponentView($templateSource),
         );
     }
 }
