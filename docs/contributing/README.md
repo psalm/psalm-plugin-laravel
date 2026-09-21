@@ -113,7 +113,9 @@ Everything in the pipeline that reads a Psalm internal whose shape differs betwe
 
 #### Debugging a shadow
 
-Shadows live under the `cacheDir` resolved by `PluginConfig::resolveBladeCacheDir()` (default: `blade/` inside the [plugin cache directory](../config.md#cache-directory)). Each template gets one file named `sha1($templatePath) . '.php'` (`ShadowManifest::shadowPath()`), alongside a single `manifest.php` that records, per shadow, the template path, line map, extends line, source fingerprint, inline suppressions, and the template contract. Delete the whole `cacheDir` to force every template to recompile. `--clear-cache` only removes `$config->getCacheDirectory()`, so it does the same for the default location, which nests under it, but not for a custom `cacheDir` set outside Psalm's own cache directory.
+Shadows live under the `cacheDir` resolved by `PluginConfig::resolveBladeCacheDir()` (default: `blade/` inside the [plugin cache directory](../config.md#cache-directory)). Each source generation gets a file named `sha1($templatePath) . '-' . $fingerprint . '.php'` (`ShadowManifest::shadowPath()`), alongside a single `manifest.php` that records, per shadow, the template path, line map, extends line, source fingerprint, inline suppressions, and the template contract. Delete the whole `cacheDir` to force every template to recompile. `--clear-cache` only removes `$config->getCacheDirectory()`, so it does the same for the default location, which nests under it, but not for a custom `cacheDir` set outside Psalm's own cache directory.
+
+Pruning drops superseded manifest entries but retains their generation files because another invocation may still be reading them. Clear the cache directory when no analyses are running to reclaim those files. Deleted-template pruning retains its existing unlink behavior.
 
 The source fingerprint hashes the template text, the marker pass version, the Laravel framework version and the plugin version, not the booted `BladeCompiler`'s own configuration. Changing a custom directive, a component alias, or another compiler setting registered in a service provider does not invalidate an already warm shadow, so delete the `cacheDir` to pick up a change like that.
 
@@ -123,7 +125,7 @@ To inspect a shadow, run once so the cache is warm, then find the file by hashin
 php -r "echo sha1(realpath('resources/views/profile.blade.php')), \"\n\";"
 ```
 
-Open the resulting `<hash>.php` in the `cacheDir` directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output.
+Open the `<hash>-<fingerprint>.php` referenced by `manifest.php` in the `cacheDir` directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output.
 
 Two flags matter when working on this pipeline:
 

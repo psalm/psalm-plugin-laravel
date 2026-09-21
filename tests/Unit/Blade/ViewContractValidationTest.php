@@ -110,6 +110,18 @@ final class ViewContractValidationTest extends TestCase
     }
 
     #[Test]
+    public function merge_data_is_respected_for_every_factory_form(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $this->assertSame([], $this->forFile($issues, 'MergeData.php'), \var_export($issues, true));
+        $wrong = $this->forFile($issues, 'MergeDataWrong.php');
+        $this->assertCount(3, $wrong, \var_export($issues, true));
+        foreach ($wrong as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+        }
+    }
+
+    #[Test]
     public function a_declared_variable_absent_from_the_data_array_is_reported(): void
     {
         $issues = $this->contractIssues('psalm.xml');

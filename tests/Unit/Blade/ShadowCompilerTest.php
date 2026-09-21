@@ -32,6 +32,77 @@ final class ShadowCompilerTest extends TestCase
         return \array_keys(\array_filter($result->lineMap, static fn(int $v): bool => $v === $bladeLine));
     }
 
+    /** @return iterable<string, array{string}> */
+    public static function lexicalBoundaryTemplates(): iterable
+    {
+        yield 'directive block comment' => ["@if(/* ) */\n true)\n{{ strlen([]) }}\n@endif\n"];
+        yield 'directive line comment' => ["@if(// )\n true)\n{{ strlen([]) }}\n@endif\n"];
+        yield 'directive hash comment' => ["@if(# )\n true)\n{{ strlen([]) }}\n@endif\n"];
+        yield 'switch argument comment' => ["@switch(/* ) @case(1) */\n 1)\n@case(1)\n{{ strlen([]) }}\n@break\n@endswitch\n"];
+        yield 'raw string' => ["<?php\n\$tag = '?>';\nstrlen([]);\n?>\n"];
+        yield 'raw comment' => ["<?php\n/* ?> */\nstrlen([]);\n?>\n"];
+        yield 'escaped directive quote' => ["@if(str_contains('it\\'s)',\n 'x'))\n@php strlen([]); @endphp\n@endif\n"];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('lexicalBoundaryTemplates')]
+    public function lexical_boundaries_preserve_valid_php(string $source): void
+    {
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $plain = (new BladeCompiler(new Filesystem(), \sys_get_temp_dir()))->compileString($source);
+        $this->assertNotNull($parser->parse($plain));
+        $result = $this->compiler->compile('view.blade.php', $source);
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertNotNull($parser->parse($result->contents));
+        $this->assertStringContainsString('strlen([])', $result->contents);
+    }
+
+    #[Test]
+    public function a_false_php_opener_does_not_mask_following_template_lines(): void
+    {
+        $source = "<?php-not-php ?>\n{{ strlen([]) }}\n{{ strval(1) }}\n";
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $plain = (new BladeCompiler(new Filesystem(), \sys_get_temp_dir()))->compileString($source);
+        $this->assertNotNull($parser->parse($plain));
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertNotNull($parser->parse($result->contents));
+        $this->assertStringContainsString('<?php-not-php ?>', $result->contents);
+        foreach (['strlen([])' => 2, 'strval(1)' => 3] as $expression => $bladeLine) {
+            $matching = \array_filter(\explode("\n", $result->contents), static fn(string $line): bool => \str_contains($line, $expression));
+            $this->assertCount(1, $matching);
+            $this->assertSame($bladeLine, $result->lineMap[\array_key_first($matching) + 1]);
+        }
+    }
+
+    #[Test]
+    public function author_marker_text_cannot_change_the_line_map(): void
+    {
+        $source = "{!! '/* blade:999 */' . request()->input('q') !!}\n<?php /* blade:1 */ strlen([]); ?>\n/* blade:999 */\n";
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertNotContains(999, $result->lineMap);
+        foreach (\explode("\n", $result->contents) as $index => $line) {
+            if (\str_contains($line, 'strlen([])')) {
+                $this->assertSame(2, $result->lineMap[$index + 1]);
+            }
+        }
+    }
+
+    #[Test]
+    public function forged_marker_comments_do_not_redirect_suppressions(): void
+    {
+        $source = "{{-- @psalm-suppress InvalidArgument --}}\n<?php /* blade:deadbeef */ strlen([]); ?>\n<?php strlen([1]); ?>\n";
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame([2 => ['InvalidArgument']], $result->suppressions);
+        $this->assertStringContainsString('<?php /** @psalm-suppress InvalidArgument */ /* blade:deadbeef */ strlen([]); ?>', $result->contents);
+        $this->assertStringContainsString('<?php strlen([1]); ?>', $result->contents);
+    }
+
     #[Test]
     public function compiles_a_plain_echo(): void
     {
@@ -189,6 +260,7 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertStringContainsString('@psalm-suppress UndefinedVariable', $result->contents);
+        $this->assertStringContainsString('<?php /** @psalm-suppress UndefinedVariable */ echo e($foo)', $result->contents);
         $this->assertLessThan(
             \strpos($result->contents, 'echo e($foo)'),
             \strpos($result->contents, '@psalm-suppress UndefinedVariable'),
