@@ -115,4 +115,33 @@ final class TemplateAnnotatorTest extends TestCase
         $this->assertSame(2, $result[1], 'the separator pushes the insertion onto the next line');
         $this->assertSame(['{{-- @var string $body --}}'], $result[2], 'only the new comment is reported as added');
     }
+
+    #[Test]
+    public function recognises_a_declaration_whose_type_itself_contains_a_variable(): void
+    {
+        // The parser binds the LAST $name in the comment ($callback); a reader that bound the first
+        // one ($f) would see the name as undeclared and append a duplicate declaration for it.
+        $source = "{{-- @var Closure(Foo \$f): Bar \$callback --}}\n<p>x</p>\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['callback' => 'mixed']));
+    }
+
+    #[Test]
+    public function recognises_a_raw_php_declaration_whose_type_contains_a_variable(): void
+    {
+        $source = "<?php /** @var Closure(Foo \$f): Bar \$callback */ ?>\n<p>x</p>\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['callback' => 'mixed']));
+    }
+
+    #[Test]
+    public function is_idempotent_for_a_type_it_wrote_that_contains_a_variable(): void
+    {
+        $vars = ['cb' => 'Closure(string $a):void'];
+
+        $first = TemplateAnnotator::annotate("<p>x</p>\n", $vars);
+
+        $this->assertNotNull($first);
+        $this->assertNull(TemplateAnnotator::annotate($first[0], $vars), 'the comment must not be re-appended');
+    }
 }

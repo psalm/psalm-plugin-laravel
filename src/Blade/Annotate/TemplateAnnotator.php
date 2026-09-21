@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
+use Psalm\LaravelPlugin\Blade\ContractParser;
+
 /**
  * Splices `{{-- @var T $name --}}` lines into a Blade template.
  *
@@ -20,14 +22,21 @@ final class TemplateAnnotator
 {
     private const BOM = "\u{FEFF}";
 
-    /** A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one. */
-    private const CONTRACT_COMMENT = '/\{\{--\s*@var\s[^\r\n]*?--\}\}[^\S\r\n]*(?:\r?\n)?/';
+    /**
+     * A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one.
+     * Group 1 is the inner content, which is what {@see ContractParser::VAR_PATTERN} reads.
+     */
+    private const CONTRACT_COMMENT = '/\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
 
-    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling {@see \Psalm\LaravelPlugin\Blade\ContractParser} does not read. */
+    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling {@see ContractParser} does not read. */
     private const RAW_PHP_BLOCK = '/<\?php\b.*?(?:\?>|\z)/s';
 
-    /** The name a `@var` declaration binds: the first `$name` after the type, in either spelling. */
-    private const DECLARED_VAR = '/@var\s+[^\r\n]*?\$(\w+)/';
+    /**
+     * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
+     * same (last) name {@see ContractParser::VAR_PATTERN} does; per line, because one block can hold
+     * several docblocks and a pattern greedy across them would see only the last.
+     */
+    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(\w+)/';
 
     /**
      * @param array<string, string> $vars variable name (without `$`) => type string
@@ -80,16 +89,16 @@ final class TemplateAnnotator
         $declared = [];
 
         if (\preg_match_all(self::CONTRACT_COMMENT, $source, $comments) > 0) {
-            foreach ($comments[0] as $comment) {
-                if (\preg_match(self::DECLARED_VAR, $comment, $matched) === 1) {
-                    $declared[$matched[1]] = true;
+            foreach ($comments[1] as $innerContent) {
+                if (\preg_match(ContractParser::VAR_PATTERN, $innerContent, $matched) === 1) {
+                    $declared[$matched[2]] = true;
                 }
             }
         }
 
         if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) > 0) {
             foreach ($blocks[0] as $block) {
-                if (\preg_match_all(self::DECLARED_VAR, $block, $names) > 0) {
+                if (\preg_match_all(self::RAW_PHP_VAR, $block, $names) > 0) {
                     foreach ($names[1] as $name) {
                         $declared[$name] = true;
                     }
