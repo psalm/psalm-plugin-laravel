@@ -164,7 +164,12 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
-    /** The prelude's ambient Blade variables, see PreludeBuilder::AMBIENT_TYPES. */
+    /**
+     * Every class name PreludeBuilder can emit into a prelude, see PreludeBuilder::ambientClassNames().
+     * `Illuminate\View\Component` never appears in a real prelude any more (#1525: `$component` is
+     * never declared), so its assertion below is vacuous — kept as a regression guard against
+     * reintroducing that declaration.
+     */
     private const AMBIENT_CLASSES = [
         'Illuminate\View\Factory',
         'Illuminate\Support\ViewErrorBag',
@@ -538,6 +543,127 @@ final class BladeIssueRemapTest extends TestCase
 
         foreach ($unusedClasses as $issue) {
             $this->assertStringNotContainsString('RouteHelperFixture\RouteGenerator', $issue['message']);
+        }
+    }
+
+    /** #1525's three ambient-guard families, checked together against one template. */
+    private const AMBIENT_GUARD_FAMILIES = [
+        'RedundantCondition',
+        'RedundantConditionGivenDocblockType',
+        'DocblockTypeContradiction',
+    ];
+
+    /**
+     * #1525 acceptance (a) + (b): `compiler-bookkeeping.blade.php` is a plain CALLER template
+     * (`<x-alert>Hi</x-alert>` on line 1, no `@props`/`@aware`/`$attributes`/`$slot` of its own),
+     * so neither `$component` nor `$attributes` is declared a type in its own prelude any more —
+     * both fall through to `mixed`, and Psalm cannot judge a `mixed` guard redundant.
+     */
+    #[Test]
+    public function ambient_guards_in_a_non_component_caller_report_nothing(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/compiler-bookkeeping.blade.php';
+
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, $family, $template),
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+
+        // Guard against a vacuous pass: the tag must have actually compiled.
+        $this->assertStringContainsString('$__componentOriginal', $this->allShadowSources());
+    }
+
+    /** #1525 acceptance (c): `$attributes->merge()` and `$slot` stay typed in a plain `@props` component view. */
+    #[Test]
+    public function attributes_merge_and_slot_stay_typed_in_a_props_component_view(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/typed-attributes.blade.php';
+
+        foreach (['PossiblyNullReference', 'UndefinedGlobalVariable', 'MixedMethodCall'] as $family) {
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, $family, $template),
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, $family, $template),
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+    }
+
+    /**
+     * The survivor family step 3 exists for: `nested-attributes.blade.php` is a `@props` component
+     * view that itself renders a NESTED `<x-alert/>` tag — the shape whose generated open/close
+     * bookkeeping re-checks `isset($attributes)`/`instanceof` after Laravel's own `??=` guard has
+     * already made both provably true, which is exactly the population `ShadowIssueRelocator`'s new
+     * drop targets (#1525).
+     */
+    #[Test]
+    public function ambient_guards_around_a_nested_component_tag_are_dropped(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes.blade.php';
+
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, $family, $template),
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+    }
+
+    /**
+     * #1525 acceptance (d), the negative case for the message gate: an author's own redundant
+     * check against their own docblock must still report, even though it shares a class with the
+     * dropped ambient-guard families. Deliberately outside `components/` and never mentions
+     * `$attributes`/`$slot`, so the classifier declares nothing for this template either way.
+     */
+    #[Test]
+    public function an_authors_own_docblock_contradiction_still_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/author-contradiction.blade.php';
+
+        $matching = [];
+
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+            foreach ($this->linesFor($issues, $family, $template) as $line) {
+                $matching[] = $line;
+            }
+        }
+
+        $this->assertCount(1, $matching, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * #1525 §0.1: the `@component('view', [...])` directive path hands `$slot` a ComponentSlot
+     * too (ManagesComponents::componentData() builds the same default slot either way), so it
+     * needs no union and no weakening — `$slot->isEmpty()` must type-check exactly as it does on
+     * the `<x-*>` path.
+     */
+    #[Test]
+    public function slot_is_typed_the_same_way_on_the_component_directive_path(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/classic-slot.blade.php';
+
+        foreach (['UndefinedMethod', 'MixedMethodCall', 'PossiblyUndefinedMethod'] as $family) {
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, $family, $template),
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
         }
     }
 

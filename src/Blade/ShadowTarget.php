@@ -19,13 +19,16 @@ use Psalm\CodeLocation\Raw;
 final class ShadowTarget
 {
     /**
-     * @param string $templateSource the template's bytes, which a `Raw` location indexes into
-     * @param string $templateName   the display name Psalm's reporters print for the template
+     * @param string $templateSource   the template's bytes, which a `Raw` location indexes into
+     * @param string $templateName     the display name Psalm's reporters print for the template
+     * @param bool   $isComponentView  {@see PreludeBuilder::isComponentView()} on $templateSource;
+     *                                 computed once here rather than per issue in the relocator
      */
     public function __construct(
         public readonly ShadowEntry $entry,
         public readonly string $templateSource,
         public readonly string $templateName,
+        public readonly bool $isComponentView,
     ) {}
 
     /** Template line a shadow line came from; 0 for prelude lines and anything the marker pass could not map. */

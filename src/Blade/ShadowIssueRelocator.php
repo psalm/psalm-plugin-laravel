@@ -7,9 +7,12 @@ namespace Psalm\LaravelPlugin\Blade;
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\RedundantCondition;
+use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
@@ -90,6 +93,26 @@ final class ShadowIssueRelocator
         // too; accepted as a documented limitation, since this method has only the message and
         // location to go on, never the AST.
         if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
+            return false;
+        }
+
+        // Laravel's own compiled guards on `$attributes`/`$component`/`$slot` (`isset()`, `??=`,
+        // `instanceof`) exist to check what {@see PreludeBuilder::componentTypesFor()} now
+        // declares as guaranteed inside a component view — most visibly when that view itself
+        // renders a NESTED `<x-...>` tag, whose own generated bookkeeping reuses the same three
+        // names Psalm has already narrowed. Gated on the MESSAGE, not the class: `RedundantCondition`
+        // on an author's OWN `@if(isset($range))` under their own docblock must keep reporting, and
+        // a message-only gate cannot tell that apart from this shape by class alone. `$target->
+        // isComponentView` is the second half of the gate: outside a component view none of these
+        // three names is ever declared by the prelude, so a local variable an author happens to
+        // name `$attributes`/`$slot` there is untouched (#1525).
+        if (
+            ($issue instanceof RedundantCondition
+                || $issue instanceof RedundantConditionGivenDocblockType
+                || $issue instanceof DocblockTypeContradiction)
+            && $target->isComponentView
+            && \preg_match('/ for \$(attributes|component|slot)(?=[\s,]|$)/', $issue->message) === 1
+        ) {
             return false;
         }
 

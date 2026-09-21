@@ -9,9 +9,12 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
+use Psalm\Issue\RedundantCondition;
+use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedVariable;
@@ -43,9 +46,13 @@ final class ShadowIssueRelocatorTest extends TestCase
         return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
     }
 
-    private function relocate(CodeIssue $issue, ShadowEntry $entry, bool $reportMixed = false): CodeIssue|false|null
-    {
-        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php');
+    private function relocate(
+        CodeIssue $issue,
+        ShadowEntry $entry,
+        bool $reportMixed = false,
+        bool $isComponentView = false,
+    ): CodeIssue|false|null {
+        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView);
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
@@ -246,6 +253,85 @@ final class ShadowIssueRelocatorTest extends TestCase
         $relocated = $this->relocate($issue, $this->entry([9 => 3]));
 
         $this->assertInstanceOf(TooManyArguments::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1525: the three families Laravel's own compiled `$attributes`/`$component`/`$slot` guards
+     * collapse into, once the prelude declares them as guaranteed inside a component view.
+     */
+    #[Test]
+    public function an_ambient_guard_redundant_condition_is_dropped_inside_a_component_view(): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(
+            'Docblock-defined type Illuminate\View\ComponentAttributeBag for $attributes is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
+    }
+
+    #[Test]
+    public function an_ambient_guard_docblock_contradiction_on_component_is_dropped_inside_a_component_view(): void
+    {
+        $issue = new DocblockTypeContradiction(
+            'Cannot resolve types for $component - docblock-defined type Illuminate\View\Component does not contain null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
+    }
+
+    /**
+     * Negative: the SAME message, outside a component view. The prelude never declares
+     * `$attributes`/`$component`/`$slot` there, so the drop must not fire on a message shape alone.
+     */
+    #[Test]
+    public function the_same_ambient_guard_message_survives_outside_a_component_view(): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(
+            'Docblock-defined type Illuminate\View\ComponentAttributeBag for $attributes is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
+
+        $this->assertInstanceOf(RedundantConditionGivenDocblockType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative: an author's own redundant check on their OWN docblock, inside a component view,
+     * must keep reporting — the gate gets no wider than the three ambient names, even though the
+     * class alone matches.
+     */
+    #[Test]
+    public function an_authors_own_redundant_condition_survives_inside_a_component_view(): void
+    {
+        $issue = new RedundantCondition('Type string for $range is never null', $this->shadowLocation(9), null);
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: true);
+
+        $this->assertInstanceOf(RedundantCondition::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative: `$slot->attributes` is a real public property on ComponentSlot, so the message
+     * naming it must not be caught by the `$attributes` gate — the boundary after the name must
+     * reject `->`, not just accept a word boundary.
+     */
+    #[Test]
+    public function a_message_naming_a_property_fetch_on_slot_survives_inside_a_component_view(): void
+    {
+        $issue = new RedundantCondition('Type string for $slot->attributes is never null', $this->shadowLocation(9), null);
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: true);
+
+        $this->assertInstanceOf(RedundantCondition::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 }
