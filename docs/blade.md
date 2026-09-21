@@ -117,6 +117,8 @@ Psalm 6 runs taint analysis exclusively: a plain run reports type issues only, a
 
 Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
+Degradation is all-or-nothing: the template facts the compile pass collects (contracts, reference sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata), [`reportUnusedViews`](config.md#reportunusedviews), and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
+
 A template that fails to compile (see [Known limits](#known-limits)) is skipped rather than aborting the run. Up to three failing template paths are named directly in the warning; beyond that, run with `--debug` for every individual cause.
 
 ## Unused templates

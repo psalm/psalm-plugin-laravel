@@ -14,6 +14,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
+use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 
 #[CoversClass(BladeBootstrapper::class)]
@@ -44,6 +45,7 @@ final class BladeBootstrapperTest extends TestCase
         // leaks into this one.
         ViewReferenceRegistry::reset();
         ContractRegistry::reset();
+        ShadowRegistry::reset();
     }
 
     protected function tearDown(): void
@@ -543,11 +545,16 @@ final class BladeBootstrapperTest extends TestCase
     /**
      * A template that fails to compile has unknown @include/@extends references, not empty ones:
      * treating them as empty would cascade into false UnusedView positives on everything it renders.
+     *
+     * The healthy sibling is what carries the run to activation: publication is deferred to a
+     * successful boot (#1518), and the dynamic mark is a SAFETY signal, so it is the one fact that
+     * must survive the mixed success/failure path rather than being dropped with the failed template.
      */
     #[Test]
     public function a_template_that_fails_to_compile_marks_the_reference_set_dynamic(): void
     {
         $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
+        $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
 
         $app = $this->app();
         $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
@@ -568,6 +575,65 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame(1, $registrar->markCalls);
         $this->assertSame([], $registrar->analyzedShadows, 'an invisible shadow is pure cost: register nothing');
         $this->assertCount(1, $this->progress->warnings);
+    }
+
+    /**
+     * Degradation is all-or-nothing (#1518). ContractRegistry and ViewReferenceRegistry CREATE
+     * issues at call sites and on templates, so a run whose templates never became reportable must
+     * leave both empty — otherwise the contract rules keep firing against a feature that announced
+     * itself disabled, and UnusedView reports templates whose references were never collected.
+     */
+    #[Test]
+    public function publishes_no_template_facts_when_activation_fails(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertNull(ContractRegistry::contractFor('profile'), 'a contract nothing can remap must not reach call sites');
+        $this->assertSame([], ViewReferenceRegistry::unusedTemplates());
+        $this->assertFalse(ViewReferenceRegistry::isDynamic());
+
+        foreach ($this->shadowFiles() as $shadow) {
+            $this->assertNull(ShadowRegistry::entryFor($shadow));
+        }
+
+        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
+    }
+
+    /** The reorder that makes the failure path empty must still publish everything on success. */
+    #[Test]
+    public function publishes_every_registry_when_activation_succeeds(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertNotNull(ContractRegistry::contractFor('profile'));
+        $this->assertSame(['profile' => $template], ViewReferenceRegistry::unusedTemplates());
+        $this->assertCount(1, $registrar->analyzedShadows);
+        $this->assertNotNull(ShadowRegistry::entryFor($registrar->analyzedShadows[0]));
+    }
+
+    /**
+     * Shadow files written this run, straight off disk: on the failure path the registrar never
+     * receives them, so the bootstrapper's own return value cannot name them.
+     *
+     * @return list<string>
+     */
+    private function shadowFiles(): array
+    {
+        $shadows = [];
+
+        foreach (\glob($this->shadowDir . '/*.php') ?: [] as $path) {
+            if (\basename($path) !== 'manifest.php') {
+                $shadows[] = $path;
+            }
+        }
+
+        return $shadows;
     }
 
     #[Test]

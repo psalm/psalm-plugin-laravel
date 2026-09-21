@@ -66,27 +66,49 @@ final class BladeBootstrapper
      */
     private array $vendorShadowedNamespaces = [];
 
-    public function boot(): void
+    /**
+     * Template facts collected while compiling, published only once activation has succeeded
+     * (#1518). Both registries they feed CREATE issues — contract violations at call sites,
+     * UnusedView on the templates — so a run that degrades has to leave them empty, or a feature
+     * that announced itself disabled keeps reporting. Insertion order is preserved and the
+     * registries keep their own lowest-root-index-wins precedence.
+     *
+     * @var list<array{0: string, 1: int, 2: string}> view name, view root index, template path
+     */
+    private array $pendingTemplates = [];
+
+    /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
+    private array $pendingContracts = [];
+
+    /** @var list<string> referenced view names */
+    private array $pendingReferences = [];
+
+    private bool $pendingDynamic = false;
+
+    /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
+    public function boot(): bool
     {
         try {
-            $this->run();
+            return $this->run();
         } catch (\Throwable $throwable) {
             $this->degrade($throwable::class . ': ' . $throwable->getMessage());
+
+            return false;
         }
     }
 
-    private function run(): void
+    private function run(): bool
     {
         $compiler = $this->resolveCompiler();
 
         if (!$compiler instanceof BladeCompiler) {
-            return;
+            return false;
         }
 
         $viewPaths = $this->resolveViewPaths();
 
         if ($viewPaths === null) {
-            return;
+            return false;
         }
 
         /** @var array<string, string> $failures template path => reason */
@@ -117,7 +139,7 @@ final class BladeBootstrapper
         if ($shadowDir === null) {
             $this->reportFailures($failures);
 
-            return;
+            return false;
         }
 
         [$environmentHash, $trustedEnvironment] = CompilerEnvironment::describe($compiler);
@@ -143,7 +165,7 @@ final class BladeBootstrapper
         $this->reportFailures($failures);
 
         if ($shadows === []) {
-            return;
+            return false;
         }
 
         // Every discovered template, not just the compiled ones: UnusedView has to be able to report
@@ -155,10 +177,8 @@ final class BladeBootstrapper
                 . 'list is not writable on this Psalm version)',
             );
 
-            return;
+            return false;
         }
-
-        $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
 
         // Every shadow's prelude carries the ambient classes only in stacked docblocks, and Psalm's
         // scanner only ever sees the last one (see ShadowRegistrar::queueClassLikesForScanning);
@@ -191,14 +211,53 @@ final class BladeBootstrapper
 
         $this->registrar->queueResolvableClassLikesForScanning(\array_keys($literalCandidates));
 
-        // Only now, with all registrations done: the registry is what turns a shadow-path issue
-        // into a template-path one, and a shadow Psalm never analyzes has nothing to remap.
+        // The enqueue goes last because it is the one irreversible step: everything above can fail
+        // and leave the run indistinguishable from Blade having never started. The remap entries
+        // publish in a finally rather than after, because they only RELOCATE issues onto the
+        // template they came from — a partial enqueue that then threw would otherwise report raw
+        // shadow paths, which is strictly worse than entries for shadows nothing analyzed.
+        try {
+            $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
+        } finally {
+            $this->publishShadowEntries($manifest, $shadows);
+        }
+
+        $this->publishTemplateFacts();
+
+        return true;
+    }
+
+    /**
+     * @param array<string, string> $shadows template path => shadow path
+     */
+    private function publishShadowEntries(ShadowManifest $manifest, array $shadows): void
+    {
         foreach ($shadows as $shadowPath) {
             $entry = $manifest->shadowEntry($shadowPath);
 
             if ($entry instanceof ShadowEntry) {
                 ShadowRegistry::register($shadowPath, $entry);
             }
+        }
+    }
+
+    /** @see self::$pendingTemplates for why this is deferred to the end of a successful run */
+    private function publishTemplateFacts(): void
+    {
+        foreach ($this->pendingTemplates as [$viewName, $rootIndex, $templatePath]) {
+            ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
+        }
+
+        foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
+            ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
+        }
+
+        foreach ($this->pendingReferences as $viewName) {
+            ViewReferenceRegistry::addReference($viewName);
+        }
+
+        if ($this->pendingDynamic) {
+            ViewReferenceRegistry::markDynamic();
         }
     }
 
@@ -303,11 +362,11 @@ final class BladeBootstrapper
     private function applyReferences(array $references): void
     {
         foreach ($references[0] as $viewName) {
-            ViewReferenceRegistry::addReference($viewName);
+            $this->pendingReferences[] = $viewName;
         }
 
         if ($references[1]) {
-            ViewReferenceRegistry::markDynamic();
+            $this->pendingDynamic = true;
         }
     }
 
@@ -365,7 +424,7 @@ final class BladeBootstrapper
 
         // Its own @include/@extends references are unknown, not empty: treating them as empty would
         // cascade into false UnusedView positives on everything this template actually renders.
-        ViewReferenceRegistry::markDynamic();
+        $this->pendingDynamic = true;
     }
 
     /**
@@ -392,13 +451,13 @@ final class BladeBootstrapper
                 continue;
             }
 
-            ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
+            $this->pendingTemplates[] = [$viewName, $rootIndex, $templatePath];
 
             if (!$contract instanceof ViewDataContract) {
                 continue;
             }
 
-            ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
+            $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
         }
     }
 

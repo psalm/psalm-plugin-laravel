@@ -96,13 +96,14 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
 
-            if ($pluginConfig->bladeEnabled) {
-                $this->initBladeAnalysis($pluginConfig, $output);
-            }
+            // Not `bladeEnabled` alone: a boot that degraded registered no shadows, so every Blade
+            // handler below would read an empty registry and, worse, report on templates whose
+            // facts were never collected (#1518).
+            $bladeActive = $pluginConfig->bladeEnabled && $this->initBladeAnalysis($pluginConfig, $output);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
-            $this->registerHandlers($registration, $pluginConfig);
+            $this->registerHandlers($registration, $pluginConfig, $bladeActive);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
@@ -272,7 +273,8 @@ final class Plugin implements PluginEntryPointInterface
         return LaravelAiIntegration::isEnabled();
     }
 
-    private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
+    /** @param bool $bladeActive whether {@see self::initBladeAnalysis()} actually put shadows into the analysis */
+    private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig, bool $bladeActive): void
     {
         // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
         // Not domain-specific like the other taint handlers below, so it is registered
@@ -713,9 +715,9 @@ final class Plugin implements PluginEntryPointInterface
         // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
         // returns a bool, so the taint exemptions above get to drop an issue before the remap pays
         // to rebuild it. Only meaningful when templates were compiled, hence the same gate as
-        // initBladeAnalysis() — with Blade off the shadow registry is empty and every issue would
-        // take the (cheap, but pointless) miss path.
-        if ($pluginConfig->bladeEnabled) {
+        // initBladeAnalysis() — without an active boot the shadow registry is empty and every issue
+        // would take the (cheap, but pointless) miss path.
+        if ($bladeActive) {
             require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
             Blade\BladeIssueRemapHandler::init($pluginConfig->bladeReportMixedIssues);
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
@@ -723,9 +725,9 @@ final class Plugin implements PluginEntryPointInterface
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
         // data keys the template never reads (#1478). Needs the compile pass to have populated
-        // ContractRegistry, hence the bladeEnabled half of the gate; the two flags are independent
+        // ContractRegistry, hence the activation half of the gate; the two flags are independent
         // opt-ins for the checks themselves, sharing one walk of the statement.
-        if ($pluginConfig->bladeEnabled && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
+        if ($bladeActive && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
@@ -738,10 +740,10 @@ final class Plugin implements PluginEntryPointInterface
 
         // Reports a template BladeBootstrapper discovered that no statically-provable call site or
         // @include/@extends ever names (#1477). Needs the enumerate-and-collect pass initBladeAnalysis()
-        // already ran into ViewReferenceRegistry, hence the bladeEnabled half of the gate;
+        // already ran into ViewReferenceRegistry, hence the activation half of the gate;
         // bladeReportUnusedViews is the opt-in for the check itself. UnusedViewHandler::init() was
         // already called in initBladeAnalysis(), where a Progress handle is in scope.
-        if ($pluginConfig->bladeEnabled && $pluginConfig->bladeReportUnusedViews) {
+        if ($bladeActive && $pluginConfig->bladeReportUnusedViews) {
             require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\UnusedViewHandler::class);
         }
@@ -894,8 +896,11 @@ final class Plugin implements PluginEntryPointInterface
      * from the manifest on disk, whose fingerprints carry the Laravel version, the plugin version,
      * and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
+     *
+     * @return bool whether the boot actually activated: false means it degraded with a warning and
+     *              published nothing, so no Blade handler may register
      */
-    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): void
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): bool
     {
         $bootstrapper = new Blade\BladeBootstrapper(
             ApplicationProvider::getApp(),
@@ -906,7 +911,9 @@ final class Plugin implements PluginEntryPointInterface
             $pluginConfig->bladeReportUnusedViewData,
         );
 
-        $bootstrapper->boot();
+        if (!$bootstrapper->boot()) {
+            return false;
+        }
 
         // Progress is only available here, not in registerHandlers() below, hence the split: init()
         // (captures the handle for the one-time dynamic-reference warning) here, registration there.
@@ -914,6 +921,8 @@ final class Plugin implements PluginEntryPointInterface
             require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
             Handlers\Views\UnusedViewHandler::init($output);
         }
+
+        return true;
     }
 
     /**
