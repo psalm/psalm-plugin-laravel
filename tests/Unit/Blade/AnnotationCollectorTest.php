@@ -114,6 +114,79 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
 
+    #[Test]
+    public function declines_a_type_whose_id_would_terminate_the_blade_comment(): void
+    {
+        // `{{-- @var array{'--}}': string} $payload --}}` closes at the key, and Laravel renders the
+        // rest of the declaration into the page.
+        $keyed = new Type\Union([new Type\Atomic\TKeyedArray(['--}}' => Type::getString()])]);
+
+        AnnotationCollector::record('home', ['payload' => $keyed], true);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'payload'));
+    }
+
+    #[Test]
+    public function declines_a_template_parameter_even_though_its_id_parses(): void
+    {
+        // `T` parses, but as a class named T — a different type than the one observed.
+        $param = new Type\Atomic\TTemplateParam('T', Type::getMixed(), 'fn-foo');
+
+        AnnotationCollector::record('home', ['row' => new Type\Union([$param])], true);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'row'));
+    }
+
+    #[Test]
+    public function declines_a_template_parameter_nested_inside_a_generic(): void
+    {
+        $param = new Type\Union([new Type\Atomic\TTemplateParam('T', Type::getMixed(), 'fn-foo')]);
+        $generic = new Type\Atomic\TGenericObject('Illuminate\Support\Collection', [Type::getInt(), $param]);
+
+        AnnotationCollector::record('home', ['rows' => new Type\Union([$generic])], true);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'rows'));
+    }
+
+    #[Test]
+    public function marks_a_view_unreadable_when_a_rendering_shape_could_not_be_resolved(): void
+    {
+        // `$v = view('home', [...])` is declined by the chain walk, so its data is invisible; the
+        // types the readable call sites agreed on are only part of the picture.
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        AnnotationCollector::markUnreadable('home');
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    #[Test]
+    public function reports_a_name_a_provably_closed_call_site_leaves_out(): void
+    {
+        // Declaring it would report MissingViewVariable at that very call site, which passes a
+        // provably closed data set without it.
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        AnnotationCollector::record('home', [], true);
+
+        $this->assertTrue(AnnotationCollector::isOptional('home', 'title'));
+    }
+
+    #[Test]
+    public function does_not_report_a_name_every_closed_call_site_passes(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+
+        $this->assertFalse(AnnotationCollector::isOptional('home', 'title'));
+    }
+
+    #[Test]
+    public function does_not_report_a_name_when_no_call_site_proved_its_key_set_closed(): void
+    {
+        AnnotationCollector::record('home', [], false);
+
+        $this->assertFalse(AnnotationCollector::isOptional('home', 'title'));
+    }
+
     /** Built directly: Type::getInt($value) reaches for a Config singleton no unit test boots. */
     private function literal(int $value): Type\Union
     {

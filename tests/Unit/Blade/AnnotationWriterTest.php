@@ -161,6 +161,33 @@ final class AnnotationWriterTest extends TestCase
         $this->assertArrayNotHasKey('error', $this->publishedResult());
     }
 
+    #[Test]
+    public function refuses_to_write_when_the_control_file_is_no_longer_valid(): void
+    {
+        // The control file is named by an environment variable and can be repointed mid-run; the
+        // templates are written well before publish() gets its own chance to re-check.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+        $request = $this->request();
+        $before = \md5_file($path);
+
+        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'control.json', (string) \json_encode(['name' => 'acme']));
+
+        AnnotationWriter::run($request);
+
+        $this->assertSame($before, \md5_file($path));
+    }
+
+    #[Test]
+    public function leaves_out_a_name_a_provably_closed_call_site_does_not_pass(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        AnnotationCollector::record('home', [], true);
+
+        $this->assertSame([], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
+    }
+
     private function registerTemplate(string $contents): string
     {
         $path = $this->template($contents);
