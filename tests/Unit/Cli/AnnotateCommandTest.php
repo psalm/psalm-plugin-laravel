@@ -10,6 +10,9 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\AnnotateCommand;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Console\Tester\CommandTester;
 
 #[CoversClass(AnnotateCommand::class)]
@@ -28,6 +31,10 @@ final class AnnotateCommandTest extends TestCase
 
     protected function tearDown(): void
     {
+        foreach (\glob($this->tempDir . \DIRECTORY_SEPARATOR . '*') ?: [] as $entry) {
+            @\unlink($entry);
+        }
+
         @\rmdir($this->tempDir);
     }
 
@@ -119,5 +126,101 @@ final class AnnotateCommandTest extends TestCase
             [],
             $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '-c', 'psalm.xml', '--dry-run']),
         );
+    }
+
+    #[Test]
+    public function takes_a_long_option_whose_value_is_spelled_as_a_separate_token(): void
+    {
+        // Psalm's getopt() accepts both `--config=psalm.xml` and `--config psalm.xml`; refusing the
+        // second form would reject every value-taking flag the user is entitled to pass.
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            [],
+            $command->pathLimitingArguments([
+                'psalm-laravel',
+                'blade:annotate',
+                '--config',
+                'psalm.xml',
+                '--memory-limit',
+                '2G',
+                '--root',
+                '/srv/app',
+                '--error-level',
+                '3',
+                '--output-format',
+                'compact',
+            ]),
+        );
+    }
+
+    #[Test]
+    public function still_refuses_a_path_that_follows_a_long_option(): void
+    {
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            ['app/Renderer.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--no-progress', 'app/Renderer.php']),
+        );
+        // getopt binds an OPTIONAL value only when it is attached, so the next token is a path.
+        $this->assertSame(
+            ['app/Renderer.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--find-unused-code', 'app/Renderer.php']),
+        );
+    }
+
+    #[Test]
+    public function a_dry_run_that_could_not_plan_every_template_fails(): void
+    {
+        // The diff is incomplete, so the caller must not read exit 0 as "this is what writing does".
+        $this->assertSame(Command::FAILURE, $this->reportExitCode([
+            'dryRun' => true,
+            'changed' => ['a.blade.php' => ['title']],
+            'failures' => ['b.blade.php' => 'unreadable'],
+            'diff' => "+{{-- @var string \$title --}}\n",
+        ]));
+    }
+
+    #[Test]
+    public function a_write_that_could_not_annotate_every_template_fails(): void
+    {
+        $this->assertSame(Command::FAILURE, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => ['a.blade.php' => ['title']],
+            'failures' => ['b.blade.php' => 'unreadable'],
+        ]));
+    }
+
+    #[Test]
+    public function a_run_that_annotated_every_template_succeeds_in_either_mode(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => ['a.blade.php' => ['title']],
+                'failures' => [],
+                'diff' => "+{{-- @var string \$title --}}\n",
+            ]));
+        }
+    }
+
+    /**
+     * Drives the reporting half of the command directly: the exit code depends on what the child
+     * published, and no CommandTester run can produce a child.
+     *
+     * @param array<string, mixed> $published
+     */
+    private function reportExitCode(array $published): int
+    {
+        $controlFile = $this->tempDir . \DIRECTORY_SEPARATOR . 'control.json';
+        \file_put_contents($controlFile, (string) \json_encode($published));
+
+        $command = new AnnotateCommand();
+        $report = new \ReflectionMethod($command, 'report');
+        $io = new SymfonyStyle(new ArrayInput([]), new NullOutput());
+
+        /** @var int */
+        return $report->invoke($command, $io, $controlFile, 0);
     }
 }

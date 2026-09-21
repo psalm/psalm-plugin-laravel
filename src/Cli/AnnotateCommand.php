@@ -30,6 +30,33 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class AnnotateCommand extends Command
 {
     /**
+     * Psalm's long options that REQUIRE a value, so the token after one is that value and never a
+     * path to check. Mirrors the single-colon entries of `Psalm\Internal\Cli\Psalm::LONG_OPTIONS`;
+     * the double-colon ones are left out because getopt() binds an optional value only when it is
+     * attached (`--find-unused-code=x`), leaving a following token positional.
+     */
+    private const VALUE_TAKING_LONG_OPTIONS = [
+        'config',
+        'disable-extension',
+        'dump-taint-graph',
+        'error-level',
+        'find-references-to',
+        'generate-json-map',
+        'generate-stubs',
+        'memory-limit',
+        'output-format',
+        'php-version',
+        'plugin',
+        'report',
+        'report-show-info',
+        'root',
+        'scan-threads',
+        'show-info',
+        'threads',
+        'use-baseline',
+    ];
+
+    /**
      * @param string|null       $workingDirectory Override the target directory; defaults to the process CWD.
      *                                            Exposed for tests.
      * @param list<string>|null $argvOverride     Override the raw argv the psalm arguments are read
@@ -184,8 +211,30 @@ final class AnnotateCommand extends Command
             $io->warning(\sprintf('Skipped %s: %s', $path, $reason));
         }
 
-        if ($changed === [] && $failures !== []) {
-            $io->error(\sprintf('%d template(s) could not be annotated.', \count($failures)));
+        $dryRun = ($result['dryRun'] ?? false) === true;
+
+        if ($changed !== []) {
+            if ($dryRun) {
+                $io->writeln(\rtrim($result['diff'] ?? ''));
+                $io->newLine();
+            } else {
+                foreach ($changed as $path => $names) {
+                    $io->writeln(\sprintf('  %s (%s)', $path, \implode(', ', $names)));
+                }
+            }
+        }
+
+        // Ahead of both success branches, so a dry run fails too: its diff is then not what a write
+        // would produce, and a caller gating on the exit code would ship the difference unnoticed.
+        if ($failures !== []) {
+            $io->error($changed === []
+                ? \sprintf('%d template(s) could not be annotated.', \count($failures))
+                : \sprintf(
+                    '%d template(s) %s, %d could not be.',
+                    \count($changed),
+                    $dryRun ? 'would be annotated' : 'annotated',
+                    \count($failures),
+                ));
 
             return Command::FAILURE;
         }
@@ -196,29 +245,9 @@ final class AnnotateCommand extends Command
             return Command::SUCCESS;
         }
 
-        if (($result['dryRun'] ?? false) === true) {
-            $io->writeln(\rtrim($result['diff'] ?? ''));
-            $io->newLine();
-            $io->success(\sprintf('%d template(s) would be annotated. Re-run without --dry-run to write them.', \count($changed)));
-
-            return Command::SUCCESS;
-        }
-
-        foreach ($changed as $path => $names) {
-            $io->writeln(\sprintf('  %s (%s)', $path, \implode(', ', $names)));
-        }
-
-        if ($failures !== []) {
-            $io->error(\sprintf(
-                '%d template(s) annotated, %d could not be.',
-                \count($changed),
-                \count($failures),
-            ));
-
-            return Command::FAILURE;
-        }
-
-        $io->success(\sprintf('%d template(s) annotated.', \count($changed)));
+        $io->success($dryRun
+            ? \sprintf('%d template(s) would be annotated. Re-run without --dry-run to write them.', \count($changed))
+            : \sprintf('%d template(s) annotated.', \count($changed)));
 
         return Command::SUCCESS;
     }
@@ -256,9 +285,9 @@ final class AnnotateCommand extends Command
                 continue;
             }
 
-            // `-c psalm.xml` and `-r <root>` take a value that is not a path to check; every other
-            // bare token is one Psalm would add to its paths-to-check list.
-            if ($token === '-c' || $token === '-r') {
+            // `-c psalm.xml`, `-r <root>` and the long options that require a value take one that is
+            // not a path to check; every other bare token is one Psalm adds to its paths-to-check list.
+            if ($token === '-c' || $token === '-r' || $this->takesASeparateValue($token)) {
                 $expectsValue = true;
 
                 continue;
@@ -270,6 +299,13 @@ final class AnnotateCommand extends Command
         }
 
         return $offending;
+    }
+
+    /** Whether the token is a long option spelled without its value, which the next token supplies. */
+    private function takesASeparateValue(string $token): bool
+    {
+        return \str_starts_with($token, '--')
+            && \in_array(\substr($token, 2), self::VALUE_TAKING_LONG_OPTIONS, true);
     }
 
     /**
