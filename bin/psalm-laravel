@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 use Psalm\LaravelPlugin\Cli\AddCommand;
 use Psalm\LaravelPlugin\Cli\AnalyzeCommand;
+use Psalm\LaravelPlugin\Cli\AnnotateCommand;
 use Psalm\LaravelPlugin\Cli\DiagnoseCommand;
 use Psalm\LaravelPlugin\Cli\InitCommand;
 use Symfony\Component\Console\Application;
@@ -41,7 +42,7 @@ $application = new Application('psalm-laravel');
 // The cwd-relative autoloader (above) may pull either version from the consuming
 // project, so dispatch through the method name that the runtime version exposes.
 $register = method_exists($application, 'addCommand') ? 'addCommand' : 'add';
-foreach ([new InitCommand(), new AnalyzeCommand(), new AddCommand(), new DiagnoseCommand()] as $command) {
+foreach ([new InitCommand(), new AnalyzeCommand(), new AddCommand(), new DiagnoseCommand(), new AnnotateCommand()] as $command) {
     $application->{$register}($command);
 }
 
