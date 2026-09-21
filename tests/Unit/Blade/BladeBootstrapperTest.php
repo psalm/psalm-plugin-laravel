@@ -528,7 +528,11 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, $registrar)->boot();
 
-        $this->assertCount(1, $this->progress->warnings, 'one aggregated warning, never one per template');
+        // Two warnings total, not three: one because `ThrowingBladeCompiler` is a compiler
+        // SUBCLASS (unconditionally untrustworthy, #1517 F3, unrelated to this test's own point),
+        // and one aggregated compile-failure warning for the broken template — never one per
+        // failed template.
+        $this->assertCount(2, $this->progress->warnings, $this->progress->warningText());
         $this->assertStringContainsString('broken.blade.php', $this->progress->warningText());
         // Every discovered template is reportable, not only the ones that compiled: UnusedView has
         // to be able to report on a template that failed to compile too (#1477).
