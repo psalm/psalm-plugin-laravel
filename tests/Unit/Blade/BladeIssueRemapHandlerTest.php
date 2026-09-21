@@ -11,6 +11,7 @@ use Psalm\Codebase;
 use Psalm\CodeLocation\Raw;
 use Psalm\Internal\Codebase\TaintFlowGraph;
 use Psalm\Issue\CodeIssue;
+use Psalm\Issue\TaintedHtml;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\LaravelPlugin\Blade\BladeIssueRemapHandler;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
@@ -18,9 +19,11 @@ use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 
 /**
- * The decline paths only. Every path past them calls `IssueBuffer::accepts()`, which needs a live
- * `ProjectAnalyzer` — so each test here also pins that the handler bails BEFORE reaching it, and
- * the re-emission itself is covered end to end by {@see BladeIssueRemapTest}.
+ * The decline paths only, for both branches `beforeAddIssue()` can take: the shadow-primary branch
+ * (`remapShadowIssue()`) and the journey-only branch for a taint finding whose sink is ordinary
+ * application code (`remapJourney()`, #1519). Every path past them calls `IssueBuffer::accepts()`,
+ * which needs a live `ProjectAnalyzer` — so each test here also pins that the handler bails BEFORE
+ * reaching it, and the re-emission itself is covered end to end by {@see BladeIssueRemapTest}.
  */
 #[CoversClass(BladeIssueRemapHandler::class)]
 final class BladeIssueRemapHandlerTest extends TestCase
@@ -69,9 +72,26 @@ final class BladeIssueRemapHandlerTest extends TestCase
     {
         $this->registerShadow();
 
+        // A non-taint issue on an ordinary file: it falls into remapJourney() (#1519), which
+        // declines immediately because PsalmBridge::taintArguments() is not a TaintedInput.
         $this->assertNull(BladeIssueRemapHandler::beforeAddIssue(
             $this->event($this->issueOn('/app/src/Controller.php'), null),
         ));
+    }
+
+    #[Test]
+    public function it_declines_a_taint_issue_whose_journey_never_touches_a_shadow(): void
+    {
+        // #1519: the journey-only branch only fires when a hop actually crossed a template. A
+        // taint finding entirely inside ordinary application code must be left for Psalm.
+        $this->registerShadow();
+
+        $location = new Raw('', '/app/src/Controller.php', 'app/src/Controller.php', 0, 0);
+        $issue = new TaintedHtml('Detected tainted HTML', $location, [
+            ['location' => $location, 'label' => 'call to echo', 'entry_path_type' => ''],
+        ], 'call to echo (app/src/Controller.php:1:1)');
+
+        $this->assertNull(BladeIssueRemapHandler::beforeAddIssue($this->event($issue, null)));
     }
 
     #[Test]

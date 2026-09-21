@@ -145,6 +145,19 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * Rebuilds a taint issue with a remapped journey only, for a sink that already sits on
+     * ordinary application code (#1519). None of the shadow-only filters above apply: those drop
+     * compiler output the template author never wrote, and here the sink is real app code Psalm
+     * found on its own.
+     *
+     * @param array{journey: list<array{location: ?CodeLocation, label: string, entry_path_type: string}>, journey_text: string} $journey
+     */
+    public static function relocateJourney(CodeIssue $issue, array $journey): ?CodeIssue
+    {
+        return self::rebuild($issue, $journey);
+    }
+
+    /**
      * `TooManyArguments` gated on the ONE class it applies to, never the whole family: a
      * compiled `@include`/`@extends` chain also expands into calls (`$__env->make()`) that an
      * arity check would then silently drop as "generated" even when they carry a real bug such
