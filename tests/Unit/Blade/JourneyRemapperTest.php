@@ -36,6 +36,7 @@ final class JourneyRemapperTest extends TestCase
             new ShadowEntry(self::TEMPLATE, $lineMap, []),
             self::TEMPLATE_SOURCE,
             self::TEMPLATE_NAME,
+            false,
         );
 
         return static fn(string $path): ?ShadowTarget => $path === self::SHADOW ? $target : null;
@@ -193,8 +194,8 @@ final class JourneyRemapperTest extends TestCase
         $includeTemplate = '/app/resources/views/included.blade.php';
         $includeTemplateName = 'resources/views/included.blade.php';
 
-        $outerTarget = new ShadowTarget(new ShadowEntry(self::TEMPLATE, [9 => 3], []), self::TEMPLATE_SOURCE, self::TEMPLATE_NAME);
-        $includeTarget = new ShadowTarget(new ShadowEntry($includeTemplate, [5 => 2], []), "<span>\n  x\n</span>\n", $includeTemplateName);
+        $outerTarget = new ShadowTarget(new ShadowEntry(self::TEMPLATE, [9 => 3], []), self::TEMPLATE_SOURCE, self::TEMPLATE_NAME, false);
+        $includeTarget = new ShadowTarget(new ShadowEntry($includeTemplate, [5 => 2], []), "<span>\n  x\n</span>\n", $includeTemplateName, false);
 
         $resolve = static fn(string $path): ?ShadowTarget => match ($path) {
             self::SHADOW => $outerTarget,

@@ -19,6 +19,31 @@ final class MarkerPrePass
     (?<args>\((?>\/\*.*?\*\/|\/\/[^\r\n]*|#(?!\[)[^\r\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^()'"\/#]|\/(?![\/*])|#(?=\[)|(?&args))*\))
     REGEX;
 
+    /** Constructs Blade never compiles: their bodies reach the output as text, or not at all. */
+    private const INERT_PATTERN = '/@verbatim.*?@endverbatim|\{\{--.*?--\}\}/s';
+
+    /**
+     * $source with Blade comments and `@verbatim` bodies replaced by spaces of equal length
+     * (newlines kept, so offsets and line numbers stay identical). Blade strips comments before it
+     * recognises directives, and emits a verbatim body as literal text, so neither can put a
+     * directive or a variable read into the compiled output — a caller classifying a template from
+     * its source must not read either.
+     *
+     * Deliberately narrower than {@see self::maskedRanges()}, which also masks `@php` and raw
+     * `<?php` bodies: those DO execute, and a mention inside them is a real one.
+     */
+    public static function blankInertText(string $source): string
+    {
+        if (\preg_match_all(self::INERT_PATTERN, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+            return $source;
+        }
+
+        /** @var list<array{0: string, 1: int}> $ranges */
+        $ranges = $matches[0];
+
+        return self::blankRanges($source, $ranges);
+    }
+
     /**
      * Byte-offset ranges of source that are not "live" Blade code: verbatim bodies,
      * `@php...@endphp` blocks, Blade comments, and raw `<?php ... ?>` / `<?= ... ?>`

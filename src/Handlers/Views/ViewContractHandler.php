@@ -171,7 +171,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         foreach (\array_keys($chain->data) as $name) {
             // Ambient names are stripped from the read set as Blade's own, so the passed side has to
             // re-check them: a call site that supplies `errors` is not wrong about the template.
-            if (isset($reads[$name]) || isset($contract->vars[$name]) || isset(PreludeBuilder::AMBIENT_TYPES[$name])) {
+            if (isset($reads[$name]) || isset($contract->vars[$name]) || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
                 continue;
             }
 
