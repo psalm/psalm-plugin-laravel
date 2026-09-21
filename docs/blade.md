@@ -41,6 +41,8 @@ Compiled shadows and their manifest are written to a cache directory:
 
 If you set `cacheDir` to a path inside your project, gitignore it and keep it out of `<projectFiles>`. A shadow that Psalm treats as one of your own project files gets analyzed twice, at the wrong location, and can make taint flows starting inside it disappear.
 
+A cached shadow is invalidated (recompiled) when either its template's own source changes, or the application's Blade compiler environment changes: a custom directive (`Blade::directive()`), an `@if` condition (`Blade::if()`), an extension, a precompiler, a string-preparation callback, an echo handler or format, the JSON-encoding options `{{ }}` uses, a component alias or namespace, or a compiler subclass swap. Editing one of these invalidates every cached shadow once, even though no template file changed. What is NOT invalidated: adding a new anonymous-component template file, without touching anything else, changes what an unrelated, already-compiled `<x-foo>` tag resolves to at render time, but not what it was compiled to. That gap is not closed by this cache.
+
 ## Suppressing issues
 
 Two suppression paths work exactly as they do for ordinary PHP files:
