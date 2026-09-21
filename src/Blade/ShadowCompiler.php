@@ -43,7 +43,7 @@ final class ShadowCompiler
             return BladeCompileError::fromThrowable($templatePath, $throwable);
         }
 
-        $prelude = $this->preludeBuilder->build($compiled, $contractVars);
+        $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");

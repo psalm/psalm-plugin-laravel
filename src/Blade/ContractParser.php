@@ -283,7 +283,7 @@ final class ContractParser
         foreach (\array_keys($names) as $name) {
             if ($name === 'this'
                 || \str_starts_with($name, '__')
-                || isset(PreludeBuilder::AMBIENT_TYPES[$name])
+                || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])
                 || isset($excluded[$name])
             ) {
                 continue;
