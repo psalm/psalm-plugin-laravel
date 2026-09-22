@@ -546,11 +546,13 @@ final class BladeIssueRemapTest extends TestCase
         }
     }
 
-    /** #1525's three ambient-guard families, checked together against one template. */
+    /** #1525/#1532's five ambient-guard families, checked together against one template. */
     private const AMBIENT_GUARD_FAMILIES = [
         'RedundantCondition',
         'RedundantConditionGivenDocblockType',
         'DocblockTypeContradiction',
+        'TypeDoesNotContainNull',
+        'TypeDoesNotContainType',
     ];
 
     /**
@@ -648,9 +650,7 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $template = 'components/nested-attributes.blade.php';
 
-        $gatedFamilies = [...self::AMBIENT_GUARD_FAMILIES, 'TypeDoesNotContainNull', 'TypeDoesNotContainType'];
-
-        foreach ($gatedFamilies as $family) {
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
             $this->assertSame(
                 [],
                 $this->linesFor($issues, $family, $template),
@@ -674,7 +674,7 @@ final class BladeIssueRemapTest extends TestCase
         );
 
         // Nothing else at all reports on this template — the allowlist above is exhaustive.
-        $accounted = [...$gatedFamilies, 'PossiblyNullReference'];
+        $accounted = [...self::AMBIENT_GUARD_FAMILIES, 'PossiblyNullReference'];
 
         foreach ($issues as $issue) {
             if (\str_ends_with($issue['file_path'], $template)) {
@@ -708,6 +708,55 @@ final class BladeIssueRemapTest extends TestCase
         }
 
         $this->assertCount(1, $matching, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * #1532: `$component` is never given a type by
+     * {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::componentTypesFor()} in ANY template (the
+     * prelude only ever declares it `mixed` through the undeclared-name fallback), unlike
+     * `$attributes`/`$slot`, whose docblock-vs-inferred split only exists inside a component view.
+     * `nested-component-tags.blade.php` is a plain page (no `@props`/`@aware`/`$attributes`/
+     * `$slot`), so `isComponentView` is false, yet it nests one `<x-alert>` tag inside another's
+     * slot: the OUTER tag's compiled `resolve()` call narrows `$component` to a concrete class
+     * before its own restore runs, and the INNER tag's opening save guard re-checks `isset($component)`
+     * while that narrowed type is still live, making the check provably redundant regardless of
+     * `isComponentView`. The unrelated `$range` guard on the same template is the author's own
+     * docblock contradiction and must survive: the fix is message-specific, not a blanket per-file
+     * suppression of the family.
+     */
+    #[Test]
+    public function ambient_component_guard_is_dropped_for_a_non_component_caller_with_nested_tags(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/nested-component-tags.blade.php';
+
+        // Guard against a vacuous pass: the test must fail if the INNER `<x-alert>` tag ever stops
+        // compiling (e.g. a fixture edit collapses the nesting), not just pass because there is
+        // nothing left to drop. Each `<x-...>` tag compiles its own opening `isset($component)` save
+        // guard, so two tags means two.
+        $this->assertSame(
+            2,
+            \substr_count($this->shadowSourceFor($template), 'if (isset($component)) {'),
+            "expected two compiled component save guards (one per <x-alert> tag); the nesting this test exists to pin did not survive compilation:\n" . $this->shadowSourceFor($template),
+        );
+
+        $componentGuards = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)
+                && \in_array($issue['type'], self::AMBIENT_GUARD_FAMILIES, true)
+                && \str_contains($issue['message'], ' for $component'),
+        ));
+
+        $this->assertSame([], $componentGuards, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        $authorGuards = \array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)
+                && \in_array($issue['type'], self::AMBIENT_GUARD_FAMILIES, true)
+                && \str_contains($issue['message'], ' for $range'),
+        );
+
+        $this->assertCount(1, $authorGuards, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -745,5 +794,29 @@ final class BladeIssueRemapTest extends TestCase
         }
 
         return $source;
+    }
+
+    /**
+     * One template's own compiled shadow, matched via `manifest.php`'s shadow-path => template-path
+     * map, rather than {@see allShadowSources()}'s whole-directory concatenation: a fixture-wide
+     * substring count cannot tell THIS template's compiled output apart from every other fixture's.
+     */
+    private function shadowSourceFor(string $template): string
+    {
+        $manifestPath = self::SHADOW_DIR . '/manifest.php';
+        $this->assertFileExists($manifestPath, 'no shadow manifest was ever written for this run');
+
+        $manifest = require $manifestPath;
+        $this->assertIsArray($manifest);
+
+        foreach ($manifest as $shadowPath => $entry) {
+            $templatePath = \is_array($entry) ? ($entry[0] ?? null) : null;
+
+            if (\is_string($templatePath) && \str_ends_with($templatePath, $template) && \is_string($shadowPath)) {
+                return (string) \file_get_contents($shadowPath);
+            }
+        }
+
+        $this->fail("no shadow was compiled for {$template}");
     }
 }
