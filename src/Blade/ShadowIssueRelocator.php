@@ -113,28 +113,55 @@ final class ShadowIssueRelocator
         //
         // Gated on the MESSAGE, not the class: `RedundantCondition` on an author's OWN
         // `@if(isset($range))` under their own docblock must keep reporting, and a message-only
-        // gate cannot tell that apart from this shape by class alone. `$target->isComponentView` is
-        // the second half of the gate: outside a component view none of these three names is ever
-        // declared by the prelude, so a local variable an author happens to name
-        // `$attributes`/`$slot` there is untouched (#1525).
+        // gate cannot tell that apart from this shape by class alone.
+        //
+        // `$component`, unlike `$attributes`/`$slot`, is never given a type by
+        // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
+        // generic `mixed` bucket for undeclared names — so `isComponentView` carries no signal for
+        // it. Its narrowed type comes entirely from the compiled `<Component>::resolve()` call one
+        // `<x-...>` tag runs before the NEXT tag's own opening save guard re-checks
+        // `isset($component)` against that still-live narrowing; that shape fires for a nested `<x-...>` tag inside a
+        // PLAIN page just as much as inside a component view (#1532), so this name drops
+        // unconditionally. `$attributes`/`$slot` keep the `isComponentView` requirement: outside a
+        // component view neither name is ever declared by the prelude, so a local variable an
+        // author happens to name `$attributes`/`$slot` there is untouched (#1525).
         //
         // Trade-off this gate does NOT avoid: it cannot tell compiler-generated bookkeeping apart
-        // from an author's OWN `@if (isset($attributes))`/`instanceof` check written inside their
-        // own `@props`/`@aware` component view — that guard is silenced too, with no trace, because
-        // it names one of the same three ambient variables. `PossiblyNullReference` on a
-        // subsequent `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
+        // from an author's OWN `@if (isset($attributes))`/`instanceof`/`@php $component = ...` check
+        // written inside their own template — that guard is silenced too, with no trace, because it
+        // names one of the same three ambient variables. `PossiblyNullReference` on a subsequent
+        // `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
         // reconciliation above (Psalm keeps the reconciled null in the never-taken arm and re-unions
         // it at the guard's `endif`) and stays visible; see docs/blade.md known limitations.
+        //
+        // These five classes render the checked name in one of TWO positions, never anywhere else
+        // (`Reconciler::triggerIssueForImpossible()` and `AssertionReconciler`/
+        // `SimpleNegatedAssertionReconciler` in vendor/vimeo/psalm), so `isAmbientGuardName()`
+        // matches only those two anchored shapes rather than searching the whole message for the
+        // name: `(Type|Docblock-defined type) <TYPE> for $key is (never|always) <ASSERTION>` (`$key`
+        // immediately BEFORE `" is "`) and `Cannot resolve types for $key - <TYPE> does not contain
+        // ...` / `... with <TYPE> and !isset assertion` (`$key` immediately AFTER `"for "`, anchored
+        // to the message START so a `<TYPE>` string cannot masquerade as the leading `$key`). `<TYPE>`
+        // is Psalm's rendered type and, for a `TLiteralString`, can itself contain the literal text
+        // `" for $component "` — a bare substring search on the first shape would then drop an
+        // unrelated key's guard whose rendered TYPE happens to quote one of the three names (#1532
+        // review). Residual gap accepted, not fixed: a literal type string that contains the WHOLE
+        // anchored phrase (name + `" is never/always "`, or the `^Cannot resolve types for $name"`
+        // prefix) still collides; no message-only gate can rule that out.
         if (
-            ($issue instanceof RedundantCondition
-                || $issue instanceof RedundantConditionGivenDocblockType
-                || $issue instanceof DocblockTypeContradiction
-                || $issue instanceof TypeDoesNotContainNull
-                || $issue instanceof TypeDoesNotContainType)
-            && $target->isComponentView
-            && \preg_match('/ for \$(attributes|component|slot)(?=[\s,]|$)/', $issue->message) === 1
+            $issue instanceof RedundantCondition
+            || $issue instanceof RedundantConditionGivenDocblockType
+            || $issue instanceof DocblockTypeContradiction
+            || $issue instanceof TypeDoesNotContainNull
+            || $issue instanceof TypeDoesNotContainType
         ) {
-            return false;
+            if (self::isAmbientGuardName($issue->message, 'component')) {
+                return false;
+            }
+
+            if ($target->isComponentView && self::isAmbientGuardName($issue->message, 'attributes|slot')) {
+                return false;
+            }
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
@@ -233,6 +260,17 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+    }
+
+    /**
+     * Whether one of `$names` (a `|`-separated alternation, no leading `$`) is the checked KEY in an
+     * ambient-guard issue message, matched at the two anchored positions documented above, never as
+     * a bare substring search.
+     */
+    private static function isAmbientGuardName(string $message, string $names): bool
+    {
+        return \preg_match('/ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
+            || \preg_match('/^Cannot resolve types for \$(?:' . $names . ')(?=[\s,]|$)/', $message) === 1;
     }
 
     /**
