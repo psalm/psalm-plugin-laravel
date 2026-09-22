@@ -102,6 +102,7 @@ Every other variable a template uses without a type the plugin can prove gets `m
 ```
 
 * **`e()` accepts `\Stringable` by design.** Laravel's `e()` has no type declaration on its `$value` parameter; `htmlspecialchars()` coerces it to string at runtime regardless of caller strictness, so passing a `\Stringable` is safe everywhere, not only at echo positions. `{{ $stringable }}` and an explicit `e($stringable)` call anywhere, including inside `@php`, no longer report `ImplicitToStringCast`. Other `ImplicitToStringCast` sites are unchanged: a `\Stringable` passed to a plain function such as `strlen()`, or used in a concatenation under `strict_binary_operands`, still reports.
+* **`old()` accepts any `$default`.** Its runtime chain ends in `Arr::get($input, $key, $default)`, which never inspects the value, so `{{ old('qty', 0) }}` and `{{ old('active', false) }}` are honest code even though Laravel's own `@param` lists only `Model|string|array|null`. The return type is left at `string|array|null`; see the echo-position gate below for what that union does in `{{ }}`.
 
 ### Compiler-generated code
 

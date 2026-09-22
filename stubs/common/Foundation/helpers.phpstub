@@ -412,8 +412,19 @@ function view($view = null, $data = [], $mergeData = []) {}
 /**
  * Retrieve an old input item.
  *
+ * `$default` is widened past Laravel's own `@param`, which is narrower than the runtime contract:
+ * the chain ends in `Arr::get($input, $key, $default)`, which never inspects or constrains the
+ * value, so an int/bool/enum fallback for an optional field is honest code. Matches the deviation
+ * `InteractsWithFlashData::old()` already carries.
+ *
+ * The return stays `string|array|null` rather than mirroring that trait stub's `mixed`: `mixed`
+ * would only convert every echo-position finding into a `MixedArgument`. Known consequence of the
+ * pairing — `old('k', $object)` can return the object, which this return type does not admit; the
+ * same unsoundness is in Laravel's own docblock, a `mixed` default just makes it reachable more
+ * often.
+ *
  * @param  string|null  $key
- * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
+ * @param  mixed  $default
  * @return string|array|null
  *
  * @psalm-taint-source input
