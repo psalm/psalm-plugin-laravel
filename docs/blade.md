@@ -122,6 +122,12 @@ Psalm 6 runs taint analysis exclusively: a plain run reports type issues only, a
 ./vendor/bin/psalm --taint-analysis # taint issues, including Blade templates
 ```
 
+## Threads
+
+Nothing in the pipeline needs a single process, and that is checked rather than assumed: a test compares a forked run against a single-process run of the same fixture, and the same comparison across a corpus of real applications, plain and `--taint-analysis`, cold and warm cache, reported identical issue lists. Shadows are compiled, and the registries the issue remap reads are filled, while Psalm initialises its plugins, which happens before either the scanner or the analyzer forks; every worker therefore inherits a complete copy, and nothing writes to the shadow cache once analysis starts. A template issue found in a worker is re-emitted there against the `.blade.php` path and travels home in the worker pool's result payload like any other issue. A taint finding is emitted later still, in the parent process, after the workers' flow graphs have been merged, so its journey is rewritten where the registries live.
+
+`psalm-laravel blade:annotate` is the one exception, and forces `--threads=1` on the Psalm run it drives (see [Annotating templates](#annotating-templates)). That restriction is about the producer types the command collects, not about analysis.
+
 ## Degradation
 
 Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
