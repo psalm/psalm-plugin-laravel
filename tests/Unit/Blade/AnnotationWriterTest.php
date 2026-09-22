@@ -15,6 +15,7 @@ use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\Type;
+use Symfony\Component\Process\Process;
 
 #[CoversClass(AnnotationWriter::class)]
 final class AnnotationWriterTest extends TestCase
@@ -33,6 +34,10 @@ final class AnnotationWriterTest extends TestCase
         if (!\mkdir($this->tempDir) && !\is_dir($this->tempDir)) {
             throw new \RuntimeException("Failed to create temp directory {$this->tempDir}");
         }
+
+        // macOS's system temp dir is reached through a `/var` -> `/private/var` symlink, which
+        // `git apply`'s path-safety check refuses to traverse; the canonical path avoids that.
+        $this->tempDir = (string) \realpath($this->tempDir);
     }
 
     protected function tearDown(): void
@@ -109,7 +114,7 @@ final class AnnotationWriterTest extends TestCase
 
         $this->assertSame($before, \md5_file($path));
         $this->assertNotNull($diff);
-        $this->assertStringContainsString('@@ -0,0 +1,1 @@', $diff);
+        $this->assertStringContainsString('@@ -1 +1,2 @@', $diff);
         $this->assertStringContainsString("+{{-- @var string \$title --}}", $diff);
     }
 
@@ -186,6 +191,52 @@ final class AnnotationWriterTest extends TestCase
         AnnotationCollector::record('home', [], true);
 
         $this->assertSame([], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
+    }
+
+    #[Test]
+    public function the_dry_run_diff_for_an_unterminated_contract_line_matches_the_actual_byte_change(): void
+    {
+        // The template ends ON its existing contract comment with no trailing newline. Declaring a
+        // second name inserts a line break the file did not have, which modifies that final line —
+        // a hand-rolled "pure insertion" hunk header would lie about that.
+        $path = $this->template('{{-- @var string $title --}}');
+        $before = (string) \file_get_contents($path);
+
+        $diff = AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], true);
+        $this->assertNotNull($diff);
+
+        AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], false);
+        $actual = (string) \file_get_contents($path);
+
+        \file_put_contents($path, $before);
+        $this->applyWithGitApply($diff);
+
+        $this->assertSame($actual, \file_get_contents($path), 'applying the dry-run diff must reproduce the real write byte for byte');
+    }
+
+    #[Test]
+    public function the_dry_run_diff_applies_cleanly_with_plain_git_apply(): void
+    {
+        $path = $this->template("<h1>{{ \$title }}</h1>\n");
+        $before = (string) \file_get_contents($path);
+
+        $diff = AnnotationWriter::apply($path, ['title' => 'string'], true);
+        $this->assertNotNull($diff);
+
+        AnnotationWriter::apply($path, ['title' => 'string'], false);
+        $actual = (string) \file_get_contents($path);
+
+        \file_put_contents($path, $before);
+        $this->applyWithGitApply($diff);
+
+        $this->assertSame($actual, \file_get_contents($path));
+    }
+
+    /** Absolute paths in the hunk header resolve correctly under plain `git apply` when run from `/`. */
+    private function applyWithGitApply(string $diff): void
+    {
+        $process = new Process(['git', 'apply'], \DIRECTORY_SEPARATOR, null, $diff);
+        $process->mustRun();
     }
 
     private function registerTemplate(string $contents): string

@@ -9,6 +9,8 @@ use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\Plugin\EventHandler\AfterAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterAnalysisEvent;
+use SebastianBergmann\Diff\Differ;
+use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
 
 /**
  * Turns what {@see AnnotationCollector} saw into `{{-- @var --}}` declarations on disk.
@@ -195,30 +197,30 @@ final class AnnotationWriter implements AfterAnalysisInterface
             return null;
         }
 
-        [$annotated, $line, $comments] = $result;
+        $annotated = $result[0];
 
         if (!$dryRun && @\file_put_contents($templatePath, $annotated) === false) {
             throw new \RuntimeException('the template could not be written');
         }
 
-        return self::hunk($templatePath, $line, $comments);
+        return self::hunk($templatePath, $source, $annotated);
     }
 
     /**
-     * The insertion as a unified-diff hunk. Whole lines are only ever added, at one offset, so the
-     * added run is the difference in full and no context lines are needed to describe it.
-     *
-     * @param list<string> $comments
+     * The insertion as a unified-diff hunk, diffed from the real before/after source rather than
+     * hand-assembled: a line the insertion also terminates (an EOL added to a template's last,
+     * previously bare, line) then shows as the modification it really is instead of a false pure
+     * addition, and the surrounding context lines this produces are what let plain `git apply`
+     * (no `--unidiff-zero`) accept the output.
      */
-    private static function hunk(string $templatePath, int $line, array $comments): string
+    private static function hunk(string $templatePath, string $before, string $after): string
     {
-        $hunk = "--- a/{$templatePath}\n+++ b/{$templatePath}\n"
-            . '@@ -' . ($line - 1) . ",0 +{$line}," . \count($comments) . " @@\n";
+        // `$templatePath` is already absolute; a literal "a/" prefix would double the leading slash.
+        $differ = new Differ(new StrictUnifiedDiffOutputBuilder([
+            'fromFile' => "a{$templatePath}",
+            'toFile' => "b{$templatePath}",
+        ]));
 
-        foreach ($comments as $comment) {
-            $hunk .= "+{$comment}\n";
-        }
-
-        return $hunk;
+        return $differ->diff($before, $after);
     }
 }
