@@ -133,6 +133,21 @@ final class ShadowIssueRelocator
         // `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
         // reconciliation above (Psalm keeps the reconciled null in the never-taken arm and re-unions
         // it at the guard's `endif`) and stays visible; see docs/blade.md known limitations.
+        //
+        // These five classes render the checked name in one of TWO positions, never anywhere else
+        // (`Reconciler::triggerIssueForImpossible()` and `AssertionReconciler`/
+        // `SimpleNegatedAssertionReconciler` in vendor/vimeo/psalm), so `isAmbientGuardName()`
+        // matches only those two anchored shapes rather than searching the whole message for the
+        // name: `(Type|Docblock-defined type) <TYPE> for $key is (never|always) <ASSERTION>` (`$key`
+        // immediately BEFORE `" is "`) and `Cannot resolve types for $key - <TYPE> does not contain
+        // ...` / `... with <TYPE> and !isset assertion` (`$key` immediately AFTER `"for "`, anchored
+        // to the message START so a `<TYPE>` string cannot masquerade as the leading `$key`). `<TYPE>`
+        // is Psalm's rendered type and, for a `TLiteralString`, can itself contain the literal text
+        // `" for $component "` — a bare substring search on the first shape would then drop an
+        // unrelated key's guard whose rendered TYPE happens to quote one of the three names (#1532
+        // review). Residual gap accepted, not fixed: a literal type string that contains the WHOLE
+        // anchored phrase (name + `" is never/always "`, or the `^Cannot resolve types for $name"`
+        // prefix) still collides; no message-only gate can rule that out.
         if (
             $issue instanceof RedundantCondition
             || $issue instanceof RedundantConditionGivenDocblockType
@@ -140,11 +155,11 @@ final class ShadowIssueRelocator
             || $issue instanceof TypeDoesNotContainNull
             || $issue instanceof TypeDoesNotContainType
         ) {
-            if (\preg_match('/ for \$component(?=[\s,]|$)/', $issue->message) === 1) {
+            if (self::isAmbientGuardName($issue->message, 'component')) {
                 return false;
             }
 
-            if ($target->isComponentView && \preg_match('/ for \$(attributes|slot)(?=[\s,]|$)/', $issue->message) === 1) {
+            if ($target->isComponentView && self::isAmbientGuardName($issue->message, 'attributes|slot')) {
                 return false;
             }
         }
@@ -245,6 +260,17 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+    }
+
+    /**
+     * Whether one of `$names` (a `|`-separated alternation, no leading `$`) is the checked KEY in an
+     * ambient-guard issue message, matched at the two anchored positions documented above, never as
+     * a bare substring search.
+     */
+    private static function isAmbientGuardName(string $message, string $names): bool
+    {
+        return \preg_match('/ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
+            || \preg_match('/^Cannot resolve types for \$(?:' . $names . ')(?=[\s,]|$)/', $message) === 1;
     }
 
     /**

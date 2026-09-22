@@ -286,6 +286,35 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
     }
 
+    /** Bare `$slot`, mirroring the `$attributes` case above: dropped inside a component view. */
+    #[Test]
+    public function a_bare_slot_redundant_condition_is_dropped_inside_a_component_view(): void
+    {
+        $issue = new RedundantCondition(
+            'Type Illuminate\View\ComponentSlot for $slot is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
+    }
+
+    /** Negative: the SAME bare `$slot` message, outside a component view, must survive. */
+    #[Test]
+    public function a_bare_slot_redundant_condition_survives_outside_a_component_view(): void
+    {
+        $issue = new RedundantCondition(
+            'Type Illuminate\View\ComponentSlot for $slot is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
+
+        $this->assertInstanceOf(RedundantCondition::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
     /**
      * `Reconciler::triggerIssueForImpossible()`'s INFERRED-branch siblings of
      * `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`: the
@@ -351,6 +380,52 @@ final class ShadowIssueRelocatorTest extends TestCase
         );
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
+    }
+
+    /**
+     * #1532 review: a bare substring search for `" for $component"` also matches a rendered TYPE
+     * that happens to quote it. `Reconciler::triggerIssueForImpossible()` puts `$key` immediately
+     * BEFORE `" is (never|always) "` in this message shape (`Type <type> for $key is ... <assertion>`)
+     * — here the real key is `$range` and the TYPE is the literal string `' for $component '`, so a
+     * substring-only gate drops an author's OWN guard because its rendered type happens to contain
+     * the ambient name.
+     */
+    #[Test]
+    public function a_literal_type_string_naming_component_does_not_mask_the_real_key(): void
+    {
+        $issue = new RedundantCondition(
+            "Type ' for \$component ' for \$range is always isset",
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
+
+        $this->assertInstanceOf(RedundantCondition::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1532 review, the mirror hazard: `AssertionReconciler`'s message shape puts `$key` right after
+     * `"for "` and the TYPE afterward (`Cannot resolve types for $key - docblock-defined type <type>
+     * does not contain ...`), so here the real key is `$range` and the TYPE (rendered after the
+     * dash) is the literal string `' for $attributes are great'` — the gate must anchor on the
+     * message START, not find the name anywhere in the tail, or this drops the author's OWN guard
+     * inside a component view.
+     */
+    #[Test]
+    public function a_literal_type_string_naming_attributes_does_not_mask_the_real_key(): void
+    {
+        $issue = new DocblockTypeContradiction(
+            "Cannot resolve types for \$range - docblock-defined type ' for \$attributes are great' does not contain null",
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: true);
+
+        $this->assertInstanceOf(DocblockTypeContradiction::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     /**
