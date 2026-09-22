@@ -318,7 +318,8 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     /**
      * Negative: the SAME message, outside a component view. The prelude never declares
-     * `$attributes`/`$component`/`$slot` there, so the drop must not fire on a message shape alone.
+     * `$attributes`/`$slot` there, so for those two names the drop must not fire on a message
+     * shape alone.
      */
     #[Test]
     public function the_same_ambient_guard_message_survives_outside_a_component_view(): void
@@ -337,7 +338,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     /**
      * #1532: unlike `$attributes`/`$slot`, `$component` is dropped even OUTSIDE a component view —
-     * its narrowed type comes from a PRECEDING `<x-...>` tag's `make()` call, a shape a plain page
+     * its narrowed type comes from a PRECEDING `<x-...>` tag's compiled `resolve()` call, a shape a plain page
      * hits just as much as a `@props`/`@aware` view.
      */
     #[Test]

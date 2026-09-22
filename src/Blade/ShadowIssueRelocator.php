@@ -118,9 +118,9 @@ final class ShadowIssueRelocator
         // `$component`, unlike `$attributes`/`$slot`, is never given a type by
         // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
         // generic `mixed` bucket for undeclared names — so `isComponentView` carries no signal for
-        // it. Its narrowed type comes entirely from the compiled `make()` call one `<x-...>` tag
-        // runs before the NEXT tag's own restore-guard bookkeeping re-checks `isset($component)`
-        // against that still-live narrowing; that shape fires for a nested `<x-...>` tag inside a
+        // it. Its narrowed type comes entirely from the compiled `<Component>::resolve()` call one
+        // `<x-...>` tag runs before the NEXT tag's own opening save guard re-checks
+        // `isset($component)` against that still-live narrowing; that shape fires for a nested `<x-...>` tag inside a
         // PLAIN page just as much as inside a component view (#1532), so this name drops
         // unconditionally. `$attributes`/`$slot` keep the `isComponentView` requirement: outside a
         // component view neither name is ever declared by the prelude, so a local variable an

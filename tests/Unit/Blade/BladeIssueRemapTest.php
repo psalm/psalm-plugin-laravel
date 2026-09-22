@@ -711,13 +711,14 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1532: `$component` is never prelude-declared in ANY template (see
-     * {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::componentTypesFor()}), unlike `$attributes`/
-     * `$slot`, whose docblock-vs-inferred split only exists inside a component view.
+     * #1532: `$component` is never given a type by
+     * {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::componentTypesFor()} in ANY template (the
+     * prelude only ever declares it `mixed` through the undeclared-name fallback), unlike
+     * `$attributes`/`$slot`, whose docblock-vs-inferred split only exists inside a component view.
      * `nested-component-tags.blade.php` is a plain page (no `@props`/`@aware`/`$attributes`/
      * `$slot`), so `isComponentView` is false, yet it nests one `<x-alert>` tag inside another's
-     * slot: the OUTER tag's `make()` call narrows `$component` to a concrete class before its own
-     * restore runs, and the INNER tag's restore-guard bookkeeping re-checks `isset($component)`
+     * slot: the OUTER tag's compiled `resolve()` call narrows `$component` to a concrete class
+     * before its own restore runs, and the INNER tag's opening save guard re-checks `isset($component)`
      * while that narrowed type is still live, making the check provably redundant regardless of
      * `isComponentView`. The unrelated `$range` guard on the same template is the author's own
      * docblock contradiction and must survive: the fix is message-specific, not a blanket per-file
