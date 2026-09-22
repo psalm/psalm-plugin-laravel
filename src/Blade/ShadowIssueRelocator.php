@@ -6,11 +6,14 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
+use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\PossiblyFalseArgument;
+use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -168,6 +171,22 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // `{{ $x }}` compiles to `echo e($x)` and `{!! $x !!}` to a bare `echo $x`, so a value whose
+        // type is only PARTLY echoable (`string|array|null` from `old()`, `string|false` from
+        // `parse_url()`) reports against a callee the author never wrote. Their only fix is a cast
+        // on every optional field in the template, and the array arm they would be casting away
+        // fails loudly at runtime the first time it is hit, so the finding is unactionable in echo
+        // position (#1535).
+        //
+        // `InvalidArgument` is deliberately NOT included: a definite `array` there is a guaranteed
+        // `htmlspecialchars()` fatal, not a possibility.
+        if (
+            ($issue instanceof PossiblyInvalidArgument || $issue instanceof PossiblyFalseArgument)
+            && self::isGeneratedEchoArgument($issue, $target)
+        ) {
+            return false;
+        }
+
         // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
         // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
         // by default, both on a mapped template line and on the prelude's own unmapped lines below.
@@ -263,6 +282,65 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * Whether the argument an issue points at is enclosed by an echo construct the Blade compiler
+     * synthesized, rather than one the author wrote.
+     *
+     * The shadow line alone can never answer that: `@php echo e(old('k')); @endphp` and
+     * `{{ old('k') }}` compile to BYTE-IDENTICAL lines. The discriminator is the same one
+     * {@see self::isGeneratedArityMismatch()} uses — does this piece of the shadow occur in the raw
+     * template? — only cut BACKWARDS, because an argument-position issue locates the argument and
+     * the callee sits before it.
+     *
+     * The callee comes from `ArgumentIssue::$function_id` rather than the message, so a namespaced
+     * `Fx\e()` is excluded without parsing rendered text and the gate does not ride on Psalm's
+     * message wording. The argument POSITION has no property to read and is taken from the message
+     * prefix: `e($value, $doubleEncode)` has a second parameter an author can pass, and
+     * `@php echo $a, $b; @endphp` produces `Argument 2 of echo`.
+     */
+    private static function isGeneratedEchoArgument(ArgumentIssue $issue, ShadowTarget $target): bool
+    {
+        $callee = $issue->function_id;
+
+        if ($callee !== 'e' && $callee !== 'echo') {
+            return false;
+        }
+
+        if (!\str_starts_with($issue->message, 'Argument 1 ')) {
+            return false;
+        }
+
+        $call = self::echoArgumentSlice($issue->code_location, $callee);
+
+        if ($call === null) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+    }
+
+    /**
+     * The enclosing `$callee(` plus the argument an issue points at, read out of the shadow, or
+     * null to decline. Same fail-open contract as {@see self::callExpression()}.
+     */
+    private static function echoArgumentSlice(CodeLocation $location, string $callee): ?string
+    {
+        try {
+            $snippet = $location->getSnippet();
+            [$selectionStart, $selectionEnd] = $location->getSelectionBounds();
+            [$snippetStart] = $location->getSnippetBounds();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return TemplateSnippetMatcher::enclosingCallAt(
+            $snippet,
+            $selectionStart - $snippetStart,
+            $selectionEnd - $snippetStart,
+            $callee,
+        );
+    }
+
+    /**
      * Whether one of `$names` (a `|`-separated alternation, no leading `$`) is the checked KEY in an
      * ambient-guard issue message, matched at the two anchored positions documented above, never as
      * a bare substring search.
@@ -288,12 +366,16 @@ final class ShadowIssueRelocator
             return null;
         }
 
-        // No marker stripping here, deliberately. `CodeLocation::$preview_start` is the located
-        // node's own `startFilePos`, so the snippet begins AT the callee name and a line-leading
-        // marker is already behind it; a marker further along the same shadow line would need the
-        // compiler to join two template lines, and a call that does span lines declines above
-        // anyway. Stripping instead would cut marker-shaped text out of an author's own string
-        // literal, leaving text the template does not contain and dropping a real issue.
+        // No marker stripping here, deliberately. The snippet is the WHOLE shadow line
+        // (`calculateRealLocation()` resets `preview_start` to the line start, overwriting the
+        // node's own `startFilePos` the constructor put there), so it does carry the line-leading
+        // `blade:HASH:N` marker comment — but slicing from the selection offset leaves that
+        // behind, and a marker further along the same line would need the compiler to join two
+        // template lines, which a multi-line call declines on anyway. Stripping instead would cut
+        // marker-shaped text out of an author's own string literal, leaving text the template does
+        // not contain and dropping a real issue.
+        //
+        // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
     }
 
