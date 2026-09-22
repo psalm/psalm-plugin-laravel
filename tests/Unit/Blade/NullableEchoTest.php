@@ -102,8 +102,13 @@ final class NullableEchoTest extends TestCase
     private function assertBladeAnalyzed(array $issues, string $template): void
     {
         $manifest = (string) \file_get_contents(self::SHADOW_DIR . '/manifest.php');
+        $templatePath = \realpath(self::FIXTURE . '/resources/views/' . $template);
+        // A missing template would make realpath() return false; cast to string that is '', and
+        // assertStringContainsString() matches an empty needle against ANY manifest, so the guard
+        // itself would pass vacuously. Pin the path's existence first.
+        $this->assertIsString($templatePath, "{$template} does not exist on disk.");
         $this->assertStringContainsString(
-            (string) \realpath(self::FIXTURE . '/resources/views/' . $template),
+            $templatePath,
             $manifest,
             "{$template} was never compiled into a shadow, so the silence below proves nothing.",
         );
