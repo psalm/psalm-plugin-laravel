@@ -89,11 +89,33 @@ final class NullableEchoTest extends TestCase
         return \array_values(\array_filter($issues, static fn(array $issue): bool => $issue['file'] === $file));
     }
 
+    /**
+     * A silent assertion on a template proves nothing if the template never compiled (or if Blade
+     * analysis is off entirely — both cases leave every `.blade.php` path silent identically to the
+     * intended fix). Checked from facts the run already produced: the manifest records every
+     * template that made it through `compileAll()` this run, keyed by its real path, and
+     * `chain-kept.blade.php` reporting at least one issue proves the shadow pipeline reached the
+     * analyzer and remapped an issue back onto a `.blade.php` path.
+     *
+     * @param list<array{type: string, file: string, message: string}> $issues
+     */
+    private function assertBladeAnalyzed(array $issues, string $template): void
+    {
+        $manifest = (string) \file_get_contents(self::SHADOW_DIR . '/manifest.php');
+        $this->assertStringContainsString(
+            (string) \realpath(self::FIXTURE . '/resources/views/' . $template),
+            $manifest,
+            "{$template} was never compiled into a shadow, so the silence below proves nothing.",
+        );
+        $this->assertNotSame([], $this->forFile($issues, 'chain-kept.blade.php'), $manifest);
+    }
+
     #[Test]
     public function an_escaped_echo_of_a_nullable_value_is_silent(): void
     {
         $issues = $this->analyze();
 
+        $this->assertBladeAnalyzed($issues, 'esc-nullable.blade.php');
         $this->assertSame([], $this->forFile($issues, 'esc-nullable.blade.php'), \var_export($issues, true));
     }
 
@@ -107,6 +129,7 @@ final class NullableEchoTest extends TestCase
     {
         $issues = $this->analyze();
 
+        $this->assertBladeAnalyzed($issues, 'raw-nullable.blade.php');
         $this->assertSame([], $this->forFile($issues, 'raw-nullable.blade.php'), \var_export($issues, true));
     }
 
