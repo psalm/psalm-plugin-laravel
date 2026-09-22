@@ -711,6 +711,44 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1532: `$component` is never prelude-declared in ANY template (see
+     * {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::componentTypesFor()}), unlike `$attributes`/
+     * `$slot`, whose docblock-vs-inferred split only exists inside a component view.
+     * `nested-component-tags.blade.php` is a plain page (no `@props`/`@aware`/`$attributes`/
+     * `$slot`), so `isComponentView` is false, yet it nests one `<x-alert>` tag inside another's
+     * slot: the OUTER tag's `make()` call narrows `$component` to a concrete class before its own
+     * restore runs, and the INNER tag's restore-guard bookkeeping re-checks `isset($component)`
+     * while that narrowed type is still live, making the check provably redundant regardless of
+     * `isComponentView`. The unrelated `$range` guard on the same template is the author's own
+     * docblock contradiction and must survive: the fix is message-specific, not a blanket per-file
+     * suppression of the family.
+     */
+    #[Test]
+    public function ambient_component_guard_is_dropped_for_a_non_component_caller_with_nested_tags(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/nested-component-tags.blade.php';
+
+        $componentGuards = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)
+                && \in_array($issue['type'], self::AMBIENT_GUARD_FAMILIES, true)
+                && \str_contains($issue['message'], ' for $component'),
+        ));
+
+        $this->assertSame([], $componentGuards, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        $authorGuards = \array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)
+                && \in_array($issue['type'], self::AMBIENT_GUARD_FAMILIES, true)
+                && \str_contains($issue['message'], ' for $range'),
+        );
+
+        $this->assertCount(1, $authorGuards, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
      * #1525 §0.1: the `@component('view', [...])` directive path hands `$slot` a ComponentSlot
      * too (ManagesComponents::componentData() builds the same default slot either way), so it
      * needs no union and no weakening — `$slot->isEmpty()` must type-check exactly as it does on

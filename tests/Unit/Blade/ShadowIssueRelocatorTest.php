@@ -336,6 +336,23 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
+     * #1532: unlike `$attributes`/`$slot`, `$component` is dropped even OUTSIDE a component view —
+     * its narrowed type comes from a PRECEDING `<x-...>` tag's `make()` call, a shape a plain page
+     * hits just as much as a `@props`/`@aware` view.
+     */
+    #[Test]
+    public function an_ambient_component_guard_is_dropped_outside_a_component_view(): void
+    {
+        $issue = new RedundantCondition(
+            'Type Illuminate\View\AnonymousComponent for $component is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
+    }
+
+    /**
      * Negative: an author's own redundant check on their OWN docblock, inside a component view,
      * must keep reporting — the gate gets no wider than the three ambient names, even though the
      * class alone matches.
@@ -362,6 +379,22 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new RedundantCondition('Type string for $slot->attributes is never null', $this->shadowLocation(9), null);
 
         $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: true);
+
+        $this->assertInstanceOf(RedundantCondition::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative: the `$component` drop applies OUTSIDE a component view too, so it needs the same
+     * `->` boundary check as `$slot->attributes` above, on a receiver where `isComponentView` can't
+     * rescue a missed boundary.
+     */
+    #[Test]
+    public function a_message_naming_a_property_fetch_on_component_survives_outside_a_component_view(): void
+    {
+        $issue = new RedundantCondition('Type string for $component->name is never null', $this->shadowLocation(9), null);
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
 
         $this->assertInstanceOf(RedundantCondition::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());

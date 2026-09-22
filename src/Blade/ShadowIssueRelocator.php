@@ -113,28 +113,40 @@ final class ShadowIssueRelocator
         //
         // Gated on the MESSAGE, not the class: `RedundantCondition` on an author's OWN
         // `@if(isset($range))` under their own docblock must keep reporting, and a message-only
-        // gate cannot tell that apart from this shape by class alone. `$target->isComponentView` is
-        // the second half of the gate: outside a component view none of these three names is ever
-        // declared by the prelude, so a local variable an author happens to name
-        // `$attributes`/`$slot` there is untouched (#1525).
+        // gate cannot tell that apart from this shape by class alone.
+        //
+        // `$component`, unlike `$attributes`/`$slot`, is never given a type by
+        // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
+        // generic `mixed` bucket for undeclared names — so `isComponentView` carries no signal for
+        // it. Its narrowed type comes entirely from the compiled `make()` call one `<x-...>` tag
+        // runs before the NEXT tag's own restore-guard bookkeeping re-checks `isset($component)`
+        // against that still-live narrowing; that shape fires for a nested `<x-...>` tag inside a
+        // PLAIN page just as much as inside a component view (#1532), so this name drops
+        // unconditionally. `$attributes`/`$slot` keep the `isComponentView` requirement: outside a
+        // component view neither name is ever declared by the prelude, so a local variable an
+        // author happens to name `$attributes`/`$slot` there is untouched (#1525).
         //
         // Trade-off this gate does NOT avoid: it cannot tell compiler-generated bookkeeping apart
-        // from an author's OWN `@if (isset($attributes))`/`instanceof` check written inside their
-        // own `@props`/`@aware` component view — that guard is silenced too, with no trace, because
-        // it names one of the same three ambient variables. `PossiblyNullReference` on a
-        // subsequent `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
+        // from an author's OWN `@if (isset($attributes))`/`instanceof`/`@php $component = ...` check
+        // written inside their own template — that guard is silenced too, with no trace, because it
+        // names one of the same three ambient variables. `PossiblyNullReference` on a subsequent
+        // `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
         // reconciliation above (Psalm keeps the reconciled null in the never-taken arm and re-unions
         // it at the guard's `endif`) and stays visible; see docs/blade.md known limitations.
         if (
-            ($issue instanceof RedundantCondition
-                || $issue instanceof RedundantConditionGivenDocblockType
-                || $issue instanceof DocblockTypeContradiction
-                || $issue instanceof TypeDoesNotContainNull
-                || $issue instanceof TypeDoesNotContainType)
-            && $target->isComponentView
-            && \preg_match('/ for \$(attributes|component|slot)(?=[\s,]|$)/', $issue->message) === 1
+            $issue instanceof RedundantCondition
+            || $issue instanceof RedundantConditionGivenDocblockType
+            || $issue instanceof DocblockTypeContradiction
+            || $issue instanceof TypeDoesNotContainNull
+            || $issue instanceof TypeDoesNotContainType
         ) {
-            return false;
+            if (\preg_match('/ for \$component(?=[\s,]|$)/', $issue->message) === 1) {
+                return false;
+            }
+
+            if ($target->isComponentView && \preg_match('/ for \$(attributes|slot)(?=[\s,]|$)/', $issue->message) === 1) {
+                return false;
+            }
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
