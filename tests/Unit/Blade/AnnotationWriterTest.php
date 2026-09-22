@@ -194,6 +194,19 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
+    public function the_hunk_header_normalises_a_windows_style_path_to_forward_slashes(): void
+    {
+        // No Windows CI here; this pins the normalization at the unit level. Outside any project
+        // root, so it also exercises the absolute-path fallback.
+        $method = new \ReflectionMethod(AnnotationWriter::class, 'headerPath');
+
+        $this->assertSame(
+            'C:/Users/dev/project/resources/views/page.blade.php',
+            $method->invoke(null, 'C:\\Users\\dev\\project\\resources\\views\\page.blade.php'),
+        );
+    }
+
+    #[Test]
     public function the_dry_run_diff_for_an_unterminated_contract_line_matches_the_actual_byte_change(): void
     {
         // The template ends ON its existing contract comment with no trailing newline. Declaring a
@@ -202,7 +215,7 @@ final class AnnotationWriterTest extends TestCase
         $path = $this->template('{{-- @var string $title --}}');
         $before = (string) \file_get_contents($path);
 
-        $diff = AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], true);
+        $diff = $this->applyFromProjectRoot(fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], true));
         $this->assertNotNull($diff);
 
         AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], false);
@@ -215,12 +228,12 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function the_dry_run_diff_applies_cleanly_with_plain_git_apply(): void
+    public function the_dry_run_diff_applies_cleanly_with_plain_git_apply_from_the_project_root(): void
     {
         $path = $this->template("<h1>{{ \$title }}</h1>\n");
         $before = (string) \file_get_contents($path);
 
-        $diff = AnnotationWriter::apply($path, ['title' => 'string'], true);
+        $diff = $this->applyFromProjectRoot(fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string'], true));
         $this->assertNotNull($diff);
 
         AnnotationWriter::apply($path, ['title' => 'string'], false);
@@ -232,10 +245,30 @@ final class AnnotationWriterTest extends TestCase
         $this->assertSame($actual, \file_get_contents($path));
     }
 
-    /** Absolute paths in the hunk header resolve correctly under plain `git apply` when run from `/`. */
+    /**
+     * Runs the callback with the current directory set to the fixture's own temp dir, standing in
+     * for the project root: the `blade:annotate` CLI launches its child Psalm process with the
+     * project root as that process's own working directory, which is what the header is meant to
+     * be relative to.
+     */
+    private function applyFromProjectRoot(callable $callback): mixed
+    {
+        $previous = \getcwd();
+        \chdir($this->tempDir);
+
+        try {
+            return $callback();
+        } finally {
+            if (\is_string($previous)) {
+                \chdir($previous);
+            }
+        }
+    }
+
+    /** A relative header lets `git apply` use its default single-component strip from the project root — no `--unsafe-paths`, no forcing the process to `/`. */
     private function applyWithGitApply(string $diff): void
     {
-        $process = new Process(['git', 'apply'], \DIRECTORY_SEPARATOR, null, $diff);
+        $process = new Process(['git', 'apply'], $this->tempDir, null, $diff);
         $process->mustRun();
     }
 

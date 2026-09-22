@@ -215,12 +215,42 @@ final class AnnotationWriter implements AfterAnalysisInterface
      */
     private static function hunk(string $templatePath, string $before, string $after): string
     {
-        // `$templatePath` is already absolute; a literal "a/" prefix would double the leading slash.
+        $header = self::headerPath($templatePath);
+
         $differ = new Differ(new StrictUnifiedDiffOutputBuilder([
-            'fromFile' => "a{$templatePath}",
-            'toFile' => "b{$templatePath}",
+            'fromFile' => self::prefixed('a', $header),
+            'toFile' => self::prefixed('b', $header),
         ]));
 
         return $differ->diff($before, $after);
+    }
+
+    /**
+     * The template path as `git apply` expects it in a hunk header: relative to the project root
+     * when the template is under one, since the `blade:annotate` CLI launches its child Psalm
+     * process with the project root as that process's own working directory — this is that root,
+     * not one invented here. A relative header is what lets a plain `git apply`, run from the same
+     * root, use git's default single-component strip; a template outside the root (or a run whose
+     * working directory cannot be read) falls back to the path as given. Either way, directory
+     * separators are normalized to `/`: a Windows path's backslashes are not diff syntax.
+     */
+    private static function headerPath(string $templatePath): string
+    {
+        $normalized = \str_replace('\\', '/', $templatePath);
+        $root = \getcwd();
+
+        if ($root === false) {
+            return $normalized;
+        }
+
+        $root = \rtrim(\str_replace('\\', '/', $root), '/') . '/';
+
+        return \str_starts_with($normalized, $root) ? \substr($normalized, \strlen($root)) : $normalized;
+    }
+
+    /** `git apply`'s default strip removes exactly one path component: "a/" ahead of a relative path, but only "a" ahead of one already rooted at "/" — otherwise the leading slash doubles. */
+    private static function prefixed(string $letter, string $path): string
+    {
+        return \str_starts_with($path, '/') ? "{$letter}{$path}" : "{$letter}/{$path}";
     }
 }
