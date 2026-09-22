@@ -18,9 +18,14 @@ use Symfony\Component\Process\Process;
  * Shadows are compiled and the registries the remap reads are filled in `Plugin::__invoke()`,
  * before Psalm forks, but the remap itself re-emits from inside whichever worker analyzed the
  * shadow, and that issue travels home through the pool's serialized payload. A taint finding adds
- * a second channel: its journey is rebuilt in the parent from the graphs the workers ship back.
+ * a second channel: its journey is rebuilt in the parent from the graphs the workers ship back, and
+ * the finding it belongs to can sit on ordinary application code that a template merely fed (#1519).
  * Only comparing a forked run against a single-process run proves both channels lossless, so the
  * assertion is run-to-run equality rather than a golden list (#1530).
+ *
+ * The whole report is compared, not the template-path subset: the fixtures are controlled, so full
+ * equality is strictly stronger, and the #1519 finding lives on a `.php` path that a template-path
+ * filter would drop precisely where it matters most.
  */
 #[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(JourneyRemapper::class)]
@@ -36,6 +41,11 @@ final class BladeThreadParityTest extends TestCase
 
     /** Forking only happens when there are more files to analyze than workers. */
     private const THREADS = 4;
+
+    /** The #1519 channel: the sink is application code, only the journey names the template. */
+    private const JOURNEY_SINK = 'app/Sink.php';
+
+    private const JOURNEY_TEMPLATE = 'resources/views/external.blade.php';
 
     protected function setUp(): void
     {
@@ -73,14 +83,17 @@ final class BladeThreadParityTest extends TestCase
     /**
      * One real Psalm run. `--debug` is what makes the forked cell provable rather than assumed:
      * it prints the pool's own "Forking analysis" line, and an explicit `--threads` keeps debug
-     * mode from silently dropping to a single process.
+     * mode from silently dropping to a single process. The shadow cache is cleared first, so the
+     * two cells differ in thread count alone rather than also in cache warmth.
      *
-     * @return array{output: string, raw: string, findings: list<string>}
+     * @return array{output: string, raw: string, findings: list<string>, issues: list<array<string, mixed>>}
      */
     private function analyze(string $fixture, int $threads, bool $taint): array
     {
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+
+        $this->deleteShadowDirs();
 
         $report = \sys_get_temp_dir() . '/blade-thread-parity-' . \bin2hex(\random_bytes(8)) . '.json';
 
@@ -102,12 +115,13 @@ final class BladeThreadParityTest extends TestCase
 
         $process = new Process($arguments, $fixture);
         $process->setTimeout(600);
-        // Not mustRun(): both fixtures report issues by design.
-        $process->run();
-
-        $output = $process->getOutput() . $process->getErrorOutput();
 
         try {
+            // Not mustRun(): both fixtures report issues by design.
+            $process->run();
+
+            $output = $process->getOutput() . $process->getErrorOutput();
+
             $this->assertFileExists($report, "Psalm wrote no report.\n{$output}");
             $raw = (string) \file_get_contents($report);
         } finally {
@@ -119,20 +133,16 @@ final class BladeThreadParityTest extends TestCase
         $decoded = \json_decode($raw, true);
         $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$output}");
 
+        $issues = [];
         $findings = [];
 
         foreach ($decoded as $issue) {
             $this->assertIsArray($issue);
 
-            $file = (string) $issue['file_name'];
-
-            if (!\str_ends_with($file, '.blade.php')) {
-                continue;
-            }
-
+            $issues[] = $issue;
             $findings[] = \sprintf(
                 '%s:%d:%d %s %s%s',
-                $file,
+                (string) $issue['file_name'],
                 (int) $issue['line_from'],
                 (int) $issue['column_from'],
                 (string) $issue['type'],
@@ -143,11 +153,13 @@ final class BladeThreadParityTest extends TestCase
 
         \sort($findings);
 
-        return ['output' => $output, 'raw' => $raw, 'findings' => $findings];
+        return ['output' => $output, 'raw' => $raw, 'findings' => $findings, 'issues' => $issues];
     }
 
     /**
      * A taint finding is only equal if every step of its journey is, so the steps join the tuple.
+     * Label included: the entry step carries no location, and label is the only thing identifying
+     * it, so dropping it would let two different sources compare equal.
      *
      * @param array<string, mixed> $issue
      */
@@ -163,13 +175,26 @@ final class BladeThreadParityTest extends TestCase
 
         foreach ($trace as $step) {
             $this->assertIsArray($step);
-            $steps[] = ($step['file_name'] ?? '?') . ':' . ((int) ($step['line_from'] ?? 0));
+            $steps[] = $this->field($step, 'label')
+                . '@' . $this->field($step, 'file_name')
+                . ':' . $this->field($step, 'line_from')
+                . '-' . $this->field($step, 'line_to')
+                . ':' . $this->field($step, 'column_from')
+                . '-' . $this->field($step, 'column_to');
         }
 
         return ' | ' . \implode(' > ', $steps);
     }
 
-    /** @param array{output: string, raw: string, findings: list<string>} $forked */
+    /** @param array<array-key, mixed> $step */
+    private function field(array $step, string $key): string
+    {
+        $value = $step[$key] ?? null;
+
+        return \is_scalar($value) ? (string) $value : '?';
+    }
+
+    /** @param array{output: string, raw: string, findings: list<string>, issues: list<array<string, mixed>>} $forked */
     private function assertForked(array $forked): void
     {
         $this->assertStringContainsString(
@@ -179,27 +204,61 @@ final class BladeThreadParityTest extends TestCase
         );
     }
 
+    /**
+     * An issue with no journey compares equal to any other journeyless issue, so a taint run whose
+     * findings lost their trails would pass equality by vacuity.
+     *
+     * @param list<array<string, mixed>> $issues
+     */
+    private function assertEveryFindingCarriesAJourney(array $issues, string $label): void
+    {
+        foreach ($issues as $issue) {
+            $trace = $issue['taint_trace'] ?? null;
+
+            $this->assertIsArray($trace, "{$label}: a taint finding carries no journey.");
+            $this->assertNotSame([], $trace, "{$label}: a taint finding carries an empty journey.");
+        }
+    }
+
     #[Test]
-    public function template_issues_are_identical_with_and_without_forked_workers(): void
+    public function issues_are_identical_with_and_without_forked_workers(): void
     {
         $forked = $this->analyze(self::REMAP_FIXTURE, self::THREADS, false);
         $single = $this->analyze(self::REMAP_FIXTURE, 1, false);
 
         $this->assertForked($forked);
-        $this->assertNotSame([], $single['findings'], 'The fixture reported no template issue at all.');
         $this->assertSame($single['findings'], $forked['findings']);
+        $this->assertNotSame(
+            [],
+            \array_filter($single['findings'], static fn(string $finding): bool => \str_contains($finding, '.blade.php:')),
+            'The fixture reported no template issue at all, so equality proves nothing.',
+        );
         $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
     }
 
     #[Test]
-    public function template_taint_findings_and_journeys_are_identical_with_and_without_forked_workers(): void
+    public function taint_findings_and_journeys_are_identical_with_and_without_forked_workers(): void
     {
         $forked = $this->analyze(self::TAINT_FIXTURE, self::THREADS, true);
         $single = $this->analyze(self::TAINT_FIXTURE, 1, true);
 
         $this->assertForked($forked);
-        $this->assertNotSame([], $single['findings'], 'The fixture reported no template taint finding at all.');
         $this->assertSame($single['findings'], $forked['findings']);
+        $this->assertEveryFindingCarriesAJourney($single['issues'], 'single-process run');
+        $this->assertEveryFindingCarriesAJourney($forked['issues'], 'forked run');
+
+        // #1519 specifically: the finding sits on application code and only its journey names the
+        // template, which is the one shape a template-path comparison cannot see.
+        $journeys = [];
+
+        foreach ($single['issues'] as $issue) {
+            if ($issue['file_name'] === self::JOURNEY_SINK && $issue['type'] === 'TaintedHtml') {
+                $journeys[] = $this->journey($issue);
+            }
+        }
+
+        $this->assertCount(1, $journeys, 'The fixture stopped reporting the journey-only finding.');
+        $this->assertStringContainsString(self::JOURNEY_TEMPLATE, $journeys[0], $journeys[0]);
         $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
     }
 }
