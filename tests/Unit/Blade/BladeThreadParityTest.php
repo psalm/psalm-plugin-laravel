@@ -39,6 +39,12 @@ final class BladeThreadParityTest extends TestCase
 
     protected function setUp(): void
     {
+        // Psalm silently clamps --threads to 1 on Windows or without pcntl, so the fork proof
+        // would fail there instead of proving anything.
+        if (\defined('PHP_WINDOWS_VERSION_MAJOR') || !\extension_loaded('pcntl')) {
+            self::markTestSkipped('Psalm cannot fork analysis workers in this environment.');
+        }
+
         $this->deleteShadowDirs();
     }
 
