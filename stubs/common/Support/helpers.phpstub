@@ -79,7 +79,11 @@ function class_uses_recursive($class) {}
  * Wraps htmlspecialchars() with ENT_QUOTES — escapes both HTML entities and quotes,
  * used by Blade's {{ }} output to prevent XSS.
  *
- * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|string|int|float|null  $value
+ * $value has no type declaration in Laravel source; htmlspecialchars() coerces it
+ * to string at runtime (no declare(strict_types=1) in helpers.php), so any
+ * \Stringable is accepted and correctly escaped, not just the listed scalars.
+ *
+ * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|\Stringable|string|int|float|null  $value
  * @param  bool  $doubleEncode
  * @return string
  *
