@@ -43,6 +43,10 @@ final class ShadowCompiler
             return BladeCompileError::fromThrowable($templatePath, $throwable);
         }
 
+        if (PreludeBuilder::isComponentView($source) && !AttributesRestoreReassert::templateAssignsAttributes($source)) {
+            $compiled = AttributesRestoreReassert::apply($compiled);
+        }
+
         $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
         $content = $prelude . $compiled;
 
