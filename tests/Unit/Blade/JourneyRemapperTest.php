@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\LaravelPlugin\Blade\JourneyRemapper;
+use Psalm\LaravelPlugin\Blade\MarkerComment;
 use Psalm\LaravelPlugin\Blade\PsalmBridge;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowTarget;
@@ -37,6 +38,7 @@ final class JourneyRemapperTest extends TestCase
             self::TEMPLATE_SOURCE,
             self::TEMPLATE_NAME,
             false,
+            MarkerComment::prefixFor(self::TEMPLATE_SOURCE),
         );
 
         return static fn(string $path): ?ShadowTarget => $path === self::SHADOW ? $target : null;
@@ -193,9 +195,10 @@ final class JourneyRemapperTest extends TestCase
         $includeShadowName = '.cache/blade-shadows/def.php';
         $includeTemplate = '/app/resources/views/included.blade.php';
         $includeTemplateName = 'resources/views/included.blade.php';
+        $includeSource = "<span>\n  x\n</span>\n";
 
-        $outerTarget = new ShadowTarget(new ShadowEntry(self::TEMPLATE, [9 => 3], []), self::TEMPLATE_SOURCE, self::TEMPLATE_NAME, false);
-        $includeTarget = new ShadowTarget(new ShadowEntry($includeTemplate, [5 => 2], []), "<span>\n  x\n</span>\n", $includeTemplateName, false);
+        $outerTarget = new ShadowTarget(new ShadowEntry(self::TEMPLATE, [9 => 3], []), self::TEMPLATE_SOURCE, self::TEMPLATE_NAME, false, MarkerComment::prefixFor(self::TEMPLATE_SOURCE));
+        $includeTarget = new ShadowTarget(new ShadowEntry($includeTemplate, [5 => 2], []), $includeSource, $includeTemplateName, false, MarkerComment::prefixFor($includeSource));
 
         $resolve = static fn(string $path): ?ShadowTarget => match ($path) {
             self::SHADOW => $outerTarget,

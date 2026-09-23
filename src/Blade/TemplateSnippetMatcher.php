@@ -29,10 +29,17 @@ final class TemplateSnippetMatcher
      * Blade comments come out of $source first, because Blade itself removes them before it
      * compiles anything else: `f('a', {{-- why --}} 'b')` reaches the shadow as `f('a', 'b')`, so
      * leaving the comment in the template would make the author's own call unfindable.
+     *
+     * Marker comments come out of $snippet for the mirror-image reason: a multi-line call written
+     * inside `@php` or a raw `<?php` block carries one at the head of each of its lines (#1544), and
+     * no template contains those. Safe because $markerPrefix is collision-checked out of the
+     * template source ({@see MarkerComment::prefixFor()}), so the strip can never reach an author's
+     * own comment or string literal.
      */
-    public static function occursIn(string $snippet, string $source): bool
+    public static function occursIn(string $snippet, string $source, string $markerPrefix): bool
     {
         $source = (string) \preg_replace(self::BLADE_COMMENT_PATTERN, '', $source);
+        $snippet = MarkerComment::strip($snippet, $markerPrefix);
 
         return \str_contains(self::normalize($source), self::normalize($snippet));
     }
@@ -60,15 +67,15 @@ final class TemplateSnippetMatcher
      * callback can rewrite template text arbitrarily and is not mirrored here, so a call whose text
      * one of THOSE rewrote can still be misjudged as generated.
      */
-    public static function occursInWithRawTextRewrites(string $snippet, string $source): bool
+    public static function occursInWithRawTextRewrites(string $snippet, string $source, string $markerPrefix): bool
     {
-        if (self::occursIn($snippet, $source)) {
+        if (self::occursIn($snippet, $source, $markerPrefix)) {
             return true;
         }
 
         $markers = ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'];
 
-        if (self::occursIn($snippet, \str_replace($markers, '', $source))) {
+        if (self::occursIn($snippet, \str_replace($markers, '', $source), $markerPrefix)) {
             return true;
         }
 
@@ -76,7 +83,7 @@ final class TemplateSnippetMatcher
         $rewritten = (string) \preg_replace('/\B@(@\w+(?:::\w+)?)/', '$1', $rewritten);
         $rewritten = \str_replace($markers, '', $rewritten);
 
-        return self::occursIn($snippet, $rewritten);
+        return self::occursIn($snippet, $rewritten, $markerPrefix);
     }
 
     /**

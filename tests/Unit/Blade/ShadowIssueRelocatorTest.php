@@ -25,6 +25,7 @@ use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedForeachValue;
 use Psalm\Issue\UnusedVariable;
+use Psalm\LaravelPlugin\Blade\MarkerComment;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
 use Psalm\LaravelPlugin\Blade\ShadowTarget;
@@ -56,7 +57,7 @@ final class ShadowIssueRelocatorTest extends TestCase
         bool $reportMixed = false,
         bool $isComponentView = false,
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView);
+        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor(self::TEMPLATE_SOURCE));
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.

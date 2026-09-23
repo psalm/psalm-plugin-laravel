@@ -115,20 +115,42 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringContainsString('unsuppressed', $matching[0]['message']);
     }
 
+    /**
+     * The suppressed and unsuppressed calls sit on adjacent lines of one block. Before #1544 both
+     * collapsed onto the line the block opened on, so "local to their statement" could only be read
+     * off the issue COUNT; now the surviving one reports on the line it was written on.
+     */
     #[Test]
     public function php_suppressions_remain_local_to_their_statement(): void
     {
         $issues = $this->analyze('psalm.xml');
-        foreach (['php-suppression.blade.php', 'raw-suppression.blade.php'] as $template) {
+        foreach (['php-suppression.blade.php' => 4, 'raw-suppression.blade.php' => 5] as $template => $line) {
             $lines = $this->linesFor($issues, 'InvalidArgument', $template);
             $this->assertCount(1, $lines, \json_encode($issues, \JSON_THROW_ON_ERROR));
-            $this->assertSame([1], $lines);
+            $this->assertSame([$line], $lines);
             foreach ($issues as $issue) {
                 if ($issue['type'] === 'InvalidArgument' && \str_ends_with($issue['file_path'], $template)) {
                     $this->assertStringContainsString('list{1}', $issue['message']);
                 }
             }
         }
+    }
+
+    /**
+     * #1544: a `@php`/raw-`<?php` body used to get no marker of its own, so every statement in it
+     * inherited the line the block OPENED on. Four statements on four distinct lines, across both
+     * block syntaxes, is the shape that collapsed onto two.
+     */
+    #[Test]
+    public function every_statement_of_a_php_block_reports_on_its_own_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [3, 4, 7, 8],
+            $this->linesFor($issues, 'InvalidArgument', 'resources/views/php-block-lines.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     #[Test]
@@ -323,10 +345,8 @@ final class BladeIssueRemapTest extends TestCase
     {
         $issues = $this->analyze('psalm.xml');
 
-        // Lines 2 and 3 are the `{{ }}` and `{!! !!}` calls. The `@php` call is written on line 5
-        // but reports on 4: a multi-line construct's continuation lines get no marker of their own
-        // (see MarkerPrePass::computeSkipLines()), so the body inherits the `@php` line. That is
-        // pre-existing line-map behaviour, not something this gate decides.
+        // Lines 2 and 3 are the `{{ }}` and `{!! !!}` calls; line 5 is the one inside `@php`, which
+        // carries a bare marker of its own since #1544 and no longer reports on the `@php` line.
         //
         // Line 7 interpolates a variable next to a `(` inside a double-quoted argument, and line 8
         // puts a Blade comment between two arguments. Both are cases where the compiled text and
@@ -334,8 +354,17 @@ final class BladeIssueRemapTest extends TestCase
         // literal `@foo` as `@@foo`; Blade's compileStatements() unescapes it to `@foo` before the
         // call reaches the shadow, so the call's own argument text differs from the template too
         // (#1540).
+        // Lines 11 and 19 are calls written ACROSS lines inside `@php`, so every continuation line
+        // of each argument list carries a bare marker (#1544), and both report on the line their
+        // callee sits on. Line 19 is the one with teeth for the marker strip: Psalm locates a
+        // FUNCTION call's `TooManyArguments` on the whole call node, so `getSnippet()` spans all
+        // four of its lines, `callExpressionAt()` reads the argument list to its end, and the
+        // markers inside it reach the template comparison. Remove the strip and this line's real
+        // author finding is judged compiler-generated and dropped. Line 11 cannot stand in for it:
+        // a METHOD call is located on its name node alone, so the snippet is one line, the argument
+        // list never closes inside it, and the gate declines before comparing anything.
         $this->assertSame(
-            [2, 3, 4, 7, 8, 9],
+            [2, 3, 5, 7, 8, 9, 11, 19],
             $this->linesFor($issues, 'TooManyArguments', 'resources/views/authored-arity.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
