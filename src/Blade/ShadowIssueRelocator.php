@@ -269,6 +269,13 @@ final class ShadowIssueRelocator
      * line whose directive produced it and learn nothing; and a multi-line construct gets no marker
      * of its own ({@see MarkerPrePass::computeSkipLines()}), so an author's multi-line call maps to
      * the line that OPENED it rather than the line the callee sits on.
+     *
+     * Uses {@see TemplateSnippetMatcher::occursInWithRawTextRewrites()}, not plain `occursIn()`:
+     * an author's own call can have argument text Blade itself rewrites (`@@foo` unescaping,
+     * component-marker removal), which would otherwise be absent from the raw template and read as
+     * "generated" (#1540). A rewrite an arbitrary precompiler or `prepareStringsForCompilationUsing()`
+     * callback makes is NOT mirrored and still drops the issue; not fixable without knowing what
+     * that rewrite does.
      */
     private static function isGeneratedArityMismatch(TooManyArguments $issue, ShadowTarget $target): bool
     {
@@ -278,7 +285,7 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+        return !TemplateSnippetMatcher::occursInWithRawTextRewrites($call, $target->templateSource);
     }
 
     /**
