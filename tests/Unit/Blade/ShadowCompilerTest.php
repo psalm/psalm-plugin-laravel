@@ -363,6 +363,13 @@ final class ShadowCompilerTest extends TestCase
      * {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert}'s pattern declines to match this
      * shape: it is anchored to the compiler's actual, marker-free output, not to text that merely
      * resembles it.
+     *
+     * A container-less `BladeCompiler` cannot compile a real `<x-...>` tag (see
+     * `component_tag_yields_a_compile_error` above), so the `isComponentView()` gate itself — a
+     * plain page that DOES carry a `<x-...>` tag, where a gate-less injection would have a real
+     * restore block to match — is pinned in
+     * `BladeIssueRemapTest::a_plain_caller_with_a_component_tag_gets_no_attributes_reassert`
+     * instead, against a real compile through the fixture's booted application.
      */
     #[Test]
     public function hand_written_lines_resembling_the_restore_are_not_reasserted(): void
@@ -379,15 +386,5 @@ final class ShadowCompilerTest extends TestCase
         // The prelude itself declares $attributes non-null (a bare mention, no @props) — that
         // docblock is expected. Only a reassert glued onto `endif;` would be the bug.
         $this->assertStringNotContainsString('endif; /** @var', $result->contents);
-    }
-
-    /** A page that never mentions `$attributes`/`$slot`/`@props`/`@aware` is not a component view; nothing is injected. */
-    #[Test]
-    public function a_plain_page_gets_no_attributes_reassert(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "Hello {{ \$name }}\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringNotContainsString('ComponentAttributeBag $attributes */', $result->contents);
     }
 }

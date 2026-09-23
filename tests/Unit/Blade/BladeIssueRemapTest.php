@@ -583,6 +583,28 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1543: {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert} must not fire on a plain
+     * caller — `compiler-bookkeeping.blade.php` carries a real `<x-alert>` tag's compiled
+     * `$__attributesOriginal*` save/restore pair, so a gate-less injection would still find
+     * something to match here, even though the template itself never mentions `@props`/`@aware`/
+     * `$attributes`/`$slot` and `isComponentView()` is false for it (#1543 review must-fix 1: the
+     * previous `"Hello {{ \$name }}\n"` fixture compiled to no restore/strip block at all, so it
+     * passed with the `isComponentView()` gate deleted).
+     */
+    #[Test]
+    public function a_plain_caller_with_a_component_tag_gets_no_attributes_reassert(): void
+    {
+        $this->analyze('psalm.xml');
+        $template = 'resources/views/compiler-bookkeeping.blade.php';
+        $shadow = $this->shadowSourceFor($template);
+
+        // Guard against a vacuous pass: the tag must have actually compiled its restore pair.
+        $this->assertStringContainsString('$__attributesOriginal', $shadow);
+
+        $this->assertStringNotContainsString('endif; /** @var', $shadow);
+    }
+
+    /**
      * #1525 acceptance (c): `$attributes->merge()` and `$slot` stay typed in a plain `@props`
      * component view. Run under `psalm-blade-report-mixed.xml`, not the default `psalm.xml`:
      * `MixedIssue` (which `MixedMethodCall` implements) is dropped unconditionally when
