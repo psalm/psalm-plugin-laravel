@@ -330,9 +330,12 @@ final class BladeIssueRemapTest extends TestCase
         //
         // Line 7 interpolates a variable next to a `(` inside a double-quoted argument, and line 8
         // puts a Blade comment between two arguments. Both are cases where the compiled text and
-        // the raw template text diverge INSIDE the call, not just around it.
+        // the raw template text diverge INSIDE the call, not just around it. Line 9 escapes a
+        // literal `@foo` as `@@foo`; Blade's compileStatements() unescapes it to `@foo` before the
+        // call reaches the shadow, so the call's own argument text differs from the template too
+        // (#1540).
         $this->assertSame(
-            [2, 3, 4, 7, 8],
+            [2, 3, 4, 7, 8, 9],
             $this->linesFor($issues, 'TooManyArguments', 'resources/views/authored-arity.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );

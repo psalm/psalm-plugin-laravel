@@ -254,4 +254,107 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertFalse(TemplateSnippetMatcher::occursIn("echo old('k')", "<div>{!! old('k') !!}</div>\n"));
         $this->assertTrue(TemplateSnippetMatcher::occursIn("echo old('k')", "@php echo old('k'); @endphp\n"));
     }
+
+    /**
+     * `@@foo` unescapes to `@foo` before a compiled call reaches the shadow (#1540): an author's
+     * over-arity call whose argument contains it is absent from the raw template under plain
+     * `occursIn()`, and only found once that same unescape is mirrored onto the template side.
+     */
+    #[Test]
+    public function an_at_escaped_argument_matches_only_with_raw_text_rewrites(): void
+    {
+        $snippet = "mount('@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * Component-marker removal (#1540) mirrors `compileString()`'s own final `str_replace` onto
+     * the template-source copy `occursIn()` matches against, as string-level parity with that
+     * rewrite regardless of which side of a match it originates on.
+     */
+    #[Test]
+    public function a_marker_wrapped_template_matches_only_with_raw_text_rewrites(): void
+    {
+        $snippet = "mount('a', 'b', 'c')";
+        $source = "<div>\n  mount('a', ##BEGIN-COMPONENT-CLASS##'b', 'c')\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * Blade removes comments BEFORE it unescapes `@@` (`$compilers` order), so
+     * `'@@{{-- c --}}foo'` compiles to `'@foo'`: the mirror must strip comments before its own
+     * unescape pass, or the `@@` never sits directly before a word character and stays escaped.
+     */
+    #[Test]
+    public function a_comment_split_escape_matches_only_with_blade_ordered_rewrites(): void
+    {
+        $snippet = "mount('@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('@@{{-- c --}}foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * Blade unescapes `@@` during the token pass and strips component markers only at the very
+     * end, so in `'x##BEGIN-COMPONENT-CLASS##@@foo'` the `@@` still unescapes (the `#` before it
+     * satisfies `\B`) and the compiled text is `'x@foo'`. Removing the marker first would glue
+     * `x` to `@@` and block the unescape; the mirror must keep Blade's order.
+     */
+    #[Test]
+    public function a_marker_adjacent_escape_matches_only_with_blade_ordered_rewrites(): void
+    {
+        $snippet = "mount('x@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('x##BEGIN-COMPONENT-CLASS##@@foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * `@php` and raw `<?php ?>` blocks are exempt from the `@@` unescape but NOT from the final
+     * marker strip, so `'@@foo##BEGIN-COMPONENT-CLASS##'` inside `@php` compiles to `'@@foo'`.
+     * Only a markers-only variant of the mirror finds that call; the full mirror over-unescapes
+     * it to `'@foo'` and misses.
+     */
+    #[Test]
+    public function a_php_block_call_with_marker_matches_via_the_markers_only_variant(): void
+    {
+        $snippet = "mount('@@foo', 'u', 'v')";
+        $source = "@php \$x->mount('@@foo##BEGIN-COMPONENT-CLASS##', 'u', 'v'); @endphp\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * The reverse boundary: in `'@@##BEGIN-COMPONENT-CLASS##foo'` the marker BLOCKS Blade's
+     * unescape (`#` after `@@` fails the pattern's word-character requirement) and only the final
+     * marker strip runs, so the compiled text keeps `'@@foo'`. The markers-only variant finds it;
+     * the full mirror would over-unescape to `'@foo'` and miss.
+     */
+    #[Test]
+    public function a_marker_blocked_escape_matches_via_the_markers_only_variant(): void
+    {
+        $snippet = "mount('@@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('@@##BEGIN-COMPONENT-CLASS##foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /** Mirroring never widens the gate: a call genuinely absent from the template still does not match. */
+    #[Test]
+    public function a_genuinely_absent_call_still_does_not_match_with_raw_text_rewrites(): void
+    {
+        $this->assertFalse(TemplateSnippetMatcher::occursInWithRawTextRewrites(
+            "mount('@foo', 'u', 'v', 'w', 'x')",
+            "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n",
+        ));
+    }
 }

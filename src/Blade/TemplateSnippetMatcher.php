@@ -38,6 +38,48 @@ final class TemplateSnippetMatcher
     }
 
     /**
+     * {@see self::occursIn()}, with two of Blade's own raw-text rewrites additionally mirrored
+     * onto $source before matching: `@@foo` unescaping ({@see BladeCompiler::compileStatements()},
+     * the pattern that keeps `$match[1]` when it contains a second `@`) and `##BEGIN/END-COMPONENT-
+     * CLASS##` marker removal ({@see BladeCompiler::compileString()}). Both reach inside an
+     * author's argument text (the unescape runs on every inline-HTML token, quotes included), so a
+     * call they touched is absent from the raw source and would otherwise be misread as
+     * compiler-generated (#1540).
+     *
+     * Two variants are tried, because Blade's rewrites are not uniform across the template:
+     * markers-only for raw `<?php ?>` and stored `@php` blocks (exempt from the unescape but not
+     * from the final marker strip), then the full mirror in Blade's own order (comments removed
+     * first, `@@` unescaped during the token pass, markers stripped last) for everything else.
+     *
+     * Used ONLY by the arity gate: {@see self::occursIn()} itself backs the echo-argument gate too,
+     * in the OPPOSITE polarity (a non-match keeps the issue there), and mirroring there would newly
+     * match `{{ old('@@foo') }}` and drop a genuine finding instead of keeping one.
+     *
+     * Only turns non-matches into matches, so it can only shrink what the arity gate drops, never
+     * grow it. Not exhaustive: a registered precompiler or `prepareStringsForCompilationUsing()`
+     * callback can rewrite template text arbitrarily and is not mirrored here, so a call whose text
+     * one of THOSE rewrote can still be misjudged as generated.
+     */
+    public static function occursInWithRawTextRewrites(string $snippet, string $source): bool
+    {
+        if (self::occursIn($snippet, $source)) {
+            return true;
+        }
+
+        $markers = ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'];
+
+        if (self::occursIn($snippet, \str_replace($markers, '', $source))) {
+            return true;
+        }
+
+        $rewritten = (string) \preg_replace(self::BLADE_COMMENT_PATTERN, '', $source);
+        $rewritten = (string) \preg_replace('/\B@(@\w+(?:::\w+)?)/', '$1', $rewritten);
+        $rewritten = \str_replace($markers, '', $rewritten);
+
+        return self::occursIn($snippet, $rewritten);
+    }
+
+    /**
      * `name(...)` starting at $offset in $snippet, argument list included, or null when $offset
      * does not start such a call or the list is not closed within $snippet.
      *
