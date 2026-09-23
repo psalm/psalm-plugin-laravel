@@ -159,7 +159,11 @@ final class ShadowIssueRelocator
             || $issue instanceof TypeDoesNotContainNull
             || $issue instanceof TypeDoesNotContainType
         ) {
-            if (self::isAmbientGuardName($issue->message, 'component')) {
+            // `$errors` joins `$component` in the unconditional half: `ShareErrorsFromSession`
+            // runs only in the `web` middleware group, not `render()` itself, so the prelude
+            // declares it in EVERY shadow — `isComponentView` carries no signal for it either,
+            // same trade-off as `$component` (an author's own `$errors` guard is silenced too).
+            if (self::isAmbientGuardName($issue->message, 'component|errors')) {
                 return false;
             }
 

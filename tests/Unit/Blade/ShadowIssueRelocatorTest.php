@@ -488,6 +488,57 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
+     * #1546: `$errors`, like `$component`, is dropped unconditionally — `ShareErrorsFromSession`
+     * runs in the `web` middleware group, not the `render()` call itself, so the prelude declares
+     * it in EVERY shadow regardless of `isComponentView`. Two message shapes, the docblock-branch
+     * pair the corpus actually produced.
+     */
+    #[Test]
+    public function an_ambient_errors_redundant_condition_is_dropped_outside_a_component_view(): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(
+            'Docblock-defined type Illuminate\Support\ViewErrorBag for $errors is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
+    }
+
+    #[Test]
+    public function an_ambient_errors_docblock_contradiction_is_dropped_outside_a_component_view(): void
+    {
+        $issue = new DocblockTypeContradiction(
+            'Cannot resolve types for $errors - docblock-defined type Illuminate\Support\ViewErrorBag does not contain null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
+    }
+
+    /**
+     * Negative: a message that names `$errors` but does not match either anchored shape (no
+     * `for $errors`, does not start with `Cannot resolve types for $errors`) must keep reporting.
+     * Drawn from the corpus's own out-of-scope case: `Operand of type ViewErrorBag is always
+     * truthy` names no variable at all, so it is ungateable by construction.
+     */
+    #[Test]
+    public function a_non_matching_errors_message_shape_survives(): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(
+            'Operand of type Illuminate\Support\ViewErrorBag is always truthy',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
+
+        $this->assertInstanceOf(RedundantConditionGivenDocblockType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
      * #1532 review: a bare substring search for `" for $component"` also matches a rendered TYPE
      * that happens to quote it. `Reconciler::triggerIssueForImpossible()` puts `$key` immediately
      * BEFORE `" is (never|always) "` in this message shape (`Type <type> for $key is ... <assertion>`)
