@@ -128,6 +128,84 @@ final class TemplateSnippetMatcher
         return null;
     }
 
+    /**
+     * `callee(` plus everything up to $argEnd, where $argStart/$argEnd are the bounds of an
+     * ARGUMENT inside $snippet, or null when the argument is not directly enclosed by a global,
+     * unqualified call to $callee.
+     *
+     * The mirror image of {@see self::callExpressionAt()}, which reads forward from a callee-name
+     * node. An argument-position issue (`PossiblyInvalidArgument` and friends) locates the argument
+     * instead, and the enclosing callee sits BEFORE it: `CodeLocation` resets its preview start to
+     * the beginning of the line, so the snippet always carries that preceding text.
+     *
+     * The slice deliberately stops at the argument's end rather than at the call's closing `)` —
+     * `e(old('k')` is already enough to tell the compiler's wrapper from an author's own call, and
+     * extending it would need a second tokenizer pass for nothing. It is a prefix, not a balanced
+     * expression; the only consumer is {@see self::occursIn()}, a substring search.
+     *
+     * Null is a decline and the caller keeps the issue, so every unreadable shape fails open.
+     */
+    public static function enclosingCallAt(string $snippet, int $argStart, int $argEnd, string $callee): ?string
+    {
+        if ($argStart < 1 || $argEnd <= $argStart || $argEnd > \strlen($snippet)) {
+            return null;
+        }
+
+        $index = $argStart - 1;
+
+        // `echo` is a language construct: it precedes its argument directly, with no parenthesis in
+        // between. Every other callee reported this way is an ordinary function call.
+        if (\strcasecmp($callee, 'echo') !== 0) {
+            $index = self::skipSpaceBack($snippet, $index);
+
+            if ($index < 0 || $snippet[$index] !== '(') {
+                return null;
+            }
+
+            $index--;
+        }
+
+        $end = self::skipSpaceBack($snippet, $index);
+        $index = $end;
+
+        while ($index >= 0 && self::isIdentifierChar($snippet[$index])) {
+            $index--;
+        }
+
+        $start = $index + 1;
+
+        // Case-insensitive because PHP identifiers are: an author's `{{ E(old('k')) }}` compiles to
+        // an inner call that really is theirs, and declining on case alone would deny it the
+        // template-source check that keeps it.
+        if ($start > $end || \strcasecmp(\substr($snippet, $start, $end - $start + 1), $callee) !== 0) {
+            return null;
+        }
+
+        // `\e(`, `Fx::e(` and `$obj->e(` all read backwards as the bare identifier `e`, and none of
+        // them is the escape helper the compiler emits. (A preceding identifier character cannot
+        // occur here — the scan above would have consumed it.)
+        if ($start > 0 && \in_array($snippet[$start - 1], ['\\', '$', ':', '>'], true)) {
+            return null;
+        }
+
+        return \substr($snippet, $start, $argEnd - $start);
+    }
+
+    /** The index of the last non-whitespace character at or before $index, or -1. */
+    private static function skipSpaceBack(string $text, int $index): int
+    {
+        while ($index >= 0 && \ctype_space($text[$index])) {
+            $index--;
+        }
+
+        return $index;
+    }
+
+    private static function isIdentifierChar(string $char): bool
+    {
+        return $char === '_' || \ctype_alnum($char) || \ord($char) >= 0x80;
+    }
+
     private static function normalize(string $text): string
     {
         return \preg_replace('/\s+/', ' ', \trim($text)) ?? $text;
