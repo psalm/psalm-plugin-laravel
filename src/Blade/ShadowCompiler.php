@@ -30,10 +30,7 @@ final class ShadowCompiler
     public function compile(string $templatePath, string $source, array $contractVars = []): ShadowResult|BladeCompileError
     {
         // The prefix is absent from author text, including real PHP comments.
-        $markerPrefix = 'blade:' . \hash('xxh128', $source) . ':';
-        while (\str_contains($source, $markerPrefix)) {
-            $markerPrefix .= ':';
-        }
+        $markerPrefix = MarkerComment::prefixFor($source);
 
         $marked = MarkerPrePass::inject($source, $markerPrefix);
 

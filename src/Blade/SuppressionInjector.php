@@ -91,7 +91,7 @@ final class SuppressionInjector
         foreach ($tokens as $index => $token) {
             $text = \is_array($token) ? $token[1] : $token;
             if (\is_array($token) && ($token[0] === \T_OPEN_TAG || $token[0] === \T_OPEN_TAG_WITH_ECHO)
-                && MarkerComment::sourceLine($tokens[$index + 1] ?? '', $markerPrefix) === null
+                && !$this->opensAMarkerOnlyBlock($tokens, $index, $markerPrefix)
             ) {
                 $openTags[] = ['line' => $token[2], 'offset' => $offset + \strlen(\rtrim($text))];
             }
@@ -110,6 +110,32 @@ final class SuppressionInjector
         }
 
         return $targets;
+    }
+
+    /**
+     * Whether the open tag at $index is one of {@see MarkerPrePass}'s own `<?php /* N *\/ ?>`
+     * blocks, which carries no statement for a suppression docblock to attach to.
+     *
+     * The closing tag is part of the test, not decoration: since #1544 an author's own multi-line
+     * `<?php` block ALSO opens with a marker comment, one that is followed by their code rather
+     * than by `?>`. Matching on the marker alone would exclude that block and push every
+     * suppression aimed at it onto some later statement.
+     *
+     * @param array<int, array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private function opensAMarkerOnlyBlock(array $tokens, int $index, string $markerPrefix): bool
+    {
+        if (MarkerComment::sourceLine($tokens[$index + 1] ?? '', $markerPrefix) === null) {
+            return false;
+        }
+
+        $next = $tokens[$index + 2] ?? null;
+
+        if (\is_array($next) && $next[0] === \T_WHITESPACE) {
+            $next = $tokens[$index + 3] ?? null;
+        }
+
+        return \is_array($next) && $next[0] === \T_CLOSE_TAG;
     }
 
     /** @return array<int, string> blade line => suppressed rule */

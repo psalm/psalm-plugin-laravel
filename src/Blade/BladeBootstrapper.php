@@ -300,6 +300,11 @@ final class BladeBootstrapper
                 continue;
             }
 
+            // Recorded off the bytes that compiled, or that a freshness hit proved identical to
+            // them, because the relocator reads the template again later and a prefix re-derived
+            // from changed bytes silently disables the marker strip ({@see ShadowTarget}).
+            ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
+
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;

@@ -32,6 +32,20 @@ final class ShadowCompilerTest extends TestCase
         return \array_keys(\array_filter($result->lineMap, static fn(int $v): bool => $v === $bladeLine));
     }
 
+    /** The template line the one shadow line containing $needle maps to. */
+    private function bladeLineOf(ShadowResult $result, string $needle): int
+    {
+        $matching = \array_filter(
+            \explode("\n", $result->contents),
+            static fn(string $line): bool => \str_contains($line, $needle),
+        );
+
+        $this->assertCount(1, $matching, "expected exactly one shadow line containing {$needle}");
+        $this->assertArrayHasKey(\array_key_first($matching) + 1, $result->lineMap, 'shadow line has no line-map entry');
+
+        return $result->lineMap[\array_key_first($matching) + 1];
+    }
+
     /** @return iterable<string, array{string}> */
     public static function lexicalBoundaryTemplates(): iterable
     {
@@ -201,7 +215,7 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function php_block_body_maps_to_its_opening_line(): void
+    public function each_statement_of_a_php_block_maps_to_its_own_line(): void
     {
         $result = $this->compiler->compile(
             'view.blade.php',
@@ -209,9 +223,69 @@ final class ShadowCompilerTest extends TestCase
         );
 
         $this->assertInstanceOf(ShadowResult::class, $result);
-        // Every line of the @php body (opening line + 2 statements + @endphp) maps to line 1.
-        $this->assertGreaterThanOrEqual(4, \count($this->shadowLinesMappedTo($result, 1)));
+        $this->assertSame(2, $this->bladeLineOf($result, '$x = 1;'));
+        $this->assertSame(3, $this->bladeLineOf($result, '$y = 2;'));
         $this->assertNotEmpty($this->shadowLinesMappedTo($result, 5));
+    }
+
+    #[Test]
+    public function each_statement_of_a_raw_php_block_maps_to_its_own_line(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "<?php\n\$x = 1;\n\$y = 2;\n\$z = 3;\n?>\ndone\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame(2, $this->bladeLineOf($result, '$x = 1;'));
+        $this->assertSame(3, $this->bladeLineOf($result, '$y = 2;'));
+        $this->assertSame(4, $this->bladeLineOf($result, '$z = 3;'));
+    }
+
+    /**
+     * Constructs whose interior a bare marker comment cannot enter: it would become part of the
+     * quoted text (heredoc, nowdoc, string), part of the comment, or — past a `?>` — literal HTML.
+     * Each interior line keeps inheriting the nearest preceding mapped line; the point here is that
+     * the shadow still parses and the quoted bytes still say what the author wrote.
+     *
+     * @return iterable<string, array{string, string}> source, text the shadow must still contain
+     */
+    public static function unmarkableInteriors(): iterable
+    {
+        yield 'heredoc' => ["<?php\n\$a = <<<EOT\n  body line\nEOT;\n\$b = 1;\n?>\n", "  body line\nEOT;"];
+        yield 'nowdoc' => ["<?php\n\$a = <<<'EOT'\n  body line\nEOT;\n\$b = 1;\n?>\n", "  body line\nEOT;"];
+        yield 'multi-line string' => ["<?php\n\$a = 'one\ntwo';\n\$b = 1;\n?>\n", "'one\ntwo';"];
+        yield 'block comment' => ["<?php\n/* one\n   two */\n\$b = 1;\n?>\n", "/* one\n   two */"];
+        yield 'php block heredoc' => ["@php\n\$a = <<<EOT\n  body line\nEOT;\n@endphp\n", "  body line\nEOT;"];
+        yield 'multi-line call' => ["<?php\nstrlen(\n    'x',\n);\n?>\n", "'x',"];
+        yield 'short echo tag' => ["<?=\n    'x'\n?>\n", "'x'"];
+        yield 'unclosed at eof' => ["<?php\n\$a = 1;\n\$b = 2;\n", '$b = 2;'];
+
+        // The block's opener has to be rewritten to `<?php` before its body can be tokenized, and
+        // `<?=` is the one opener a body can follow with no separator at all. Glued straight on,
+        // `<?php<<<'TXT'` is not an open tag but inline HTML, and the `<?php` INSIDE the nowdoc
+        // then reads as the one that opens PHP mode: the body's own lines are judged markable and
+        // a marker lands in front of the closing delimiter, which ends the nowdoc nowhere.
+        yield 'short echo opening a nowdoc' => ["<?=<<<'TXT'\n<?php\necho \"sample\";\nTXT ?>\n", "<?php\necho \"sample\";\nTXT"];
+        yield 'short echo opening a heredoc' => ["<?=<<<TXT\nplain\nTXT ?>\n", "plain\nTXT"];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('unmarkableInteriors')]
+    public function a_php_block_stays_parseable_and_verbatim(string $source, string $preserved): void
+    {
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString($preserved, $result->contents);
+
+        try {
+            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($result->contents);
+        } catch (PhpParserError $phpParserError) {
+            $this->fail('shadow is not parseable PHP: ' . $phpParserError->getMessage());
+        }
+
+        $this->assertNotNull($stmts);
     }
 
     #[Test]

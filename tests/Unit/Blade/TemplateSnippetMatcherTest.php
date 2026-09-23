@@ -7,18 +7,74 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\MarkerComment;
 use Psalm\LaravelPlugin\Blade\TemplateSnippetMatcher;
 
 #[CoversClass(TemplateSnippetMatcher::class)]
 final class TemplateSnippetMatcherTest extends TestCase
 {
+    /**
+     * A prefix no test source below contains, so the marker strip is inert for every case that is
+     * not about it. Its own cases build a real prefix with {@see MarkerComment::prefixFor()}.
+     */
+    private const PREFIX = 'blade:0f0f:';
+
+    private function occursIn(string $snippet, string $source, string $markerPrefix = self::PREFIX): bool
+    {
+        return TemplateSnippetMatcher::occursIn($snippet, $source, $markerPrefix);
+    }
+
+    private function occursInWithRawTextRewrites(string $snippet, string $source, string $markerPrefix = self::PREFIX): bool
+    {
+        return TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source, $markerPrefix);
+    }
+
+    /**
+     * #1544: a call written across several lines inside `@php` or a raw `<?php` block reaches the
+     * shadow with a marker at the head of every continuation line, and no template contains one.
+     * Without the strip the gate compares text the author could not have written, finds it absent,
+     * and drops their issue as compiler-generated.
+     *
+     * That is a real lost finding, not noise. `CodeLocation` extends its snippet to the end of the
+     * line the SELECTION ends on, so a node spanning lines yields a snippet spanning lines, and
+     * `FunctionCallAnalyzer` builds a function call's `TooManyArguments` location from the whole
+     * call node: `callExpressionAt()` then reads the argument list to its end and hands the markers
+     * straight to the comparison. Pinned end to end on line 19 of `authored-arity.blade.php`, in
+     * `BladeIssueRemapTest::an_authored_over_arity_call_survives_in_every_compiled_blade_syntax()`.
+     */
+    #[Test]
+    public function in_block_markers_are_stripped_before_matching(): void
+    {
+        $source = "@php\n\$x->mount(\n  'a',\n  'b',\n);\n@endphp\n";
+        $prefix = MarkerComment::prefixFor($source);
+        $snippet = "mount(\n  /* {$prefix}3 */ 'a',\n  /* {$prefix}4 */ 'b',\n)";
+
+        $this->assertTrue($this->occursIn($snippet, $source, $prefix));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source, $prefix));
+
+        // Teeth: the same snippet under an unrelated prefix keeps the marker text and misses.
+        $this->assertFalse($this->occursIn($snippet, $source, self::PREFIX));
+    }
+
+    /**
+     * The strip is scoped by the prefix, which {@see MarkerComment::prefixFor()} extends until it is
+     * absent from the template. Marker-SHAPED text an author wrote is therefore never cut out, and a
+     * call that genuinely differs from the template still does not match.
+     */
+    #[Test]
+    public function author_written_marker_shaped_text_is_not_stripped(): void
+    {
+        $source = "@php\n\$x->mount('/* blade:3 */');\n@endphp\n";
+        $prefix = MarkerComment::prefixFor($source);
+
+        $this->assertTrue($this->occursIn("mount('/* blade:3 */')", $source, $prefix));
+        $this->assertFalse($this->occursIn("mount('')", $source, $prefix));
+    }
+
     #[Test]
     public function an_identical_snippet_occurs(): void
     {
-        $this->assertTrue(TemplateSnippetMatcher::occursIn(
-            "foo('a', 'b')",
-            "<div>\n  foo('a', 'b')\n</div>\n",
-        ));
+        $this->assertTrue($this->occursIn("foo('a', 'b')", "<div>\n  foo('a', 'b')\n</div>\n"));
     }
 
     #[Test]
@@ -26,10 +82,7 @@ final class TemplateSnippetMatcherTest extends TestCase
     {
         // A generated block reformats an argument list onto its own lines; the comparison must
         // ignore that rather than requiring byte-identical whitespace.
-        $this->assertTrue(TemplateSnippetMatcher::occursIn(
-            "foo('a',\n'b',\n'c')",
-            "<div>\n  foo('a', 'b', 'c')\n</div>\n",
-        ));
+        $this->assertTrue($this->occursIn("foo('a',\n'b',\n'c')", "<div>\n  foo('a', 'b', 'c')\n</div>\n"));
     }
 
     #[Test]
@@ -40,16 +93,13 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "foo('a',\n  'b')";
         $source = "<div>\n  foo('a',\n  'b')\n</div>\n";
 
-        $this->assertTrue(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue($this->occursIn($snippet, $source));
     }
 
     #[Test]
     public function an_absent_snippet_does_not_occur(): void
     {
-        $this->assertFalse(TemplateSnippetMatcher::occursIn(
-            "bar('a', 'b', 'c')",
-            "<div>\n  foo('a', 'b')\n</div>\n",
-        ));
+        $this->assertFalse($this->occursIn("bar('a', 'b', 'c')", "<div>\n  foo('a', 'b')\n</div>\n"));
     }
 
     /**
@@ -110,10 +160,7 @@ final class TemplateSnippetMatcherTest extends TestCase
         // Blade strips `{{-- --}}` before compiling, so the compiled call has no comment in it and
         // the raw template does. The template side has to be stripped the same way, or the call is
         // never found and the issue is dropped as generated.
-        $this->assertTrue(TemplateSnippetMatcher::occursIn(
-            "mount('a', 'b')",
-            "<div>\n  {{ \$x->mount('a', {{-- why --}} 'b') }}\n</div>\n",
-        ));
+        $this->assertTrue($this->occursIn("mount('a', 'b')", "<div>\n  {{ \$x->mount('a', {{-- why --}} 'b') }}\n</div>\n"));
     }
 
     #[Test]
@@ -249,10 +296,10 @@ final class TemplateSnippetMatcherTest extends TestCase
     #[Test]
     public function the_slice_separates_a_compiled_echo_from_an_authors_identical_php_block(): void
     {
-        $this->assertFalse(TemplateSnippetMatcher::occursIn("e(old('k')", "<div>{{ old('k') }}</div>\n"));
-        $this->assertTrue(TemplateSnippetMatcher::occursIn("e(old('k')", "@php echo e(old('k')); @endphp\n"));
-        $this->assertFalse(TemplateSnippetMatcher::occursIn("echo old('k')", "<div>{!! old('k') !!}</div>\n"));
-        $this->assertTrue(TemplateSnippetMatcher::occursIn("echo old('k')", "@php echo old('k'); @endphp\n"));
+        $this->assertFalse($this->occursIn("e(old('k')", "<div>{{ old('k') }}</div>\n"));
+        $this->assertTrue($this->occursIn("e(old('k')", "@php echo e(old('k')); @endphp\n"));
+        $this->assertFalse($this->occursIn("echo old('k')", "<div>{!! old('k') !!}</div>\n"));
+        $this->assertTrue($this->occursIn("echo old('k')", "@php echo old('k'); @endphp\n"));
     }
 
     /**
@@ -266,8 +313,8 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "mount('@foo', 'u', 'v')";
         $source = "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n";
 
-        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
-        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+        $this->assertFalse($this->occursIn($snippet, $source));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
     }
 
     /**
@@ -281,8 +328,8 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "mount('a', 'b', 'c')";
         $source = "<div>\n  mount('a', ##BEGIN-COMPONENT-CLASS##'b', 'c')\n</div>\n";
 
-        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
-        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+        $this->assertFalse($this->occursIn($snippet, $source));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
     }
 
     /**
@@ -296,8 +343,8 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "mount('@foo', 'u', 'v')";
         $source = "<div>\n  {{ \$x->mount('@@{{-- c --}}foo', 'u', 'v') }}\n</div>\n";
 
-        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
-        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+        $this->assertFalse($this->occursIn($snippet, $source));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
     }
 
     /**
@@ -312,8 +359,8 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "mount('x@foo', 'u', 'v')";
         $source = "<div>\n  {{ \$x->mount('x##BEGIN-COMPONENT-CLASS##@@foo', 'u', 'v') }}\n</div>\n";
 
-        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
-        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+        $this->assertFalse($this->occursIn($snippet, $source));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
     }
 
     /**
@@ -328,8 +375,8 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "mount('@@foo', 'u', 'v')";
         $source = "@php \$x->mount('@@foo##BEGIN-COMPONENT-CLASS##', 'u', 'v'); @endphp\n";
 
-        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
-        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+        $this->assertFalse($this->occursIn($snippet, $source));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
     }
 
     /**
@@ -344,17 +391,14 @@ final class TemplateSnippetMatcherTest extends TestCase
         $snippet = "mount('@@foo', 'u', 'v')";
         $source = "<div>\n  {{ \$x->mount('@@##BEGIN-COMPONENT-CLASS##foo', 'u', 'v') }}\n</div>\n";
 
-        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
-        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+        $this->assertFalse($this->occursIn($snippet, $source));
+        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
     }
 
     /** Mirroring never widens the gate: a call genuinely absent from the template still does not match. */
     #[Test]
     public function a_genuinely_absent_call_still_does_not_match_with_raw_text_rewrites(): void
     {
-        $this->assertFalse(TemplateSnippetMatcher::occursInWithRawTextRewrites(
-            "mount('@foo', 'u', 'v', 'w', 'x')",
-            "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n",
-        ));
+        $this->assertFalse($this->occursInWithRawTextRewrites("mount('@foo', 'u', 'v', 'w', 'x')", "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n"));
     }
 }

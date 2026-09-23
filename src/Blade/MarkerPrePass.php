@@ -211,6 +211,95 @@ final class MarkerPrePass
     }
 
     /**
+     * Lines inside a masked `@php` or raw `<?php`/`<?=` body that can carry a BARE marker comment:
+     * PHP mode is open where the line starts, and no token that opened on an earlier line is still
+     * running there. Those bodies reach the shadow byte-for-byte (Blade wraps `@php` in
+     * `<?php ... ?>` and passes raw tags through untouched), so a comment placed at the head of such
+     * a line is the only thing between the line and its own statement.
+     *
+     * Everything else in the block keeps inheriting the nearest preceding mapped line: a heredoc or
+     * nowdoc body, a multi-line string, a block comment's interior, and anything past a `?>` would
+     * swallow the marker as text instead of reading it as one — the second case turns the shadow
+     * into text that no longer parses.
+     *
+     * Tokenized per range with the opener rewritten to `<?php ` and glued on with NO newline, so the
+     * lexer's line 1 is the template line the block opens on. `T_OPEN_TAG`/`T_OPEN_TAG_WITH_ECHO`
+     * carry their own trailing newline, and `T_CLOSE_TAG` can too, so neither counts as covering the
+     * line it ends on; without the open-tag exemption the FIRST body line loses its marker.
+     *
+     * @param list<array{0: string, 1: int}> $masked ranges from {@see self::maskedRanges()}
+     * @return array<int, true>
+     */
+    private static function safeBlockLines(string $source, array $masked): array
+    {
+        $safe = [];
+
+        // Ascending offsets, so the source is scanned for newlines once in total.
+        $cursor = 0;
+        $openLine = 1;
+
+        foreach ($masked as [$text, $offset]) {
+            $openLine += \substr_count($source, "\n", $cursor, $offset - $cursor);
+            $cursor = $offset;
+
+            $openerLength = self::phpOpenerLength($text);
+
+            if ($openerLength === null) {
+                continue;
+            }
+
+            $line = $openLine;
+            $inPhp = false;
+
+            // The suppression mirrors callExpressionAt(): a block cut off at EOF ends mid-construct, and
+            // the lexer warns on an unterminated string while still returning usable tokens.
+            // A SPACE, never a newline: `<?php` is only an open tag when whitespace follows it, and
+            // `<?=` is the one opener a body can follow with nothing in between — `<?=<<<'TXT'`
+            // glued bare yields `<?php<<<'TXT'`, which lexes as inline HTML, so a `<?php` written
+            // inside that nowdoc becomes the tag that opens PHP mode and the quoted body is judged
+            // markable. A newline would fix that too, and would break line 1's anchor to the
+            // opener's own template line.
+            foreach (@\token_get_all('<?php ' . \substr($text, $openerLength)) as $token) {
+                $id = \is_array($token) ? $token[0] : null;
+                $newlines = \substr_count(\is_array($token) ? $token[1] : $token, "\n");
+
+                if ($id === \T_OPEN_TAG || $id === \T_OPEN_TAG_WITH_ECHO) {
+                    $inPhp = true;
+                } elseif ($id === \T_CLOSE_TAG) {
+                    $inPhp = false;
+                }
+
+                // These four end AT a line boundary instead of running past one, so each line they
+                // reach still starts clean. Every other multi-line token is still open there.
+                $endsCleanly = \in_array($id, [\T_WHITESPACE, \T_OPEN_TAG, \T_OPEN_TAG_WITH_ECHO, \T_CLOSE_TAG], true);
+
+                if ($inPhp && $endsCleanly) {
+                    for ($l = $line + 1; $l <= $line + $newlines; $l++) {
+                        $safe[$l] = true;
+                    }
+                }
+
+                $line += $newlines;
+            }
+        }
+
+        return $safe;
+    }
+
+    /**
+     * Byte length of the PHP-block opener a masked range starts with, or null when the range is a
+     * `@verbatim` body or a Blade comment instead — neither reaches the shadow as PHP.
+     */
+    private static function phpOpenerLength(string $text): ?int
+    {
+        if (\str_starts_with($text, '@php')) {
+            return 4;
+        }
+
+        return \preg_match('/^<\?(?:php\b|=)/i', $text, $match) === 1 ? \strlen($match[0]) : null;
+    }
+
+    /**
      * Replaces each given range with spaces, keeping newlines intact so line numbers and byte
      * offsets stay identical to $source.
      *
@@ -257,6 +346,13 @@ final class MarkerPrePass
      * Whitespace-only lines get no marker: a marker there leaves `?>` right
      * before a newline, which PHP swallows when the compiled view executes.
      *
+     * A skipped line inside a `@php` or raw PHP body gets a BARE marker
+     * instead ({@see self::safeBlockLines()}) — PHP mode is already open there,
+     * so the `<?php ?>` wrapper would be a syntax error, while the comment on
+     * its own reads back identically ({@see LineMapBuilder} matches T_COMMENT
+     * regardless of the tags around it). Every other skipped line still gets
+     * nothing and inherits the line that opened its construct.
+     *
      * The trailing marker exists because Blade's addFooters() appends the
      * `@extends` footer after everything else, so without it the footer
      * would inherit the LAST content line's marker instead of the line the
@@ -266,14 +362,19 @@ final class MarkerPrePass
     {
         $masked = self::maskedRanges($source);
         $skip = self::computeSkipLines($source, $masked);
+        $safe = self::safeBlockLines($source, $masked);
         $lines = SourceLines::split($source);
 
         $out = '';
         $lineNumber = 1;
 
         foreach ($lines as $line) {
-            if (!isset($skip[$lineNumber]) && \trim($line) !== '') {
-                $out .= "<?php /* {$markerPrefix}{$lineNumber} */ ?>";
+            if (\trim($line) !== '') {
+                if (!isset($skip[$lineNumber])) {
+                    $out .= "<?php /* {$markerPrefix}{$lineNumber} */ ?>";
+                } elseif (isset($safe[$lineNumber])) {
+                    $out .= "/* {$markerPrefix}{$lineNumber} */ ";
+                }
             }
 
             $out .= $line;

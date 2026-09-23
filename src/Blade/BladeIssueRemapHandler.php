@@ -262,6 +262,9 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             $templateSource,
             Config::getInstance()->shortenFileName($entry->templatePath),
             PreludeBuilder::isComponentView($templateSource),
+            // Falling back to the live bytes only when boot recorded nothing: no worse than having
+            // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
+            ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
         );
     }
 }

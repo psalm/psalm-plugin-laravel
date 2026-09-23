@@ -266,9 +266,9 @@ final class ShadowIssueRelocator
      * Matching is against the WHOLE template source, not the mapped template line: generated code
      * DOES inherit the injecting directive's line (the precompiler rewrites text that sits behind
      * that line's marker), so a per-line match would compare the generated call against the very
-     * line whose directive produced it and learn nothing; and a multi-line construct gets no marker
-     * of its own ({@see MarkerPrePass::computeSkipLines()}), so an author's multi-line call maps to
-     * the line that OPENED it rather than the line the callee sits on.
+     * line whose directive produced it and learn nothing; and a call spanning several lines of a
+     * construct Blade rewrites still gets no marker per line ({@see MarkerPrePass::computeSkipLines()}),
+     * so it maps to the line that OPENED the construct rather than the line the callee sits on.
      *
      * Uses {@see TemplateSnippetMatcher::occursInWithRawTextRewrites()}, not plain `occursIn()`:
      * an author's own call can have argument text Blade itself rewrites (`@@foo` unescaping,
@@ -285,7 +285,7 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        return !TemplateSnippetMatcher::occursInWithRawTextRewrites($call, $target->templateSource);
+        return !TemplateSnippetMatcher::occursInWithRawTextRewrites($call, $target->templateSource, $target->markerPrefix());
     }
 
     /**
@@ -339,11 +339,11 @@ final class ShadowIssueRelocator
 
         [$call, $argument] = $slice;
 
-        if (!TemplateSnippetMatcher::occursIn($argument, $target->templateSource)) {
+        if (!TemplateSnippetMatcher::occursIn($argument, $target->templateSource, $target->markerPrefix())) {
             return false;
         }
 
-        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource);
+        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource, $target->markerPrefix());
     }
 
     /**
@@ -398,14 +398,17 @@ final class ShadowIssueRelocator
             return null;
         }
 
-        // No marker stripping here, deliberately. The snippet is the WHOLE shadow line
-        // (`calculateRealLocation()` resets `preview_start` to the line start, overwriting the
-        // node's own `startFilePos` the constructor put there), so it does carry the line-leading
-        // `blade:HASH:N` marker comment — but slicing from the selection offset leaves that
-        // behind, and a marker further along the same line would need the compiler to join two
-        // template lines, which a multi-line call declines on anyway. Stripping instead would cut
-        // marker-shaped text out of an author's own string literal, leaving text the template does
-        // not contain and dropping a real issue.
+        // No marker stripping HERE, because every offset below indexes into $snippet: the snippet is
+        // the WHOLE shadow line (`calculateRealLocation()` resets `preview_start` to the line start,
+        // overwriting the node's own `startFilePos` the constructor put there), and cutting bytes
+        // out of it would shift the selection offset off its own token.
+        //
+        // Markers are no longer only ahead of the selection: since #1544 a call written across
+        // several lines inside `@php` or a raw `<?php` block carries one at the head of each
+        // continuation line, so the expression cut out here can contain them. They come out at
+        // comparison time instead, in {@see TemplateSnippetMatcher::occursIn()}, where only the text
+        // matters — and safely, because the prefix is collision-checked out of the template source
+        // ({@see MarkerComment::prefixFor()}), which a bare `blade:N` would not have been.
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
