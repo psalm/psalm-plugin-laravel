@@ -31,6 +31,18 @@ final class ShadowTarget
         public readonly bool $isComponentView,
     ) {}
 
+    private ?string $markerPrefix = null;
+
+    /**
+     * The marker prefix this template's shadow was written with, re-derived from the source rather
+     * than carried in the manifest: it is a pure function of those bytes, and the manifest tuple's
+     * shape is a cache-compatibility surface of its own ({@see ShadowManifest}).
+     */
+    public function markerPrefix(): string
+    {
+        return $this->markerPrefix ??= MarkerComment::prefixFor($this->templateSource);
+    }
+
     /** Template line a shadow line came from; 0 for prelude lines and anything the marker pass could not map. */
     public function templateLineFor(int $shadowLine): int
     {
