@@ -133,4 +133,125 @@ final class TemplateSnippetMatcherTest extends TestCase
         // a partial read would not match the template.
         $this->assertNull(TemplateSnippetMatcher::callExpressionAt('mount(1,', 0));
     }
+
+    /**
+     * The shape an argument-position issue hands the relocator: the whole compiled line, plus the
+     * bounds of the ARGUMENT rather than the callee. The enclosing `e(` sits before those bounds on
+     * the same line, so the walk runs backwards from them.
+     */
+    #[Test]
+    public function the_enclosing_escape_call_is_cut_out_of_a_compiled_echo_line(): void
+    {
+        $line = "<?php /* blade:2 */ ?><?php echo e(old('k')); ?>";
+        $start = (int) \strpos($line, "old('k')");
+
+        $this->assertSame(
+            "e(old('k')",
+            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
+        );
+    }
+
+    #[Test]
+    public function the_enclosing_raw_echo_is_cut_out_without_a_parenthesis(): void
+    {
+        // `{!! !!}` compiles to a bare `echo`, a language construct with no parenthesis to step
+        // over, and Psalm names it `echo` in the message like any other callee.
+        $line = "<?php /* blade:2 */ ?><div><?php echo old('k'); ?></div>";
+        $start = (int) \strpos($line, "old('k')");
+
+        $this->assertSame(
+            "echo old('k')",
+            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'echo'),
+        );
+    }
+
+    #[Test]
+    public function whitespace_between_the_callee_and_its_parenthesis_is_kept(): void
+    {
+        // An author's own `e ( ... )` inside `@php` reaches the shadow verbatim, so the slice has
+        // to reproduce that spacing for the template to contain it.
+        $line = "echo e ( old('k') );";
+        $start = (int) \strpos($line, "old('k')");
+
+        $this->assertSame(
+            "e ( old('k')",
+            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
+        );
+    }
+
+    #[Test]
+    public function the_nearest_preceding_call_wins_when_a_line_holds_two_echoes(): void
+    {
+        // `{{ $a }}{{ old('k') }}` compiles to two echo statements on one shadow line.
+        $line = "<?php echo e(\$a); ?><?php echo e(old('k')); ?>";
+        $start = (int) \strpos($line, "old('k')");
+
+        $this->assertSame(
+            "e(old('k')",
+            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
+        );
+    }
+
+    #[Test]
+    public function a_qualified_or_member_callee_of_the_same_name_declines(): void
+    {
+        // Without an identifier-boundary check all three read backwards as the identifier `e`, and
+        // a user-defined `\Fx\e()` or `$obj->e()` would be treated as the compiler's own escape.
+        foreach (["echo \\e(old('k'));", "echo Fx::e(old('k'));", "echo \$obj->e(old('k'));", "echo safe(old('k'));"] as $line) {
+            $start = (int) \strpos($line, "old('k')");
+
+            $this->assertNull(
+                TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
+                $line,
+            );
+        }
+    }
+
+    #[Test]
+    public function an_argument_not_enclosed_by_the_named_callee_declines(): void
+    {
+        $line = "echo trim(old('k'));";
+        $start = (int) \strpos($line, "old('k')");
+
+        $this->assertNull(TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'));
+    }
+
+    #[Test]
+    public function bounds_with_no_room_for_a_callee_decline(): void
+    {
+        // Fail open on anything unreadable: an argument at offset 0 has nothing before it, and
+        // bounds past the end of the snippet mean the location and the snippet disagree.
+        $this->assertNull(TemplateSnippetMatcher::enclosingCallAt("old('k')", 0, 8, 'e'));
+        $this->assertNull(TemplateSnippetMatcher::enclosingCallAt("e(old('k')", 2, 99, 'e'));
+        $this->assertNull(TemplateSnippetMatcher::enclosingCallAt("e(old('k')", 2, 2, 'e'));
+        $this->assertNull(TemplateSnippetMatcher::enclosingCallAt('e(', 2, 2, 'e'));
+    }
+
+    #[Test]
+    public function a_differently_cased_callee_still_matches(): void
+    {
+        // PHP identifiers are case-insensitive, so an author's `{{ E(old('k')) }}` compiles to an
+        // inner call that is genuinely theirs; matching case-sensitively would decline and the
+        // template-source check below would never get to keep it on its own merits.
+        $line = "echo E(old('k'));";
+        $start = (int) \strpos($line, "old('k')");
+
+        $this->assertSame(
+            "E(old('k')",
+            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
+        );
+    }
+
+    /**
+     * The whole point of the slice: the compiler's own wrapper is absent from the template, an
+     * author's identical-looking `@php` line is present, and the two shadow lines are byte-identical.
+     */
+    #[Test]
+    public function the_slice_separates_a_compiled_echo_from_an_authors_identical_php_block(): void
+    {
+        $this->assertFalse(TemplateSnippetMatcher::occursIn("e(old('k')", "<div>{{ old('k') }}</div>\n"));
+        $this->assertTrue(TemplateSnippetMatcher::occursIn("e(old('k')", "@php echo e(old('k')); @endphp\n"));
+        $this->assertFalse(TemplateSnippetMatcher::occursIn("echo old('k')", "<div>{!! old('k') !!}</div>\n"));
+        $this->assertTrue(TemplateSnippetMatcher::occursIn("echo old('k')", "@php echo old('k'); @endphp\n"));
+    }
 }

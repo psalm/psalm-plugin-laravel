@@ -13,6 +13,8 @@ use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
+use Psalm\Issue\PossiblyFalseArgument;
+use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -255,6 +257,43 @@ final class ShadowIssueRelocatorTest extends TestCase
         $relocated = $this->relocate($issue, $this->entry([9 => 3]));
 
         $this->assertInstanceOf(TooManyArguments::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1535, both halves of the echo-position family. Same "cannot be read" case as the arity gate
+     * above: without a booted ProjectAnalyzer `getSnippet()` throws, and an issue whose callee and
+     * argument position both match the gate must still come back relocated rather than dropped.
+     * The discriminating behaviour needs a real compiled shadow and is pinned by
+     * {@see EchoUnionArgumentTest}; the string rule itself by {@see TemplateSnippetMatcherTest}.
+     */
+    #[Test]
+    public function an_echo_position_argument_issue_is_kept_when_its_snippet_cannot_be_read(): void
+    {
+        $issue = new PossiblyInvalidArgument(
+            'Argument 1 of e expects string, but possibly different type array<array-key, mixed>|null|string provided',
+            $this->shadowLocation(9),
+            'e',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(PossiblyInvalidArgument::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    #[Test]
+    public function an_echo_position_false_argument_issue_is_kept_when_its_snippet_cannot_be_read(): void
+    {
+        $issue = new PossiblyFalseArgument(
+            'Argument 1 of echo cannot be false, possibly string value expected',
+            $this->shadowLocation(9),
+            'echo',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(PossiblyFalseArgument::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
