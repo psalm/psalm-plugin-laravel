@@ -163,6 +163,23 @@ final class ShadowIssueRelocator
                 return false;
             }
 
+            // `$errors`, unlike `$component`, is ALWAYS declared via the prelude's own `@var`
+            // docblock ({@see PreludeBuilder}), never inferred — so an ambient guard on it is
+            // always the DOCBLOCK branch of the two shapes above (`Reconciler::
+            // triggerIssueForImpossible()`'s `$from_docblock` check), never the plain `Type
+            // <TYPE> for $key ...` / `Cannot resolve types for $key - <TYPE> does not contain`
+            // wording those two functions also emit for an INFERRED type. `isAmbientGuardName()`
+            // itself only anchors the `$key` position, not the docblock/inferred split, and
+            // widening it to `$errors` unconditionally (#1546 v1) dropped a genuine author
+            // contradiction against their OWN reassignment (`@php $errors = 42; @if
+            // (is_string($errors))` renders `Type 42 for $errors is never string`, no
+            // "Docblock-defined"/"docblock-defined" text, because the reassignment replaces the
+            // docblock type with an inferred one) — matched only via `isAmbientDocblockGuardName()`
+            // instead, which requires that text and so cannot match the inferred-branch wording.
+            if (self::isAmbientDocblockGuardName($issue->message, 'errors')) {
+                return false;
+            }
+
             if ($target->isComponentView && self::isAmbientGuardName($issue->message, 'attributes|slot')) {
                 return false;
             }
@@ -409,6 +426,22 @@ final class ShadowIssueRelocator
     {
         return \preg_match('/ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
             || \preg_match('/^Cannot resolve types for \$(?:' . $names . ')(?=[\s,]|$)/', $message) === 1;
+    }
+
+    /**
+     * Like {@see isAmbientGuardName()}, but narrowed to the DOCBLOCK branch of the same two
+     * anchored shapes: `Docblock-defined type <TYPE> for $key is (never|always) ...` and
+     * `Cannot resolve types for $key - docblock-defined type ...` (case differs between the two:
+     * `Reconciler::triggerIssueForImpossible()` capitalizes it, `AssertionReconciler` does not).
+     * A name whose ambient type always comes from the prelude's own `@var` docblock — never
+     * inferred — uses this instead of `isAmbientGuardName()`, so an author's own reassignment
+     * (which replaces the docblock type with an inferred one, dropping that text from the
+     * message) survives instead of being silently swallowed by the wider match.
+     */
+    private static function isAmbientDocblockGuardName(string $message, string $names): bool
+    {
+        return \preg_match('/^Docblock-defined type .+ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
+            || \preg_match('/^Cannot resolve types for \$(?:' . $names . ') - docblock-defined type/', $message) === 1;
     }
 
     /**
