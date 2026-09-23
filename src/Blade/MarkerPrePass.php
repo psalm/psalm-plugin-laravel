@@ -222,7 +222,7 @@ final class MarkerPrePass
      * swallow the marker as text instead of reading it as one — the second case turns the shadow
      * into text that no longer parses.
      *
-     * Tokenized per range with the opener rewritten to `<?php` and glued on with NO newline, so the
+     * Tokenized per range with the opener rewritten to `<?php ` and glued on with NO newline, so the
      * lexer's line 1 is the template line the block opens on. `T_OPEN_TAG`/`T_OPEN_TAG_WITH_ECHO`
      * carry their own trailing newline, and `T_CLOSE_TAG` can too, so neither counts as covering the
      * line it ends on; without the open-tag exemption the FIRST body line loses its marker.
@@ -251,7 +251,13 @@ final class MarkerPrePass
             $line = $openLine;
             $inPhp = false;
 
-            foreach (@\token_get_all('<?php' . \substr($text, $openerLength)) as $token) {
+            // A SPACE, never a newline: `<?php` is only an open tag when whitespace follows it, and
+            // `<?=` is the one opener a body can follow with nothing in between — `<?=<<<'TXT'`
+            // glued bare yields `<?php<<<'TXT'`, which lexes as inline HTML, so a `<?php` written
+            // inside that nowdoc becomes the tag that opens PHP mode and the quoted body is judged
+            // markable. A newline would fix that too, and would break line 1's anchor to the
+            // opener's own template line.
+            foreach (@\token_get_all('<?php ' . \substr($text, $openerLength)) as $token) {
                 $id = \is_array($token) ? $token[0] : null;
                 $newlines = \substr_count(\is_array($token) ? $token[1] : $token, "\n");
 

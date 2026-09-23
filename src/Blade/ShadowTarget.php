@@ -23,24 +23,24 @@ final class ShadowTarget
      * @param string $templateName     the display name Psalm's reporters print for the template
      * @param bool   $isComponentView  {@see PreludeBuilder::isComponentView()} on $templateSource;
      *                                 computed once here rather than per issue in the relocator
+     * @param string $markerPrefix     the prefix the shadow's marker comments actually carry, from
+     *                                 {@see ShadowRegistry::markerPrefixFor()}. Passed in rather
+     *                                 than derived from $templateSource: the prefix is a salted hash
+     *                                 of the template, and $templateSource is read at relocation
+     *                                 time, so a template edited since the compile would yield a
+     *                                 prefix matching nothing in the shadow.
      */
     public function __construct(
         public readonly ShadowEntry $entry,
         public readonly string $templateSource,
         public readonly string $templateName,
         public readonly bool $isComponentView,
+        private readonly string $markerPrefix,
     ) {}
 
-    private ?string $markerPrefix = null;
-
-    /**
-     * The marker prefix this template's shadow was written with, re-derived from the source rather
-     * than carried in the manifest: it is a pure function of those bytes, and the manifest tuple's
-     * shape is a cache-compatibility surface of its own ({@see ShadowManifest}).
-     */
     public function markerPrefix(): string
     {
-        return $this->markerPrefix ??= MarkerComment::prefixFor($this->templateSource);
+        return $this->markerPrefix;
     }
 
     /** Template line a shadow line came from; 0 for prelude lines and anything the marker pass could not map. */

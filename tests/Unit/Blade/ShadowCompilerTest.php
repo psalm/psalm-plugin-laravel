@@ -259,6 +259,14 @@ final class ShadowCompilerTest extends TestCase
         yield 'multi-line call' => ["<?php\nstrlen(\n    'x',\n);\n?>\n", "'x',"];
         yield 'short echo tag' => ["<?=\n    'x'\n?>\n", "'x'"];
         yield 'unclosed at eof' => ["<?php\n\$a = 1;\n\$b = 2;\n", '$b = 2;'];
+
+        // The block's opener has to be rewritten to `<?php` before its body can be tokenized, and
+        // `<?=` is the one opener a body can follow with no separator at all. Glued straight on,
+        // `<?php<<<'TXT'` is not an open tag but inline HTML, and the `<?php` INSIDE the nowdoc
+        // then reads as the one that opens PHP mode: the body's own lines are judged markable and
+        // a marker lands in front of the closing delimiter, which ends the nowdoc nowhere.
+        yield 'short echo opening a nowdoc' => ["<?=<<<'TXT'\n<?php\necho \"sample\";\nTXT ?>\n", "<?php\necho \"sample\";\nTXT"];
+        yield 'short echo opening a heredoc' => ["<?=<<<TXT\nplain\nTXT ?>\n", "plain\nTXT"];
     }
 
     #[Test]
