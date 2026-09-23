@@ -20,14 +20,13 @@ use Stringable;
  *
  * @method \Illuminate\Support\MessageBag addIf(bool $boolean, string $key, string $message)
  * @method bool hasAny(string|array<string>|null ...$keys)
- * @method bool missing(string|array<string>|null ...$key)
+ * @method bool missing(string|array<string> $key, string ...$keys)
  * @method array<string> unique(?string $format = null)
  * @method array<string, array<string>> messages()
  * @method \Illuminate\Support\MessageBag getMessageBag()
  * @method array<string, array<string>> toArray()
  * @method array<string, array<string>> jsonSerialize()
  * @method string toJson(int $options = 0)
- * @method string toPrettyJson(int $options = 0)
  */
 class ViewErrorBag implements Countable, Stringable
 {

@@ -27,6 +27,18 @@ function view_error_bag_missing(ViewErrorBag $errors): void
 {
     $_ = $errors->missing('a');
     /** @psalm-check-type-exact $_ = bool */
+
+    $_multi = $errors->missing('a', 'b');
+    /** @psalm-check-type-exact $_multi = bool */
+}
+
+// Negative: unlike hasAny(), missing() is NOT variadic with a default on the concrete
+// MessageBag — its one parameter is required (extras collected via func_get_args()), so a
+// zero-argument call must keep reporting TooFewArguments rather than type-checking and
+// fataling at runtime.
+function view_error_bag_missing_requires_an_argument(ViewErrorBag $errors): void
+{
+    $errors->missing();
 }
 
 // Negative: a genuinely undefined method must still report UndefinedMagicMethod, proving the
@@ -37,4 +49,5 @@ function view_error_bag_unknown_method_still_reports(ViewErrorBag $errors): void
 }
 ?>
 --EXPECTF--
+TooFewArguments on line %d: Too few arguments for missing - expecting key to be passed
 UndefinedMagicMethod on line %d: Magic method Illuminate\Support\ViewErrorBag::nopenotamethod does not exist
