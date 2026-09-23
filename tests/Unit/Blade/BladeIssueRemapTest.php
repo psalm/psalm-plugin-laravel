@@ -646,6 +646,12 @@ final class BladeIssueRemapTest extends TestCase
      * (`TypeDoesNotContainNull`/`TypeDoesNotContainType`), not the docblock branch
      * (`RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`) —
      * both siblings are gated, or this test cannot see the exact shape it exists to pin.
+     *
+     * `PossiblyNullReference` on the `merge()` call used to be a survivor here too: the impossible
+     * negative arm above left Psalm holding the reconciled `null` from the never-taken branch and
+     * re-unioning it into `$attributes`'s type at `endif`. #1543 fixes it at the source instead of
+     * gating the message: {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert} re-asserts
+     * `$attributes` as non-null right after that `endif`, so the issue no longer fires at all.
      */
     #[Test]
     public function ambient_guards_around_a_nested_component_tag_are_dropped(): void
@@ -653,7 +659,9 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $template = 'components/nested-attributes.blade.php';
 
-        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+        $accounted = [...self::AMBIENT_GUARD_FAMILIES, 'PossiblyNullReference'];
+
+        foreach ($accounted as $family) {
             $this->assertSame(
                 [],
                 $this->linesFor($issues, $family, $template),
@@ -661,24 +669,7 @@ final class BladeIssueRemapTest extends TestCase
             );
         }
 
-        // `PossiblyNullReference` on the `merge()` call is a CONSEQUENCE of the impossible negative
-        // arm above, not something the message gate can drop: Psalm keeps the reconciled `null` in
-        // the never-taken branch of the nested tag's guard and re-unions it back into $attributes's
-        // type at `endif`. Confirmed pre-existing, not a #1525 regression, against a base-prelude
-        // differential (blade/integration's own non-nullable `$attributes` produces the identical
-        // TypeDoesNotContainNull + PossiblyNullReference pair on the same shadow). Left VISIBLE
-        // deliberately — an explicit allowlist, not an omission — because dropping
-        // `PossiblyNullReference` by receiver name would also hide an author's genuine
-        // `$attributes->` read before their own `@props` line (see docs/blade.md known limitations).
-        $this->assertSame(
-            [3],
-            $this->linesFor($issues, 'PossiblyNullReference', $template),
-            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-        );
-
-        // Nothing else at all reports on this template — the allowlist above is exhaustive.
-        $accounted = [...self::AMBIENT_GUARD_FAMILIES, 'PossiblyNullReference'];
-
+        // Nothing else at all reports on this template.
         foreach ($issues as $issue) {
             if (\str_ends_with($issue['file_path'], $template)) {
                 $this->assertContains(
@@ -688,6 +679,72 @@ final class BladeIssueRemapTest extends TestCase
                 );
             }
         }
+    }
+
+    /**
+     * #1543: the same false `PossiblyNullReference` reported for `@aware` and a bare `$attributes`
+     * mention, not only `@props` — the reconciler-branch shape differs (see the `@props` test above)
+     * but the restore/strip `endif`s that leak `null` are identical regardless of which directive
+     * declared the view a component.
+     */
+    #[Test]
+    public function attributes_stays_non_null_after_a_nested_tag_in_an_aware_component_view(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes-aware.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    #[Test]
+    public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes-mention.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1543 trap 3: a read INSIDE the nested tag's own body degrades at the inner strip's `endif`,
+     * which precedes the restore — fixing only the restore leaves this case red.
+     */
+    #[Test]
+    public function attributes_stays_non_null_for_a_read_inside_the_nested_tags_body(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes-inside-body.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1543 negative: the reassert is scoped to `$attributes` by name. An author's own nullable
+     * local that merely happens to share a nested `<x-...>` tag's template must keep reporting.
+     */
+    #[Test]
+    public function an_authors_own_nullable_local_still_reports_after_a_nested_tag(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes-usernull.blade.php';
+
+        $this->assertSame(
+            [7],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
