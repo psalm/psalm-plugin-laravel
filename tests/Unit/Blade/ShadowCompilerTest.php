@@ -41,8 +41,9 @@ final class ShadowCompilerTest extends TestCase
         );
 
         $this->assertCount(1, $matching, "expected exactly one shadow line containing {$needle}");
+        $this->assertArrayHasKey(\array_key_first($matching) + 1, $result->lineMap, 'shadow line has no line-map entry');
 
-        return $result->lineMap[\array_key_first($matching) + 1] ?? 0;
+        return $result->lineMap[\array_key_first($matching) + 1];
     }
 
     /** @return iterable<string, array{string}> */

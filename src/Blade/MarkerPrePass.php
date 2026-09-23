@@ -251,6 +251,8 @@ final class MarkerPrePass
             $line = $openLine;
             $inPhp = false;
 
+            // The suppression mirrors callExpressionAt(): a block cut off at EOF ends mid-construct, and
+            // the lexer warns on an unterminated string while still returning usable tokens.
             // A SPACE, never a newline: `<?php` is only an open tag when whitespace follows it, and
             // `<?=` is the one opener a body can follow with nothing in between — `<?=<<<'TXT'`
             // glued bare yields `<?php<<<'TXT'`, which lexes as inline HTML, so a `<?php` written
