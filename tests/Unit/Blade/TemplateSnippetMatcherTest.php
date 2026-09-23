@@ -254,4 +254,44 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertFalse(TemplateSnippetMatcher::occursIn("echo old('k')", "<div>{!! old('k') !!}</div>\n"));
         $this->assertTrue(TemplateSnippetMatcher::occursIn("echo old('k')", "@php echo old('k'); @endphp\n"));
     }
+
+    /**
+     * `@@foo` unescapes to `@foo` before a compiled call reaches the shadow (#1540): an author's
+     * over-arity call whose argument contains it is absent from the raw template under plain
+     * `occursIn()`, and only found once that same unescape is mirrored onto the template side.
+     */
+    #[Test]
+    public function an_at_escaped_argument_matches_only_with_raw_text_rewrites(): void
+    {
+        $snippet = "mount('@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * Component-marker removal (#1540) mirrors `compileString()`'s own final `str_replace` onto
+     * the template-source copy `occursIn()` matches against, as string-level parity with that
+     * rewrite regardless of which side of a match it originates on.
+     */
+    #[Test]
+    public function a_marker_wrapped_template_matches_only_with_raw_text_rewrites(): void
+    {
+        $snippet = "mount('a', 'b', 'c')";
+        $source = "<div>\n  mount('a', ##BEGIN-COMPONENT-CLASS##'b', 'c')\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /** Mirroring never widens the gate: a call genuinely absent from the template still does not match. */
+    #[Test]
+    public function a_genuinely_absent_call_still_does_not_match_with_raw_text_rewrites(): void
+    {
+        $this->assertFalse(TemplateSnippetMatcher::occursInWithRawTextRewrites(
+            "mount('@foo', 'u', 'v', 'w', 'x')",
+            "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n",
+        ));
+    }
 }
