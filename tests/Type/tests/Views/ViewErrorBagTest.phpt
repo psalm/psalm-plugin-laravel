@@ -30,6 +30,13 @@ function view_error_bag_missing(ViewErrorBag $errors): void
 
     $_multi = $errors->missing('a', 'b');
     /** @psalm-check-type-exact $_multi = bool */
+
+    // Runtime-valid per the concrete MessageBag: is_array(null) is false, so func_get_args()
+    // is used and $key stays null, which has(null) below resolves via any(). Vendor's own
+    // @param is `array<string>|string|null $key`, so the stub's first param must accept null
+    // too, not just the tail.
+    $_null = $errors->missing(null);
+    /** @psalm-check-type-exact $_null = bool */
 }
 
 // Negative: unlike hasAny(), missing() is NOT variadic with a default on the concrete
