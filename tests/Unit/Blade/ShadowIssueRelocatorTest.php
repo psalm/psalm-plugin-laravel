@@ -21,6 +21,8 @@ use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedMethod;
+use Psalm\Issue\UndefinedThisPropertyAssignment;
+use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedForeachValue;
@@ -163,6 +165,69 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(CodeIssue::class, $relocated);
         $this->assertSame(1, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1545: `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
+     * against a `VirtualMethodCall` Psalm synthesizes to model the magic call, and reports this
+     * class regardless of the real receiver, duplicating the `UndefinedMagicPropertyFetch` the
+     * direct property-fetch site already reports on the correct line. That synthesized node carries
+     * NO location attributes at all, so its issue is always unmapped; the genuine emission carries
+     * the real fetch node and maps normally, so an unmapped instance of this class is always the
+     * synthesized duplicate, never a genuine `$this` fetch.
+     */
+    #[Test]
+    public function an_unmapped_undefined_this_property_fetch_is_dropped(): void
+    {
+        $issue = new UndefinedThisPropertyFetch('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
+
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
+    }
+
+    /** Negative: a MAPPED instance of the same class is a real signal and must keep reporting. */
+    #[Test]
+    public function a_mapped_undefined_this_property_fetch_survives(): void
+    {
+        $issue = new UndefinedThisPropertyFetch('Instance property Foo::$bar is not defined', $this->shadowLocation(9), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyFetch::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1545 review: `UndefinedThisPropertyAssignment` LOOKS like the identical `__set` sibling
+     * (same kind of synthesized, positionless `VirtualMethodCall` node via
+     * `InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), but is deliberately NOT dropped.
+     * Its twin, `UndefinedMagicPropertyAssignment`, requires a resolved `$var_id` and is never
+     * emitted for a non-variable receiver (`Magic::make()->missing = 1`); for that receiver shape
+     * this unmapped issue is the ONLY diagnostic, and the relocator sees one issue at a time with
+     * no way to know whether a twin fired for the same access — so it stays reported on line 1,
+     * same as any other unmapped non-`MixedIssue`.
+     */
+    #[Test]
+    public function an_unmapped_undefined_this_property_assignment_is_still_reported_on_line_one(): void
+    {
+        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+        $this->assertSame('Instance property Foo::$bar is not defined (unmapped)', $relocated->message);
+    }
+
+    /** A MAPPED instance was never affected by the unmapped-branch logic either way. */
+    #[Test]
+    public function a_mapped_undefined_this_property_assignment_survives(): void
+    {
+        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(9), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     #[Test]

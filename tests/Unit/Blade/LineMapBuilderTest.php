@@ -55,4 +55,22 @@ final class LineMapBuilderTest extends TestCase
 
         $this->assertSame(3, $map[1]);
     }
+
+    /**
+     * #1545 review: `token_get_all()` (which supplies each marker's own `$token[2]` line number)
+     * counts a bare `\r` as a line terminator, same as PHP's own lexer. If the line-numbering loop
+     * here under-counts lines with bare-CR endings, a marker's line number races ahead of the map's
+     * own `$lineNumber` and the map ends short — everything past that point is unmapped.
+     */
+    #[Test]
+    public function marker_carries_forward_across_unmarked_lines_with_bare_cr_endings(): void
+    {
+        $content = "<?php /* blade:5 */ ?>one\rtwo\rthree\r";
+
+        $map = LineMapBuilder::build($content);
+
+        $this->assertSame(5, $map[1]);
+        $this->assertSame(5, $map[2]);
+        $this->assertSame(5, $map[3]);
+    }
 }
