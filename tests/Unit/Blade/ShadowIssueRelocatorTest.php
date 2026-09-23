@@ -21,6 +21,7 @@ use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedMethod;
+use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
@@ -168,10 +169,12 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     /**
      * #1545: `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
-     * against a synthesized `__get()` call and reports this class regardless of the real receiver,
-     * duplicating the `UndefinedMagicPropertyFetch` the direct property-fetch site already reports
-     * on the correct line. Its location falls outside the shadow's line map — a shadow file
-     * declares no class, so an unmapped instance of this class can never be a genuine `$this` fetch.
+     * against a `VirtualMethodCall` Psalm synthesizes to model the magic call, and reports this
+     * class regardless of the real receiver, duplicating the `UndefinedMagicPropertyFetch` the
+     * direct property-fetch site already reports on the correct line. That synthesized node carries
+     * NO location attributes at all, so its issue is always unmapped; the genuine emission carries
+     * the real fetch node and maps normally, so an unmapped instance of this class is always the
+     * synthesized duplicate, never a genuine `$this` fetch.
      */
     #[Test]
     public function an_unmapped_undefined_this_property_fetch_is_dropped(): void
@@ -190,6 +193,32 @@ final class ShadowIssueRelocatorTest extends TestCase
         $relocated = $this->relocate($issue, $this->entry([9 => 3]));
 
         $this->assertInstanceOf(UndefinedThisPropertyFetch::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1545 sibling: `ExistingAtomicMethodCallAnalyzer`'s `__set` handling has the identical
+     * defect — its `UndefinedThisPropertyAssignment` comes from the SAME kind of synthesized,
+     * positionless `VirtualMethodCall` (`InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), so
+     * it is dropped by the same gate for the same reason.
+     */
+    #[Test]
+    public function an_unmapped_undefined_this_property_assignment_is_dropped(): void
+    {
+        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
+
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
+    }
+
+    /** Negative: a MAPPED instance of the same class is a real signal and must keep reporting. */
+    #[Test]
+    public function a_mapped_undefined_this_property_assignment_survives(): void
+    {
+        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(9), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 

@@ -10,17 +10,19 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
 /**
- * Pins #1545: a magic property fetch on a receiver sealed by `sealAllProperties="true"` reaches
- * Psalm through two emission sites for the SAME fetch. `AtomicPropertyFetchAnalyzer`'s direct
- * property-fetch handling reports `UndefinedMagicPropertyFetch` at the real fetch node, which maps
- * to the correct template line. `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks the
- * same seal on a synthesized `__get()` call and reports `UndefinedThisPropertyFetch` again, whose
- * location falls outside the shadow's line map and lands on line 1 with the `(unmapped)` suffix. A
- * shadow file declares no class, so an unmapped `UndefinedThisPropertyFetch` there can never be a
- * genuine `$this` fetch — it is always this duplicate.
+ * Pins #1545: a magic property fetch (or assignment) on a receiver sealed by
+ * `sealAllProperties="true"` reaches Psalm through two emission sites for the SAME access.
+ * `AtomicPropertyFetchAnalyzer`/`InstancePropertyAssignmentAnalyzer`'s direct handling reports
+ * `UndefinedMagicPropertyFetch`/`UndefinedMagicPropertyAssignment` at the real node, which maps to
+ * the correct template line. `ExistingAtomicMethodCallAnalyzer`'s `__get`/`__set` handling re-checks
+ * the same seal on a `VirtualMethodCall` Psalm synthesizes internally to model the magic call, and
+ * reports `UndefinedThisPropertyFetch`/`UndefinedThisPropertyAssignment` again. That synthesized
+ * node carries NO location attributes at all, so its issue is always unmapped and lands on line 1
+ * with the `(unmapped)` suffix — the genuine emission always carries the real node and maps
+ * normally, so an unmapped instance of either class is always this duplicate, never a real access.
  *
  * A real `vendor/bin/psalm` run is the only way to pin it: both emission sites only fire once the
- * fixture's `sealAllProperties="true"` config and a real magic-property fetch are analyzed together.
+ * fixture's `sealAllProperties="true"` config and a real magic-property access are analyzed together.
  */
 #[CoversNothing]
 final class UndefinedThisPropertyDuplicateTest extends TestCase
@@ -130,14 +132,19 @@ final class UndefinedThisPropertyDuplicateTest extends TestCase
         $this->assertContains('UndefinedMagicPropertyFetch', $types, \var_export($issues, true));
         $this->assertNotContains('UndefinedThisPropertyFetch', $types, \var_export($issues, true));
 
-        foreach ($reported as $issue) {
-            if ($issue['type'] !== 'UndefinedMagicPropertyFetch') {
-                continue;
-            }
+        // The `__set` sibling: same synthesized, positionless node, same duplication, same drop.
+        $this->assertContains('UndefinedMagicPropertyAssignment', $types, \var_export($issues, true));
+        $this->assertNotContains('UndefinedThisPropertyAssignment', $types, \var_export($issues, true));
 
-            // The real fetch node's own line — 5, where `{{ $magic->missing }}` sits — proving the
-            // twin that DID map is the one that survives, not merely that some issue remains.
-            $this->assertSame(5, $issue['line'], \var_export($issues, true));
+        foreach ($reported as $issue) {
+            // The real fetch/assignment node's own line — 5 for `{{ $magic->missing }}`, 7 for
+            // `$magic->nope = 1;` — proving the twin that DID map is the one that survives, not
+            // merely that some issue remains.
+            if ($issue['type'] === 'UndefinedMagicPropertyFetch') {
+                $this->assertSame(5, $issue['line'], \var_export($issues, true));
+            } elseif ($issue['type'] === 'UndefinedMagicPropertyAssignment') {
+                $this->assertSame(7, $issue['line'], \var_export($issues, true));
+            }
         }
     }
 }

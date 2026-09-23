@@ -19,6 +19,7 @@ use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
+use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
@@ -209,12 +210,19 @@ final class ShadowIssueRelocator
                 return false;
             }
 
-            // `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
-            // against a synthesized `__get()` call for ANY receiver, not just `$this`, duplicating
-            // the `UndefinedMagicPropertyFetch` the direct property-fetch site already reports on
-            // the mapped line. A shadow file declares no class, so an UNMAPPED instance of this
-            // class can never be a genuine `$this` fetch (#1545).
-            if ($issue instanceof UndefinedThisPropertyFetch) {
+            // `ExistingAtomicMethodCallAnalyzer`'s `__get`/`__set` handling re-checks
+            // `sealAllProperties` against a `VirtualMethodCall` Psalm synthesizes internally to
+            // model the magic call (`AtomicPropertyFetchAnalyzer::propertyFetchCanBeAnalyzed()` for
+            // a fetch, `InstancePropertyAssignmentAnalyzer::analyzeSetCall()` for an assignment),
+            // and that virtual node carries NO location attributes at all — so its
+            // `UndefinedThisPropertyFetch`/`UndefinedThisPropertyAssignment` is always unmapped,
+            // regardless of whether the shadow itself declares a class. The genuine emission comes
+            // from the real fetch/assignment node instead (`UndefinedMagicPropertyFetch`/
+            // `UndefinedMagicPropertyAssignment`, gated on the receiver NOT being `$this`) and maps
+            // normally once #1544 gives `@php`/raw-PHP body lines their own markers, so an unmapped
+            // instance of either dropped class here is always this synthesized duplicate, never a
+            // genuine `$this` access (#1545).
+            if ($issue instanceof UndefinedThisPropertyFetch || $issue instanceof UndefinedThisPropertyAssignment) {
                 return false;
             }
 
