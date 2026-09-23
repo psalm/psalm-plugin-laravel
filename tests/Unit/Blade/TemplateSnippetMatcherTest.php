@@ -332,6 +332,22 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
     }
 
+    /**
+     * The reverse boundary: in `'@@##BEGIN-COMPONENT-CLASS##foo'` the marker BLOCKS Blade's
+     * unescape (`#` after `@@` fails the pattern's word-character requirement) and only the final
+     * marker strip runs, so the compiled text keeps `'@@foo'`. The markers-only variant finds it;
+     * the full mirror would over-unescape to `'@foo'` and miss.
+     */
+    #[Test]
+    public function a_marker_blocked_escape_matches_via_the_markers_only_variant(): void
+    {
+        $snippet = "mount('@@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('@@##BEGIN-COMPONENT-CLASS##foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
     /** Mirroring never widens the gate: a call genuinely absent from the template still does not match. */
     #[Test]
     public function a_genuinely_absent_call_still_does_not_match_with_raw_text_rewrites(): void
