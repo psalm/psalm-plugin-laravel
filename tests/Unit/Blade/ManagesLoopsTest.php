@@ -162,8 +162,26 @@ final class ManagesLoopsTest extends TestCase
     public function foreach_over_a_non_iterable_still_reports(): void
     {
         $issues = $this->analyze();
+        $reported = $this->forFile($issues, 'non-iterable.blade.php');
 
         $this->assertTemplateCompiled('non-iterable.blade.php');
         $this->assertPipelineReachedAnalyzer($issues);
+        $this->assertContains('InvalidIterator', \array_column($reported, 'type'), \var_export($issues, true));
+    }
+
+    /**
+     * Real Laravel's getLastLoop() returns `(object) $last`, which IS a `\stdClass` instance, not
+     * merely something shaped like one. A stub return type of plain `object{...}` (no class
+     * identity) loses that fact: a userland `?\stdClass`-typed wrapper around the call then
+     * reports LessSpecificReturnStatement/MoreSpecificReturnType, because Psalm cannot prove the
+     * returned shape IS a `\stdClass`.
+     */
+    #[Test]
+    public function a_stdclass_typed_wrapper_around_getlastloop_is_silent(): void
+    {
+        $issues = $this->analyze();
+
+        $this->assertPipelineReachedAnalyzer($issues);
+        $this->assertSame([], $this->forFile($issues, 'Source.php'), \var_export($issues, true));
     }
 }

@@ -39,7 +39,13 @@ trait ManagesLoops
      * common case and the one the ambient prelude type exists for); reading `$loop` right after
      * `@endforeach`/`@empty` at top level is unsound and Psalm will not flag a null-fetch there.
      *
-     * @return object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}
+     * The real body returns `(object) $last`, which IS a `\stdClass` instance, not merely
+     * something shaped like one; a plain `object{...}` shape here drops that class identity, so a
+     * userland `?\stdClass`-typed wrapper around the call reports LessSpecificReturnStatement /
+     * MoreSpecificReturnType. Prepending `\stdClass&` keeps the property shape byte-identical
+     * while restoring the identity.
+     *
+     * @return \stdClass&object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}
      */
     public function getLastLoop()
     {

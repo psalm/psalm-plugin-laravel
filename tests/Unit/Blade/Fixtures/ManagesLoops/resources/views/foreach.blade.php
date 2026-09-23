@@ -1,3 +1,5 @@
+@if((new \Fx\Source())->loopAsStdClass($__env))
+@endif
 @foreach((new \Fx\Source)->items() as $item)
     @if($loop->first)
         first
