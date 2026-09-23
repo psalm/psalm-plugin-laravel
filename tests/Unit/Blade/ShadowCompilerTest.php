@@ -352,4 +352,39 @@ final class ShadowCompilerTest extends TestCase
         // Once the @case line closes PHP mode, the body line right after it maps to its own line.
         $this->assertNotEmpty($this->shadowLinesMappedTo($result, 5));
     }
+
+    /**
+     * #1543: a REAL `<x-...>` tag's bookkeeping originates from ONE Blade source line, so
+     * {@see \Psalm\LaravelPlugin\Blade\MarkerPrePass} (which runs BEFORE `compileString()`, on the
+     * raw source) never inserts a marker comment between its compiled sub-statements — confirmed
+     * against a real compile of `nested-attributes.blade.php` (no fixture container here, so this
+     * writes the four statements as raw pass-through PHP instead). Four hand-written statements
+     * across four SOURCE lines, by contrast, each get their own marker, which is exactly why
+     * {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert}'s pattern declines to match this
+     * shape: it is anchored to the compiler's actual, marker-free output, not to text that merely
+     * resembles it.
+     *
+     * A container-less `BladeCompiler` cannot compile a real `<x-...>` tag (see
+     * `component_tag_yields_a_compile_error` above), so the `isComponentView()` gate itself — a
+     * plain page that DOES carry a `<x-...>` tag, where a gate-less injection would have a real
+     * restore block to match — is pinned in
+     * `BladeIssueRemapTest::a_plain_caller_with_a_component_tag_gets_no_attributes_reassert`
+     * instead, against a real compile through the fixture's booted application.
+     */
+    #[Test]
+    public function hand_written_lines_resembling_the_restore_are_not_reasserted(): void
+    {
+        $source = "{{ \$attributes }}\n"
+            . "<?php if (isset(\$__attributesOriginalabc)): ?>\n"
+            . "<?php \$attributes = \$__attributesOriginalabc; ?>\n"
+            . "<?php unset(\$__attributesOriginalabc); ?>\n"
+            . "<?php endif; ?>\n";
+
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        // The prelude itself declares $attributes non-null (a bare mention, no @props) — that
+        // docblock is expected. Only a reassert glued onto `endif;` would be the bug.
+        $this->assertStringNotContainsString('endif; /** @var', $result->contents);
+    }
 }
