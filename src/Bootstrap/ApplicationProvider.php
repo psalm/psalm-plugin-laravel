@@ -50,6 +50,15 @@ final class ApplicationProvider
      */
     private static ?\Throwable $bootstrapError = null;
 
+    /**
+     * Files that declared a global function while {@see doGetApp()} ran — a package-style monorepo
+     * `include`s its helper files from a service provider's `register()`, so these exist only after
+     * a real boot and no autoloader ever names them. See {@see runtimeDeclaredFunctionFiles()}.
+     *
+     * @var list<string>
+     */
+    private static array $runtimeDeclaredFunctionFiles = [];
+
     public static function bootApp(): void
     {
         self::getApp();
@@ -69,6 +78,7 @@ final class ApplicationProvider
         self::$bootPath = null;
         self::$bootstrapError = null;
         self::$booted = false;
+        self::$runtimeDeclaredFunctionFiles = [];
 
         \Illuminate\Support\Facades\Facade::clearResolvedInstances();
         \Illuminate\Support\Facades\Facade::setFacadeApplication(null);
@@ -146,6 +156,10 @@ final class ApplicationProvider
             \define('LARAVEL_START', \microtime(true));
         }
 
+        // Snapshot taken around the WHOLE boot, not just $consoleApp->bootstrap(): a bootstrap/app.php
+        // may require helper files directly, before any provider runs.
+        $functionsBeforeBoot = \get_defined_functions()['user'];
+
         // Resolution order:
         //   1. cwd-relative bootstrap/app.php — Applications and local dev (Psalm run from project root).
         //   2. vendor-parent-relative bootstrap/app.php — plugin installed into a project's vendor/.
@@ -213,7 +227,60 @@ final class ApplicationProvider
             self::$booted = true;
         }
 
+        self::$runtimeDeclaredFunctionFiles = $this->declaringFilesOf(
+            \array_values(\array_diff(\get_defined_functions()['user'], $functionsBeforeBoot)),
+        );
+
         return $app;
+    }
+
+    /**
+     * Files the booted Laravel application declared global functions in.
+     *
+     * Psalm has no global function table for ordinary project code: a bare `foo()` resolves only
+     * through the ROOT file's `FileStorage::$declaring_function_ids`, which a file reaches by
+     * `require`ing the declaring file (transitively) and nothing else. A package-style monorepo
+     * `include`s its helpers from a provider's `register()`, so no project file ever requires them
+     * and Blade shadows — which reference nothing at all — never see them (#1551).
+     *
+     * Empty when the boot degraded before providers registered, which makes every consumer a no-op.
+     *
+     * @return list<string>
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function runtimeDeclaredFunctionFiles(): array
+    {
+        return self::$runtimeDeclaredFunctionFiles;
+    }
+
+    /**
+     * @param list<callable-string> $functionNames
+     *
+     * @return list<string>
+     */
+    private function declaringFilesOf(array $functionNames): array
+    {
+        $files = [];
+
+        foreach ($functionNames as $functionName) {
+            try {
+                $file = (new \ReflectionFunction($functionName))->getFileName();
+            } catch (\ReflectionException) {
+                continue;
+            }
+
+            // Vendor helpers are deliberately excluded. Their types come from this plugin's stubs,
+            // which a file-storage read would silently outrank, and force-scanning every framework
+            // helper file the boot touched costs a scan on every run for nothing.
+            if ($file === false || \str_contains($file, \DIRECTORY_SEPARATOR . 'vendor' . \DIRECTORY_SEPARATOR)) {
+                continue;
+            }
+
+            $files[$file] = true;
+        }
+
+        return \array_keys($files);
     }
 
     /**

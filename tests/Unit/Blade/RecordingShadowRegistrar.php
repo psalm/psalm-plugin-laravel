@@ -24,6 +24,9 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     /** @var list<string> */
     public array $queuedResolvableClassLikes = [];
 
+    /** @var list<string> */
+    public array $queuedFiles = [];
+
     public int $markCalls = 0;
 
     public function __construct(private readonly bool $markSucceeds = true) {}
@@ -58,5 +61,11 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     public function queueResolvableClassLikesForScanning(array $candidates): void
     {
         $this->queuedResolvableClassLikes = $candidates;
+    }
+
+    #[\Override]
+    public function queueFilesForScanning(array $paths): void
+    {
+        $this->queuedFiles = $paths;
     }
 }

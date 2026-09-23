@@ -67,6 +67,21 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         )));
     }
 
+    /** @inheritDoc */
+    #[\Override]
+    public function queueFilesForScanning(array $paths): void
+    {
+        $scanner = $this->projectAnalyzer->getCodebase()->scanner;
+
+        foreach ($paths as $path) {
+            if (!\is_file($path)) {
+                continue;
+            }
+
+            $scanner->addFileToDeepScan($path);
+        }
+    }
+
     /**
      * Whether Psalm could resolve `$candidate` to a file WITHOUT this method's own queueing being
      * the reason it can. Neither arm below triggers autoloading (`class_exists()` etc. are always
