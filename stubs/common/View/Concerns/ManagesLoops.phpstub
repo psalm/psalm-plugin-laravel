@@ -1,0 +1,47 @@
+<?php
+
+namespace Illuminate\View\Concerns;
+
+use Illuminate\Support\Arr;
+use Illuminate\Support\LazyCollection;
+
+trait ManagesLoops
+{
+    /**
+     * The real signature narrows to `\Countable|array`, but the body only calls `is_countable()`
+     * before falling through to a null count — `$data` is never iterated or otherwise used, so
+     * any runtime value is accepted. `\Countable|iterable` is not wide enough:
+     * `Illuminate\Contracts\Pagination\Paginator` reaches `@foreach` but its interface declares
+     * no `extends` at all (not Countable, not Traversable — it exposes `items(): array` instead),
+     * so even `iterable` rejects it. Widened to `mixed` to match the body; the compiled
+     * `@foreach`'s own `foreach ($x as ...)` still independently reports a genuinely
+     * non-iterable argument.
+     *
+     * @param  mixed  $data
+     * @return void
+     */
+    public function addLoop($data)
+    {
+    }
+
+    /**
+     * Typed non-nullable, matching `Blade\PreludeBuilder::AMBIENT_TYPES['loop']`, so the ambient
+     * shadow-prelude type for `$loop` survives the reassignment `$loop = $__env->getLastLoop();`
+     * inside a loop body instead of collapsing to `stdClass|null` (the real method's
+     * `if ($last = Arr::last(...))` has no `else` branch, so Psalm infers the implicit `null`
+     * return).
+     *
+     * This is a deliberate, bounded unsoundness, not a general "always non-null" claim: Blade's
+     * compiled `@foreach` also calls this from `compileEndforeach()` / `compileEmpty()`
+     * (`endforeach; $__env->popLoop(); $loop = $__env->getLastLoop();`), and after a top-level
+     * loop pops its only frame the stack IS empty, so the real call there returns `null`. The
+     * false type is accepted only for the in-loop-body read (`$loop->foo` inside the loop, the
+     * common case and the one the ambient prelude type exists for); reading `$loop` right after
+     * `@endforeach`/`@empty` at top level is unsound and Psalm will not flag a null-fetch there.
+     *
+     * @return object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}
+     */
+    public function getLastLoop()
+    {
+    }
+}
