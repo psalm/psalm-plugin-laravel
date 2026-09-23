@@ -19,6 +19,7 @@ use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
+use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
 
@@ -205,6 +206,15 @@ final class ShadowIssueRelocator
             // about the prelude's own noise. Anything else is worth showing even without an exact
             // line.
             if ($issue instanceof MixedIssue) {
+                return false;
+            }
+
+            // `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
+            // against a synthesized `__get()` call for ANY receiver, not just `$this`, duplicating
+            // the `UndefinedMagicPropertyFetch` the direct property-fetch site already reports on
+            // the mapped line. A shadow file declares no class, so an UNMAPPED instance of this
+            // class can never be a genuine `$this` fetch (#1545).
+            if ($issue instanceof UndefinedThisPropertyFetch) {
                 return false;
             }
 

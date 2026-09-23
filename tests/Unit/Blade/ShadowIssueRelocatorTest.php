@@ -21,6 +21,7 @@ use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedMethod;
+use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedForeachValue;
@@ -163,6 +164,33 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(CodeIssue::class, $relocated);
         $this->assertSame(1, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1545: `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
+     * against a synthesized `__get()` call and reports this class regardless of the real receiver,
+     * duplicating the `UndefinedMagicPropertyFetch` the direct property-fetch site already reports
+     * on the correct line. Its location falls outside the shadow's line map — a shadow file
+     * declares no class, so an unmapped instance of this class can never be a genuine `$this` fetch.
+     */
+    #[Test]
+    public function an_unmapped_undefined_this_property_fetch_is_dropped(): void
+    {
+        $issue = new UndefinedThisPropertyFetch('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
+
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
+    }
+
+    /** Negative: a MAPPED instance of the same class is a real signal and must keep reporting. */
+    #[Test]
+    public function a_mapped_undefined_this_property_fetch_survives(): void
+    {
+        $issue = new UndefinedThisPropertyFetch('Instance property Foo::$bar is not defined', $this->shadowLocation(9), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyFetch::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     #[Test]
