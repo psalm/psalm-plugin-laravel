@@ -68,6 +68,27 @@ Two suppression paths work exactly as they do for ordinary PHP files:
   </issueHandlers>
   ```
 
+## Tuning template findings
+
+Re-emitted template issues pass through Psalm's normal suppression with the `.blade.php` path, so the standard per-path `<issueHandlers>` config applies to a template line exactly as it does to a PHP file. Downgrade a whole issue type over `resources/views` the same way as for any other directory:
+
+```xml
+<issueHandlers>
+    <RiskyTruthyFalsyComparison>
+        <errorLevel type="info">
+            <directory name="resources/views" />
+        </errorLevel>
+    </RiskyTruthyFalsyComparison>
+</issueHandlers>
+```
+
+Note that Psalm prints `info` level findings only when `--show-info=true` is passed, so with default output the example above hides the findings entirely.
+
+The mechanism is confirmed by `tests/Unit/Blade/BladeIssueRemapTest.php`, method `an_issue_handler_suppression_on_the_view_directory_silences_the_template` (the same config path, asserted for `type="suppress"`).
+
+* **`RiskyTruthyFalsyComparison` stays reporting by default.** The rule fires just as often in the same project's plain PHP, so a template-only downgrade would make one rule behave two ways in the same codebase. On the reference corpus, about 68% of the template hits were harmless optional-field guards, but the remainder included real zero-value bugs, such as a rating of `0` rendering as "not rated". The default stays honest, and the config above is the knob for a project that wants it quieter.
+* **`PossiblyFalseArgument` on a `json_encode()` result passed to an author-written call (for example `{{ e(json_encode($x)) }}`) is deliberate signal, not noise.** The false arm is a silent encode failure, so the fix is `JSON_THROW_ON_ERROR`, not suppression. Note that `@json($x)` shares the silent failure rather than fixing it, and when the compiler itself wraps the value (`{{ json_encode($x) }}` compiles to `echo e(json_encode($x))`), the finding is already dropped as unactionable in echo position.
+
 ## Ambient variables
 
 These template variables are typed automatically, in every compiled view, without any annotation:
