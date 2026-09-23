@@ -14,6 +14,7 @@ use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+use Psalm\LaravelPlugin\Internal\VendorDirectory;
 
 final class ApplicationProvider
 {
@@ -261,6 +262,12 @@ final class ApplicationProvider
      */
     private function declaringFilesOf(array $functionNames): array
     {
+        // Vendor helpers are deliberately excluded. Their types come from this plugin's stubs,
+        // which a file-storage read would silently outrank, and force-scanning every framework
+        // helper file the boot touched costs a scan on every run for nothing. A vendor directory
+        // that cannot be located skips the filter rather than guessing at it, same as the view-hint
+        // filter in BladeBootstrapper.
+        $vendorDir = VendorDirectory::path();
         $files = [];
 
         foreach ($functionNames as $functionName) {
@@ -270,10 +277,7 @@ final class ApplicationProvider
                 continue;
             }
 
-            // Vendor helpers are deliberately excluded. Their types come from this plugin's stubs,
-            // which a file-storage read would silently outrank, and force-scanning every framework
-            // helper file the boot touched costs a scan on every run for nothing.
-            if ($file === false || \str_contains($file, \DIRECTORY_SEPARATOR . 'vendor' . \DIRECTORY_SEPARATOR)) {
+            if ($file === false || ($vendorDir !== null && VendorDirectory::contains($file, $vendorDir))) {
                 continue;
             }
 
