@@ -43,7 +43,7 @@ final class ShadowCompiler
             return BladeCompileError::fromThrowable($templatePath, $throwable);
         }
 
-        if (PreludeBuilder::isComponentView($source)) {
+        if (PreludeBuilder::isComponentView($source) && !AttributesRestoreReassert::templateAssignsAttributes($source)) {
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 

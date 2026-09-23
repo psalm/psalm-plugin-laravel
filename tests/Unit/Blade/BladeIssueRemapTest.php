@@ -770,6 +770,27 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1543 external review finding 2: the restore/strip `endif`s only prove LARAVEL'S OWN
+     * bookkeeping left `$attributes` non-null between the `<x-...>` tag's save and restore — never
+     * that an author's own reassignment inside the same view, between `@props` and the tag, didn't
+     * null it out again first. Laravel skips the save/strip/restore entirely on this path (the save
+     * is `isset($attributes)`-gated, and this reassignment runs AFTER it), so `$attributes` genuinely
+     * stays null at the read on line 4. The re-assert must not paper over it.
+     */
+    #[Test]
+    public function an_authors_own_reassignment_of_attributes_still_reports_after_a_nested_tag(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes-authornull.blade.php';
+
+        $this->assertSame(
+            [4],
+            $this->linesFor($issues, 'PossiblyNullReference', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1525 acceptance (d), the negative case for the message gate: an author's own redundant
      * check against their own docblock must still report, even though it shares a class with the
      * dropped ambient-guard families. Deliberately outside `components/` and never mentions

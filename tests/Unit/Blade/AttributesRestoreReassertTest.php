@@ -92,4 +92,86 @@ final class AttributesRestoreReassertTest extends TestCase
 
         $this->assertSame($source, AttributesRestoreReassert::apply($source));
     }
+
+    /**
+     * #1543 external review finding 3: PHP identifiers allow `\x80-\xff` bytes (`Café`), and Laravel
+     * emits the class name unchanged into `except(\Class::ignoredParameterNames())`. An ASCII-only
+     * charset under-matches, leaving the inner strip un-reasserted.
+     */
+    #[Test]
+    public function the_strip_block_matches_a_non_ascii_class_name(): void
+    {
+        $strip = "<?php if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag): ?>\n"
+            . "<?php \$attributes = \$attributes->except(\\Review\\Café::ignoredParameterNames()); ?>\n"
+            . '<?php endif; ?>';
+
+        $this->assertStringContainsString(self::REASSERT, AttributesRestoreReassert::apply($strip));
+    }
+
+    /**
+     * #1543 external review finding 1: a regex-only match cannot tell compiler output apart from an
+     * author's own PHP comment whose TEXT happens to spell out the restore shape (a realistic
+     * accident: pasting compiled output into a debugging comment). The injected suffix's own comment
+     * closer, followed by `?>`, would end that comment AND php mode early, turning every following
+     * template line into raw HTML — proven by a live `strlen([])` call right after the comment.
+     */
+    #[Test]
+    public function a_restore_shaped_block_inside_a_php_comment_is_not_reasserted(): void
+    {
+        $compiled = "<?php\n/*\n" . self::RESTORE . "\n*/\nstrlen([]);\n?>";
+
+        $this->assertSame($compiled, AttributesRestoreReassert::apply($compiled));
+    }
+
+    /**
+     * #1543 external review finding 2: the restore/strip `endif`s only prove LARAVEL'S OWN
+     * bookkeeping left `$attributes` non-null — never that an author's own reassignment inside the
+     * same view didn't null it out again first. `templateAssignsAttributes()` scans the raw
+     * TEMPLATE source (not the compiled shadow) for that; {@see \Psalm\LaravelPlugin\Blade\ShadowCompiler}
+     * skips the whole re-assert for a template it flags.
+     */
+    #[Test]
+    public function template_assigns_attributes_detects_a_plain_reassignment(): void
+    {
+        $this->assertTrue(AttributesRestoreReassert::templateAssignsAttributes(
+            "@props([])\n@php \$attributes = \$flag ? null : \$attributes; @endphp\n<x-alert />\n",
+        ));
+    }
+
+    #[Test]
+    public function template_assigns_attributes_detects_an_unset(): void
+    {
+        $this->assertTrue(AttributesRestoreReassert::templateAssignsAttributes(
+            "@props([])\n@php unset(\$attributes); @endphp\n<x-alert />\n",
+        ));
+    }
+
+    /** `??=`/`.=`/`==` are not plain assignment: they never hand `$attributes` an unrelated value wholesale. */
+    #[Test]
+    public function template_assigns_attributes_ignores_compound_and_comparison_operators(): void
+    {
+        $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
+            "@props([])\n@php \$attributes ??= new \\Illuminate\\View\\ComponentAttributeBag; @endphp\n<x-alert />\n",
+        ));
+        $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
+            "@if (\$attributes == null)\nyes\n@endif\n",
+        ));
+    }
+
+    #[Test]
+    public function template_assigns_attributes_is_false_for_a_read_only_component_view(): void
+    {
+        $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
+            "@props(['type' => 'info'])\n<x-alert>nested</x-alert>\n{{ \$attributes->merge([]) }}\n",
+        ));
+    }
+
+    /** A mention inside a Blade comment is dead text — never executed, so never a real write. */
+    #[Test]
+    public function template_assigns_attributes_ignores_a_blade_comment(): void
+    {
+        $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
+            "{{-- \$attributes = null; --}}\n@props([])\n<x-alert />\n",
+        ));
+    }
 }
