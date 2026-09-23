@@ -296,6 +296,21 @@ final class ShadowIssueRelocator
      * message wording. The argument POSITION has no property to read and is taken from the message
      * prefix: `e($value, $doubleEncode)` has a second parameter an author can pass, and
      * `@php echo $a, $b; @endphp` produces `Argument 2 of echo`.
+     *
+     * A missing call is only evidence about the CALLEE when the ARGUMENT survived compilation
+     * verbatim, so that is checked first. Blade rewrites raw text inside an author's own
+     * expression: `compileStatement()` unescapes `@@foo` to `@foo` before echos are compiled, and
+     * `compileString()` strips the `##BEGIN-COMPONENT-CLASS##` markers from the finished output
+     * after `@php` blocks have been restored into it — so `{{ e(old('@@foo')) }}` reaches the
+     * analyzer as `echo e(e(old('@foo')))`, and the author's own inner call is absent from their
+     * template. Without this check that call is read as the compiler's and a real issue vanishes.
+     *
+     * Gating on the argument rather than mirroring those rewrites onto the template covers the
+     * rewrites that cannot be mirrored at all — a registered precompiler (Livewire) or a
+     * `prepareStringsForCompilationUsing()` callback may rewrite anything — and it cannot widen
+     * what the gate drops. Caveat it accepts: when Blade rewrote the argument of a genuinely
+     * GENERATED echo (`{{ old('@@foo') }}`), the callee can no longer be proven and the issue is
+     * kept. Noise on a rare shape, the same direction every other decline here takes.
      */
     private static function isGeneratedEchoArgument(ArgumentIssue $issue, ShadowTarget $target): bool
     {
@@ -309,9 +324,15 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        $call = self::echoArgumentSlice($issue->code_location, $callee);
+        $slice = self::echoArgumentSlice($issue->code_location, $callee);
 
-        if ($call === null) {
+        if ($slice === null) {
+            return false;
+        }
+
+        [$call, $argument] = $slice;
+
+        if (!TemplateSnippetMatcher::occursIn($argument, $target->templateSource)) {
             return false;
         }
 
@@ -319,10 +340,13 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * The enclosing `$callee(` plus the argument an issue points at, read out of the shadow, or
-     * null to decline. Same fail-open contract as {@see self::callExpression()}.
+     * The enclosing `$callee(` plus the argument an issue points at, and that argument on its own,
+     * read out of the shadow; null to decline. Same fail-open contract as
+     * {@see self::callExpression()}.
+     *
+     * @return array{string, string}|null `[enclosing call, argument]`
      */
-    private static function echoArgumentSlice(CodeLocation $location, string $callee): ?string
+    private static function echoArgumentSlice(CodeLocation $location, string $callee): ?array
     {
         try {
             $snippet = $location->getSnippet();
@@ -332,12 +356,13 @@ final class ShadowIssueRelocator
             return null;
         }
 
-        return TemplateSnippetMatcher::enclosingCallAt(
-            $snippet,
-            $selectionStart - $snippetStart,
-            $selectionEnd - $snippetStart,
-            $callee,
-        );
+        $argumentStart = $selectionStart - $snippetStart;
+        $argumentEnd = $selectionEnd - $snippetStart;
+
+        $call = TemplateSnippetMatcher::enclosingCallAt($snippet, $argumentStart, $argumentEnd, $callee);
+
+        // A non-null call means enclosingCallAt() already validated the bounds against $snippet.
+        return $call === null ? null : [$call, \substr($snippet, $argumentStart, $argumentEnd - $argumentStart)];
     }
 
     /**

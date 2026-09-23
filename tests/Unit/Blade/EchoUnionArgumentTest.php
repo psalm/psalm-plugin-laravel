@@ -191,6 +191,40 @@ final class EchoUnionArgumentTest extends TestCase
     }
 
     /**
+     * Blade rewrites raw text INSIDE an author's own expression, so "absent from the template" is
+     * not by itself evidence that the compiler wrote the call. `@@foo` is unescaped to `@foo` by
+     * `compileStatement()`, which runs before echos are compiled, and the component-class markers
+     * are stripped from the finished output after `@php` blocks are restored. In both cases the
+     * author's own `e(...)` call reaches the analyzer in a form their template does not contain.
+     */
+    #[Test]
+    public function an_authors_own_escape_call_whose_argument_blade_rewrote_still_reports(): void
+    {
+        $issues = $this->analyze();
+
+        foreach (['escaped-directive.blade.php', 'component-marker.blade.php'] as $template) {
+            $types = \array_column($this->forFile($issues, $template), 'type');
+
+            $this->assertContains('PossiblyInvalidArgument', $types, \var_export($issues, true));
+        }
+    }
+
+    /**
+     * The accepted cost of the guard above, pinned rather than left to drift: when Blade rewrote
+     * the argument of a genuinely generated echo, the gate can no longer prove the callee is the
+     * compiler's and keeps the issue. Noise on a rare shape, in exchange for never dropping a
+     * rewritten author call. See the caveat in `ShadowIssueRelocator::isGeneratedEchoArgument()`.
+     */
+    #[Test]
+    public function a_generated_echo_whose_argument_blade_rewrote_keeps_its_issue(): void
+    {
+        $issues = $this->analyze();
+        $types = \array_column($this->forFile($issues, 'escaped-directive-generated.blade.php'), 'type');
+
+        $this->assertContains('PossiblyInvalidArgument', $types, \var_export($issues, true));
+    }
+
+    /**
      * The gate is anchored on the enclosing callee, not on the union: the same value passed to a
      * user-written function inside an echo is a real finding. Asserted by presence rather than by
      * count — a `PossiblyInvalidCast` on the same expression rides along.
