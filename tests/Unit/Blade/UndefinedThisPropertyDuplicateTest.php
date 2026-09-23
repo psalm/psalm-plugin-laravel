@@ -10,16 +10,23 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
 /**
- * Pins #1545: a magic property fetch (or assignment) on a receiver sealed by
+ * Pins #1545, asymmetrically. A magic property fetch on a receiver sealed by
  * `sealAllProperties="true"` reaches Psalm through two emission sites for the SAME access.
- * `AtomicPropertyFetchAnalyzer`/`InstancePropertyAssignmentAnalyzer`'s direct handling reports
- * `UndefinedMagicPropertyFetch`/`UndefinedMagicPropertyAssignment` at the real node, which maps to
- * the correct template line. `ExistingAtomicMethodCallAnalyzer`'s `__get`/`__set` handling re-checks
- * the same seal on a `VirtualMethodCall` Psalm synthesizes internally to model the magic call, and
- * reports `UndefinedThisPropertyFetch`/`UndefinedThisPropertyAssignment` again. That synthesized
- * node carries NO location attributes at all, so its issue is always unmapped and lands on line 1
- * with the `(unmapped)` suffix — the genuine emission always carries the real node and maps
- * normally, so an unmapped instance of either class is always this duplicate, never a real access.
+ * `AtomicPropertyFetchAnalyzer`'s direct handling reports `UndefinedMagicPropertyFetch` at the real
+ * node, which maps to the correct template line, and fires UNCONDITIONALLY once the receiver has a
+ * magic getter — proven here across a plain variable, a static-call result, and an array offset.
+ * `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks the same seal on a
+ * `VirtualMethodCall` Psalm synthesizes internally, and reports `UndefinedThisPropertyFetch` again;
+ * that synthesized node carries NO location attributes, so its issue is always unmapped, and it is
+ * always the fetch duplicate — `ShadowIssueRelocator` drops it.
+ *
+ * The `__set` sibling looks identical but is NOT sound the same way (#1545 review):
+ * `InstancePropertyAssignmentAnalyzer`'s `UndefinedMagicPropertyAssignment` twin requires a
+ * resolved `$var_id` and is never emitted for a non-variable receiver (`Magic::make()->nope = 1`),
+ * while the synthesized `UndefinedThisPropertyAssignment` fires regardless — so for that receiver
+ * shape the synthesized issue is the ONLY diagnostic, and dropping it unconditionally would lose it
+ * silently. The relocator therefore does NOT drop `UndefinedThisPropertyAssignment`: the pre-#1545
+ * duplicate stays, on purpose, for every assignment shape including the plain-variable one.
  *
  * A real `vendor/bin/psalm` run is the only way to pin it: both emission sites only fire once the
  * fixture's `sealAllProperties="true"` config and a real magic-property access are analyzed together.
@@ -121,7 +128,7 @@ final class UndefinedThisPropertyDuplicateTest extends TestCase
     }
 
     #[Test]
-    public function the_mapped_twin_survives_and_the_unmapped_duplicate_is_dropped(): void
+    public function the_fetch_duplicate_is_dropped_across_every_receiver_shape(): void
     {
         $issues = $this->analyze();
         $this->assertBladeAnalyzed($issues);
@@ -129,22 +136,56 @@ final class UndefinedThisPropertyDuplicateTest extends TestCase
         $reported = $this->forTemplate($issues);
         $types = \array_column($reported, 'type');
 
-        $this->assertContains('UndefinedMagicPropertyFetch', $types, \var_export($issues, true));
+        // Never present, regardless of receiver shape (plain variable, static-call, array offset).
         $this->assertNotContains('UndefinedThisPropertyFetch', $types, \var_export($issues, true));
 
-        // The `__set` sibling: same synthesized, positionless node, same duplication, same drop.
-        $this->assertContains('UndefinedMagicPropertyAssignment', $types, \var_export($issues, true));
-        $this->assertNotContains('UndefinedThisPropertyAssignment', $types, \var_export($issues, true));
+        // Three receiver shapes, three mapped twins, each on the real fetch's own template line:
+        // line 6 `{{ $magic->missing }}`, line 10 `{{ \Fx\Magic::make()->missing }}`, line 11
+        // `{{ $objects[0]->missing }}`.
+        $fetchLines = \array_column(
+            \array_filter($reported, static fn(array $issue): bool => $issue['type'] === 'UndefinedMagicPropertyFetch'),
+            'line',
+        );
+        \sort($fetchLines);
+        $this->assertSame([6, 10, 11], $fetchLines, \var_export($issues, true));
+    }
 
-        foreach ($reported as $issue) {
-            // The real fetch/assignment node's own line — 5 for `{{ $magic->missing }}`, 7 for
-            // `$magic->nope = 1;` — proving the twin that DID map is the one that survives, not
-            // merely that some issue remains.
-            if ($issue['type'] === 'UndefinedMagicPropertyFetch') {
-                $this->assertSame(5, $issue['line'], \var_export($issues, true));
-            } elseif ($issue['type'] === 'UndefinedMagicPropertyAssignment') {
-                $this->assertSame(7, $issue['line'], \var_export($issues, true));
-            }
-        }
+    /**
+     * #1545 review: the `__set` counterpart is NOT dropped, because its twin does not fire
+     * unconditionally the way the fetch twin does. A non-variable receiver
+     * (`\Fx\Magic::make()->nope = 1` at line 13) never gets `UndefinedMagicPropertyAssignment`, so
+     * the unmapped `UndefinedThisPropertyAssignment` on line 1 is the ONLY diagnostic for it —
+     * kept, on purpose, at the cost of also keeping it (as a real duplicate) for the
+     * plain-variable assignment at line 8, which DOES also get its mapped twin.
+     */
+    #[Test]
+    public function the_assignment_duplicate_is_kept_because_its_twin_is_not_unconditional(): void
+    {
+        $issues = $this->analyze();
+        $this->assertBladeAnalyzed($issues);
+
+        $reported = $this->forTemplate($issues);
+        $types = \array_column($reported, 'type');
+
+        $this->assertContains('UndefinedThisPropertyAssignment', $types, \var_export($issues, true));
+
+        $unmapped = \array_values(\array_filter(
+            $reported,
+            static fn(array $issue): bool => $issue['type'] === 'UndefinedThisPropertyAssignment',
+        ));
+        $this->assertSame(1, $unmapped[0]['line'], \var_export($issues, true));
+        $this->assertStringContainsString('(unmapped)', $unmapped[0]['message'], \var_export($issues, true));
+
+        // The plain-variable receiver (line 8, `$magic->nope = 1;`) still gets its mapped twin.
+        $magicAssignments = \array_values(\array_filter(
+            $reported,
+            static fn(array $issue): bool => $issue['type'] === 'UndefinedMagicPropertyAssignment',
+        ));
+        $this->assertCount(1, $magicAssignments, \var_export($issues, true));
+        $this->assertSame(8, $magicAssignments[0]['line'], \var_export($issues, true));
+
+        // The non-variable receiver (line 13, `\Fx\Magic::make()->nope = 1;`) never gets a mapped
+        // twin — the kept unmapped duplicate above is its ONLY diagnostic.
+        $this->assertNotContains(13, \array_column($magicAssignments, 'line'), \var_export($issues, true));
     }
 }

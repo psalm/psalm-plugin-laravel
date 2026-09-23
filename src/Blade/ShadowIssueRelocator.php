@@ -19,7 +19,6 @@ use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
-use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
@@ -210,19 +209,30 @@ final class ShadowIssueRelocator
                 return false;
             }
 
-            // `ExistingAtomicMethodCallAnalyzer`'s `__get`/`__set` handling re-checks
-            // `sealAllProperties` against a `VirtualMethodCall` Psalm synthesizes internally to
-            // model the magic call (`AtomicPropertyFetchAnalyzer::propertyFetchCanBeAnalyzed()` for
-            // a fetch, `InstancePropertyAssignmentAnalyzer::analyzeSetCall()` for an assignment),
-            // and that virtual node carries NO location attributes at all — so its
-            // `UndefinedThisPropertyFetch`/`UndefinedThisPropertyAssignment` is always unmapped,
-            // regardless of whether the shadow itself declares a class. The genuine emission comes
-            // from the real fetch/assignment node instead (`UndefinedMagicPropertyFetch`/
-            // `UndefinedMagicPropertyAssignment`, gated on the receiver NOT being `$this`) and maps
-            // normally once #1544 gives `@php`/raw-PHP body lines their own markers, so an unmapped
-            // instance of either dropped class here is always this synthesized duplicate, never a
-            // genuine `$this` access (#1545).
-            if ($issue instanceof UndefinedThisPropertyFetch || $issue instanceof UndefinedThisPropertyAssignment) {
+            // `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
+            // against a `VirtualMethodCall` Psalm synthesizes internally to model the magic call
+            // (`AtomicPropertyFetchAnalyzer::propertyFetchCanBeAnalyzed()`), and that virtual node
+            // carries NO location attributes at all — so its `UndefinedThisPropertyFetch` is always
+            // unmapped, regardless of whether the shadow itself declares a class. The genuine
+            // emission comes from the real fetch node instead (`UndefinedMagicPropertyFetch`,
+            // `handleUndefinedProperty()`) and fires UNCONDITIONALLY once `$has_magic_getter` is
+            // true — proven empirically across a plain-variable, a static-call, and an array-offset
+            // receiver, none of which suppressed it — and maps normally once #1544 gives
+            // `@php`/raw-PHP body lines their own markers, so an unmapped instance of this class is
+            // always the synthesized duplicate, never a genuine `$this` fetch (#1545).
+            //
+            // `UndefinedThisPropertyAssignment` (the `__set` sibling) is DELIBERATELY not included
+            // here, despite coming from the identical kind of positionless synthesized node
+            // (`InstancePropertyAssignmentAnalyzer::analyzeSetCall()`): its twin,
+            // `UndefinedMagicPropertyAssignment`, requires a resolved `$var_id` and
+            // `InstancePropertyAssignmentAnalyzer` returns BEFORE emitting it when the receiver has
+            // none (a function/static-call result, an array offset — `Magic::make()->missing = 1`,
+            // `$objects[0]->missing = 1`). For those receivers the synthesized issue is the ONLY
+            // diagnostic, and this relocator sees one issue at a time with no way to know whether a
+            // twin fired for the same access, so the only sound choice is to never drop it: the
+            // pre-#1545 duplicate on line 1 with the `(unmapped)` suffix is the accepted trade-off
+            // (#1545 review; the corpus this issue was filed against was 100% the fetch shape).
+            if ($issue instanceof UndefinedThisPropertyFetch) {
                 return false;
             }
 

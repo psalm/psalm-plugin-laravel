@@ -197,20 +197,28 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
-     * #1545 sibling: `ExistingAtomicMethodCallAnalyzer`'s `__set` handling has the identical
-     * defect — its `UndefinedThisPropertyAssignment` comes from the SAME kind of synthesized,
-     * positionless `VirtualMethodCall` (`InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), so
-     * it is dropped by the same gate for the same reason.
+     * #1545 review: `UndefinedThisPropertyAssignment` LOOKS like the identical `__set` sibling
+     * (same kind of synthesized, positionless `VirtualMethodCall` node via
+     * `InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), but is deliberately NOT dropped.
+     * Its twin, `UndefinedMagicPropertyAssignment`, requires a resolved `$var_id` and is never
+     * emitted for a non-variable receiver (`Magic::make()->missing = 1`); for that receiver shape
+     * this unmapped issue is the ONLY diagnostic, and the relocator sees one issue at a time with
+     * no way to know whether a twin fired for the same access — so it stays reported on line 1,
+     * same as any other unmapped non-`MixedIssue`.
      */
     #[Test]
-    public function an_unmapped_undefined_this_property_assignment_is_dropped(): void
+    public function an_unmapped_undefined_this_property_assignment_is_still_reported_on_line_one(): void
     {
         $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
 
-        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
+        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+        $this->assertSame('Instance property Foo::$bar is not defined (unmapped)', $relocated->message);
     }
 
-    /** Negative: a MAPPED instance of the same class is a real signal and must keep reporting. */
+    /** A MAPPED instance was never affected by the unmapped-branch logic either way. */
     #[Test]
     public function a_mapped_undefined_this_property_assignment_survives(): void
     {
