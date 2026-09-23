@@ -28,6 +28,9 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
 
     private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
 
+    /** Forking only happens when there are more files to analyze than workers. */
+    private const THREADS = 4;
+
     protected function setUp(): void
     {
         $this->deleteShadowDir();
@@ -52,23 +55,52 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     }
 
     /**
-     * @return list<array{type: string, file: string, message: string}>
+     * One real Psalm run. The report goes to a file rather than stdout so `--debug` can occupy
+     * stdout: its "Forking analysis" line is the only proof a multi-threaded cell actually forked
+     * (see {@see assertForked()}), and an explicit `--threads` keeps debug mode from silently
+     * dropping to a single process.
+     *
+     * @return array{output: string, issues: list<array{type: string, file: string, message: string}>}
      */
-    private function analyze(string $threads = '1'): array
+    private function analyze(int $threads = 1): array
     {
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
+        $report = \sys_get_temp_dir() . '/blade-runtime-helpers-' . \bin2hex(\random_bytes(8)) . '.json';
+
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', "--threads={$threads}", '--no-progress', '--output-format=json'],
+            [
+                \PHP_BINARY,
+                $psalmBinary,
+                '-c',
+                'psalm.xml',
+                '--no-cache',
+                '--threads=' . $threads,
+                '--scan-threads=' . $threads,
+                '--debug',
+                '--report=' . $report,
+            ],
             self::FIXTURE,
         );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues on purpose.
-        $process->run();
+        $process->setTimeout(600);
 
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
+        try {
+            // Not mustRun(): the fixture reports issues on purpose.
+            $process->run();
+
+            $output = $process->getOutput() . $process->getErrorOutput();
+
+            $this->assertFileExists($report, "Psalm wrote no report.\n{$output}");
+            $raw = (string) \file_get_contents($report);
+        } finally {
+            if (\is_file($report)) {
+                \unlink($report);
+            }
+        }
+
+        $decoded = \json_decode($raw, true);
+        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$output}");
 
         $issues = [];
 
@@ -81,7 +113,22 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
             ];
         }
 
-        return $issues;
+        return ['output' => $output, 'issues' => $issues];
+    }
+
+    /**
+     * Psalm forks only when there are MORE files to analyze than workers
+     * (`Internal/Codebase/Analyzer::doAnalysis()`), so a small fixture silently runs single-process
+     * and a thread-parity assertion over it proves nothing. The fixture carries padding files for
+     * exactly this reason; this guard is what stops a later trim from re-vacuuming the test.
+     */
+    private function assertForked(string $output): void
+    {
+        $this->assertStringContainsString(
+            'Forking analysis',
+            $output,
+            'The multi-threaded run never forked, so it proves nothing about workers.',
+        );
     }
 
     /**
@@ -116,7 +163,7 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     #[Test]
     public function a_helper_the_booted_app_defined_resolves_inside_a_template(): void
     {
-        $issues = $this->analyze();
+        ['issues' => $issues] = $this->analyze();
         $this->assertTemplateAnalyzed();
 
         $this->assertSame(
@@ -129,7 +176,7 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     #[Test]
     public function a_constant_the_booted_app_defined_resolves_inside_a_template(): void
     {
-        $issues = $this->analyze();
+        ['issues' => $issues] = $this->analyze();
         $this->assertTemplateAnalyzed();
 
         $this->assertSame(
@@ -148,7 +195,7 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     #[Test]
     public function the_helpers_real_signature_is_enforced_inside_a_template(): void
     {
-        $issues = $this->analyze();
+        ['issues' => $issues] = $this->analyze();
         $this->assertTemplateAnalyzed();
 
         $this->assertCount(
@@ -161,7 +208,7 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     #[Test]
     public function a_function_nothing_ever_defined_is_still_reported_in_a_template(): void
     {
-        $issues = $this->analyze();
+        ['issues' => $issues] = $this->analyze();
         $this->assertTemplateAnalyzed();
 
         $this->assertCount(
@@ -179,7 +226,7 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     #[Test]
     public function an_ordinary_project_file_calling_the_helper_still_reports(): void
     {
-        $issues = $this->analyze();
+        ['issues' => $issues] = $this->analyze();
 
         $this->assertCount(
             1,
@@ -195,7 +242,15 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     #[Test]
     public function the_injection_survives_forked_analysis_workers(): void
     {
-        $issues = $this->analyze('4');
+        // Psalm silently clamps --threads to 1 on Windows or without pcntl, so the fork proof
+        // would fail there instead of proving anything.
+        if (\defined('PHP_WINDOWS_VERSION_MAJOR') || !\extension_loaded('pcntl')) {
+            self::markTestSkipped('Psalm cannot fork analysis workers in this environment.');
+        }
+
+        ['issues' => $issues, 'output' => $output] = $this->analyze(self::THREADS);
+
+        $this->assertForked($output);
         $this->assertTemplateAnalyzed();
 
         $this->assertSame(
@@ -212,5 +267,23 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
         ApplicationProvider::reset();
 
         $this->assertSame([], ApplicationProvider::runtimeDeclaredFunctionFiles());
+    }
+
+    /**
+     * The handler's own static carries the same per-run facts and needs the same clearing. Read
+     * reflectively because the only public reader is the hook itself, and driving that would mean
+     * assembling a populated `Codebase`; asserting the filled state first is what keeps the
+     * cleared assertion from passing vacuously.
+     */
+    #[Test]
+    public function the_handlers_helper_files_are_cleared_on_reset(): void
+    {
+        $helperFiles = new \ReflectionProperty(RuntimeHelperVisibility::class, 'helperFiles');
+
+        RuntimeHelperVisibility::init(['/tmp/does-not-need-to-exist.php']);
+        $this->assertSame(['/tmp/does-not-need-to-exist.php'], $helperFiles->getValue());
+
+        RuntimeHelperVisibility::reset();
+        $this->assertSame([], $helperFiles->getValue());
     }
 }
