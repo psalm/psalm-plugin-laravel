@@ -232,7 +232,7 @@ This governs the prompt sink direction only. Model output as a taint source (an 
 
 ## `blade`
 
-See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, tuning template findings, ambient variables, taint reporting, and known limits).
+See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, [tuning template findings](blade.md#tuning-template-findings), ambient variables, taint reporting, and known limits).
 
 **default**: off. Omit the element, or write `<blade enabled="false" />`.
 

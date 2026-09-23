@@ -76,13 +76,15 @@ Re-emitted template issues pass through Psalm's normal suppression with the `.bl
 <issueHandlers>
     <RiskyTruthyFalsyComparison>
         <errorLevel type="info">
-            <directory name="resources/views"/>
+            <directory name="resources/views" />
         </errorLevel>
     </RiskyTruthyFalsyComparison>
 </issueHandlers>
 ```
 
-The mechanism is confirmed by `tests/Unit/Blade/BladeIssueRemapTest.php`, method `an_issue_handler_suppression_on_the_view_directory_silences_the_template`.
+Note that Psalm prints `info` level findings only when `--show-info=true` is passed, so with default output the example above hides the findings entirely.
+
+The mechanism is confirmed by `tests/Unit/Blade/BladeIssueRemapTest.php`, method `an_issue_handler_suppression_on_the_view_directory_silences_the_template` (the same config path, asserted for `type="suppress"`).
 
 * **`RiskyTruthyFalsyComparison` stays reporting by default.** The rule fires just as often in the same project's plain PHP, so a template-only downgrade would make one rule behave two ways in the same codebase. On the reference corpus, about 68% of the template hits were harmless optional-field guards, but the remainder included real zero-value bugs, such as a rating of `0` rendering as "not rated". The default stays honest, and the config above is the knob for a project that wants it quieter.
 * **`PossiblyFalseArgument` on a `{{ json_encode($x) }}`-class echo is deliberate signal, not noise.** The false arm is a silent encode failure, so the fix is `JSON_THROW_ON_ERROR` or `@json`, not suppression.
