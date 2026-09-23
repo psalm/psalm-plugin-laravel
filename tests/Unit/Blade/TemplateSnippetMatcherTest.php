@@ -285,6 +285,53 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
     }
 
+    /**
+     * Blade removes comments BEFORE it unescapes `@@` (`$compilers` order), so
+     * `'@@{{-- c --}}foo'` compiles to `'@foo'`: the mirror must strip comments before its own
+     * unescape pass, or the `@@` never sits directly before a word character and stays escaped.
+     */
+    #[Test]
+    public function a_comment_split_escape_matches_only_with_blade_ordered_rewrites(): void
+    {
+        $snippet = "mount('@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('@@{{-- c --}}foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * Blade unescapes `@@` during the token pass and strips component markers only at the very
+     * end, so in `'x##BEGIN-COMPONENT-CLASS##@@foo'` the `@@` still unescapes (the `#` before it
+     * satisfies `\B`) and the compiled text is `'x@foo'`. Removing the marker first would glue
+     * `x` to `@@` and block the unescape; the mirror must keep Blade's order.
+     */
+    #[Test]
+    public function a_marker_adjacent_escape_matches_only_with_blade_ordered_rewrites(): void
+    {
+        $snippet = "mount('x@foo', 'u', 'v')";
+        $source = "<div>\n  {{ \$x->mount('x##BEGIN-COMPONENT-CLASS##@@foo', 'u', 'v') }}\n</div>\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
+    /**
+     * `@php` and raw `<?php ?>` blocks are exempt from the `@@` unescape but NOT from the final
+     * marker strip, so `'@@foo##BEGIN-COMPONENT-CLASS##'` inside `@php` compiles to `'@@foo'`.
+     * Only a markers-only variant of the mirror finds that call; the full mirror over-unescapes
+     * it to `'@foo'` and misses.
+     */
+    #[Test]
+    public function a_php_block_call_with_marker_matches_via_the_markers_only_variant(): void
+    {
+        $snippet = "mount('@@foo', 'u', 'v')";
+        $source = "@php \$x->mount('@@foo##BEGIN-COMPONENT-CLASS##', 'u', 'v'); @endphp\n";
+
+        $this->assertFalse(TemplateSnippetMatcher::occursIn($snippet, $source));
+        $this->assertTrue(TemplateSnippetMatcher::occursInWithRawTextRewrites($snippet, $source));
+    }
+
     /** Mirroring never widens the gate: a call genuinely absent from the template still does not match. */
     #[Test]
     public function a_genuinely_absent_call_still_does_not_match_with_raw_text_rewrites(): void

@@ -44,8 +44,12 @@ final class TemplateSnippetMatcher
      * CLASS##` marker removal ({@see BladeCompiler::compileString()}). Both reach inside an
      * author's argument text (the unescape runs on every inline-HTML token, quotes included), so a
      * call they touched is absent from the raw source and would otherwise be misread as
-     * compiler-generated (#1540). Raw `<?php ?>` and stored `@php` blocks are exempt from the
-     * unescape in Blade itself; calls there match on the unmodified source already.
+     * compiler-generated (#1540).
+     *
+     * Two variants are tried, because Blade's rewrites are not uniform across the template:
+     * markers-only for raw `<?php ?>` and stored `@php` blocks (exempt from the unescape but not
+     * from the final marker strip), then the full mirror in Blade's own order (comments removed
+     * first, `@@` unescaped during the token pass, markers stripped last) for everything else.
      *
      * Used ONLY by the arity gate: {@see self::occursIn()} itself backs the echo-argument gate too,
      * in the OPPOSITE polarity (a non-match keeps the issue there), and mirroring there would newly
@@ -62,10 +66,17 @@ final class TemplateSnippetMatcher
             return true;
         }
 
-        $source = \str_replace(['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'], '', $source);
-        $source = (string) \preg_replace('/\B@(@\w+(?:::\w+)?)/', '$1', $source);
+        $markers = ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'];
 
-        return self::occursIn($snippet, $source);
+        if (self::occursIn($snippet, \str_replace($markers, '', $source))) {
+            return true;
+        }
+
+        $rewritten = (string) \preg_replace(self::BLADE_COMMENT_PATTERN, '', $source);
+        $rewritten = (string) \preg_replace('/\B@(@\w+(?:::\w+)?)/', '$1', $rewritten);
+        $rewritten = \str_replace($markers, '', $rewritten);
+
+        return self::occursIn($snippet, $rewritten);
     }
 
     /**
