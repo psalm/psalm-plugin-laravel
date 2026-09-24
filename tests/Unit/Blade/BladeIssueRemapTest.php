@@ -914,6 +914,41 @@ final class BladeIssueRemapTest extends TestCase
         }
     }
 
+    /**
+     * #1553: an empty bound component attribute (`:value=""`) compiles to a dangling `'value' =>`
+     * in the component's data array (here `'value' => ]`; with a sibling attribute, `'value' => ,`
+     * as in the original report), a syntax error mid-shadow. Before the fix,
+     * PreludeBuilder::undeclaredVariables() caught the resulting
+     * PhpParser\Error and dropped the ENTIRE `@var mixed` net for the template, so every OTHER
+     * variable Blade never declares (here, `$undeclared` bound to the second tag) surfaced as a
+     * false UndefinedGlobalVariable instead of the genuine syntax error.
+     */
+    #[Test]
+    public function a_bound_attribute_syntax_error_does_not_drop_the_prelude_for_other_reads(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/bound-attr-syntax-error.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'UndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: the empty bound attribute must actually have compiled to
+        // the erroring shape this test exists to pin (a missing expression before `]` in the
+        // component's data array), not silently changed under a Laravel bump.
+        $this->assertStringContainsString(
+            "'value' => ]",
+            $this->shadowSourceFor($template),
+            "expected the empty bound attribute to compile to a syntax error; got:\n" . $this->shadowSourceFor($template),
+        );
+
+        // The genuine syntax error keeps reporting (the issue's own acceptance): only the false
+        // UndefinedGlobalVariable findings go away, never the ParseError.
+        $this->assertNotSame([], $this->linesFor($issues, 'ParseError', $template));
+    }
+
     /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
     private function allShadowSources(): string
     {

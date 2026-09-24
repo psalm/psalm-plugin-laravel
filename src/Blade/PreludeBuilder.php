@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use PhpParser\ErrorHandler\Collecting;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
@@ -179,8 +180,15 @@ final class PreludeBuilder
     {
         $parser = $this->parser();
 
+        // A collecting handler mirrors Psalm's own error-tolerant parse (StatementsProvider uses
+        // the same class): a syntax error anywhere in the compiled shadow must drop only the
+        // erroring statement, not the whole net — Psalm still analyzes every statement it recovers
+        // and would otherwise report UndefinedGlobalVariable for names this pass never sees.
+        // A null result (unrecoverable, e.g. brace imbalance) or a throw still drops the net,
+        // which is safe: Psalm's parse of that shadow yields no statements either, so nothing
+        // is analyzed and only ParseError is reported.
         try {
-            $ast = $parser->parse($compiled) ?? [];
+            $ast = $parser->parse($compiled, new Collecting()) ?? [];
         } catch (\Throwable) {
             return [];
         }
