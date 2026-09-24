@@ -951,7 +951,7 @@ final class BladeIssueRemapTest extends TestCase
 
     /**
      * #1554: a bound attribute followed by ANOTHER attribute on the same tag compiles to
-     * `'value' => ,'label' => ...` (the trailing-comma shape #1553 pinned is the OTHER position: an
+     * `'value' => ,'label' => ...` (the `'value' => ]` shape #1553 pinned is the OTHER position: an
      * empty bound attribute with nothing after it on that tag). Both are genuine `ParseError`s
      * Laravel's own `ComponentTagCompiler::attributesToString()` would emit at render time; this
      * test pins that the malformed line still gets attributed back to a template line, and to the
@@ -971,10 +971,22 @@ final class BladeIssueRemapTest extends TestCase
 
         // The dangling comma is ambiguous enough that PhpParser reports several cascading
         // ParseErrors off the one malformed expression; every one of them must still land on the
-        // tag's opening line, never on an unmapped or wrong line.
+        // tag's opening line (line 2 — a filler line 1 keeps this off the unmapped fallback's own
+        // line 1, which would otherwise make the assertion pass vacuously), never on an unmapped or
+        // wrong line.
         $lines = $this->linesFor($issues, 'ParseError', $template);
         $this->assertNotSame([], $lines, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-        $this->assertSame([1], \array_values(\array_unique($lines)), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertSame([2], \array_values(\array_unique($lines)), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'ParseError' && \str_ends_with($issue['file_path'], $template)) {
+                $this->assertStringNotContainsString(
+                    '(unmapped)',
+                    $issue['message'],
+                    \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+                );
+            }
+        }
 
         // Guard against a vacuous pass: pin the actual malformed shape (missing expression before
         // the comma), not merely that SOME ParseError fired.
@@ -1013,12 +1025,14 @@ final class BladeIssueRemapTest extends TestCase
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
 
-        // Guard against a vacuous pass: pin the actual malformed shape (an orphan endif from the
-        // closing tag's epilogue), not merely that SOME ParseError fired.
-        $this->assertStringContainsString(
-            'endif',
-            $this->shadowSourceFor($template),
-            "expected the stray closing tag to compile to an orphan endif; got:\n" . $this->shadowSourceFor($template),
+        // Guard against a vacuous pass: a well-formed `<x-alert />` alone already emits several
+        // `endif;` lines as part of its own save/restore bookkeeping, so a bare substring check for
+        // "endif" cannot fail. `renderComponent()` is only ever emitted once per genuinely opened
+        // component; a second occurrence is the stray closing tag's own orphaned epilogue.
+        $this->assertSame(
+            2,
+            \substr_count($this->shadowSourceFor($template), 'renderComponent()'),
+            "expected the stray closing tag to emit a second, orphaned renderComponent() call; got:\n" . $this->shadowSourceFor($template),
         );
 
         // Neighbour isolation: a finding on an unrelated template in the same run must survive
