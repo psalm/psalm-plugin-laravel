@@ -195,11 +195,15 @@ final class ShadowIssueRelocator
             // the view Factory unconditionally shares `$__env` into every rendered view, so the gate
             // matches the whole family by prefix rather than enumerating each name, unlike
             // `component`/`errors`/`attributes`/`slot` above. Except for `$__env` (excluded below,
-            // same reason as `$errors`), no docblock-branch wording exists for a `$__`-prefixed
-            // name — it is never declared via the prelude's `@var` — so `isAmbientGuardName()` (not
-            // the docblock-narrowed `isAmbientDocblockGuardName()`) is correct here, and
-            // unconditional: unlike `attributes`/`slot`, the bookkeeping compiles identically
-            // whether or not the enclosing view is itself a component.
+            // same reason as `$errors`), a `$__`-prefixed name the prelude declares gets only the
+            // generic `@var mixed` fallback ({@see PreludeBuilder::undeclaredVariables()}, #1558),
+            // never a real type (contract types never reach the prelude,
+            // {@see BladeBootstrapper}). A guard on one usually renders the INFERRED wording
+            // (narrowing `mixed` drops `from_docblock`), but falsy reconciliation preserves
+            // docblock provenance (`Docblock-defined type empty-mixed ... is always falsy`), so
+            // both branches occur and the wide `isAmbientGuardName()` (not the docblock-narrowed
+            // `isAmbientDocblockGuardName()`) is the correct matcher here, and unconditional: unlike `attributes`/`slot`, the bookkeeping compiles
+            // identically whether or not the enclosing view is itself a component.
             //
             // Trade-off: an author who writes their own `$__`-prefixed local inside `@php`
             // (`$__myFlag = ...`), a name Blade's own compiled output never happens to collide with
