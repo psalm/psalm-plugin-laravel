@@ -80,7 +80,7 @@ Psalm keeps no global function table for ordinary project code: `Functions::func
 - Shadows only. Merging into an ordinary project `FileStorage` would suppress genuine `UndefinedFunction` across the codebase.
 - Anything `Functions::hasStubbedFunction()` already answers is skipped, so a user helper can never outrank a stub's types, and the capture excludes `vendor/` outright.
 - `AfterCodebasePopulated`, not earlier: `FileStorageCacheProvider::writeToCache()` runs during scanning, so a merge before that point would persist into the on-disk file-storage cache and leak into runs with Blade off. It runs in the parent before `analyzeFiles()` forks, so workers inherit the mutation by copy-on-write.
-- A degraded boot captures nothing and the whole thing no-ops, same as every other Blade half.
+- A boot that degrades before providers register captures nothing, so the whole thing no-ops. A boot that throws mid-bootstrap keeps whatever helpers had already been declared: those functions genuinely exist in the process, and gating the capture on a fully clean boot would lose them in exactly the one-bad-config-file scenario the bootstrap tolerance exists for (`ApplicationProvider::runtimeDeclaredFunctionFiles()` documents the same contract).
 
 #### Remapping a shadow issue onto its template
 
