@@ -101,6 +101,25 @@ final class PathCaseCanonicalizerTest extends TestCase
         $this->assertSame($missing, PathCaseCanonicalizer::canonicalize($missing));
     }
 
+    /**
+     * A Windows-style path split on `/` has no leading separator, so walking it would start at
+     * `scandir()` of the process cwd (or a drive's own cwd) and could rewrite segments against
+     * unrelated dirents. Same for a relative path. Both must pass through untouched.
+     */
+    #[Test]
+    public function windows_style_and_relative_paths_pass_through_unchanged(): void
+    {
+        $this->assertSame(
+            'C:\\project\\Resources\\views',
+            PathCaseCanonicalizer::canonicalize('C:\\project\\Resources\\views'),
+        );
+        $this->assertSame(
+            '\\\\server\\share\\Resources',
+            PathCaseCanonicalizer::canonicalize('\\\\server\\share\\Resources'),
+        );
+        $this->assertSame('relative/views', PathCaseCanonicalizer::canonicalize('relative/views'));
+    }
+
     #[Test]
     public function a_path_through_a_symlinked_root_keeps_the_symlink_segment_untouched(): void
     {

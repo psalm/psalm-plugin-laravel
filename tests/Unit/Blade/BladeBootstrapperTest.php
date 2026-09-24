@@ -55,7 +55,9 @@ final class BladeBootstrapperTest extends TestCase
 
     private function deleteRecursively(string $path): void
     {
-        if (\is_file($path)) {
+        // A symlink must be unlinked, never descended into or rmdir'd: descending would delete
+        // through the link and rmdir() refuses a link.
+        if (\is_link($path) || \is_file($path)) {
             \unlink($path);
 
             return;

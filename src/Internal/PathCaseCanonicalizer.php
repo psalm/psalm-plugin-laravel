@@ -29,20 +29,29 @@ final class PathCaseCanonicalizer
      * Never fails: a segment that cannot be listed (missing path, permission denied) or that
      * matches nothing/more than one dirent case-insensitively is returned as given, for that
      * segment onward. Callers that feed this a nonexistent path get the same path back unchanged.
+     *
+     * Only POSIX absolute paths are walked. A Windows path (`C:\...`, `\\server\share`) or a
+     * relative path is returned unchanged: walking one from `scandir('.')` would resolve segments
+     * against the WRONG directory (the process cwd, or the drive's own cwd) and could rewrite a
+     * segment against unrelated dirents. Windows therefore keeps its pre-canonicalization
+     * behavior — case-variant duplicates persist there until a drive/UNC-aware walk exists.
      */
     public static function canonicalize(string $path): string
     {
-        $isAbsolute = \str_starts_with($path, \DIRECTORY_SEPARATOR);
+        if (!\str_starts_with($path, '/')) {
+            return $path;
+        }
+
         $segments = \array_values(\array_filter(
-            \explode(\DIRECTORY_SEPARATOR, $path),
+            \explode('/', $path),
             static fn(string $segment): bool => $segment !== '',
         ));
 
-        $walked = $isAbsolute ? \DIRECTORY_SEPARATOR : '';
+        $walked = '/';
         $canonicalSegments = [];
 
         foreach ($segments as $segment) {
-            $entries = @\scandir($walked === '' ? '.' : $walked);
+            $entries = @\scandir($walked);
 
             if ($entries === false) {
                 // Cannot list this level at all: keep the ORIGINAL path, not a half-canonicalized
@@ -52,12 +61,10 @@ final class PathCaseCanonicalizer
 
             $resolved = self::resolveSegment($entries, $segment);
             $canonicalSegments[] = $resolved;
-            $walked = ($walked === '' || $walked === \DIRECTORY_SEPARATOR)
-                ? $walked . $resolved
-                : $walked . \DIRECTORY_SEPARATOR . $resolved;
+            $walked = $walked === '/' ? $walked . $resolved : $walked . '/' . $resolved;
         }
 
-        return ($isAbsolute ? \DIRECTORY_SEPARATOR : '') . \implode(\DIRECTORY_SEPARATOR, $canonicalSegments);
+        return '/' . \implode('/', $canonicalSegments);
     }
 
     /** @param list<string> $entries */
