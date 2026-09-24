@@ -769,6 +769,15 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $template = 'components/nested-attributes-aware.blade.php';
 
+        // Guard against a vacuous pass: if `@aware()` stops compiling the literal-array
+        // `$__key`/`$__value` loop (a compiler change, a fixture edit), the assertions below would
+        // pass with nothing left to drop.
+        $this->assertStringContainsString(
+            'as $__key => $__value',
+            $this->shadowSourceFor($template),
+            "the fixture's @aware() directive never compiled the literal-array loop: no \$__key/\$__value foreach found in the compiled shadow",
+        );
+
         foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
             $this->assertSame(
                 [],
