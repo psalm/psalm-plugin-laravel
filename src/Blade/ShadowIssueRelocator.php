@@ -183,6 +183,34 @@ final class ShadowIssueRelocator
             if ($target->isComponentView && self::isAmbientGuardName($issue->message, 'attributes|slot')) {
                 return false;
             }
+
+            // `@aware(['type' => 'info'])` compiles to `foreach (['type' => 'info'] as $__key =>
+            // $__value) { $__consumeVariable = is_string($__key) ? ... }` ({@see
+            // CompilesComponents::compileAware()}); `@props()`'s own three `$__key`/`$__value`
+            // loops over `$attributes->all()` compile the same way. Iterating a literal array lets
+            // Psalm enumerate each pair and narrow `$__key`/`$__value` to a literal, so the
+            // `is_string($__key)` ternary (and its negated arm) reports a guard against a name the
+            // template author never wrote and has no docblock position to annotate (#1557). Every
+            // `$__`-prefixed local is this same compiled bookkeeping, so the gate matches the whole
+            // family by prefix rather than enumerating each name, unlike `component`/`errors`/
+            // `attributes`/`slot` above. No docblock-branch wording exists for a `$__`-prefixed
+            // name — it is never declared via the prelude's `@var` — so `isAmbientGuardName()`
+            // (not the docblock-narrowed `isAmbientDocblockGuardName()`) is correct here, and
+            // unconditional: unlike `attributes`/`slot`, the bookkeeping compiles identically
+            // whether or not the enclosing view is itself a component.
+            //
+            // Trade-off: `__` is a prefix Blade's own compiler reserves for itself, but an author
+            // who defies that reservation inside `@php` (`$__myFlag = ...`) gets their own guard
+            // contradictions on it silenced too, with no trace.
+            //
+            // Excludes `__tmp_*`: Psalm's OWN nullsafe-chain analysis synthesizes
+            // `$__tmp_nullsafe__<offset>` temps for an author-written `?->` (vendor, not Blade), and
+            // reports this same issue family on that temp identically in a plain `.php` file — that
+            // is genuine author signal the plugin has no business dropping, so the negative
+            // lookahead carves it out of the wide `__`-prefix match.
+            if (self::isAmbientGuardName($issue->message, '__(?!tmp_)[A-Za-z_]\w*')) {
+                return false;
+            }
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
