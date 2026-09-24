@@ -751,6 +751,53 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1557: `compileAware()`'s generated `foreach (['type' => 'info'] as $__key => $__value) {
+     * $__consumeVariable = is_string($__key) ? ... }` iterates a literal array, so Psalm enumerates
+     * the single pair and narrows `$__key` to its literal key — the `is_string($__key)` ternary
+     * then reports `RedundantCondition` ("is always string") and its negated arm reports
+     * `TypeDoesNotContainType` ("is always !string"), both against a variable the template author
+     * never wrote and cannot act on. `nested-attributes-aware.blade.php` is the exact fixture that
+     * reproduces the shape; the sibling test above already covers this template's
+     * `PossiblyNullReference` survivor, so this checks the whole ambient-guard family instead of
+     * only naming the two new classes, the same whole-set style
+     * {@see ambient_guards_around_a_nested_component_tag_are_dropped()} uses for `@props`.
+     */
+    #[Test]
+    public function ambient_key_guards_from_an_aware_directive_are_dropped(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/nested-attributes-aware.blade.php';
+
+        // Guard against a vacuous pass: if `@aware()` stops compiling the literal-array
+        // `$__key`/`$__value` loop (a compiler change, a fixture edit), the assertions below would
+        // pass with nothing left to drop.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString(
+            'as $__key => $__value',
+            $shadow,
+            "the fixture's @aware() directive never compiled the literal-array loop: no \$__key/\$__value foreach found in the compiled shadow",
+        );
+
+        // A loop alone isn't enough: `@aware([])` would compile the same `foreach` shape and still
+        // report nothing, because Psalm can only enumerate per-pair KEYS out of a literal array with
+        // an actual pair in it — that key enumerability, not the loop shape, is what makes the
+        // reconciler fire in the first place.
+        $this->assertStringContainsString(
+            "'type' => 'info'",
+            $shadow,
+            "the fixture's @aware() directive compiled an empty array: no literal pair for Psalm to enumerate, so the reconciler this test exists to pin never fires",
+        );
+
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, $family, $template),
+                \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+    }
+
     #[Test]
     public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
     {
