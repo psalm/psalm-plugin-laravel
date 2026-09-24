@@ -16,6 +16,7 @@ use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
+use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
 
 #[CoversClass(BladeBootstrapper::class)]
 final class BladeBootstrapperTest extends TestCase
@@ -46,6 +47,7 @@ final class BladeBootstrapperTest extends TestCase
         ViewReferenceRegistry::reset();
         ContractRegistry::reset();
         ShadowRegistry::reset();
+        PathCaseCanonicalizer::reset();
     }
 
     protected function tearDown(): void
@@ -55,7 +57,9 @@ final class BladeBootstrapperTest extends TestCase
 
     private function deleteRecursively(string $path): void
     {
-        if (\is_file($path)) {
+        // A symlink must be unlinked, never descended into or rmdir'd: descending would delete
+        // through the link and rmdir() refuses a link.
+        if (\is_link($path) || \is_file($path)) {
             \unlink($path);
 
             return;
@@ -94,6 +98,19 @@ final class BladeBootstrapperTest extends TestCase
     private function bootstrapper(Container $app, RecordingShadowRegistrar $registrar): BladeBootstrapper
     {
         return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir);
+    }
+
+    /**
+     * True when a directory's upper/lower-cased spelling also resolves to it, on THIS filesystem.
+     * Case (in)sensitivity is a filesystem capability, never assumed from the OS: this is what
+     * gates the two case-variant tests below to whichever half of the pair this machine can hold.
+     */
+    private function filesystemIsCaseInsensitive(): bool
+    {
+        $lower = $this->root . '/case-probe';
+        \mkdir($lower, 0o777, true);
+
+        return \is_dir($this->root . '/CASE-PROBE');
     }
 
     #[Test]
@@ -213,6 +230,234 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the filtered vendor root still owns the name');
         $this->assertSame([$local], $registrar->reportableTemplates, 'the local template is still analyzed');
+    }
+
+    /**
+     * The hints are canonicalized before the vendor filter, so the boundary they are tested against
+     * has to be canonicalized too. A vendor directory whose configured spelling differs from its
+     * on-disk dirent casing otherwise fails the prefix test against every canonicalized hint, and
+     * the whole vendor filter silently stops filtering.
+     */
+    #[Test]
+    public function a_vendor_root_reached_under_a_mis_cased_vendor_directory_is_still_filtered(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $vendorPkgViews = $this->root . '/Fake-Vendor/acme/pkg/views';
+        \mkdir($vendorPkgViews, 0o777, true);
+        \file_put_contents($vendorPkgViews . '/widget.blade.php', "<p>vendor</p>\n");
+
+        $localDir = $this->root . '/extra-views';
+        \mkdir($localDir, 0o777, true);
+        $local = $localDir . '/widget.blade.php';
+        \file_put_contents($local, "<p>{{ \$name }}</p>\n");
+        $local = (string) \realpath($local);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', [$vendorPkgViews, $localDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        // Same physical directory as the hint sits in, spelled the way a config value or a derived
+        // install path easily spells it.
+        $misCasedVendorDir = $this->root . '/fake-vendor';
+
+        (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, vendorDirOverride: $misCasedVendorDir))->boot();
+
+        $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the filtered vendor root still owns the name');
+        $this->assertSame([$local], $registrar->reportableTemplates, 'the vendor template must not reach discovery');
+    }
+
+    /**
+     * #1552: the same physical view root reaching the finder twice under different case (a
+     * published-override-style hint vs. its default-root spelling, or two roots a project
+     * configured redundantly) must collapse to ONE discovered template, not double it. `realpath()`
+     * cannot do this alone — it preserves the caller's casing on a case-insensitive filesystem — so
+     * this only exercises the fix, {@see \Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer}, when
+     * the machine running the suite actually has one.
+     */
+    #[Test]
+    public function two_case_variant_spellings_of_the_same_view_root_collapse_into_one_shadow(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $lowerSpelling = $this->root . '/resources/views';
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir, $lowerSpelling]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'the two spellings of one physical root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
+     * The mirror of the test above: on a case-SENSITIVE filesystem, two directories differing only
+     * by case are two real, distinct dirents holding two real, distinct templates — collapsing them
+     * would be a regression, not a fix.
+     */
+    #[Test]
+    public function two_distinct_dirents_differing_only_by_case_stay_two_separate_shadows(): void
+    {
+        if ($this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-sensitive filesystem to hold two same-named-but-cased dirents');
+        }
+
+        $upperDir = $this->root . '/Resources/views';
+        $lowerDir = $this->root . '/resources/views';
+        \mkdir($upperDir, 0o777, true);
+        \mkdir($lowerDir, 0o777, true);
+        \file_put_contents($upperDir . '/widget.blade.php', "<p>upper</p>\n");
+        \file_put_contents($lowerDir . '/widget.blade.php', "<p>lower</p>\n");
+
+        $finder = new FileViewFinder(new Filesystem(), [$upperDir, $lowerDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertCount(2, $registrar->analyzedShadows, 'two physically distinct templates must stay two shadows');
+    }
+
+    /**
+     * `realpath()` expands a symlink using the link's STORED target string, so a link whose target
+     * is spelled in the wrong case re-introduces the mis-cased spelling AFTER any canonicalization
+     * done on the link path itself. `FileViewFinder` realpaths its `getPaths()` entries but stores
+     * namespace hints RAW, so the hint layer is where such a link actually reaches discovery. The
+     * root list has to be canonicalized after resolution too, or the linked spelling and the
+     * direct spelling survive as two roots.
+     */
+    #[Test]
+    public function a_hint_symlink_whose_stored_target_is_mis_cased_still_collapses_with_the_direct_root(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open a mis-cased symlink target');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        // The stored target string deliberately mis-cases the real 'Resources' dirent.
+        \symlink($this->root . '/resources', $this->root . '/link');
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir]);
+        $finder->addNamespace('pkg', $this->root . '/link/views');
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'the linked and the direct spelling of one physical root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
+     * The same hazard one level down: a `*.blade.php` SYMLINK inside a view root is realpath'd
+     * through its STORED target, so a mis-cased target string re-introduces a spelling the roots
+     * already collapsed. The physical file is then discovered twice — directly, and through the
+     * link — and one template becomes two shadows.
+     */
+    #[Test]
+    public function a_template_symlink_whose_stored_target_is_mis_cased_is_not_discovered_twice(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open a mis-cased symlink target');
+        }
+
+        $partials = $this->viewDir . '/Partials';
+        \mkdir($partials, 0o777, true);
+        $template = $partials . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        // The stored target string deliberately mis-cases the real 'Partials' dirent.
+        \symlink($this->viewDir . '/partials/widget.blade.php', $this->viewDir . '/alias.blade.php');
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'the linked and the direct spelling of one physical template must not double discovery',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
+     * The hint layer is the entry the issue describes (different hint sources supplying different
+     * casing): a namespace hint spelled in the wrong case must collapse with the identically-cased
+     * default root, not double every template under it.
+     */
+    #[Test]
+    public function a_mis_cased_namespace_hint_collapses_with_the_default_root(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir]);
+        $finder->addNamespace('pkg', $this->root . '/resources/views');
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'a mis-cased hint spelling of the default root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
     }
 
     /**

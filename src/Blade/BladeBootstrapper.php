@@ -8,6 +8,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
+use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
 use Psalm\LaravelPlugin\Internal\VendorDirectory;
 use Psalm\Progress\Progress;
 
@@ -112,9 +113,16 @@ final class BladeBootstrapper
             return false;
         }
 
+        // Resolved ONCE and fed to both discovery below and compileAll() further down: two
+        // independent calls each deduping the same raw $viewPaths could only ever agree by
+        // construction, but a single shared list is the simpler invariant to keep, and it is what
+        // lets findTemplates() below enumerate from the SAME case-collapsed roots that
+        // registerContract()/ViewName::resolve() later match template paths against.
+        $roots = $this->resolveRoots($viewPaths);
+
         /** @var array<string, string> $failures template path => reason */
         $failures = [];
-        $templates = $this->findTemplates($viewPaths, $failures);
+        $templates = $this->findTemplates($roots, $failures);
 
         if ($templates === [] && $failures === []) {
             // Not a failure (an API-only app or a package with no views is normal), but silent under
@@ -156,7 +164,7 @@ final class BladeBootstrapper
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
         $manifest->load();
 
-        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $viewPaths, $failures, $trustedEnvironment);
+        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
 
         if ($templatesFullyDiscovered) {
             $manifest->prune($templates);
@@ -264,7 +272,7 @@ final class BladeBootstrapper
 
     /**
      * @param list<string>                              $templates
-     * @param list<array{0: string, 1: string|null}>     $viewPaths path, namespace pairs in finder
+     * @param list<array{0: string, 1: string|null}>     $roots     resolved, deduped roots in finder
      *                                                     order, which decides which template wins a
      *                                                     view name two roots both define
      * @param array<string, string>                      $failures  template path => reason, appended to
@@ -280,12 +288,11 @@ final class BladeBootstrapper
         ShadowCompiler $compiler,
         ShadowManifest $manifest,
         array $templates,
-        array $viewPaths,
+        array $roots,
         array &$failures,
         bool $trustedEnvironment,
     ): array {
         $shadows = [];
-        $roots = $this->resolveRoots($viewPaths);
         $parser = new ContractParser();
         $collector = $this->collectViewReferences || $this->collectDataIncludes ? new ViewReferenceCollector() : null;
         $requiredSlots = ($this->collectViewReferences ? ShadowManifest::SLOT_REFERENCES : 0)
@@ -381,7 +388,9 @@ final class BladeBootstrapper
      * (path, namespace): a published override's directory is both the last segment of the default
      * root AND a namespace's own hint root, and both names it earns have to survive. The template
      * paths this is matched against are realpaths too, so both sides have to be normalized or a
-     * symlinked root never matches its own templates.
+     * symlinked root never matches its own templates. Callers pass paths already run through
+     * {@see PathCaseCanonicalizer} — this dedup is by exact string, so two spellings of the same
+     * physical root would otherwise realpath to two different strings and survive as two roots.
      *
      * @param list<array{0: string, 1: string|null}> $viewPaths
      *
@@ -399,7 +408,14 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $resolved = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            // realpath() expands a symlink using the link's STORED target string, so a link whose
+            // target is spelled in the wrong case re-introduces a mis-cased spelling AFTER the
+            // entry-point canonicalization already ran — canonicalize the resolved form too.
+            $resolved = PathCaseCanonicalizer::canonicalize($resolved);
+            // Trimming the filesystem root would leave '', which no is_dir() or prefix test
+            // downstream survives — '/' is an odd but usable view root.
+            $trimmed = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            $resolved = $trimmed === '' ? $resolved : $trimmed;
             // "\0" never occurs in a namespace, so a null (default-root) marker cannot collide.
             $key = ($namespace ?? "\0") . "\0" . $resolved;
 
@@ -529,7 +545,7 @@ final class BladeBootstrapper
         $roots = [];
 
         foreach (\array_values($finder->getPaths()) as $path) {
-            $roots[] = [$path, null];
+            $roots[] = [PathCaseCanonicalizer::canonicalize($path), null];
         }
 
         $vendorDir = $this->vendorDirectory();
@@ -541,6 +557,14 @@ final class BladeBootstrapper
 
         foreach ($hints as $namespace => $hintPaths) {
             foreach ($hintPaths as $hint) {
+                // Canonicalized BEFORE the vendor check and before entering $roots: the same
+                // physical view root reaches here twice under different case (a published
+                // override's own hint vs. its default-root path, #1552) — realpath() alone cannot
+                // collapse them (it preserves the caller's casing on a case-insensitive
+                // filesystem), so without this the vendor filter below and every downstream
+                // dedup-by-string see two roots instead of one.
+                $hint = PathCaseCanonicalizer::canonicalize($hint);
+
                 if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
                     $this->vendorShadowedNamespaces[$namespace] = true;
 
@@ -578,7 +602,10 @@ final class BladeBootstrapper
             return true;
         }
 
-        return $winner === $templatePath;
+        // The finder resolves against its OWN (uncanonicalized) hint list, so a mis-cased root
+        // can still hand back a differently-cased winner than the canonical $templatePath this is
+        // compared against — canonicalize it too, or a legitimately-owned name would read as lost.
+        return $winner !== false && PathCaseCanonicalizer::canonicalize($winner) === $templatePath;
     }
 
     /**
@@ -589,7 +616,19 @@ final class BladeBootstrapper
      */
     private function vendorDirectory(): ?string
     {
-        return $this->vendorDirOverride ?? VendorDirectory::path();
+        $vendorDir = $this->vendorDirOverride ?? VendorDirectory::path();
+
+        if ($vendorDir === null) {
+            return null;
+        }
+
+        // The hints tested against this boundary are canonicalized, so the boundary has to be too,
+        // in the same realpath-then-canonicalize order: a configured or derived vendor path whose
+        // spelling differs from the on-disk dirent casing otherwise fails the prefix test against
+        // every hint, and the filter silently stops filtering anything.
+        $resolved = \realpath($vendorDir);
+
+        return $resolved === false ? $vendorDir : PathCaseCanonicalizer::canonicalize($resolved);
     }
 
     private function isUnderVendorDirectory(string $path, string $vendorDir): bool
@@ -656,17 +695,17 @@ final class BladeBootstrapper
      * with Psalm has to be the same string Psalm itself would use, and view roots overlap in
      * applications that add a package path twice.
      *
-     * @param list<array{0: string, 1: string|null}> $viewPaths
+     * @param list<array{0: string, 1: string|null}> $roots    resolved, deduped view roots
      * @param array<string, string>                  $failures appended to, keyed by the directory
      *                                                that failed
      *
      * @return list<string>
      */
-    private function findTemplates(array $viewPaths, array &$failures): array
+    private function findTemplates(array $roots, array &$failures): array
     {
         $templates = [];
 
-        foreach ($viewPaths as [$viewPath]) {
+        foreach ($roots as [$viewPath]) {
             if (!\is_dir($viewPath)) {
                 // A configured-but-absent view root (a package path, a not-yet-published vendor
                 // directory) is not an error for Laravel either.
@@ -687,7 +726,11 @@ final class BladeBootstrapper
                     $real = $file->getRealPath();
 
                     if ($real !== false) {
-                        $templates[$real] = true;
+                        // getRealPath() expands a symlinked template through the link's STORED
+                        // target, so a mis-cased target re-introduces a spelling the roots already
+                        // collapsed — the same physical file would land here twice, under two
+                        // keys, and become two shadows.
+                        $templates[PathCaseCanonicalizer::canonicalize($real)] = true;
                     }
                 }
             } catch (\Throwable $throwable) {

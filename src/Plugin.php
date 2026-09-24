@@ -220,6 +220,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Views\MissingViewHandler::reset();
         Handlers\Views\ViewContractHandler::reset();
         Handlers\Views\UnusedViewHandler::reset();
+        Internal\PathCaseCanonicalizer::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
         Blade\Annotate\AnnotationCollector::reset();
         Blade\Annotate\AnnotationWriter::reset();
