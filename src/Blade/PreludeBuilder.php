@@ -215,7 +215,7 @@ final class PreludeBuilder
         $names = [];
 
         foreach (\array_keys($visitor->found) as $name) {
-            if (\str_starts_with($name, '__') || isset($declared[$name])) {
+            if (isset($declared[$name])) {
                 continue;
             }
 

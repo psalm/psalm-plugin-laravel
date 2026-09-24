@@ -248,12 +248,19 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var mixed $undeclared */', $prelude);
     }
 
+    /**
+     * #1558: a shared `__`-prefixed global (e.g. bookstack's `$__themeViews`) that a template
+     * merely READS, never assigns, used to be silently dropped from the undeclared set by the
+     * `__`-prefix skip below, leaving the read genuinely undeclared and reporting
+     * UndefinedGlobalVariable per occurrence. The design default for an undeclared read is silent
+     * `mixed`, same as any other name.
+     */
     #[Test]
-    public function underscore_prefixed_variables_are_excluded(): void
+    public function a_read_underscore_prefixed_global_gets_var_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo $__key; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $__customShared; ?>', [], '');
 
-        $this->assertStringNotContainsString('$__key', $prelude);
+        $this->assertStringContainsString('@var mixed $__customShared */', $prelude);
     }
 
     #[Test]
@@ -262,6 +269,21 @@ final class PreludeBuilderTest extends TestCase
         $prelude = (new PreludeBuilder())->build('<?php echo $errors; ?>', [], '');
 
         $this->assertSame(1, \substr_count($prelude, '$errors'));
+    }
+
+    /**
+     * #1558: `$__env` is the one `__`-prefixed name with a REAL declared type
+     * ({@see PreludeBuilder::AMBIENT_TYPES}); removing the blanket `__`-prefix skip must not let a
+     * read of it also fall into the generic mixed-declaration pass and duplicate the docblock.
+     */
+    #[Test]
+    public function declared_underscore_prefixed_variable_is_not_duplicated_as_mixed(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo $__env; ?>', [], '');
+
+        $this->assertSame(1, \substr_count($prelude, '$__env'));
+        $this->assertStringContainsString('@var \Illuminate\View\Factory $__env */', $prelude);
+        $this->assertStringNotContainsString('@var mixed $__env', $prelude);
     }
 
     #[Test]
