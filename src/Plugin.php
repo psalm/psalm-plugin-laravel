@@ -965,7 +965,11 @@ final class Plugin implements PluginEntryPointInterface
         // dependency; both halves are needed, the deep scan alone changes nothing.
         $helperFiles = ApplicationProvider::runtimeDeclaredFunctionFiles();
         $registrar->queueFilesForScanning($helperFiles);
-        Blade\RuntimeHelperVisibility::init($helperFiles);
+        Blade\RuntimeHelperVisibility::init(
+            $helperFiles,
+            ApplicationProvider::runtimeDeclaredFunctionIds(),
+            ApplicationProvider::runtimeDeclaredConstants(),
+        );
 
         // Progress is only available here, not in registerHandlers() below, hence the split: init()
         // (captures the handle for the one-time dynamic-reference warning) here, registration there.

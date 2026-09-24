@@ -60,6 +60,21 @@ final class ApplicationProvider
      */
     private static array $runtimeDeclaredFunctionFiles = [];
 
+    /**
+     * The function names the boot actually declared, lowercase as PHP reports them — which is also
+     * how Psalm keys global function ids. See {@see runtimeDeclaredFunctionIds()}.
+     *
+     * @var list<string>
+     */
+    private static array $runtimeDeclaredFunctionIds = [];
+
+    /**
+     * The user constants the boot actually defined, case-sensitive.
+     *
+     * @var list<string>
+     */
+    private static array $runtimeDeclaredConstants = [];
+
     public static function bootApp(): void
     {
         self::getApp();
@@ -80,6 +95,8 @@ final class ApplicationProvider
         self::$bootstrapError = null;
         self::$booted = false;
         self::$runtimeDeclaredFunctionFiles = [];
+        self::$runtimeDeclaredFunctionIds = [];
+        self::$runtimeDeclaredConstants = [];
 
         \Illuminate\Support\Facades\Facade::clearResolvedInstances();
         \Illuminate\Support\Facades\Facade::setFacadeApplication(null);
@@ -160,6 +177,7 @@ final class ApplicationProvider
         // Snapshot taken around the WHOLE boot, not just $consoleApp->bootstrap(): a bootstrap/app.php
         // may require helper files directly, before any provider runs.
         $functionsBeforeBoot = \get_defined_functions()['user'];
+        $constantsBeforeBoot = \get_defined_constants(true)['user'] ?? [];
 
         // Resolution order:
         //   1. cwd-relative bootstrap/app.php — Applications and local dev (Psalm run from project root).
@@ -228,8 +246,12 @@ final class ApplicationProvider
             self::$booted = true;
         }
 
-        self::$runtimeDeclaredFunctionFiles = $this->declaringFilesOf(
-            \array_values(\array_diff(\get_defined_functions()['user'], $functionsBeforeBoot)),
+        $declaredFunctions = \array_values(\array_diff(\get_defined_functions()['user'], $functionsBeforeBoot));
+
+        self::$runtimeDeclaredFunctionIds = $declaredFunctions;
+        self::$runtimeDeclaredFunctionFiles = $this->declaringFilesOf($declaredFunctions);
+        self::$runtimeDeclaredConstants = \array_keys(
+            \array_diff_key(\get_defined_constants(true)['user'] ?? [], $constantsBeforeBoot),
         );
 
         return $app;
@@ -253,6 +275,36 @@ final class ApplicationProvider
     public static function runtimeDeclaredFunctionFiles(): array
     {
         return self::$runtimeDeclaredFunctionFiles;
+    }
+
+    /**
+     * Global functions the booted application actually declared.
+     *
+     * Names only, because a declaring file's storage is a superset of what ran: a declaration inside
+     * a disabled branch (feature flag, version gate) or nested in an uncalled function is in the
+     * file's storage all the same. Consumers intersect against this set rather than trusting the
+     * file. Lowercase as PHP reports them, which is how Psalm keys global function ids.
+     *
+     * @return list<string>
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function runtimeDeclaredFunctionIds(): array
+    {
+        return self::$runtimeDeclaredFunctionIds;
+    }
+
+    /**
+     * User constants the booted application actually defined. Case-sensitive, and the same
+     * superset caveat as {@see runtimeDeclaredFunctionIds()} applies.
+     *
+     * @return list<string>
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function runtimeDeclaredConstants(): array
+    {
+        return self::$runtimeDeclaredConstants;
     }
 
     /**

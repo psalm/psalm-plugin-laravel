@@ -24,6 +24,11 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  * confined to paths {@see ShadowRegistry} knows: widening it to project files would suppress
  * genuine `UndefinedFunction` everywhere.
  *
+ * What gets injected is the INTERSECTION of the boot's declared names with the declaring file's
+ * storage, never the whole file: a declaration behind a disabled feature flag or version gate, or
+ * nested inside an uncalled function, sits in that storage without the runtime ever declaring it,
+ * and merging it would make an unreachable symbol resolvable in every template.
+ *
  * Runs at `AfterCodebasePopulated`, which is after scanning (so the storages exist) and before
  * `analyzeFiles()` forks (so workers inherit the mutation by copy-on-write). Deliberately not
  * earlier: `FileStorageCacheProvider::writeToCache()` runs during scanning, so a merge before that
@@ -36,15 +41,29 @@ final class RuntimeHelperVisibility implements AfterCodebasePopulatedInterface
     /** @var list<string> */
     private static array $helperFiles = [];
 
-    /** @param list<string> $helperFiles from {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider::runtimeDeclaredFunctionFiles()} */
-    public static function init(array $helperFiles): void
+    /** @var array<string, true> */
+    private static array $declaredFunctionIds = [];
+
+    /** @var array<string, true> */
+    private static array $declaredConstants = [];
+
+    /**
+     * @param list<string> $helperFiles from {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider::runtimeDeclaredFunctionFiles()}
+     * @param list<string> $declaredFunctionIds from {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider::runtimeDeclaredFunctionIds()}
+     * @param list<string> $declaredConstants from {@see \Psalm\LaravelPlugin\Bootstrap\ApplicationProvider::runtimeDeclaredConstants()}
+     */
+    public static function init(array $helperFiles, array $declaredFunctionIds, array $declaredConstants): void
     {
         self::$helperFiles = $helperFiles;
+        self::$declaredFunctionIds = \array_fill_keys($declaredFunctionIds, true);
+        self::$declaredConstants = \array_fill_keys($declaredConstants, true);
     }
 
     public static function reset(): void
     {
         self::$helperFiles = [];
+        self::$declaredFunctionIds = [];
+        self::$declaredConstants = [];
     }
 
     #[\Override]
@@ -72,20 +91,25 @@ final class RuntimeHelperVisibility implements AfterCodebasePopulatedInterface
                 continue;
             }
 
-            // Gating on `functions` is what makes the map followable: `Functions::getStorage()`
+            // Three gates. The declared-name set keeps symbols the file merely CONTAINS out (see the
+            // class docblock). `functions` is what makes the map followable: `Functions::getStorage()`
             // reads `file_storage_provider->get($declaringPath)->functions[$id]` and FATALS when it
-            // is absent. A populated `declaring_function_ids` also carries entries merged in from
+            // is absent; a populated `declaring_function_ids` also carries entries merged in from
             // required files, whose storage this one does not hold; those are dropped here and
             // picked up from their own file, since the capture names every declaring file directly.
             // A stubbed id is skipped outright so a user helper can never outrank a stub's types.
             foreach ($helperStorage->declaring_function_ids as $id => $declaringPath) {
-                if (isset($helperStorage->functions[$id]) && !$codebase->functions->hasStubbedFunction($id)) {
+                if (!isset(self::$declaredFunctionIds[$id], $helperStorage->functions[$id])) {
+                    continue;
+                }
+
+                if (!$codebase->functions->hasStubbedFunction($id)) {
                     $functionIds[$id] = $declaringPath;
                 }
             }
 
             foreach ($helperStorage->declaring_constants as $name => $declaringPath) {
-                if (isset($helperStorage->constants[$name])) {
+                if (isset(self::$declaredConstants[$name], $helperStorage->constants[$name])) {
                     $constants[$name] = $declaringPath;
                 }
             }

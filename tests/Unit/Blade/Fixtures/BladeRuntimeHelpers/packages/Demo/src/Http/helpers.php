@@ -16,3 +16,15 @@ if (!\function_exists('demo_helper')) {
 if (!\defined('DEMO_CONST')) {
     \define('DEMO_CONST', 'demo-const');
 }
+
+// Never runs, but Psalm's scanner records both symbols in this file's storage all the same — the
+// stand-in for a feature flag or a PHP-version gate. Merging a whole file's storage into shadows
+// would make these resolvable and swallow the genuine diagnostics.
+if (\PHP_MAJOR_VERSION < 5) {
+    function demo_never_declared(): string
+    {
+        return 'never';
+    }
+
+    \define('DEMO_NEVER_DEFINED', 'never');
+}

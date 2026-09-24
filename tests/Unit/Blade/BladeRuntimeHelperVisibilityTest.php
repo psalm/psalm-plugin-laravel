@@ -219,6 +219,37 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
     }
 
     /**
+     * A helper file's storage also carries symbols the file merely CONTAINS — a declaration behind a
+     * disabled feature flag or version gate, an uncalled nested function. The runtime never declared
+     * them, so a template cannot call them and the diagnostic must survive the injection.
+     */
+    #[Test]
+    public function a_function_the_boot_never_declared_is_still_reported_in_a_template(): void
+    {
+        ['issues' => $issues] = $this->analyze();
+        $this->assertTemplateAnalyzed();
+
+        $this->assertCount(
+            1,
+            $this->matching($issues, 'page.blade.php', 'UndefinedFunction', 'demo_never_declared'),
+            \var_export($issues, true),
+        );
+    }
+
+    #[Test]
+    public function a_constant_the_boot_never_defined_is_still_reported_in_a_template(): void
+    {
+        ['issues' => $issues] = $this->analyze();
+        $this->assertTemplateAnalyzed();
+
+        $this->assertCount(
+            1,
+            $this->matching($issues, 'page.blade.php', 'UndefinedConstant', 'DEMO_NEVER_DEFINED'),
+            \var_export($issues, true),
+        );
+    }
+
+    /**
      * The blast radius is shadows only. An ordinary project file calling the same helper keeps
      * Psalm's own answer; widening the injection to project files would suppress genuine
      * `UndefinedFunction` across the whole codebase.
@@ -267,23 +298,31 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
         ApplicationProvider::reset();
 
         $this->assertSame([], ApplicationProvider::runtimeDeclaredFunctionFiles());
+        $this->assertSame([], ApplicationProvider::runtimeDeclaredFunctionIds());
+        $this->assertSame([], ApplicationProvider::runtimeDeclaredConstants());
     }
 
     /**
-     * The handler's own static carries the same per-run facts and needs the same clearing. Read
+     * The handler's own statics carry the same per-run facts and need the same clearing. Read
      * reflectively because the only public reader is the hook itself, and driving that would mean
      * assembling a populated `Codebase`; asserting the filled state first is what keeps the
      * cleared assertion from passing vacuously.
      */
     #[Test]
-    public function the_handlers_helper_files_are_cleared_on_reset(): void
+    public function the_handlers_captured_state_is_cleared_on_reset(): void
     {
         $helperFiles = new \ReflectionProperty(RuntimeHelperVisibility::class, 'helperFiles');
+        $functionIds = new \ReflectionProperty(RuntimeHelperVisibility::class, 'declaredFunctionIds');
+        $constants = new \ReflectionProperty(RuntimeHelperVisibility::class, 'declaredConstants');
 
-        RuntimeHelperVisibility::init(['/tmp/does-not-need-to-exist.php']);
+        RuntimeHelperVisibility::init(['/tmp/does-not-need-to-exist.php'], ['demo_helper'], ['DEMO_CONST']);
         $this->assertSame(['/tmp/does-not-need-to-exist.php'], $helperFiles->getValue());
+        $this->assertSame(['demo_helper' => true], $functionIds->getValue());
+        $this->assertSame(['DEMO_CONST' => true], $constants->getValue());
 
         RuntimeHelperVisibility::reset();
         $this->assertSame([], $helperFiles->getValue());
+        $this->assertSame([], $functionIds->getValue());
+        $this->assertSame([], $constants->getValue());
     }
 }
