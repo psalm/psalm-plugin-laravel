@@ -96,6 +96,19 @@ final class BladeBootstrapperTest extends TestCase
         return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir);
     }
 
+    /**
+     * True when a directory's upper/lower-cased spelling also resolves to it, on THIS filesystem.
+     * Case (in)sensitivity is a filesystem capability, never assumed from the OS: this is what
+     * gates the two case-variant tests below to whichever half of the pair this machine can hold.
+     */
+    private function filesystemIsCaseInsensitive(): bool
+    {
+        $lower = $this->root . '/case-probe';
+        \mkdir($lower, 0o777, true);
+
+        return \is_dir($this->root . '/CASE-PROBE');
+    }
+
     #[Test]
     public function compiles_a_template_and_registers_both_sides_with_psalm(): void
     {
@@ -213,6 +226,79 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the filtered vendor root still owns the name');
         $this->assertSame([$local], $registrar->reportableTemplates, 'the local template is still analyzed');
+    }
+
+    /**
+     * #1552: the same physical view root reaching the finder twice under different case (a
+     * published-override-style hint vs. its default-root spelling, or two roots a project
+     * configured redundantly) must collapse to ONE discovered template, not double it. `realpath()`
+     * cannot do this alone — it preserves the caller's casing on a case-insensitive filesystem — so
+     * this only exercises the fix, {@see \Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer}, when
+     * the machine running the suite actually has one.
+     */
+    #[Test]
+    public function two_case_variant_spellings_of_the_same_view_root_collapse_into_one_shadow(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $lowerSpelling = $this->root . '/resources/views';
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir, $lowerSpelling]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'the two spellings of one physical root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
+     * The mirror of the test above: on a case-SENSITIVE filesystem, two directories differing only
+     * by case are two real, distinct dirents holding two real, distinct templates — collapsing them
+     * would be a regression, not a fix.
+     */
+    #[Test]
+    public function two_distinct_dirents_differing_only_by_case_stay_two_separate_shadows(): void
+    {
+        if ($this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-sensitive filesystem to hold two same-named-but-cased dirents');
+        }
+
+        $upperDir = $this->root . '/Resources/views';
+        $lowerDir = $this->root . '/resources/views';
+        \mkdir($upperDir, 0o777, true);
+        \mkdir($lowerDir, 0o777, true);
+        \file_put_contents($upperDir . '/widget.blade.php', "<p>upper</p>\n");
+        \file_put_contents($lowerDir . '/widget.blade.php', "<p>lower</p>\n");
+
+        $finder = new FileViewFinder(new Filesystem(), [$upperDir, $lowerDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertCount(2, $registrar->analyzedShadows, 'two physically distinct templates must stay two shadows');
     }
 
     /**
