@@ -194,11 +194,12 @@ final class ShadowIssueRelocator
             // own compilers write roughly twenty distinct `$__*` names across their directives, and
             // the view Factory unconditionally shares `$__env` into every rendered view, so the gate
             // matches the whole family by prefix rather than enumerating each name, unlike
-            // `component`/`errors`/`attributes`/`slot` above. No docblock-branch wording exists for
-            // a `$__`-prefixed name — it is never declared via the prelude's `@var` — so
-            // `isAmbientGuardName()` (not the docblock-narrowed `isAmbientDocblockGuardName()`) is
-            // correct here, and unconditional: unlike `attributes`/`slot`, the bookkeeping compiles
-            // identically whether or not the enclosing view is itself a component.
+            // `component`/`errors`/`attributes`/`slot` above. Except for `$__env` (excluded below,
+            // same reason as `$errors`), no docblock-branch wording exists for a `$__`-prefixed
+            // name — it is never declared via the prelude's `@var` — so `isAmbientGuardName()` (not
+            // the docblock-narrowed `isAmbientDocblockGuardName()`) is correct here, and
+            // unconditional: unlike `attributes`/`slot`, the bookkeeping compiles identically
+            // whether or not the enclosing view is itself a component.
             //
             // Trade-off: an author who writes their own `$__`-prefixed local inside `@php`
             // (`$__myFlag = ...`), a name Blade's own compiled output never happens to collide with
@@ -208,10 +209,23 @@ final class ShadowIssueRelocator
             // mixin vars, ...) report this same issue family on a genuine author expression
             // identically in a plain `.php` file — that is real signal the plugin has no business
             // dropping, so the negative lookahead carves the whole class out of the wide
-            // `__`-prefix match. Psalm's `__fake_*` synthesized names are a separate case the
-            // lookahead does not need to handle: they exist internally but never render into either
-            // of the two anchored message shapes `isAmbientGuardName()` matches.
-            if (self::isAmbientGuardName($issue->message, '__(?!tmp_)[A-Za-z_]\w*')) {
+            // `__`-prefix match. `__fake_*` (Psalm's synthesized `$__fake_<id>_method_call_var__`
+            // for an `array_map`/`array_walk`-style callback carrying `@psalm-assert`) is excluded
+            // alongside it: unlike `__tmp_*`'s sibling shapes, it CAN render into the second
+            // anchored `Cannot resolve types for $key - ...` shape, and when it does the message is
+            // genuine signal about the callback's own contract, not Blade bookkeeping.
+            //
+            // Excludes exact `__env`: like `$errors` above, `$__env` IS declared via the prelude's
+            // own `@var` docblock (`PreludeBuilder::AMBIENT_TYPES`), so an author reassignment
+            // (`@php $__env = 42; @endphp`) renders the inferred-branch wording this wide match
+            // would otherwise wrongly drop; only the DOCBLOCK branch is dropped, via the dedicated
+            // check below. The lookahead is exact-name (`env\b`), not a prefix, so `$__environment`
+            // still matches the wide family.
+            if (self::isAmbientGuardName($issue->message, '__(?!tmp_|fake_|env\b)[A-Za-z_]\w*')) {
+                return false;
+            }
+
+            if (self::isAmbientDocblockGuardName($issue->message, '__env')) {
                 return false;
             }
         }

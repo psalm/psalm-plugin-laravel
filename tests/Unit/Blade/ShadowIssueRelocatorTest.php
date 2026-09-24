@@ -738,4 +738,71 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertInstanceOf(TypeDoesNotContainNull::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
+
+    /**
+     * #1557 review: `$__env`, unlike every other `$__`-prefixed name, IS declared via the prelude's
+     * own `@var` docblock (`PreludeBuilder::AMBIENT_TYPES`) — the same shape `$errors` above is
+     * excluded for. An author's own reassignment (`@php $__env = 42; @endphp @if
+     * (is_string($__env))`) replaces that docblock type with an INFERRED one, rendering this
+     * plain, non-"Docblock-defined" wording — genuine author signal the wide `$__`-prefix match
+     * would otherwise wrongly drop as compiled bookkeeping.
+     */
+    #[Test]
+    public function an_inferred_type_dunder_env_contradiction_survives(): void
+    {
+        $issue = new TypeDoesNotContainType('Type 42 for $__env is never string', $this->shadowLocation(9), null);
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
+
+        $this->assertInstanceOf(TypeDoesNotContainType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** The docblock-branch counterpart: `$__env`'s OWN ambient guard, dropped like `$errors`'s. */
+    #[Test]
+    public function an_ambient_dunder_env_docblock_contradiction_is_dropped(): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(
+            'Docblock-defined type Illuminate\View\Factory for $__env is never null',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
+    }
+
+    /**
+     * Negative: the `$__env` exclusion from the wide `$__`-prefix match is exact-name, not a
+     * prefix — `$__environment` is compiled bookkeeping like any other `$__`-prefixed local and
+     * must still be dropped, proving the lookahead's word boundary doesn't over-exclude.
+     */
+    #[Test]
+    public function a_dunder_environment_name_is_still_dropped(): void
+    {
+        $issue = new RedundantCondition("Type 'x' for \$__environment is always string", $this->shadowLocation(9), null);
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
+    }
+
+    /**
+     * #1557 review (CLI P2): `array_map([$obj, 'method'], [...])` against a callback carrying
+     * `@psalm-assert` synthesizes `$__fake_<id>_method_call_var__`, and CAN render into the
+     * `Cannot resolve types for $key - ...` anchored shape — genuine author-actionable signal
+     * about the callback's own contract, not Blade bookkeeping. Excluded from the wide match
+     * alongside `__tmp_*`.
+     */
+    #[Test]
+    public function a_fake_method_call_var_survives(): void
+    {
+        $issue = new TypeDoesNotContainType(
+            'Cannot resolve types for $__fake_123_method_call_var__ - ReviewFirst does not contain ReviewSecond',
+            $this->shadowLocation(9),
+            null,
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
+
+        $this->assertInstanceOf(TypeDoesNotContainType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
 }

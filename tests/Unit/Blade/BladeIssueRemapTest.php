@@ -772,10 +772,21 @@ final class BladeIssueRemapTest extends TestCase
         // Guard against a vacuous pass: if `@aware()` stops compiling the literal-array
         // `$__key`/`$__value` loop (a compiler change, a fixture edit), the assertions below would
         // pass with nothing left to drop.
+        $shadow = $this->shadowSourceFor($template);
         $this->assertStringContainsString(
             'as $__key => $__value',
-            $this->shadowSourceFor($template),
+            $shadow,
             "the fixture's @aware() directive never compiled the literal-array loop: no \$__key/\$__value foreach found in the compiled shadow",
+        );
+
+        // A loop alone isn't enough: `@aware([])` would compile the same `foreach` shape and still
+        // report nothing, because Psalm can only enumerate per-pair KEYS out of a literal array with
+        // an actual pair in it — that key enumerability, not the loop shape, is what makes the
+        // reconciler fire in the first place.
+        $this->assertStringContainsString(
+            "'type' => 'info'",
+            $shadow,
+            "the fixture's @aware() directive compiled an empty array: no literal pair for Psalm to enumerate, so the reconciler this test exists to pin never fires",
         );
 
         foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
