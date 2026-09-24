@@ -59,4 +59,12 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     {
         $this->queuedResolvableClassLikes = $candidates;
     }
+
+    /**
+     * Nothing to record: the call site is `Plugin::initBladeAnalysis()`, not `BladeBootstrapper`,
+     * so no test driving this double reaches it. The seam is covered end to end by
+     * `BladeRuntimeHelperVisibilityTest`.
+     */
+    #[\Override]
+    public function queueFilesForScanning(array $paths): void {}
 }

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
+use Psalm\LaravelPlugin\Internal\VendorDirectory;
 use Psalm\Progress\Progress;
 
 /**
@@ -581,42 +582,19 @@ final class BladeBootstrapper
     }
 
     /**
-     * The analyzed project's own Composer vendor directory, derived from where it installed
-     * laravel/framework — every booted Laravel app has one — rather than assuming the conventional
-     * `vendor/` name, which `config/vendor-dir` can rename. Null when it cannot be determined
-     * (`composer/composer` runtime API missing or laravel/framework not resolvable), in which case
-     * the vendor filter above is skipped rather than guessed at.
+     * The analyzed project's own Composer vendor directory, or the test override. Null when it
+     * cannot be determined, in which case the vendor filter above is skipped rather than guessed
+     * at. See {@see VendorDirectory} for why the boundary is the
+     * install root and not the substring `vendor`.
      */
     private function vendorDirectory(): ?string
     {
-        if ($this->vendorDirOverride !== null) {
-            return $this->vendorDirOverride;
-        }
-
-        if (!\class_exists(\Composer\InstalledVersions::class)) {
-            return null;
-        }
-
-        try {
-            $installPath = \Composer\InstalledVersions::getInstallPath('laravel/framework');
-        } catch (\Throwable) {
-            return null;
-        }
-
-        // vendor/laravel/framework -> vendor
-        return $installPath === null ? null : \dirname($installPath, 2);
+        return $this->vendorDirOverride ?? VendorDirectory::path();
     }
 
     private function isUnderVendorDirectory(string $path, string $vendorDir): bool
     {
-        $resolvedPath = \realpath($path);
-        $resolvedVendorDir = \realpath($vendorDir);
-
-        if ($resolvedPath === false || $resolvedVendorDir === false) {
-            return false;
-        }
-
-        return \str_starts_with($resolvedPath, \rtrim($resolvedVendorDir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR);
+        return VendorDirectory::contains($path, $vendorDir);
     }
 
     /**

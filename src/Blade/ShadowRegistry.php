@@ -61,6 +61,17 @@ final class ShadowRegistry
     }
 
     /**
+     * Every registered shadow path. The one authority on what counts as a shadow, which is what
+     * keeps {@see RuntimeHelperVisibility} from widening its injection onto project files.
+     *
+     * @return list<string>
+     */
+    public static function shadowPaths(): array
+    {
+        return \array_keys(self::$entries);
+    }
+
+    /**
      * Template bytes, read once per run. The remap needs them to turn a line number into the byte
      * offsets a `CodeLocation\Raw` is built from, and to render the snippet a reporter prints.
      */

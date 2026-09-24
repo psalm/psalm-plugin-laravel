@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * The three registrations a compiled template needs from Psalm, kept behind an interface because the
+ * The registrations a compiled template needs from Psalm, kept behind an interface because the
  * real implementation needs a live `ProjectAnalyzer` that a unit test cannot build.
  */
 interface ShadowRegistrar
@@ -47,4 +47,13 @@ interface ShadowRegistrar
      *                     `\`-prefixed or not
      */
     public function queueResolvableClassLikesForScanning(array $candidates): void;
+
+    /**
+     * Queues whole FILES for deep scanning, for the helper files the booted app `include`d (#1551).
+     * Nothing in the project references them in code position, so without this they get no
+     * `FileStorage` at all and {@see RuntimeHelperVisibility} has nothing to read.
+     *
+     * @param list<string> $paths absolute paths to existing PHP files
+     */
+    public function queueFilesForScanning(array $paths): void;
 }

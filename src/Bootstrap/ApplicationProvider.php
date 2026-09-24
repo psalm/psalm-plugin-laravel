@@ -14,6 +14,7 @@ use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+use Psalm\LaravelPlugin\Internal\VendorDirectory;
 
 final class ApplicationProvider
 {
@@ -50,6 +51,30 @@ final class ApplicationProvider
      */
     private static ?\Throwable $bootstrapError = null;
 
+    /**
+     * Files that declared a global function while {@see doGetApp()} ran — a package-style monorepo
+     * `include`s its helper files from a service provider's `register()`, so these exist only after
+     * a real boot and no autoloader ever names them. See {@see runtimeDeclaredFunctionFiles()}.
+     *
+     * @var list<string>
+     */
+    private static array $runtimeDeclaredFunctionFiles = [];
+
+    /**
+     * The function names the boot actually declared, lowercase as PHP reports them — which is also
+     * how Psalm keys global function ids. See {@see runtimeDeclaredFunctionIds()}.
+     *
+     * @var list<string>
+     */
+    private static array $runtimeDeclaredFunctionIds = [];
+
+    /**
+     * The user constants the boot actually defined, case-sensitive.
+     *
+     * @var list<string>
+     */
+    private static array $runtimeDeclaredConstants = [];
+
     public static function bootApp(): void
     {
         self::getApp();
@@ -69,6 +94,9 @@ final class ApplicationProvider
         self::$bootPath = null;
         self::$bootstrapError = null;
         self::$booted = false;
+        self::$runtimeDeclaredFunctionFiles = [];
+        self::$runtimeDeclaredFunctionIds = [];
+        self::$runtimeDeclaredConstants = [];
 
         \Illuminate\Support\Facades\Facade::clearResolvedInstances();
         \Illuminate\Support\Facades\Facade::setFacadeApplication(null);
@@ -146,6 +174,11 @@ final class ApplicationProvider
             \define('LARAVEL_START', \microtime(true));
         }
 
+        // Snapshot taken around the WHOLE boot, not just $consoleApp->bootstrap(): a bootstrap/app.php
+        // may require helper files directly, before any provider runs.
+        $functionsBeforeBoot = \get_defined_functions()['user'];
+        $constantsBeforeBoot = \get_defined_constants(true)['user'] ?? [];
+
         // Resolution order:
         //   1. cwd-relative bootstrap/app.php — Applications and local dev (Psalm run from project root).
         //   2. vendor-parent-relative bootstrap/app.php — plugin installed into a project's vendor/.
@@ -213,7 +246,97 @@ final class ApplicationProvider
             self::$booted = true;
         }
 
+        $declaredFunctions = \array_values(\array_diff(\get_defined_functions()['user'], $functionsBeforeBoot));
+
+        self::$runtimeDeclaredFunctionIds = $declaredFunctions;
+        self::$runtimeDeclaredFunctionFiles = $this->declaringFilesOf($declaredFunctions);
+        self::$runtimeDeclaredConstants = \array_keys(
+            \array_diff_key(\get_defined_constants(true)['user'] ?? [], $constantsBeforeBoot),
+        );
+
         return $app;
+    }
+
+    /**
+     * Files the booted Laravel application declared global functions in.
+     *
+     * Psalm has no global function table for ordinary project code: a bare `foo()` resolves only
+     * through the ROOT file's `FileStorage::$declaring_function_ids`, which a file reaches by
+     * `require`ing the declaring file (transitively) and nothing else. A package-style monorepo
+     * `include`s its helpers from a provider's `register()`, so no project file ever requires them
+     * and Blade shadows — which reference nothing at all — never see them (#1551).
+     *
+     * Empty when the boot degraded before providers registered, which makes every consumer a no-op.
+     *
+     * @return list<string>
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function runtimeDeclaredFunctionFiles(): array
+    {
+        return self::$runtimeDeclaredFunctionFiles;
+    }
+
+    /**
+     * Global functions the booted application actually declared.
+     *
+     * Names only, because a declaring file's storage is a superset of what ran: a declaration inside
+     * a disabled branch (feature flag, version gate) or nested in an uncalled function is in the
+     * file's storage all the same. Consumers intersect against this set rather than trusting the
+     * file. Lowercase as PHP reports them, which is how Psalm keys global function ids.
+     *
+     * @return list<string>
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function runtimeDeclaredFunctionIds(): array
+    {
+        return self::$runtimeDeclaredFunctionIds;
+    }
+
+    /**
+     * User constants the booted application actually defined. Case-sensitive, and the same
+     * superset caveat as {@see runtimeDeclaredFunctionIds()} applies.
+     *
+     * @return list<string>
+     *
+     * @psalm-external-mutation-free
+     */
+    public static function runtimeDeclaredConstants(): array
+    {
+        return self::$runtimeDeclaredConstants;
+    }
+
+    /**
+     * @param list<callable-string> $functionNames
+     *
+     * @return list<string>
+     */
+    private function declaringFilesOf(array $functionNames): array
+    {
+        // Vendor helpers are deliberately excluded. Their types come from this plugin's stubs,
+        // which a file-storage read would silently outrank, and force-scanning every framework
+        // helper file the boot touched costs a scan on every run for nothing. A vendor directory
+        // that cannot be located skips the filter rather than guessing at it, same as the view-hint
+        // filter in BladeBootstrapper.
+        $vendorDir = VendorDirectory::path();
+        $files = [];
+
+        foreach ($functionNames as $functionName) {
+            try {
+                $file = (new \ReflectionFunction($functionName))->getFileName();
+            } catch (\ReflectionException) {
+                continue;
+            }
+
+            if ($file === false || ($vendorDir !== null && VendorDirectory::contains($file, $vendorDir))) {
+                continue;
+            }
+
+            $files[$file] = true;
+        }
+
+        return \array_keys($files);
     }
 
     /**

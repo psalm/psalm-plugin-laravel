@@ -225,6 +225,7 @@ final class Plugin implements PluginEntryPointInterface
         Blade\Annotate\AnnotationWriter::reset();
         Blade\BladeIssueRemapHandler::reset();
         Blade\ContractRegistry::reset();
+        Blade\RuntimeHelperVisibility::reset();
         Blade\ShadowRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
     }
@@ -735,11 +736,15 @@ final class Plugin implements PluginEntryPointInterface
         // returns a bool, so the taint exemptions above get to drop an issue before the remap pays
         // to rebuild it. Only meaningful when templates were compiled, hence the same gate as
         // initBladeAnalysis() — without an active boot the shadow registry is empty and every issue
-        // would take the (cheap, but pointless) miss path.
+        // would take the (cheap, but pointless) miss path. RuntimeHelperVisibility shares the gate
+        // for the same reason — with no compiled templates there are no shadows to patch — and its
+        // init() already ran in initBladeAnalysis(), where the boot's own capture is in scope.
         if ($bladeActive) {
             require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
             Blade\BladeIssueRemapHandler::init($pluginConfig->bladeReportMixedIssues);
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
+            require_once __DIR__ . '/Blade/RuntimeHelperVisibility.php';
+            $registration->registerHooksFromClass(Blade\RuntimeHelperVisibility::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
@@ -939,9 +944,11 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
     {
+        $registrar = new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance());
+
         $bootstrapper = new Blade\BladeBootstrapper(
             ApplicationProvider::getApp(),
-            new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance()),
+            $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViews,
@@ -951,6 +958,18 @@ final class Plugin implements PluginEntryPointInterface
         if (!$bootstrapper->boot()) {
             return false;
         }
+
+        // #1551: the helper files the boot `include`d are reachable from no project file, so Psalm
+        // would never scan them and RuntimeHelperVisibility would have no storage to read. Queued
+        // here rather than inside BladeBootstrapper to keep the bootstrapper free of a Bootstrap\
+        // dependency; both halves are needed, the deep scan alone changes nothing.
+        $helperFiles = ApplicationProvider::runtimeDeclaredFunctionFiles();
+        $registrar->queueFilesForScanning($helperFiles);
+        Blade\RuntimeHelperVisibility::init(
+            $helperFiles,
+            ApplicationProvider::runtimeDeclaredFunctionIds(),
+            ApplicationProvider::runtimeDeclaredConstants(),
+        );
 
         // Progress is only available here, not in registerHandlers() below, hence the split: init()
         // (captures the handle for the one-time dynamic-reference warning) here, registration there.
