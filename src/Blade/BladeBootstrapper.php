@@ -408,6 +408,10 @@ final class BladeBootstrapper
                 continue;
             }
 
+            // realpath() expands a symlink using the link's STORED target string, so a link whose
+            // target is spelled in the wrong case re-introduces a mis-cased spelling AFTER the
+            // entry-point canonicalization already ran — canonicalize the resolved form too.
+            $resolved = PathCaseCanonicalizer::canonicalize($resolved);
             $resolved = \rtrim($resolved, \DIRECTORY_SEPARATOR);
             // "\0" never occurs in a namespace, so a null (default-root) marker cannot collide.
             $key = ($namespace ?? "\0") . "\0" . $resolved;

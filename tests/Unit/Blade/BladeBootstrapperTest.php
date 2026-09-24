@@ -302,6 +302,86 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
+     * `realpath()` expands a symlink using the link's STORED target string, so a link whose target
+     * is spelled in the wrong case re-introduces the mis-cased spelling AFTER any canonicalization
+     * done on the link path itself. `FileViewFinder` realpaths its `getPaths()` entries but stores
+     * namespace hints RAW, so the hint layer is where such a link actually reaches discovery. The
+     * root list has to be canonicalized after resolution too, or the linked spelling and the
+     * direct spelling survive as two roots.
+     */
+    #[Test]
+    public function a_hint_symlink_whose_stored_target_is_mis_cased_still_collapses_with_the_direct_root(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open a mis-cased symlink target');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        // The stored target string deliberately mis-cases the real 'Resources' dirent.
+        \symlink($this->root . '/resources', $this->root . '/link');
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir]);
+        $finder->addNamespace('pkg', $this->root . '/link/views');
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'the linked and the direct spelling of one physical root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
+     * The hint layer is the entry the issue describes (different hint sources supplying different
+     * casing): a namespace hint spelled in the wrong case must collapse with the identically-cased
+     * default root, not double every template under it.
+     */
+    #[Test]
+    public function a_mis_cased_namespace_hint_collapses_with_the_default_root(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir]);
+        $finder->addNamespace('pkg', $this->root . '/resources/views');
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'a mis-cased hint spelling of the default root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
      * A boot can bind 'view' with a closure that needs runtime-only state and throws under the
      * plugin's partial boot, while still binding a perfectly good 'view.finder'. The throw must
      * fall through to the fallback, not disable Blade analysis for the run.
