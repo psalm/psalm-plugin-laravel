@@ -184,6 +184,9 @@ final class PreludeBuilder
         // the same class): a syntax error anywhere in the compiled shadow must drop only the
         // erroring statement, not the whole net — Psalm still analyzes every statement it recovers
         // and would otherwise report UndefinedGlobalVariable for names this pass never sees.
+        // A null result (unrecoverable, e.g. brace imbalance) or a throw still drops the net,
+        // which is safe: Psalm's parse of that shadow yields no statements either, so nothing
+        // is analyzed and only ParseError is reported.
         try {
             $ast = $parser->parse($compiled, new Collecting()) ?? [];
         } catch (\Throwable) {
