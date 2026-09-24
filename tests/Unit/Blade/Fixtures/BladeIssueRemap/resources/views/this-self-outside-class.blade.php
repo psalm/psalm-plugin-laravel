@@ -1,0 +1,2 @@
+{{ $this->method() }}
+{{ self::bar() }}

@@ -9,9 +9,11 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\RedundantCondition;
@@ -99,6 +101,45 @@ final class ShadowIssueRelocator
         // too; accepted as a documented limitation, since this method has only the message and
         // location to go on, never the AST.
         if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
+            return false;
+        }
+
+        // A Blade shadow is classless global scope, so `$this`/`self::`/`static::` in a plain
+        // template (Livewire/Filament conventions lean on both heavily) trips Psalm's own
+        // out-of-class checks on every mention, flooding noise a template author has no class
+        // declaration to fix (#1559). Gated on the exact message, never the class: both
+        // `InvalidScope` and `NonStaticSelfCall` are also raised for GENUINE author mistakes
+        // written inside a real class `@php class ... @endphp` compiles into the shadow
+        // (MethodAnalyzer.php's `self::` call to a non-static sibling, VariableFetchAnalyzer.php's
+        // `$this` inside a static method), and those must keep reporting.
+        if (
+            $issue instanceof InvalidScope
+            && (
+                $issue->message === 'Use of $this in non-class context'
+                // VariableFetchAnalyzer.php's sibling message for a bare `$this` fetch; unreachable
+                // today because the prelude declares `@var mixed $this` for every template that
+                // mentions it (PreludeBuilder::undeclaredVariables()), which satisfies the
+                // `isset($context->vars_in_scope['$this'])` check ahead of this message — gated
+                // anyway so a prelude change cannot silently regress into flooding noise.
+                || $issue->message === 'Invalid reference to $this in a non-class context'
+            )
+        ) {
+            return false;
+        }
+
+        // `self::`/`static::` outside any class: this exact message shape is emitted by both
+        // StaticCallAnalyzer.php (preserves the AUTHOR's own case: `self`, `SELF`, `Static`...) and
+        // ClassConstAnalyzer.php (always lowercases it), and neither ever reaches it for anything
+        // but the `self`/`static` keywords — `parent` outside a class reports `ParentNotFound`
+        // instead, a separate family out of scope here — so a bare `\S+` wildcard is a safe,
+        // case-agnostic match rather than one anchored to a specific literal casing that would miss
+        // the case-preserved variant. `Method X::y is not static, but is called using self::`
+        // (MethodAnalyzer.php, fired from WITHIN a real class) shares this issue class but never
+        // this message shape, so it is untouched.
+        if (
+            $issue instanceof NonStaticSelfCall
+            && \preg_match('/^Cannot use \S+ outside class context$/', $issue->message) === 1
+        ) {
             return false;
         }
 

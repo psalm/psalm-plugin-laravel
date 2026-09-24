@@ -1118,6 +1118,62 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1559: `$this`/`self::` in a plain template (no enclosing `@php class`) is classless global
+     * scope from Psalm's point of view, so every mention floods `InvalidScope`/`NonStaticSelfCall` —
+     * conventions Livewire/Filament templates lean on heavily. Neither issue type may appear on this
+     * template at all.
+     */
+    #[Test]
+    public function this_and_self_outside_a_class_report_no_scope_issues(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/this-self-outside-class.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'InvalidScope', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'NonStaticSelfCall', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1559 negative: `@php class ... @endphp` compiles a REAL class into the shadow (#581), so
+     * `self::` calling a non-static sibling and `$this` inside a static method are genuine author
+     * mistakes, not compiler bookkeeping, and must keep reporting on the template.
+     */
+    #[Test]
+    public function this_and_self_inside_a_compiled_class_still_report_genuine_scope_issues(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/this-self-inside-compiled-class.blade.php';
+
+        // Guard against a vacuous pass: if this fixture's @php block ever stopped compiling a real
+        // class into the shadow, the assertions below would pass with nothing left to find.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString(
+            'class BladeScopeCompiledClass1559',
+            $shadow,
+            "the fixture's @php class block never compiled a real class into the shadow:\n" . $shadow,
+        );
+
+        $this->assertSame(
+            [10],
+            $this->linesFor($issues, 'NonStaticSelfCall', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        $this->assertSame(
+            [15],
+            $this->linesFor($issues, 'InvalidScope', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
     private function allShadowSources(): string
     {
