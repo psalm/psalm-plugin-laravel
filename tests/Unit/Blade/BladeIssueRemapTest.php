@@ -949,6 +949,87 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertNotSame([], $this->linesFor($issues, 'ParseError', $template));
     }
 
+    /**
+     * #1554: a bound attribute followed by ANOTHER attribute on the same tag compiles to
+     * `'value' => ,'label' => ...` (the trailing-comma shape #1553 pinned is the OTHER position: an
+     * empty bound attribute with nothing after it on that tag). Both are genuine `ParseError`s
+     * Laravel's own `ComponentTagCompiler::attributesToString()` would emit at render time; this
+     * test pins that the malformed line still gets attributed back to a template line, and to the
+     * RIGHT one.
+     *
+     * The multi-attribute component tag is one `MarkerPrePass::computeSkipLines()` match end to end
+     * (the guard at src/Blade/MarkerPrePass.php:112-116 is MANDATORY: a marker between two attributes
+     * would break `compileOpeningTags()`'s strict attribute alternation), so every shadow line the
+     * tag's PHP expands to maps back to the tag's OPENING line, not to wherever `:value` sits inside
+     * it — there is no more granular line to attribute the syntax error to.
+     */
+    #[Test]
+    public function a_bound_attribute_syntax_error_before_another_attribute_maps_to_the_tag_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/bound-attr-empty-middle.blade.php';
+
+        // The dangling comma is ambiguous enough that PhpParser reports several cascading
+        // ParseErrors off the one malformed expression; every one of them must still land on the
+        // tag's opening line, never on an unmapped or wrong line.
+        $lines = $this->linesFor($issues, 'ParseError', $template);
+        $this->assertNotSame([], $lines, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertSame([1], \array_values(\array_unique($lines)), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        // Guard against a vacuous pass: pin the actual malformed shape (missing expression before
+        // the comma), not merely that SOME ParseError fired.
+        $this->assertStringContainsString(
+            "'value' => ,",
+            $this->shadowSourceFor($template),
+            "expected the empty bound attribute to compile to a dangling comma; got:\n" . $this->shadowSourceFor($template),
+        );
+
+        // Neighbour isolation: a finding on an unrelated template in the same run must survive
+        // untouched. This issue never had a neighbour assertion in this suite.
+        $this->assertSame(
+            [11],
+            $this->linesFor($issues, 'InvalidReturnStatement', 'resources/views/docblock-suppression.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1554: a self-closing component tag (`<x-form.label for="a" />`) followed by a stray closing
+     * tag for the same component. `ComponentTagCompiler::compileClosingTags()` has no stack check, so
+     * it emits the `renderComponent()`/`endif` epilogue for a component that was never opened,
+     * producing an orphan `@endif` with no matching `@if` — a genuine `ParseError` (`T_ENDIF`), not a
+     * v-slot or attribute artifact. The three-line repro is minimal: the leading self-closing tag,
+     * the closing tag, and nothing else, is enough to reproduce it.
+     */
+    #[Test]
+    public function a_stray_closing_tag_over_a_self_closed_component_maps_to_its_own_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/stray-closing-tag.blade.php';
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'ParseError', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: pin the actual malformed shape (an orphan endif from the
+        // closing tag's epilogue), not merely that SOME ParseError fired.
+        $this->assertStringContainsString(
+            'endif',
+            $this->shadowSourceFor($template),
+            "expected the stray closing tag to compile to an orphan endif; got:\n" . $this->shadowSourceFor($template),
+        );
+
+        // Neighbour isolation: a finding on an unrelated template in the same run must survive
+        // untouched. This issue never had a neighbour assertion in this suite.
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UnusedForeachValue', 'resources/views/foreach-unused-value.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
     private function allShadowSources(): string
     {
