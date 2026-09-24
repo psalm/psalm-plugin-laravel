@@ -26,7 +26,7 @@ final class ShadowManifest
      * are never fingerprinted (see class docblock), so this is the only lever that self-invalidates
      * a plugin-side change to what gets written around them.
      */
-    private const MARKER_PASS_VERSION = 9;
+    private const MARKER_PASS_VERSION = 10;
 
     /** {@see self::isFresh()}: the references slot must have been collected for the entry to count as fresh. */
     public const SLOT_REFERENCES = 1;

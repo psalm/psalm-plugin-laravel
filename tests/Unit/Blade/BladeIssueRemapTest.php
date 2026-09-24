@@ -997,6 +997,33 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1558: a `__`-prefixed name a host app shares as a global (e.g. bookstack's
+     * `$__themeViews`) is READ by the template but never assigned anywhere in its compiled
+     * output, so the design default (undeclared => silent `mixed`) must apply exactly like any
+     * other unrecognized name — before the fix, `undeclaredVariables()`'s own `__`-prefix skip
+     * dropped it from the mixed-declaration pass, leaving the read genuinely undeclared.
+     */
+    #[Test]
+    public function a_shared_underscore_prefixed_global_read_reports_no_undefined_global_variable(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/shared-underscore-global.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'UndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: the read must have actually reached the prelude pass, and
+        // the component tag's own compiled bookkeeping (unrelated `$__`-prefixed names) must still
+        // be present, unchanged by widening the mixed-declaration pass to the whole `__` family.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString('@var mixed $__themeViews', $shadow);
+        $this->assertStringContainsString('$__componentOriginal', $shadow);
+    }
+
+    /**
      * #1554: a bound attribute followed by ANOTHER attribute on the same tag compiles to
      * `'value' => ,'label' => ...` (the `'value' => ]` shape #1553 pinned is the OTHER position: an
      * empty bound attribute with nothing after it on that tag). Both are genuine `ParseError`s
