@@ -9,9 +9,11 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\RedundantCondition;
@@ -99,6 +101,53 @@ final class ShadowIssueRelocator
         // too; accepted as a documented limitation, since this method has only the message and
         // location to go on, never the AST.
         if ($issue instanceof UnevaluatedCode && $issue->message === 'Expressions after return/throw/continue') {
+            return false;
+        }
+
+        // A Blade shadow is classless global scope, so a bare `$this` method call in a plain
+        // template (Livewire/Filament conventions lean on it heavily) trips
+        // MethodCallAnalyzer.php's dedicated `!$statements_analyzer->getFQCLN()` check on every
+        // mention, flooding noise a template author has no class declaration to fix (#1559). Gated
+        // on the exact message, never the class: `InvalidScope` is also raised for a GENUINE
+        // author mistake written inside a real class `@php class ... @endphp` compiles into the
+        // shadow (VariableFetchAnalyzer.php's `$this` inside a static method), and that must keep
+        // reporting.
+        //
+        // VariableFetchAnalyzer.php's sibling message for a bare `$this` FETCH (`Invalid reference
+        // to $this in a non-class context`) is deliberately NOT included here, even though it
+        // looks like the same classless-shadow shape: `ClosureAnalyzer.php::analyzeExpression()`
+        // only threads `$this` into a closure's `use_context` when NEITHER the enclosing method
+        // nor the closure itself is static, so a non-static closure written inside a STATIC method
+        // of a real compiled class has no `$this` in scope and genuinely trips this exact message
+        // even though it sits lexically inside a class — the PHP runtime agrees (`Using $this when
+        // not in object context`). A corpus review of the flooding shape found zero occurrences of
+        // this message (all were `Use of $this in non-class context`), so it is left alone entirely
+        // rather than risk swallowing that closure case. Residual, accepted: a named function or
+        // closure declared directly in a classless template, whose body itself calls `$this->m()`,
+        // still emits the FLOODING `Use of $this in non-class context` message and is still
+        // dropped — the relocator has only the message and location, never scope info, so the two
+        // cannot be told apart there either.
+        if ($issue instanceof InvalidScope && $issue->message === 'Use of $this in non-class context') {
+            return false;
+        }
+
+        // `self::`/`static::` outside any class: this exact message shape is emitted by both
+        // StaticCallAnalyzer.php (preserves the AUTHOR's own case: `self`, `SELF`, `Static`...) and
+        // ClassConstAnalyzer.php (always lowercases it). The alternation is case-insensitive and
+        // anchored to the two keywords, never a bare wildcard: StaticCallAnalyzer.php's own keyword
+        // check is case-insensitive (`self`/`static`/`parent` all match via `strtolower()`), but
+        // its `parent` HANDLING is case-sensitive — only a literal lowercase `parent` reaches the
+        // dedicated `ParentNotFound` branch, so `PARENT::x()`/`Parent::x()` outside a class falls
+        // through to this SAME `NonStaticSelfCall` message instead (`Cannot use PARENT outside
+        // class context`). The `parent::` family is explicitly out of scope (near-zero corpus
+        // prevalence) and must stay with Psalm's own handling, so the pattern cannot be a bare
+        // `\S+` wildcard. `Method X::y is not static, but is called using self::`
+        // (MethodAnalyzer.php, fired from WITHIN a real class) shares this issue class but never
+        // this message shape, so it is untouched.
+        if (
+            $issue instanceof NonStaticSelfCall
+            && \preg_match('/^Cannot use (?:self|static) outside class context$/i', $issue->message) === 1
+        ) {
             return false;
         }
 
