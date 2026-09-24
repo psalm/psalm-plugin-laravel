@@ -856,6 +856,22 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
+     * Negative: `$this = 1` (AssignmentAnalyzer.php's `Cannot re-assign $this`) is a PHP fatal the
+     * author literally wrote in `@php`, never compiled bookkeeping — must keep reporting even
+     * though its issue class is also `InvalidScope`.
+     */
+    #[Test]
+    public function a_this_reassignment_survives(): void
+    {
+        $issue = new InvalidScope('Cannot re-assign $this', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidScope::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
      * `self::bar()`/`self::CONST` outside any class (StaticCallAnalyzer.php and
      * ClassConstAnalyzer.php share this class): the same classless-shadow flooding as `$this`
      * above.

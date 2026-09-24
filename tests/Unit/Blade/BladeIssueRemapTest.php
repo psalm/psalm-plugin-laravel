@@ -1130,6 +1130,10 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/this-self-outside-class.blade.php';
 
+        // Guard against a vacuous pass: prove the fixture actually compiled into a shadow before
+        // asserting the absence of findings on it.
+        $this->assertStringContainsString('$this->method()', $this->shadowSourceFor($template));
+
         $this->assertSame(
             [],
             $this->linesFor($issues, 'InvalidScope', $template),
