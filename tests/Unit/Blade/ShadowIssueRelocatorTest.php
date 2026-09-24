@@ -10,9 +10,11 @@ use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
+use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\RedundantCondition;
@@ -803,6 +805,149 @@ final class ShadowIssueRelocatorTest extends TestCase
         $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
 
         $this->assertInstanceOf(TypeDoesNotContainType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1559: a Blade shadow is classless global scope, so `$this->method()` in a plain template
+     * reports this exact message (MethodCallAnalyzer.php's dedicated `!$statements_analyzer->
+     * getFQCLN()` check, ahead of the general `$this` handling below) — flooding noise on
+     * Livewire/Filament templates, never author signal, since the template author cannot declare a
+     * class around their own code.
+     */
+    #[Test]
+    public function this_in_non_class_context_is_dropped_unconditionally(): void
+    {
+        $issue = new InvalidScope('Use of $this in non-class context', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * Negative: VariableFetchAnalyzer.php's sibling message for a bare `$this` fetch is NOT gated
+     * — it is not only the classless-template shape. `ClosureAnalyzer.php::analyzeExpression()`
+     * only threads `$this` into a closure's `use_context` when NEITHER the enclosing method nor
+     * the closure itself is static (lines 92-105); a non-static closure written inside a STATIC
+     * method of a real class `@php class ... @endphp` compiles into the shadow therefore has no
+     * `$this` in scope even though it sits lexically inside a class, and its own `$this->` read
+     * genuinely fails this exact check — the runtime confirms with `Using $this when not in
+     * object context`. Corpus review found zero occurrences of this message among the messages
+     * the sibling drop above covers (all were `Use of $this in non-class context`), so this
+     * message is left alone entirely rather than risk swallowing that shape.
+     */
+    #[Test]
+    public function this_in_non_class_context_bare_fetch_survives(): void
+    {
+        $issue = new InvalidScope('Invalid reference to $this in a non-class context', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidScope::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative: `$this` inside a static method IS a class context, so this message is genuine
+     * author signal — reported only when `@php class ... @endphp` compiles a real class into the
+     * shadow (VariableFetchAnalyzer.php's `$statements_analyzer->isStatic()` branch) — and must
+     * keep reporting on the template.
+     */
+    #[Test]
+    public function this_in_a_static_context_survives(): void
+    {
+        $issue = new InvalidScope('Invalid reference to $this in a static context', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidScope::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative: `$this = 1` (AssignmentAnalyzer.php's `Cannot re-assign $this`) is a PHP fatal the
+     * author literally wrote in `@php`, never compiled bookkeeping — must keep reporting even
+     * though its issue class is also `InvalidScope`.
+     */
+    #[Test]
+    public function a_this_reassignment_survives(): void
+    {
+        $issue = new InvalidScope('Cannot re-assign $this', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidScope::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * `self::bar()`/`self::CONST` outside any class (StaticCallAnalyzer.php and
+     * ClassConstAnalyzer.php share this class): the same classless-shadow flooding as `$this`
+     * above.
+     */
+    #[Test]
+    public function self_outside_class_context_is_dropped_unconditionally(): void
+    {
+        $issue = new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * StaticCallAnalyzer.php preserves the AUTHOR's own case for this message (unlike
+     * ClassConstAnalyzer.php, which always lowercases it): an uppercase `SELF::bar()` call is the
+     * SAME flooding shape and must be dropped too, so the gate cannot be anchored to a lowercase
+     * literal.
+     */
+    #[Test]
+    public function an_uppercase_self_call_outside_class_context_is_also_dropped(): void
+    {
+        $issue = new NonStaticSelfCall('Cannot use SELF outside class context', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** `static::` is the same classless-shadow flooding as `self::` above. */
+    #[Test]
+    public function static_outside_class_context_is_dropped_unconditionally(): void
+    {
+        $issue = new NonStaticSelfCall('Cannot use static outside class context', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * Negative: StaticCallAnalyzer.php's own keyword check is case-INSENSITIVE (`self`/`static`/
+     * `parent` all match via `strtolower()`), but its `parent` HANDLING is case-SENSITIVE — only
+     * a literal lowercase `parent` reaches the dedicated `ParentNotFound` branch. `PARENT::x()`/
+     * `Parent::x()` outside a class instead falls through to the SAME `NonStaticSelfCall` branch
+     * as `self`/`static`, rendering `Cannot use PARENT outside class context` — a message this
+     * gate must never match, because the `parent::` family is explicitly out of scope (near-zero
+     * corpus prevalence) and stays with Psalm's own handling.
+     */
+    #[Test]
+    public function an_uppercase_parent_call_outside_class_context_survives(): void
+    {
+        $issue = new NonStaticSelfCall('Cannot use PARENT outside class context', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(NonStaticSelfCall::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative: a non-static method called via `self::` FROM WITHIN a real class
+     * (MethodAnalyzer.php) is genuine author signal, never compiled bookkeeping — must keep
+     * reporting even though its class is also `NonStaticSelfCall`.
+     */
+    #[Test]
+    public function a_non_static_method_called_via_self_survives(): void
+    {
+        $issue = new NonStaticSelfCall('Method Foo::bar is not static, but is called using self::', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(NonStaticSelfCall::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 }
