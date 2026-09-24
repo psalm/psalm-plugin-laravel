@@ -14,5 +14,12 @@ class BladeScopeCompiledClass1559
     {
         $this->instance();
     }
+
+    public static function callsAClosureThatReferencesThis(): void
+    {
+        (function () {
+            $this->instance();
+        })();
+    }
 }
 @endphp

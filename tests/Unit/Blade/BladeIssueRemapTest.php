@@ -1130,9 +1130,12 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/this-self-outside-class.blade.php';
 
-        // Guard against a vacuous pass: prove the fixture actually compiled into a shadow before
-        // asserting the absence of findings on it.
-        $this->assertStringContainsString('$this->method()', $this->shadowSourceFor($template));
+        // Guard against a vacuous pass: prove the fixture actually compiled all three flooding
+        // expressions into the shadow before asserting the absence of findings on it.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString('$this->method()', $shadow);
+        $this->assertStringContainsString('self::bar()', $shadow);
+        $this->assertStringContainsString('static::baz()', $shadow);
 
         $this->assertSame(
             [],
@@ -1171,8 +1174,13 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'NonStaticSelfCall', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+        // Line 15: `$this` inside a static method. Line 21: a non-static closure created inside a
+        // static method — ClosureAnalyzer.php only threads `$this` into a closure's scope when
+        // neither the enclosing method nor the closure itself is static, so this `$this->` read
+        // genuinely has no `$this` in scope too, even though it sits lexically inside a class
+        // (#1559 fix round).
         $this->assertSame(
-            [15],
+            [15, 21],
             $this->linesFor($issues, 'InvalidScope', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
