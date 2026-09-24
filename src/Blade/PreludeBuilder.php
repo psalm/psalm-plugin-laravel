@@ -197,6 +197,9 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $found = [];
 
+            /** @var array<string, true> */
+            public array $written = [];
+
             #[\Override]
             public function enterNode(Node $node): null
             {
@@ -204,7 +207,46 @@ final class PreludeBuilder
                     $this->found[$node->name] = true;
                 }
 
+                if ($node instanceof Node\Expr\Assign
+                    || $node instanceof Node\Expr\AssignOp
+                    || $node instanceof Node\Expr\AssignRef
+                ) {
+                    $this->markWritten($node->var);
+                }
+
+                if ($node instanceof Node\Stmt\Foreach_) {
+                    $this->markWritten($node->valueVar);
+
+                    if ($node->keyVar instanceof \PhpParser\Node\Expr) {
+                        $this->markWritten($node->keyVar);
+                    }
+                }
+
                 return null;
+            }
+
+            /** Walks a write target down to its root variables (array append, list destructuring). */
+            private function markWritten(Node\Expr $target): void
+            {
+                if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
+                    $this->written[$target->name] = true;
+
+                    return;
+                }
+
+                if ($target instanceof Node\Expr\ArrayDimFetch) {
+                    $this->markWritten($target->var);
+
+                    return;
+                }
+
+                if ($target instanceof Node\Expr\List_) {
+                    foreach ($target->items as $item) {
+                        if ($item !== null) {
+                            $this->markWritten($item->value);
+                        }
+                    }
+                }
             }
         };
 
@@ -216,6 +258,15 @@ final class PreludeBuilder
 
         foreach (\array_keys($visitor->found) as $name) {
             if (isset($declared[$name])) {
+                continue;
+            }
+
+            // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping (Blade's
+            // `@session`/`@context` append to `$__sessionPrevious`/`$__contextPrevious` without a
+            // whole assignment); declaring it `mixed` widens the append result and turns the
+            // compiler's own `!empty()` epilogue into a RiskyTruthyFalsyComparison on the template
+            // line. Only a read-only `__` name is a host-app shared global (#1558).
+            if (\str_starts_with($name, '__') && isset($visitor->written[$name])) {
                 continue;
             }
 

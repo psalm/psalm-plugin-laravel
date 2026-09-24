@@ -198,11 +198,11 @@ final class ShadowIssueRelocator
             // same reason as `$errors`), a `$__`-prefixed name the prelude declares gets only the
             // generic `@var mixed` fallback ({@see PreludeBuilder::undeclaredVariables()}, #1558),
             // never a real type (contract types never reach the prelude,
-            // {@see BladeBootstrapper}), so the docblock-branch wording never fires for one in
-            // practice: narrowing a `mixed` docblock drops `from_docblock`, so a re-checked guard
-            // on a `$__` name renders the INFERRED wording, which only `isAmbientGuardName()` (not
-            // the docblock-narrowed `isAmbientDocblockGuardName()`) matches — so the wide matcher is
-            // correct here, and unconditional: unlike `attributes`/`slot`, the bookkeeping compiles
+            // {@see BladeBootstrapper}). A guard on one usually renders the INFERRED wording
+            // (narrowing `mixed` drops `from_docblock`), but falsy reconciliation preserves
+            // docblock provenance (`Docblock-defined type empty-mixed ... is always falsy`), so
+            // both branches occur and the wide `isAmbientGuardName()` (not the docblock-narrowed
+            // `isAmbientDocblockGuardName()`) is the correct matcher here, and unconditional: unlike `attributes`/`slot`, the bookkeeping compiles
             // identically whether or not the enclosing view is itself a component.
             //
             // Trade-off: an author who writes their own `$__`-prefixed local inside `@php`

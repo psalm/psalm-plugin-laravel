@@ -263,6 +263,26 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var mixed $__customShared */', $prelude);
     }
 
+    /**
+     * #1558: a `__`-prefixed name the compiled output WRITES (Blade's `@session` bookkeeping
+     * appends to `$__sessionPrevious` without ever assigning it whole) must keep the skip: a
+     * `mixed` declaration on an append target widens the appended array to
+     * `mixed|non-empty-list<mixed>` and turns the compiler's own `!empty()` epilogue check into a
+     * new `RiskyTruthyFalsyComparison` on the template line. Only read-only `__` names are shared
+     * globals; a written one is bookkeeping.
+     */
+    #[Test]
+    public function a_written_underscore_prefixed_variable_keeps_the_skip(): void
+    {
+        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
+            . ' if (!empty($__sessionPrevious)) { echo 1; } echo $__readOnlyShared; ?>';
+
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringNotContainsString('$__sessionPrevious', $prelude);
+        $this->assertStringContainsString('@var mixed $__readOnlyShared */', $prelude);
+    }
+
     #[Test]
     public function declared_variables_are_not_duplicated_as_mixed(): void
     {
