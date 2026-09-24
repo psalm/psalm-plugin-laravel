@@ -412,7 +412,10 @@ final class BladeBootstrapper
             // target is spelled in the wrong case re-introduces a mis-cased spelling AFTER the
             // entry-point canonicalization already ran — canonicalize the resolved form too.
             $resolved = PathCaseCanonicalizer::canonicalize($resolved);
-            $resolved = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            // Trimming the filesystem root would leave '', which no is_dir() or prefix test
+            // downstream survives — '/' is an odd but usable view root.
+            $trimmed = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            $resolved = $trimmed === '' ? $resolved : $trimmed;
             // "\0" never occurs in a namespace, so a null (default-root) marker cannot collide.
             $key = ($namespace ?? "\0") . "\0" . $resolved;
 
@@ -613,7 +616,19 @@ final class BladeBootstrapper
      */
     private function vendorDirectory(): ?string
     {
-        return $this->vendorDirOverride ?? VendorDirectory::path();
+        $vendorDir = $this->vendorDirOverride ?? VendorDirectory::path();
+
+        if ($vendorDir === null) {
+            return null;
+        }
+
+        // The hints tested against this boundary are canonicalized, so the boundary has to be too,
+        // in the same realpath-then-canonicalize order: a configured or derived vendor path whose
+        // spelling differs from the on-disk dirent casing otherwise fails the prefix test against
+        // every hint, and the filter silently stops filtering anything.
+        $resolved = \realpath($vendorDir);
+
+        return $resolved === false ? $vendorDir : PathCaseCanonicalizer::canonicalize($resolved);
     }
 
     private function isUnderVendorDirectory(string $path, string $vendorDir): bool
@@ -711,7 +726,11 @@ final class BladeBootstrapper
                     $real = $file->getRealPath();
 
                     if ($real !== false) {
-                        $templates[$real] = true;
+                        // getRealPath() expands a symlinked template through the link's STORED
+                        // target, so a mis-cased target re-introduces a spelling the roots already
+                        // collapsed — the same physical file would land here twice, under two
+                        // keys, and become two shadows.
+                        $templates[PathCaseCanonicalizer::canonicalize($real)] = true;
                     }
                 }
             } catch (\Throwable $throwable) {

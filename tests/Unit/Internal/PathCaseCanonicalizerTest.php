@@ -25,6 +25,10 @@ final class PathCaseCanonicalizerTest extends TestCase
         $root = \realpath(\sys_get_temp_dir()) . '/psalm-case-canon-' . \bin2hex(\random_bytes(8));
         \mkdir($root, 0o777, true);
         $this->root = $root;
+
+        // These tests call the canonicalizer directly, bypassing Plugin::resetInvocationState(),
+        // so the dirent memo has to be dropped here or one test's listing answers the next.
+        PathCaseCanonicalizer::reset();
     }
 
     protected function tearDown(): void
@@ -99,6 +103,77 @@ final class PathCaseCanonicalizerTest extends TestCase
         $missing = $this->root . '/never/created/at/all';
 
         $this->assertSame($missing, PathCaseCanonicalizer::canonicalize($missing));
+    }
+
+    /**
+     * A trailing separator on a FILE is a spelling no filesystem opens (a file is not a directory),
+     * so it is not a casing problem to fix: rewriting it onto the real file path would hand the
+     * caller a path it could not have reached itself.
+     */
+    #[Test]
+    public function a_trailing_separator_on_a_file_passes_through_unchanged(): void
+    {
+        \file_put_contents($this->root . '/COMPOSER.JSON', "{}\n");
+
+        $this->assertSame(
+            $this->root . '/COMPOSER.JSON/',
+            PathCaseCanonicalizer::canonicalize($this->root . '/COMPOSER.JSON/'),
+        );
+    }
+
+    /**
+     * The case-insensitive fallback must never invent resolution. Where only `Resources` exists as
+     * a dirent, `resources` is a path the application itself cannot open, and answering it with the
+     * sibling would claim a view root Laravel would fail to read.
+     */
+    #[Test]
+    public function a_spelling_the_filesystem_refuses_is_not_rewritten_onto_a_sibling(): void
+    {
+        if ($this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-sensitive filesystem: elsewhere both spellings open the same directory');
+        }
+
+        \mkdir($this->root . '/Resources/views', 0o777, true);
+
+        $this->assertSame(
+            $this->root . '/resources/views',
+            PathCaseCanonicalizer::canonicalize($this->root . '/resources/views'),
+        );
+    }
+
+    /**
+     * The ownership check canonicalizes once per surviving template, and every call re-walks the
+     * whole path, so without a memo one view root's dirents are re-read once per template in it.
+     * Proven behaviourally: a rename that changes only a dirent's CASE is invisible to a cached
+     * listing, and visible again after {@see PathCaseCanonicalizer::reset()}.
+     */
+    #[Test]
+    public function repeat_lookups_are_served_from_the_per_invocation_dirent_memo(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem: a case-only rename changes identity elsewhere');
+        }
+
+        \mkdir($this->root . '/Resources/views', 0o777, true);
+        $request = $this->root . '/resources/views';
+
+        $this->assertSame($this->root . '/Resources/views', PathCaseCanonicalizer::canonicalize($request));
+
+        \rename($this->root . '/Resources', $this->root . '/RESOURCES');
+
+        $this->assertSame(
+            $this->root . '/Resources/views',
+            PathCaseCanonicalizer::canonicalize($request),
+            'the second lookup must come from the memo, not a fresh scandir',
+        );
+
+        PathCaseCanonicalizer::reset();
+
+        $this->assertSame(
+            $this->root . '/RESOURCES/views',
+            PathCaseCanonicalizer::canonicalize($request),
+            'reset() must drop the memo so a later invocation sees the real dirents',
+        );
     }
 
     /**

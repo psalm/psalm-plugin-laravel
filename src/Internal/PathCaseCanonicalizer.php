@@ -26,6 +26,15 @@ namespace Psalm\LaravelPlugin\Internal;
 final class PathCaseCanonicalizer
 {
     /**
+     * Dirent listings for this Psalm invocation, keyed by directory, `false` for one that could not
+     * be listed. Callers canonicalize once per discovered template against a handful of view roots,
+     * so without this every template re-reads the same directories from the top down.
+     *
+     * @var array<string, list<string>|false>
+     */
+    private static array $entriesByDirectory = [];
+
+    /**
      * Never fails: a segment that cannot be listed (missing path, permission denied) or that
      * matches nothing/more than one dirent case-insensitively is returned as given, for that
      * segment onward. Callers that feed this a nonexistent path get the same path back unchanged.
@@ -42,6 +51,16 @@ final class PathCaseCanonicalizer
             return $path;
         }
 
+        // Only a spelling this filesystem actually opens gets rewritten. Anything else must pass
+        // through: on a case-SENSITIVE filesystem holding only `Resources`, the fallback below
+        // would answer `resources` with the sibling and hand callers a view root the application
+        // itself cannot read; a trailing separator on a file ('/x/composer.json/') is refused for
+        // the same reason. `file_exists()` case-folds exactly where the rewrite is wanted, so the
+        // legitimate case-variant collapses are unaffected.
+        if (!\file_exists($path)) {
+            return $path;
+        }
+
         $segments = \array_values(\array_filter(
             \explode('/', $path),
             static fn(string $segment): bool => $segment !== '',
@@ -51,7 +70,7 @@ final class PathCaseCanonicalizer
         $canonicalSegments = [];
 
         foreach ($segments as $segment) {
-            $entries = @\scandir($walked);
+            $entries = self::$entriesByDirectory[$walked] ??= @\scandir($walked);
 
             if ($entries === false) {
                 // Cannot list this level at all: keep the ORIGINAL path, not a half-canonicalized
@@ -65,6 +84,12 @@ final class PathCaseCanonicalizer
         }
 
         return '/' . \implode('/', $canonicalSegments);
+    }
+
+    /** Dropped per Psalm invocation: the memo above is a within-run cache, not a view of the disk. */
+    public static function reset(): void
+    {
+        self::$entriesByDirectory = [];
     }
 
     /** @param list<string> $entries */
