@@ -222,6 +222,32 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var mixed $foo */', $prelude);
     }
 
+    /**
+     * #1553: a compiled shadow with a syntax error anywhere used to drop the ENTIRE prelude net
+     * (undeclaredVariables() caught the parse Throwable and returned []), not just the erroring
+     * statement. A read that precedes the error must still get its `@var mixed` fallback.
+     */
+    #[Test]
+    public function a_read_before_a_syntax_error_still_gets_var_mixed(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo $foo; $bad = [\'value\' => ,]; ?>', [], '');
+
+        $this->assertStringContainsString('@var mixed $foo */', $prelude);
+    }
+
+    /**
+     * The bagisto shape (#1553): an empty bound component attribute (`:value=""`) compiles to
+     * `'value' => ,`, a syntax error. PhpParser's own error recovery drops only the erroring
+     * statement and keeps analyzing what follows, so a read AFTER the error point must recover too.
+     */
+    #[Test]
+    public function a_read_after_a_syntax_error_still_gets_var_mixed(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php $bad = [\'value\' => ,]; echo $undeclared; ?>', [], '');
+
+        $this->assertStringContainsString('@var mixed $undeclared */', $prelude);
+    }
+
     #[Test]
     public function underscore_prefixed_variables_are_excluded(): void
     {
