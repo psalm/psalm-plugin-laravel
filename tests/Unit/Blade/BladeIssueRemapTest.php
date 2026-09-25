@@ -10,7 +10,6 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeIssueRemapHandler;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that an issue Psalm finds in a shadow file surfaces on the `.blade.php` path and
@@ -23,33 +22,20 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ShadowRegistry::class)]
 final class BladeIssueRemapTest extends TestCase
 {
-    private const FIXTURE = __DIR__ . '/Fixtures/BladeIssueRemap';
+    use AnalysesFixtureApp;
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
+    private const FIXTURE = __DIR__ . '/Fixtures/BladeIssueRemap';
 
     private const ISSUE = 'UndefinedPropertyFetch';
 
-    protected function setUp(): void
+    /**
+     * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
     }
 
     /**
@@ -57,24 +43,9 @@ final class BladeIssueRemapTest extends TestCase
      */
     private function analyze(string $config): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues on purpose.
-        $process->run();
-
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
-
         $issues = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
             $issues[] = [
                 'type' => (string) $issue['type'],
                 'file_path' => (string) $issue['file_path'],
@@ -454,7 +425,7 @@ final class BladeIssueRemapTest extends TestCase
         // report nothing and the assertions above would pass for the wrong reason.
         $this->assertStringContainsString(
             '$__componentOriginal',
-            $this->allShadowSources(),
+            $this->allShadowSources('psalm-unused-code.xml'),
             'the fixture component never compiled: no $__componentOriginal* save found in any compiled shadow',
         );
     }
@@ -1186,15 +1157,16 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
-    /** Every compiled shadow's source, concatenated, read before tearDown() wipes the cache dir. */
-    private function allShadowSources(): string
+    /** Every compiled shadow's source of that run, concatenated. */
+    private function allShadowSources(string $config = 'psalm.xml'): string
     {
-        $this->assertDirectoryExists(self::SHADOW_DIR, 'no shadow was ever written for this run');
+        $shadows = $this->fixtureShadows(self::FIXTURE, $this->arguments($config));
+        $this->assertDirectoryExists($shadows, 'no shadow was ever written for this run');
 
         $source = '';
 
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            $source .= (string) \file_get_contents(self::SHADOW_DIR . '/' . $entry);
+        foreach (\array_diff(\scandir($shadows) ?: [], ['.', '..']) as $entry) {
+            $source .= (string) \file_get_contents($shadows . '/' . $entry);
         }
 
         return $source;
@@ -1205,9 +1177,10 @@ final class BladeIssueRemapTest extends TestCase
      * map, rather than {@see allShadowSources()}'s whole-directory concatenation: a fixture-wide
      * substring count cannot tell THIS template's compiled output apart from every other fixture's.
      */
-    private function shadowSourceFor(string $template): string
+    private function shadowSourceFor(string $template, string $config = 'psalm.xml'): string
     {
-        $manifestPath = self::SHADOW_DIR . '/manifest.php';
+        $shadows = $this->fixtureShadows(self::FIXTURE, $this->arguments($config));
+        $manifestPath = $shadows . '/manifest.php';
         $this->assertFileExists($manifestPath, 'no shadow manifest was ever written for this run');
 
         $manifest = require $manifestPath;
@@ -1217,7 +1190,9 @@ final class BladeIssueRemapTest extends TestCase
             $templatePath = \is_array($entry) ? ($entry[0] ?? null) : null;
 
             if (\is_string($templatePath) && \str_ends_with($templatePath, $template) && \is_string($shadowPath)) {
-                return (string) \file_get_contents($shadowPath);
+                // The manifest names the fixture's own cache directory, which a later run of the
+                // same fixture wipes; read the copy taken when this run finished.
+                return (string) \file_get_contents($shadows . '/' . \basename($shadowPath));
             }
         }
 

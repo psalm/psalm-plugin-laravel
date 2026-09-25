@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a data key no template in the include chain reads is reported. A real
@@ -25,33 +24,20 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ReadSetResolver::class)]
 final class UnusedViewDataTest extends TestCase
 {
-    private const FIXTURE = __DIR__ . '/Fixtures/UnusedViewData';
+    use AnalysesFixtureApp;
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
+    private const FIXTURE = __DIR__ . '/Fixtures/UnusedViewData';
 
     private const UNUSED = 'UnusedViewData';
 
-    protected function setUp(): void
+    /**
+     * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
     }
 
     /**
@@ -62,24 +48,9 @@ final class UnusedViewDataTest extends TestCase
      */
     private function unusedDataIssues(string $config): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues on purpose.
-        $process->run();
-
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
-
         $issues = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
 
             if ((string) $issue['type'] !== self::UNUSED) {
                 continue;

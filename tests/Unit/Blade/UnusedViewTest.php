@@ -10,7 +10,6 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ViewReferenceCollector;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\LaravelPlugin\Handlers\Views\UnusedViewHandler;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a Blade template with no statically-provable reference is reported
@@ -27,6 +26,8 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ViewReferenceRegistry::class)]
 final class UnusedViewTest extends TestCase
 {
+    use AnalysesFixtureApp;
+
     private const FIXTURE = __DIR__ . '/Fixtures/UnusedView';
 
     private const NAMESPACED_FIXTURE = __DIR__ . '/Fixtures/UnusedViewNamespaced';
@@ -53,49 +54,15 @@ final class UnusedViewTest extends TestCase
 
     private const ISSUE = 'UnusedView';
 
-    /** @var list<string> */
-    private const FIXTURES = [
-        self::FIXTURE,
-        self::NAMESPACED_FIXTURE,
-        self::DYNAMIC_FIXTURE,
-        self::DIRECTIVES_FIXTURE,
-        self::COMPONENT_TAG_FIXTURE,
-        self::FIRST_CALL_FIXTURE,
-        self::PARSE_FAILURE_FIXTURE,
-        self::SUPPRESSED_FIXTURE,
-        self::INSTANCE_CALL_FIXTURE,
-        self::FACADE_ALIAS_FIXTURE,
-        self::FACADE_ALIAS_DYNAMIC_FIXTURE,
-        self::NUMERIC_NAME_FIXTURE,
-    ];
-
-    protected function setUp(): void
+    /**
+     * The command a case's fixture and `$config` resolve to. Cases naming the same pair share one
+     * run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        foreach (self::FIXTURES as $fixture) {
-            $this->deleteShadowDir($fixture);
-        }
-    }
-
-    protected function tearDown(): void
-    {
-        foreach (self::FIXTURES as $fixture) {
-            $this->deleteShadowDir($fixture);
-        }
-    }
-
-    private function deleteShadowDir(string $fixture): void
-    {
-        $shadowDir = $fixture . '/.cache/blade-shadows';
-
-        if (!\is_dir($shadowDir)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir($shadowDir) ?: [], ['.', '..']) as $entry) {
-            \unlink($shadowDir . '/' . $entry);
-        }
-
-        \rmdir($shadowDir);
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
     }
 
     /**
@@ -103,24 +70,9 @@ final class UnusedViewTest extends TestCase
      */
     private function unusedViewIssues(string $fixture, string $config): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            $fixture,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports an issue on purpose.
-        $process->run();
-
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
-
         $issues = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
+        foreach ($this->fixtureIssues($fixture, $this->arguments($config)) as $issue) {
             $type = (string) $issue['type'];
 
             if ($type !== self::ISSUE) {

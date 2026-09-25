@@ -12,7 +12,6 @@ use Psalm\LaravelPlugin\Blade\JourneyRemapper;
 use Psalm\LaravelPlugin\Blade\PsalmBridge;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
 use Psalm\LaravelPlugin\Blade\ShadowTarget;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a taint finding inside a Blade template reads as a template finding: the
@@ -29,27 +28,20 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ShadowTarget::class)]
 final class BladeTaintRemapTest extends TestCase
 {
+    use AnalysesFixtureApp;
+
     private const FIXTURE = __DIR__ . '/Fixtures/BladeTaintRemap';
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
-
-    /** @var array{0: string, 1: list<array<string, mixed>>}|null shared across the cases: one Psalm run costs seconds */
-    private static ?array $report = null;
-
-    public static function tearDownAfterClass(): void
-    {
-        self::$report = null;
-
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
-    }
+    /** @var list<string> */
+    private const ARGUMENTS = [
+        '-c',
+        'psalm.xml',
+        '--no-cache',
+        '--threads=1',
+        '--no-progress',
+        '--taint-analysis',
+        '--output-format=json',
+    ];
 
     /**
      * The raw JSON Psalm printed plus its decoded issues. Raw matters: the shadow path has to be
@@ -59,43 +51,10 @@ final class BladeTaintRemapTest extends TestCase
      */
     private function report(): array
     {
-        if (self::$report !== null) {
-            return self::$report;
-        }
-
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        $process = new Process(
-            [
-                \PHP_BINARY,
-                $psalmBinary,
-                '-c',
-                'psalm.xml',
-                '--no-cache',
-                '--threads=1',
-                '--no-progress',
-                '--taint-analysis',
-                '--output-format=json',
-            ],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports a taint issue on purpose.
-        $process->run();
-
-        $output = $process->getOutput();
-        $decoded = \json_decode($output, true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$output}\n{$process->getErrorOutput()}");
-
-        $issues = [];
-
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
-            $issues[] = $issue;
-        }
-
-        return self::$report = [$output, $issues];
+        return [
+            $this->analyzeFixture(self::FIXTURE, self::ARGUMENTS)['output'],
+            $this->fixtureIssues(self::FIXTURE, self::ARGUMENTS),
+        ];
     }
 
     /** @return list<array<string, mixed>> */
