@@ -160,13 +160,13 @@ Most taint handlers live under the Laravel feature directory whose API they cove
 
 ### Experimental issue lifecycle
 
-Experimental status changes an issue's default severity, never whether its handler or type inference runs. Keep the experimental policy list in `ExperimentalIssuePolicy` as the single source of truth; `PromptInjectionIssuePolicy` is a separate, integration-gated opt-out for the stable `TaintedLlmPrompt` issue. Both policies delegate to `Internal\DefaultIssueLevels`, which implements the safe setter Psalm lacks: it applies a default only when the project has no handler for that issue, and recognizes its own earlier default by object identity so a later invocation can refresh it when the flag flips. Any explicit issue handler owns the complete reporting policy, including its base level and scoped filters.
+Experimental status sets an issue's default severity. The policy itself never gates handler registration or type inference. An issue whose handler is too expensive or too noisy to run unconditionally MAY additionally carry its own `findXxx` enablement flag in `PluginConfig`, defaulted to `?? $experimental` so that `<experimental value="true" />` both turns the rule on and raises it to `error` in one step (`MissingRoute`, `findMissingRoutes`). The two responsibilities stay separate: the flag decides whether the handler is registered, the policy decides the severity. Keep the experimental policy list in `ExperimentalIssuePolicy` as the single source of truth; `PromptInjectionIssuePolicy` is a separate, integration-gated opt-out for the stable `TaintedLlmPrompt` issue. Both policies delegate to `Internal\DefaultIssueLevels`, which implements the safe setter Psalm lacks: it applies a default only when the project has no handler for that issue, and recognizes its own earlier default by object identity so a later invocation can refresh it when the flag flips. Any explicit issue handler owns the complete reporting policy, including its base level and scoped filters.
 
-1. Introduce an experimental issue: register its handler normally, add its issue type to that internal list, and let the policy default it to `info` (or `error` when `<experimental value="true" />` is configured).
-2. Graduate an issue: remove it from the internal list; it becomes a normal stable error.
+1. Introduce an experimental issue: register its handler normally, add its issue type to that internal list, and let the policy default it to `info` (or `error` when `<experimental value="true" />` is configured). Add a `findXxx` flag defaulted to `?? $experimental` only when the handler must not run by default; document it in `docs/config.md`.
+2. Graduate an issue: remove it from the internal list; it becomes a normal stable error. A paired `findXxx` flag is dropped in the same step, or kept and defaulted to `true` if the rule stays opt-out.
 3. Withdraw an issue: remove its handler and issue class.
 
-Do not add user-facing feature names or handler-registration gates. Do not overwrite or merge explicit issue handlers.
+Keep user-facing feature names and handler-registration gates out of the policy list itself: a gate belongs in `PluginConfig` as a documented `findXxx` flag read by `Plugin::registerHandlers()`. Do not overwrite or merge explicit issue handlers.
 
 ### Psalm hooks used by the plugin
 
