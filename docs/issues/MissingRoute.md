@@ -6,7 +6,7 @@ nav_order: 12
 
 # MissingRoute
 
-Emitted when `route()`, `to_route()`, `URL::route()` / `signedRoute()` / `temporarySignedRoute()`, `Redirect::route()`, or `redirect()->route()` references a route name that is not registered anywhere in the booted application.
+Emitted when `route()`, `to_route()`, `URL::route()` / `signedRoute()` / `temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered anywhere in the booted application.
 
 Controlled by the `findMissingRoutes` flag (see [Configuration](../config.md)).
 
@@ -22,6 +22,11 @@ route('dashbaord'); // MissingRoute
 
 // Good — the route is registered
 route('dashboard');
+```
+
+```php
+// Named arguments are resolved by parameter name, not by position
+route(absolute: false, name: 'dashbaord'); // MissingRoute
 ```
 
 ```php
@@ -56,6 +61,7 @@ The plugin bails on the check entirely, with no findings at all, when the booted
 
 - Only string literal route names are checked — dynamic or concatenated names are skipped
 - `\BackedEnum` route names (Laravel 11+) are skipped
+- An empty name (`route('')`) is skipped by design. It can never match a registered route, so a finding would restate a mistake that is already plain at the call site, and an empty literal usually means unfinished scaffolding rather than a typo'd name
 - A call site guarded by `Route::has('name')` is not tracked — the guarded branch still reports if the name is unregistered in the analysed boot
 - Routes registered conditionally (behind a feature flag, an env check, or a package's own conditional registration) can produce a false positive if the plugin's boot doesn't register them the same way production does
 - Blade templates are out of scope — only PHP call sites are checked

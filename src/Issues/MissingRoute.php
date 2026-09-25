@@ -8,8 +8,8 @@ use Psalm\Issue\PluginIssue;
 
 /**
  * Reported when route(), to_route(), URL::route()/signedRoute()/temporarySignedRoute(),
- * Redirect::route(), or redirect()->route() references a route name that is not
- * registered anywhere in the booted application.
+ * Redirect::route(), redirect()->route(), or url()->route() references a route name that
+ * is not registered anywhere in the booted application.
  */
 final class MissingRoute extends PluginIssue
 {
@@ -17,6 +17,7 @@ final class MissingRoute extends PluginIssue
 
     // No ERROR_LEVEL override: controlled by the plugin setting findMissingRoutes.
     // Also entered in ExperimentalIssuePolicy::ISSUES — defaults to 'info' until
-    // graduated, given the false-negative surface documented on the handler
-    // (Route::has() guards, conditionally-registered routes, stale route caches).
+    // graduated, given the false-POSITIVE sources documented on the handler
+    // (Route::has() guards, conditionally-registered routes, stale route caches):
+    // each one can report a route that does resolve at runtime.
 }

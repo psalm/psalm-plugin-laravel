@@ -175,13 +175,13 @@ See [MissingView](issues/MissingView.md) for details.
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findMissingRoutes />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
 
-When enabled, the plugin checks that `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, and `redirect()->route()` calls reference a route name registered in the booted application.
+When enabled, the plugin checks that `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, and `url()->route()` calls reference a route name registered in the booted application.
 
-Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. The check bails entirely when the application boots with no named routes at all (e.g. a package/library project analysed through the Testbench fallback), rather than reporting every route name as missing.
+Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. Named arguments are honoured, so the name is found wherever it sits (`route(absolute: false, name: 'dashboard')`). The check bails entirely when the application boots with no named routes at all (e.g. a package/library project analysed through the Testbench fallback), rather than reporting every route name as missing.
 
 `MissingRoute` is also one of the issues [`<experimental>`](#experimental) reports at `error` instead of `info`, so turning `<experimental>` on both enables this check (via the flag above) and raises its severity at the same time.
 
-See [MissingRoute](issues/MissingRoute.md) for details, including its known false-negative and false-positive limitations.
+See [MissingRoute](issues/MissingRoute.md) for details, including its known false-positive sources (conditionally registered routes, stale route caches) and the call shapes it deliberately skips.
 
 ### Example
 
