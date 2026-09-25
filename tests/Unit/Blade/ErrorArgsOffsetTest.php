@@ -11,7 +11,7 @@ use Symfony\Component\Process\Process;
 
 /**
  * Pins #1566 against a real Psalm run: `@error('field')` compiles to `$__errorArgs = ['field'];
- * $__bag = $errors->getBag($__errorArgs[1] ?? 'default');` (`CompilesConditionals::compileError()`).
+ * $__bag = $errors->getBag($__errorArgs[1] ?? 'default');` (`CompilesErrors::compileError()`).
  * A single-argument directive's `$__errorArgs` is a literal one-element list, so
  * `ArrayFetchAnalyzer.php` reports `InvalidArrayOffset` for the `[1]` probe on every mention — compiler
  * bookkeeping the template author never wrote and cannot act on, dropped by `ShadowIssueRelocator`.

@@ -153,7 +153,7 @@ final class ShadowIssueRelocator
         }
 
         // `@error('field')` compiles to `$__errorArgs = ['field']; $__bag =
-        // $errors->getBag($__errorArgs[1] ?? 'default');` (CompilesConditionals::compileError()). A
+        // $errors->getBag($__errorArgs[1] ?? 'default');` (CompilesErrors::compileError()). A
         // single-argument directive gives `$__errorArgs` a literal one-element list, so
         // ArrayFetchAnalyzer.php sees a certainly-absent offset `1` on every mention and this class is
         // the only one it can produce for that shape — the offset is checked immediately after a
@@ -162,10 +162,13 @@ final class ShadowIssueRelocator
         // two-argument form (`@error('field', 'bag')`) supplies that second element and emits nothing
         // at all. Exact-name on `$__errorArgs`, not the wide `__`-prefix family above: it is the only
         // Blade bookkeeping name that indexes a possibly-absent offset this way, and a wide match
-        // would also swallow an author's own `$__foo[9]` typo (#1566).
+        // would also swallow an author's own `$__foo[9]` typo (#1566). Accepted residuals: an
+        // author's own `$__errorArgs[...]` written in `@php` is dropped too (name-exact bookkeeping
+        // convention, same trade as the ambient-guard gates), and the spread form
+        // (`@error(...$args)`) emits `PossiblyUndefinedArrayOffset` instead, which stays ungated.
         if (
             $issue instanceof InvalidArrayOffset
-            && \preg_match('/^Cannot access value on variable \$__errorArgs using offset value of /', $issue->message) === 1
+            && \str_starts_with($issue->message, 'Cannot access value on variable $__errorArgs using offset value of ')
         ) {
             return false;
         }
