@@ -37,6 +37,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        require_once __DIR__ . '/Issues/MassAssignmentFromRequest.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -620,6 +621,15 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->findSerializedQueuedModels) {
             require_once __DIR__ . '/Handlers/Rules/SerializedQueuedModelHandler.php';
             $registration->registerHooksFromClass(Handlers\Rules\SerializedQueuedModelHandler::class);
+        }
+
+        // Opt-in: flag create()/fill()/update() calls whose argument is PROVEN to be raw request
+        // data ($request->all(), request()->all(), the query/request InputBag properties, json()).
+        // RequestInputProvenance is a plain collaborator (no hooks of its own).
+        if ($pluginConfig->findMassAssignmentFromRequest) {
+            require_once __DIR__ . '/Handlers/Http/RequestInputProvenance.php';
+            require_once __DIR__ . '/Handlers/Rules/MassAssignmentFromRequestHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\MassAssignmentFromRequestHandler::class);
         }
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:

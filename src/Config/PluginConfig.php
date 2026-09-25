@@ -30,6 +30,7 @@ final readonly class PluginConfig
         public bool $findMissingTranslations,
         public bool $findMissingViews,
         public bool $findSerializedQueuedModels,
+        public bool $findMassAssignmentFromRequest,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
          *
@@ -75,6 +76,7 @@ final readonly class PluginConfig
         // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
+        $findMassAssignmentFromRequest = self::xmlOptionalBoolAttr($config?->findMassAssignmentFromRequest, 'findMassAssignmentFromRequest') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $findPromptInjection = self::xmlPromptInjectionAttr($config);
@@ -91,6 +93,7 @@ final readonly class PluginConfig
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
             findSerializedQueuedModels: $findSerializedQueuedModels,
+            findMassAssignmentFromRequest: $findMassAssignmentFromRequest,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             findPromptInjection: $findPromptInjection,
             cachePath: self::resolveCachePath(),
