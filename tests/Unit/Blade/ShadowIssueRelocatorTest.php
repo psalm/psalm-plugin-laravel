@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
@@ -274,6 +275,41 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new UnusedVariable('$loop is never referenced or the value is not used', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * #1566: `@error('field')` compiles to `$__errorArgs = ['field']; $__bag =
+     * $errors->getBag($__errorArgs[1] ?? 'default');` — a single-argument directive's `$__errorArgs`
+     * is a literal one-element list, so the `[1]` probe is a definite invalid offset the template
+     * author never wrote and cannot act on.
+     */
+    #[Test]
+    public function a_compiled_error_args_offset_is_dropped_unconditionally(): void
+    {
+        $issue = new InvalidArrayOffset(
+            "Cannot access value on variable \$__errorArgs using offset value of '1', expecting 0",
+            $this->shadowLocation(9),
+        );
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * Negative: identical wording naming an author's own variable must keep reporting — the gate is
+     * exact-name on `$__errorArgs`, not a wide `__`-prefix family (#1566).
+     */
+    #[Test]
+    public function an_authors_own_invalid_array_offset_survives(): void
+    {
+        $issue = new InvalidArrayOffset(
+            "Cannot access value on variable \$arr using offset value of '1', expecting 0",
+            $this->shadowLocation(9),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidArrayOffset::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     #[Test]
