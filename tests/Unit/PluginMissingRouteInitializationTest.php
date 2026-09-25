@@ -82,8 +82,8 @@ final class PluginMissingRouteInitializationTest extends TestCase
 
     /**
      * Regression: routesAreCached() resolves the 'files' container binding
-     * (Illuminate\Foundation\Application::routesAreCached()). The UnknownModelAttribute
-     * fixture's bootstrap/app.php never completes BootProviders (no bootstrap/cache
+     * (Illuminate\Foundation\Application::routesAreCached()). The dedicated partial-boot
+     * fixture this test chdir()s into never completes BootProviders (no bootstrap/cache
      * directory — see that fixture's own bootstrap/app.php docblock), so 'files' is never
      * bound there at all. Before this was caught, the resulting BindingResolutionException
      * escaped initMissingRouteHandler() uncaught, propagated through __invoke()'s try block,
@@ -100,7 +100,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
     #[Test]
     public function a_throwing_routes_are_cached_check_degrades_only_this_feature(): void
     {
-        $fixtureDir = __DIR__ . '/Handlers/Fixtures/UnknownModelAttribute';
+        $fixtureDir = __DIR__ . '/Handlers/Fixtures/MissingRoute/partial-boot';
         $originalCwd = \getcwd();
         \assert(\is_string($originalCwd));
 
