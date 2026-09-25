@@ -19,7 +19,7 @@ nav_order: 6
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
 | Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
 | LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
-| Mass Assignment  | API3:2023 | `Model::create($request->all())`, `$model->fill(request()->all())`, `$model->update($request->request->all())` (opt-in, [`findMassAssignmentFromRequest`](config.md#findmassassignmentfromrequest)) |
+| Mass Assignment  | API3:2023 | `Model::create($request->all())`, `$model->fill(request()->all())`, `$model->update($request->request->all())`, `Model::create($request->input())` (opt-in, [`findMassAssignmentFromRequest`](config.md#findmassassignmentfromrequest)) |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a

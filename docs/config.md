@@ -190,7 +190,7 @@ See [SerializedQueuedModel](issues/SerializedQueuedModel.md) for details.
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findMassAssignmentFromRequest />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
 
-When enabled, the plugin flags a `create()` / `fill()` / `update()` call (and their `Quietly` / `updateOrFail` variants) whose argument is proven to be raw, unfiltered request data — `$request->all()`, `request()->all()`, the `query`/`request` `InputBag` properties, or `json()`, read directly or through one local variable assignment. `forceFill()` / `forceCreate()` are not flagged.
+When enabled, the plugin flags a `create()` / `fill()` / `update()` call (and their `Quietly` / `updateOrFail` variants) whose argument is proven to be raw, unfiltered request data — `$request->all()`, `request()->all()`, the `query`/`request` `InputBag` properties, `json()`, or the bare, no-argument `input()` / `post()` / `query()`, read directly or through one local variable assignment. `forceFill()` / `forceCreate()` are not flagged.
 
 See [MassAssignmentFromRequest](issues/MassAssignmentFromRequest.md) for details.
 
