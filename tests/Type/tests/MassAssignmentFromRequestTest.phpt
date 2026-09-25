@@ -113,6 +113,17 @@ function bare_input_methods_are_flagged(Request $request): void
     Customer::query()->create($request->post());
     Customer::query()->create($request->query());
 }
+
+/**
+ * createQuietly()/updateQuietly()/updateOrFail() share the same shape as create()/update() and are
+ * flagged too (#1574 bot review round 2 — these three were untested).
+ */
+function quietly_and_or_fail_variants_are_flagged(Customer $customer, Request $request): void
+{
+    Customer::query()->createQuietly($request->all());
+    $customer->updateQuietly($request->all());
+    $customer->updateOrFail($request->all());
+}
 ?>
 --EXPECTF--
 MassAssignmentFromRequest on line %d: Customer::fill() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
@@ -135,3 +146,8 @@ MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::fill ex
 MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
 MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
 MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MassAssignmentFromRequest on line %d: Customer::createQuietly() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MassAssignmentFromRequest on line %d: Customer::updateQuietly() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::updateQuietly expects array<string, mixed>, but parent type array<array-key, mixed> provided
+MassAssignmentFromRequest on line %d: Customer::updateOrFail() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::updateOrFail expects array<string, mixed>, but parent type array<array-key, mixed> provided

@@ -35,7 +35,8 @@ use Psalm\Type\Union;
  * assignment in the same function-like:
  *
  * - `$request->all()` — receiver's every atomic is `Illuminate\Http\Request` or a subclass.
- * - `request()->all()` — the bare `request()` helper (no `$key` argument).
+ * - `request()->all()` — the bare `request()` helper (no `$key` argument), confirmed by its own
+ *   INFERRED type rather than the written name alone (see {@see isBareRequestHelperCall()}).
  * - `$request->query->all()` / `$request->request->all()` — Symfony's `InputBag` properties.
  * - `$request->json()->all()` — `json()` returns an `InputBag` at runtime (its stub types it
  *   `mixed`, so this is detected structurally, exactly like `request()` above).
@@ -108,7 +109,7 @@ final class RequestInputProvenance
     private static function isRequestAllReceiver(Expr $receiver, AfterExpressionAnalysisEvent $event): bool
     {
         if ($receiver instanceof FuncCall) {
-            return self::isBareRequestHelperCall($receiver);
+            return self::isBareRequestHelperCall($receiver, $event);
         }
 
         if ($receiver instanceof PropertyFetch) {
@@ -144,14 +145,20 @@ final class RequestInputProvenance
 
     /**
      * The `request()` helper only resolves to `Illuminate\Http\Request` when called with no `$key`.
-     *
-     * @psalm-mutation-free
+     * The written name is only a cheap pre-filter: PHP falls back to a GLOBAL function only when no
+     * function of that name exists in the current namespace, so a userland `App\Foo\request(): Bar`
+     * shadows the real helper for every unqualified call inside that namespace, and a plain name
+     * match would false-positive on it (#1574 bot review round 2). Confirming the call's own
+     * INFERRED type is `Illuminate\Http\Request` closes that gap; it also means a static-analysis
+     * false negative is impossible in the other direction, since nothing statically named `request`
+     * that resolves to Request can be anything other than the real helper.
      */
-    private static function isBareRequestHelperCall(FuncCall $call): bool
+    private static function isBareRequestHelperCall(FuncCall $call, AfterExpressionAnalysisEvent $event): bool
     {
         return $call->name instanceof Name
             && \strtolower($call->name->toString()) === 'request'
-            && $call->args === [];
+            && $call->args === []
+            && self::isRequestReceiverType($call, $event);
     }
 
     private static function isRequestReceiverType(Expr $expr, AfterExpressionAnalysisEvent $event): bool
@@ -206,7 +213,13 @@ final class RequestInputProvenance
 
         try {
             $stmts = $event->getCodebase()->getStatementsForFile($event->getStatementsSource()->getFilePath());
-        } catch (\Throwable) {
+        } catch (\UnexpectedValueException) {
+            // The only exception that can actually escape getStatementsForFile(): FileProvider::
+            // getContents() throws it when the path no longer exists on disk. A real parse failure
+            // is swallowed internally (StatementsProvider::parseStatements() catches \Throwable and
+            // falls back to an empty statement list), so it never reaches here at all — a narrow
+            // catch here lets any other, genuinely unexpected failure surface instead of hiding it
+            // (#1574 bot review round 2).
             return false;
         }
 

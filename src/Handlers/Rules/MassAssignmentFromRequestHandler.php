@@ -199,21 +199,32 @@ final class MassAssignmentFromRequestHandler implements AfterExpressionAnalysisI
         }
 
         $modelClass = null;
+        $hasNonModelAtomic = false;
 
         foreach ($receiverType->getAtomicTypes() as $atomicType) {
-            if (!$atomicType instanceof TNamedObject || !self::isModelSubclass($atomicType->value, $codebase)) {
-                $modelClass = null;
-                break;
+            if ($atomicType instanceof TNamedObject && self::isModelSubclass($atomicType->value, $codebase)) {
+                if ($modelClass === null) {
+                    $modelClass = $atomicType->value;
+                } elseif ($modelClass !== $atomicType->value) {
+                    return null;
+                }
+
+                continue;
             }
 
-            if ($modelClass === null) {
-                $modelClass = $atomicType->value;
-            } elseif ($modelClass !== $atomicType->value) {
-                return null;
-            }
+            $hasNonModelAtomic = true;
         }
 
-        return $modelClass ?? ModelPropertyResolver::resolveExactlyOneModelClass(null, 0, $receiverType, $codebase);
+        if ($modelClass !== null) {
+            // A union mixing a plain model atomic with ANYTHING else (a Builder, a Relation, mixed,
+            // ...) is ambiguous — the receiver may already be an explicit builder — so it is
+            // rejected here directly rather than trusted to resolveExactlyOneModelClass() below,
+            // which resolves template index 0 off the NON-model atomics and would otherwise still
+            // answer for a `Customer|Builder<Customer>` union (#1574 bot review round 2).
+            return $hasNonModelAtomic ? null : $modelClass;
+        }
+
+        return ModelPropertyResolver::resolveExactlyOneModelClass(null, 0, $receiverType, $codebase);
     }
 
     /**

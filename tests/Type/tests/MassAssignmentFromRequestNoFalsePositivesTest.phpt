@@ -7,6 +7,7 @@ namespace App\MassAssignmentFromRequestNoFalsePositives;
 
 use App\Models\Customer;
 use App\Models\Vehicle;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -38,11 +39,12 @@ function only_and_except_are_not_flagged(Request $request): void
     Customer::query()->create($request->except(['password']));
 }
 
-/** forceFill()/forceCreate() are an explicit author opt-out — deliberately out of scope. */
+/** forceFill()/forceCreate()/forceCreateQuietly() are an explicit author opt-out — out of scope. */
 function force_variants_are_not_flagged(Customer $customer, Request $request): void
 {
     $customer->forceFill($request->all());
     Customer::query()->forceCreate($request->all());
+    Customer::query()->forceCreateQuietly($request->all());
 }
 
 /**
@@ -84,6 +86,18 @@ function ambiguous_union_receiver_is_not_flagged(Customer|Vehicle $model, Reques
 }
 
 /**
+ * A model-or-builder union: the receiver may already be an explicit builder, so it is rejected
+ * before the Builder/Relation fallback is ever consulted, even though that fallback alone would
+ * still resolve Customer off the Builder<Customer> atomic (#1574 bot review round 2).
+ *
+ * @param Customer|Builder<Customer> $receiver
+ */
+function model_or_builder_receiver_is_not_flagged(Customer|Builder $receiver, Request $request): void
+{
+    $receiver->update($request->all());
+}
+
+/**
  * ANY argument narrows the result — a keyed all()/input() is not "the whole request" and is not
  * flagged, only the bare, zero-argument form is (#1574 review round 1).
  */
@@ -109,6 +123,28 @@ final class CollectionHoldingService
         Customer::query()->create($this->items->all());
     }
 }
+
+namespace App\MassAssignmentFromRequestNoFalsePositives\Shadow;
+
+use App\Models\Customer;
+use Illuminate\Support\Collection;
+
+/**
+ * A userland function named request(), declared in THIS namespace, shadows the global Illuminate
+ * helper for every unqualified request() call inside it: PHP falls back to the global namespace only
+ * when the current one has no function of that name. The written name alone must not be trusted —
+ * only the call's own INFERRED type proves (or here, disproves) it is the real helper (#1574 bot
+ * review round 2).
+ */
+function request(): Collection
+{
+    return Collection::make(['name' => 'shadow']);
+}
+
+function shadowed_request_helper_is_not_flagged(): void
+{
+    Customer::query()->create(request()->all());
+}
 ?>
 --EXPECTF--
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided
@@ -119,6 +155,8 @@ MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array{source: 'web', ...<array-key, mixed>} provided
 MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::fill expects array<string, mixed>, but parent type array<array-key, mixed> provided
 MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Vehicle::fill expects array<string, mixed>, but parent type array<array-key, mixed> provided
+MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::update expects array<string, mixed>, but parent type array<array-key, mixed> provided
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided
 MixedArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create cannot be mixed, expecting array<string, mixed>
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<TKey:Illuminate\Support\Collection as array-key, TValue:Illuminate\Support\Collection as mixed> provided
+MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided

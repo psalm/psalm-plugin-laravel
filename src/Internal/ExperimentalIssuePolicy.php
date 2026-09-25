@@ -16,7 +16,8 @@ use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
  *
  * Only for an issue whose HANDLER IS ALWAYS REGISTERED and needs a temporary severity discount
  * during its early-access period (see the lifecycle contract below). An issue whose registration
- * is itself gated by `<theFlag value="..." /> ?? <experimental>` — {@see MassAssignmentFromRequest},
+ * is itself gated by `<theFlag value="..." /> ?? <experimental>` —
+ * {@see \Psalm\LaravelPlugin\Issues\MassAssignmentFromRequest},
  * {@see \Psalm\LaravelPlugin\Issues\SerializedQueuedModel} — does not belong here: once its handler
  * is registered, its findings are ordinary errors, and adding it to this list too would let an
  * explicit `<findMassAssignmentFromRequest value="true" />` with `<experimental>` left at its
