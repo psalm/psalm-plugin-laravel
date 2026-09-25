@@ -82,6 +82,33 @@ function ambiguous_union_receiver_is_not_flagged(Customer|Vehicle $model, Reques
 {
     $model->fill($request->all());
 }
+
+/**
+ * ANY argument narrows the result — a keyed all()/input() is not "the whole request" and is not
+ * flagged, only the bare, zero-argument form is (#1574 review round 1).
+ */
+function keyed_forms_are_not_flagged(Request $request): void
+{
+    Customer::query()->create($request->all(['name']));
+    Customer::query()->create($request->input('name'));
+}
+
+/**
+ * A PropertyFetch receiver's type-based fallback (#1574 review round 1) is not a blanket accept: a
+ * property typed as something other than Request still declines, even though it shares the
+ * all()-call shape.
+ */
+final class CollectionHoldingService
+{
+    public function __construct(private readonly Collection $items)
+    {
+    }
+
+    public function non_request_property_is_not_flagged(): void
+    {
+        Customer::query()->create($this->items->all());
+    }
+}
 ?>
 --EXPECTF--
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided
@@ -92,3 +119,6 @@ MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array{source: 'web', ...<array-key, mixed>} provided
 MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::fill expects array<string, mixed>, but parent type array<array-key, mixed> provided
 MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Vehicle::fill expects array<string, mixed>, but parent type array<array-key, mixed> provided
+MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided
+MixedArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create cannot be mixed, expecting array<string, mixed>
+MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<TKey:Illuminate\Support\Collection as array-key, TValue:Illuminate\Support\Collection as mixed> provided

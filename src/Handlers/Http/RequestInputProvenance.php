@@ -39,11 +39,20 @@ use Psalm\Type\Union;
  * - `$request->query->all()` / `$request->request->all()` — Symfony's `InputBag` properties.
  * - `$request->json()->all()` — `json()` returns an `InputBag` at runtime (its stub types it
  *   `mixed`, so this is detected structurally, exactly like `request()` above).
+ * - `$request->input()` / `$request->post()` / `$request->query()`, each called with NO arguments,
+ *   on a receiver that is itself `Illuminate\Http\Request` or a subclass — the identical hole as
+ *   `->all()`. Verified against `Illuminate\Http\Concerns\InteractsWithInput` source: `input(null)`
+ *   merges the query and post/json bags, `post(null)`/`query(null)` each return their whole bag.
+ *   ANY argument (a key, a default, a key list) narrows the result, so the `args === []` gate
+ *   applies here exactly as it does to `->all()`.
+ *
+ * A PropertyFetch receiver not literally named `query`/`request` still resolves through the same
+ * type-based check as any other receiver (an injected `$this->httpRequest`, or `$this->request`
+ * typed as the Request object rather than Symfony's bag) — see {@see isRequestAllReceiver()}.
  *
  * `->post->all()` does not exist on `Illuminate\Http\Request` — `post()` is a method, not a
- * property, and it already returns the raw array directly (no `->all()` call is possible on its
- * result). Verified against `Symfony\Component\HttpFoundation\Request` and
- * `Illuminate\Http\Concerns\InteractsWithInput` source; not implemented.
+ * property. Verified against `Symfony\Component\HttpFoundation\Request` and
+ * `Illuminate\Http\Concerns\InteractsWithInput` source; not implemented as a property.
  *
  * The local-assignment hop mirrors {@see ResponseFactoryTaintHandler}'s header-array proof: the
  * variable's occurrences in the enclosing function-like must number exactly two (this read and one
@@ -60,6 +69,15 @@ final class RequestInputProvenance
         'GLOBALS', '_GET', '_POST', '_COOKIE', '_REQUEST', '_SERVER', '_ENV', '_FILES', '_SESSION', 'this',
     ];
 
+    /**
+     * `input()`/`post()`/`query()` are checked directly against the receiver's own type — unlike
+     * `all()`, they are never chained off an `InputBag` property or `json()` (there is no
+     * `$request->query->query()`), so {@see isRequestAllReceiver()}'s extra shapes do not apply here.
+     *
+     * @var list<lowercase-string>
+     */
+    private const BARE_RAW_ARRAY_METHODS = ['input', 'post', 'query'];
+
     public static function isProven(Expr $expr, AfterExpressionAnalysisEvent $event): bool
     {
         if (self::isDirectAllExpression($expr, $event)) {
@@ -73,9 +91,18 @@ final class RequestInputProvenance
 
     private static function isDirectAllExpression(Expr $expr, AfterExpressionAnalysisEvent $event): bool
     {
-        return $expr instanceof MethodCall
-            && self::isBareCall($expr, 'all')
-            && self::isRequestAllReceiver($expr->var, $event);
+        if (!$expr instanceof MethodCall || !$expr->name instanceof Identifier || $expr->args !== []) {
+            return false;
+        }
+
+        $methodName = \strtolower($expr->name->name);
+
+        if ($methodName === 'all') {
+            return self::isRequestAllReceiver($expr->var, $event);
+        }
+
+        return \in_array($methodName, self::BARE_RAW_ARRAY_METHODS, true)
+            && self::isRequestReceiverType($expr->var, $event);
     }
 
     private static function isRequestAllReceiver(Expr $receiver, AfterExpressionAnalysisEvent $event): bool
@@ -85,9 +112,19 @@ final class RequestInputProvenance
         }
 
         if ($receiver instanceof PropertyFetch) {
-            return $receiver->name instanceof Identifier
+            if ($receiver->name instanceof Identifier
                 && \in_array($receiver->name->name, ['query', 'request'], true)
-                && self::isRequestReceiverType($receiver->var, $event);
+                && self::isRequestReceiverType($receiver->var, $event)
+            ) {
+                return true;
+            }
+
+            // Not (or not provably) one of the InputBag properties — the PropertyFetch itself may
+            // still directly hold a Request (an injected `$this->httpRequest`, `$this->request`
+            // typed as the object rather than Symfony's bag, etc). Fall through to the same
+            // type-based check a plain Variable receiver already gets at the bottom of this
+            // method, instead of declining outright on the property name alone (#1574 review).
+            return self::isRequestReceiverType($receiver, $event);
         }
 
         if ($receiver instanceof MethodCall) {

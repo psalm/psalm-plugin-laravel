@@ -84,6 +84,35 @@ function unguarded_model_gets_suffix(Request $request): void
 {
     UnguardedModel::query()->create($request->all());
 }
+
+/**
+ * A PropertyFetch receiver not literally named query/request still resolves through the type-based
+ * check: $this->request here is a property directly typed Request (constructor-promoted), not one
+ * of Symfony's InputBag properties, and must not decline just because its var ($this) isn't a
+ * Request itself (#1574 review round 1).
+ */
+final class RequestHoldingService
+{
+    public function __construct(private readonly Request $request)
+    {
+    }
+
+    public function fill_via_injected_property_is_flagged(Customer $customer): void
+    {
+        $customer->fill($this->request->all());
+    }
+}
+
+/**
+ * input()/post()/query() called with NO arguments return the full request payload, the identical
+ * hole as all() (#1574 review round 1).
+ */
+function bare_input_methods_are_flagged(Request $request): void
+{
+    Customer::query()->create($request->input());
+    Customer::query()->create($request->post());
+    Customer::query()->create($request->query());
+}
 ?>
 --EXPECTF--
 MassAssignmentFromRequest on line %d: Customer::fill() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
@@ -101,3 +130,8 @@ MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw reques
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided
 MassAssignmentFromRequest on line %d: UnguardedModel::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to UnguardedModel — use $request->validated() or $request->safe()->only([...]) instead. UnguardedModel declares no $fillable or $guarded restriction, so every column is writable this way.
 MixedArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::create expects array<string, mixed>, but parent type array<array-key, mixed> provided
+MassAssignmentFromRequest on line %d: Customer::fill() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MixedArgumentTypeCoercion on line %d: Argument 1 of App\Models\Customer::fill expects array<string, mixed>, but parent type array<array-key, mixed> provided
+MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
+MassAssignmentFromRequest on line %d: Customer::create() mass-assigns raw request data. An attacker can add any key to the request and have it written to Customer — use $request->validated() or $request->safe()->only([...]) instead.
