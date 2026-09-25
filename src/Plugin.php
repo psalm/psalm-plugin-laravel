@@ -834,7 +834,10 @@ final class Plugin implements PluginEntryPointInterface
         try {
             $configured = ConfigRepositoryProvider::get()->get('filesystems.disks');
         } catch (\Throwable $throwable) {
-            $output->debug("Laravel plugin: reading filesystems.disks threw: {$throwable->getMessage()}\n");
+            $output->warning(
+                'Laravel plugin: findUnknownFilesystemDisks is enabled but reading filesystems.disks '
+                . "threw: {$throwable->getMessage()}. The UnknownFilesystemDisk check will be skipped.",
+            );
 
             return;
         }
