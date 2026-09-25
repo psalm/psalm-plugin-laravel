@@ -9,6 +9,7 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
@@ -147,6 +148,32 @@ final class ShadowIssueRelocator
         if (
             $issue instanceof NonStaticSelfCall
             && \preg_match('/^Cannot use (?:self|static) outside class context$/i', $issue->message) === 1
+        ) {
+            return false;
+        }
+
+        // `@error('field')` compiles to `$__errorArgs = ['field']; $__bag =
+        // $errors->getBag($__errorArgs[1] ?? 'default');` (CompilesErrors::compileError()). A
+        // single-argument directive gives `$__errorArgs` a literal one-element list, so
+        // ArrayFetchAnalyzer.php sees a certainly-absent offset `1` on the `?? 'default'` probe on
+        // every mention and this class is the only one it can produce for that shape — the offset is
+        // checked immediately after a fresh literal assignment, never against a union, so the sibling
+        // `PossiblyInvalidArrayOffset` (which requires the checked key to be valid in SOME union
+        // member) cannot fire here. The two-argument form (`@error('field', 'bag')`) supplies that
+        // second element and emits nothing at all. Pinned to the literal offset `'1'`, not any offset
+        // on `$__errorArgs`: an author who writes a keyed argument (`@error(1 => 'field')`) compiles
+        // to `$__errorArgs = [1 => 'field']`, which has no key `0` — the compiled
+        // `$__bag->has($__errorArgs[0])` read then reports THIS class with the offset-`0` wording, a
+        // genuine malformed-input bug (runtime `Undefined array key 0`) the gate must not swallow
+        // (#1566 review). Exact-name on `$__errorArgs`, not the wide `__`-prefix family above: it is
+        // the only Blade bookkeeping name that indexes a possibly-absent offset this way, and a wide
+        // match would also swallow an author's own `$__foo[9]` typo (#1566). Accepted residuals: an
+        // author's own `$__errorArgs[1]` written in `@php` is dropped too (name-exact bookkeeping
+        // convention, same trade as the ambient-guard gates), and the spread form
+        // (`@error(...$args)`) emits `PossiblyUndefinedArrayOffset` instead, which stays ungated.
+        if (
+            $issue instanceof InvalidArrayOffset
+            && \str_starts_with($issue->message, "Cannot access value on variable \$__errorArgs using offset value of '1', expecting ")
         ) {
             return false;
         }
