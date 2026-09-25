@@ -12,7 +12,7 @@ nav_order: 6
 | SQL Injection   | A03:2021 | `DB::statement()`, `DB::unprepared()`, raw query methods      |
 | Shell Injection | A03:2021 | `Process::run()`, `Process::command()`                        |
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
-| Header Injection | A03:2021 | `Response::make()` and `new Response()` with user-controlled header values |
+| Header Injection | A03:2021 | `Response::make()`, `response()`, and `new Response()` with user-controlled header values |
 | SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
@@ -35,13 +35,14 @@ Security scanning runs automatically alongside type analysis, no extra configura
 
 ### `ResponseFactory::make()` and `new Response()` HTML responses
 
-`ResponseFactory::make()` and the `Illuminate\Http\Response` constructor both
-report XSS for unescaped content because their default response is HTML. Both
-also sink their `$headers` argument as `header`: a tainted header value lets
-an attacker inject or override response headers (for example a
-`Content-Disposition` filename), independent of the content sink below. The
-attachment/content-type exemption applies only to the `TaintedHtml` content
-finding and never suppresses a genuinely tainted header value.
+`ResponseFactory::make()`, the `response()` helper's direct 3-argument form,
+and the `Illuminate\Http\Response` constructor all report XSS for unescaped
+content because their default response is HTML. All three also sink their
+`$headers` argument as `header`: a tainted header value lets an attacker
+inject or override response headers (for example a `Content-Disposition`
+filename), independent of the content sink below. The attachment/content-type
+exemption applies only to the `TaintedHtml` content finding and never
+suppresses a genuinely tainted header value.
 
 The finding is dropped for a positional call whose headers array proves either
 that the browser downloads the response instead of rendering it, or that the
