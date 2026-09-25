@@ -1744,6 +1744,10 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $this->assertSame([], $this->metadataFor(Customer::class)->relations());
+        // An empty map on its own cannot tell the short-circuit apart from a model that genuinely
+        // has no relations, and consumers gate on the section flag rather than on emptiness. Drop
+        // the guard and the assertion above still passes; this one does not.
+        $this->assertFalse($this->metadataFor(Customer::class)->isComplete(ModelMetadata::SECTION_RELATIONS));
     }
 
     #[Test]

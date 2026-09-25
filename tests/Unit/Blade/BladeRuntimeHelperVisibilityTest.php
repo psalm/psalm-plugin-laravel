@@ -24,50 +24,39 @@ use Symfony\Component\Process\Process;
 #[CoversClass(RuntimeHelperVisibility::class)]
 final class BladeRuntimeHelperVisibilityTest extends TestCase
 {
-    private const FIXTURE = __DIR__ . '/Fixtures/BladeRuntimeHelpers';
+    use AnalysesFixtureApp;
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
+    private const FIXTURE = __DIR__ . '/Fixtures/BladeRuntimeHelpers';
 
     /** Forking only happens when there are more files to analyze than workers. */
     private const THREADS = 4;
 
-    protected function setUp(): void
+    /** @var array<int, array{output: string, issues: list<array{type: string, file: string, message: string}>, shadows: string}> */
+    private static array $analyses = [];
+
+    protected static function resetFixtureAnalyses(): void
     {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
+        self::$analyses = [];
     }
 
     /**
-     * One real Psalm run. The report goes to a file rather than stdout so `--debug` can occupy
-     * stdout: its "Forking analysis" line is the only proof a multi-threaded cell actually forked
-     * (see {@see assertForked()}), and an explicit `--threads` keeps debug mode from silently
-     * dropping to a single process.
+     * One real Psalm run per thread count, shared by every case asking for it. The report goes to a
+     * file rather than stdout so `--debug` can occupy stdout: its "Forking analysis" line is the
+     * only proof a multi-threaded cell actually forked (see {@see assertForked()}), and an explicit
+     * `--threads` keeps debug mode from silently dropping to a single process.
      *
-     * @return array{output: string, issues: list<array{type: string, file: string, message: string}>}
+     * @return array{output: string, issues: list<array{type: string, file: string, message: string}>, shadows: string}
      */
     private function analyze(int $threads = 1): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+        if (isset(self::$analyses[$threads])) {
+            return self::$analyses[$threads];
+        }
 
+        $psalmBinary = $this->psalmBinary();
         $report = \sys_get_temp_dir() . '/blade-runtime-helpers-' . \bin2hex(\random_bytes(8)) . '.json';
+
+        $shadowDir = $this->startFixtureRun(self::FIXTURE);
 
         $process = new Process(
             [
@@ -113,7 +102,11 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
             ];
         }
 
-        return ['output' => $output, 'issues' => $issues];
+        return self::$analyses[$threads] = [
+            'output' => $output,
+            'issues' => $issues,
+            'shadows' => $this->snapshotShadows($shadowDir, self::FIXTURE . "\0{$threads}"),
+        ];
     }
 
     /**
@@ -136,9 +129,9 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
      * pipeline actually reached the analyzer: the manifest records every template `compileAll()`
      * produced a shadow for, and the negative control below reports through the remap.
      */
-    private function assertTemplateAnalyzed(): void
+    private function assertTemplateAnalyzed(int $threads = 1): void
     {
-        $manifest = self::SHADOW_DIR . '/manifest.php';
+        $manifest = $this->analyze($threads)['shadows'] . '/manifest.php';
         $this->assertFileExists($manifest);
         $templatePath = \realpath(self::FIXTURE . '/resources/views/page.blade.php');
         $this->assertIsString($templatePath, 'page.blade.php does not exist on disk.');
@@ -282,7 +275,7 @@ final class BladeRuntimeHelperVisibilityTest extends TestCase
         ['issues' => $issues, 'output' => $output] = $this->analyze(self::THREADS);
 
         $this->assertForked($output);
-        $this->assertTemplateAnalyzed();
+        $this->assertTemplateAnalyzed(self::THREADS);
 
         $this->assertSame(
             [],
