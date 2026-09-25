@@ -12,7 +12,7 @@ Controlled by the `findMissingRoutes` flag (see [Configuration](../config.md)).
 
 ## Why this is a problem
 
-Laravel throws a `RouteNotFoundException` at runtime when `route()` or `URL::route()` is called with a name that isn't registered. This check catches typos and stale references to renamed or removed routes during static analysis.
+Laravel throws a `RouteNotFoundException` at runtime when `route()` or `URL::route()` is called with a name that isn't registered and the application has no missing-named-route resolver (see below). This check catches typos and stale references to renamed or removed routes during static analysis.
 
 ## Examples
 
@@ -55,6 +55,14 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 </plugins>
 ```
 
+## Missing-named-route resolvers
+
+`UrlGenerator::route()` consults a callback registered through `resolveMissingNamedRoutesUsing()` before it throws, so in an application that registers one, a name absent from the route table can still produce a working URL at runtime. The plugin detects that during boot and disables this check entirely (silently, since registering the resolver is an explicit opt-in to dynamic route resolution, not a degradation). A project-specific `url` service that is not an `Illuminate\Routing\UrlGenerator` cannot be probed, so it disables the check as well, rather than reporting names the plugin cannot judge.
+
+A resolver registered after boot, for instance inside middleware or a controller, is invisible to static analysis and remains a false-positive source.
+
+## When the check bails
+
 The plugin bails on the check entirely, with no findings at all, when the booted application resolves zero named routes. This avoids reporting every route name as missing when the plugin simply has no route table to check against. Two situations produce that empty table: a package/library project analysed through the Testbench fallback (which never loads an application's route files, and produces no warning, since that is the expected shape for a non-application analysis target) and an application whose route cache itself carries no named routes (which does produce a warning naming `route:cache` and `route:clear`, since a real application with real routes silently going unchecked is worth flagging).
 
 ## Limitations
@@ -66,4 +74,5 @@ The plugin bails on the check entirely, with no findings at all, when the booted
 - Routes registered conditionally (behind a feature flag, an env check, or a package's own conditional registration) can produce a false positive if the plugin's boot doesn't register them the same way production does
 - Blade templates are out of scope — only PHP call sites are checked
 - When `bootstrap/cache/routes-v7.php` is present, named routes are read from it, the same as from a live route-file boot
+- A missing-named-route resolver registered after boot (in middleware, a controller, or a test) cannot be detected, so names it would have resolved are still reported
 - A stale route cache (one written before a route was added, renamed, or given a name) can produce a false positive, reporting a route that does exist because the cache predates it. Running `php artisan route:cache` again, or `php artisan route:clear`, resolves it. This is a known, accepted limitation of checking against whatever route table the analysed boot actually resolves

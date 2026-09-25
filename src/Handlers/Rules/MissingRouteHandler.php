@@ -54,8 +54,13 @@ use Psalm\Type\Union;
  * Testbench fallback (never loads user route files, no warning) and a route cache that
  * itself carries no named routes (warns, naming `route:cache` and `route:clear`).
  *
+ * The rule also stands down entirely when the booted app registers a missing-named-route
+ * resolver: `UrlGenerator::route()` consults it before throwing, so absence from the table
+ * stops implying failure at runtime (see `Plugin::hasMissingNamedRouteResolver()`).
+ *
  * Known limitations (by design, not pre-waived accidents): `Route::has()` guards around a
  * call site are not tracked, so a name that is only conditionally missing still reports;
+ * a missing-named-route resolver registered after boot cannot be detected;
  * conditionally-registered routes (feature flags, env-gated route files) can produce a
  * false positive if the analysing environment doesn't register them; a stale route cache
  * (one written before a route was added, renamed, or before its name was added) can also

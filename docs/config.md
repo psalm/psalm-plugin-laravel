@@ -177,7 +177,7 @@ See [MissingView](issues/MissingView.md) for details.
 
 When enabled, the plugin checks that `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, and `url()->route()` calls reference a route name registered in the booted application.
 
-Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. Named arguments are honoured, so the name is found wherever it sits (`route(absolute: false, name: 'dashboard')`). The check bails entirely when the application boots with no named routes at all (e.g. a package/library project analysed through the Testbench fallback), rather than reporting every route name as missing.
+Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. Named arguments are honoured, so the name is found wherever it sits (`route(absolute: false, name: 'dashboard')`). The check bails entirely when the application boots with no named routes at all (e.g. a package/library project analysed through the Testbench fallback), rather than reporting every route name as missing. It also bails when the application registers a missing-named-route resolver, since `route()` then resolves names that are absent from the table.
 
 `MissingRoute` is also one of the issues [`<experimental>`](#experimental) reports at `error` instead of `info`, so turning `<experimental>` on both enables this check (via the flag above) and raises its severity at the same time.
 

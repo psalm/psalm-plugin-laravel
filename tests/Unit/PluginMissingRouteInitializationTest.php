@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit;
 
+use Illuminate\Routing\UrlGenerator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -123,6 +124,94 @@ final class PluginMissingRouteInitializationTest extends TestCase
 
         $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled, not crash the whole invocation.');
         $this->assertSame(0, $progress->warningCount, 'Cannot determine cache state, so this must fall through to the silent path, same as a genuinely empty table.');
+    }
+
+    /**
+     * Positive control for the two resolver tests below: the same fixture, same in-process boot,
+     * no resolver registered. Without this, a resolver test could pass for the wrong reason (a
+     * fixture that stopped resolving routes at all would also leave the handler disabled).
+     */
+    #[Test]
+    public function enables_the_handler_with_the_fixture_route_table_when_no_resolver_is_registered(): void
+    {
+        $this->bootRouteFixture(static function (): void {});
+
+        $this->assertTrue($this->isEnabled(), 'A booted app with named routes and no resolver must enable the handler.');
+
+        // Not an exact-array assertion: the framework registers named routes of its own
+        // (storage.local*), and which ones varies by Laravel version.
+        $names = $this->registeredNames();
+        $this->assertArrayHasKey('dashboard', $names);
+        $this->assertArrayHasKey('posts.show', $names);
+    }
+
+    /**
+     * Illuminate\Routing\UrlGenerator::route() consults the missing-named-route resolver before
+     * throwing RouteNotFoundException, so in an app that registers one an unregistered name can
+     * still resolve at runtime and every finding would be a false positive. The whole rule must
+     * decline, exactly like the empty-table bail, rather than report names it cannot judge.
+     *
+     * Silent by design (debug, not warning): registering the resolver is an explicit opt-in to
+     * dynamic route resolution, so the plugin standing down is the correct outcome, not a
+     * degradation worth interrupting the run for.
+     */
+    #[Test]
+    public function stays_disabled_when_the_app_registers_a_missing_named_route_resolver(): void
+    {
+        $progress = $this->bootRouteFixture(static function (UrlGenerator $url): void {
+            $url->resolveMissingNamedRoutesUsing(static fn(string $name): string => "/legacy/{$name}");
+        });
+
+        $this->assertFalse($this->isEnabled(), 'A registered missing-named-route resolver must disable the rule entirely.');
+        $this->assertSame([], $this->registeredNames());
+        $this->assertSame(0, $progress->warningCount, 'Opting into dynamic route resolution is not a degradation: stay silent.');
+    }
+
+    /**
+     * A project-specific `url` service cannot be probed for the resolver, so the rule's core
+     * assumption (absent from the table = fails at runtime) is unverifiable. Inconclusive is
+     * treated the same as "resolver present": decline, never guess.
+     */
+    #[Test]
+    public function stays_disabled_when_the_url_service_is_not_a_laravel_url_generator(): void
+    {
+        $progress = $this->bootRouteFixture(static function (UrlGenerator $url): void {
+            ApplicationProvider::getApp()->instance('url', new \stdClass());
+        });
+
+        $this->assertFalse($this->isEnabled(), 'An unprobeable url service must disable the rule rather than assume no resolver.');
+        $this->assertSame(0, $progress->warningCount);
+    }
+
+    /**
+     * Boot the complete-boot MissingRoute fixture in-process (a real bootstrap/app.php with
+     * withRouting(), so the named-route table is genuinely populated: 'dashboard', 'posts.show'),
+     * run $configure against its url service, then invoke the initializer.
+     *
+     * @param \Closure(UrlGenerator):void $configure
+     */
+    private function bootRouteFixture(\Closure $configure): RecordingProgress
+    {
+        $fixtureDir = __DIR__ . '/Handlers/Fixtures/MissingRoute';
+        $originalCwd = \getcwd();
+        \assert(\is_string($originalCwd));
+
+        \chdir($fixtureDir);
+
+        try {
+            ApplicationProvider::bootApp();
+            $url = ApplicationProvider::getApp()->make('url');
+            \assert($url instanceof UrlGenerator);
+
+            $configure($url);
+
+            $progress = new RecordingProgress();
+            $this->invokeInitMissingRouteHandler($progress);
+        } finally {
+            \chdir($originalCwd);
+        }
+
+        return $progress;
     }
 
     private function invokeInitMissingRouteHandler(\Psalm\Progress\Progress $progress): void

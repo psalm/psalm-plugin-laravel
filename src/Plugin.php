@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
+use Illuminate\Routing\UrlGenerator;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
@@ -911,7 +912,54 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
+        if ($this->hasMissingNamedRouteResolver($app, $output)) {
+            $output->debug(
+                "Laravel plugin: the application registers a missing-named-route resolver, so a name "
+                . "absent from the route table can still resolve at runtime. The MissingRoute check "
+                . "will be skipped.\n",
+            );
+
+            return;
+        }
+
         Handlers\Rules\MissingRouteHandler::init($names);
+    }
+
+    /**
+     * Whether the booted app can resolve route names that are absent from the route table.
+     *
+     * `UrlGenerator::route()` consults a resolver registered through
+     * `resolveMissingNamedRoutesUsing()` BEFORE throwing `RouteNotFoundException`, so in an app
+     * that registers one, "absent from the named-route table" no longer implies "fails at
+     * runtime" and every finding would be a false positive. The rule declines wholesale in that
+     * case, the same trade the empty-table bail makes. There is no public accessor for the
+     * resolver, hence the reflection.
+     *
+     * Inconclusive counts as "resolver present": a project-specific `url` service cannot be
+     * probed, and a throw must degrade this one probe rather than escape to __invoke()'s outer
+     * catch — either way the rule stays off instead of guessing. A resolver registered AFTER boot
+     * (in middleware, say) is invisible here and remains a documented false-positive source.
+     */
+    private function hasMissingNamedRouteResolver(Application $app, \Psalm\Progress\Progress $output): bool
+    {
+        try {
+            $url = $app->bound('url') ? $app->make('url') : null;
+
+            if (!$url instanceof UrlGenerator) {
+                $output->debug("Laravel plugin: the 'url' service is not an Illuminate UrlGenerator, so it cannot be probed for a missing-named-route resolver.\n");
+
+                return true;
+            }
+
+            /** @psalm-var callable|null $resolver */
+            $resolver = (new \ReflectionProperty(UrlGenerator::class, 'missingNamedRouteResolver'))->getValue($url);
+
+            return $resolver !== null;
+        } catch (\Throwable $throwable) {
+            $output->debug("Laravel plugin: probing for a missing-named-route resolver threw: {$throwable->getMessage()}\n");
+
+            return true;
+        }
     }
 
     /**
