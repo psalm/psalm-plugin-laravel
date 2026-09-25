@@ -37,7 +37,13 @@ use Psalm\Type\Union;
  * Only string literal route names are checked. A leading spread (`route(...$args)`) hides
  * the name entirely and is skipped, same as an already-non-literal first argument. A
  * `\BackedEnum` route name (Laravel 11+) is a `ClassConstFetch` node, never a `String_`,
- * so it is skipped too — a deliberate false-negative, not a bug.
+ * so it is skipped too — a deliberate false-negative, not a bug. Named arguments are
+ * resolved by parameter identifier, so `route(absolute: false, name: 'typo')` is checked at
+ * the offset it actually occupies (see {@see self::resolveRouteName()}).
+ *
+ * An empty name (`route('')`) is skipped by design: it can never match a registered route,
+ * so a finding here would restate a mistake that is already obvious at the call site, and an
+ * empty literal reads as unfinished scaffolding rather than a typo'd name.
  *
  * The named-route table is populated once per invocation from the booted app's router
  * (see `Plugin::initMissingRouteHandler()`). A compiled route cache
@@ -60,6 +66,21 @@ use Psalm\Type\Union;
  */
 final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
+    /**
+     * Parameter identifiers the route name can arrive under, for named-argument call sites.
+     *
+     * Laravel's own signatures disagree across the family: the `route()` helper and
+     * UrlGenerator's route()/signedRoute()/temporarySignedRoute() (plus the
+     * Contracts\Routing\UrlGenerator interface) name it `$name`, while `to_route()` and
+     * Redirector's route family name it `$route`. No signature in the family declares both,
+     * so accepting either identifier cannot retarget a valid call: on a receiver from the
+     * other family that identifier is already an unknown-named-argument error at the call
+     * site, which Psalm reports on its own.
+     *
+     * @var list<string>
+     */
+    private const ROUTE_NAME_PARAMETERS = ['name', 'route'];
+
     /** @var array<string, true> Registered route names, from the booted app's router */
     private static array $names = [];
 
@@ -96,13 +117,7 @@ final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, 
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
-        $callArgs = $event->getCallArgs();
-
-        if ($callArgs === [] || $callArgs[0]->unpack) {
-            return null;
-        }
-
-        $routeName = self::extractLiteralStringArg($callArgs[0]);
+        $routeName = self::resolveRouteName($event->getCallArgs());
 
         if ($routeName !== null) {
             self::checkRouteExists(
@@ -146,19 +161,47 @@ final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, 
             return null;
         }
 
-        $callArgs = $event->getCallArgs();
-
-        if ($callArgs === [] || $callArgs[0]->unpack) {
-            return null;
-        }
-
-        $routeName = self::extractLiteralStringArg($callArgs[0]);
+        $routeName = self::resolveRouteName($event->getCallArgs());
 
         if ($routeName !== null) {
             self::checkRouteExists($routeName, $event->getCodeLocation(), $event->getSource()->getSuppressedIssues());
         }
 
         return null;
+    }
+
+    /**
+     * Resolve the literal route name from a call's arguments, honouring named arguments.
+     *
+     * `route(absolute: false, name: 'typo')` puts the name at offset 1, so reading offset 0
+     * positionally would check the wrong node. Resolve by parameter identifier first
+     * ({@see self::ROUTE_NAME_PARAMETERS}); only fall back to the first argument when it is
+     * genuinely positional. Decline when the name cannot be located confidently rather than
+     * guess: a leading spread hides it, and a first argument named for some OTHER parameter
+     * means the name is either spread in or absent.
+     *
+     * @param list<Arg> $callArgs
+     * @psalm-mutation-free
+     */
+    private static function resolveRouteName(array $callArgs): ?string
+    {
+        foreach ($callArgs as $arg) {
+            if ($arg->name !== null && \in_array($arg->name->name, self::ROUTE_NAME_PARAMETERS, true)) {
+                return self::extractLiteralStringArg($arg);
+            }
+        }
+
+        if ($callArgs === []) {
+            return null;
+        }
+
+        $firstArg = $callArgs[0];
+
+        if ($firstArg->name !== null || $firstArg->unpack) {
+            return null;
+        }
+
+        return self::extractLiteralStringArg($firstArg);
     }
 
     /**
@@ -186,6 +229,7 @@ final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, 
             return;
         }
 
+        // The empty name is an intentional limitation, not an oversight: see the class docblock.
         if ($routeName === '' || isset(self::$names[$routeName])) {
             return;
         }

@@ -18,8 +18,9 @@ use Symfony\Component\Process\Process;
  * Psalm subprocess at a self-contained fixture with a real `bootstrap/app.php` and `withRouting()`
  * so the router resolves an actual named-route table and the rule fires for real — across every
  * receiver the handler covers (route(), to_route(), URL::route()/signedRoute()/
- * temporarySignedRoute(), Redirect::route(), redirect()->route()) — while staying silent on a
- * clean call, a leading spread, a non-literal name, and a BackedEnum name.
+ * temporarySignedRoute(), Redirect::route(), redirect()->route(), url()->route()) and in both
+ * the positional and named-argument call shapes — while staying silent on a clean call, a
+ * leading spread, a non-literal name, a BackedEnum name, and an empty name.
  *
  * Lives in tests/Unit for proximity to the handler it guards, same convention as
  * {@see UnknownModelAttributeEmissionTest}.
@@ -38,14 +39,16 @@ final class MissingRouteEmissionTest extends TestCase
         );
         $joined = \implode("\n", $messages);
 
-        // One finding per typo'd receiver call site: route(), to_route(), URL::route(),
+        // One finding per typo'd call site. Eight positional: route(), to_route(), URL::route(),
         // URL::signedRoute(), URL::temporarySignedRoute(), Redirect::route(), redirect()->route(),
         // url()->route() (the last one hits the \Illuminate\Contracts\Routing\UrlGenerator
         // contract url() returns with no path, a distinct receiver from the concrete class).
-        // The clean calls, the spread, the non-literal name, and the enum name must stay silent —
-        // asserting an exact count proves both that the rule fires on every covered receiver and
-        // that it does not over-fire on the forms it deliberately skips.
-        $this->assertCount(8, $findings, "Expected exactly 8 MissingRoute findings, got:\n{$joined}");
+        // Three named-argument: route(absolute:, name:) with the name at offset 1, to_route(route:)
+        // and redirect()->route(route:) covering the `$route` half of Laravel's split signature.
+        // The clean calls, the spread, the non-literal name, the enum name, and the empty name must
+        // stay silent — asserting an exact count proves both that the rule fires on every covered
+        // receiver and that it does not over-fire on the forms it deliberately skips.
+        $this->assertCount(11, $findings, "Expected exactly 11 MissingRoute findings, got:\n{$joined}");
         $this->assertStringContainsString("'dashbaord'", $joined, 'Every URL/Redirect-family typo must be flagged.');
         $this->assertStringContainsString("'posts.hsow'", $joined, 'to_route() with a typo must be flagged.');
         $this->assertStringNotContainsString(
@@ -58,7 +61,7 @@ final class MissingRouteEmissionTest extends TestCase
             $joined,
             'A registered route name must never be flagged, on any receiver.',
         );
-        $this->assertSame(\array_fill(0, 8, 'info'), \array_column($findings, 'severity'));
+        $this->assertSame(\array_fill(0, 11, 'info'), \array_column($findings, 'severity'));
     }
 
     #[Test]
@@ -66,8 +69,8 @@ final class MissingRouteEmissionTest extends TestCase
     {
         $findings = $this->runPsalmAndCollectFindings('psalm-experimental.xml');
 
-        $this->assertCount(8, $findings);
-        $this->assertSame(\array_fill(0, 8, 'error'), \array_column($findings, 'severity'));
+        $this->assertCount(11, $findings);
+        $this->assertSame(\array_fill(0, 11, 'error'), \array_column($findings, 'severity'));
     }
 
     /**
@@ -85,8 +88,8 @@ final class MissingRouteEmissionTest extends TestCase
     {
         $findings = $this->runPsalmAndCollectFindings('psalm-experimental-auto-enable.xml');
 
-        $this->assertCount(8, $findings);
-        $this->assertSame(\array_fill(0, 8, 'error'), \array_column($findings, 'severity'));
+        $this->assertCount(11, $findings);
+        $this->assertSame(\array_fill(0, 11, 'error'), \array_column($findings, 'severity'));
     }
 
     /**

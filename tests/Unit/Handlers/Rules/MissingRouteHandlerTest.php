@@ -8,6 +8,7 @@ use Illuminate\Routing\Redirector;
 use Illuminate\Routing\UrlGenerator;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
@@ -105,6 +106,45 @@ final class MissingRouteHandlerTest extends TestCase
         // even with that guard deleted, since extractLiteralStringArg() already returns null for
         // non-String_ nodes — this shape is required to give the guard real teeth.
         $event = $this->createFunctionEvent('route', [new Arg(new String_('anything-unregistered'), false, true)]);
+
+        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+    }
+
+    #[Test]
+    public function skips_when_the_first_argument_is_named_for_a_different_parameter(): void
+    {
+        // route(parameters: 'not-a-registered-route') — the name is absent (spread in, or the
+        // call is simply wrong), so the positional fallback must NOT claim this argument.
+        // Deliberately an UNREGISTERED String_: reading it would reach IssueBuffer::accepts()
+        // and throw here (no Psalm runtime in a plain unit test), so deleting the
+        // "first argument must be positional" guard turns this test red.
+        $arg = new Arg(new String_('not-a-registered-route'), false, false, [], new Identifier('parameters'));
+        $event = $this->createFunctionEvent('route', [$arg]);
+
+        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+    }
+
+    #[Test]
+    public function resolves_a_reordered_named_route_argument_rather_than_the_first_argument(): void
+    {
+        // route(absolute: false, name: 'dashboard') — offset 0 is `absolute`, so a positional
+        // read would skip the call entirely. Resolution by identifier finds the REGISTERED name
+        // at offset 1 and declines silently; the positive (unregistered) counterpart needs a
+        // real Psalm runtime and lives in MissingRouteEmissionTest.
+        $absolute = new Arg(new ConstFetch(new Name('false')), false, false, [], new Identifier('absolute'));
+        $name = new Arg(new String_('dashboard'), false, false, [], new Identifier('name'));
+        $event = $this->createFunctionEvent('route', [$absolute, $name]);
+
+        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+    }
+
+    #[Test]
+    public function skips_empty_route_name(): void
+    {
+        // route('') is skipped by design (see MissingRouteHandler's class docblock). The empty
+        // name is not in the registered-names table, so without that guard this would reach
+        // IssueBuffer::accepts() and throw.
+        $event = $this->createFunctionEvent('route', [new Arg(new String_(''))]);
 
         $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
     }
