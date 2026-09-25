@@ -82,6 +82,44 @@ trait AnalysesFixtureApp
     }
 
     /**
+     * Consecutive real runs against ONE fixture, sharing the shadow directory the way repeated runs
+     * of a real project do: it is cleared once before the first step and never between steps.
+     *
+     * Deliberately outside the memo. A case pinning warm-manifest behaviour needs the later
+     * subprocess to actually happen against the state its predecessor left behind, which is exactly
+     * what serving a memoized report, or wiping the directory for a second config, would destroy.
+     *
+     * @param non-empty-list<list<string>> $argumentSets the Psalm arguments of each step, in order
+     *
+     * @return array{output: string, errorOutput: string, shadows: string} the final step's run
+     */
+    private function analyzeFixtureSequence(string $fixture, array $argumentSets, int $timeout = 300): array
+    {
+        $shadowDir = $this->startFixtureRun($fixture);
+        $process = null;
+
+        foreach ($argumentSets as $arguments) {
+            $process = new Process([\PHP_BINARY, $this->psalmBinary(), ...$arguments], $fixture);
+            $process->setTimeout($timeout);
+            // Not mustRun(): these fixtures report issues on purpose.
+            $process->run();
+        }
+
+        $this->assertInstanceOf(Process::class, $process, 'a run sequence needs at least one step.');
+
+        $key = $fixture . "\0sequence\0" . \implode("\1", \array_map(
+            static fn(array $arguments): string => \implode("\0", $arguments),
+            $argumentSets,
+        ));
+
+        return [
+            'output' => $process->getOutput(),
+            'errorOutput' => $process->getErrorOutput(),
+            'shadows' => $this->snapshotShadows($shadowDir, $key),
+        ];
+    }
+
+    /**
      * Every issue of a `--output-format=json` run, undecoded beyond the outer list so each caller
      * can project the fields it asserts on.
      *
@@ -91,8 +129,16 @@ trait AnalysesFixtureApp
      */
     private function fixtureIssues(string $fixture, array $arguments, int $timeout = 300): array
     {
-        $run = $this->analyzeFixture($fixture, $arguments, $timeout);
+        return $this->decodeIssues($this->analyzeFixture($fixture, $arguments, $timeout));
+    }
 
+    /**
+     * @param array{output: string, errorOutput: string, shadows: string} $run
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function decodeIssues(array $run): array
+    {
         $decoded = \json_decode($run['output'], true);
         $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$run['output']}\n{$run['errorOutput']}");
 

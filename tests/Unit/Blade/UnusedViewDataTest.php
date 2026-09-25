@@ -48,21 +48,46 @@ final class UnusedViewDataTest extends TestCase
      */
     private function unusedDataIssues(string $config): array
     {
-        $issues = [];
+        return $this->project($this->fixtureIssues(self::FIXTURE, $this->arguments($config)));
+    }
 
-        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
+    /**
+     * The final run of consecutive real runs, each against the shadow cache its predecessor left
+     * behind. The cache surviving between the steps is the subject, so these runs stay out of the
+     * memo and nothing clears the directory between them.
+     *
+     * @param non-empty-list<string> $configs
+     *
+     * @return list<array{file: string, message: string}>
+     */
+    private function unusedDataIssuesWarm(array $configs): array
+    {
+        $argumentSets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
 
+        return $this->project($this->decodeIssues($this->analyzeFixtureSequence(self::FIXTURE, $argumentSets)));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $issues
+     *
+     * @return list<array{file: string, message: string}>
+     */
+    private function project(array $issues): array
+    {
+        $projected = [];
+
+        foreach ($issues as $issue) {
             if ((string) $issue['type'] !== self::UNUSED) {
                 continue;
             }
 
-            $issues[] = [
+            $projected[] = [
                 'file' => \basename((string) $issue['file_name']),
                 'message' => (string) $issue['message'],
             ];
         }
 
-        return $issues;
+        return $projected;
     }
 
     /**
@@ -211,9 +236,12 @@ final class UnusedViewDataTest extends TestCase
     #[Test]
     public function a_cache_warmed_with_the_flag_off_is_recompiled_once_the_flag_turns_on(): void
     {
-        $this->unusedDataIssues('psalm-unused-data-off.xml');
-
-        // Same fixture, same cache directory, flag now on, deliberately without deleting the cache.
-        $this->assertReportsOnly($this->unusedDataIssues('psalm.xml'), 'UnreadKey.php', 'orphan');
+        // Step one warms the cache with the flag off; step two runs against that same cache
+        // directory with the flag on, deliberately without deleting it in between.
+        $this->assertReportsOnly(
+            $this->unusedDataIssuesWarm(['psalm-unused-data-off.xml', 'psalm.xml']),
+            'UnreadKey.php',
+            'orphan',
+        );
     }
 }

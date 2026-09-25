@@ -43,10 +43,36 @@ final class BladeIssueRemapTest extends TestCase
      */
     private function analyze(string $config): array
     {
-        $issues = [];
+        return $this->project($this->fixtureIssues(self::FIXTURE, $this->arguments($config)));
+    }
 
-        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
-            $issues[] = [
+    /**
+     * The final run of consecutive real runs, each against the shadow directory its predecessor
+     * left behind. A warm-manifest case has to keep both subprocesses: the second one reading the
+     * first one's manifest is the whole assertion.
+     *
+     * @param non-empty-list<string> $configs
+     *
+     * @return list<array{type: string, file_path: string, line_from: int, message: string}>
+     */
+    private function analyzeWarm(array $configs): array
+    {
+        $argumentSets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
+
+        return $this->project($this->decodeIssues($this->analyzeFixtureSequence(self::FIXTURE, $argumentSets)));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $issues
+     *
+     * @return list<array{type: string, file_path: string, line_from: int, message: string}>
+     */
+    private function project(array $issues): array
+    {
+        $projected = [];
+
+        foreach ($issues as $issue) {
+            $projected[] = [
                 'type' => (string) $issue['type'],
                 'file_path' => (string) $issue['file_path'],
                 'line_from' => (int) $issue['line_from'],
@@ -54,7 +80,7 @@ final class BladeIssueRemapTest extends TestCase
             ];
         }
 
-        return $issues;
+        return $projected;
     }
 
     /**
@@ -144,11 +170,9 @@ final class BladeIssueRemapTest extends TestCase
     #[Test]
     public function a_warm_manifest_run_reports_the_same_template_line(): void
     {
-        $this->analyze('psalm.xml');
-
         // Second run: every template is a manifest freshness hit, so the line map and the
         // suppression map must come off the manifest rather than a recompile.
-        $issues = $this->analyze('psalm.xml');
+        $issues = $this->analyzeWarm(['psalm.xml', 'psalm.xml']);
 
         $this->assertSame(
             [2],
@@ -242,8 +266,7 @@ final class BladeIssueRemapTest extends TestCase
     {
         // Warm the manifest with the default (off) config first: reusing it under the opt-in config
         // is itself the proof that the flag needs no cache invalidation.
-        $this->analyze('psalm.xml');
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyzeWarm(['psalm.xml', 'psalm-blade-report-mixed.xml']);
 
         $this->assertSame(
             [2],
@@ -478,8 +501,7 @@ final class BladeIssueRemapTest extends TestCase
     #[Test]
     public function a_warm_manifest_run_still_queues_the_literal_named_class(): void
     {
-        $this->analyze('psalm.xml');
-        $issues = $this->analyze('psalm.xml');
+        $issues = $this->analyzeWarm(['psalm.xml', 'psalm.xml']);
 
         foreach ($issues as $issue) {
             if ($issue['type'] === 'UndefinedClass' || $issue['type'] === 'UndefinedDocblockClass') {

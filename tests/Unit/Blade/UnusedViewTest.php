@@ -70,23 +70,49 @@ final class UnusedViewTest extends TestCase
      */
     private function unusedViewIssues(string $fixture, string $config): array
     {
-        $issues = [];
+        return $this->project($this->fixtureIssues($fixture, $this->arguments($config)));
+    }
 
-        foreach ($this->fixtureIssues($fixture, $this->arguments($config)) as $issue) {
+    /**
+     * The final run of consecutive real runs, each against the shadow cache its predecessor left
+     * behind. The cache surviving between the steps is the subject, so these runs stay out of the
+     * memo and nothing clears the directory between them.
+     *
+     * @param non-empty-list<string> $configs
+     *
+     * @return list<array{type: string, file: string, message: string}>
+     */
+    private function unusedViewIssuesWarm(string $fixture, array $configs): array
+    {
+        $argumentSets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
+
+        return $this->project($this->decodeIssues($this->analyzeFixtureSequence($fixture, $argumentSets)));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $issues
+     *
+     * @return list<array{type: string, file: string, message: string}>
+     */
+    private function project(array $issues): array
+    {
+        $projected = [];
+
+        foreach ($issues as $issue) {
             $type = (string) $issue['type'];
 
             if ($type !== self::ISSUE) {
                 continue;
             }
 
-            $issues[] = [
+            $projected[] = [
                 'type' => $type,
                 'file' => \basename((string) $issue['file_name']),
                 'message' => (string) $issue['message'],
             ];
         }
 
-        return $issues;
+        return $projected;
     }
 
     #[Test]
@@ -349,13 +375,10 @@ final class UnusedViewTest extends TestCase
     #[Test]
     public function a_cache_warmed_with_the_flag_off_is_recompiled_once_the_flag_turns_on(): void
     {
-        // Warm the shadow cache with reference collection off — every template's manifest entry gets
-        // a null references slot.
-        $this->unusedViewIssues(self::FIXTURE, 'psalm-unused-off.xml');
-
-        // Same fixture, same cache directory, flag now on, deliberately without deleting the cache
-        // between the two runs.
-        $issues = $this->unusedViewIssues(self::FIXTURE, 'psalm.xml');
+        // Step one warms the shadow cache with reference collection off, so every template's
+        // manifest entry gets a null references slot. Step two runs against that same cache
+        // directory with the flag on, deliberately without deleting it in between.
+        $issues = $this->unusedViewIssuesWarm(self::FIXTURE, ['psalm-unused-off.xml', 'psalm.xml']);
 
         $this->assertCount(1, $issues, \var_export($issues, true));
         $this->assertSame('orphan.blade.php', $issues[0]['file']);
