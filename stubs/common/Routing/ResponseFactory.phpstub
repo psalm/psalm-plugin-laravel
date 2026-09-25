@@ -15,6 +15,7 @@ class ResponseFactory implements FactoryContract
      * @return \Illuminate\Http\Response
      *
      * @psalm-taint-sink html $content
+     * @psalm-taint-sink header $headers
      */
     public function make($content = '', $status = 200, array $headers = []) {}
 
