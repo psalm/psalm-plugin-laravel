@@ -7,7 +7,6 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Process\Process;
 
 /**
  * Pins issue #1535: `PossiblyInvalidArgument`/`PossiblyFalseArgument` on the argument of an echo
@@ -23,56 +22,21 @@ use Symfony\Component\Process\Process;
 #[CoversNothing]
 final class EchoUnionArgumentTest extends TestCase
 {
+    use AnalysesFixtureApp;
+
     private const FIXTURE = __DIR__ . '/Fixtures/EchoUnion';
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
-
-    protected function setUp(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
-    }
+    /** @var list<string> */
+    private const ARGUMENTS = ['-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
 
     /**
      * @return list<array{type: string, file: string, message: string}>
      */
     private function analyze(): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues on purpose.
-        $process->run();
-
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
-
         $issues = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
+        foreach ($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS) as $issue) {
             $issues[] = [
                 'type' => (string) $issue['type'],
                 'file' => \basename((string) $issue['file_name']),
@@ -105,7 +69,7 @@ final class EchoUnionArgumentTest extends TestCase
      */
     private function assertBladeAnalyzed(array $issues, string $template): void
     {
-        $manifest = (string) \file_get_contents(self::SHADOW_DIR . '/manifest.php');
+        $manifest = (string) \file_get_contents($this->fixtureShadows(self::FIXTURE, self::ARGUMENTS) . '/manifest.php');
         $templatePath = \realpath(self::FIXTURE . '/resources/views/' . $template);
         // A missing template would make realpath() return false; cast to string that is '', and
         // assertStringContainsString() matches an empty needle against ANY manifest, so the guard

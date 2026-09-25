@@ -10,7 +10,6 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
 use Psalm\LaravelPlugin\Blade\PsalmShadowRegistrar;
 use Psalm\LaravelPlugin\Plugin;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a real `vendor/bin/psalm` run compiles the fixture's Blade template and
@@ -26,54 +25,35 @@ use Symfony\Component\Process\Process;
 #[CoversClass(PsalmShadowRegistrar::class)]
 final class BladeShadowAnalysisTest extends TestCase
 {
+    use AnalysesFixtureApp;
+
     private const FIXTURE = __DIR__ . '/Fixtures/BladeShadowAnalysis';
 
+    /** Where the run itself wrote, which is the path `--debug` names. */
     private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
 
-    protected function setUp(): void
+    /**
+     * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
+        return ['-c', $config, '--no-cache', '--threads=1', '--debug'];
     }
 
     private function runPsalm(string $config): string
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+        $run = $this->analyzeFixture(self::FIXTURE, $this->arguments($config));
 
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--debug'],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues, and the shadow adds more.
-        $process->run();
-
-        return $process->getOutput() . $process->getErrorOutput();
+        return $run['output'] . $run['errorOutput'];
     }
 
     /** @return list<string> */
-    private function shadowFiles(): array
+    private function shadowFiles(string $config): array
     {
         return \array_values(\array_filter(
-            \glob(self::SHADOW_DIR . '/*.php') ?: [],
+            \glob($this->fixtureShadows(self::FIXTURE, $this->arguments($config)) . '/*.php') ?: [],
             static fn(string $path): bool => \basename($path) !== 'manifest.php',
         ));
     }
@@ -84,16 +64,17 @@ final class BladeShadowAnalysisTest extends TestCase
         $output = $this->runPsalm('psalm.xml');
 
         $this->assertStringNotContainsString('Blade template analysis is disabled', $output, $output);
-        $this->assertFileExists(self::SHADOW_DIR . '/manifest.php');
+        $this->assertFileExists($this->fixtureShadows(self::FIXTURE, $this->arguments('psalm.xml')) . '/manifest.php');
 
-        $shadows = $this->shadowFiles();
+        $shadows = $this->shadowFiles('psalm.xml');
         $this->assertCount(1, $shadows, "Expected exactly one shadow file.\n{$output}");
         $this->assertStringContainsString('echo e($name)', (string) \file_get_contents($shadows[0]));
 
         // Psalm's --debug names every file it analyzes; the shadow appearing there is the proof
-        // that addFilesToAnalyze() took effect from inside initializePlugins().
+        // that addFilesToAnalyze() took effect from inside initializePlugins(). The debug line
+        // names where the run wrote, not the snapshot the assertions above read.
         $this->assertStringContainsString(
-            'Analyzing ' . $shadows[0],
+            'Analyzing ' . self::SHADOW_DIR . '/' . \basename($shadows[0]),
             $output,
             "The shadow was written but never analyzed.\n{$output}",
         );
@@ -104,7 +85,7 @@ final class BladeShadowAnalysisTest extends TestCase
     {
         $this->runPsalm('psalm.xml');
 
-        $manifest = self::SHADOW_DIR . '/manifest.php';
+        $manifest = $this->fixtureShadows(self::FIXTURE, $this->arguments('psalm.xml')) . '/manifest.php';
         $this->assertFileExists($manifest);
 
         /** @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string}> $entries */
@@ -126,7 +107,10 @@ final class BladeShadowAnalysisTest extends TestCase
     {
         $output = $this->runPsalm('psalm-blade-disabled.xml');
 
-        $this->assertDirectoryDoesNotExist(self::SHADOW_DIR, $output);
+        $this->assertDirectoryDoesNotExist(
+            $this->fixtureShadows(self::FIXTURE, $this->arguments('psalm-blade-disabled.xml')),
+            $output,
+        );
         $this->assertStringNotContainsString('.blade.php', $output, $output);
     }
 }

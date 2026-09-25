@@ -10,7 +10,6 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ViewReferenceCollector;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\LaravelPlugin\Handlers\Views\UnusedViewHandler;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a Blade template with no statically-provable reference is reported
@@ -27,6 +26,8 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ViewReferenceRegistry::class)]
 final class UnusedViewTest extends TestCase
 {
+    use AnalysesFixtureApp;
+
     private const FIXTURE = __DIR__ . '/Fixtures/UnusedView';
 
     private const NAMESPACED_FIXTURE = __DIR__ . '/Fixtures/UnusedViewNamespaced';
@@ -53,49 +54,15 @@ final class UnusedViewTest extends TestCase
 
     private const ISSUE = 'UnusedView';
 
-    /** @var list<string> */
-    private const FIXTURES = [
-        self::FIXTURE,
-        self::NAMESPACED_FIXTURE,
-        self::DYNAMIC_FIXTURE,
-        self::DIRECTIVES_FIXTURE,
-        self::COMPONENT_TAG_FIXTURE,
-        self::FIRST_CALL_FIXTURE,
-        self::PARSE_FAILURE_FIXTURE,
-        self::SUPPRESSED_FIXTURE,
-        self::INSTANCE_CALL_FIXTURE,
-        self::FACADE_ALIAS_FIXTURE,
-        self::FACADE_ALIAS_DYNAMIC_FIXTURE,
-        self::NUMERIC_NAME_FIXTURE,
-    ];
-
-    protected function setUp(): void
+    /**
+     * The command a case's fixture and `$config` resolve to. Cases naming the same pair share one
+     * run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        foreach (self::FIXTURES as $fixture) {
-            $this->deleteShadowDir($fixture);
-        }
-    }
-
-    protected function tearDown(): void
-    {
-        foreach (self::FIXTURES as $fixture) {
-            $this->deleteShadowDir($fixture);
-        }
-    }
-
-    private function deleteShadowDir(string $fixture): void
-    {
-        $shadowDir = $fixture . '/.cache/blade-shadows';
-
-        if (!\is_dir($shadowDir)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir($shadowDir) ?: [], ['.', '..']) as $entry) {
-            \unlink($shadowDir . '/' . $entry);
-        }
-
-        \rmdir($shadowDir);
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
     }
 
     /**
@@ -103,38 +70,49 @@ final class UnusedViewTest extends TestCase
      */
     private function unusedViewIssues(string $fixture, string $config): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+        return $this->project($this->fixtureIssues($fixture, $this->arguments($config)));
+    }
 
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            $fixture,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports an issue on purpose.
-        $process->run();
+    /**
+     * The final run of consecutive real runs, each against the shadow cache its predecessor left
+     * behind. The cache surviving between the steps is the subject, so these runs stay out of the
+     * memo and nothing clears the directory between them.
+     *
+     * @param non-empty-list<string> $configs
+     *
+     * @return list<array{type: string, file: string, message: string}>
+     */
+    private function unusedViewIssuesWarm(string $fixture, array $configs): array
+    {
+        $argumentSets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
 
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
+        return $this->project($this->decodeIssues($this->analyzeFixtureSequence($fixture, $argumentSets)));
+    }
 
-        $issues = [];
+    /**
+     * @param list<array<string, mixed>> $issues
+     *
+     * @return list<array{type: string, file: string, message: string}>
+     */
+    private function project(array $issues): array
+    {
+        $projected = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
+        foreach ($issues as $issue) {
             $type = (string) $issue['type'];
 
             if ($type !== self::ISSUE) {
                 continue;
             }
 
-            $issues[] = [
+            $projected[] = [
                 'type' => $type,
                 'file' => \basename((string) $issue['file_name']),
                 'message' => (string) $issue['message'],
             ];
         }
 
-        return $issues;
+        return $projected;
     }
 
     #[Test]
@@ -397,13 +375,10 @@ final class UnusedViewTest extends TestCase
     #[Test]
     public function a_cache_warmed_with_the_flag_off_is_recompiled_once_the_flag_turns_on(): void
     {
-        // Warm the shadow cache with reference collection off — every template's manifest entry gets
-        // a null references slot.
-        $this->unusedViewIssues(self::FIXTURE, 'psalm-unused-off.xml');
-
-        // Same fixture, same cache directory, flag now on, deliberately without deleting the cache
-        // between the two runs.
-        $issues = $this->unusedViewIssues(self::FIXTURE, 'psalm.xml');
+        // Step one warms the shadow cache with reference collection off, so every template's
+        // manifest entry gets a null references slot. Step two runs against that same cache
+        // directory with the flag on, deliberately without deleting it in between.
+        $issues = $this->unusedViewIssuesWarm(self::FIXTURE, ['psalm-unused-off.xml', 'psalm.xml']);
 
         $this->assertCount(1, $issues, \var_export($issues, true));
         $this->assertSame('orphan.blade.php', $issues[0]['file']);

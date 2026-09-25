@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a data key no template in the include chain reads is reported. A real
@@ -25,33 +24,20 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ReadSetResolver::class)]
 final class UnusedViewDataTest extends TestCase
 {
-    private const FIXTURE = __DIR__ . '/Fixtures/UnusedViewData';
+    use AnalysesFixtureApp;
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
+    private const FIXTURE = __DIR__ . '/Fixtures/UnusedViewData';
 
     private const UNUSED = 'UnusedViewData';
 
-    protected function setUp(): void
+    /**
+     * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
     }
 
     /**
@@ -62,36 +48,46 @@ final class UnusedViewDataTest extends TestCase
      */
     private function unusedDataIssues(string $config): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+        return $this->project($this->fixtureIssues(self::FIXTURE, $this->arguments($config)));
+    }
 
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues on purpose.
-        $process->run();
+    /**
+     * The final run of consecutive real runs, each against the shadow cache its predecessor left
+     * behind. The cache surviving between the steps is the subject, so these runs stay out of the
+     * memo and nothing clears the directory between them.
+     *
+     * @param non-empty-list<string> $configs
+     *
+     * @return list<array{file: string, message: string}>
+     */
+    private function unusedDataIssuesWarm(array $configs): array
+    {
+        $argumentSets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
 
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
+        return $this->project($this->decodeIssues($this->analyzeFixtureSequence(self::FIXTURE, $argumentSets)));
+    }
 
-        $issues = [];
+    /**
+     * @param list<array<string, mixed>> $issues
+     *
+     * @return list<array{file: string, message: string}>
+     */
+    private function project(array $issues): array
+    {
+        $projected = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
-
+        foreach ($issues as $issue) {
             if ((string) $issue['type'] !== self::UNUSED) {
                 continue;
             }
 
-            $issues[] = [
+            $projected[] = [
                 'file' => \basename((string) $issue['file_name']),
                 'message' => (string) $issue['message'],
             ];
         }
 
-        return $issues;
+        return $projected;
     }
 
     /**
@@ -240,9 +236,12 @@ final class UnusedViewDataTest extends TestCase
     #[Test]
     public function a_cache_warmed_with_the_flag_off_is_recompiled_once_the_flag_turns_on(): void
     {
-        $this->unusedDataIssues('psalm-unused-data-off.xml');
-
-        // Same fixture, same cache directory, flag now on, deliberately without deleting the cache.
-        $this->assertReportsOnly($this->unusedDataIssues('psalm.xml'), 'UnreadKey.php', 'orphan');
+        // Step one warms the cache with the flag off; step two runs against that same cache
+        // directory with the flag on, deliberately without deleting it in between.
+        $this->assertReportsOnly(
+            $this->unusedDataIssuesWarm(['psalm-unused-data-off.xml', 'psalm.xml']),
+            'UnreadKey.php',
+            'orphan',
+        );
     }
 }

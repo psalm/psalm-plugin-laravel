@@ -10,7 +10,6 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
-use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof that a template's `{{-- @var --}}` / `@props` contract is enforced at the
@@ -26,35 +25,22 @@ use Symfony\Component\Process\Process;
 #[CoversClass(ContractRegistry::class)]
 final class ViewContractValidationTest extends TestCase
 {
-    private const FIXTURE = __DIR__ . '/Fixtures/ViewContract';
+    use AnalysesFixtureApp;
 
-    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
+    private const FIXTURE = __DIR__ . '/Fixtures/ViewContract';
 
     private const MISSING = 'MissingViewVariable';
 
     private const WRONG_TYPE = 'InvalidViewVariableType';
 
-    protected function setUp(): void
+    /**
+     * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     *
+     * @return list<string>
+     */
+    private function arguments(string $config): array
     {
-        $this->deleteShadowDir();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->deleteShadowDir();
-    }
-
-    private function deleteShadowDir(): void
-    {
-        if (!\is_dir(self::SHADOW_DIR)) {
-            return;
-        }
-
-        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
-            \unlink(self::SHADOW_DIR . '/' . $entry);
-        }
-
-        \rmdir(self::SHADOW_DIR);
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
     }
 
     /**
@@ -65,24 +51,9 @@ final class ViewContractValidationTest extends TestCase
      */
     private function contractIssues(string $config): array
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            self::FIXTURE,
-        );
-        $process->setTimeout(300);
-        // Not mustRun(): the fixture reports issues on purpose.
-        $process->run();
-
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
-
         $issues = [];
 
-        foreach ($decoded as $issue) {
-            $this->assertIsArray($issue);
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
             $type = (string) $issue['type'];
 
             if ($type !== self::MISSING && $type !== self::WRONG_TYPE) {
