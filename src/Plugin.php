@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin;
 
 use Illuminate\Foundation\Application;
+use Illuminate\Routing\UrlGenerator;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
@@ -37,6 +38,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        require_once __DIR__ . '/Issues/MissingRoute.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -98,6 +100,10 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
+            if ($pluginConfig->findMissingRoutes) {
+                $this->initMissingRouteHandler($output);
+            }
+
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
@@ -121,6 +127,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
+        require_once __DIR__ . '/Handlers/Rules/MissingRouteHandler.php';
         require_once __DIR__ . '/Handlers/Application/ContainerResolver.php';
         require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
         require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
@@ -199,6 +206,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Jobs\DispatchableHandler::reset();
         Handlers\Magic\MacroRegistry::reset();
         Handlers\Producers\ProducerReturnTypeHandler::reset();
+        Handlers\Rules\MissingRouteHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -622,6 +630,16 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Rules\SerializedQueuedModelHandler::class);
         }
 
+        // Flag route() / to_route() / URL::route() / Redirect::route() calls that reference
+        // an undefined route name. initMissingRouteHandler() already gated the handler's
+        // internal $enabled flag on a non-empty named-route table, so registering the hooks
+        // here whenever the config flag is set is safe — a package/library boot with no
+        // routes loaded stays silent via that internal gate, not by skipping registration.
+        if ($pluginConfig->findMissingRoutes) {
+            require_once __DIR__ . '/Handlers/Rules/MissingRouteHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\MissingRouteHandler::class);
+        }
+
         // Tri-state gate for the OctaneIncompatibleBinding rule:
         //   findOctaneIncompatibleBinding === null  → auto-detect via class_exists()
         //   findOctaneIncompatibleBinding === true  → force enabled
@@ -807,6 +825,141 @@ final class Plugin implements PluginEntryPointInterface
         $extensions = $finder->getExtensions();
 
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
+    }
+
+    /**
+     * Read the booted app's named-route table and pass it to MissingRouteHandler.
+     *
+     * A package/library project analysed through the Testbench fallback boots a router
+     * but never loads any user route file, so the table comes back empty — that case is
+     * NOT an error, but init() is deliberately skipped: the handler must stay disabled
+     * rather than treat "no routes known" as "every route name is missing" (mirrors
+     * ApplicationProvider's own bound()-then-verify caution around partial boots).
+     *
+     * refreshNameLookups() mirrors the call ApplicationProvider's CreatesApplication
+     * override makes after boot, in case route names were registered fluently or a
+     * route file overwrote an earlier definition after the router last indexed them.
+     */
+    private function initMissingRouteHandler(\Psalm\Progress\Progress $output): void
+    {
+        $app = ApplicationProvider::getApp();
+
+        if (!$app->bound('router')) {
+            $output->warning(
+                'Laravel plugin: findMissingRoutes is enabled but the router service is not bound. '
+                . 'The MissingRoute check will be skipped.',
+            );
+
+            return;
+        }
+
+        try {
+            /** @var \Illuminate\Routing\Router $router */
+            $router = $app->make('router');
+            $routes = $router->getRoutes();
+            $routes->refreshNameLookups();
+
+            /** @var array<string, true> $names */
+            $names = \array_fill_keys(\array_keys($routes->getRoutesByName()), true);
+        } catch (\Throwable $throwable) {
+            // A throwing router resolution must degrade this one feature, not escape to
+            // __invoke()'s outer catch and disable the whole plugin — same per-probe
+            // policy as resolveViewFactory(). Keep the real cause reachable for --debug.
+            $output->warning(
+                'Laravel plugin: findMissingRoutes is enabled but the router could not be resolved '
+                . '(run with --debug for the underlying cause). The MissingRoute check will be skipped.',
+            );
+            $output->debug("Laravel plugin: resolving the 'router' binding threw: {$throwable->getMessage()}\n");
+
+            return;
+        }
+
+        if ($names === []) {
+            // A compiled route cache (bootstrap/cache/routes-v7.php) is read the same way
+            // a live route-file boot is: refreshNameLookups() populates the name table from
+            // it normally. This branch only fires when that cache itself carries zero named
+            // routes (e.g. it was cached before any named route existed), not because the
+            // plugin failed to read it. Warn here so the resulting silence reads as "cache
+            // has nothing to check", not as a clean run.
+            //
+            // routesAreCached() resolves the 'files' binding, which a minimal bootstrap/app.php
+            // (no filesystem provider registered) does not guarantee. A throw here must degrade
+            // this one probe, not escape to __invoke()'s outer catch and disable the whole
+            // plugin — same per-probe policy as the router resolution above.
+            $routesAreCached = false;
+
+            try {
+                $routesAreCached = $app->routesAreCached();
+            } catch (\Throwable $throwable) {
+                $output->debug("Laravel plugin: checking routesAreCached() threw: {$throwable->getMessage()}\n");
+            }
+
+            if ($routesAreCached) {
+                $output->warning(
+                    'Laravel plugin: findMissingRoutes is enabled but the application has a route cache '
+                    . 'that carries no named routes. The MissingRoute check will be skipped for this run. '
+                    . 'Run `php artisan route:cache` to regenerate it, or `php artisan route:clear` to '
+                    . 'remove it and analyse against the live route files instead.',
+                );
+
+                return;
+            }
+
+            // No named routes known to this boot (most commonly: a package/library
+            // project with no app route files). Reporting every route name as missing
+            // would be all false positives, so the handler stays disabled — no warning,
+            // since this is the expected shape for a non-application analysis target.
+            return;
+        }
+
+        if ($this->hasMissingNamedRouteResolver($app, $output)) {
+            $output->debug(
+                "Laravel plugin: the application registers a missing-named-route resolver, so a name "
+                . "absent from the route table can still resolve at runtime. The MissingRoute check "
+                . "will be skipped.\n",
+            );
+
+            return;
+        }
+
+        Handlers\Rules\MissingRouteHandler::init($names);
+    }
+
+    /**
+     * Whether the booted app can resolve route names that are absent from the route table.
+     *
+     * `UrlGenerator::route()` consults a resolver registered through
+     * `resolveMissingNamedRoutesUsing()` BEFORE throwing `RouteNotFoundException`, so in an app
+     * that registers one, "absent from the named-route table" no longer implies "fails at
+     * runtime" and every finding would be a false positive. The rule declines wholesale in that
+     * case, the same trade the empty-table bail makes. There is no public accessor for the
+     * resolver, hence the reflection.
+     *
+     * Inconclusive counts as "resolver present": a project-specific `url` service cannot be
+     * probed, and a throw must degrade this one probe rather than escape to __invoke()'s outer
+     * catch — either way the rule stays off instead of guessing. A resolver registered AFTER boot
+     * (in middleware, say) is invisible here and remains a documented false-positive source.
+     */
+    private function hasMissingNamedRouteResolver(Application $app, \Psalm\Progress\Progress $output): bool
+    {
+        try {
+            $url = $app->bound('url') ? $app->make('url') : null;
+
+            if (!$url instanceof UrlGenerator) {
+                $output->debug("Laravel plugin: the 'url' service is not an Illuminate UrlGenerator, so it cannot be probed for a missing-named-route resolver.\n");
+
+                return true;
+            }
+
+            /** @psalm-var callable|null $resolver */
+            $resolver = (new \ReflectionProperty(UrlGenerator::class, 'missingNamedRouteResolver'))->getValue($url);
+
+            return $resolver !== null;
+        } catch (\Throwable $throwable) {
+            $output->debug("Laravel plugin: probing for a missing-named-route resolver threw: {$throwable->getMessage()}\n");
+
+            return true;
+        }
     }
 
     /**

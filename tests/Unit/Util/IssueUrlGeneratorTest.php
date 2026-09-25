@@ -157,6 +157,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: true', $body);
         $this->assertStringContainsString('- findMissingTranslations: false', $body);
         $this->assertStringContainsString('- findMissingViews: false', $body);
+        $this->assertStringContainsString('- findMissingRoutes: false', $body);
         $this->assertStringContainsString('- findPromptInjection: auto', $body);
         $this->assertStringContainsString('- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(), $body);
         // Tri-state default (null) renders as "auto (...)" with the resolved
@@ -180,6 +181,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '<resolveDynamicWhereClauses value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findMissingRoutes value="true" />'
             . '<findOctaneIncompatibleBinding value="true" />'
             . '<findPromptInjection value="false" />'
             . '<failOnInternalError value="true" />'
@@ -193,6 +195,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- resolveDynamicWhereClauses: false', $body);
         $this->assertStringContainsString('- findMissingTranslations: true', $body);
         $this->assertStringContainsString('- findMissingViews: true', $body);
+        $this->assertStringContainsString('- findMissingRoutes: true', $body);
         $this->assertStringContainsString('- findOctaneIncompatibleBinding: true', $body);
         $this->assertStringContainsString('- findPromptInjection: false', $body);
         $this->assertStringContainsString('- failOnInternalError: true', $body);
