@@ -312,6 +312,45 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
+    /**
+     * Negative: `@error(1 => 'field')` (a keyed argument, unusual but valid PHP) compiles to
+     * `$__errorArgs = [1 => 'field'];`, which has no key `0` — the compiled `$__bag->has($__errorArgs[0])`
+     * read then reports THIS class with the offset-`0` wording, a genuine malformed-input bug (runtime
+     * `Undefined array key 0`), not the generated `[1]` bookkeeping probe. The gate must be pinned to
+     * the literal offset `'1'`, not any offset on `$__errorArgs` (#1566 review).
+     */
+    #[Test]
+    public function an_offset_zero_error_args_message_survives(): void
+    {
+        $issue = new InvalidArrayOffset(
+            "Cannot access value on variable \$__errorArgs using offset value of '0', expecting 1",
+            $this->shadowLocation(9),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidArrayOffset::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative control: the exact-name boundary must not widen to any `$__`-prefixed name — only
+     * `$__errorArgs` is gated (#1566 review).
+     */
+    #[Test]
+    public function a_dunder_prefixed_but_differently_named_offset_survives(): void
+    {
+        $issue = new InvalidArrayOffset(
+            "Cannot access value on variable \$__foo using offset value of '9', expecting 0",
+            $this->shadowLocation(9),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(InvalidArrayOffset::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
     #[Test]
     public function the_trailing_inline_html_after_break_shape_is_dropped(): void
     {
