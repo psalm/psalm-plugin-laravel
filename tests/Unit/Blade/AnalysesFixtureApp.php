@@ -20,6 +20,10 @@ use Symfony\Component\Process\Process;
  * `phpunit.xml.dist` can reorder the cases, so a case reading the live directory would otherwise
  * assert against whichever run happened to go last.
  *
+ * A using class must not declare its own `tearDownAfterClass()`: PHP silently prefers the class
+ * method over the trait's, which would skip the scratch-directory cleanup below. Override
+ * `resetFixtureAnalyses()` instead for extra per-class teardown.
+ *
  * @psalm-require-extends \PHPUnit\Framework\TestCase
  */
 trait AnalysesFixtureApp
@@ -132,7 +136,7 @@ trait AnalysesFixtureApp
     /** Copies a run's shadow directory aside before any later run can wipe it. */
     private function snapshotShadows(string $shadowDir, string $key): string
     {
-        $snapshot = \sys_get_temp_dir() . '/psalm-blade-shadows-' . \hash('xxh128', $key);
+        $snapshot = \sys_get_temp_dir() . '/psalm-blade-shadows-' . \getmypid() . '-' . \hash('xxh128', $key);
 
         self::deleteDirectory($snapshot);
         self::$fixtureScratchDirs[$snapshot] = true;
