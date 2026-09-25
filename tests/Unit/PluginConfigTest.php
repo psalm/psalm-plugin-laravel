@@ -43,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findUnknownFilesystemDisks);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -233,6 +234,104 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_unknown_filesystem_disks_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_explicit_true_with_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks value="true" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_absent_without_experimental_stays_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass />');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unknown_filesystem_disks_no_value_attribute_treated_as_absent(): void
+    {
+        // A present element without a `value` attribute is auto-detect, same as a
+        // missing element — see xmlOptionalBoolAttr().
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnknownFilesystemDisks);
+    }
+
+    #[Test]
+    public function invalid_find_unknown_filesystem_disks_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnknownFilesystemDisks value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findUnknownFilesystemDisks value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function find_prompt_injection_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="true" /></pluginClass>');
@@ -375,6 +474,25 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
+        $this->assertTrue($config->findSerializedQueuedModels);
+    }
+
+    #[Test]
+    public function experimental_flags_resolve_independently_when_only_one_is_overridden(): void
+    {
+        // An explicit override on one experimental-gated flag must not leak into the
+        // other: findUnknownFilesystemDisks is forced off here while
+        // findSerializedQueuedModels is left unset and must still follow experimental.
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnknownFilesystemDisks value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnknownFilesystemDisks);
         $this->assertTrue($config->findSerializedQueuedModels);
     }
 
@@ -598,6 +716,7 @@ final class PluginConfigTest extends TestCase
             . '<resolveConfigReturnTypes value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUnknownFilesystemDisks value="true" />'
             . '<experimental value="true" />'
             . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
@@ -612,6 +731,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnknownFilesystemDisks);
         $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);

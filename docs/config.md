@@ -170,6 +170,22 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findUnknownFilesystemDisks`
+
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnknownFilesystemDisks />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
+
+When enabled, the plugin checks that literal disk names passed to `Storage::disk()` / `Storage::drive()` are present in `filesystems.disks`. An unknown disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local` — the failure mode is availability, not a wrong write target.
+
+Only calls through the `Storage` facade are checked (an injected `FilesystemManager` may be a userland subclass with its own disk resolution), and only string literal disk names are validated — dynamic, enum, `null`, falsy (`''`, `'0'`), and dotted (nested-group) names are skipped. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve cleanly; it stays off under the Testbench package-mode fallback and after a degraded boot.
+
+See [UnknownFilesystemDisk](issues/UnknownFilesystemDisk.md) for details.
+
+### Example
+
+```xml
+<findUnknownFilesystemDisks value="true" />
+```
+
 ## `findSerializedQueuedModels`
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findSerializedQueuedModels />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
@@ -265,6 +281,7 @@ Early access to plugin features that are still on their way to becoming the defa
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
 - [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turns on unless the project sets it explicitly.
+- [`findUnknownFilesystemDisks`](#findunknownfilesystemdisks), off by default, turns on unless the project sets it explicitly.
 
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 
