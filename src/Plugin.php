@@ -822,12 +822,25 @@ final class Plugin implements PluginEntryPointInterface
      * === 'bootstrap'): the Testbench package-mode fallback boots Testbench's own bundled
      * skeleton config, not the analysed project's, so flagging disk names against that
      * config would be pure noise rather than project truth. A degraded boot can still
-     * leave the mode at 'bootstrap' with an incomplete config load, so the disk list is
-     * also required to be non-empty before the diagnostic is armed.
+     * leave the mode at 'bootstrap' with an incomplete config load, so a recorded
+     * bootstrap error also disarms the diagnostic and the disk list is required to be
+     * non-empty before it is armed.
      */
     private function initUnknownFilesystemDiskHandler(\Psalm\Progress\Progress $output): void
     {
         if (ApplicationProvider::getBootMode() !== 'bootstrap') {
+            return;
+        }
+
+        // A non-empty disk list does not prove the boot completed: a provider that threw
+        // after config loaded may have skipped merging additional disks, so arming here
+        // would flag those disks as unknown.
+        if (ApplicationProvider::getBootstrapError() instanceof \Throwable) {
+            $output->warning(
+                'Laravel plugin: findUnknownFilesystemDisks is enabled but the application boot was '
+                . 'degraded. The UnknownFilesystemDisk check will be skipped.',
+            );
+
             return;
         }
 

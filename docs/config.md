@@ -174,9 +174,9 @@ See [MissingView](issues/MissingView.md) for details.
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnknownFilesystemDisks />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
 
-When enabled, the plugin checks that literal disk names passed to `Storage::disk()` / `Storage::drive()` (and the same call on an injected `FilesystemManager` or `Factory` contract) are present in `filesystems.disks`. An unknown disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local` — the failure mode is availability, not a wrong write target.
+When enabled, the plugin checks that literal disk names passed to `Storage::disk()` / `Storage::drive()` are present in `filesystems.disks`. An unknown disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local` — the failure mode is availability, not a wrong write target.
 
-Only string literal disk names are validated — dynamic, enum, and `null` names are skipped, as is an empty string literal. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve; it stays off under the Testbench package-mode fallback.
+Only calls through the `Storage` facade are checked (an injected `FilesystemManager` may be a userland subclass with its own disk resolution), and only string literal disk names are validated — dynamic, enum, `null`, falsy (`''`, `'0'`), and dotted (nested-group) names are skipped. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve cleanly; it stays off under the Testbench package-mode fallback and after a degraded boot.
 
 See [UnknownFilesystemDisk](issues/UnknownFilesystemDisk.md) for details.
 

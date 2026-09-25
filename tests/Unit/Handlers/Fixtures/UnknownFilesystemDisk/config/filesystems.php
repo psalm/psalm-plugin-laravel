@@ -18,5 +18,14 @@ return [
             'url' => '/storage',
             'visibility' => 'public',
         ],
+
+        // Nested group: Laravel resolves disk('tenant.assets') through its dotted
+        // config lookup (FilesystemManager::getConfig() reads "filesystems.disks.{$name}").
+        'tenant' => [
+            'assets' => [
+                'driver' => 'local',
+                'root' => __DIR__ . '/../storage/app/tenant-assets',
+            ],
+        ],
     ],
 ];

@@ -178,11 +178,19 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             return null;
         }
 
-        self::checkDiskExists(
-            $event->getCallArgs(),
-            $event->getCodeLocation(),
-            $event->getSource()->getSuppressedIssues(),
-        );
+        // Diagnostic is facade-only: a DI-injected manager may be a userland
+        // FilesystemManager subclass with its own disk resolution (an overridden
+        // getConfig() resolving tenant-specific disks, for example), and this base-class
+        // provider also fires for subclass receivers — checking those against the booted
+        // app's global disk names would be a false positive. The facade always resolves
+        // the app's own manager, so only that surface is checked.
+        if ($event->getFqClasslikeName() === \Illuminate\Support\Facades\Storage::class) {
+            self::checkDiskExists(
+                $event->getCallArgs(),
+                $event->getCodeLocation(),
+                $event->getSource()->getSuppressedIssues(),
+            );
+        }
 
         return self::$adapter_return_type ??= new Type\Union([
             new Type\Atomic\TNamedObject(\Illuminate\Filesystem\FilesystemAdapter::class),
@@ -216,10 +224,18 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
 
         $diskName = $value->value;
 
-        // Dynamic/enum/null names are skipped above (not a String_ node); an empty literal is
-        // skipped here too — Storage::disk('') resolves to the default disk at runtime, not a
-        // lookup failure, so flagging it would be a false positive.
-        if ($diskName === '') {
+        // Dynamic/enum/null names are skipped above (not a String_ node). Falsy literals are
+        // skipped here too — `enum_value($name) ?: $this->getDefaultDriver()` sends both ''
+        // and '0' to the default disk at runtime, not to a lookup failure.
+        if ($diskName === '' || $diskName === '0') {
+            return;
+        }
+
+        // Dotted names resolve through Laravel's dotted config lookup
+        // (`config["filesystems.disks.{$name}"]`), reaching nested groups like
+        // `disks.tenant.assets`. The armed list holds top-level keys only, so dotted
+        // names are skipped rather than guessed at (accepted detection gap).
+        if (\str_contains($diskName, '.')) {
             return;
         }
 
