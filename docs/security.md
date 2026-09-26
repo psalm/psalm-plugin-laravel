@@ -92,13 +92,18 @@ and taint is then reported against that parameter.
 The plugin drops taint from exactly that shape, where both halves hold: the variadic takes the
 argument, and the written position belongs to some other, non-variadic parameter. So
 `format(unknown: $input)` on `format(string $path, string ...$rest)` no longer reports `$path`'s
-sink. The cost is that a genuine flow reaching a sink through the variadic is not reported either,
-so pass such a value positionally to have it analyzed.
+sink. Two caveats on how much it drops. It removes every *input* taint kind, not the kind the
+colliding sink happens to care about, but secret kinds and any kind your project defines are left
+untouched, so a mis-attributed secret still reports against the wrong parameter. And a genuine flow
+reaching a sink through the variadic is not reported either, so pass such a value positionally to
+have it analyzed.
 
 Everything else is analyzed normally, including an argument whose written position is the variadic's
 own declared index (`format(unknown: $input)` on `format(string ...$rest)`, where nothing collides),
 and an argument on a callee the plugin cannot resolve: a dynamic callee, a chained receiver such as
-`Storage::disk('local')->put(path: $input)`, or a union-typed receiver.
+`Storage::disk('local')->put(path: $input)`, a union-typed receiver, or an intersection-typed one
+(only one component's signature is reachable, so a variadic in that component must not speak for
+the others).
 
 Three imprecisions belong to Psalm itself and are left in place, to be filed upstream:
 

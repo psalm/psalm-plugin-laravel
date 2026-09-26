@@ -271,8 +271,11 @@ Both conditions after resolution mirror one piece of vendor source and neither i
   variadic takes the argument when no parameter carries its name AND when it names the variadic
   itself; `w(rest: 'X')` really yields `$rest === ['rest' => 'X']` at runtime. A scan treating any
   name match as "not captured" misses the second route.
-- The collision test mirrors `DataFlowNode::getParameterOffset()`, which returns the written offset
-  only for a variadic parameter. When the written offset IS the variadic's own declared index
+- The collision test mirrors `DataFlowNode::getParameterOffset()`, which returns the declared index
+  for a parameter it can locate and the written offset otherwise. Two paths reach that fallback: a
+  variadic parameter, which returns early, and a parameter whose name is absent from the callee's
+  storage. Only the first is gated on here, because the matcher can only bind a parameter drawn from
+  that same storage. When the written offset IS the variadic's own declared index
   (`f(cmd: $x)` on `f(string ...$rest)`, or `g('a', 'b', zzz: $x)` on `g($a, $b, ...$rest)`), or is
   past every declared parameter, the node is keyed exactly as a positional call would be and
   stripping it is pure loss. Measured: four such shapes reported correctly under vanilla and were
@@ -282,7 +285,8 @@ Both conditions after resolution mirror one piece of vendor source and neither i
 matched the declared parameter at its own WRITTEN offset and stripping everything else. That was
 correct against the Psalm the bug was filed on, but `DataFlowNode::getParameterOffset()` has since
 keyed every argument node by the matched parameter's DECLARED index, landing in 7.0.0-beta21 —
-below the `^7.0.0-beta21` floor in `composer.json`. On every supported Psalm the old gate was a
+which is exactly the `^7.0.0-beta21` floor in `composer.json`, so no supported Psalm still has the
+bug the handler was written against. On every supported Psalm the old gate was a
 pure false-negative generator: measured against vanilla on the same fixtures, it silenced a
 correct `TaintedHtml` for `sink(label: $tainted)`, for `$sink->report(label: $tainted)`, for an
 unresolved receiver, for a reordered call, and for the static form, while the false positive the
@@ -291,6 +295,16 @@ issue claimed for the resolvable case did not reproduce at all.
 `getParameterOffset()` still falls back to the written offset for a variadic parameter, so a
 collision does remain where that offset belongs to another parameter. Inverting the gate keeps that
 one case and returns everything else to upstream.
+
+**An intersection receiver declines.** `Union::isSingle()` counts union members, so an intersection
+passes it as one member while `getSingleAtomic()` answers with the primary atomic and leaves the
+siblings in `extra_types`. Resolving one component alone let a variadic there prove a capture and
+strip the shared argument node, erasing a sibling's correctly attributed finding — measured with a
+`VariadicWriter&HtmlWriter` receiver, where the `html` sink on the fixed `$label` vanished. Proving
+the collision across every component is the sound alternative; it buys nothing measurable, so the
+resolver declines instead, which is what the "exactly one known class" rule already required.
+Pinned in `TaintedNamedArgumentIntersectionReceiverReports.phpt`, in both intersection orders,
+because which component becomes the primary atomic is Psalm's choice.
 
 **Direction of failure flipped deliberately.** Under the old gate a resolution miss stripped, so
 every gap in `resolveReceiverClass()` / `pseudoMethodParams()` / the CallMap fallback cost a real
@@ -304,7 +318,9 @@ original gate reads the other way once the strip is the only thing producing sil
 
 **Measured, not assumed:** vanilla reports nothing against the variadic parameter itself for
 `v(zzz: $tainted)` where `$rest` carries a sink — only the mis-attributed findings against offset
-0. So the total (`TaintKind::ALL_INPUT`) strip costs no detection on that fixture.
+0. So the strip costs no detection on that fixture. It removes `TaintKind::ALL_INPUT`, which is every
+input kind but NOT the secret kinds or any custom kind a project defines, so it is broad rather than
+total; a mis-routed secret or custom taint still reports against the wrong parameter.
 
 **#1395's own fixture is NOT suppressed, by decision.** The reported shape,
 `Action::run(page: $input)` forwarding `mixed ...$arguments`, writes its argument at offset 0, which
