@@ -201,7 +201,7 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function a_masked_case_does_not_disarm_a_live_switchs_gate(): void
+    public function a_masked_case_does_not_disarm_a_live_switch_gate(): void
     {
         // A `@case(` typed inside a Blade comment must not consume the pending switch: the real
         // @case that follows still needs its own gate, or the ParseError from #1496 comes back.

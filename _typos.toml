@@ -69,6 +69,8 @@ IIFEs = "IIFEs"
 Responsable = "Responsable"
 
 [default.extend-words]
+# Deliberate multi-byte identifier fixtures ("$café" truncated by \w to "$caf") in the Blade contract tests.
+caf = "caf"
 # `mis-` is a valid English prefix (mis-cased, mis-infer, mis-identify, etc.).
 # typos tokenizes the bare `mis` and flags it as a typo of "miss"/"mist".
 mis = "mis"
