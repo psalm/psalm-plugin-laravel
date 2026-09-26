@@ -8,14 +8,15 @@ namespace TaintedNamedArgumentSelfDispatchedDynamicCalleeSurvives;
 /** @psalm-taint-source input */
 function tainted(): string { return 'attacker'; }
 
-function outer(string $safe = '', mixed $label = null): void { echo (string) $label; }
+/** A variadic callee, so `label:` matches no declared parameter and is capture-stripped. */
+function outer(string $safe = '', mixed ...$extra): void { if ($extra === []) { echo $safe; } }
 
 /**
- * `$fn()` — a `FuncCall` with a DYNAMIC (tainted) callee — is written as `label:`'s
- * mismatched value. `FunctionCallAnalyzer` independently dispatches
- * `AddRemoveTaintsEvent` on that SAME `FuncCall` node to check its own `INPUT_CALLABLE`
- * ("variable-call") sink; recording it for the mismatch strip would erase
- * `TaintedCallable` too (MUST-FIX A, #1395 round 3).
+ * `$fn()` — a `FuncCall` with a DYNAMIC (tainted) callee — is written as the value of `label:`,
+ * which names no parameter of `outer()` and is captured by its variadic.
+ * `FunctionCallAnalyzer` independently dispatches `AddRemoveTaintsEvent` on that SAME `FuncCall`
+ * node to check its own `INPUT_CALLABLE` ("variable-call") sink; recording it for the capture
+ * strip would erase `TaintedCallable` too (MUST-FIX A, #1395 round 3).
  */
 function dynamicFuncCallCalleeSurvives(): void
 {

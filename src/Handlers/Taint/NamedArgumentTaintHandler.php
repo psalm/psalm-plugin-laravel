@@ -27,29 +27,35 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
 
 /**
- * Strips ALL taint from a named-argument VALUE unless Psalm can be trusted to attribute it to
- * the parameter the argument actually names — a stop-gap for vimeo/psalm#11923.
+ * Strips ALL taint from a named-argument VALUE that the callee's VARIADIC parameter captures —
+ * the one attribution upstream still gets wrong (residual vimeo/psalm#11923).
  *
- * Upstream builds the argument's taint node id from its WRITTEN offset
- * (`ArgumentsAnalyzer::checkArgumentsMatch()` stores the matched param under the positional
- * key) while sinks are keyed by DECLARED parameter index, so `sink(label: $tainted)` reports
- * against whatever parameter sits at offset 0. Type checking is unaffected; only the taint
- * graph mis-routes. Reported as psalm/psalm-plugin-laravel#1395.
+ * `DataFlowNode::getParameterOffset()` keys an argument's taint node by the DECLARED index of
+ * the parameter the argument names, so `sink(label: $tainted)` reaches `$label`'s sink and not
+ * the sink on whatever parameter sits at offset 0. It falls back to the WRITTEN offset in
+ * exactly one case, a variadic parameter — and an argument whose name matches no declared
+ * parameter is matched against the variadic (`ArgumentsAnalyzer::checkArgumentsMatch()`), so its
+ * node collides with the non-variadic parameter declared at that written offset.
+ * `Action::run(page: $input)` re-spreading `mixed ...$arguments` onto
+ * `handle(?string $directory, int $page)` reports TaintedFile against `$directory`, the false
+ * positive psalm/psalm-plugin-laravel#1395 was filed for.
  *
- * A named argument is preserved only when the callee is statically resolvable AND the declared
- * parameter at the argument's own written offset already carries the argument's name — the one
- * shape upstream gets right. Everything else is stripped, and the strip is total
+ * Every other named argument is PRESERVED, including one on a callee this handler cannot
+ * resolve: upstream's attribution does not depend on the plugin seeing the signature, so an
+ * unresolvable callee is no reason to doubt it. The strip that does fire is total
  * ({@see TaintKind::ALL_INPUT}, not the kind a given sink cares about) because a mis-routed
- * node can resurface as an arbitrary kind at an arbitrary sink.
+ * node can resurface as an arbitrary kind at an arbitrary sink; with the gate this narrow the
+ * over-strip costs one accepted false negative, a variadic that itself leads to a sink.
  *
- * That trade is FN-over-FP by design. The resulting false-negative surface — variadic capture,
- * late static binding, re-entrant file analysis, callees that stay unresolvable — is enumerated
- * in psalm/psalm-plugin-laravel#1406 rather than repeated here.
+ * Residual upstream false positive this does NOT catch: a subclass declaring a variadic where
+ * its parent does not, called through `static::`. The call resolves to the parent, whose
+ * parameter the argument names, so the capture cannot be seen. Prevalence is unmeasurable and
+ * the direction is a retained FP, not a new FN.
  *
- * Retirement: once upstream threads the matched parameter's declared index into
- * `DataFlowNode::getForMethodArgument()` instead of the written offset, this handler has
- * nothing left to correct and can be deleted outright — there is no partial field to gate on,
- * unlike {@see \Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler}.
+ * Retirement: once `getParameterOffset()` threads the matched parameter's declared index through
+ * its variadic branch too, this handler has nothing left to correct and can be deleted outright
+ * — there is no partial field to gate on, unlike
+ * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler}.
  */
 final class NamedArgumentTaintHandler implements
     BeforeExpressionAnalysisInterface,
@@ -57,7 +63,7 @@ final class NamedArgumentTaintHandler implements
     BeforeFileAnalysisInterface
 {
     /**
-     * Each named argument's VALUE node recorded as mis-attributable, consumed by
+     * Each variadic-captured named argument's VALUE node, consumed by
      * {@see removeTaints}. Weakly keyed for the same reason as
      * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler::$whereColumnArguments}
      * (foreign ASTs can be parsed and freed mid-file, reissuing the object handle) and flushed
@@ -81,8 +87,8 @@ final class NamedArgumentTaintHandler implements
     }
 
     /**
-     * Records the value node of every named argument whose name does not provably match the
-     * declared parameter at its own written offset. Never short-circuits.
+     * Records the value node of every named argument the callee's variadic provably captures.
+     * Never short-circuits.
      */
     #[\Override]
     public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
@@ -113,12 +119,10 @@ final class NamedArgumentTaintHandler implements
         // a storage lookup, and `null` is already a meaningful result (callee unresolvable).
         $params = false;
 
-        foreach ($expr->getArgs() as $offset => $arg) {
+        foreach ($expr->getArgs() as $arg) {
             $name = $arg->name;
 
-            // getArgs() is docblocked `Arg[]`, which Psalm reads as array-key-keyed; real call
-            // args are int-indexed, and the offset has to line up with the int-keyed $params.
-            if (!$name instanceof Identifier || !\is_int($offset)) {
+            if (!$name instanceof Identifier) {
                 continue;
             }
 
@@ -126,12 +130,11 @@ final class NamedArgumentTaintHandler implements
                 $params = self::resolveDeclaredParams($expr, $event);
             }
 
-            $param = $params[$offset] ?? null;
-
-            // Skip when upstream already attributes this argument correctly (its name equals the
-            // declared parameter at its own written offset), and never record a node Psalm's own
-            // core dispatches AddRemoveTaintsEvent against ({@see isSelfDispatchedSinkSubject}).
-            if (($param instanceof FunctionLikeParameter && $param->name === $name->name)
+            // An unresolvable callee preserves: upstream attributes a named argument by declared
+            // index whether or not the plugin can read the signature. Never record a node Psalm's
+            // own core dispatches AddRemoveTaintsEvent against ({@see isSelfDispatchedSinkSubject}).
+            if ($params === null
+                || !self::isCapturedByVariadic($params, $name->name)
                 || self::isSelfDispatchedSinkSubject($arg->value)
             ) {
                 continue;
@@ -144,10 +147,39 @@ final class NamedArgumentTaintHandler implements
     }
 
     /**
+     * True when the argument's name matches no declared parameter, so PHP collects it into the
+     * callee's variadic and `ArgumentsAnalyzer::checkArgumentsMatch()` matches it there — the one
+     * shape whose taint node `DataFlowNode::getParameterOffset()` still keys by written offset.
+     *
+     * The scan runs in declaration order and returns on the first name match, mirroring that
+     * matcher: PHP forces the variadic last, so a name match anywhere always wins over it.
+     *
+     * @param list<FunctionLikeParameter> $params
+     *
+     * @psalm-mutation-free
+     */
+    private static function isCapturedByVariadic(array $params, string $name): bool
+    {
+        $variadic = false;
+
+        foreach ($params as $param) {
+            if ($param->name === $name) {
+                return false;
+            }
+
+            $variadic = $variadic || $param->is_variadic;
+        }
+
+        return $variadic;
+    }
+
+    /**
      * True when Psalm's own core separately dispatches `AddRemoveTaintsEvent` against this very
      * node for a reason unrelated to it being a named-argument value. Our `\WeakMap` matches by
      * node IDENTITY ({@see removeTaints}), so recording one of these would make our strip fire
      * on that unrelated dispatch too and erase a genuine, independent finding.
+     *
+     * Still reachable after the strip narrowed to variadic capture: `v(zzz: eval($input))`.
      *
      * `Eval_`/`Include_` are the vulnerability themselves, and a `FuncCall`/`New_` whose
      * callee/class expression is dynamic carries a `TaintKind::INPUT_CALLABLE` sink keyed to the
@@ -173,7 +205,8 @@ final class NamedArgumentTaintHandler implements
     /**
      * The callee's declared params, or `null` when the callee stays unresolvable — a dynamic
      * call/class, a receiver that is not one known class, or a name none of whose candidates
-     * resolve. `null` records every named argument on the call, the safe (strip) direction.
+     * resolve. `null` preserves every named argument on the call: a variadic capture cannot be
+     * proven without the signature, and anything unproven is attributed correctly upstream.
      *
      * @return list<FunctionLikeParameter>|null
      */
@@ -204,7 +237,7 @@ final class NamedArgumentTaintHandler implements
      * `FunctionStorage` at all (its param NAMES live only in the CallMap), and a facade
      * `@method` pseudo-method is skipped by `getFunctionLikeStorage()`'s `methodExists()` gate.
      * An overloaded builtin (`file_put_contents'1`, ...) picks the FIRST listed signature; a
-     * misaligned pick falls through to the accepted-strip default, not a crash.
+     * misaligned pick costs at most an unproven variadic capture, not a crash.
      *
      * @param non-empty-string $functionId
      *
@@ -239,9 +272,8 @@ final class NamedArgumentTaintHandler implements
     /**
      * A facade's `@method static` tag declares params but no real `MethodStorage`, and
      * {@see \Psalm\Codebase::getFunctionLikeStorage()} cannot see it — its `methodExists()`
-     * gate leaves `$with_pseudo` false. Without this fallback `Storage::get(path: ...)` and
-     * every other facade named-argument call counted as "unresolvable" and had its taint
-     * stripped, losing genuine findings upstream attributes correctly.
+     * gate leaves `$with_pseudo` false. Without this fallback a variadic capture on a facade call
+     * cannot be proven, so the mis-attributed finding upstream produces for it survives.
      *
      * `pseudo_methods` is read for symmetry only: a stock Laravel codebase carries every
      * sink-bearing pseudo-method as a STATIC one. A class with both a real method and a
@@ -325,8 +357,8 @@ final class NamedArgumentTaintHandler implements
      * that narrowing on anything but exactly one known class turns into false positives.
      *
      * A CHAINED receiver (`Storage::disk('local')->put(path: ...)`) is not a `Variable` and has
-     * no entry to read, so the fluent form still strips while the variable form does not. There
-     * is no receiver type at this pre-pass to fix that with; tracked in #1406.
+     * no entry to read, so the fluent form declines and preserves. That is the correct answer for
+     * everything but a variadic capture, which the fluent form therefore keeps mis-attributed.
      *
      * @psalm-mutation-free
      */
@@ -409,7 +441,7 @@ final class NamedArgumentTaintHandler implements
     }
 
     /**
-     * Removes every taint kind from a recorded named-argument value node. See the class
+     * Removes every taint kind from a recorded variadic-captured value node. See the class
      * docblock for why the strip is total rather than kind-scoped.
      */
     #[\Override]

@@ -8,16 +8,16 @@ namespace TaintedNamedArgumentSelfDispatchedEvalIncludeSurvives;
 /** @psalm-taint-source input */
 function tainted(): string { return 'attacker'; }
 
-function outer(string $safe = '', mixed $label = null): void { echo (string) $label; }
+/** A variadic callee, so `label:` matches no declared parameter and is capture-stripped. */
+function outer(string $safe = '', mixed ...$extra): void { if ($extra === []) { echo $safe; } }
 
 /**
- * `eval(tainted())` is written as the VALUE of `label:` — a mismatched named argument
- * (offset 0, but `outer`'s param 0 is `$safe`) that NamedArgumentTaintHandler would
- * otherwise record and strip (MUST-FIX A, #1395 round 3). `EvalAnalyzer` independently
- * dispatches `AddRemoveTaintsEvent` on that SAME `Eval_` node to check its own `eval`
- * sink; recording it would erase `TaintedEval` along with the mismatch strip.
- * `isSelfDispatchedSinkSubject()` excludes `Eval_` values, so the mismatch is never
- * recorded and the real `TaintedEval` finding survives.
+ * `eval(tainted())` is written as the VALUE of `label:`, which names no parameter of `outer()`
+ * and is therefore captured by its variadic — the one shape NamedArgumentTaintHandler strips.
+ * `EvalAnalyzer` independently dispatches `AddRemoveTaintsEvent` on that SAME `Eval_` node to
+ * check its own `eval` sink, and the strip matches by node IDENTITY, so recording the node would
+ * erase `TaintedEval` along with the capture strip (MUST-FIX A, #1395 round 3).
+ * `isSelfDispatchedSinkSubject()` excludes `Eval_` values, so the real finding survives.
  */
 function evalValueSurvives(): void
 {
