@@ -81,24 +81,41 @@ no coverage relative to running without the plugin.
 
 ### Known limitation: named arguments captured by a variadic
 
-Psalm keys a named argument's taint node by the declared index of the parameter the argument
-names, so an ordinary named argument is attributed correctly. The exception is a variadic
-parameter, where the key falls back to the argument's written position
-([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)). A named argument matching no
-declared parameter is matched against the callee's variadic, so its node collides with whatever
-non-variadic parameter is declared at that written position, and taint is reported against that
-parameter instead.
+Psalm keys a named argument's taint node by the declared index of the parameter the argument binds
+to, so an ordinary named argument is attributed correctly. A variadic parameter is the exception:
+for it, the key falls back to the argument's written position
+([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)). An argument binds to the
+callee's variadic both when no parameter carries its name and when it names the variadic itself, so
+its node can collide with a different, non-variadic parameter declared at that written position,
+and taint is then reported against that parameter.
 
-The plugin drops taint from exactly that case. A static entry point re-spreading
-`mixed ...$arguments` onto a method that writes a file no longer reports the file write against
-an unrelated argument. The cost is that a genuine flow reaching a sink through the variadic is
-not reported either, so pass such a value positionally to have it analyzed.
+The plugin drops taint from exactly that shape, where both halves hold: the variadic takes the
+argument, and the written position belongs to some other, non-variadic parameter. So
+`format(unknown: $input)` on `format(string $path, string ...$rest)` no longer reports `$path`'s
+sink. The cost is that a genuine flow reaching a sink through the variadic is not reported either,
+so pass such a value positionally to have it analyzed.
 
-Every other named argument is analyzed normally, including on a callee the plugin cannot
-resolve: a dynamic callee, a chained receiver such as `Storage::disk('local')->put(path: $input)`,
-or a union-typed receiver. One shape can still report against the wrong parameter, a subclass
-declaring a variadic where its parent does not and called through `static::`, because the call
-resolves to the parent, whose parameter the argument names.
+Everything else is analyzed normally, including an argument whose written position is the variadic's
+own declared index (`format(unknown: $input)` on `format(string ...$rest)`, where nothing collides),
+and an argument on a callee the plugin cannot resolve: a dynamic callee, a chained receiver such as
+`Storage::disk('local')->put(path: $input)`, or a union-typed receiver.
+
+Three imprecisions belong to Psalm itself and are left in place, to be filed upstream:
+
+- **Spread fan-out.** A forwarder re-spreading `mixed ...$arguments` onto a method with several
+  parameters reports the forwarded value against each of them, so a value destined for one is
+  reported against the others. This is independent of named arguments:
+  `forward(...['page' => $input])` produces the identical finding with no named argument present.
+  The plugin used to hide the named spelling of it, which also hid the genuine finding whenever the
+  argument's real destination carried a sink, so it no longer does.
+- **Shared inheritance edge.** A taint removal at one call site is written onto the edge between a
+  contract's parameter and its implementation's, replacing what is already there rather than merging
+  with it, so a removal at one call site can silence a different call site's genuine finding through
+  the same interface. Which one wins depends on declaration order. This affects every call-site
+  taint removal, not just named arguments.
+- **Subclass variadic through `static::`.** A subclass declaring a variadic where its parent does
+  not resolves to the parent, whose parameter the argument names, so the capture is invisible and
+  the mis-attribution survives.
 
 ### Timing-unsafe secret comparison (CWE-208)
 

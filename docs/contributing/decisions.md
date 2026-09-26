@@ -256,12 +256,27 @@ annotation instead keeps the plugin package-agnostic and makes the exemption opt
 author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
 records that a mitigation is attached, not that a payload is neutralised.
 
-### Named-argument taint: strip only what a variadic captures
+### Named-argument taint: strip only a variadic capture that actually collides
 
-**Decision:** `NamedArgumentTaintHandler` strips taint from a named argument only when the
-callee's declared parameters resolve, no declared parameter carries the argument's name, and some
-declared parameter is variadic. Every other named argument is preserved, including one on a
-callee the handler cannot resolve.
+**Decision:** `NamedArgumentTaintHandler` strips taint from a named argument only when all three
+hold: the callee's declared parameters resolve; upstream's matcher binds the argument to the
+variadic; and the argument's WRITTEN offset lands on a declared parameter that is not itself the
+variadic. Every other named argument is preserved, including one on a callee the handler cannot
+resolve.
+
+Both conditions after resolution mirror one piece of vendor source and neither is sufficient alone:
+
+- The binding test mirrors `ArgumentsAnalyzer::checkArgumentsMatch()`, which scans in declaration
+  order and breaks on the first parameter satisfying `name === $arg->name || is_variadic`. So the
+  variadic takes the argument when no parameter carries its name AND when it names the variadic
+  itself; `w(rest: 'X')` really yields `$rest === ['rest' => 'X']` at runtime. A scan treating any
+  name match as "not captured" misses the second route.
+- The collision test mirrors `DataFlowNode::getParameterOffset()`, which returns the written offset
+  only for a variadic parameter. When the written offset IS the variadic's own declared index
+  (`f(cmd: $x)` on `f(string ...$rest)`, or `g('a', 'b', zzz: $x)` on `g($a, $b, ...$rest)`), or is
+  past every declared parameter, the node is keyed exactly as a positional call would be and
+  stripping it is pure loss. Measured: four such shapes reported correctly under vanilla and were
+  silenced by an offset-blind gate.
 
 **Why:** the handler shipped with the opposite gate, preserving only an argument whose name
 matched the declared parameter at its own WRITTEN offset and stripping everything else. That was
@@ -273,11 +288,9 @@ correct `TaintedHtml` for `sink(label: $tainted)`, for `$sink->report(label: $ta
 unresolved receiver, for a reordered call, and for the static form, while the false positive the
 issue claimed for the resolvable case did not reproduce at all.
 
-`getParameterOffset()` still falls back to the written offset for a variadic parameter, and
-`ArgumentsAnalyzer::checkArgumentsMatch()` matches a name that no parameter carries against the
-variadic, so that one shape still collides with the non-variadic parameter declared at the written
-offset. It is also the shape #1395 was reported from. Inverting the gate keeps that fix and
-returns everything else to upstream.
+`getParameterOffset()` still falls back to the written offset for a variadic parameter, so a
+collision does remain where that offset belongs to another parameter. Inverting the gate keeps that
+one case and returns everything else to upstream.
 
 **Direction of failure flipped deliberately.** Under the old gate a resolution miss stripped, so
 every gap in `resolveReceiverClass()` / `pseudoMethodParams()` / the CallMap fallback cost a real
@@ -291,13 +304,35 @@ original gate reads the other way once the strip is the only thing producing sil
 
 **Measured, not assumed:** vanilla reports nothing against the variadic parameter itself for
 `v(zzz: $tainted)` where `$rest` carries a sink — only the mis-attributed findings against offset
-0. So the total (`TaintKind::ALL_INPUT`) strip costs no detection on that fixture, and the accepted
-false negative is the indirect case, a variadic re-spread onto a sink.
+0. So the total (`TaintKind::ALL_INPUT`) strip costs no detection on that fixture.
 
-**Residual false positive, accepted:** a subclass declaring a variadic where its parent does not,
-called through `static::`. `resolveClassNamePart()` maps `static` to the enclosing class, the
-parent's parameter name matches, and the capture is invisible. No fixture can measure its
-prevalence and the direction is a retained FP.
+**#1395's own fixture is NOT suppressed, by decision.** The reported shape,
+`Action::run(page: $input)` forwarding `mixed ...$arguments`, writes its argument at offset 0, which
+is the variadic's own declared index — keyed correctly, so the handler preserves it and the
+`TaintedFile` reopens. Three facts made that the right call. The finding is spelling-independent:
+`forward(...['page' => $p])` emits the byte-identical finding with no named `Arg` node anywhere, and
+the plugin's output there was already equal to vanilla's, so the handler was suppressing one
+spelling of an imprecision it could not suppress in general. It is born a hop later, at the spread
+fan-out in `handle(...$arguments)`, not at the named argument. And suppressing it worked by killing
+the source flow out of the call site, which also killed the genuine finding whenever the argument's
+true destination carried a sink of its own. The fixture was renamed from `Safe…` to
+`TaintedNamedArgumentVariadicRespreadSpreadFanOutFalsePositive.phpt` and its sibling
+`…VariadicRespreadGenuineDestinationReports.phpt` pins the finding that the old strip destroyed.
+
+**Three upstream defects disclosed, none filed yet, none plugin-fixable.** All three belong in a
+report against vimeo/psalm:
+
+1. Spread fan-out, above.
+2. A shared inheritance edge. `ArgumentAnalyzer` passes a call site's `removed_taints` into the
+   `Contract::method#n -> Impl::method#n` edge, and `DataFlowGraph::addPath()` ASSIGNS
+   `forward_edges[$from][$to]` rather than merging, so a strip at one call site can erase a
+   different call site's genuine finding through the same hop, with declaration order deciding which
+   survives. This widens the blast radius of every `RemoveTaintsInterface` handler, not just this
+   one, and is a standing argument for emission-time suppression where that is available (see the
+   call-site sink exemption decision above).
+3. A subclass declaring a variadic where its parent does not, called through `static::`.
+   `resolveClassNamePart()` maps `static` to the enclosing class, the parent's parameter name
+   matches, and the capture is invisible. Prevalence unmeasurable; direction is a retained FP.
 
 **Dead end (#1406 §3):** the re-entrant `beforeFileAnalysis` flush was to be replaced by an
 `array<string, WeakMap>` keyed per file path, since `BeforeFileAnalysisEvent` exposes no depth or
@@ -312,7 +347,8 @@ near-harmless and the cost is not worth paying.
 **See:** [#1395](https://github.com/psalm/psalm-plugin-laravel/issues/1395),
 [#1406](https://github.com/psalm/psalm-plugin-laravel/issues/1406),
 [vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923),
-`tests/Type/tests/TaintAnalysis/SafeNamedArgumentVariadicRespreadFileFilesReporterShape.phpt`.
+`tests/Type/tests/TaintAnalysis/SafeNamedArgumentUnmatchedNameCapturedByVariadicStripped.phpt`,
+`tests/Type/tests/TaintAnalysis/TaintedNamedArgumentVariadicAtWrittenOffsetReports.phpt`.
 
 ## Breaking Changes
 
