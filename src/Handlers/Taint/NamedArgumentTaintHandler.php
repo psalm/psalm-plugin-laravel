@@ -27,30 +27,43 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
 
 /**
- * Strips ALL taint from a named-argument VALUE that the callee's VARIADIC parameter captures —
- * the one attribution upstream still gets wrong (residual vimeo/psalm#11923).
+ * Strips ALL taint from a named-argument VALUE in the one shape whose taint node upstream still
+ * mis-keys: the callee's VARIADIC takes the argument, and the argument's WRITTEN offset lands on a
+ * different, non-variadic parameter (residual vimeo/psalm#11923).
  *
- * `DataFlowNode::getParameterOffset()` keys an argument's taint node by the DECLARED index of
- * the parameter the argument names, so `sink(label: $tainted)` reaches `$label`'s sink and not
- * the sink on whatever parameter sits at offset 0. It falls back to the WRITTEN offset in
- * exactly one case, a variadic parameter — and an argument whose name matches no declared
- * parameter is matched against the variadic (`ArgumentsAnalyzer::checkArgumentsMatch()`), so its
- * node collides with the non-variadic parameter declared at that written offset.
- * `Action::run(page: $input)` re-spreading `mixed ...$arguments` onto
- * `handle(?string $directory, int $page)` reports TaintedFile against `$directory`, the false
- * positive psalm/psalm-plugin-laravel#1395 was filed for.
+ * `DataFlowNode::getParameterOffset()` keys an argument's node by the DECLARED index of the
+ * parameter it binds to, so `sink(label: $tainted)` reaches `$label`'s sink and not the sink on
+ * whatever parameter sits at offset 0. It returns the written offset instead for a variadic
+ * parameter, so a collision needs both a variadic binding and a non-variadic parameter declared at
+ * that offset. Neither condition alone is enough, which is why
+ * {@see isMisattributedVariadicCapture} tests both against vendor source.
  *
- * Every other named argument is PRESERVED, including one on a callee this handler cannot
+ * Everything else is PRESERVED, including a named argument on a callee this handler cannot
  * resolve: upstream's attribution does not depend on the plugin seeing the signature, so an
  * unresolvable callee is no reason to doubt it. The strip that does fire is total
- * ({@see TaintKind::ALL_INPUT}, not the kind a given sink cares about) because a mis-routed
- * node can resurface as an arbitrary kind at an arbitrary sink; with the gate this narrow the
- * over-strip costs one accepted false negative, a variadic that itself leads to a sink.
+ * ({@see TaintKind::ALL_INPUT}, not the kind a given sink cares about) because a mis-routed node
+ * can resurface as an arbitrary kind at an arbitrary sink.
  *
- * Residual upstream false positive this does NOT catch: a subclass declaring a variadic where
- * its parent does not, called through `static::`. The call resolves to the parent, whose
- * parameter the argument names, so the capture cannot be seen. Prevalence is unmeasurable and
- * the direction is a retained FP, not a new FN.
+ * Three upstream defects are deliberately left alone. All are to be filed against vimeo/psalm;
+ * none is fixable here.
+ *
+ * 1. SPREAD FAN-OUT. `Action::run(page: $input)` forwarding `mixed ...$arguments` onto
+ *    `handle(?string $directory, int $page)` reports TaintedFile against `$directory`. The offset
+ *    there IS the variadic's own index, so the call-site node is keyed correctly and this handler
+ *    preserves it; the imprecision is born one hop later, where the spread fans out. It is
+ *    spelling-independent — `forward(...['page' => $p])` emits the identical finding with no named
+ *    argument anywhere — so suppressing the named spelling only hid one spelling of it, and hid the
+ *    genuine finding when the argument's true destination is itself a sink. Reported as
+ *    psalm/psalm-plugin-laravel#1395; accepted here.
+ * 2. SHARED INHERITANCE EDGE. `ArgumentAnalyzer` passes a call site's `removed_taints` into the
+ *    `Contract::method#n -> Impl::method#n` edge, and `DataFlowGraph::addPath()` ASSIGNS
+ *    `forward_edges[$from][$to]` rather than merging it. So a strip at one call site can erase a
+ *    DIFFERENT call site's genuine finding through the same interface hop, and which one wins
+ *    depends on declaration order. This makes the strip's blast radius wider than the call site it
+ *    fires on, for every `RemoveTaintsInterface` handler, not just this one.
+ * 3. SUBCLASS VARIADIC THROUGH `static::`. A child declaring a variadic where its parent does not
+ *    resolves to the parent, whose parameter the argument names, so the capture is invisible and
+ *    the mis-attribution survives. Prevalence unmeasurable; direction is a retained FP.
  *
  * Retirement: once `getParameterOffset()` threads the matched parameter's declared index through
  * its variadic branch too, this handler has nothing left to correct and can be deleted outright
@@ -87,7 +100,7 @@ final class NamedArgumentTaintHandler implements
     }
 
     /**
-     * Records the value node of every named argument the callee's variadic provably captures.
+     * Records the value node of every named argument provably mis-keyed by a variadic capture.
      * Never short-circuits.
      */
     #[\Override]
@@ -119,10 +132,12 @@ final class NamedArgumentTaintHandler implements
         // a storage lookup, and `null` is already a meaningful result (callee unresolvable).
         $params = false;
 
-        foreach ($expr->getArgs() as $arg) {
+        foreach ($expr->getArgs() as $offset => $arg) {
             $name = $arg->name;
 
-            if (!$name instanceof Identifier) {
+            // getArgs() is docblocked `Arg[]`, which Psalm reads as array-key-keyed; real call
+            // args are int-indexed, and the offset has to line up with the int-keyed $params.
+            if (!$name instanceof Identifier || !\is_int($offset)) {
                 continue;
             }
 
@@ -134,7 +149,7 @@ final class NamedArgumentTaintHandler implements
             // index whether or not the plugin can read the signature. Never record a node Psalm's
             // own core dispatches AddRemoveTaintsEvent against ({@see isSelfDispatchedSinkSubject}).
             if ($params === null
-                || !self::isCapturedByVariadic($params, $name->name)
+                || !self::isMisattributedVariadicCapture($params, $offset, $name->name)
                 || self::isSelfDispatchedSinkSubject($arg->value)
             ) {
                 continue;
@@ -147,30 +162,44 @@ final class NamedArgumentTaintHandler implements
     }
 
     /**
-     * True when the argument's name matches no declared parameter, so PHP collects it into the
-     * callee's variadic and `ArgumentsAnalyzer::checkArgumentsMatch()` matches it there — the one
-     * shape whose taint node `DataFlowNode::getParameterOffset()` still keys by written offset.
+     * True when upstream binds this named argument to the callee's VARIADIC *and* keys the
+     * resulting node onto a different, non-variadic parameter. Both halves are required, and each
+     * mirrors one piece of vendor source rather than paraphrasing it.
      *
-     * The scan runs in declaration order and returns on the first name match, mirroring that
-     * matcher: PHP forces the variadic last, so a name match anywhere always wins over it.
+     * The COLLISION half, `DataFlowNode::getParameterOffset()`: it returns `$fallback` (the
+     * written offset) for a variadic parameter and the declared index otherwise. So the node is
+     * mis-keyed only when the written offset lands on a parameter that is itself NOT variadic. An
+     * offset landing on the variadic's own declared index — `f(cmd: $x)` on `f(string ...$rest)`,
+     * or `g('a', 'b', zzz: $x)` on `g($a, $b, ...$rest)` — is keyed exactly as a positional call
+     * would be, and so is an offset past every declared parameter. Stripping either is pure loss.
+     *
+     * The BINDING half, `ArgumentsAnalyzer::checkArgumentsMatch()`: it scans in declaration order
+     * and breaks on the first parameter satisfying `name === $arg->name || is_variadic`, so the
+     * variadic takes the argument BOTH when no parameter carries the name AND when the argument
+     * names the variadic itself. `w(rest: 'X')` really does yield `$rest === ['rest' => 'X']` at
+     * runtime, so the second route is not a technicality. Returning `$param->is_variadic` from the
+     * first hit reproduces the break exactly; a scan that treated any name match as "not captured"
+     * would miss it.
      *
      * @param list<FunctionLikeParameter> $params
      *
      * @psalm-mutation-free
      */
-    private static function isCapturedByVariadic(array $params, string $name): bool
+    private static function isMisattributedVariadicCapture(array $params, int $offset, string $name): bool
     {
-        $variadic = false;
+        $collidesWith = $params[$offset] ?? null;
 
-        foreach ($params as $param) {
-            if ($param->name === $name) {
-                return false;
-            }
-
-            $variadic = $variadic || $param->is_variadic;
+        if (!$collidesWith instanceof FunctionLikeParameter || $collidesWith->is_variadic) {
+            return false;
         }
 
-        return $variadic;
+        foreach ($params as $param) {
+            if ($param->name === $name || $param->is_variadic) {
+                return $param->is_variadic;
+            }
+        }
+
+        return false;
     }
 
     /**
