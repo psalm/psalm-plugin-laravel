@@ -156,7 +156,7 @@ require getcwd() . '/vendor/autoload.php';
 Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
-Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
+Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`). Its upstream bug, vimeo/psalm#11923, was fixed for non-variadic parameters in Psalm 7.0.0-beta21, below the plugin's own floor; the handler now covers only the residual variadic-capture case, which is why its strip gate is a narrow one.
 
 ### Experimental issue lifecycle
 

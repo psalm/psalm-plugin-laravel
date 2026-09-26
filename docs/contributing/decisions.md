@@ -256,6 +256,64 @@ annotation instead keeps the plugin package-agnostic and makes the exemption opt
 author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
 records that a mitigation is attached, not that a payload is neutralised.
 
+### Named-argument taint: strip only what a variadic captures
+
+**Decision:** `NamedArgumentTaintHandler` strips taint from a named argument only when the
+callee's declared parameters resolve, no declared parameter carries the argument's name, and some
+declared parameter is variadic. Every other named argument is preserved, including one on a
+callee the handler cannot resolve.
+
+**Why:** the handler shipped with the opposite gate, preserving only an argument whose name
+matched the declared parameter at its own WRITTEN offset and stripping everything else. That was
+correct against the Psalm the bug was filed on, but `DataFlowNode::getParameterOffset()` has since
+keyed every argument node by the matched parameter's DECLARED index, landing in 7.0.0-beta21 —
+below the `^7.0.0-beta21` floor in `composer.json`. On every supported Psalm the old gate was a
+pure false-negative generator: measured against vanilla on the same fixtures, it silenced a
+correct `TaintedHtml` for `sink(label: $tainted)`, for `$sink->report(label: $tainted)`, for an
+unresolved receiver, for a reordered call, and for the static form, while the false positive the
+issue claimed for the resolvable case did not reproduce at all.
+
+`getParameterOffset()` still falls back to the written offset for a variadic parameter, and
+`ArgumentsAnalyzer::checkArgumentsMatch()` matches a name that no parameter carries against the
+variadic, so that one shape still collides with the non-variadic parameter declared at the written
+offset. It is also the shape #1395 was reported from. Inverting the gate keeps that fix and
+returns everything else to upstream.
+
+**Direction of failure flipped deliberately.** Under the old gate a resolution miss stripped, so
+every gap in `resolveReceiverClass()` / `pseudoMethodParams()` / the CallMap fallback cost a real
+finding. Under the new one a resolution miss preserves, so the same gaps cost at most a retained
+upstream false positive. Those resolvers therefore became precision, not correctness, and their
+phpts say so: only a fixture that pairs a variadic with a sink on a non-variadic parameter can
+still fail on them.
+
+**Zero corpus movement is not evidence of value.** The prevalence argument that justified the
+original gate reads the other way once the strip is the only thing producing silence.
+
+**Measured, not assumed:** vanilla reports nothing against the variadic parameter itself for
+`v(zzz: $tainted)` where `$rest` carries a sink — only the mis-attributed findings against offset
+0. So the total (`TaintKind::ALL_INPUT`) strip costs no detection on that fixture, and the accepted
+false negative is the indirect case, a variadic re-spread onto a sink.
+
+**Residual false positive, accepted:** a subclass declaring a variadic where its parent does not,
+called through `static::`. `resolveClassNamePart()` maps `static` to the enclosing class, the
+parent's parameter name matches, and the capture is invisible. No fixture can measure its
+prevalence and the direction is a retained FP.
+
+**Dead end (#1406 §3):** the re-entrant `beforeFileAnalysis` flush was to be replaced by an
+`array<string, WeakMap>` keyed per file path, since `BeforeFileAnalysisEvent` exposes no depth or
+root flag but does reach a path through its statements source. Rejected: a depth counter is
+unsound because no decrement survives a mid-file throw, and the per-path map retains one WeakMap
+per analysed file with no disposal hook. Under the inverted gate a dropped record means preserve,
+which is the correct answer for everything but variadic capture, so the bug direction is
+near-harmless and the cost is not worth paying.
+
+**Not backported.** Psalm 6 has no `getParameterOffset()`, so `3.x` keeps the original gate.
+
+**See:** [#1395](https://github.com/psalm/psalm-plugin-laravel/issues/1395),
+[#1406](https://github.com/psalm/psalm-plugin-laravel/issues/1406),
+[vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923),
+`tests/Type/tests/TaintAnalysis/SafeNamedArgumentVariadicRespreadFileFilesReporterShape.phpt`.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in

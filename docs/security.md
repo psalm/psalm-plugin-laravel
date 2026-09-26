@@ -79,20 +79,26 @@ the call reports nothing at all instead of reporting one of its flows. The
 longer flows are discarded whether or not the exemption applies, so this costs
 no coverage relative to running without the plugin.
 
-### Known limitation: named arguments
+### Known limitation: named arguments captured by a variadic
 
-Psalm keys a named argument's taint node by the argument's written position rather than by the
-parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
-can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
-taint from a named argument it cannot prove is attributed correctly.
+Psalm keys a named argument's taint node by the declared index of the parameter the argument
+names, so an ordinary named argument is attributed correctly. The exception is a variadic
+parameter, where the key falls back to the argument's written position
+([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)). A named argument matching no
+declared parameter is matched against the callee's variadic, so its node collides with whatever
+non-variadic parameter is declared at that written position, and taint is reported against that
+parameter instead.
 
-Detection is unaffected when the callee is statically known (a plain function, a facade, a
-static call, a constructor, or a method on a receiver typed as exactly one class) and the
-argument names the parameter at its own position, which covers ordinary application code. It is
-lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
-chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
-expression rather than a variable), an argument captured by a variadic, and a `static::` call
-resolved through a subclass override. Passing the same values positionally always reports.
+The plugin drops taint from exactly that case. A static entry point re-spreading
+`mixed ...$arguments` onto a method that writes a file no longer reports the file write against
+an unrelated argument. The cost is that a genuine flow reaching a sink through the variadic is
+not reported either, so pass such a value positionally to have it analyzed.
+
+Every other named argument is analyzed normally, including on a callee the plugin cannot
+resolve: a dynamic callee, a chained receiver such as `Storage::disk('local')->put(path: $input)`,
+or a union-typed receiver. One shape can still report against the wrong parameter, a subclass
+declaring a variadic where its parent does not and called through `static::`, because the call
+resolves to the parent, whose parameter the argument names.
 
 ### Timing-unsafe secret comparison (CWE-208)
 
