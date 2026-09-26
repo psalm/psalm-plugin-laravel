@@ -50,6 +50,25 @@ final class UnresolvedSink
 }
 
 /**
+ * A callee that pairs the named FIXED parameter with a trailing variadic. The variadic exists, so a
+ * gate that asked only "does this callee declare a variadic?" would strip here; upstream's matcher
+ * breaks on `$label` before ever reaching `$rest`, so the node is keyed by `$label`'s declared index
+ * and must be preserved.
+ *
+ * @psalm-taint-sink file $path
+ * @psalm-taint-sink html $label
+ */
+function sinkWithTail(string $path = 'safe', string $label = 'x', string ...$rest): void
+{
+    echo $path;
+    echo $label;
+
+    foreach ($rest as $chunk) {
+        echo $chunk;
+    }
+}
+
+/**
  * `label:` is written at offset 0, where `$path` is declared, yet upstream keys the argument's
  * taint node by the DECLARED index of the parameter the name resolves to
  * (`DataFlowNode::getParameterOffset()`), so it reaches `$label`'s `html` sink and never
@@ -77,6 +96,12 @@ function unresolvedReceiverNameMatchReports(): void
     (new UnresolvedSink())->report(label: tainted());
 }
 
+/** The name-matches-a-fixed-param-before-a-variadic shape, which must still report. */
+function nameMatchesFixedParamBeforeVariadicReports(): void
+{
+    sinkWithTail(label: tainted());
+}
+
 /**
  * A dynamic callee has no `Name` node, so no candidate id exists and the arguments are
  * preserved. Vanilla Psalm resolves no callee here either and reports nothing, so this pins the
@@ -89,6 +114,9 @@ function dynamicCalleeEmitsNothing(): void
 }
 ?>
 --EXPECTF--
+TaintedHtml on line %d: Detected tainted HTML
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

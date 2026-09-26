@@ -34,6 +34,16 @@ function sinkAfterTwo(string $a = '', string $b = '', string ...$rest): void
     }
 }
 
+/** @psalm-taint-sink file $a */
+function sinkPastDeclared(string $a = '', string $b = '', string ...$rest): void
+{
+    echo $b;
+
+    foreach ($rest as $chunk) {
+        echo $chunk;
+    }
+}
+
 /**
  * `getParameterOffset()` falls back to the argument's WRITTEN offset only for a variadic
  * parameter, so the node it produces is mis-keyed only when a NON-variadic parameter is declared
@@ -58,6 +68,21 @@ function variadicAtOffsetOneReports(): void
 function variadicAtOffsetTwoReports(): void
 {
     sinkAfterTwo('safe', 'safe', zzz: tainted());
+}
+
+/**
+ * Written offset 3, PAST every declared parameter (`$a`, `$b`, `$rest` occupy 0-2), so no parameter
+ * exists for the node to collide with and the handler declines on `isset($params[$offset])`.
+ *
+ * This pins the absence of any emission, NOT a preserved finding: vanilla Psalm reports nothing for
+ * this shape either — the node lands on offset 3, which carries no sink, so the value never reaches
+ * `$rest`'s `echo`. Measured directly under a plugin-free config. So the branch cannot be given a
+ * must-report assertion; what this case does catch is the handler starting to emit, or to suppress,
+ * something here, and `$a`'s `file` sink staying silent.
+ */
+function offsetPastAllDeclaredParamsReports(): void
+{
+    sinkPastDeclared('safe', 'safe', 'safe', zzz: tainted());
 }
 ?>
 --EXPECTF--

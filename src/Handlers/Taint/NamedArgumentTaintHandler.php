@@ -40,9 +40,11 @@ use Psalm\Type\TaintKind;
  *
  * Everything else is PRESERVED, including a named argument on a callee this handler cannot
  * resolve: upstream's attribution does not depend on the plugin seeing the signature, so an
- * unresolvable callee is no reason to doubt it. The strip that does fire is total
- * ({@see TaintKind::ALL_INPUT}, not the kind a given sink cares about) because a mis-routed node
- * can resurface as an arbitrary kind at an arbitrary sink.
+ * unresolvable callee is no reason to doubt it. The strip that does fire removes
+ * {@see TaintKind::ALL_INPUT} rather than the kind a given sink cares about, because a mis-routed
+ * node can resurface as an arbitrary kind at an arbitrary sink. That is broad but NOT total:
+ * `ALL_INPUT` excludes the secret kinds and any kind a project defines itself, so a mis-routed
+ * secret or custom taint is still reported against the wrong parameter.
  *
  * Three upstream defects are deliberately left alone. All are to be filed against vimeo/psalm;
  * none is fixable here.
@@ -385,6 +387,15 @@ final class NamedArgumentTaintHandler implements
      * so the two cannot disagree. A union or non-object receiver declines, per the house rule
      * that narrowing on anything but exactly one known class turns into false positives.
      *
+     * An INTERSECTION also declines. `isSingle()` counts union members and an intersection is one
+     * member, so it passes that check while `getSingleAtomic()` answers with the primary atomic
+     * alone and hides the rest in `extra_types`. Resolving one component's parameters would let a
+     * variadic in that component prove a capture and strip the shared argument node, erasing a
+     * sibling component's correctly attributed finding — measured with a receiver typed
+     * `VariadicWriter&HtmlWriter`, where the `html` sink on the fixed `$label` disappeared.
+     * Proving the collision across every component is the only sound alternative and buys nothing
+     * measurable, so declining is the answer the house rule already prescribes.
+     *
      * A CHAINED receiver (`Storage::disk('local')->put(path: ...)`) is not a `Variable` and has
      * no entry to read, so the fluent form declines and preserves. That is the correct answer for
      * everything but a variadic capture, which the fluent form therefore keeps mis-attributed.
@@ -409,7 +420,11 @@ final class NamedArgumentTaintHandler implements
 
         $atomic = $receiver->getSingleAtomic();
 
-        return $atomic instanceof TNamedObject ? $atomic->value : null;
+        if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
+            return null;
+        }
+
+        return $atomic->value;
     }
 
     /**
@@ -470,8 +485,8 @@ final class NamedArgumentTaintHandler implements
     }
 
     /**
-     * Removes every taint kind from a recorded variadic-captured value node. See the class
-     * docblock for why the strip is total rather than kind-scoped.
+     * Removes every INPUT taint kind from a recorded variadic-captured value node. See the class
+     * docblock for why the removal is kind-agnostic, and for what `ALL_INPUT` leaves behind.
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
