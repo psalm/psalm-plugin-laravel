@@ -160,8 +160,8 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     /**
      * Resolve a function argument by parameter name first, then by positional index, so a watched
      * comparand is found regardless of whether the call passes it positionally or as a named
-     * argument. Returns null when the argument is absent or unpacked (`...$args`), where the
-     * position can no longer be determined statically.
+     * argument. Returns null when the argument is absent, unpacked (`...$args`), or preceded by a
+     * placeholder (`...`, `?`), where the position can no longer be determined statically.
      *
      * @param array<Arg|\PhpParser\Node\VariadicPlaceholder|\PhpParser\Node\ArgPlaceholder> $args
      *
@@ -180,13 +180,13 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         // positional args before named ones, so the n-th unnamed arg is at parameter position n.
         $index = 0;
         foreach ($args as $arg) {
-            if (!$arg instanceof Arg || $arg->name instanceof \PhpParser\Node\Identifier) {
-                continue;
+            // A placeholder (`...`, `?`) or an unpacked argument leaves positions unknown — give up.
+            if (!$arg instanceof Arg || $arg->unpack) {
+                return null;
             }
 
-            // An unpacked argument shifts every later position by an unknown amount — give up.
-            if ($arg->unpack) {
-                return null;
+            if ($arg->name instanceof \PhpParser\Node\Identifier) {
+                continue;
             }
 
             if ($index === $position) {
