@@ -1,0 +1,68 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Laravel\Ai\Gateway\TextGenerationOptions;
+use Laravel\Ai\Responses\Data\TextUsage;
+
+/**
+ * Agent middleware mutates this value immediately before a generation step.
+ * The text-bearing overrides below reach the provider from
+ * `vendor/laravel/ai/src/PendingStep.php` and are prompt-injection boundaries.
+ */
+class PendingStep
+{
+    public function __construct(
+        public readonly int $number,
+        public readonly bool $isFinalStep,
+        public readonly string $provider,
+        public readonly string $model,
+        public readonly ?string $instructions,
+        public readonly array $messages,
+        public readonly array $tools,
+        public readonly ?array $schema,
+        public readonly ?TextGenerationOptions $options,
+        public readonly array $steps = [],
+        public readonly TextUsage $usage = new TextUsage,
+        public readonly ?int $timeout = null,
+        public readonly ?string $invocationId = null,
+    ) {}
+
+    public function isFirstStep(): bool {}
+
+    public function withModel(string $model): self {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $instructions
+     */
+    public function withInstructions(?string $instructions): self {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $messages
+     */
+    public function withMessages(iterable $messages): self {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $tools
+     */
+    public function withTools(iterable $tools): self {}
+
+    public function onlyTools(string ...$names): self {}
+
+    public function withoutTools(string ...$names): self {}
+
+    public function withToolChoice(ToolChoice|string|array|null $toolChoice): self {}
+
+    public function withMaxTokens(?int $maxTokens): self {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $providerOptions
+     */
+    public function withProviderOptions(array $providerOptions): self {}
+
+    protected function withOptions(TextGenerationOptions $options): self {}
+
+    protected function resolvedOptions(): TextGenerationOptions {}
+
+    protected function with(array $overrides): self {}
+}

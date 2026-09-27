@@ -1,0 +1,109 @@
+<?php
+
+namespace Laravel\Ai\Prompts;
+
+use Illuminate\Support\Collection;
+use Laravel\Ai\Approvals\Decisions;
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\Providers\TextProvider;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Exceptions\FailoverableException;
+use Laravel\Ai\Gateway\RunContext;
+use Laravel\Ai\Messages\Message;
+use Laravel\Ai\Providers\Tools\ProviderTool;
+use Throwable;
+
+/**
+ * Underlying value object every Agent::prompt()/stream() call constructs.
+ * Catches the rare codepath where user code builds an AgentPrompt directly
+ * and hands it to a TextProvider, bypassing the Promptable trait sinks.
+ *
+ * Stub re-declares `extends Prompt` so the relationship survives the override.
+ */
+class AgentPrompt extends Prompt
+{
+    public readonly Agent $agent;
+
+    public readonly Collection $attachments;
+
+    /**
+     * The ad-hoc message history to send ahead of the prompt.
+     *
+     * @var list<Message>|null
+     */
+    public readonly ?array $messages;
+
+    /**
+     * The tools available for this run, or null to use the tools the agent declares.
+     *
+     * @var array<int, Agent|Tool|ProviderTool>|null
+     */
+    public readonly ?array $tools;
+
+    public readonly ?int $timeout;
+
+    public readonly ?string $invocationId;
+
+    public readonly ?string $parentInvocationId;
+
+    public readonly ?string $parentToolInvocationId;
+
+    protected readonly bool $isFinalAttempt;
+
+    protected ?RunContext $runContext = null;
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function __construct(
+        Agent $agent,
+        string $prompt,
+        Collection|array $attachments,
+        TextProvider $provider,
+        string $model,
+        ?int $timeout = null,
+        ?string $invocationId = null,
+        ?Decisions $approvalDecisions = null,
+        ?string $parentInvocationId = null,
+        ?string $parentToolInvocationId = null,
+        bool $isFinalAttempt = true,
+        ?array $messages = null,
+        ?array $tools = null,
+    ) {}
+
+    public function contains(string $string): bool {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function prepend(string $prompt): AgentPrompt {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function append(string $prompt): AgentPrompt {}
+
+    /**
+     * @psalm-taint-sink llm_prompt $prompt
+     */
+    public function revise(string $prompt, Collection|array|null $attachments = null): AgentPrompt {}
+
+    /**
+     * The tools supplied here reach the model's request; see `vendor/laravel/ai/src/Prompts/AgentPrompt.php`.
+     *
+     * @psalm-taint-sink llm_prompt $tools
+     */
+    public function withTools(iterable $tools): AgentPrompt {}
+
+    public function withAttachments(Collection|array $attachments): AgentPrompt {}
+
+    public function provider(): TextProvider {}
+
+    public function isFinalAttempt(): bool {}
+
+    public function setRunContext(?RunContext $context): void {}
+
+    public function runContext(): ?RunContext {}
+
+    public function willRetry(Throwable $exception): bool {}
+}

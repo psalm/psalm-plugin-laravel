@@ -1,0 +1,35 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Closure;
+use Laravel\Ai\Gateway\FakeClassificationGateway;
+use Laravel\Ai\PendingResponses\PendingClassification;
+
+/**
+ * `AiServiceProvider` registers `Str::decide()` and `Stringable::decide()` as
+ * macros, but Macroable exposes only pseudo-methods with no per-method
+ * docblock on which to declare an `llm_prompt` sink. Closing that coverage gap
+ * requires a call-analysis handler for both macro forms, or Psalm support for
+ * taint annotations on registered macro signatures.
+ */
+class Classification
+{
+    /**
+     * `PendingClassification::classify()` sends this state to the model; see
+     * `vendor/laravel/ai/src/Classification.php`.
+     *
+     * @psalm-taint-sink llm_prompt $state
+     */
+    public static function of(string|array $state): PendingClassification {}
+
+    public static function fake(Closure|array $responses = []): FakeClassificationGateway {}
+
+    public static function assertClassified(Closure $callback): void {}
+
+    public static function assertNotClassified(Closure $callback): void {}
+
+    public static function assertNothingClassified(): void {}
+
+    public static function isFaked(): bool {}
+}

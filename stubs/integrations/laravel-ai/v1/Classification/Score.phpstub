@@ -1,0 +1,22 @@
+<?php
+
+namespace Laravel\Ai\Classification;
+
+use Laravel\Ai\Contracts\Question;
+
+/**
+ * The instructions are serialized into the classification request in
+ * `vendor/laravel/ai/src/Classification/Score.php`.
+ */
+final readonly class Score implements Question
+{
+    /**
+     * @psalm-taint-sink llm_prompt $instructions
+     */
+    public function __construct(
+        public string|array $instructions,
+        public array $levels,
+    ) {}
+
+    public function toArray(): array {}
+}

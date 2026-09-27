@@ -19,9 +19,14 @@ declare(strict_types=1);
  *
  * Signature metadata is compared beyond types: parameter count, parameter
  * names position-by-position, optionality/default expressions, by-reference
- * and variadic flags, and the native return type/by-reference flag. Count and
- * names are not cosmetic. A stub missing a trailing parameter makes Psalm
- * reject a call that is valid at runtime, and a parameter renamed upstream
+ * and variadic flags, and the native return type/by-reference flag. PHP
+ * reflection expands `iterable` only when it appears in a union, so the stub
+ * side applies the same expansion before comparing. Reflection also evaluates
+ * a `new` parameter default into an object, whose exported state cannot be
+ * compared to source; object defaults therefore compare by class and
+ * optionality, while scalar, null, and array defaults still compare exactly.
+ * Count and names are not cosmetic. A stub missing a trailing parameter makes
+ * Psalm reject a call that is valid at runtime, and a parameter renamed upstream
  * silently disarms every `@psalm-taint-sink <kind> $name` hung off the old name
  * while every existing test stays green.
  *
@@ -59,6 +64,11 @@ declare(strict_types=1);
  * removal upstream is still caught.
  *
  * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]
+ * With no argument it compares `shared/` plus the major-specific variant
+ * directory that the installed release actually loads (`v1/` or `pre-1.0/`);
+ * the inactive variant is deliberately skipped, since it redeclares the same
+ * classes for the other major and would report every intended difference as
+ * drift. An explicit [stubs-dir] is scanned recursively as given.
  * Exit codes: 0 = no drift found (beyond KNOWN_GAPS below), 1 = new drift
  * found or a stubbed class/method is missing from the installed vendor
  * package, 2 = laravel/ai not installed (soft skip, not a failure: the
@@ -105,7 +115,13 @@ if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
     exit(2);
 }
 
-$stubsDir = $argv[1] ?? dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai';
+$stubDirs = isset($argv[1])
+    ? [$argv[1]]
+    : [
+        dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai/shared',
+        dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai/'
+            . \Psalm\LaravelPlugin\Internal\LaravelAiIntegration::stubVariantDirectory(),
+    ];
 $installedVersion = installedLaravelAiVersion();
 
 /** @var list<string> $mismatches */
@@ -122,7 +138,13 @@ $comparedClasses = 0;
 
 $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
-foreach (findStubFiles($stubsDir) as $file) {
+$stubFiles = [];
+
+foreach ($stubDirs as $stubDir) {
+    \array_push($stubFiles, ...findStubFiles($stubDir));
+}
+
+foreach ($stubFiles as $file) {
     $ast = $parser->parse(\file_get_contents($file) ?: '');
     if ($ast === null) {
         report($file, "{$file}: php-parser could not parse this stub", $mismatches, $knownGaps, $consumedGapKeys);
@@ -685,10 +707,15 @@ function diffSignature(
             );
         }
 
-        $stubHasDefault = $stubParam->default !== null;
+        $stubDefault = $stubParam->default;
+        $stubHasDefault = $stubDefault !== null;
         $vendorHasDefault = $reflectedParams[$position]->isDefaultValueAvailable();
         if ($stubHasDefault !== $vendorHasDefault
-            || ($stubHasDefault && $vendorHasDefault && stubDefaultToString($stubParam->default) !== reflectionDefaultToString($reflectedParams[$position]))) {
+            || ($stubDefault !== null && $vendorHasDefault && !defaultValuesMatch(
+                $stubDefault,
+                $reflectedParams[$position],
+                $enclosingFqcn,
+            ))) {
             report(
                 $label,
                 "{$label}(): parameter at position {$position} default/optionality differs (stub: "
@@ -817,6 +844,25 @@ function stubDefaultToString(?Node\Expr $default): string
         : (new Standard())->prettyPrintExpr($default);
 }
 
+/**
+ * A `new` initializer reaches Reflection as an object rather than its source
+ * expression. Its state is not a reliable comparison basis, but its class is.
+ * Other default values retain their exact source/runtime comparison.
+ */
+function defaultValuesMatch(Node\Expr $stubDefault, \ReflectionParameter $parameter, ?string $enclosingFqcn): bool
+{
+    $vendorDefault = $parameter->getDefaultValue();
+    if (!\is_object($vendorDefault)) {
+        return stubDefaultToString($stubDefault) === reflectionDefaultToString($parameter);
+    }
+
+    if (!$stubDefault instanceof Node\Expr\New_ || !$stubDefault->class instanceof Node\Name) {
+        return false;
+    }
+
+    return stubTypeToString($stubDefault->class, null, $enclosingFqcn) === $vendorDefault::class;
+}
+
 function reflectionDefaultToString(\ReflectionParameter $parameter): string
 {
     if ($parameter->isDefaultValueConstant()) {
@@ -833,6 +879,9 @@ function reflectionDefaultToString(\ReflectionParameter $parameter): string
     if ($value === false) {
         return 'false';
     }
+    if (\is_object($value)) {
+        return 'new ' . $value::class;
+    }
     if (\is_array($value) && $value === []) {
         return 'array()';
     }
@@ -843,6 +892,10 @@ function reflectionDefaultToString(\ReflectionParameter $parameter): string
 /**
  * Native-type-only normalization, comparable against reflectionTypeToString().
  * Docblock precision is intentionally invisible here; see the file docblock.
+ *
+ * PHP reflection expands `iterable` to `Traversable|array` only when it is a
+ * union member. The same expansion here preserves equivalent declarations
+ * while still distinguishing a bare `array` from `iterable`.
  *
  * `self`/`parent` are resolved to the enclosing class's FQCN because
  * ReflectionNamedType::getName() resolves them too (unlike `static`, which
@@ -856,7 +909,16 @@ function stubTypeToString(Node\Identifier|Node\Name|Node\ComplexType $type, ?Nod
     }
 
     if ($type instanceof Node\UnionType) {
-        $parts = \array_map(static fn(Node\Identifier|Node\Name|Node\IntersectionType $t): string => stubTypeToString($t, null, $enclosingFqcn), $type->types);
+        $parts = [];
+        foreach ($type->types as $unionMember) {
+            $part = stubTypeToString($unionMember, null, $enclosingFqcn);
+            if (\strtolower($part) === 'iterable') {
+                \array_push($parts, 'Traversable', 'array');
+                continue;
+            }
+
+            $parts[] = $part;
+        }
         \sort($parts);
 
         return \implode('|', $parts);

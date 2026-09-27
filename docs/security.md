@@ -17,8 +17,8 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` agents and prompt sinks (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
-| LLM output reuse | LLM01:2025 | Model output as a source: `$response->text`, `$response->structured`, response string casts, `toArray()` / `toJson()` / `jsonSerialize()`, tool results |
+| Prompt injection | LLM01:2025 | `laravel/ai` 0.11.x and 1.x prompt sinks: agents, messages, media, documents, reranking, and tool metadata; 1.x-only boundaries are noted below (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
+| LLM output reuse | LLM01:2025 | `laravel/ai` tool and model-output sources: text, structured output, reasoning, and 1.x classification answers and citations |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
@@ -120,38 +120,66 @@ Treat any such finding from this plugin as a timing issue and fix it with
 
 ### LLM prompt injection (OWASP LLM01:2025)
 
-Applies to projects using `laravel/ai`. The stubs and the LLM-output handler load
-only when that package is installed and satisfies `>=0.11.0 <1.0.0`, so projects
-without it pay nothing.
+Applies to projects using `laravel/ai`. The stubs, LLM-output handler,
+prompt-guard handler, and prompt-injection issue policy load together only when
+that package is installed and satisfies `>=0.11.0 <2.0.0` (0.11.x and 1.x), so
+projects without a supported package pay nothing.
 
 Two directions are covered. Both are errors by default; the explicit opt-out only
-suppresses the D-in `TaintedLlmPrompt` issue.
+suppresses the D-in `TaintedLlmPrompt` issue. A **1.x-only** boundary below is
+present in the `v1/` stubs and does not exist in laravel/ai 0.11.x.
 
-* Untrusted input reaching a prompt is reported as `TaintedLlmPrompt` at the
-  normal error level by default when the supported `laravel/ai` integration is
-  installed. Set [`findPromptInjection`](config.md#findpromptinjection) to
-  `false` only to suppress this D-in issue; an explicit issue handler still wins.
-  The integration gate is `laravel/ai >=0.11.0 <1.0.0`, and `true` cannot bypass
-  it. Sinks are
-  `Promptable::prompt()` / `stream()` / `queue()` / `broadcast*()`, the
-  `Laravel\Ai\agent()` helper, `AgentPrompt::prepend()` / `append()` / `revise()`,
-  `Files\Document::fromString()` / `fromBase64()`,
-  `PendingReranking::rerank()`, and the
-  `Messages\UserMessage` / `Messages\Message` constructors.
-* Model output is itself a taint source, reported as an error out of the box and
-  unaffected by `findPromptInjection`: these findings have the ordinary fix
-  (parameterize, escape). Reading `$response->text` (or casting the
-  response to string) yields tainted data, so an answer echoed into HTML, SQL, or a
-  shell command is reported like any other user input. That models indirect prompt
-  injection, where the payload arrives through a page, document, or tool result the
-  model read. Transcripts count on both paths (`TranscriptionResponse::$text` and
-  the string cast): the audio was supplied by a user, so the transcript is
-  attacker-authored text a speech model merely re-typed.
-* Structured output is a source on the same footing. On
-  `StructuredAgentResponse` / `StructuredTextResponse`, the covered reads are the
-  `$structured` property, `toArray()`, `toJson()`, `jsonSerialize()`, the string
-  cast, and an explicit `offsetGet()` call. The keys come from the application's
-  schema, the values come from the model.
+* **Prompt sinks.** Untrusted input reaching any listed sink is reported as
+  `TaintedLlmPrompt` at the normal error level by default when the supported
+  `laravel/ai` integration is installed. Set
+  [`findPromptInjection`](config.md#findpromptinjection) to `false` only to
+  suppress this D-in issue; an explicit issue handler still wins. The integration
+  gate is `laravel/ai >=0.11.0 <2.0.0`, covering 0.11.x and 1.x, and `true`
+  cannot bypass it.
+* **Sinks in 0.11.x and 1.x.** `Promptable` and `Contracts\Agent` each annotate
+  `prompt()`, `stream()`, `queue()`, `broadcast()`, `broadcastNow()`, and
+  `broadcastOnQueue()`; `agent()` and `AnonymousAgent::__construct()` annotate
+  their instructions and messages. `AgentPrompt::__construct()`, `prepend()`,
+  `append()`, and `revise()`; the `Messages\Message` and
+  `Messages\UserMessage` constructors; `Audio::of()`, `Image::of()`, and
+  `Reranking::of()`; `PendingReranking::rerank()`; `Files\Document::fromString()`
+  / `fromBase64()` and `Files\Image::fromBase64()`; and
+  `Tools\SimilaritySearch::withDescription()` are also sinks.
+* **1.x-only sinks.** The agent delivery methods above accept
+  `AgentInput|UserMessage|Decisions|string`. `Promptable::withMessages()` and
+  `AgentPrompt::withTools()` are sinks. Middleware mutations through
+  `PendingStep::withInstructions()`, `withMessages()`, `withTools()`, and
+  `withProviderOptions()` are sinks. Classification annotates
+  `Classification::of()`, the constructors of `Classification\Boolean`,
+  `Classification\Choice`, and `Classification\Score`, and
+  `PendingClassification::__construct()`.
+* **Sources in 0.11.x and 1.x.** `Contracts\Tool::handle()` returns a source so
+  tool output keeps flowing into later prompt sinks. `Tools\Request::validate()`,
+  `all()`, `toArray()`, `offsetGet()`, `str()`, `string()`, `array()`, `only()`,
+  `except()`, and `collect()` are sources. The LLM-output handler sources
+  `$text` on `TextResponse`, `AgentResponse`, `StreamedAgentResponse`,
+  `StreamableAgentResponse`, and `TranscriptionResponse`, and `$structured` on
+  `StructuredAgentResponse` and `StructuredTextResponse`. String casts on
+  `AgentResponse`, `TextResponse`, `TranscriptionResponse`,
+  `StructuredAgentResponse`, and `StructuredTextResponse` are sources.
+  `StructuredAgentResponse::toArray()`, `toJson()`, and `jsonSerialize()`, plus
+  `ProvidesStructuredResponse::offsetGet()`, are sources too.
+* **1.x-only sources.** The handler sources `$reasoning` on `TextResponse`,
+  `StreamableAgentResponse`, `Responses\Data\Step`, and `Gateway\StepResponse`,
+  and `$citations` on `StreamableAgentResponse`. `AgentResponse::fakeWithReasoning()`
+  and `TextResponse::withReasoning()` are sources. Classification sources are
+  `ClassificationResponse::answer()`, `collect()`, `toArray()`,
+  `jsonSerialize()`, `getIterator()`, and `offsetGet()`; `Data\Answer::toArray()`
+  and `jsonSerialize()`; `BooleanAnswer::isTrue()` and `toArray()`;
+  `ChoiceAnswer::probabilityOf()` and `toArray()`; and
+  `ScoreAnswer::level()`, `label()`, `normalized()`, and `toArray()`.
+
+Model-output sources are unaffected by `findPromptInjection`: their ordinary
+SQL/HTML/shell findings have the ordinary fix (parameterize or escape). This
+models indirect prompt injection, where the payload arrives through a page,
+document, or tool result the model read. Transcripts count on both paths
+(`TranscriptionResponse::$text` and its string cast): the audio was supplied by a
+user, so the transcript is attacker-authored text a speech model merely re-typed.
 
 #### Marking prompt-guard middleware as trusted
 
@@ -162,29 +190,32 @@ the finding by hand.
 
 Two annotations, both phpdoc:
 
-1. On the guard, annotate the method `Illuminate\Pipeline\Pipeline` actually invokes with
-   `@psalm-taint-escape llm_prompt`. Which method that is depends on how the agent lists the entry:
-   an OBJECT entry (`[new PromptGuard()]`) dispatches `__invoke()` when your class has one and
-   `handle()` otherwise, while a class-STRING entry (`[PromptGuard::class]`) dispatches `handle()`
-   first and only falls back to `__invoke()` when there is no `handle()`. A guard with just
-   `handle()` is correct for both.
-2. On the agent's `middleware()`, declare a `@return` naming your guard class:
-   `@return list<PromptGuard>` (a `@return list<class-string<PromptGuard>>` entry works too).
+1. On the guard, annotate the method `laravel/ai` invokes with
+   `@psalm-taint-escape llm_prompt`. Use `handle()` for a cross-major guard:
+   laravel/ai 1.x invokes it once per `PendingStep`, while 0.11.x invokes it for
+   an `AgentPrompt`. In 0.11.x, an object middleware entry with `__invoke()` uses
+   that method instead; a class-string entry uses `handle()` first and falls back
+   to `__invoke()`.
+2. On the agent's unchanged `middleware()` method, declare a `@return` naming
+   your guard class: `@return list<PromptGuard>` (a
+   `@return list<class-string<PromptGuard>>` entry works too).
+
+This laravel/ai 1.x guard wraps each generation step:
 
 ```php
 use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\PendingStep;
 use Laravel\Ai\Promptable;
-use Laravel\Ai\Prompts\AgentPrompt;
 
 final class PromptGuard
 {
     /**
      * @psalm-taint-escape llm_prompt
-     * @psalm-flow ($prompt) -> return
+     * @psalm-flow ($step) -> return
      */
-    public function handle(AgentPrompt $prompt, \Closure $next): mixed
+    public function handle(PendingStep $step, \Closure $next): mixed
     {
-        return $next($prompt);
+        return $next($step);
     }
 }
 
@@ -199,6 +230,10 @@ final class SupportAgent implements HasMiddleware
     }
 }
 ```
+
+For laravel/ai 0.11.x, import `Laravel\Ai\Prompts\AgentPrompt` instead and use
+`handle(AgentPrompt $prompt, \Closure $next): mixed`; retarget the flow
+annotation and `$next()` call to `$prompt`.
 
 What it does: `TaintedLlmPrompt` stops being reported for `prompt()` and `stream()` on that agent.
 Every other taint kind keeps flowing, so the same value reaching SQL, HTML, or a shell command is
@@ -245,20 +280,28 @@ distinguishable, and the middleware list is read from the declared return type r
 method body. Deeper mechanics, including the exact `Pipeline` dispatch order, are in
 [`docs/contributing/taint-analysis.md`](contributing/taint-analysis.md).
 
-Two shapes are not covered. Each is an upstream limitation rather than a
-judgement that the flow is safe, so treat them as blind spots when reviewing.
+Known limitations. Each is an upstream limitation rather than a judgement that
+the flow is safe, so treat it as a blind spot when reviewing.
 
-Return-value sinks (`Tool::description()`, `Agent::instructions()`) are not covered
-yet: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in
-[#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
-
-Array-access reads (`$response['field']`, `$request['task']`) are not covered
-either, on any class: Psalm drops the taint edge when it resolves the `[]` sugar,
-which affects every `ArrayAccess`-based taint source and is left for an upstream
-fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)). It is worth
-knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to
-a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit
-`offsetGet()` call, all of which are covered.
+* **Return-value sinks.** `Tool::description()` and `Agent::instructions()` are
+  not covered: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked
+  in [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
+* **1.x `decide()` macros.** `Str::decide()` and `Stringable::decide()` are not
+  sinks. They are macro pseudo-methods with no per-method docblock on which to
+  attach an `llm_prompt` sink. This is pinned by
+  `tests/Type/tests/PromptInjection/ClassificationDecideKnownLimitation.phpt` and
+  documented in `stubs/integrations/laravel-ai/v1/Classification.phpstub`.
+* **1.x citation collection reads.** `StreamableAgentResponse::$citations` is a
+  registered source, but no end-to-end flow is observable through its
+  `Collection` reads because Psalm drops the taint edge there. The handler
+  caveat in `src/Handlers/Ai/LlmOutputTaintHandler.php` records this gap.
+* **Array-access reads.** `$response['field']` and `$request['task']` are not
+  covered on any class: Psalm drops the taint edge when it resolves the `[]`
+  sugar, which affects every `ArrayAccess`-based taint source and is left for an
+  upstream fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)).
+  It is worth knowing about, because `Tools\AgentTool` uses exactly that shape
+  to pass a task to a sub-agent. Prefer `Tools\Request::str()` / `string()` /
+  `array()`, or an explicit `offsetGet()` call, all of which are covered.
 
 Reading a single element back out of an array-typed source is covered. Both the
 `$structured` property and the `toArray()` return keep the taint through
