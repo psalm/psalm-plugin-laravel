@@ -20,10 +20,5 @@ final class User extends BaseUser
         return $this->belongsTo(Team::class);
     }
 
-    public function ordinaryRelation(): BelongsTo
-    {
-        return $this->belongsTo(Team::class);
-    }
-
     public function ordinaryUnused(): void {}
 }

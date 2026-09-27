@@ -11,7 +11,6 @@ use IndirectMethodReferencesFixture\Controllers\InvocableController;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
 use IndirectMethodReferencesFixture\Dependencies\ContractImplementation;
 use IndirectMethodReferencesFixture\Dependencies\DocblockOnlyDependency;
-use IndirectMethodReferencesFixture\Dependencies\DynamicDependency;
 use IndirectMethodReferencesFixture\Dependencies\ProtectedDependency;
 use IndirectMethodReferencesFixture\Dependencies\PublicControl;
 use IndirectMethodReferencesFixture\Dependencies\UnusedDependency;
@@ -29,7 +28,6 @@ function consume(): array
         InvocableController::class,
         ReferenceCommand::class,
         ContractImplementation::class,
-        DynamicDependency::class,
         ProtectedDependency::class,
         UnusedDependency::class,
         AbstractDependency::class,

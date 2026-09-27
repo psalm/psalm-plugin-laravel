@@ -14,181 +14,193 @@ use Symfony\Component\Process\Process;
  * Whole-project regression coverage for Laravel's indirect method references. Psalm's dead-code
  * consolidation does not inspect an explicitly passed file, so this deliberately runs a real
  * fixture project with findUnusedCode enabled, matching a consuming application's lifecycle.
+ *
+ * Markers are matched against the whole dead-code family, never against method findings alone:
+ * when a class loses its last live reference Psalm folds all of its members into one UnusedClass
+ * finding, so a `Foo::__construct` marker checked against method findings cannot fail. Method
+ * markers stay class-unqualified because Psalm reports inherited and trait methods under the
+ * using class, not the declaring one.
  */
 #[CoversClass(IndirectMethodReferenceHandler::class)]
 final class IndirectMethodReferencesTest extends TestCase
 {
+    private const FIXTURE = __DIR__ . '/Fixtures/IndirectMethodReferences';
+
+    /** @var list<string> */
+    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass'];
+
+    /** @var list<string> */
+    private const DEAD_RETURNS = ['PossiblyUnusedReturnValue', 'UnusedReturnValue'];
+
     #[Test]
-    public function it_records_only_proven_container_and_relationship_references(): void
+    public function it_reports_dead_code_only_where_laravel_cannot_dispatch(): void
     {
-        $findings = $this->runPsalmAndCollectUnusedMethodFindings(
-            __DIR__ . '/Fixtures/IndirectMethodReferences',
-            false,
-        );
-        $messages = \array_map(
-            static fn(array $finding): string => $finding['message'],
-            $findings,
-        );
-        $joined = \implode("\n", $messages);
+        $findings = $this->runPsalm(self::FIXTURE, false);
+        $deadCode = $this->report($findings, self::DEAD_CODE);
 
         foreach ([
-            'UpdateDriver::__construct',
-            'InvokeDependency::__construct',
-            'CommandDependency::__construct',
-            'ReferenceCommand::handle',
-            'DriverController::update',
-            'DriverController::traitAction',
-            'BaseController::inherited',
-            'ConcreteController::show',
-            'BaseController::__construct',
-            'ConcreteController::__construct',
-            'OwnerDependency::__construct',
-            'NestedDependency::__construct',
-            'InheritedActionDependency::__construct',
-            'TraitActionDependency::__construct',
-            'User::team',
-            'User::ordinaryRelation',
-            'BaseUser::baseTeam',
-            'RelationTrait::traitTeam',
+            '::update',                         // controller action
+            '::inherited',                      // action inherited from an abstract base controller
+            '::traitAction',                    // action pulled in from a trait
+            '::handle',                         // console command entrypoint
+            '::team',                           // relationship declared on the model itself
+            '::baseTeam',                       // relationship inherited from a parent model
+            '::traitTeam',                      // relationship pulled in from a trait
+            'BaseController::__construct',      // container-constructed, declared on the parent
+            'ConcreteController::__construct',  // container-constructed, own declaration
+            // Constructors Laravel autowires out of an entrypoint signature. These classes have no
+            // other reference, so a lost edge surfaces as UnusedClass rather than as the method.
+            'Dependencies\UpdateDriver',        // action parameter
+            'Dependencies\InvokeDependency',    // __invoke parameter (Psalm never reports __invoke itself)
+            'Dependencies\CommandDependency',   // handle() parameter
+            'Dependencies\OwnerDependency',     // controller constructor parameter
+            'Dependencies\NestedDependency',    // resolved recursively out of OwnerDependency
+            'Dependencies\InheritedActionDependency', // parameter of an inherited action
+            'Dependencies\TraitActionDependency',     // parameter of a trait-provided action
         ] as $marker) {
-            $this->assertStringNotContainsString($marker, $joined, "Expected {$marker} to be referenced indirectly.");
+            $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
 
         foreach ([
-            'UnusedDependency::__construct',
-            'HelperDependency::__construct',
-            'CommandHelperDependency::__construct',
-            'UnionDependencyA::__construct',
-            'UnionDependencyB::__construct',
-            'ContractImplementation::__construct',
-            'DynamicDependency::__construct',
-            'ProtectedDependency::__construct',
-            'AbstractDependency::__construct',
-            'DocblockOnlyDependency::__construct',
-            'User::privateTeam',
-            'User::ordinaryUnused',
+            'Dependencies\UnusedDependency::__construct',        // referenced by nothing
+            'Dependencies\UnionDependencyA::__construct',        // union parameter: not autowirable
+            'Dependencies\ContractImplementation::__construct',  // only its interface is type-hinted
+            'Dependencies\ProtectedDependency::__construct',     // non-public constructor
+            'Dependencies\AbstractDependency::__construct',      // abstract type hint
+            'Dependencies\DocblockOnlyDependency::__construct',  // docblock-only type: invisible to the container
+            'Commands\ReferenceCommand::helper',                 // public command method other than handle()
+            'Models\User::privateTeam',                          // non-public relationship
+            'Models\User::ordinaryUnused',                       // plain model method
         ] as $marker) {
-            $this->assertStringContainsString($marker, $joined, "Expected {$marker} to remain reportable.");
+            $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }
+
+        // A private controller helper is not an entrypoint. Psalm never reports the helper itself
+        // (Illuminate's Controller::__call makes private methods possibly-called), so its parameter
+        // staying an unused class is the only observable proof.
+        $this->assertStringContainsString(
+            'Dependencies\HelperDependency',
+            $this->report($findings, ['UnusedClass']),
+            'Expected HelperDependency to remain an unused class.',
+        );
+
+        // A public command method other than handle() is not an entrypoint either; its
+        // parameter staying an unused class proves the restriction applies beyond controllers.
+        $this->assertStringContainsString(
+            'Dependencies\CommandHelperDependency',
+            $this->report($findings, ['UnusedClass']),
+            'Expected CommandHelperDependency to remain an unused class.',
+        );
+
+        // Laravel consumes what an entrypoint and a relationship return (the router, the console
+        // kernel, eager loading), so those edges carry "return value used" - unlike a discarded
+        // return of an ordinary public method.
+        $deadReturns = $this->report($findings, self::DEAD_RETURNS);
+        $this->assertStringNotContainsString('function team(', $deadReturns, 'Expected the relationship return value to read as used.');
+        $this->assertStringNotContainsString('function show(', $deadReturns, 'Expected the controller action return value to read as used.');
+        $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
     }
 
+    /**
+     * `--find-dead-code` turns reference collection on after the config is parsed, so the plugin
+     * must gate handler registration on the codebase flag rather than on the config value.
+     */
     #[Test]
     public function it_honors_the_cli_dead_code_override_when_config_disables_it(): void
     {
-        $findings = $this->runPsalmAndCollectUnusedMethodFindings(
-            __DIR__ . '/Fixtures/IndirectMethodReferences',
-            false,
-            'psalm-no-dead-code.xml',
-            ['--find-dead-code'],
-        );
-        $joined = \implode(
-            "\n",
-            \array_map(static fn(array $finding): string => $finding['message'], $findings),
+        $deadCode = $this->report(
+            $this->runPsalm(self::FIXTURE, false, 'psalm-no-dead-code.xml', ['--find-dead-code']),
+            self::DEAD_CODE,
         );
 
-        foreach ([
-            'UpdateDriver::__construct',
-            'InvokeDependency::__construct',
-            'CommandDependency::__construct',
-            'ReferenceCommand::handle',
-            'DriverController::update',
-            'User::team',
-        ] as $marker) {
-            $this->assertStringNotContainsString($marker, $joined, "Expected {$marker} to be referenced by the CLI override.");
-        }
-
-        $this->assertStringContainsString('UnusedDependency::__construct', $joined);
-        $this->assertStringContainsString('User::ordinaryUnused', $joined);
+        $this->assertStringNotContainsString('::update', $deadCode, 'Expected the CLI override to activate the handler.');
+        $this->assertStringContainsString(
+            'Dependencies\UnusedDependency::__construct',
+            $deadCode,
+            'Expected the CLI override to actually report dead code.',
+        );
     }
 
     #[Test]
-    public function it_marks_framework_consumed_returns_as_used(): void
+    public function cached_runs_replay_references_after_file_changes(): void
     {
-        $findings = $this->runPsalmAndCollectFindings(
-            __DIR__ . '/Fixtures/IndirectMethodReferences',
-            false,
-            ['PossiblyUnusedReturnValue', 'UnusedReturnValue'],
-        );
+        // Keep the copy under the repository so Psalm's GitInfoCollector does not emit its
+        // "not a git repository" warning, which would hide real subprocess failures on stderr.
+        $fixtureDir = self::FIXTURE . '/.incremental-' . (int) \getmypid();
+        $this->copyDirectory(self::FIXTURE, $fixtureDir);
 
-        $consumed = [
-            // [file suffix, return-type declaration line]
-            ['app/Models/User.php', 13],
-            ['app/Commands/ReferenceCommand.php', 13],
-            ['app/Controllers/ConcreteController.php', 16],
-        ];
-        foreach ($consumed as [$fileSuffix, $line]) {
-            $this->assertFalse(
-                $this->containsFinding($findings, $fileSuffix, $line),
-                "Expected no unused-return-value finding at {$fileSuffix}:{$line}.",
+        try {
+            $this->runPsalm($fixtureDir, true);
+
+            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php'] as $changed) {
+                $this->assertNotFalse(
+                    \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
+                );
+            }
+
+            $findings = $this->runPsalm($fixtureDir, true);
+            $deadCode = $this->report($findings, self::DEAD_CODE);
+
+            $this->assertStringContainsString(
+                'Models\User::privateTeam',
+                $deadCode,
+                'Expected the incremental run to still consolidate dead code.',
             );
+            $this->assertStringNotContainsString(
+                'Dependencies\UpdateDriver',
+                $deadCode,
+                'Expected the queued constructor edge to be replayed after its file changed.',
+            );
+            $this->assertStringNotContainsString(
+                '::team',
+                $deadCode,
+                'Expected the queued relationship edge to be replayed after the model changed.',
+            );
+            // The relationship edge is anchored to the plugin file (recordFileReference()), which is
+            // never re-analyzed, so its "return value used" half must survive the model file's own
+            // invalidation too - not just the method-used half asserted above.
+            $this->assertStringNotContainsString(
+                'function team(',
+                $this->report($findings, self::DEAD_RETURNS),
+                'Expected the relationship return value to remain used after the model file changed.',
+            );
+        } finally {
+            $this->removeDirectory($fixtureDir);
         }
-
-        $this->assertSame(
-            'PossiblyUnusedReturnValue',
-            $this->findingType($findings, 'app/Dependencies/Dependencies.php', 147),
-            'Expected the discarded-return control at PublicControl::discarded to remain reportable as PossiblyUnusedReturnValue.',
-        );
     }
 
     /**
-     * @param list<array{type: string, file_name: string, line_from: int}> $findings
+     * Joins each finding's message with its source snippet: method and class findings name their
+     * symbol in the message, return-value findings only in the snippet.
+     *
+     * @param list<array{type: string, message: string, snippet: string}> $findings
+     * @param list<string> $types
      */
-    private function containsFinding(array $findings, string $fileSuffix, int $line): bool
+    private function report(array $findings, array $types): string
     {
-        return $this->findingType($findings, $fileSuffix, $line) !== null;
-    }
-
-    /**
-     * @param list<array{type: string, file_name: string, line_from: int}> $findings
-     */
-    private function findingType(array $findings, string $fileSuffix, int $line): ?string
-    {
+        $lines = [];
         foreach ($findings as $finding) {
-            if (\str_ends_with($finding['file_name'], $fileSuffix) && $finding['line_from'] === $line) {
-                return $finding['type'];
+            if (\in_array($finding['type'], $types, true)) {
+                $lines[] = $finding['message'] . ' ' . \trim($finding['snippet']);
             }
         }
 
-        return null;
+        return \implode("\n", $lines);
     }
 
     /**
-     * @return list<array{type: string, message: string}>
+     * @param list<string> $extraArguments
+     * @return list<array{type: string, message: string, snippet: string}>
      */
-    private function runPsalmAndCollectUnusedMethodFindings(
+    private function runPsalm(
         string $fixtureDir,
         bool $useCache,
         string $config = 'psalm.xml',
         array $extraArguments = [],
     ): array {
-        return $this->runPsalmAndCollectFindings(
-            $fixtureDir,
-            $useCache,
-            ['PossiblyUnusedMethod', 'UnusedMethod'],
-            $config,
-            $extraArguments,
-        );
-    }
-
-    /**
-     * @param list<string> $types
-     * @return list<array{type: string, message: string, file_name: string, line_from: int}>
-     */
-    private function runPsalmAndCollectFindings(
-        string $fixtureDir,
-        bool $useCache,
-        array $types,
-        string $config = 'psalm.xml',
-        array $extraArguments = [],
-    ): array {
-        $projectRoot = \dirname(__DIR__, 3);
-        $psalmBinary = $projectRoot . '/vendor/bin/psalm';
-
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
         $arguments = [
             \PHP_BINARY,
-            $psalmBinary,
+            \dirname(__DIR__, 3) . '/vendor/bin/psalm',
             '-c',
             $config,
             '--threads=1',
@@ -200,10 +212,7 @@ final class IndirectMethodReferencesTest extends TestCase
             $arguments[] = '--no-cache';
         }
 
-        $process = new Process(
-            $arguments,
-            $fixtureDir,
-        );
+        $process = new Process($arguments, $fixtureDir);
         $process->setTimeout(300);
         $process->run();
 
@@ -211,89 +220,25 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertSame(
             2,
             $process->getExitCode(),
-            "Psalm must report the fixture's intentional unused-method controls.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}",
-        );
-        $this->assertFalse(
-            $process->isSuccessful(),
-            'The fixture subprocess must not silently pass without exercising dead-code reporting.',
+            "Psalm must report the fixture's intentional dead-code controls.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}",
         );
         $this->assertSame('', \trim($process->getErrorOutput()), 'Psalm emitted an unexpected stderr diagnostic.');
+
         $decoded = \json_decode($stdout, true);
-        $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}");
+        $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}");
 
-        $matchedFindings = [];
+        $findings = [];
         foreach ($decoded as $finding) {
-            if (!\is_array($finding)
-                || !isset($finding['type'], $finding['message'], $finding['file_name'], $finding['line_from'])
-            ) {
-                continue;
-            }
-
-            if (\in_array($finding['type'], $types, true)) {
-                $matchedFindings[] = [
-                    'type' => $finding['type'],
+            if (\is_array($finding) && isset($finding['type'], $finding['message'], $finding['snippet'])) {
+                $findings[] = [
+                    'type' => (string) $finding['type'],
                     'message' => (string) $finding['message'],
-                    'file_name' => (string) $finding['file_name'],
-                    'line_from' => (int) $finding['line_from'],
+                    'snippet' => (string) $finding['snippet'],
                 ];
             }
         }
 
-        return $matchedFindings;
-    }
-
-    #[Test]
-    public function cached_runs_replay_references_after_relevant_file_changes(): void
-    {
-        // Keep the copy under the repository so Psalm's GitInfoCollector does not emit its
-        // "not a git repository" warning, which would hide real subprocess failures on stderr.
-        $processId = \getmypid();
-        if ($processId === false) {
-            $processId = 0;
-        }
-
-        $fixtureDir = __DIR__ . '/Fixtures/IndirectMethodReferences/.incremental-' . $processId;
-        $this->copyDirectory(__DIR__ . '/Fixtures/IndirectMethodReferences', $fixtureDir);
-
-        try {
-            $this->runPsalmAndCollectUnusedMethodFindings($fixtureDir, true);
-
-            $dependencies = $fixtureDir . '/app/Dependencies/Dependencies.php';
-            $contents = \file_get_contents($dependencies);
-            $this->assertIsString($contents);
-            $this->assertNotFalse(\file_put_contents(
-                $dependencies,
-                $contents . "\n// incremental dependency change {$processId}\n",
-            ));
-
-            $findingsAfterDependencyChange = $this->runPsalmAndCollectUnusedMethodFindings($fixtureDir, true);
-            $messages = \implode(
-                "\n",
-                \array_map(static fn(array $finding): string => $finding['message'], $findingsAfterDependencyChange),
-            );
-            $this->assertStringNotContainsString('UpdateDriver::__construct', $messages);
-            $this->assertStringNotContainsString('NestedDependency::__construct', $messages);
-
-            $user = $fixtureDir . '/app/Models/User.php';
-            $contents = \file_get_contents($user);
-            $this->assertIsString($contents);
-            $this->assertNotFalse(\file_put_contents(
-                $user,
-                $contents . "\n// incremental model change {$processId}\n",
-            ));
-
-            $findingsAfterRelationChange = $this->runPsalmAndCollectUnusedMethodFindings($fixtureDir, true);
-            $messages = \implode(
-                "\n",
-                \array_map(static fn(array $finding): string => $finding['message'], $findingsAfterRelationChange),
-            );
-            $this->assertStringNotContainsString('User::team', $messages);
-            $this->assertStringNotContainsString('User::ordinaryRelation', $messages);
-            $this->assertStringContainsString('User::privateTeam', $messages);
-            $this->assertStringContainsString('User::ordinaryUnused', $messages);
-        } finally {
-            $this->removeDirectory($fixtureDir);
-        }
+        return $findings;
     }
 
     private function copyDirectory(string $source, string $destination): void
