@@ -28,31 +28,23 @@ final class TemplateLocation
     }
 
     /**
-     * Byte offsets of a 1-based line, or null when the source has no such line.
+     * Byte offsets of a 1-based line, or null when the source has no such line. Lines split the
+     * way {@see SourceLines} does, so a bare-CR template locates the same line the line map named.
      *
      * @return array{int, int}|null
      */
     private static function lineBounds(string $source, int $line): ?array
     {
-        $start = 0;
+        $lines = SourceLines::split($source);
 
-        for ($current = 1; $current < $line; $current++) {
-            $newline = \strpos($source, "\n", $start);
-
-            if ($newline === false) {
-                return null;
-            }
-
-            $start = $newline + 1;
-        }
-
-        if ($start > \strlen($source)) {
+        if ($line < 1 || !isset($lines[$line - 1])) {
             return null;
         }
 
-        $newline = \strpos($source, "\n", $start);
-        $end = $newline === false ? \strlen($source) : $newline;
+        $start = \strlen(\implode('', \array_slice($lines, 0, $line - 1)));
+        // A line holds no `\r`/`\n` besides its own terminator, so this strips exactly LF, CRLF or bare CR.
+        $length = \strlen(\rtrim($lines[$line - 1], "\r\n"));
 
-        return [$start, \max($start, $end - 1)];
+        return [$start, \max($start, $start + $length - 1)];
     }
 }
