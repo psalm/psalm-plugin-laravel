@@ -7,32 +7,34 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Auth\GuardTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Encryption\EncrypterTaintHandler;
 use Symfony\Component\Process\Process;
 
 /**
- * Narrowing-shadow regression (sibling of #1113): methods reached only through `app('encrypter')`
- * narrowing must resolve against the real `Illuminate\Encryption\Encrypter`, not report
- * `UndefinedMethod`.
+ * End-to-end guard for #1113 and its encrypter sibling: a method reached only through container
+ * narrowing (`auth('web')`, `app('encrypter')`) must resolve against the real Laravel class, not
+ * report `UndefinedMethod`.
  *
- * Why a real Psalm subprocess instead of a phpt: the bug only manifests under whole-program analysis
- * over a config's `<projectFiles>`. psalm-tester always passes the snippet as an explicit file
- * argument, and in that single-file mode Psalm scans the narrowed-to vendor class anyway — so a phpt
- * resolves the methods with or without the fix and would guard nothing. This points Psalm at a
- * self-contained fixture project the way a real application runs it, where the regression actually
- * reproduces.
+ * Why a real Psalm subprocess instead of a phpt: the bug only manifests under whole-program
+ * analysis over a config's `<projectFiles>`. psalm-tester always passes the snippet as an explicit
+ * file argument, and in that single-file mode Psalm scans the narrowed-to vendor class anyway, so a
+ * phpt resolves the methods with or without the fix and would guard nothing. Each case points Psalm
+ * at a self-contained fixture project the way a real application runs it, where the regression
+ * actually reproduces.
  *
- * The fix replaced the full-class `Encryption/Encrypter.phpstub` (which shadowed the whole class to
- * host its four taint methods) with {@see EncrypterTaintHandler}, leaving the real class intact so
- * its methods resolve.
+ * The fix in both cases replaced a full-class stub (`SessionGuard.phpstub` / `TokenGuard.phpstub`,
+ * `Encryption/Encrypter.phpstub`), which shadowed a whole class to host its taint methods, with a
+ * handler that leaves the real class intact so its methods resolve.
  */
 #[CoversClass(EncrypterTaintHandler::class)]
-final class EncrypterMethodResolutionTest extends TestCase
+#[CoversClass(GuardTaintHandler::class)]
+final class ContainerNarrowedMethodResolutionTest extends TestCase
 {
     #[Test]
     public function it_resolves_encrypter_methods_reached_only_through_container_narrowing(): void
     {
-        $findings = $this->runPsalmAndCollectFindings();
+        $findings = $this->findings('EncrypterMethodResolution');
 
         // The regression was a flood of UndefinedMethod on Illuminate\Encryption\Encrypter. None must
         // remain — assert on the class so an unrelated UndefinedMethod elsewhere can't mask it.
@@ -58,11 +60,29 @@ final class EncrypterMethodResolutionTest extends TestCase
         );
     }
 
+    #[Test]
+    public function it_resolves_session_guard_methods_reached_only_through_auth_narrowing(): void
+    {
+        $findings = $this->findings('GuardMethodResolution');
+        $joined = \implode("\n", $this->messagesOfType($findings, 'UndefinedMethod'));
+
+        // The regression was a flood of UndefinedMethod on Illuminate\Auth\SessionGuard. None must
+        // remain — assert on the class so an unrelated UndefinedMethod elsewhere can't mask it.
+        $guardErrors = $this->messagesOfType($findings, 'UndefinedMethod', 'Illuminate\\Auth\\SessionGuard');
+
+        $this->assertSame(
+            [],
+            $guardErrors,
+            "auth('web') methods must resolve against the real SessionGuard, got UndefinedMethod:\n{$joined}",
+        );
+    }
+
     /**
      * Extract the messages of every finding of a given issue type, optionally restricted to those
      * mentioning $needle. Returns a re-indexed `list<string>` so it compares cleanly against `[]`.
      *
      * @param list<array{type: string, message: string}> $findings
+     *
      * @return list<string>
      */
     private function messagesOfType(array $findings, string $type, string $needle = ''): array
@@ -80,19 +100,19 @@ final class EncrypterMethodResolutionTest extends TestCase
     }
 
     /**
+     * One Psalm run over a fixture project. The two fixtures are separate projects, so each case
+     * needs its own run; only the harness is shared.
+     *
      * @return list<array{type: string, message: string}>
      */
-    private function runPsalmAndCollectFindings(): array
+    private function findings(string $fixture): array
     {
-        $projectRoot = \dirname(__DIR__, 3);
-        $fixtureDir = __DIR__ . '/Fixtures/EncrypterMethodResolution';
-        $psalmBinary = $projectRoot . '/vendor/bin/psalm';
-
+        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
             [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            $fixtureDir,
+            __DIR__ . '/Fixtures/' . $fixture,
         );
         $process->setTimeout(300);
         // Psalm exits non-zero when it reports issues; that is expected here, so do not mustRun().
@@ -104,6 +124,7 @@ final class EncrypterMethodResolutionTest extends TestCase
         $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}");
 
         $findings = [];
+
         foreach ($decoded as $finding) {
             if (\is_array($finding) && \is_string($finding['type'] ?? null)) {
                 $findings[] = [
