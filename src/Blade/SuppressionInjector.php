@@ -32,7 +32,7 @@ final class SuppressionInjector
         }
 
         foreach (\array_reverse($targets) as $target) {
-            $shadowContent = \substr_replace($shadowContent, ' /** @psalm-suppress ' . $target['rule'] . ' */', $target['offset'], 0);
+            $shadowContent = \substr_replace($shadowContent, ' /** @psalm-suppress ' . \implode(', ', $target['rules']) . ' */', $target['offset'], 0);
         }
 
         return $shadowContent;
@@ -58,7 +58,8 @@ final class SuppressionInjector
         $resolved = [];
 
         foreach ($this->findTargets($shadowContent, $suppressions, $lineMap, $markerPrefix) as $target) {
-            $resolved[$lineMap[$target['line']] ?? 0][] = $target['rule'];
+            $bladeLine = $lineMap[$target['line']] ?? 0;
+            $resolved[$bladeLine] = [...$resolved[$bladeLine] ?? [], ...$target['rules']];
         }
 
         return $resolved;
@@ -75,13 +76,31 @@ final class SuppressionInjector
      */
     public function suppressedRules(string $bladeSource): array
     {
-        return \array_values($this->findSuppressions($bladeSource));
+        return \array_values(\array_unique(\array_merge([], ...\array_values($this->findSuppressions($bladeSource)))));
     }
 
     /**
-     * @param array<int, string> $suppressions blade line => suppressed rule
+     * Splits the body of one `@psalm-suppress` tag into its issue names, accepting the same
+     * comma-separated form (`A, B`) and trailing description Psalm's own docblock parser does.
+     *
+     * @return list<string>
+     * @psalm-pure
+     */
+    public static function parseRuleList(string $tagBody): array
+    {
+        if (\preg_match('/^\s*([A-Za-z0-9_-]+(?:\s*,\s*[A-Za-z0-9_-]+)*)/', $tagBody, $matches) !== 1) {
+            return [];
+        }
+
+        return \array_map(trim(...), \explode(',', $matches[1]));
+    }
+
+    /**
+     * @param array<int, list<string>> $suppressions blade line => suppressed rules
      * @param array<int, int> $lineMap
-     * @return list<array{line: int, offset: int, rule: string}>
+     * @return list<array{line: int, offset: int, rules: list<string>}> one entry per open tag, so
+     *     several suppression comments aimed at one statement share a single docblock (Psalm reads
+     *     only the docblock nearest the statement)
      */
     private function findTargets(string $content, array $suppressions, array $lineMap, string $markerPrefix): array
     {
@@ -100,16 +119,17 @@ final class SuppressionInjector
         }
 
         $targets = [];
-        foreach ($suppressions as $bladeLine => $rule) {
+        foreach ($suppressions as $bladeLine => $rules) {
             foreach ($openTags as $openTag) {
                 if (($lineMap[$openTag['line']] ?? 0) > $bladeLine) {
-                    $targets[] = [...$openTag, 'rule' => $rule];
+                    $existing = $targets[$openTag['offset']]['rules'] ?? [];
+                    $targets[$openTag['offset']] = [...$openTag, 'rules' => \array_values(\array_unique([...$existing, ...$rules]))];
                     break;
                 }
             }
         }
 
-        return $targets;
+        return \array_values($targets);
     }
 
     /**
@@ -138,15 +158,19 @@ final class SuppressionInjector
         return \is_array($next) && $next[0] === \T_CLOSE_TAG;
     }
 
-    /** @return array<int, string> blade line => suppressed rule */
+    /** @return array<int, list<string>> blade line => suppressed rules */
     private function findSuppressions(string $bladeSource): array
     {
         $suppressions = [];
 
-        if (\preg_match_all('/^.*\{\{--\s*@psalm-suppress\s+(\S+)\s*--\}\}.*$/m', $bladeSource, $matches, \PREG_OFFSET_CAPTURE) !== false) {
+        if (\preg_match_all('/^.*\{\{--\s*@psalm-suppress\s+(.+?)\s*--\}\}.*$/m', $bladeSource, $matches, \PREG_OFFSET_CAPTURE) !== false) {
             foreach ($matches[0] as $index => [, $offset]) {
-                $line = 1 + \substr_count($bladeSource, "\n", 0, $offset);
-                $suppressions[$line] = $matches[1][$index][0];
+                $rules = self::parseRuleList($matches[1][$index][0]);
+
+                if ($rules !== []) {
+                    $line = 1 + \substr_count($bladeSource, "\n", 0, $offset);
+                    $suppressions[$line] = $rules;
+                }
             }
         }
 

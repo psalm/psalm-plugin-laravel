@@ -114,6 +114,14 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function comma_separated_suppression_yields_every_rule(): void
+    {
+        $contract = $this->parse("{{-- @psalm-suppress UndefinedVariable, MixedArgument --}}\n{{ \$foo }}\n");
+
+        $this->assertSame(['UndefinedVariable', 'MixedArgument'], $contract->suppressions[2] ?? null);
+    }
+
+    #[Test]
     public function suppression_is_dropped_when_nothing_follows(): void
     {
         $contract = $this->parse("content\n{{-- @psalm-suppress Foo --}}\n");

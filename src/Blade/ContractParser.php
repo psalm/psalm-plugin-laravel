@@ -42,7 +42,7 @@ final class ContractParser
     /** PHP's own variable-name grammar, as bytes. */
     public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
-    private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(\S+)\s*$/';
+    private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(.+?)\s*$/';
 
     private ?Parser $parser = null;
 
@@ -116,8 +116,10 @@ final class ContractParser
                 if (\preg_match(self::SUPPRESS_PATTERN, $node->innerContent, $matches) === 1) {
                     $targetLine = $this->nextStatementLine($nodes, $index, $source, $mbLines);
 
-                    if ($targetLine !== null) {
-                        $suppressions[$targetLine][] = $matches[1];
+                    $rules = SuppressionInjector::parseRuleList($matches[1]);
+
+                    if ($targetLine !== null && $rules !== []) {
+                        $suppressions[$targetLine] = [...$suppressions[$targetLine] ?? [], ...$rules];
                     }
                 }
 
