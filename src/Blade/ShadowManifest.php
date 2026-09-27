@@ -24,9 +24,11 @@ final class ShadowManifest
      * pass, the prelude ({@see PreludeBuilder}), suppression injection, or the `$attributes`
      * restore-point re-assert ({@see AttributesRestoreReassert}). The shadow's own compiled bytes
      * are never fingerprinted (see class docblock), so this is the only lever that self-invalidates
-     * a plugin-side change to what gets written around them.
+     * a plugin-side change to what gets written around them — and the only one that reaches the
+     * derived {@see ViewDataContract} cached in slot 5, whose meaning can change without the
+     * template changing.
      */
-    private const MARKER_PASS_VERSION = 10;
+    private const MARKER_PASS_VERSION = 11;
 
     /** {@see self::isFresh()}: the references slot must have been collected for the entry to count as fresh. */
     public const SLOT_REFERENCES = 1;
@@ -213,18 +215,18 @@ final class ShadowManifest
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $loopVariables] = \array_values($data);
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables] = \array_values($data);
 
         if (!\is_array($vars) || !\is_bool($propsUnknown) || !\is_array($readVariables)
-            || !\is_bool($readsUnknown) || !\is_array($loopVariables)
+            || !\is_bool($readsUnknown) || !\is_array($localVariables)
         ) {
             return null;
         }
 
         $validReads = $this->normalizeNames($readVariables);
-        $validLoops = $this->normalizeNames($loopVariables);
+        $validLocals = $this->normalizeNames($localVariables);
 
-        if ($validReads === null || $validLoops === null) {
+        if ($validReads === null || $validLocals === null) {
             return null;
         }
 
@@ -245,7 +247,7 @@ final class ShadowManifest
             $validVars[$name] = [$typeString, $line, $optional];
         }
 
-        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLoops];
+        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLocals];
     }
 
     /**
@@ -372,7 +374,7 @@ final class ShadowManifest
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $loopVariables] = $entry[5];
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables] = $entry[5];
 
         $contractVars = [];
 
@@ -380,7 +382,7 @@ final class ShadowManifest
             $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional);
         }
 
-        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $loopVariables);
+        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $localVariables);
     }
 
     /**
@@ -429,7 +431,7 @@ final class ShadowManifest
             $shadow->extendsLine,
             $this->fingerprint($source),
             $shadow->suppressions,
-            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->loopVariables],
+            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables],
             $references,
             $dataIncludes,
         ];

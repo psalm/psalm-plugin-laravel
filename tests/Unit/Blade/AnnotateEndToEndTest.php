@@ -40,6 +40,8 @@ final class AnnotateEndToEndTest extends TestCase
         'declared' => "{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
         'conflict' => "<p>{{ \$flag }}</p>\n",
         'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
+        'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
+            . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
     ];
 
     private ?string $controlFile = null;
@@ -111,6 +113,19 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
+    public function never_declares_a_name_the_template_binds_for_itself(): void
+    {
+        // `@php($heading = ...)` and a closure parameter are template locals, not inputs: declaring
+        // either reports MissingViewVariable at every correct call site.
+        $this->annotate();
+
+        $this->assertSame(
+            "{{-- @var mixed \$rows --}}\n" . self::TEMPLATES['locals'],
+            $this->template('locals'),
+        );
+    }
+
+    #[Test]
     public function refuses_a_control_file_this_cli_did_not_write(): void
     {
         // A leaked PSALM_LARAVEL_BLADE_ANNOTATE (a stale shell, a .envrc, a CI export) must not turn
@@ -152,7 +167,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(4, $result['changed']);
+        $this->assertCount(5, $result['changed']);
         $this->assertStringContainsString("+{{-- @var string \$title --}}", (string) ($result['diff'] ?? ''));
     }
 

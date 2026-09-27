@@ -211,7 +211,7 @@ A rendering shape the plugin could not read is any expression the call-chain wal
 What it leaves alone:
 
 * a variable the template already declares, in either `{{-- @var --}}` or raw `<?php /** @var */ ?>` form. Existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
-* a variable the template binds itself: a `@foreach ($items as $item)` alias is the template's own, not something the call site passes, so `$items` is declared and `$item` is not. List destructuring (`as [$id, $name]`) binds both names the same way.
+* a variable the template binds itself: a `@foreach ($items as $item)` alias is the template's own, not something the call site passes, so `$items` is declared and `$item` is not. List destructuring (`as [$id, $name]`) binds both names the same way, and so do an assignment (`@php ($heading = 'Hello')`), a closure or arrow-function parameter (`fn ($item) => ...`), a `catch` variable, and a `static`/`global` declaration. A `use ($x)` clause is not one of them: it reads the enclosing `$x`.
 * a variable some call site provably renders the template without. That call site proves the template works without it (it is read guarded, `{{ $flag ?? false }}`), and declaring it would report [MissingViewVariable](issues/MissingViewVariable.md) there.
 * a template whose compiled body hides which names it reads. `@props` and `@aware` compile to `$$name`, so component templates are skipped whole rather than annotated in part.
 

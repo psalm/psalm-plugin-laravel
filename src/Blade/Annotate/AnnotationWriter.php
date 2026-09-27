@@ -147,14 +147,15 @@ final class AnnotationWriter implements AfterAnalysisInterface
 
         $plan = [];
 
-        // A `@foreach ($items as $item)` alias is read by the template and bound by it, so it stays
-        // in the read set (UnusedViewData asks "is this name used at all") but must never be
-        // declared: declaring it reports MissingViewVariable at every correct call site, which is
-        // the check this codemod exists to feed.
-        $loopAliases = \array_fill_keys($contract->loopVariables, true);
+        // A name the template binds for itself — a `@foreach ($items as $item)` alias, a
+        // `@php ($heading = ...)` assignment, a `fn ($item) => ...` parameter — is read by the
+        // template but supplied by it too. It stays in the read set (UnusedViewData asks "is this
+        // name used at all") and must never be declared: declaring it reports MissingViewVariable
+        // at every correct call site, which is the check this codemod exists to feed.
+        $localNames = \array_fill_keys($contract->localVariables, true);
 
         foreach ($contract->readVariables as $name) {
-            if (isset($contract->vars[$name]) || isset($loopAliases[$name])) {
+            if (isset($contract->vars[$name]) || isset($localNames[$name])) {
                 continue;
             }
 

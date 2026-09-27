@@ -34,7 +34,7 @@ final class ContractParser
      * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises:
      * a declaration it reads differently is one it appends a duplicate for, forever.
      *
-     * The name is matched as PHP matches an identifier, bytes >= 0x80 included (`$café` is a legal
+     * The name is matched as PHP matches an identifier, bytes >= 0x80 included (`$menü` is a legal
      * variable), not as `\w`, which is ASCII-only under this pattern.
      */
     public const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(' . self::IDENTIFIER . ')\s*$/';
@@ -63,9 +63,9 @@ final class ContractParser
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
         [$vars, , $propsUnknown] = $this->parseSource($source);
-        [$reads, $readsUnknown, $loopVariables] = $this->parseReads($compiled);
+        [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
-        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $loopVariables);
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables);
     }
 
     /**
@@ -247,34 +247,34 @@ final class ContractParser
     }
 
     /**
-     * Loop aliases are excluded template-wide, not per scope: an outer read of
-     * a name that a later loop re-binds as its alias is dropped from the read
-     * set. The cost is one missing `mixed` declaration for a shadowed name;
-     * scope-aware tracking is not worth it for v1.
+     * Locally bound names are excluded template-wide, not per scope: an outer
+     * read of a name that a later loop or closure re-binds is dropped from the
+     * read set. The cost is one missing `mixed` declaration for a shadowed
+     * name; scope-aware tracking is not worth it for v1.
      *
      * @return list<string> variable names (without $)
      */
     private function readVariables(string $compiled): array
     {
-        [$names, $loopLocals] = $this->walkReads($compiled);
+        [$names, $locals] = $this->walkReads($compiled);
 
-        return $this->filterNames($names, $loopLocals);
+        return $this->filterNames($names, $locals);
     }
 
     /**
      * The read set the UnusedViewData rule consumes. Two differences from {@see self::readVariables()}:
-     * loop aliases stay in (the question is "does the template use this name at all", and dropping
-     * the alias would report the very name a `@foreach` binds), and an unknowable body is flagged
-     * rather than reported as an empty set.
+     * locally bound names stay in (the question is "does the template use this name at all", and
+     * dropping them would report the very name a `@foreach` binds), and an unknowable body is
+     * flagged rather than reported as an empty set.
      *
      * @return array{0: list<string>, 1: bool, 2: list<string>} names read, whether the set is only a
-     *         lower bound, and the loop aliases among the names
+     *         lower bound, and the names the template binds for itself
      */
     private function parseReads(string $compiled): array
     {
-        [$names, $loopLocals, $unknown] = $this->walkReads($compiled);
+        [$names, $locals, $unknown] = $this->walkReads($compiled);
 
-        return [$this->filterNames($names, []), $unknown, $this->filterNames($loopLocals, [])];
+        return [$this->filterNames($names, []), $unknown, $this->filterNames($locals, [])];
     }
 
     /**
@@ -309,8 +309,8 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the loop
-     *         aliases among them, and whether the body hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
+     *         the body binds for itself, and whether it hides which names it reads
      */
     private function walkReads(string $compiled): array
     {
@@ -329,22 +329,41 @@ final class ContractParser
             public array $names = [];
 
             /** @var array<string, true> */
-            public array $loopLocals = [];
+            public array $locals = [];
 
             public bool $unknown = false;
 
             #[\Override]
             public function enterNode(Node $node): null
             {
-                if (($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef)
-                    && $node->var instanceof Node\Expr\Variable
-                ) {
-                    $node->var->setAttribute('contractSkip', true);
+                if ($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef) {
+                    if ($node->var instanceof Node\Expr\Variable) {
+                        $node->var->setAttribute('contractSkip', true);
+                    }
+
+                    $this->bindLocals($node->var);
                 }
 
                 if ($node instanceof Node\Stmt\Foreach_) {
-                    $this->bindLoopLocals($node->valueVar);
-                    $this->bindLoopLocals($node->keyVar);
+                    $this->bindLocals($node->valueVar);
+                    $this->bindLocals($node->keyVar);
+                }
+
+                // A closure or arrow-function parameter, a `catch` variable, and a `static`/`global`
+                // declaration all bind a name the template supplies itself, exactly as a loop alias
+                // does. A `use ($x)` clause is deliberately absent: it READS the enclosing $x.
+                if ($node instanceof Node\Param || $node instanceof Node\StaticVar) {
+                    $this->bindLocals($node->var);
+                }
+
+                if ($node instanceof Node\Stmt\Catch_) {
+                    $this->bindLocals($node->var);
+                }
+
+                if ($node instanceof Node\Stmt\Global_) {
+                    foreach ($node->vars as $global) {
+                        $this->bindLocals($global);
+                    }
                 }
 
                 if ($node instanceof Node\Expr\Variable) {
@@ -365,15 +384,13 @@ final class ContractParser
             }
 
             /**
-             * Every name one `foreach` binds, list destructuring included: `as [$id, $name]` binds
-             * both, and a call site is expected to pass neither.
-             *
-             * @psalm-external-mutation-free
+             * Every name one binding construct introduces, list destructuring included: `as [$id,
+             * $name]` binds both, and a call site is expected to pass neither.
              */
-            private function bindLoopLocals(?Node\Expr $target): void
+            private function bindLocals(?Node\Expr $target): void
             {
                 if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
-                    $this->loopLocals[$target->name] = true;
+                    $this->locals[$target->name] = true;
 
                     return;
                 }
@@ -386,7 +403,7 @@ final class ContractParser
                     // A skipped slot (`[, $b]`) is null; the key of a keyed destructure is read, not
                     // bound, so only the value side recurses.
                     if ($item instanceof Node\ArrayItem) {
-                        $this->bindLoopLocals($item->value);
+                        $this->bindLocals($item->value);
                     }
                 }
             }
@@ -426,6 +443,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->loopLocals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown];
     }
 }

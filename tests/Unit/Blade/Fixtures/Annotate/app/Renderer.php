@@ -33,6 +33,12 @@ final class Renderer
         return view('loop', ['items' => $this->items()]);
     }
 
+    /** An unresolvable producer: nothing proves what 'locals' is passed, so every name it reads is a candidate. */
+    public function locals(): string
+    {
+        return view('locals', ['rows' => $this->items()])->render();
+    }
+
     /** @return list<string> */
     private function items(): array
     {

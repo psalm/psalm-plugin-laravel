@@ -179,14 +179,14 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function assign_target_in_a_php_block_is_not_itself_counted_as_a_read(): void
+    public function an_assign_target_is_excluded_from_the_template_read_set(): void
     {
-        // $computed is read again via the echo, so it legitimately appears; a write with
-        // no later read (below) is the case the Assign-LHS exclusion actually guards.
+        // $computed is echoed further down, so it IS read; this read set subtracts every name the
+        // template binds for itself, and an assignment target is one of them.
         $contract = $this->parse("@php\n\$computed = \$input;\n@endphp\n{{ \$computed }}\n");
 
         $this->assertContains('input', $contract->readVariables);
-        $this->assertContains('computed', $contract->readVariables);
+        $this->assertNotContains('computed', $contract->readVariables);
     }
 
     #[Test]
@@ -313,7 +313,7 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function collects_a_destructured_loop_binding_as_a_loop_variable(): void
+    public function collects_a_destructured_loop_binding_as_a_local_variable(): void
     {
         // `@foreach ($rows as [$id, $name])`: both names are bound by the template, so neither is
         // something a call site passes.
@@ -322,7 +322,7 @@ final class ContractParserTest extends TestCase
             '<?php foreach ($rows as [$id, $name]): echo e($id) . e($name); endforeach;',
         );
 
-        $this->assertSame(['id', 'name'], $contract->loopVariables);
+        $this->assertSame(['id', 'name'], $contract->localVariables);
     }
 
     #[Test]
@@ -333,14 +333,55 @@ final class ContractParserTest extends TestCase
             '<?php foreach ($rows as $key => [\'a\' => $first]): echo e($first) . e($key); endforeach;',
         );
 
-        $this->assertSame(['first', 'key'], $contract->loopVariables);
+        $this->assertSame(['first', 'key'], $contract->localVariables);
+    }
+
+    /**
+     * The gap this closes: a name the template assigns and then echoes is read (so it stays in the
+     * read set) AND bound by the template, so the annotate pass must not declare it as an input.
+     */
+    #[Test]
+    public function an_assigned_then_read_name_is_local(): void
+    {
+        $contract = (new ContractParser())->parseDataContract(
+            '',
+            "<?php (\$heading = 'Hello'); echo e(\$heading);",
+        );
+
+        $this->assertContains('heading', $contract->readVariables);
+        $this->assertSame(['heading'], $contract->localVariables);
+    }
+
+    #[Test]
+    public function a_closure_parameter_is_local_and_a_use_clause_is_not(): void
+    {
+        $contract = (new ContractParser())->parseDataContract(
+            '',
+            '<?php echo e(array_map(function ($item) use ($sep) { return $item . $sep; }, $items));',
+        );
+
+        $this->assertSame(['item'], $contract->localVariables);
+        $this->assertContains('sep', $contract->readVariables);
+        $this->assertContains('items', $contract->readVariables);
+    }
+
+    #[Test]
+    public function an_arrow_function_parameter_and_a_catch_variable_are_local(): void
+    {
+        $contract = (new ContractParser())->parseDataContract(
+            '',
+            '<?php try { echo e(array_map(fn ($row) => $row, $rows)); } catch (\Throwable $error) { echo e($error); }',
+        );
+
+        $this->assertSame(['error', 'row'], $contract->localVariables);
+        $this->assertContains('rows', $contract->readVariables);
     }
 
     #[Test]
     public function reads_a_declaration_with_a_non_ascii_variable_name(): void
     {
-        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$caf\u{00e9} --}}\n");
+        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$men\u{00fc} --}}\n");
 
-        $this->assertArrayHasKey("caf\u{00e9}", $contract->vars);
+        $this->assertArrayHasKey("men\u{00fc}", $contract->vars);
     }
 }
