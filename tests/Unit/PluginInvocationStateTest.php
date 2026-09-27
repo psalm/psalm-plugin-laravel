@@ -94,8 +94,10 @@ final class PluginInvocationStateTest extends TestCase
         (new \ReflectionProperty(RelationResolver::class, 'relatedModelCache'))->setValue(null, ['App\\Models\\Post::comments' => 'App\\Models\\Comment']);
 
         \chdir($secondRoot);
+        // findMissingTranslations off: with the translator unbound, `true` only adds a warning that a
+        // stub registration writes straight to STDERR. The translator-reset assertion holds either way.
         $plugin($this->createStub(RegistrationInterface::class), new \SimpleXMLElement(
-            '<plugin><modelProperties columnFallback="none" /><findMissingViews value="false" /><findMissingTranslations value="true" /></plugin>',
+            '<plugin><modelProperties columnFallback="none" /><findMissingViews value="false" /><findMissingTranslations value="false" /></plugin>',
         ));
 
         $this->assertNull($this->functionReturn('view', 'only-in-first-application'));
