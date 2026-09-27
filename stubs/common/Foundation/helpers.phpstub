@@ -416,18 +416,16 @@ function view($view = null, $data = [], $mergeData = []) {}
  * `$default` is widened past Laravel's own `@param`, which is narrower than the runtime contract:
  * the runtime special-cases only `Model` defaults (`instanceof Model` -> `getAttribute($key)`) and then
  * forwards to `Arr::get($input, $key, $default)`, which accepts any value unconstrained, so an
- * int/bool/enum fallback for an optional field is honest code. Matches the deviation
- * `InteractsWithFlashData::old()` already carries.
+ * int/bool/enum fallback for an optional field is honest code.
  *
- * The return stays `string|array|null` rather than mirroring that trait stub's `mixed`: `mixed`
- * would only convert every echo-position finding into a `MixedArgument`. Known consequence of the
- * pairing — `old('k', $object)` can return the object, which this return type does not admit; the
- * same unsoundness is in Laravel's own docblock, a `mixed` default just makes it reachable more
- * often.
+ * The fallback's own type joins the return, since `Arr::get()` hands it back when the key is absent.
+ * A `Model` default keeps Laravel's `string|array|null`: the runtime returns the model's attribute,
+ * never the model.
  *
+ * @template TDefault
  * @param  string|null  $key
- * @param  mixed  $default
- * @return string|array|null
+ * @param  TDefault  $default
+ * @return ($default is \Illuminate\Database\Eloquent\Model ? string|array|null : string|array|TDefault)
  *
  * @psalm-taint-source input
  */
