@@ -60,9 +60,11 @@ final class ReadSetResolver
         // chain: `{{-- @var --}}` / `@props` is a template's stated interface, and reporting a key an
         // included partial declares but has not got round to reading yet would contradict the
         // "neither reads nor declares" semantics the call-site check already applies to the outermost
-        // template.
+        // template. The raw `<?php` docblock spelling declares just as visibly, so it counts here
+        // even though it never becomes a contract type.
         $reads = \array_fill_keys($contract->readVariables, true)
-            + \array_fill_keys(\array_keys($contract->vars), true);
+            + \array_fill_keys(\array_keys($contract->vars), true)
+            + \array_fill_keys($contract->rawDeclaredVariables, true);
 
         foreach ($dataIncludes[0] as $included) {
             $nested = self::walk($included, $visited);

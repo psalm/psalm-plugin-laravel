@@ -42,6 +42,17 @@ final class ContractParser
     /** PHP's own variable-name grammar, as bytes. */
     public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
+    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling a template declares in. */
+    private const RAW_PHP_BLOCK = '/<\?php\b.*?(?:\?>|\z)/s';
+
+    /**
+     * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
+     * same (last) name {@see self::VAR_PATTERN} does; per line, because one block can hold several
+     * docblocks and a pattern greedy across them would see only the last. The name grammar is shared
+     * with that pattern, so `$menü` binds whole rather than as its ASCII prefix.
+     */
+    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . self::IDENTIFIER . ')/';
+
     private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(.+?)\s*$/';
 
     private ?Parser $parser = null;
@@ -65,7 +76,12 @@ final class ContractParser
         [$vars, , $propsUnknown] = $this->parseSource($source);
         [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
-        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables);
+        // Raw declarations are consumed-only, never contract types: in a template a raw `@var` is as
+        // often a local type hint after an assignment as a stated interface, and promoting one into
+        // $vars would report MissingViewVariable at every call site that correctly omits it.
+        $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
+
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
     }
 
     /**
@@ -80,6 +96,48 @@ final class ContractParser
         [$vars, , $propsUnknown] = $this->parseSource($source);
 
         return new ViewDataContract($vars, $propsUnknown);
+    }
+
+    /**
+     * Names a template declares in the raw `<?php` docblock spelling, which
+     * {@see self::parseSource()} does not read: `Document::fromText()` hands a raw PHP block back as
+     * one opaque node.
+     *
+     * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND an
+     * `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which is
+     * not declared at all, while the declared `$title` is missed. A `@var` inside a string literal is
+     * not a declaration either.
+     *
+     * Public because {@see Annotate\TemplateAnnotator} must recognise exactly what this recognises:
+     * a spelling it reads differently is one it appends a duplicate declaration for, forever.
+     *
+     * @return list<string>
+     */
+    public static function rawDeclaredNames(string $source): array
+    {
+        if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) < 1) {
+            return [];
+        }
+
+        $names = [];
+
+        foreach ($blocks[0] as $block) {
+            // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
+            // not parse, so that is fine; the @ is for the warning an unterminated string emits.
+            foreach (@\token_get_all($block) as $token) {
+                if (!\is_array($token) || ($token[0] !== \T_DOC_COMMENT && $token[0] !== \T_COMMENT)) {
+                    continue;
+                }
+
+                if (\preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
+                    foreach ($matched[1] as $name) {
+                        $names[] = $name;
+                    }
+                }
+            }
+        }
+
+        return $names;
     }
 
     /**

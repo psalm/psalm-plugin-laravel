@@ -30,17 +30,6 @@ final class TemplateAnnotator
      */
     private const CONTRACT_COMMENT = '/\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
 
-    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling {@see ContractParser} does not read. */
-    private const RAW_PHP_BLOCK = '/<\?php\b.*?(?:\?>|\z)/s';
-
-    /**
-     * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
-     * same (last) name {@see ContractParser::VAR_PATTERN} does; per line, because one block can hold
-     * several docblocks and a pattern greedy across them would see only the last. The name grammar
-     * is shared with that pattern, so `$menü` binds whole rather than as its ASCII prefix.
-     */
-    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . ContractParser::IDENTIFIER . ')/';
-
     /**
      * @param array<string, string> $vars variable name (without `$`) => type string
      *
@@ -85,7 +74,7 @@ final class TemplateAnnotator
     /**
      * Names the template already declares, in either spelling. Read straight from the source rather
      * than from the parsed contract: the writer must not re-declare a name that a raw PHP docblock
-     * covers, and that spelling never reaches a {@see \Psalm\LaravelPlugin\Blade\ViewDataContract}.
+     * covers, and the typed contract never carries that spelling.
      *
      * @return array<string, true>
      *
@@ -103,48 +92,11 @@ final class TemplateAnnotator
             }
         }
 
-        if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) > 0) {
-            foreach ($blocks[0] as $block) {
-                foreach (self::declaredInPhp($block) as $name) {
-                    $declared[$name] = true;
-                }
-            }
+        foreach (ContractParser::rawDeclaredNames($source) as $name) {
+            $declared[$name] = true;
         }
 
         return $declared;
-    }
-
-    /**
-     * Names declared by a `@var` docblock inside one raw PHP block.
-     *
-     * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND
-     * an `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which
-     * is not declared at all, while the declared `$title` is missed. A `@var` inside a string
-     * literal is not a declaration either.
-     *
-     * @return list<string>
-     *
-     * @psalm-pure
-     */
-    private static function declaredInPhp(string $block): array
-    {
-        $names = [];
-
-        // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
-        // not parse, so that is fine; the @ is for the warning an unterminated string emits.
-        foreach (@\token_get_all($block) as $token) {
-            if (!\is_array($token) || ($token[0] !== \T_DOC_COMMENT && $token[0] !== \T_COMMENT)) {
-                continue;
-            }
-
-            if (\preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
-                foreach ($matched[1] as $name) {
-                    $names[] = $name;
-                }
-            }
-        }
-
-        return $names;
     }
 
     /**

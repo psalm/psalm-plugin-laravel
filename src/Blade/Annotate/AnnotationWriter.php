@@ -152,7 +152,12 @@ final class AnnotationWriter implements AfterAnalysisInterface
         // template but supplied by it too. It stays in the read set (UnusedViewData asks "is this
         // name used at all") and must never be declared: declaring it reports MissingViewVariable
         // at every correct call site, which is the check this codemod exists to feed.
-        $localNames = \array_fill_keys($contract->localVariables, true);
+        //
+        // A name declared by a raw `<?php` docblock joins them: `TemplateAnnotator` reads that
+        // spelling back, so planning one produces no insertion anyway, and reporting it as changed
+        // would be a lie.
+        $localNames = \array_fill_keys($contract->localVariables, true)
+            + \array_fill_keys($contract->rawDeclaredVariables, true);
 
         foreach ($contract->readVariables as $name) {
             if (isset($contract->vars[$name]) || isset($localNames[$name])) {
