@@ -150,15 +150,15 @@ final class TemplateAnnotatorTest extends TestCase
     {
         // PHP identifiers take bytes >= 0x80; a declaration the writer cannot read back is one it
         // appends again on every run.
-        $source = "{{-- @var string \$caf\u{00e9} --}}\n<p>x</p>\n";
+        $source = "{{-- @var string \$men\u{00fc} --}}\n<p>x</p>\n";
 
-        $this->assertNull(TemplateAnnotator::annotate($source, ["caf\u{00e9}" => 'string']));
+        $this->assertNull(TemplateAnnotator::annotate($source, ["men\u{00fc}" => 'string']));
     }
 
     #[Test]
     public function is_idempotent_for_a_non_ascii_variable_name_it_wrote(): void
     {
-        $vars = ["caf\u{00e9}" => 'string'];
+        $vars = ["men\u{00fc}" => 'string'];
 
         $first = TemplateAnnotator::annotate("<p>x</p>\n", $vars);
 
@@ -182,11 +182,11 @@ final class TemplateAnnotatorTest extends TestCase
     #[Test]
     public function recognises_a_raw_php_declaration_with_a_non_ascii_variable_name(): void
     {
-        // A reader binding only the ASCII prefix sees `$caf` declared and `$café` undeclared, and
+        // A reader binding only the ASCII prefix sees `$men` declared and `$menü` undeclared, and
         // appends a second declaration for the same variable on every run.
-        $source = "<?php /** @var string \$caf\u{00e9} */ ?>\n<p>x</p>\n";
+        $source = "<?php /** @var string \$men\u{00fc} */ ?>\n<p>x</p>\n";
 
-        $this->assertNull(TemplateAnnotator::annotate($source, ["caf\u{00e9}" => 'string']));
+        $this->assertNull(TemplateAnnotator::annotate($source, ["men\u{00fc}" => 'string']));
     }
 
     #[Test]
