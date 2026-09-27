@@ -23,9 +23,23 @@ declare(strict_types=1);
  * names are not cosmetic. A stub missing a trailing parameter makes Psalm
  * reject a call that is valid at runtime, and a parameter renamed upstream
  * silently disarms every `@psalm-taint-sink <kind> $name` hung off the old name
- * while every existing test stays green. Public/protected vendor methods and
- * properties declared directly by laravel/ai are also checked for erasure by
- * a redeclaration stub, with only narrow intentional omissions allowed.
+ * while every existing test stays green.
+ *
+ * Public/protected vendor methods and properties are also checked against
+ * the stub. Psalm actually MERGES an omitted one in from the real class
+ * rather than erasing it (verified against Psalm 6.16.1 and 7.0.0-beta19),
+ * so this isn't a correctness check — it's a taint-review tripwire: a
+ * merged-in method has whatever taint annotations the real class has, i.e.
+ * none. `Tools\Request::validate()` shipping without `@psalm-taint-source
+ * input` is exactly this failure mode.
+ *
+ * The interface list IS genuinely wiped on redeclaration, unlike
+ * methods/properties, so a stub `implements`/`extends` clause missing one
+ * really does break `instanceof`/type-hint compatibility. Checked separately
+ * below, both directions (missing and stale), against each declared name's
+ * own interface-extends-interface closure (Reflection can't distinguish an
+ * explicit name from one only reachable through it) and exempting
+ * `Stringable`, which PHP grants implicitly to any `__toString()` class.
  *
  * Docblock-only precision (`@param non-empty-string`) is unaffected and
  * deliberately out of scope (see docs/contributing/README.md, "Stub merging":
@@ -162,13 +176,11 @@ foreach (findStubFiles($stubsDir) as $file) {
             );
         }
 
-        // A redeclaration can silently erase a public/protected method that was
-        // added upstream. Count methods supplied by a trait used by the stub as
-        // present only when that trait has a concrete implementation. An
-        // abstract trait requirement is not an implementation of a method that
-        // the vendor class declares directly. Only compare methods whose
-        // implementation belongs to laravel/ai; framework trait helpers (e.g.
-        // SerializesModels) are not this integration's API contract.
+        // Taint-review tripwire, not a correctness check (see file docblock).
+        // A trait counts as providing a method only when concretely
+        // implemented, not just required abstractly. Only laravel/ai's own
+        // implementation counts; framework trait helpers (e.g.
+        // SerializesModels) aren't this integration's API contract.
         foreach ($reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_PROTECTED) as $method) {
             if ($method->getDeclaringClass()->getName() !== $fqcn || !isLaravelAiSource($method->getFileName())) {
                 continue;
@@ -206,6 +218,59 @@ foreach (findStubFiles($stubsDir) as $file) {
                 $knownGaps,
                 $consumedGapKeys,
                 $consumedOmissionKeys,
+            );
+        }
+
+        // Unlike methods/properties, this one is real erasure (file docblock).
+        // `parent_classes` isn't wiped, so Psalm still derives interfaces
+        // inherited from the real parent without the stub repeating them.
+        // Each literal name in the stub's clause is expanded to its own
+        // interface-extends-interface closure (e.g. `IteratorAggregate`
+        // implies `Traversable`) before comparing, matching what a real
+        // `implements IteratorAggregate` in the stub would also grant.
+        // `Stringable` is PHP-implicit on any class with `__toString()`, on
+        // both the real class and the stub, so it's exempt rather than
+        // needing to be spelled out.
+        $clauseWord = $classLike instanceof Node\Stmt\Interface_ ? 'extends' : 'implements';
+        $declaredInterfaceClosure = declaredInterfaceClosure($classLike);
+        if (isset($declaredMethodNames['__toString'])) {
+            $declaredInterfaceClosure['Stringable'] = true;
+        }
+
+        $parentClass = $reflectionClass->getParentClass();
+        $inheritedInterfaceNames = $parentClass !== false ? \array_flip($parentClass->getInterfaceNames()) : [];
+
+        foreach ($reflectionClass->getInterfaceNames() as $interfaceName) {
+            if (isset($declaredInterfaceClosure[$interfaceName]) || isset($inheritedInterfaceNames[$interfaceName])) {
+                continue;
+            }
+
+            reportOmission(
+                "{$fqcn} implements {$interfaceName}",
+                "{$fqcn}: implements {$interfaceName} in the installed laravel/ai, but the stub's `{$clauseWord}` clause omits it (Psalm wipes the interface list on redeclaration)",
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
+                $consumedOmissionKeys,
+            );
+        }
+
+        // The reverse direction: a stale interface the stub still claims but
+        // the installed class no longer implements (removed/renamed
+        // upstream). This is a hard mismatch, not an omission — Psalm would
+        // let a project treat the class as that type when it no longer is.
+        $realInterfaceNames = \array_flip($reflectionClass->getInterfaceNames());
+        foreach (declaredInterfaceNames($classLike) as $interfaceName => $_) {
+            if (isset($realInterfaceNames[$interfaceName])) {
+                continue;
+            }
+
+            report(
+                "{$fqcn} implements {$interfaceName} (stale)",
+                "{$fqcn}: stub's `{$clauseWord}` clause declares {$interfaceName}, but the installed class doesn't implement it (renamed or removed upstream?)",
+                $mismatches,
+                $knownGaps,
+                $consumedGapKeys,
             );
         }
     }
@@ -412,6 +477,47 @@ function stubTraits(Node\Stmt\ClassLike $classLike): array
     }
 
     return $traits;
+}
+
+/** @return array<string, true> */
+function declaredInterfaceNames(Node\Stmt\ClassLike $classLike): array
+{
+    $interfaces = [];
+    $names = match (true) {
+        $classLike instanceof Node\Stmt\Class_, $classLike instanceof Node\Stmt\Enum_ => $classLike->implements,
+        $classLike instanceof Node\Stmt\Interface_ => $classLike->extends,
+        default => [],
+    };
+
+    foreach ($names as $name) {
+        $interfaces[$name->toString()] = true;
+    }
+
+    return $interfaces;
+}
+
+/**
+ * Each literal name expanded to include the interfaces it itself extends
+ * (e.g. `IteratorAggregate` implies `Traversable`), matching what Reflection
+ * reports for a real `implements IteratorAggregate` — Reflection can't tell
+ * the difference between a name explicitly written and one only reachable
+ * through it.
+ *
+ * @return array<string, true>
+ */
+function declaredInterfaceClosure(Node\Stmt\ClassLike $classLike): array
+{
+    $closure = declaredInterfaceNames($classLike);
+
+    foreach (\array_keys($closure) as $interfaceName) {
+        if (\interface_exists($interfaceName)) {
+            foreach ((new \ReflectionClass($interfaceName))->getInterfaceNames() as $inherited) {
+                $closure[$inherited] = true;
+            }
+        }
+    }
+
+    return $closure;
 }
 
 /** @return array<string, true> */

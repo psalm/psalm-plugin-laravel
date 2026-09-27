@@ -9,7 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
-use Psalm\Progress\Progress;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\CollectingProgress;
 
 #[CoversClass(InternalErrorReporter::class)]
 final class InternalErrorReporterTest extends TestCase
@@ -17,7 +17,7 @@ final class InternalErrorReporterTest extends TestCase
     #[Test]
     public function degraded_boot_warns_with_error_message_and_diagnose_pointer(): void
     {
-        $progress = $this->collectingProgress();
+        $progress = new CollectingProgress();
 
         InternalErrorReporter::reportDegradedBoot(
             new \RuntimeException('parse_url(): Argument #1 ($url) must be of type string, null given'),
@@ -39,7 +39,7 @@ final class InternalErrorReporterTest extends TestCase
     #[Test]
     public function degraded_boot_includes_classifier_hint_when_available(): void
     {
-        $progress = $this->collectingProgress();
+        $progress = new CollectingProgress();
 
         // Thrown from this test file — classified as user application code
         // (not vendor/, not the plugin's src/), so a hint line is emitted
@@ -57,7 +57,7 @@ final class InternalErrorReporterTest extends TestCase
     #[Test]
     public function degraded_boot_rethrows_and_stays_silent_when_fail_on_internal_error_is_on(): void
     {
-        $progress = $this->collectingProgress();
+        $progress = new CollectingProgress();
         $config = PluginConfig::fromXml(
             new \SimpleXMLElement('<pluginClass><failOnInternalError value="true" /></pluginClass>'),
         );
@@ -73,24 +73,5 @@ final class InternalErrorReporterTest extends TestCase
         }
 
         $this->assertSame([], $progress->warnings, 'Escalation path must not double-report warnings');
-    }
-
-    /**
-     * @return Progress&object{warnings: list<string>}
-     */
-    private function collectingProgress(): Progress
-    {
-        // Psalm 6's Progress is fully concrete (no abstract members), so only the one
-        // method under test needs overriding. Psalm 7 makes six of them abstract.
-        return new class extends Progress {
-            /** @var list<string> */
-            public array $warnings = [];
-
-            #[\Override]
-            public function warning(string $message): void
-            {
-                $this->warnings[] = $message;
-            }
-        };
     }
 }
