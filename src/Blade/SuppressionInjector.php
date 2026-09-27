@@ -71,21 +71,6 @@ final class SuppressionInjector
         return $resolved;
     }
 
-    /**
-     * Every rule suppressed anywhere in the template source, independent of whether a following PHP
-     * statement exists to attach a docblock to. A static-HTML-only template has no such statement
-     * (`findTargets()` drops the suppression for nothing to attach to), so a FILE-LEVEL issue with no
-     * call site of its own — {@see \Psalm\LaravelPlugin\Issues\UnusedView} — reads this instead of
-     * the target-keyed map {@see self::resolve()} builds.
-     *
-     * @return list<string>
-     *
-     * @psalm-mutation-free
-     */
-    public function suppressedRules(string $bladeSource): array
-    {
-        return \array_values(\array_unique(\array_merge([], ...\array_values($this->findSuppressions($bladeSource)))));
-    }
 
     /**
      * Splits the body of one `@psalm-suppress` tag into its issue names, accepting the same

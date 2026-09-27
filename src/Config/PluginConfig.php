@@ -54,8 +54,6 @@ final readonly class PluginConfig
         public string $bladeCacheDir,
         /** Opt-in checking of `view()` call sites against template contracts (`<blade validateViewData="true" />`). */
         public bool $bladeValidateViewData,
-        /** Opt-in reporting of a template no statically-provable reference renders (`<blade reportUnusedViews="true" />`). */
-        public bool $bladeReportUnusedViews,
         /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
         public bool $bladeReportUnusedViewData,
         /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
@@ -95,7 +93,6 @@ final readonly class PluginConfig
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $bladeEnabled = self::xmlBoolAttr($config?->blade, 'blade enabled', false, 'enabled');
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
-        $bladeReportUnusedViews = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViews', false, 'reportUnusedViews');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
@@ -115,7 +112,6 @@ final readonly class PluginConfig
             bladeEnabled: $bladeEnabled,
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $bladeValidateViewData,
-            bladeReportUnusedViews: $bladeReportUnusedViews,
             bladeReportUnusedViewData: $bladeReportUnusedViewData,
             bladeReportMixedIssues: $bladeReportMixedIssues,
             experimental: $experimental,

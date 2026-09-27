@@ -45,6 +45,16 @@ final class BladeConfigTest extends TestCase
     }
 
     #[Test]
+    public function removed_report_unused_views_attribute_is_ignored(): void
+    {
+        $config = PluginConfig::fromXml(
+            new \SimpleXMLElement('<pluginClass><blade enabled="true" reportUnusedViews="true" /></pluginClass>'),
+        );
+
+        $this->assertTrue($config->bladeEnabled);
+    }
+
+    #[Test]
     public function blade_enabled_false_is_accepted(): void
     {
         $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade enabled="false" /></pluginClass>'));

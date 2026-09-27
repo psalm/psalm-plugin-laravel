@@ -13,8 +13,7 @@ namespace Psalm\LaravelPlugin\Blade;
  * (`resources/views/vendor/pkg/x.blade.php`) sits under both the default root (`vendor.pkg.x`) and
  * the namespace's own hint root (`pkg::x`), so every matching root is resolved, not just the first.
  *
- * Extracted so template-side name resolution and reference-side name resolution can never drift —
- * a byte-for-byte mismatch between the two makes every UnusedView verdict a false positive.
+ * Extracted so contract lookup and template publication use one canonical rendering name.
  *
  * @internal
  *

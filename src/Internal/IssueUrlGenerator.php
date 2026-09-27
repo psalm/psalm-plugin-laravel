@@ -95,7 +95,6 @@ final class IssueUrlGenerator
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- bladeCacheDir: ' . self::sanitizeCachePath($pluginConfig->bladeCacheDir),
             '- bladeValidateViewData: ' . self::formatBool($pluginConfig->bladeValidateViewData),
-            '- bladeReportUnusedViews: ' . self::formatBool($pluginConfig->bladeReportUnusedViews),
             '- bladeReportUnusedViewData: ' . self::formatBool($pluginConfig->bladeReportUnusedViewData),
             '- bladeReportMixedIssues: ' . self::formatBool($pluginConfig->bladeReportMixedIssues),
             '- experimental: ' . self::formatBool($pluginConfig->experimental),

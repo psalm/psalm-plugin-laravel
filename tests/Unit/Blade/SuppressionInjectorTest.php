@@ -134,11 +134,4 @@ final class SuppressionInjectorTest extends TestCase
         );
     }
 
-    #[Test]
-    public function suppressed_rules_expands_comma_lists_and_ignores_descriptions(): void
-    {
-        $bladeSource = "{{-- @psalm-suppress UnusedView, MissingView kept for the mailer --}}\n<p>static</p>\n";
-
-        $this->assertSame(['UnusedView', 'MissingView'], (new SuppressionInjector())->suppressedRules($bladeSource));
-    }
 }

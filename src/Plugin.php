@@ -221,7 +221,6 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Validation\ValidationRuleAnalyzer::reset();
         Handlers\Views\MissingViewHandler::reset();
         Handlers\Views\ViewContractHandler::reset();
-        Handlers\Views\UnusedViewHandler::reset();
         Internal\PathCaseCanonicalizer::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
         Blade\Annotate\AnnotationCollector::reset();
@@ -788,15 +787,6 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
         }
 
-        // Reports a template BladeBootstrapper discovered that no statically-provable call site or
-        // @include/@extends ever names (#1477). Needs the enumerate-and-collect pass initBladeAnalysis()
-        // already ran into ViewReferenceRegistry, hence the activation half of the gate;
-        // bladeReportUnusedViews is the opt-in for the check itself. UnusedViewHandler::init() was
-        // already called in initBladeAnalysis(), where a Progress handle is in scope.
-        if ($bladeActive && $pluginConfig->bladeReportUnusedViews) {
-            require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
-            $registration->registerHooksFromClass(Handlers\Views\UnusedViewHandler::class);
-        }
 
         // Writes `{{-- @var --}}` declarations into the analysed templates (#1524). Registered only
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
@@ -975,7 +965,6 @@ final class Plugin implements PluginEntryPointInterface
             $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
-            $pluginConfig->bladeReportUnusedViews,
             $pluginConfig->bladeReportUnusedViewData || $annotating,
         );
 
@@ -995,12 +984,6 @@ final class Plugin implements PluginEntryPointInterface
             ApplicationProvider::runtimeDeclaredConstants(),
         );
 
-        // Progress is only available here, not in registerHandlers() below, hence the split: init()
-        // (captures the handle for the one-time dynamic-reference warning) here, registration there.
-        if ($pluginConfig->bladeReportUnusedViews) {
-            require_once __DIR__ . '/Handlers/Views/UnusedViewHandler.php';
-            Handlers\Views\UnusedViewHandler::init($output);
-        }
 
         return true;
     }

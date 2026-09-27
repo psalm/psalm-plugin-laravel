@@ -9,7 +9,7 @@ Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports 
 
 ## What is analyzed
 
-* Every `*.blade.php` file under the booted application's view paths (`config('view.paths')`), plus every namespace hint a service provider registered with `loadViewsFrom()` (`view('pkg::widget')`) — outside your Composer vendor directory. A namespace's own internal templates (Laravel's `notifications`/`pagination`/`laravel-exceptions` namespaces, or any other vendored package's) are never discovered: they ship with component tags and dynamic includes the reference collector cannot resolve, and unioning them in would disable UnusedView project-wide the moment Blade analysis is enabled.
+* Every `*.blade.php` file under the booted application's view paths (`config('view.paths')`), plus every namespace hint a service provider registered with `loadViewsFrom()` (`view('pkg::widget')`) — outside your Composer vendor directory.
 * Each template is compiled through the application's own Blade compiler into a standalone PHP file (a "shadow"), and the shadow is what Psalm actually scans. The template itself is never handed to Psalm as PHP.
 * Each template is analyzed on its own. `@include`, `@extends`, and component tags are not followed into the files they reference.
 * Issues found in the shadow are relocated onto the `.blade.php` path and the matching template line before they are reported. Nothing in the output points at the compiled shadow.
@@ -173,17 +173,14 @@ Nothing in the pipeline needs a single process, and that is checked rather than 
 
 Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
-Degradation is all-or-nothing: the template facts the compile pass collects (contracts, reference sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata), [`reportUnusedViews`](config.md#reportunusedviews), and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
+Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata) and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
 
 A template that fails to compile (see [Known limits](#known-limits)) is skipped rather than aborting the run. Up to three failing template paths are named directly in the warning; beyond that, run with `--debug` for every individual cause.
 
-## Unused templates
-
-With [`reportUnusedViews`](config.md#reportunusedviews) enabled, the plugin also reports a template that no statically-provable reference ever names ([UnusedView](issues/UnusedView.md)). References are gathered from two places: the `view()` helper and `View::make()` in plain project files, and `@include` / `@extends` inside every compiled template. One reference this plugin cannot resolve statically — a dynamic `view($name)` or `@include($name)` anywhere in the project — turns the check off for the whole run.
 
 ## Unused view data
 
-With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares (`{{-- @var --}}`, `@props`) are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it.
+With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it. All three declaration spellings count: `{{-- @var --}}`, `@props`, and a raw `<?php /** @var T $name */ ?>` docblock. The raw one counts for THIS rule only — in a template that spelling is as often a local type hint after an assignment as a stated interface, so it never becomes a contract [`validateViewData`](config.md#validateviewdata) checks call sites against.
 
 The check declines for a call site instead of guessing, and the gate that matters most in practice is that a template whose compiled body hides which names it reads is never checked. `@props` and `@aware` both compile to `$$name` writes, which means component templates are outside this release's reach. The issue page lists the rest.
 

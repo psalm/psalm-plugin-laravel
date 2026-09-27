@@ -7,10 +7,7 @@ namespace Psalm\LaravelPlugin\Blade;
 use Psalm\CodeLocation\Raw;
 
 /**
- * A `CodeLocation\Raw` covering one line of a template's source, extracted from
- * {@see ShadowTarget} so an issue can be anchored to a template line without a shadow entry —
- * {@see \Psalm\LaravelPlugin\Handlers\Views\UnusedViewHandler} reports on templates that never
- * compiled at all, which have no shadow to relocate from.
+ * A `CodeLocation\Raw` covering one line of a template's source, shared by the shadow remap.
  *
  * @internal
  *

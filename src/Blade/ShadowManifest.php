@@ -20,27 +20,22 @@ final class ShadowManifest
     private const MANIFEST_FILE = 'manifest.php';
 
     /**
-     * Bump when anything the plugin WRITES into a shadow changes for the same source: the marker
+     * Bump when anything the plugin writes around a shadow changes for the same source: the marker
      * pass, the prelude ({@see PreludeBuilder}), suppression injection, or the `$attributes`
-     * restore-point re-assert ({@see AttributesRestoreReassert}). The shadow's own compiled bytes
-     * are never fingerprinted (see class docblock), so this is the only lever that self-invalidates
-     * a plugin-side change to what gets written around them — and the only one that reaches the
-     * derived {@see ViewDataContract} cached in slot 5, whose meaning can change without the
-     * template changing.
+     * restore-point re-assert ({@see AttributesRestoreReassert}). It also invalidates a changed
+     * manifest-entry layout. The shadow's own compiled bytes are never fingerprinted (see class
+     * docblock), so this is the only lever that self-invalidates plugin-side derived facts such as
+     * the {@see ViewDataContract} cached in slot 5.
      */
-    private const MARKER_PASS_VERSION = 11;
+    private const MARKER_PASS_VERSION = 12;
 
-    /** {@see self::isFresh()}: the references slot must have been collected for the entry to count as fresh. */
-    public const SLOT_REFERENCES = 1;
-
-    /** {@see self::isFresh()}: likewise for the data-includes slot. */
-    public const SLOT_DATA_INCLUDES = 2;
+    /** {@see self::isFresh()}: the data-includes slot must have been collected for the entry to count as fresh. */
+    public const SLOT_DATA_INCLUDES = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
      *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract,
-     *      references, dataIncludes]. The last two are null when the entry was written with their
-     *      collection pass disabled.
+     *      dataIncludes]. The final slot is null when its collection pass was disabled.
      */
     private array $entries = [];
 
@@ -91,9 +86,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
-     *
-     * @psalm-mutation-free
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -104,13 +97,13 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            // Arity 8 gates every entry written before the data-includes slot was added: one full
-            // recompile on upgrade, rather than a manifest carrying entries of two different shapes.
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 8) {
+            // Arity 7 gates entries written before the removed references slot. Recompiling is
+            // safer than misreading a derived cache entry of a different shape.
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 7) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $references, $dataIncludes] = \array_values($entry);
+            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $dataIncludes] = \array_values($entry);
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
                 continue;
@@ -132,11 +125,6 @@ final class ShadowManifest
                 continue;
             }
 
-            $validReferences = $this->normalizeViewNames($references);
-
-            if ($validReferences === false) {
-                continue;
-            }
 
             $validDataIncludes = $this->normalizeViewNames($dataIncludes);
 
@@ -155,16 +143,16 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validReferences, $validDataIncludes];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validDataIncludes];
         }
 
         return $entries;
     }
 
     /**
-     * The shape both view-name slots share: a list of names plus a "something here was not
-     * statically resolvable" flag. Null is a valid value ("this collection pass was off when the
-     * entry was written"), distinct from `false` ("the shape is wrong"), which drops the whole entry.
+     * The data-includes slot holds a list of names plus a "something here was not statically
+     * resolvable" flag. Null means the collection pass was off when the entry was written; false
+     * means the shape is wrong and drops the whole entry.
      *
      * @return array{0: list<string>, 1: bool}|null|false
      *
@@ -204,29 +192,30 @@ final class ShadowManifest
      * An entry written by a plugin version with a different slot count is dropped rather than
      * migrated, which recompiles the template — the cheap, correct answer for a derived cache.
      *
-     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}|null
+     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}|null
      *         null when the shape is wrong, which drops the entry
      *
      * @psalm-mutation-free
      */
     private function normalizeContract(mixed $data): ?array
     {
-        if (!\is_array($data) || \count($data) !== 5) {
+        if (!\is_array($data) || \count($data) !== 6) {
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables] = \array_values($data);
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared] = \array_values($data);
 
         if (!\is_array($vars) || !\is_bool($propsUnknown) || !\is_array($readVariables)
-            || !\is_bool($readsUnknown) || !\is_array($localVariables)
+            || !\is_bool($readsUnknown) || !\is_array($localVariables) || !\is_array($rawDeclared)
         ) {
             return null;
         }
 
         $validReads = $this->normalizeNames($readVariables);
         $validLocals = $this->normalizeNames($localVariables);
+        $validRaw = $this->normalizeNames($rawDeclared);
 
-        if ($validReads === null || $validLocals === null) {
+        if ($validReads === null || $validLocals === null || $validRaw === null) {
             return null;
         }
 
@@ -247,7 +236,7 @@ final class ShadowManifest
             $validVars[$name] = [$typeString, $line, $optional];
         }
 
-        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLocals];
+        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLocals, $validRaw];
     }
 
     /**
@@ -324,10 +313,8 @@ final class ShadowManifest
 
     /**
      * @param int-mask-of<self::SLOT_*> $requiredSlots slots whose collection pass must have run for
-     *        the entry to count as fresh; an entry written with that pass disabled (a null slot)
-     *        forces a recompile so the collector actually runs for it. Flipping `reportUnusedViews`
-     *        or `reportUnusedViewData` on against a cache warmed while it was off must not leave
-     *        every template permanently "fresh with nothing ever collected".
+     *        the entry to count as fresh; an entry written with that pass disabled forces a recompile
+     *        so the collector actually runs for it.
      */
     public function isFresh(string $templatePath, string $source, int $requiredSlots = 0): bool
     {
@@ -338,11 +325,7 @@ final class ShadowManifest
             return false;
         }
 
-        if (($requiredSlots & self::SLOT_REFERENCES) !== 0 && $entry[6] === null) {
-            return false;
-        }
-
-        if (($requiredSlots & self::SLOT_DATA_INCLUDES) !== 0 && $entry[7] === null) {
+        if (($requiredSlots & self::SLOT_DATA_INCLUDES) !== 0 && $entry[6] === null) {
             return false;
         }
 
@@ -374,7 +357,7 @@ final class ShadowManifest
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables] = $entry[5];
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared] = $entry[5];
 
         $contractVars = [];
 
@@ -382,20 +365,17 @@ final class ShadowManifest
             $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional);
         }
 
-        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $localVariables);
+        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared);
     }
 
     /**
      * Writes the shadow file to disk and records it. Call flush() to persist the manifest itself.
      *
-     * @param array{0: list<string>, 1: bool}|null $references view names the compiled shadow
-     *        references, and whether it also holds one this plugin could not resolve statically;
-     *        null when reference collection is disabled for this run
-     * @param array{0: list<string>, 1: bool}|null $dataIncludes the subset of those the shadow hands
-     *        its whole scope to (`@include`, `@extends`, ...); null when that pass is disabled, which
-     *        is distinct from "collected, found none" and makes the read set decline
+     * @param array{0: list<string>, 1: bool}|null $dataIncludes the subset of references the shadow
+     *        hands its whole scope to (`@include`, `@extends`, ...); null when that pass is disabled,
+     *        distinct from "collected, found none" and making the read set decline
      */
-    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $references, ?array $dataIncludes = null): string
+    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $dataIncludes = null): string
     {
         $shadowPath = $this->shadowPath($templatePath, $source);
         $pid = \getmypid();
@@ -431,27 +411,13 @@ final class ShadowManifest
             $shadow->extendsLine,
             $this->fingerprint($source),
             $shadow->suppressions,
-            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables],
-            $references,
+            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
             $dataIncludes,
         ];
 
         return $shadowPath;
     }
 
-    /**
-     * The template-side view-name references collected from the compiled shadow, including for a
-     * template that was fresh enough to skip recompiling this run. Null for an unknown shadow path
-     * or one whose entry was written with reference collection disabled.
-     *
-     * @return array{0: list<string>, 1: bool}|null
-     *
-     * @psalm-mutation-free
-     */
-    public function referencesFor(string $shadowPath): ?array
-    {
-        return $this->entries[$shadowPath][6] ?? null;
-    }
 
     /**
      * The view names the compiled shadow hands its whole scope to, including for a template that was
@@ -464,7 +430,7 @@ final class ShadowManifest
      */
     public function dataIncludesFor(string $shadowPath): ?array
     {
-        return $this->entries[$shadowPath][7] ?? null;
+        return $this->entries[$shadowPath][6] ?? null;
     }
 
     /**

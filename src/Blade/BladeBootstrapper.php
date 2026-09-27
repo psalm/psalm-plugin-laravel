@@ -38,12 +38,6 @@ final class BladeBootstrapper
         private readonly Progress $output,
         private readonly string $shadowDir,
         /**
-         * Opt-in for UnusedView (`reportUnusedViews`). Gates the compile-time reference collection
-         * pass: off by default so the AST walk and the manifest's references slot are pure cost paid
-         * only by projects that turned the rule on.
-         */
-        private readonly bool $collectViewReferences = false,
-        /**
          * Opt-in for UnusedViewData (`reportUnusedViewData`). Gates both the read-set extraction and
          * the data-include collection that closes it over the `@include` chain: two extra AST walks
          * per template, paid only by projects that turned the rule on.
@@ -73,10 +67,9 @@ final class BladeBootstrapper
 
     /**
      * Template facts collected while compiling, published only once activation has succeeded
-     * (#1518). Both registries they feed CREATE issues — contract violations at call sites,
-     * UnusedView on the templates — so a run that degrades has to leave them empty, or a feature
-     * that announced itself disabled keeps reporting. Insertion order is preserved and the
-     * registries keep their own lowest-root-index-wins precedence.
+     * (#1518). Contract validation and template annotation read these registries, so a degraded
+     * run must leave them empty. Insertion order is preserved and the registries keep their own
+     * lowest-root-index-wins precedence.
      *
      * @var list<array{0: string, 1: int, 2: string}> view name, view root index, template path
      */
@@ -85,10 +78,6 @@ final class BladeBootstrapper
     /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
     private array $pendingContracts = [];
 
-    /** @var list<string> referenced view names */
-    private array $pendingReferences = [];
-
-    private bool $pendingDynamic = false;
 
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
@@ -181,11 +170,9 @@ final class BladeBootstrapper
         }
 
         // Reached only with at least one shadow, because nothing can be reported on a template path
-        // without one: a remap needs a ShadowRegistry entry, and a template that failed to compile
-        // has already turned UnusedView off for the whole run (claimNameOnly() marks the reference
-        // set dynamic). The list is the discovered set rather than the compiled one because the two
-        // differ only by those failures, which are harmless extras here, and
-        // Config::reportIssueInFile() consults nothing but this project-file list.
+        // without one: a remap needs a ShadowRegistry entry. The list is the discovered set rather
+        // than the compiled one because the two differ only by compile failures, which are harmless
+        // extras here, and Config::reportIssueInFile() consults nothing but this project-file list.
         if (!$this->registrar->markTemplatesReportable($templates)) {
             $this->degrade(
                 "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
@@ -267,13 +254,6 @@ final class BladeBootstrapper
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
 
-        foreach ($this->pendingReferences as $viewName) {
-            ViewReferenceRegistry::addReference($viewName);
-        }
-
-        if ($this->pendingDynamic) {
-            ViewReferenceRegistry::markDynamic();
-        }
     }
 
     /**
@@ -300,9 +280,8 @@ final class BladeBootstrapper
     ): array {
         $shadows = [];
         $parser = new ContractParser();
-        $collector = $this->collectViewReferences || $this->collectDataIncludes ? new ViewReferenceCollector() : null;
-        $requiredSlots = ($this->collectViewReferences ? ShadowManifest::SLOT_REFERENCES : 0)
-            | ($this->collectDataIncludes ? ShadowManifest::SLOT_DATA_INCLUDES : 0);
+        $collector = $this->collectDataIncludes ? new ViewReferenceCollector() : null;
+        $requiredSlots = $this->collectDataIncludes ? ShadowManifest::SLOT_DATA_INCLUDES : 0;
 
         foreach ($templates as $template) {
             $source = @\file_get_contents($template);
@@ -329,9 +308,6 @@ final class BladeBootstrapper
                     $manifest->dataIncludesFor($shadowPath),
                 );
 
-                if ($this->collectViewReferences) {
-                    $this->applyReferences($manifest->referencesFor($shadowPath) ?? [[], false]);
-                }
 
                 continue;
             }
@@ -354,20 +330,16 @@ final class BladeBootstrapper
                 : $parser->parseDeclarations($source);
 
             // Read from the compiled output, not the raw template: Laravel has already resolved
-            // component namespaces and anonymous-component candidates by this point. Null (not an
-            // empty pair) when the rule is off, so a later flag flip cannot mistake "never
-            // collected" for "collected, found nothing" — see ShadowManifest::isFresh().
-            $references = $this->collectViewReferences ? $collector?->collectFromSource($shadow->contents) : null;
+            // the directive arguments. Null (not an empty pair) when the pass is off, so a later
+            // flag flip cannot mistake "never collected" for "collected, found nothing" — see
+            // ShadowManifest::isFresh().
             $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
 
             try {
-                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $references, $dataIncludes);
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract($template, $roots, $contract, $dataIncludes);
 
-                if ($references !== null) {
-                    $this->applyReferences($references);
-                }
             } catch (\RuntimeException $throwable) {
                 $failures[$template] = $throwable->getMessage();
                 $this->claimNameOnly($template, $roots);
@@ -377,21 +349,6 @@ final class BladeBootstrapper
         return $shadows;
     }
 
-    /**
-     * @param array{0: list<string>, 1: bool} $references
-     *
-     * @psalm-external-mutation-free
-     */
-    private function applyReferences(array $references): void
-    {
-        foreach ($references[0] as $viewName) {
-            $this->pendingReferences[] = $viewName;
-        }
-
-        if ($references[1]) {
-            $this->pendingDynamic = true;
-        }
-    }
 
     /**
      * View roots as realpaths, in finder order, skipping the ones that do not resolve, deduped by
@@ -454,17 +411,14 @@ final class BladeBootstrapper
     {
         $this->registerContract($templatePath, $roots, new ViewDataContract([], false));
 
-        // Its own @include/@extends references are unknown, not empty: treating them as empty would
-        // cascade into false UnusedView positives on everything this template actually renders.
-        $this->pendingDynamic = true;
     }
 
     /**
      * A template that declares nothing is registered too, with an empty contract. Skipping it would
      * leave its view name unclaimed, and a same-named template in a LATER view root would then own
      * the name and have its declarations checked against callers that Laravel resolves to this
-     * file instead. The view name is claimed as an UnusedView CANDIDATE unconditionally, even for a
-     * template this pass could not process — see {@see claimNameOnly()}.
+     * file instead. A template this pass could not process is claimed in the same way — see
+     * {@see claimNameOnly()}.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array{0: list<string>, 1: bool}|null   $dataIncludes null when the collection pass was off
@@ -529,16 +483,12 @@ final class BladeBootstrapper
      * `callAfterResolving('view')` callback, so `resolveFinder()` touches the `'view'` binding itself
      * rather than depending on some earlier, unrelated resolve to have already fired it.
      *
-     * Hint roots inside the analyzed project's Composer vendor directory are dropped:
-     * `ViewServiceProvider`, `NotificationServiceProvider`, and `PaginationServiceProvider` all
-     * register their OWN internal templates this exact same way, on every application,
-     * unconditionally. `notifications::email` alone carries a `<x-mail::…>` component tag, which the
-     * reference collector cannot resolve — unioning it in would disable UnusedView, permanently, for
-     * every project the moment Blade analysis is enabled. A project's own published override
-     * (`resources/views/vendor/<namespace>`, see {@see ViewName}) is NOT inside the vendor
-     * directory — the boundary is the Composer install root, not the literal substring "vendor" —
-     * so that case is unaffected. `getPaths()` roots are never filtered: Laravel never configures one
-     * inside the vendor directory.
+     * Hint roots inside the analyzed project's Composer vendor directory are dropped so third-party
+     * template diagnostics and annotation writes stay outside the analyzed project. A project's own
+     * published override (`resources/views/vendor/<namespace>`, see {@see ViewName}) is NOT inside
+     * the vendor directory — the boundary is the Composer install root, not the literal substring
+     * "vendor" — so that case is unaffected. `getPaths()` roots are never filtered: Laravel never
+     * configures one inside the vendor directory.
      *
      * @return list<array{0: string, 1: string|null}>|null
      */
