@@ -103,4 +103,42 @@ final class SuppressionInjectorTest extends TestCase
         $this->assertStringNotContainsString('blade:2 */ /** @psalm-suppress', $result);
         $this->assertStringContainsString('<?php /** @psalm-suppress Foo */ echo e($foo); ?>', $result);
     }
+
+    #[Test]
+    public function comma_separated_rules_are_split_into_separate_suppressions(): void
+    {
+        $shadow = "prelude\n<?php /* blade:2 */ ?><?php echo e(\$foo); ?>\n";
+        $bladeSource = "{{-- @psalm-suppress UndefinedVariable,MixedArgument --}}\n{{ \$foo }}\n";
+        $lineMap = [1 => 0, 2 => 2];
+        $injector = new SuppressionInjector();
+
+        $this->assertStringContainsString(
+            '<?php /** @psalm-suppress UndefinedVariable, MixedArgument */ echo e($foo); ?>',
+            $injector->inject($shadow, $bladeSource, $lineMap),
+        );
+        $this->assertSame([2 => ['UndefinedVariable', 'MixedArgument']], $injector->resolve($shadow, $bladeSource, $lineMap));
+    }
+
+    #[Test]
+    public function two_suppression_comments_before_one_statement_share_one_docblock(): void
+    {
+        // Psalm reads only the docblock nearest the statement, so two separate docblocks would
+        // silently drop the first rule.
+        $shadow = "prelude\nprelude\n<?php /* blade:3 */ ?><?php echo e(\$foo); ?>\n";
+        $bladeSource = "{{-- @psalm-suppress UndefinedVariable --}}\n{{-- @psalm-suppress MixedArgument --}}\n{{ \$foo }}\n";
+        $lineMap = [1 => 0, 2 => 0, 3 => 3];
+
+        $this->assertStringContainsString(
+            '<?php /** @psalm-suppress UndefinedVariable, MixedArgument */ echo e($foo); ?>',
+            (new SuppressionInjector())->inject($shadow, $bladeSource, $lineMap),
+        );
+    }
+
+    #[Test]
+    public function suppressed_rules_expands_comma_lists_and_ignores_descriptions(): void
+    {
+        $bladeSource = "{{-- @psalm-suppress UnusedView, MissingView kept for the mailer --}}\n<p>static</p>\n";
+
+        $this->assertSame(['UnusedView', 'MissingView'], (new SuppressionInjector())->suppressedRules($bladeSource));
+    }
 }
