@@ -13,7 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\Progress\VoidProgress;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\CollectingProgress;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 
 /**
@@ -72,7 +72,7 @@ final class ModelMethodHandlerGetKeyReturnTypeTest extends TestCase
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
-        $progressProperty->setValue($codebase, new VoidProgress());
+        $progressProperty->setValue($codebase, new CollectingProgress());
 
         return $codebase;
     }
