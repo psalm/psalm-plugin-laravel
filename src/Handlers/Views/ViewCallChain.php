@@ -59,16 +59,15 @@ final class ViewCallChain
 
     public static function from(Expr $expr, StatementsSource $source): ?self
     {
-        /** @var array<string, Union> $data */
-        $data = [];
-        $complete = true;
+        /** @var list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending */
+        $pending = [];
         $node = $expr;
 
         // Terminates on the expression's own nesting: every branch either returns or steps one link
         // closer to the receiver.
         while (true) {
             if ($node instanceof Expr\FuncCall) {
-                return self::fromHelperCall($node, $source, $data, $complete);
+                return self::fromHelperCall($node, $source, $pending);
             }
 
             if (!$node instanceof Expr\MethodCall
@@ -91,36 +90,26 @@ final class ViewCallChain
             $methodName = $node->name->toLowerString();
 
             if ($node instanceof Expr\StaticCall) {
-                return self::fromBinder(self::roleOfStaticClass($node->class), $methodName, $args, $source, $data, $complete);
+                return self::fromBinder(self::roleOfStaticClass($node->class), $methodName, $args, $source, $pending);
             }
 
-            if ($methodName === 'with') {
-                if (!self::mergeWith($args, $source, $data, $complete)) {
-                    return null;
-                }
-
+            // Collected rather than folded in here: whether these carry template data at all depends
+            // on the receiver the walk has not reached yet.
+            if ($methodName === 'with' || $methodName === 'witherrors') {
+                $pending[] = [$methodName, $args];
                 $node = $node->var;
 
                 continue;
             }
 
-            if ($methodName === 'witherrors') {
-                // withErrors() forwards to with('errors', ...) — the key is fixed, and the value is
-                // a ViewErrorBag no template declares a type for, so mixed carries enough.
-                $data['errors'] ??= Type::getMixed();
-                $node = $node->var;
-
-                continue;
-            }
-
-            return self::fromBinder(self::roleOfReceiver($node->var, $source), $methodName, $args, $source, $data, $complete);
+            return self::fromBinder(self::roleOfReceiver($node->var, $source), $methodName, $args, $source, $pending);
         }
     }
 
     /**
-     * @param array<string, Union> $data
+     * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
-    private static function fromHelperCall(Expr\FuncCall $call, StatementsSource $source, array $data, bool $complete): ?self
+    private static function fromHelperCall(Expr\FuncCall $call, StatementsSource $source, array $pending): ?self
     {
         if (!$call->name instanceof Name || $call->name->toLowerString() !== 'view') {
             return null;
@@ -134,24 +123,21 @@ final class ViewCallChain
 
         // view($view = null, $data = [], $mergeData = []): $mergeData lands in the same data array,
         // so anything supplied there that we cannot read leaves the key set open.
-        if (ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg) {
-            $complete = false;
-        }
+        $complete = !ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg;
 
-        return self::build($args, $source, $data, $complete);
+        return self::build($args, $source, $pending, true, $complete);
     }
 
     /**
-     * @param list<Arg>            $args
-     * @param array<string, Union> $data
+     * @param list<Arg>                                        $args
+     * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
     private static function fromBinder(
         ?string $role,
         string $methodName,
         array $args,
         StatementsSource $source,
-        array $data,
-        bool $complete,
+        array $pending,
     ): ?self {
         $binds = match ($role) {
             ViewNameSignatures::ROLE_VIEW_FACTORY => $methodName === 'make',
@@ -164,24 +150,29 @@ final class ViewCallChain
             return null;
         }
 
-        if ($role === ViewNameSignatures::ROLE_VIEW_FACTORY
-            && ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg
-        ) {
-            $complete = false;
-        }
+        $complete = $role !== ViewNameSignatures::ROLE_VIEW_FACTORY || !ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg;
 
-        return self::build($args, $source, $data, $complete);
+        // `SimpleMessage::with($line)`, which is what a MailMessage chain's `with()` reaches, appends
+        // an intro/outro line to the notification body and never touches the template's data.
+        $carriesData = $role !== ViewNameSignatures::ROLE_MAIL_MESSAGE;
+
+        return self::build($args, $source, $pending, $carriesData, $complete);
     }
 
     /**
      * Every binder this class recognizes takes `($view, $data)` in that order. `Router::view()` is
      * the exception that puts the name at position 1, which is why it is not in the table above.
      *
-     * @param list<Arg>            $args
-     * @param array<string, Union> $data
+     * @param list<Arg>                                        $args
+     * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
-    private static function build(array $args, StatementsSource $source, array $data, bool $complete): ?self
-    {
+    private static function build(
+        array $args,
+        StatementsSource $source,
+        array $pending,
+        bool $carriesData,
+        bool $complete,
+    ): ?self {
         $nameArg = ArgUtil::byNameOrPosition($args, 0, 'view');
 
         if (!$nameArg instanceof Arg || !$nameArg->value instanceof String_) {
@@ -196,6 +187,15 @@ final class ViewCallChain
             return null;
         }
 
+        /** @var array<string, Union> $data */
+        $data = [];
+
+        // The chain's contributions land before the binder's own data argument, because the walk ran
+        // outermost-first and `??=` below lets the first contribution seen — the last one to run — win.
+        if ($carriesData && !self::mergePending($pending, $source, $data, $complete)) {
+            return null;
+        }
+
         $dataArg = ArgUtil::byNameOrPosition($args, 1, 'data');
 
         if ($dataArg instanceof Arg) {
@@ -206,7 +206,31 @@ final class ViewCallChain
     }
 
     /**
-     * `with()` has two shapes: `with(array $data)` and `with(string $key, $value)`.
+     * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
+     * @param array<string, Union>                             $data
+     */
+    private static function mergePending(array $pending, StatementsSource $source, array &$data, bool &$complete): bool
+    {
+        foreach ($pending as [$methodName, $args]) {
+            if ($methodName === 'witherrors') {
+                // withErrors() forwards to with('errors', ...) — the key is fixed, and the value is
+                // a ViewErrorBag no template declares a type for, so mixed carries enough.
+                $data['errors'] ??= Type::getMixed();
+
+                continue;
+            }
+
+            if (!self::mergeWith($args, $source, $data, $complete)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * `with()` dispatches on `is_array($key)`, never on the argument count: `with('name')` really
+     * does assign null to 'name', and `with(['name' => $n], $ignored)` still merges the array.
      *
      * @param list<Arg>            $args
      * @param array<string, Union> $data
@@ -219,26 +243,62 @@ final class ViewCallChain
             return false;
         }
 
-        $valueArg = ArgUtil::byNameOrPosition($args, 1, 'value');
+        $merges = self::mergesArray($keyArg, $source);
 
-        if (!$valueArg instanceof Arg) {
+        if ($merges === true) {
             self::mergeArrayArg($keyArg, $source, $data, $complete);
 
             return true;
         }
 
-        if (!$keyArg->value instanceof String_) {
-            // A dynamic key can name any declared variable, so nothing is provably absent.
+        if ($merges === null || !$keyArg->value instanceof String_) {
+            // Either branch could run, or the key names a variable we cannot read: nothing the
+            // template declares is provably absent, and nothing is provably present either.
             $complete = false;
 
             return true;
         }
 
+        $valueArg = ArgUtil::byNameOrPosition($args, 1, 'value');
+
         // Walking outermost-first means the first contribution seen is the last one to run, and
         // Laravel lets the last write win.
-        $data[$keyArg->value->value] ??= $source->getNodeTypeProvider()->getType($valueArg->value) ?? Type::getMixed();
+        $data[$keyArg->value->value] ??= $valueArg instanceof Arg
+            ? $source->getNodeTypeProvider()->getType($valueArg->value) ?? Type::getMixed()
+            : Type::getNull();
 
         return true;
+    }
+
+    /**
+     * Which branch of `with()` its key argument takes, or null when the inferred type admits both.
+     */
+    private static function mergesArray(Arg $keyArg, StatementsSource $source): ?bool
+    {
+        if ($keyArg->value instanceof String_) {
+            return false;
+        }
+
+        $type = $source->getNodeTypeProvider()->getType($keyArg->value);
+
+        if (!$type instanceof Union || $type->hasMixed()) {
+            return null;
+        }
+
+        $atomics = $type->getAtomicTypes();
+        $arrays = 0;
+
+        foreach ($atomics as $atomic) {
+            if ($atomic instanceof TArray || $atomic instanceof TKeyedArray) {
+                ++$arrays;
+            }
+        }
+
+        if ($arrays === 0) {
+            return false;
+        }
+
+        return $arrays === \count($atomics) ? true : null;
     }
 
     /**

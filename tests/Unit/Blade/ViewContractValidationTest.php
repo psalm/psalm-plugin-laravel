@@ -136,6 +136,40 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
     }
 
+    /**
+     * `with()` dispatches on `is_array($key)`, never on the argument count. Both halves are pinned
+     * together: reading the count instead makes the first case silent AND the second a false
+     * positive, and each alone could be explained by an unrelated decline.
+     */
+    #[Test]
+    public function a_single_key_with_call_assigns_null_and_an_array_key_merges(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $nulled = $this->forFile($issues, 'WithNullValue.php');
+        $this->assertCount(1, $nulled, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $nulled[0]['type']);
+        $this->assertStringContainsString('null', $nulled[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'WithArrayAndSecondArgument.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A MailMessage chain reaches `SimpleMessage::with($line)`, which appends a notification line
+     * and binds no template data — so the chain's key set stays closed and the declared variable is
+     * still reported as missing.
+     */
+    #[Test]
+    public function a_mail_message_with_call_contributes_no_view_data(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'MailMessageChain.php');
+
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertStringContainsString("'name'", $reported[0]['message']);
+    }
+
     #[Test]
     public function a_response_view_call_is_checked_like_the_helper(): void
     {
