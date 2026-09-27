@@ -9,10 +9,11 @@ use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 /**
  * Family table + lazy reverse index for every receiver MissingViewHandler
  * validates a view name on: the view Factory (and its contract/facade/aliases),
- * ResponseFactory, Router, MailMessage, and TestResponse.
+ * ResponseFactory, Router, MailMessage, Mailable, TestResponse, and the
+ * InteractsWithViews trait.
  *
  * A separate file from MissingViewHandler because the registration surface here
- * (five families, several facade-aliased) would otherwise crowd out the actual
+ * (seven families, several facade-aliased) would otherwise crowd out the actual
  * view-name-extraction and existence-check logic that handler owns.
  *
  * Keyed on a role string rather than a class-string, because MissingViewHandler
@@ -44,9 +45,11 @@ final class ViewNameSignatures
 
     public const ROLE_TEST_RESPONSE = 'test-response';
 
+    public const ROLE_INTERACTS_WITH_VIEWS = 'interacts-with-views';
+
     /**
-     * @var array<'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response', array{
-     *     concrete: class-string,
+     * @var array<'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'|'interacts-with-views', array{
+     *     concrete: string,
      *     facade: class-string|null,
      *     extra: list<class-string>,
      * }>
@@ -87,9 +90,18 @@ final class ViewNameSignatures
             'facade' => null,
             'extra' => [],
         ],
+        // A trait, not a class: Psalm dispatches a method return-type provider on the
+        // DECLARING class, which for a trait method is the trait itself (the using class
+        // arrives as getCalledFqClasslikeName()), so one entry covers every TestCase.
+        // Same registration shape as ConditionableWhenHandler/TappableTapHandler.
+        self::ROLE_INTERACTS_WITH_VIEWS => [
+            'concrete' => \Illuminate\Foundation\Testing\Concerns\InteractsWithViews::class,
+            'facade' => null,
+            'extra' => [],
+        ],
     ];
 
-    /** @var array<lowercase-string, 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'>|null */
+    /** @var array<lowercase-string, 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'|'interacts-with-views'>|null */
     private static ?array $classToRole = null;
 
     /**
@@ -106,7 +118,7 @@ final class ViewNameSignatures
     }
 
     /**
-     * @return list<class-string>
+     * @return list<string>
      * @psalm-external-mutation-free
      */
     public static function getClassLikeNames(): array
@@ -127,7 +139,7 @@ final class ViewNameSignatures
     }
 
     /**
-     * @return 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'|null
+     * @return 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'|'interacts-with-views'|null
      * @psalm-external-mutation-free
      */
     public static function resolveRole(string $fqClasslikeName): ?string

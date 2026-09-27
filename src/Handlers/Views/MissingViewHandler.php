@@ -30,8 +30,9 @@ use Psalm\Type\Union;
  * (make/first/renderWhen/renderUnless/renderEach/composer/creator) and its View facade,
  * ResponseFactory::view() (concrete, contract, and Response facade),
  * Router::view(), MailMessage::view()/markdown(), Mailable::view()/markdown()/text(),
- * Mailables\Content's constructor, and TestResponse::assertViewIs() — and narrows
- * the view() helper's return type past the stub's contract fallback to a concrete class.
+ * Mailables\Content's constructor, TestResponse::assertViewIs(), and
+ * InteractsWithViews::view() (a test-case trait method) — and narrows the view()
+ * helper's return type past the stub's contract fallback to a concrete class.
  *
  * The receiver classes for the method-call families are {@see ViewNameSignatures},
  * which also resolves a receiver back to a role so this handler knows which
@@ -276,6 +277,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_MAILABLE => self::checkMailableCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_TEST_RESPONSE => self::checkTestResponseCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_INTERACTS_WITH_VIEWS => self::checkInteractsWithViewsCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
         };
 
         return null;
@@ -529,6 +531,23 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         }
 
         self::checkArgViewName($callArgs, 0, 'value', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * InteractsWithViews::view() — a single view name at position 0. The trait's
+     * other two methods, blade() (raw template source) and component() (a class
+     * string), are not view-name signatures and must not be checked here.
+     *
+     * @param list<Arg> $callArgs
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkInteractsWithViewsCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        if ($methodNameLower !== 'view') {
+            return;
+        }
+
+        self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
     }
 
     /**
