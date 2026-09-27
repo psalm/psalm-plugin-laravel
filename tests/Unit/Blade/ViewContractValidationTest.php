@@ -170,6 +170,28 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString("'name'", $reported[0]['message']);
     }
 
+    /**
+     * Laravel merges `Component::data()` — the public properties and methods — into the view a
+     * class component renders, so a `render()` that passes only `['component' => $this]` still
+     * supplies every declared name. All three halves are asserted together: a blanket decline for
+     * Component subclasses would pass the first and silently lose the second.
+     */
+    #[Test]
+    public function a_class_components_public_properties_count_as_supplied(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'ComponentRender.php'), \var_export($issues, true));
+
+        $wrongType = $this->forFile($issues, 'ComponentWrongType.php');
+        $this->assertCount(1, $wrongType, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrongType[0]['type']);
+        $this->assertStringContainsString('$count', $wrongType[0]['message']);
+
+        // A userland data() can add any key, so the supplied set is open rather than enumerated.
+        $this->assertSame([], $this->forFile($issues, 'ComponentDataOverride.php'), \var_export($issues, true));
+    }
+
     #[Test]
     public function a_response_view_call_is_checked_like_the_helper(): void
     {
@@ -290,6 +312,9 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'NoContract.php'));
         // A spread shifts every position after it, so no argument can be read by position.
         $this->assertSame([], $this->forFile($issues, 'SpreadArgs.php'));
+        // A raw `<?php` docblock types a local the template assigns itself; it counts
+        // as declared for UnusedViewData and is never a contract a call site has to satisfy.
+        $this->assertSame([], $this->forFile($issues, 'RawLocalHint.php'));
     }
 
     #[Test]

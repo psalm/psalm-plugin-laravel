@@ -69,6 +69,14 @@ The check declines rather than guess. It is silent when:
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
 
+A view rendered from the `render()` of an `Illuminate\View\Component` subclass IS handled: Laravel
+merges `Component::data()` — every public non-static property, every public method minus
+`ignoredMethods()`, and `$attributes` — into the view's data, so those names count as supplied even
+though the `render()` passes only `['component' => $this]`. Property types are kept, so
+[InvalidViewVariableType](InvalidViewVariableType.md) still checks them against the template's
+declarations. A component with its own `data()` override can add names nothing can enumerate, so its
+supplied set is treated as open and this check declines for it.
+
 ### Known false positive: variables bound outside the call site
 
 The check reads the data one call site passes. It does not know about the ways Laravel binds a

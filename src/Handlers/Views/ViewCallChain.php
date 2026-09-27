@@ -40,24 +40,57 @@ use Psalm\Type\Union;
  * call: an unknown link may bind a different template or inject data, and a wrong answer here is a
  * false positive at the call site.
  *
+ * The ARGUMENTS are not the whole data set, though: a chain inside an `Illuminate\View\Component`
+ * subclass also receives whatever `Component::data()` merges in, which {@see ComponentRenderData}
+ * resolves from the analyzed class and which lands in `$frameworkData` rather than `$data`.
+ *
  * @internal
  */
 final class ViewCallChain
 {
     /**
-     * @param array<string, Union> $data     supplied variable name => the type passed for it
-     * @param bool                 $complete every contribution was proven, so a name absent from
-     *                                       $data is provably not supplied
-     *
-     * @psalm-mutation-free
+     * @param array<string, Union> $data          supplied variable name => the type passed for it
+     * @param array<string, Union> $frameworkData keys Laravel merges in around the call site rather
+     *                                            than from its arguments, so they count as supplied
+     *                                            but were never PASSED — {@see ComponentRenderData}
+     * @param bool                 $complete      every contribution was proven, so a name absent
+     *                                            from both sets is provably not supplied
      */
     private function __construct(
         public readonly string $viewName,
         public readonly array $data,
         public readonly bool $complete,
+        public readonly array $frameworkData = [],
     ) {}
 
+    /**
+     * Every key the rendered template actually receives, whatever supplied it.
+     *
+     * @return array<string, Union>
+     */
+    public function supplied(): array
+    {
+        return $this->data + $this->frameworkData;
+    }
+
     public static function from(Expr $expr, StatementsSource $source): ?self
+    {
+        $chain = self::walk($expr, $source);
+
+        if (!$chain instanceof self) {
+            return null;
+        }
+
+        $merged = ComponentRenderData::forSource($source);
+
+        if ($merged === null) {
+            return $chain;
+        }
+
+        return new self($chain->viewName, $chain->data, $chain->complete && $merged[1], $merged[0]);
+    }
+
+    private static function walk(Expr $expr, StatementsSource $source): ?self
     {
         /** @var list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending */
         $pending = [];

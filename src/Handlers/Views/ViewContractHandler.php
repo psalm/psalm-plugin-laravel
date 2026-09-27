@@ -117,16 +117,18 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         $suppressedIssues = $source->getSuppressedIssues();
 
         if (self::$validateViewData) {
-            foreach ($contract->vars as $name => $var) {
-                $supplied = $chain->data[$name] ?? null;
+            $supplied = $chain->supplied();
 
-                if ($supplied === null) {
+            foreach ($contract->vars as $name => $var) {
+                $passed = $supplied[$name] ?? null;
+
+                if ($passed === null) {
                     self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
 
                     continue;
                 }
 
-                self::checkType($chain, $var, $supplied, $codeLocation, $source, $suppressedIssues);
+                self::checkType($chain, $var, $passed, $codeLocation, $source, $suppressedIssues);
             }
         }
 

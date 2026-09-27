@@ -117,7 +117,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $chain = ViewCallChain::from($expr, $event->getStatementsSource());
 
         if ($chain instanceof ViewCallChain) {
-            self::record($chain->viewName, $chain->data, $chain->complete);
+            self::record($chain->viewName, $chain->supplied(), $chain->complete);
 
             return null;
         }
