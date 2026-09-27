@@ -11,5 +11,3 @@ function renderFromValidator(\Illuminate\Validation\Validator $validator): void 
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string
-PossiblyUndefinedStringArrayOffset on line %d: Possibly undefined array offset ''body'' is risky given expected type 'string'. Consider using isset beforehand.

@@ -23,13 +23,6 @@ LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-12.12.2}"
 # @see https://github.com/vimeo/psalm/issues/11958
 LARAVEL_FRAMEWORK_CONSTRAINT="${LARAVEL_FRAMEWORK_CONSTRAINT:-}"
 
-# Optional Composer constraint applied to laravel/framework after the project is scaffolded.
-# Empty means whatever laravel/laravel resolves. Set it to hold the framework back when a
-# release breaks the analysis itself rather than the plugin. Currently set by the workflow to
-# dodge the Psalm scan-phase crash on laravel/framework >= 13.32.
-# @see https://github.com/vimeo/psalm/issues/11958
-LARAVEL_FRAMEWORK_CONSTRAINT="${LARAVEL_FRAMEWORK_CONSTRAINT:-}"
-
 # Terminal colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
