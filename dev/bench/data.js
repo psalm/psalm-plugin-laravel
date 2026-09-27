@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789508750606,
+  "lastUpdate": 1790545732579,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11400,6 +11400,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 25.29,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "9ea2c1fc86bcca6e968ebcea2a43c488518a8dae",
+          "message": "Merge pull request #1587 from psalm/fix/psalm-beta22\n\nchore: require Psalm 7.0.0-beta22",
+          "timestamp": "2026-09-27T18:19:34+02:00",
+          "tree_id": "a975838a7a80b365e31587b0a54b26b0d96f862f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9ea2c1fc86bcca6e968ebcea2a43c488518a8dae"
+        },
+        "date": 1790545731398,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.86,
+            "range": "± 0.57",
             "unit": "s"
           },
           {
