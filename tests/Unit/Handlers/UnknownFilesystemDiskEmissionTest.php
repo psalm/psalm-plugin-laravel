@@ -60,9 +60,9 @@ final class UnknownFilesystemDiskEmissionTest extends TestCase
                 's3-old',          // self::OLD
                 'missing-literal', // Storage::disk('...')
                 'missing-alias',   // \Storage::disk('...')
-                'archiv-typo',     // string-backed enum case
+                'archive-legacy',  // string-backed enum case
                 'backups',         // pure enum: enum_value() yields the case name
-                'archiv-typo',     // \Storage::drive() with an enum case
+                'archive-legacy',  // \Storage::drive() with an enum case
                 's3-old',          // DiskNames::OLD
                 'archive-copy',    // constant expression resolved by Psalm
                 's3-old',          // DiskUsage: Storage::disk('s3-old')
