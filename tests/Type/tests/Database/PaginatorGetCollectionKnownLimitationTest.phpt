@@ -15,6 +15,13 @@ use Illuminate\Pagination\LengthAwarePaginator;
  *
  * See the docblock on AbstractPaginator::getCollection() in
  * stubs/common/Pagination/Pagination.phpstub for the full trade-off.
+ *
+ * Same provenance family: `through()` transforms the wrapped collection IN PLACE
+ * (`AbstractPaginator::through()` calls `$this->items->transform($callback)`, see
+ * AbstractPaginator.php:363 in vendor/laravel/framework) — the wrapped collection object
+ * never changes class. `Part::query()->paginate()->through(fn(Part $p): WorkOrder =>
+ * new WorkOrder())->getCollection()` therefore types as `WorkOrderCollection` (TValue is
+ * now WorkOrder) while staying a `PartCollection` at runtime.
  */
 function manual_construction_holds_plain_support_collection_not_eloquent(): void
 {

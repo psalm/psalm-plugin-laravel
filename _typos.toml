@@ -64,6 +64,10 @@ IIF = "IIF"
 IIFE = "IIFE"
 IIFEs = "IIFEs"
 
+# Laravel's `Illuminate\Contracts\Support\Responsable` is a real contract name;
+# typos suggests "Responsible" but the framework spelling is canonical.
+Responsable = "Responsable"
+
 [default.extend-words]
 # `mis-` is a valid English prefix (mis-cased, mis-infer, mis-identify, etc.).
 # typos tokenizes the bare `mis` and flags it as a typo of "miss"/"mist".
@@ -83,3 +87,8 @@ encrypter = "encrypter"
 # appears in WhereColumnTaintHandler's docblock and the where-family taint docs/tests.
 # typos tokenizes the `Wheres` sub-word and flags it as a typo of "Whereas".
 Wheres = "Wheres"
+# Same as the Encrypter bare-word entry above: "Invokable" appears as a sub-word inside
+# compound identifiers (`PromptGuardInvokableMiddleware`, `InvokableAgent`, `askInvokable`,
+# ...) that the extend-identifiers entries above don't cover one by one.
+Invokable = "Invokable"
+invokable = "invokable"

@@ -138,7 +138,7 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
-        $guard_name = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard);
+        $guard_name = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard, $event->getSource());
         if ($guard_name === null) {
             return null; // dynamic guard name — cannot narrow statically
         }
@@ -158,11 +158,14 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
      * the Guard / StatefulGuard interfaces it @mixins. The MissingMethodCallHandler then asks
      * Methods::getMethodParams for params Psalm cannot find, throwing UnexpectedValueException.
      *
-     * Only `guard()` is scoped to the facade. AuthManager / Factory declare guard() with
-     * `string|null` today, so our override would match — but the early-return guards against
-     * future Laravel signature changes (e.g. accepting \UnitEnum|string|null) that would turn
-     * our override into false positives on valid calls. Letting Psalm derive guard()'s params
-     * from the source for non-facade receivers keeps that signature in sync automatically.
+     * Only `guard()` is scoped to the facade. For the real declaring classes (AuthManager /
+     * Factory) Psalm resolves params from source, so the signature — `?string` pre-13.5,
+     * `\UnitEnum|string|null` from Laravel 13.5.0 onward (issue #1389) — stays version-correct
+     * automatically. For facade / root-alias receivers `guard()` only exists as a parent
+     * `@method` annotation with no real params of its own; {@see guardParams} copies the
+     * canonical facade's own declared `@method static` params instead of hardcoding a
+     * signature here, so it likewise tracks whatever version of Laravel is actually installed
+     * (mirrors {@see \Psalm\LaravelPlugin\Handlers\Cache\CacheManagerReturnTypeHandler::pseudoMethodParams()}).
      *
      * INVARIANT: every method handled by {@see getMethodReturnType} above must have a non-null
      * arm in the match below (the `guard()` early-return is the documented exception, safe because
@@ -178,18 +181,8 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
     {
         $method_name_lowercase = $event->getMethodNameLowercase();
 
-        // Defer guard()'s params to Laravel source for the real declaring classes
-        // (AuthManager / Factory), where `guard()` is a concrete method Psalm can resolve.
-        // For facade and root-alias receivers (`Illuminate\Support\Facades\Auth`, `\Auth`, ...)
-        // `guard()` only exists as a parent `@method` annotation, so returning null here
-        // re-triggers the #454/#854 `Cannot get method params for ...::guard` crash.
-        if ($method_name_lowercase === 'guard'
-            && \in_array($event->getFqClasslikeName(), [
-                \Illuminate\Auth\AuthManager::class,
-                \Illuminate\Contracts\Auth\Factory::class,
-            ], true)
-        ) {
-            return null;
+        if ($method_name_lowercase === 'guard') {
+            return self::guardParams($event);
         }
 
         return match ($method_name_lowercase) {
@@ -197,17 +190,6 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             // SessionGuard::getLastAttempted() — all take no parameters
             'user', 'getuser', 'authenticate', 'getlastattempted' => [],
 
-            // AuthManager::guard(?string $name = null)
-            'guard' => [
-                new FunctionLikeParameter(
-                    'name',
-                    false,
-                    new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
-                    new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
-                    is_optional: true,
-                    default_type: Type::getNull(),
-                ),
-            ],
             // SessionGuard::logoutOtherDevices(#[\SensitiveParameter] string $password)
             'logoutotherdevices' => [
                 new FunctionLikeParameter('password', false, Type::getString(), Type::getString(), is_optional: false),
@@ -223,5 +205,47 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
             ],
             default => null,
         };
+    }
+
+    /**
+     * `guard()`'s params. Real declaring classes (AuthManager / Factory) keep Laravel's actual,
+     * version-correct signature — return null so Psalm derives it from source. Facade and
+     * root-alias pseudo-method calls have no real params of their own, so copy the canonical
+     * facade's declared `@method static` params: the `\UnitEnum` widening Laravel 13.5.0 added
+     * is then honored automatically, and live storage params carry taint sinks that a hardcoded
+     * {@see FunctionLikeParameter} drops.
+     *
+     * Never returns null for those receivers — that re-triggers the #454/#854 crash — so an
+     * unreadable facade storage falls back to the pre-13.5 `string|null` signature.
+     *
+     * @return list<FunctionLikeParameter>|null
+     */
+    private static function guardParams(MethodParamsProviderEvent $event): ?array
+    {
+        if (\in_array($event->getFqClasslikeName(), [
+            \Illuminate\Auth\AuthManager::class,
+            \Illuminate\Contracts\Auth\Factory::class,
+        ], true)) {
+            return null;
+        }
+
+        try {
+            $declared = $event->getStatementsSource()?->getCodebase()->classlike_storage_provider
+                ->get(\Illuminate\Support\Facades\Auth::class)
+                ->pseudo_static_methods['guard'] ?? null;
+        } catch (\InvalidArgumentException) {
+            $declared = null; // facade storage missing — its @method tag remains authoritative
+        }
+
+        return $declared?->params ?? [
+            new FunctionLikeParameter(
+                'name',
+                false,
+                new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
+                new Type\Union([new Type\Atomic\TString(), new Type\Atomic\TNull()]),
+                is_optional: true,
+                default_type: Type::getNull(),
+            ),
+        ];
     }
 }

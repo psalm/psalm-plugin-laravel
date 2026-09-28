@@ -1,0 +1,46 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+use Illuminate\Support\Collection;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TranscriptionSegment;
+use Laravel\Ai\Responses\Data\Usage;
+
+/**
+ * A transcript is model output like any other: the audio was supplied by a user,
+ * so the text is attacker-authored content that a speech model merely re-typed.
+ * `$text` property reads are sourced by LlmOutputTaintHandler, which lists this
+ * class explicitly because it extends nothing (no subclass walk reaches it).
+ * `__toString()` returns `$this->text` verbatim upstream, so the string cast is
+ * the same trust boundary and is annotated here.
+ *
+ * Hierarchy and member list copied from
+ * `vendor/laravel/ai/src/Responses/TranscriptionResponse.php`: re-declaring the
+ * class resets the reflected interface list, and restating every member keeps
+ * `$segments`, `$usage` and `$meta` resolvable even if the class is ever reached
+ * only through a return type, in which case the stub becomes its sole definition.
+ *
+ * @psalm-api
+ */
+class TranscriptionResponse implements \Stringable
+{
+    public string $text;
+
+    /** @var Collection<int, TranscriptionSegment> */
+    public Collection $segments;
+
+    public Usage $usage;
+
+    public Meta $meta;
+
+    /**
+     * @param Collection<int, TranscriptionSegment> $segments
+     */
+    public function __construct(string $text, Collection $segments, Usage $usage, Meta $meta) {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function __toString(): string {}
+}

@@ -87,7 +87,13 @@ final class AuthMethodHandlerTest extends TestCase
         $this->assertFalse($params[0]->is_optional);
     }
 
-    public function testGetMethodParamsForGuard(): void
+    /**
+     * Covers the FALLBACK arm only: an event built without a statements source cannot read the
+     * facade's declared `@method static` params. The live-storage arm is pinned by
+     * `tests/Type/tests/Auth/AuthEnumGuardTest.phpt`, which needs Laravel 13.5.0 for the
+     * `\UnitEnum` widening to be observable at all.
+     */
+    public function testGetMethodParamsForGuardFallsBackWithoutSource(): void
     {
         $event = new MethodParamsProviderEvent(
             \Illuminate\Support\Facades\Auth::class,

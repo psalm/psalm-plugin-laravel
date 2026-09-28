@@ -345,6 +345,8 @@ final class ClosureTypeFactory
      * | `Expr\BinaryOp\Concat` of literal strings | concatenated literal-string     |
      * | `Expr\BinaryOp` arithmetic of inferable numerics | `int|float`            |
      * | anything else                   | `null` (caller bails)                     |
+     *
+     * @psalm-external-mutation-free
      */
     private static function inferExpression(Node\Expr $expr): ?Union
     {
@@ -414,6 +416,8 @@ final class ClosureTypeFactory
      * both reduce to single string literals. Anything coarser (mixed types,
      * non-literal operand, nested non-string union) bails, because we cannot
      * produce a single literal value to fold the result into.
+     *
+     * @psalm-external-mutation-free
      */
     private static function inferConcat(Node\Expr\BinaryOp\Concat $expr): ?Union
     {
@@ -477,6 +481,8 @@ final class ClosureTypeFactory
      * `inferExpression()` calls: that gate is what prevents `1 + 'x'` from
      * widening to `int|float` (which would be wrong, since the runtime
      * outcome is a `TypeError`).
+     *
+     * @psalm-external-mutation-free
      */
     private static function inferArithmetic(Node\Expr\BinaryOp $expr): ?Union
     {
@@ -526,6 +532,8 @@ final class ClosureTypeFactory
      * are conservative bails: we deliberately don't try to model partial
      * arrays. The empty array is its own degenerate case — Psalm exposes a
      * dedicated empty-array Union for it.
+     *
+     * @psalm-external-mutation-free
      */
     private static function inferArray(Node\Expr\Array_ $expr): ?Union
     {

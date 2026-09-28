@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-/** @psalm-suppress PossiblyUnusedProperty $default and $unsigned will be used for model attribute type inference */
 final class SchemaColumn
 {
     public const TYPE_STRING = 'string';

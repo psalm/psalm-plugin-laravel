@@ -41,7 +41,7 @@ final class RequestHandler implements MethodReturnTypeProviderInterface
             return null; // normally should not happen (e.g. empty or invalid auth.php)
         }
 
-        $guard = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard);
+        $guard = self::getGuardNameFromFirstArgument($event->getStmt(), $default_guard, $event->getSource());
         if (!\is_string($guard)) {
             return null;
         }

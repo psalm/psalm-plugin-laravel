@@ -90,6 +90,8 @@ final class IssueUrlGenerator
             '- findUnknownFilesystemDisks: ' . self::formatBool($pluginConfig->findUnknownFilesystemDisks),
             '- findSerializedQueuedModels: ' . self::formatBool($pluginConfig->findSerializedQueuedModels),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
+            '- findPromptInjection: ' . self::formatNullableBool($pluginConfig->findPromptInjection),
+            '- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(),
             '- cachePath: ' . self::sanitizeCachePath($pluginConfig->cachePath),
             '- experimental: ' . self::formatBool($pluginConfig->experimental),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
@@ -122,6 +124,12 @@ final class IssueUrlGenerator
     private static function formatBool(bool $value): string
     {
         return $value ? 'true' : 'false';
+    }
+
+    /** @psalm-pure */
+    private static function formatNullableBool(?bool $value): string
+    {
+        return $value === null ? 'auto' : self::formatBool($value);
     }
 
     /**

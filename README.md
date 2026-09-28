@@ -9,7 +9,7 @@
 
 Laravel static analysis with built-in security scanning.
 
-The only free tool that combines deep Laravel static analysis with taint-based vulnerability detection that traces user input from request to sink: SQL injection, XSS, shell injection, file traversal, SSRF, open redirects, and timing-unsafe secret comparisons.
+The only free tool that combines deep Laravel static analysis with taint-based vulnerability detection that traces user input from request to sink: SQL injection, XSS, shell injection, file traversal, SSRF, open redirects, timing-unsafe secret comparisons, and LLM prompt injection (`laravel/ai` agents).
 Everything runs inside your project and your CI. No account, no cloud upload, no code leaves your machine.
 
 ```php
@@ -70,6 +70,8 @@ Unlike pattern-matching tools, Psalm follows dataflow across function boundaries
 | Timing attack (CWE-208) | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                         |
 
 You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
+
+Writing `laravel/ai` prompt middleware that blocks injection? Annotate it so the plugin stops reporting a mitigation you already ship: [Marking prompt-guard middleware as trusted](docs/security.md#marking-prompt-guard-middleware-as-trusted).
 
 ## Custom checks
 

@@ -75,6 +75,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\CollectingProgress;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
@@ -1735,6 +1736,10 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $this->assertSame([], $this->metadataFor(Customer::class)->relations());
+        // An empty map on its own cannot tell the short-circuit apart from a model that genuinely
+        // has no relations, and consumers gate on the section flag rather than on emptiness. Drop
+        // the guard and the assertion above still passes; this one does not.
+        $this->assertFalse($this->metadataFor(Customer::class)->isComplete(ModelMetadata::SECTION_RELATIONS));
     }
 
     #[Test]
@@ -1802,7 +1807,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
-        $progressProperty->setValue($codebase, $progress ?? new VoidProgress());
+        $progressProperty->setValue($codebase, $progress ?? new CollectingProgress());
 
         return $codebase;
     }

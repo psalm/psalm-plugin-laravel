@@ -50,6 +50,7 @@ final class PluginConfigTest extends TestCase
         // null = auto-detect via class_exists('Laravel\Octane\Octane') at runtime;
         // explicit true/false in XML overrides the auto-detection.
         $this->assertNull($config->findOctaneIncompatibleBinding);
+        $this->assertNull($config->findPromptInjection);
         $this->assertTrue($config->resolveDynamicWhereClauses);
         $this->assertTrue($config->resolveConfigReturnTypes);
         $this->assertSame([], $config->configDirectories);
@@ -331,6 +332,48 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_prompt_injection_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findPromptInjection);
+    }
+
+    #[Test]
+    public function find_prompt_injection_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="false" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findPromptInjection);
+    }
+
+    #[Test]
+    public function find_prompt_injection_without_value_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('findPromptInjection> requires a `value` attribute');
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_prompt_injection_invalid_value_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="yes" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findPromptInjection value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
     public function report_implicit_query_builder_calls_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><reportImplicitQueryBuilderCalls value="true" /></pluginClass>');
@@ -397,14 +440,10 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function find_serialized_queued_models_explicit_true_with_experimental(): void
+    public function find_serialized_queued_models_explicit_true_without_experimental(): void
     {
-        $xml = new \SimpleXMLElement(
-            '<pluginClass>'
-            . '<experimental value="true" />'
-            . '<findSerializedQueuedModels value="true" />'
-            . '</pluginClass>',
-        );
+        // The one combination `= $experimental` alone cannot satisfy: the flag must be read.
+        $xml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="true" /></pluginClass>');
 
         $config = PluginConfig::fromXml($xml);
 

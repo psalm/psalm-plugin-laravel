@@ -65,7 +65,7 @@ final class ModelRelationshipPropertyHandler
     {
         $source = $event->getSource();
 
-        if (!$source || !$event->isReadMode()) {
+        if (!$source instanceof \Psalm\StatementsSource || !$event->isReadMode()) {
             return null;
         }
 
@@ -109,7 +109,7 @@ final class ModelRelationshipPropertyHandler
     {
         $source = $event->getSource();
 
-        if (!$source || !$event->isReadMode()) {
+        if (!$source instanceof \Psalm\StatementsSource || !$event->isReadMode()) {
             return null;
         }
 
