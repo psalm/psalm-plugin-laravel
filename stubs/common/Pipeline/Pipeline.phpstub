@@ -16,7 +16,8 @@ class Pipeline implements PipelineContract
      *
      * Accepts an array of pipes or variadic pipe arguments via func_get_args().
      *
-     * @param  array<\Closure|callable|string>|\Closure|callable|string  $pipes
+     *
+     * @param  array<\Closure|callable|string|object>|\Closure|callable|string|object  $pipes
      * @return $this
      *
      * @psalm-variadic
@@ -41,7 +42,8 @@ class Pipeline implements PipelineContract
      *
      * Accepts an array of pipes or variadic pipe arguments via func_get_args().
      *
-     * @param  array<\Closure|callable|string>|\Closure|callable|string  $pipes
+     *
+     * @param  array<\Closure|callable|string|object>|\Closure|callable|string|object  $pipes
      * @return $this
      *
      * @psalm-variadic
