@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Internal\IssueUrlGenerator;
+use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 
 #[CoversClass(IssueUrlGenerator::class)]
 final class IssueUrlGeneratorTest extends TestCase
@@ -157,6 +158,8 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- findMissingTranslations: false', $body);
         $this->assertStringContainsString('- findMissingViews: false', $body);
         $this->assertStringContainsString('- findMissingRoutes: false', $body);
+        $this->assertStringContainsString('- findPromptInjection: auto', $body);
+        $this->assertStringContainsString('- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(), $body);
         // Tri-state default (null) renders as "auto (...)" with the resolved
         // class_exists() outcome so triagers know whether the handler actually ran.
         // The plugin's own composer.json does not depend on laravel/octane, so the
@@ -180,6 +183,7 @@ final class IssueUrlGeneratorTest extends TestCase
             . '<findMissingViews value="true" />'
             . '<findMissingRoutes value="true" />'
             . '<findOctaneIncompatibleBinding value="true" />'
+            . '<findPromptInjection value="false" />'
             . '<failOnInternalError value="true" />'
             . '</pluginClass>',
         );
@@ -193,7 +197,39 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- findMissingViews: true', $body);
         $this->assertStringContainsString('- findMissingRoutes: true', $body);
         $this->assertStringContainsString('- findOctaneIncompatibleBinding: true', $body);
+        $this->assertStringContainsString('- findPromptInjection: false', $body);
         $this->assertStringContainsString('- failOnInternalError: true', $body);
+    }
+
+    #[Test]
+    public function body_renders_explicit_prompt_injection_enforcement(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><findPromptInjection value="true" /></pluginClass>',
+        );
+
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), PluginConfig::fromXml($xml)));
+
+        $this->assertStringContainsString('- findPromptInjection: true', $body);
+    }
+
+    #[Test]
+    public function body_makes_the_laravel_ai_gate_and_installed_version_auditable(): void
+    {
+        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
+        $version = LaravelAiIntegration::installedVersion();
+
+        if ($version === null) {
+            $this->assertStringContainsString('laravel/ai not installed', $body);
+
+            return;
+        }
+
+        $this->assertStringContainsString('laravel/ai ' . $version, $body);
+        $this->assertStringContainsString(
+            LaravelAiIntegration::isEnabled() ? 'laravelAiIntegrationGate: enabled' : 'laravelAiIntegrationGate: disabled',
+            $body,
+        );
     }
 
     /**

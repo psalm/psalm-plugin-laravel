@@ -12,6 +12,7 @@ return RectorConfig::configure()
     ->withRootFiles()
     ->withSkip([
         'tests/Unit/Handlers/Eloquent/Schema/migrations',
+        'bin/ci', // Standalone procedural scripts, not part of the analysed plugin surface. Rector rewrote every `report(...)` call here down to a single argument while leaving the 5-parameter declaration untouched, so the auto-fix workflow committed a file that fatals on load.
         'tests/Type/macro-fixtures-vendor-style.php', // The vendor-style macro fixture (PR #991 + PR #994) deliberately exercises closures without native return types or docblock `@return` so the AST-scan + body-inference paths are the only sources of narrowing.
         \Rector\PHPUnit\CodeQuality\Rector\FuncCall\AssertFuncCallToPHPUnitAssertRector::class => ['tests/*'], //  Rewrites `assert($x instanceof Foo)` inside test classes to `Assert::assertInstanceOf(...)`,  the two are not equivalent
         \Rector\PHPUnit\CodeQuality\Rector\MethodCall\AssertEmptyNullableObjectToAssertInstanceofRector::class => ['tests/*'],

@@ -82,10 +82,6 @@ trait ExtractsGuardNameFromCallLike
             return null; // unresolvable enum class
         }
 
-        if ($storage->enum_type !== 'string') {
-            return null; // int-backed or pure enum — out of scope, see docblock above
-        }
-
         $case = $storage->enum_cases[$expr->name->name] ?? null;
         if ($case === null) {
             return null; // not an enum case (e.g. a plain class constant) or unknown case
@@ -97,6 +93,10 @@ trait ExtractsGuardNameFromCallLike
             return null; // unresolvable case value (deferred constant expression)
         }
 
+        // getValue() answers TLiteralInt for an int-backed case and null for a well-formed pure
+        // one, so this single check declines both without a separate enum_type gate. It does
+        // answer TLiteralString for a pure enum whose case illegally carries a value, but PHP
+        // refuses to compile that and Psalm flags the declaration itself.
         return $value instanceof TLiteralString ? $value->value : null;
     }
 }

@@ -1,0 +1,49 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Closure;
+use Laravel\Ai\Files\Audio;
+use Laravel\Ai\Files\Document;
+use Laravel\Ai\Files\Image;
+use Laravel\Ai\Files\Video;
+use Laravel\Ai\Gateway\FakeEmbeddingGateway;
+use Laravel\Ai\PendingResponses\PendingEmbeddingsGeneration;
+
+class Embeddings
+{
+    /**
+     * This method also serves ordinary query embedding for vector search; it
+     * does not invoke a generative model and is intentionally not an
+     * `llm_prompt` sink.
+     *
+     * The union is copied from vendor/laravel/ai/src/Embeddings.php. Narrowing
+     * it to `string[]` here made a valid `Document::fromString()` argument a
+     * false `InvalidArgument`, and native types match on both sides (`array`),
+     * so bin/ci/check-laravel-ai-stub-parity.php cannot see docblock drift of
+     * this shape.
+     *
+     * @param  array<int, string|Audio|Document|Image|Video>  $inputs
+     *
+     */
+    public static function for(array $inputs): PendingEmbeddingsGeneration {}
+
+    public static function fake(Closure|array $responses = []): FakeEmbeddingGateway {}
+
+    public static function assertGenerated(Closure $callback): void {}
+
+    public static function assertNotGenerated(Closure $callback): void {}
+
+    public static function assertNothingGenerated(): void {}
+
+    public static function assertQueued(Closure $callback): void {}
+
+    public static function assertNotQueued(Closure $callback): void {}
+
+    public static function assertNothingQueued(): void {}
+
+    public static function isFaked(): bool {}
+
+    /** @return array<float> */
+    public static function fakeEmbedding(int $dimensions): array {}
+}

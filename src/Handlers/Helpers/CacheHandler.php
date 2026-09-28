@@ -38,7 +38,7 @@ final class CacheHandler implements FunctionReturnTypeProviderInterface
         $first_arg_type = Arg::typeAt($call_args, $event->getStatementsSource(), 0);
 
         /** @see \Illuminate\Contracts\Cache\Store::put() */
-        if ($first_arg_type && $first_arg_type->isArray()) {
+        if ($first_arg_type instanceof \Psalm\Type\Union && $first_arg_type->isArray()) {
             return new Type\Union([new TBool()]);
         }
 

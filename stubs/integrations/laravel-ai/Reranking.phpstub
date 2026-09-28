@@ -1,0 +1,32 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Closure;
+use Illuminate\Support\Collection;
+use Laravel\Ai\Gateway\FakeRerankingGateway;
+use Laravel\Ai\PendingResponses\PendingReranking;
+
+class Reranking
+{
+    /**
+     * Documents are fed to the reranking model alongside the query —
+     * an attacker-controlled document can hijack the reranker the same way it
+     * hijacks the main LLM.
+     *
+     * @param  Collection<int, string>|array<int, string>  $documents
+     *
+     * @psalm-taint-sink llm_prompt $documents
+     */
+    public static function of(Collection|array $documents): PendingReranking {}
+
+    public static function fake(Closure|array $responses = []): FakeRerankingGateway {}
+
+    public static function assertReranked(Closure $callback): void {}
+
+    public static function assertNotReranked(Closure $callback): void {}
+
+    public static function assertNothingReranked(): void {}
+
+    public static function isFaked(): bool {}
+}

@@ -1,0 +1,34 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+use ArrayAccess;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+
+/**
+ * Structured-output sibling of TextResponse, carrying the same
+ * ProvidesStructuredResponse surface as StructuredAgentResponse but a
+ * different parent. It overrides `__toString()` to serialize `$structured`
+ * rather than `$text`, which drops the source annotation TextResponse's stub
+ * puts on that method, so it is repeated here.
+ *
+ * Hierarchy and member list copied from
+ * `vendor/laravel/ai/src/Responses/StructuredTextResponse.php`.
+ *
+ * @template-implements ArrayAccess<array-key, mixed>
+ */
+class StructuredTextResponse extends TextResponse implements ArrayAccess
+{
+    use ProvidesStructuredResponse;
+
+    /**
+     * @param array<array-key, mixed> $structured
+     */
+    public function __construct(array $structured, string $text, public Usage $usage, public Meta $meta) {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function __toString(): string {}
+}

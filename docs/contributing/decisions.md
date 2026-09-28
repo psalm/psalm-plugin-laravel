@@ -204,6 +204,58 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Exception:** Sinks for high-severity, targeted operations remain valid — e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
 
+### Call-site sink exemptions are applied at issue emission, not in the taint graph
+
+**Decision:** When one call site has to be exempted from a stub's taint sink, implement `BeforeAddIssueInterface`, re-check the call site from the emitted issue, and return `false`. Do not mutate the taint graph through `RemoveTaintsInterface`.
+
+**Why:** `AddRemoveTaintsEvent` identifies neither the method nor the argument offset, so a graph-level removal can only be keyed on the content AST node. Psalm dispatches that same event for the same node a second time while fetching the node's own callee return type. For a callee carrying `@psalm-flow` without `@psalm-taint-specialize` (`decrypt()`, and most helper stubs) the removal is then written onto that callee's single project-wide argument-to-return edge, which silences the removed taint kind on every unrelated flow through it. Emission-time suppression writes nothing, so the worst outcome of a wrong answer is a retained finding.
+
+**Dead end (#1348, upstream vimeo/psalm#11924):** the shipped bridge recorded the content node in a `WeakMap` from `BeforeExpressionAnalysisInterface` and answered `RemoveTaintsInterface` on node identity. It needed a syntactic gate refusing any content that was itself a function or static call, which kept a known false positive, and the weak keying existed only because Psalm frees foreign ASTs mid-file (`ProjectAnalyzer::getMethodMutations()`, `ClassLikes::getTraitNode()`) without dispatching `BeforeFileAnalysisEvent`, so an `spl_object_id` key could be reissued to an unrelated node and strip taint off it.
+
+**Rejected alternatives:** compensating with `AddTaintsInterface` after the fact joins the same last-write-wins race on the shared edge. Counting dispatches to tell the call-site event from the return-type-fetch event breaks across roughly seventeen dispatch sites, with the poisonous one firing first.
+
+**Constraint:** the handler must be stateless. Taint findings are resolved in the main process after the worker pool exits (`Analyzer::analyzeFiles()`) while type issues are emitted inside workers, so nothing recorded by an analysis-phase hook is still there. Re-derive from the issue plus `Codebase::getStatementsForFile()`.
+
+**Reference implementation:** `src/Handlers/Http/ResponseFactoryTaintHandler.php`.
+
+**Widenings (#1416):** the all-literal gate cleared 1 of 20 real `response()->make()` sites, so four widenings landed, each still failing toward a retained finding. Mechanics live in the handler's docblocks; the decisions were:
+
+- A headers variable resolves only on proof of one dominating assignment: exactly two occurrences of the name in the enclosing function-like, the straight-line `$headers = [...]` before the call and the call argument itself. Variable-variables, the `extract()` family, and top-level code cannot be proven and keep the sink.
+- An interpolated or concatenated disposition proves `attachment` by its literal leading part alone; nothing after a literal parameter separator can retract the token.
+- `new Illuminate\Http\Response(...)` is a second route to the same sink. Its journey tail (dumped empirically) matches `make()`'s shape, so the matcher trusts the label and needs no class gate.
+- A safe `Content-Type` is proven by a denylist, not the whitelist the issue proposed: deny types containing `html`, `xml` (an XML document can carry an XHTML-namespaced script) or `script` (the WHATWG JavaScript group; `application/postscript` is accepted collateral), plus `multipart/*` and the sniffing escapes `unknown/unknown` and `application/unknown`. Every other well-formed literal type is exempt, so vendor download types need no maintenance list.
+
+**Second application (#1435, `PromptGuardTaintHandler`):** the same mechanism exempts a
+`TaintedLlmPrompt` at a `laravel/ai` `prompt()` / `stream()` call site. Two facts made it cheaper
+than #1348:
+
+- The journey tail label carries the RECEIVER class, not the declaring trait or base
+  (`Internal/Codebase/Methods::getCasedMethodId()` returns the original fq class name unless it is
+  all-lowercase). Dumped empirically on 7.0.0-beta19 with a child class inheriting `middleware()`
+  from an abstract base: the label named the child. So the class is free at emission time, no AST
+  read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
+- The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s
+  declared return type (as an object, a `class-string<Guard>`, or a `Guard::class` literal) whose
+  dispatched method populates `FunctionLikeStorage::$removed_taints` with
+  `TaintKind::INPUT_LLM_PROMPT`, which is what `@psalm-taint-escape llm_prompt` already writes.
+
+**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision, not a fixed `handle`.**
+`Pipeline::carry()` tests `is_callable($pipe)` before `method_exists($pipe, 'handle')`, so an object
+entry with `__invoke` never reaches its own `handle()`, while a class-string entry is not callable,
+takes the container branch, and lands on `handle()` even when `__invoke` exists. The handler mirrors
+both orders per candidate rather than assuming one, and consults only the first method that exists:
+runtime has no fallthrough to the other one, so neither does the exemption. Confirmed against PHP's
+`is_callable()` semantics directly. A closure entry is unprovable by construction and always keeps
+the finding.
+
+**Trust the tag, do not prove the body.** An AST proof of `middleware()`'s body was designed and
+rejected: it would hardcode one guard vendor's FQN and constructor parameter names (a pre-1.0
+signature that has already moved), it could not distinguish a blocking guard from a logging one
+anyway, and it would exempt nothing for an app-local or second-vendor guard. Reading an escape
+annotation instead keeps the plugin package-agnostic and makes the exemption opt-in by the guard
+author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
+records that a mitigation is attached, not that a payload is neutralised.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in

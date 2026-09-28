@@ -1,0 +1,34 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Closure;
+use Laravel\Ai\Gateway\FakeAudioGateway;
+use Laravel\Ai\PendingResponses\PendingAudioGeneration;
+
+class Audio
+{
+    /**
+     * TTS input. The text is read by the model that does the synthesis;
+     * adversarial inputs can steer voice, language, or emit unintended speech.
+     *
+     * @psalm-taint-sink llm_prompt $text
+     */
+    public static function of(string $text): PendingAudioGeneration {}
+
+    public static function fake(Closure|array $responses = []): FakeAudioGateway {}
+
+    public static function assertGenerated(Closure $callback): void {}
+
+    public static function assertNotGenerated(Closure $callback): void {}
+
+    public static function assertNothingGenerated(): void {}
+
+    public static function assertQueued(Closure $callback): void {}
+
+    public static function assertNotQueued(Closure $callback): void {}
+
+    public static function assertNothingQueued(): void {}
+
+    public static function isFaked(): bool {}
+}

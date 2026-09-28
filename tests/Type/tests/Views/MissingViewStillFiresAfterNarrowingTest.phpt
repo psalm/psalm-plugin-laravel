@@ -16,7 +16,13 @@ function _diFactory(\Illuminate\View\Factory $factory): void {
     $_alsoMissing = $factory->make('also-missing');
     /** @psalm-check-type-exact $_alsoMissing = \Illuminate\View\View */
 }
+
+// first() is in ProducerReturnTypeHandler::FAMILIES' method list too — the same
+// ordering requirement applies to it, not only to make().
+$_firstMissing = \Illuminate\Support\Facades\View::first(['definitely-missing-a', 'definitely-missing-b']);
+/** @psalm-check-type-exact $_firstMissing = \Illuminate\View\View */
 ?>
 --EXPECTF--
 MissingView on line %d: View 'definitely-missing-view' not found in any of the registered view paths
 MissingView on line %d: View 'also-missing' not found in any of the registered view paths
+MissingView on line %d: None of the views 'definitely-missing-a', 'definitely-missing-b' were found in any of the registered view paths
