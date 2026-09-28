@@ -25,7 +25,20 @@ function pipeline_through_variadic(Pipeline $pipeline): void
     /** @psalm-check-type-exact $_closure = Pipeline&static */
 }
 
-function pipeline_pipe_variadic(Pipeline $pipeline): void
+/**
+ * Pre-instantiated pipe objects are valid: Pipeline::carry() calls the pipe's
+ * method (default `handle`) on anything that is an object.
+ */
+function pipeline_through_object_pipes(Pipeline $pipeline, object $pipe, object $anotherPipe): void
+{
+    $_object = $pipeline->through($pipe);
+    /** @psalm-check-type-exact $_object = Pipeline&static */
+
+    $_list = $pipeline->through([$pipe, $anotherPipe]);
+    /** @psalm-check-type-exact $_list = Pipeline&static */
+}
+
+function pipeline_pipe_variadic(Pipeline $pipeline, object $pipe): void
 {
     $_single = $pipeline->pipe('middleware');
     /** @psalm-check-type-exact $_single = Pipeline&static */
@@ -35,6 +48,9 @@ function pipeline_pipe_variadic(Pipeline $pipeline): void
 
     $_array = $pipeline->pipe(['auth', 'throttle:60,1']);
     /** @psalm-check-type-exact $_array = Pipeline&static */
+
+    $_object = $pipeline->pipe($pipe);
+    /** @psalm-check-type-exact $_object = Pipeline&static */
 }
 ?>
 --EXPECTF--
