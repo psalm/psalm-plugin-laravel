@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// Deliberately minimal — only the two disks the fixture actually references as "known".
+// Deliberately minimal: only the disks the fixture references as "known".
 return [
     'default' => 'local',
 
@@ -17,6 +17,11 @@ return [
             'root' => __DIR__ . '/../storage/app/public',
             'url' => '/storage',
             'visibility' => 'public',
+        ],
+
+        'archive' => [
+            'driver' => 'local',
+            'root' => __DIR__ . '/../storage/archive',
         ],
 
         // Nested group: Laravel resolves disk('tenant.assets') through its dotted
