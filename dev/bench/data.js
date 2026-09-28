@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790545732579,
+  "lastUpdate": 1790587967148,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11435,6 +11435,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.86,
             "range": "± 0.57",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "691a3ac6e3abaec0a90bda408502ce59ccb43f89",
+          "message": "test: cover concrete pipe objects in Pipeline::through() and ::pipe()\n\nThe #1590 test typed its pipes as bare `object`, which Psalm already\naccepts for `callable`, so it passed before the fix. Concrete final and\nnon-final classes with handle() are what the old stub rejected.\n\n- PipelineThenTest.phpt -> PipelineTest.phpt: every pipe shape carry()\n  accepts (class-string, parameterised string, closure, invokable, plain\n  objects, mixed lists) plus a scalar rejection guarding against a\n  widening to mixed, alongside the existing then() cases\n- Variadic/PipelineTest.phpt: back to variadic/array arity forms only\n- Pipeline.phpstub: drop doubled docblock blank lines",
+          "timestamp": "2026-09-28T11:29:19+02:00",
+          "tree_id": "3763e25fc29b5ddca53c9fb801532133799353a3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/691a3ac6e3abaec0a90bda408502ce59ccb43f89"
+        },
+        "date": 1790587966076,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.98,
+            "range": "± 0.18",
             "unit": "s"
           },
           {
