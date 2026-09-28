@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Storage;
 enum Disk: string
 {
     case Archive = 'archive';
-    case Typo = 'archiv-typo';
+    case Legacy = 'archive-legacy';
 }
 
 enum PureDisk
@@ -58,10 +58,10 @@ final class DiskCalls
     public function enums(): void
     {
         Storage::disk(Disk::Archive);
-        Storage::disk(Disk::Typo); // flagged: 'archiv-typo'
+        Storage::disk(Disk::Legacy); // flagged: 'archive-legacy'
         Storage::disk(PureDisk::archive);
         Storage::disk(PureDisk::backups); // flagged: enum_value() yields the case name
-        \Storage::drive(Disk::Typo); // flagged: alias + enum
+        \Storage::drive(Disk::Legacy); // flagged: alias + enum
         Storage::disk(IntDisk::First); // declined: int-backed
     }
 

@@ -21,8 +21,8 @@ An unconfigured disk name is not a silent fallback to the `local` disk. `Filesys
 Storage::disk('s3-old')->put('file.txt', $contents); // UnknownFilesystemDisk
 
 // Also resolved: enum cases (backing value, or case name for a pure enum) and class constants
-enum Disk: string { case Archive = 'archiv'; }
-Storage::disk(Disk::Archive);        // UnknownFilesystemDisk: 'archiv'
+enum Disk: string { case Legacy = 'archive-legacy'; }
+Storage::disk(Disk::Legacy);         // UnknownFilesystemDisk: 'archive-legacy'
 Storage::disk(Paths::LEGACY_DISK);   // UnknownFilesystemDisk when the constant is an unknown literal
 
 // Good
