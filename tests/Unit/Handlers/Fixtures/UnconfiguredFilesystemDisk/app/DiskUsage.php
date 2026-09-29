@@ -32,6 +32,18 @@ final class DiskUsage
         return Storage::disk('tenant.assets')->get('report.csv');
     }
 
+    /** One edit from 'public': flagged with a "did you mean 'public'?" suggestion. */
+    public function readsFromATypoedDisk(): string
+    {
+        return Storage::disk('publc')->get('report.csv');
+    }
+
+    /** A group of nested disks has no `driver`, so `disk('tenant')` throws at runtime: flagged. */
+    public function readsFromANestedGroupAsADisk(): string
+    {
+        return Storage::disk('tenant')->get('report.csv');
+    }
+
     /**
      * A DI-injected manager may be a userland subclass with its own disk resolution
      * (e.g. an overridden `getConfig()`), so the diagnostic is facade-only — even an

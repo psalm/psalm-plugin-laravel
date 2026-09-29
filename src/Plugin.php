@@ -864,7 +864,22 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        $disks = \array_map(static fn(int|string $name): string => (string) $name, \array_keys($configured));
+        // A key without a `driver` is a nested group (`disks.tenant.assets`), not a disk:
+        // `disk('tenant')` throws at runtime just like an absent key, and must not be suggested.
+        $withDriver = \array_filter(
+            $configured,
+            static fn(mixed $diskConfig): bool => \is_array($diskConfig) && isset($diskConfig['driver']),
+        );
+        $disks = \array_map(static fn(int|string $name): string => (string) $name, \array_keys($withDriver));
+
+        if ($disks === []) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks has no '
+                . 'entry with a driver. The UnconfiguredFilesystemDisk check will be skipped.',
+            );
+
+            return;
+        }
 
         Handlers\Filesystem\StorageHandler::init($disks);
     }

@@ -17,8 +17,12 @@ An unconfigured disk name is not a silent fallback to the `local` disk. `Filesys
 ```php
 // filesystems.disks configures: local, public, s3
 
-// Bad — typo, no 's3-old' disk configured
+// Bad: no 's3-old' disk configured
 Storage::disk('s3-old')->put('file.txt', $contents); // UnconfiguredFilesystemDisk
+
+// A close match is suggested:
+// "Disk 'publc' is not configured in filesystems.disks, did you mean 'public'?"
+Storage::disk('publc')->put('file.txt', $contents);
 
 // Also resolved: enum cases (backing value, or case name for a pure enum) and class constants
 enum Disk: string { case Legacy = 'archive-legacy'; }

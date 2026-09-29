@@ -45,9 +45,11 @@ final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
         $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}");
 
         $reported = [];
+        $messages = [];
         foreach ($decoded as $finding) {
             if (\is_array($finding) && ($finding['type'] ?? null) === 'UnconfiguredFilesystemDisk') {
                 $message = (string) $finding['message'];
+                $messages[] = $message;
                 $reported[] = \preg_match("/^Disk '([^']*)'/", $message, $m) === 1 ? $m[1] : $message;
             }
         }
@@ -66,8 +68,14 @@ final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
                 's3-old',          // DiskNames::OLD
                 'archive-copy',    // constant expression resolved by Psalm
                 's3-old',          // DiskUsage: Storage::disk('s3-old')
+                'publc',           // DiskUsage: one edit from 'public'
+                'tenant',          // DiskUsage: nested group, no driver
             ],
             $reported,
         );
+
+        // A close name gets a suggestion; a distant one gets neither a suggestion nor a disk list.
+        $this->assertContains("Disk 'publc' is not configured in filesystems.disks, did you mean 'public'?", $messages);
+        $this->assertContains("Disk 'missing-literal' is not configured in filesystems.disks", $messages);
     }
 }

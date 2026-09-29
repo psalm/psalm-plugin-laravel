@@ -11,6 +11,7 @@ use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
+use Psalm\LaravelPlugin\Internal\ClosestName;
 use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -116,9 +117,8 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
     private static bool $enabled = false;
 
     /**
-     * Configured disk names from `filesystems.disks`, in config order (used to render the
-     * "configured: ..." hint on the diagnostic). Membership is checked against this same list —
-     * it is small enough in real apps that a set is not worth the extra allocation.
+     * Disk names from `filesystems.disks` that carry a `driver`, used for membership and the
+     * "did you mean" suggestion. Small enough in real apps that a set is not worth building.
      *
      * @var list<string>
      */
@@ -246,11 +246,13 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             return;
         }
 
-        $configured = \implode(', ', self::$disks);
+        // No list of configured disks: it repeats on every finding and grows with the app.
+        $suggestion = ClosestName::find($diskName, self::$disks);
+        $hint = $suggestion === null ? '' : ", did you mean '{$suggestion}'?";
 
         IssueBuffer::accepts(
             new UnconfiguredFilesystemDisk(
-                "Disk '{$diskName}' is not configured in filesystems.disks (configured: {$configured})",
+                "Disk '{$diskName}' is not configured in filesystems.disks{$hint}",
                 $codeLocation,
             ),
             $source->getSuppressedIssues(),
