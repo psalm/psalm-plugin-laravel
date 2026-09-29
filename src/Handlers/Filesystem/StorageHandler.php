@@ -230,7 +230,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
         // Dynamic/null/unresolvable names answer null. Falsy names are skipped too:
         // `enum_value($name) ?: $this->getDefaultDriver()` sends both '' and '0' to the default
         // disk at runtime, not to a lookup failure.
-        if ($diskName === null || $diskName === '' || $diskName === '0') {
+        if (in_array($diskName, [null, '', '0'], true)) {
             return;
         }
 
