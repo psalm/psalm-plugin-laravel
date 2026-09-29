@@ -76,7 +76,7 @@ final class PestClosureThisHandler implements AfterCodebasePopulatedInterface
 
         $testFile = $source->getFilePath();
         $testCase = PestTestCaseResolver::resolve(
-            \rtrim($codebase->config->base_dir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'tests' . \DIRECTORY_SEPARATOR . 'Pest.php',
+            \rtrim($codebase->config->base_dir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'tests',
             $testFile,
             $codebase->file_provider->getContents($testFile),
             static fn(string $class): ?bool => self::isClass($codebase, $class),

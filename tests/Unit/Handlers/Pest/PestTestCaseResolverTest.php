@@ -118,6 +118,37 @@ final class PestTestCaseResolverTest extends TestCase
         $this->assertSame('Tests\Other', $this->resolve('Feature/UserTest.php'));
     }
 
+    #[Test]
+    public function file_outside_the_tests_directory_declines_instead_of_the_default(): void
+    {
+        $this->writePest("uses(Tests\\TestCase::class)->in('Feature');");
+        \mkdir($this->root . '/packages/foo/tests', 0o777, true);
+
+        $this->assertNull($this->resolve('../packages/foo/tests/PkgTest.php'));
+    }
+
+    #[Test]
+    public function boot_files_are_config_sources_too(): void
+    {
+        $this->writePest('');
+        \file_put_contents($this->root . '/tests/Helpers.php', "<?php\nuses(Tests\\TestCase::class)->in('Feature');");
+        \mkdir($this->root . '/tests/Expectations/Nested', 0o777, true);
+        \file_put_contents($this->root . '/tests/Expectations/Nested/Api.php', "<?php\npest()->extend(Tests\\Other::class)->in(__DIR__ . '/../../Unit');");
+
+        $this->assertSame('Tests\TestCase', $this->resolve('Feature/UserTest.php'));
+        $this->assertSame('Tests\Other', $this->resolve('Unit/MathTest.php'));
+    }
+
+    #[Test]
+    public function unreadable_boot_file_declines(): void
+    {
+        $this->writePest('');
+        \mkdir($this->root . '/tests/Helpers', 0o777, true);
+        \file_put_contents($this->root . '/tests/Helpers/Auth.php', '<?php if (true) { uses(Tests\\Other::class)->in("Unit"); }');
+
+        $this->assertNull($this->resolve('Unit/MathTest.php'));
+    }
+
     private function writePest(string $source): void
     {
         \file_put_contents($this->root . '/tests/Pest.php', "<?php\n" . $source);
@@ -129,7 +160,7 @@ final class PestTestCaseResolverTest extends TestCase
         \file_put_contents($testFile, "<?php\n" . $testSource);
 
         return PestTestCaseResolver::resolve(
-            $this->root . '/tests/Pest.php',
+            $this->root . '/tests',
             $testFile,
             "<?php\n" . $testSource,
             static fn(string $class): ?bool => match ($class) {
