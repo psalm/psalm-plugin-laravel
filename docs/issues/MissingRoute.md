@@ -63,7 +63,9 @@ A resolver registered after boot, for instance inside middleware or a controller
 
 ## When the check bails
 
-The plugin bails on the check entirely, with no findings at all, when the booted application resolves zero named routes. This avoids reporting every route name as missing when the plugin simply has no route table to check against. Two situations produce that empty table: a package/library project analysed through the Testbench fallback (which never loads an application's route files, and produces no warning, since that is the expected shape for a non-application analysis target) and an application whose route cache itself carries no named routes (which does produce a warning naming `route:cache` and `route:clear`, since a real application with real routes silently going unchecked is worth flagging).
+The check runs only when the plugin boots the project's own `bootstrap/app.php`. A package/library project analysed through the Testbench fallback is skipped without a warning: that boot never loads the project's route files, so its route table (which on Laravel 12 still carries framework routes such as `storage.local`) says nothing about the names the package uses.
+
+Under a real boot, the plugin also bails, with no findings at all, when the application resolves zero named routes, rather than reporting every route name as missing. When that empty table comes from a route cache carrying no named routes, it warns and names `route:cache` and `route:clear`, since a real application with real routes silently going unchecked is worth flagging.
 
 ## Limitations
 

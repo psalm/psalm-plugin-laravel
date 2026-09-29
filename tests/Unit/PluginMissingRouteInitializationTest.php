@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit;
 
+use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\UrlGenerator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -13,14 +14,12 @@ use Psalm\LaravelPlugin\Handlers\Rules\MissingRouteHandler;
 use Psalm\LaravelPlugin\Plugin;
 
 /**
- * Fast, in-process guard for `Plugin::initMissingRouteHandler()`'s empty-table branches — the
- * branches a phpt type test cannot exercise as a POSITIVE assertion (the psalm-tester harness
- * boots this exact Testbench fallback, so every phpt run already goes through the plain empty-
- * table path implicitly) and that a real Psalm subprocess would be needlessly slow to pin
- * directly. Boots the plugin's Testbench fallback (no bootstrap/app.php at the plugin root,
- * mirroring the psalm-tester harness) — the router is bound but no route file is ever loaded,
- * so the named-route table comes back empty. `MissingRouteHandler::init()` must not be called
- * in that case, or an app with zero known routes would report every route name as missing.
+ * Fast, in-process guard for `Plugin::initMissingRouteHandler()`'s decline branches, which a phpt
+ * type test cannot exercise as a POSITIVE assertion (the psalm-tester harness boots the Testbench
+ * fallback, where the rule never arms) and that a real Psalm subprocess would be needlessly slow
+ * to pin. The Testbench fallback is gated off by boot mode; the empty-table branches boot the
+ * MissingRoute fixture (a real bootstrap/app.php) and clear its route collection, so
+ * `MissingRouteHandler::init()` is never called with zero known names.
  *
  * A second scenario shares that same empty table for a different, more surprising reason.
  * A compiled route cache (`bootstrap/cache/routes-v7.php`) is read the same way a live
@@ -49,31 +48,49 @@ final class PluginMissingRouteInitializationTest extends TestCase
         MissingRouteHandler::reset();
     }
 
+    /**
+     * The Testbench table is not reliably empty: on Laravel 12 the skeleton's local disk
+     * (`serve => true`) registers `storage.local*`, which armed the rule before the boot-mode
+     * gate existed. Asserting disabled here pins the gate, not the emptiness bail.
+     */
     #[Test]
-    public function stays_disabled_when_the_booted_app_has_no_named_routes(): void
+    public function stays_disabled_under_the_testbench_fallback_boot(): void
     {
         ApplicationProvider::bootApp();
+        $this->assertSame('testbench_fallback', ApplicationProvider::getBootMode());
 
         $progress = new RecordingProgress();
         $this->invokeInitMissingRouteHandler($progress);
 
+        $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled under the Testbench fallback.');
+        $this->assertSame([], $this->registeredNames());
+        $this->assertSame(0, $progress->warningCount, 'A package/library boot is the expected shape and must not warn.');
+    }
+
+    #[Test]
+    public function stays_disabled_when_the_booted_app_has_no_named_routes(): void
+    {
+        $progress = $this->bootRouteFixture(static function (): void {
+            ApplicationProvider::getApp()->make('router')->setRoutes(new RouteCollection());
+        });
+
         $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled when the named-route table is empty.');
         $this->assertSame([], $this->registeredNames());
-        $this->assertSame(0, $progress->warningCount, 'A package/library boot with no route files is the expected shape and must not warn.');
+        $this->assertSame(0, $progress->warningCount, 'An uncached empty table must not warn.');
     }
 
     #[Test]
     public function warns_and_stays_disabled_when_the_empty_table_is_caused_by_a_route_cache(): void
     {
-        ApplicationProvider::bootApp();
-        // routesAreCached() checks this binding before ever touching the filesystem
-        // (Illuminate\Foundation\Application::routesAreCached()), so this is the cheapest
-        // way to simulate "a compiled route cache is present" without shipping a real
-        // bootstrap/cache/routes-v7.php fixture.
-        ApplicationProvider::getApp()->instance('routes.cached', true);
-
-        $progress = new RecordingProgress();
-        $this->invokeInitMissingRouteHandler($progress);
+        $progress = $this->bootRouteFixture(static function (): void {
+            $app = ApplicationProvider::getApp();
+            $app->make('router')->setRoutes(new RouteCollection());
+            // routesAreCached() checks this binding before ever touching the filesystem
+            // (Illuminate\Foundation\Application::routesAreCached()), so this is the cheapest
+            // way to simulate "a compiled route cache is present" without shipping a real
+            // bootstrap/cache/routes-v7.php fixture.
+            $app->instance('routes.cached', true);
+        });
 
         $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled when the route cache yields no named routes.');
         $this->assertSame(1, $progress->warningCount, 'A cached-routes empty table must warn exactly once.');

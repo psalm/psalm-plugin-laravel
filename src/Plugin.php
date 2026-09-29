@@ -830,11 +830,13 @@ final class Plugin implements PluginEntryPointInterface
     /**
      * Read the booted app's named-route table and pass it to MissingRouteHandler.
      *
-     * A package/library project analysed through the Testbench fallback boots a router
-     * but never loads any user route file, so the table comes back empty — that case is
-     * NOT an error, but init() is deliberately skipped: the handler must stay disabled
-     * rather than treat "no routes known" as "every route name is missing" (mirrors
-     * ApplicationProvider's own bound()-then-verify caution around partial boots).
+     * Restricted to a real `bootstrap/app.php` boot: the Testbench fallback (package/library
+     * projects) never loads the project's route files, so its table is Testbench's skeleton,
+     * not project truth. It is not reliably empty either: on Laravel 12 the skeleton's local
+     * disk has `serve => true`, which registers `storage.local` / `storage.local.upload`, so
+     * an emptiness check alone would arm the rule and report every route name the package uses.
+     * An empty table under a real boot still keeps the handler disabled rather than treating
+     * "no routes known" as "every route name is missing".
      *
      * refreshNameLookups() mirrors the call ApplicationProvider's CreatesApplication
      * override makes after boot, in case route names were registered fluently or a
@@ -842,6 +844,11 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function initMissingRouteHandler(\Psalm\Progress\Progress $output): void
     {
+        // Silent: a package analysed through the fallback is the expected shape, not a degradation.
+        if (ApplicationProvider::getBootMode() !== 'bootstrap') {
+            return;
+        }
+
         $app = ApplicationProvider::getApp();
 
         if (!$app->bound('router')) {
