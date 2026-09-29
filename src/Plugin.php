@@ -447,6 +447,11 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrGetHandler::class);
 
+        // Pest: lift `@internal` from Pest's public DSL classes. Self-gates on the classes
+        // being scanned (AfterCodebasePopulated).
+        require_once __DIR__ . '/Handlers/Pest/PestInternalDslHandler.php';
+        $registration->registerHooksFromClass(Handlers\Pest\PestInternalDslHandler::class);
+
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
         require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';

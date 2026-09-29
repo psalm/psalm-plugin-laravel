@@ -1,0 +1,202 @@
+<?php
+
+// Minimal mirror of the pestphp/pest v4 declarations the Pest handlers depend on, loaded only by
+// ./psalm-pest.xml. Pest is not a dev dependency (its PHPUnit pin conflicts with the plugin's
+// matrix), so the relevant headers are copied from pestphp/pest v4.7.0: src/Functions.php and
+// the @internal DSL classes. Keep docblocks verbatim where the handlers read them
+// (`@param-closure-this TestCall`, class-level `@internal`, `@mixin`).
+
+namespace Pest\Support {
+    /** @internal */
+    final class HigherOrderCallables
+    {
+    }
+
+    /** @internal */
+    final class HigherOrderTapProxy
+    {
+    }
+}
+
+namespace Pest\Concerns {
+    /**
+     * @internal
+     *
+     * @mixin \PHPUnit\Framework\TestCase
+     */
+    trait Testable
+    {
+    }
+}
+
+namespace Pest\PendingCalls {
+    use Pest\Concerns\Testable;
+    use Pest\Support\HigherOrderCallables;
+    use PHPUnit\Framework\TestCase;
+
+    /**
+     * @internal
+     *
+     * @mixin HigherOrderCallables|TestCase|Testable
+     */
+    final class TestCall
+    {
+        public function group(string ...$groups): self
+        {
+            return $this;
+        }
+    }
+
+    /** @internal */
+    final class BeforeEachCall
+    {
+    }
+
+    /** @internal */
+    final class AfterEachCall
+    {
+    }
+
+    /** @internal */
+    final class UsesCall
+    {
+        public function in(string ...$targets): self
+        {
+            return $this;
+        }
+
+        public function extend(string ...$classAndTraits): self
+        {
+            return $this;
+        }
+    }
+}
+
+namespace Pest {
+    use Pest\PendingCalls\UsesCall;
+
+    /**
+     * @internal
+     *
+     * @mixin UsesCall
+     */
+    final class Configuration
+    {
+        public function extend(string ...$classAndTraits): UsesCall
+        {
+            return new UsesCall();
+        }
+    }
+
+    /**
+     * @template TValue
+     *
+     * @mixin Mixins\Expectation<TValue>
+     */
+    final class Expectation
+    {
+        /** @param TValue $value */
+        public function __construct(public mixed $value)
+        {
+        }
+    }
+
+    /** @internal Genuinely internal, never part of the test-writing DSL. */
+    final class Kernel
+    {
+        public function boot(): void
+        {
+        }
+    }
+}
+
+namespace Pest\Mixins {
+    /**
+     * @internal
+     *
+     * @template TValue
+     *
+     * @mixin \Pest\Expectation<TValue>
+     */
+    final class Expectation
+    {
+        /** @param TValue $value */
+        public function __construct(public mixed $value)
+        {
+        }
+
+        /** @return self<TValue> */
+        public function toBeTrue(string $message = ''): self
+        {
+            return $this;
+        }
+    }
+}
+
+namespace {
+    use Pest\Configuration;
+    use Pest\Expectation;
+    use Pest\PendingCalls\AfterEachCall;
+    use Pest\PendingCalls\BeforeEachCall;
+    use Pest\PendingCalls\TestCall;
+    use Pest\PendingCalls\UsesCall;
+    use Pest\Support\HigherOrderTapProxy;
+
+    /**
+     * @template TValue
+     *
+     * @param  TValue|null  $value
+     * @return Expectation<TValue|null>
+     */
+    function expect(mixed $value = null): Expectation
+    {
+        return new Expectation($value);
+    }
+
+    /**
+     * @param-closure-this TestCall  $closure
+     */
+    function beforeEach(?Closure $closure = null): BeforeEachCall
+    {
+        return new BeforeEachCall();
+    }
+
+    /**
+     * @param  class-string  ...$classAndTraits
+     */
+    function uses(string ...$classAndTraits): UsesCall
+    {
+        return new UsesCall();
+    }
+
+    function pest(): Configuration
+    {
+        return new Configuration();
+    }
+
+    /**
+     * @param-closure-this TestCall  $closure
+     *
+     * @return ($description is string ? TestCall : HigherOrderTapProxy|TestCall)
+     */
+    function test(?string $description = null, ?Closure $closure = null): HigherOrderTapProxy|TestCall
+    {
+        return new TestCall();
+    }
+
+    /**
+     * @param-closure-this TestCall  $closure
+     */
+    function it(string $description, ?Closure $closure = null): TestCall
+    {
+        return new TestCall();
+    }
+
+    /**
+     * @param-closure-this TestCall  $closure
+     */
+    function afterEach(?Closure $closure = null): AfterEachCall
+    {
+        return new AfterEachCall();
+    }
+}
