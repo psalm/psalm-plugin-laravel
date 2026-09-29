@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Pest;
 
 /**
- * Answers which TestCase class Pest binds a test file's closures to, from the test directory's boot
- * files (`Pest.php`, `Helpers.php`, `Expectations.php` and the `Helpers/`, `Expectations/` trees, as
- * `Pest\Bootstrappers\BootFiles` loads them) plus the file's own `uses()` / `pest()->extend()` calls,
+ * Answers which TestCase class Pest binds a test file's closures to, from every file
+ * `Pest\Bootstrappers\BootFiles::boot()` loads (`Pest.php`, `Helpers.php`, `Expectations.php`, the
+ * `Helpers/` and `Expectations/` trees, and dataset files) plus the file's own `uses()` / `pest()->extend()` calls,
  * following `Pest\Repositories\TestRepository::make()`:
  * a file target matches by equality, a directory target by path prefix, traits never decide the
  * class, and more than one class for one file is a runtime `TestCaseAlreadyInUse`.
@@ -23,6 +23,9 @@ final class PestTestCaseResolver
 
     /** `Pest\Bootstrappers\BootFiles::STRUCTURE` (pest v4.7.0): files, or directories loaded recursively. */
     private const BOOT_FILES = ['Expectations', 'Expectations.php', 'Helpers', 'Helpers.php', 'Pest.php'];
+
+    /** `Pest\Support\DatasetInfo`: files with this name, and files under a directory with this name. */
+    private const DATASETS = 'Datasets';
 
     /**
      * Parsed boot files per test directory; `null` = no `Pest.php`, or a file that is unreadable.
@@ -124,13 +127,30 @@ final class PestTestCaseResolver
             if (\is_file($path)) {
                 $files[] = $path;
             } elseif (\is_dir($path)) {
-                $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS));
-                /** @var \SplFileInfo $file */
-                foreach ($iterator as $file) {
-                    if (\str_ends_with($file->getPathname(), '.php')) {
-                        $files[] = $file->getPathname();
-                    }
-                }
+                \array_push($files, ...self::phpFiles($path));
+            }
+        }
+
+        // BootFiles::bootDatasets(): every `Datasets.php`, and every file below a `Datasets/` directory.
+        foreach (self::phpFiles($testsDir) as $file) {
+            $relativeDirs = \explode(\DIRECTORY_SEPARATOR, \dirname(\substr($file, \strlen($testsDir) + 1)));
+            if (\basename($file) === self::DATASETS . '.php' || \in_array(self::DATASETS, $relativeDirs, true)) {
+                $files[] = $file;
+            }
+        }
+
+        return $files;
+    }
+
+    /** @return list<string> */
+    private static function phpFiles(string $dir): array
+    {
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
+        /** @var \SplFileInfo $file */
+        foreach ($iterator as $file) {
+            if (\str_ends_with($file->getPathname(), '.php')) {
+                $files[] = $file->getPathname();
             }
         }
 

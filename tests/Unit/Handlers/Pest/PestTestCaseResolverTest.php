@@ -140,6 +140,29 @@ final class PestTestCaseResolverTest extends TestCase
     }
 
     #[Test]
+    public function dataset_files_are_config_sources_too(): void
+    {
+        // BootFiles::bootDatasets(): any Datasets.php, and any file under a Datasets/ directory.
+        $this->writePest('');
+        \file_put_contents($this->root . '/tests/Datasets.php', "<?php\nuses(Tests\\TestCase::class)->in('Feature');");
+        \mkdir($this->root . '/tests/Unit/Datasets', 0o777, true);
+        \file_put_contents($this->root . '/tests/Unit/Datasets/Numbers.php', "<?php\nuses(Tests\\Other::class)->in(__DIR__ . '/..');");
+
+        $this->assertSame('Tests\TestCase', $this->resolve('Feature/UserTest.php'));
+        $this->assertSame('Tests\Other', $this->resolve('Unit/MathTest.php'));
+    }
+
+    #[Test]
+    public function unreadable_nested_dataset_file_declines(): void
+    {
+        $this->writePest('');
+        \mkdir($this->root . '/tests/Feature/Api', 0o777, true);
+        \file_put_contents($this->root . '/tests/Feature/Api/Datasets.php', '<?php uses($case)->in("..");');
+
+        $this->assertNull($this->resolve('Unit/MathTest.php'));
+    }
+
+    #[Test]
     public function unreadable_boot_file_declines(): void
     {
         $this->writePest('');

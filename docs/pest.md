@@ -10,9 +10,9 @@ Pest runs each `test()`, `it()`, `beforeEach()` and `afterEach()` closure bound 
 The plugin replaces that binding with the class Pest actually uses:
 
 - the class passed to `uses(...)` or `pest()->extend(...)` in the test file itself;
-- otherwise, the class `tests/Pest.php` assigns to the file's directory through `uses(...)->in(...)` or `pest()->extend(...)->in(...)` (`in()` accepts string literals, `__DIR__` and `__DIR__ . '/Feature'`). The other files Pest loads at boot (`tests/Helpers.php`, `tests/Expectations.php`, and the `tests/Helpers/` and `tests/Expectations/` trees) count too;
+- otherwise, the class `tests/Pest.php` assigns to the file's directory through `uses(...)->in(...)` or `pest()->extend(...)->in(...)` (`in()` accepts string literals, `__DIR__` and `__DIR__ . '/Feature'`). The other files Pest loads at boot (`tests/Helpers.php`, `tests/Expectations.php`, the `tests/Helpers/` and `tests/Expectations/` trees, every `Datasets.php` and every file under a `Datasets/` directory) count too;
 - otherwise `PHPUnit\Framework\TestCase`, Pest's default, for files inside `tests/`.
 
-`tests/Pest.php` is read relative to the directory of your Psalm config and is never executed. When it is missing, when the test file lives outside `tests/` (a monorepo package with its own suite), or when a boot file holds a call the plugin cannot read statically (a variable argument, a call inside a condition), the plugin keeps Pest's own `TestCall` binding for tests it cannot resolve, rather than guess.
+`tests/Pest.php` is read relative to the directory of your Psalm config and is never executed. A custom test directory (Pest's `--test-directory`, so no `tests/Pest.php` there) is not detected: its tests keep Pest's own binding. When it is missing, when the test file lives outside `tests/` (a monorepo package with its own suite), or when a boot file holds a call the plugin cannot read statically (a variable argument, a call inside a condition), the plugin keeps Pest's own `TestCall` binding for tests it cannot resolve, rather than guess.
 
 The plugin also stops reporting `InternalMethod` on Pest's public API (`expect()->toBe()`, `uses()->in()`, `test()->group()`): Pest marks those classes `@internal`, but they are how tests are written.
