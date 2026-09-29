@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Illuminate\Foundation\Application;
 
 // Deliberately incomplete app, owned solely by
-// PluginMissingRouteInitializationTest::a_throwing_routes_are_cached_check_degrades_only_this_feature.
+// PluginUnregisteredRouteNameInitializationTest::a_throwing_routes_are_cached_check_degrades_only_this_feature.
 //
 // There is no bootstrap/cache directory next to this file and no withRouting() call. Without the
 // cache directory BootProviders never completes, so the 'files' binding stays unregistered, and

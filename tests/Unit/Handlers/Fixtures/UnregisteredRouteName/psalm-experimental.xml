@@ -10,7 +10,8 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <findMissingRoutes value="true" />
+            <findUnregisteredRouteNames value="true" />
+            <experimental value="true" />
         </pluginClass>
     </plugins>
 </psalm>

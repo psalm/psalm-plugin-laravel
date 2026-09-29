@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace MissingRouteFixture;
+namespace UnregisteredRouteNameFixture;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Redirect;
@@ -125,7 +125,7 @@ final class UsesRoutes
 
     /**
      * A leading spread hides the name entirely — must never be flagged.
-     * @psalm-suppress MixedArgument unrelated to MissingRoute — spread hides the argument types too
+     * @psalm-suppress MixedArgument unrelated to UnregisteredRouteName — spread hides the argument types too
      */
     public function spreadArgsNeverFlagged(): string
     {

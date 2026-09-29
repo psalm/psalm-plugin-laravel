@@ -38,7 +38,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
-        require_once __DIR__ . '/Issues/MissingRoute.php';
+        require_once __DIR__ . '/Issues/UnregisteredRouteName.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -100,8 +100,8 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
-            if ($pluginConfig->findMissingRoutes) {
-                $this->initMissingRouteHandler($output);
+            if ($pluginConfig->findUnregisteredRouteNames) {
+                $this->initUnregisteredRouteNameHandler($output);
             }
 
             $this->registerHandlers($registration, $pluginConfig);
@@ -127,7 +127,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
-        require_once __DIR__ . '/Handlers/Rules/MissingRouteHandler.php';
+        require_once __DIR__ . '/Handlers/Rules/UnregisteredRouteNameHandler.php';
         require_once __DIR__ . '/Handlers/Application/ContainerResolver.php';
         require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
         require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
@@ -206,7 +206,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Jobs\DispatchableHandler::reset();
         Handlers\Magic\MacroRegistry::reset();
         Handlers\Producers\ProducerReturnTypeHandler::reset();
-        Handlers\Rules\MissingRouteHandler::reset();
+        Handlers\Rules\UnregisteredRouteNameHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -631,13 +631,13 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         // Flag route() / to_route() / URL::route() / Redirect::route() calls that reference
-        // an undefined route name. initMissingRouteHandler() already gated the handler's
+        // an undefined route name. initUnregisteredRouteNameHandler() already gated the handler's
         // internal $enabled flag on a non-empty named-route table, so registering the hooks
         // here whenever the config flag is set is safe — a package/library boot with no
         // routes loaded stays silent via that internal gate, not by skipping registration.
-        if ($pluginConfig->findMissingRoutes) {
-            require_once __DIR__ . '/Handlers/Rules/MissingRouteHandler.php';
-            $registration->registerHooksFromClass(Handlers\Rules\MissingRouteHandler::class);
+        if ($pluginConfig->findUnregisteredRouteNames) {
+            require_once __DIR__ . '/Handlers/Rules/UnregisteredRouteNameHandler.php';
+            $registration->registerHooksFromClass(Handlers\Rules\UnregisteredRouteNameHandler::class);
         }
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:
@@ -828,7 +828,7 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * Read the booted app's named-route table and pass it to MissingRouteHandler.
+     * Read the booted app's named-route table and pass it to UnregisteredRouteNameHandler.
      *
      * Restricted to a real `bootstrap/app.php` boot: the Testbench fallback (package/library
      * projects) never loads the project's route files, so its table is Testbench's skeleton,
@@ -842,7 +842,7 @@ final class Plugin implements PluginEntryPointInterface
      * override makes after boot, in case route names were registered fluently or a
      * route file overwrote an earlier definition after the router last indexed them.
      */
-    private function initMissingRouteHandler(\Psalm\Progress\Progress $output): void
+    private function initUnregisteredRouteNameHandler(\Psalm\Progress\Progress $output): void
     {
         // Silent: a package analysed through the fallback is the expected shape, not a degradation.
         if (ApplicationProvider::getBootMode() !== 'bootstrap') {
@@ -853,8 +853,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$app->bound('router')) {
             $output->warning(
-                'Laravel plugin: findMissingRoutes is enabled but the router service is not bound. '
-                . 'The MissingRoute check will be skipped.',
+                'Laravel plugin: findUnregisteredRouteNames is enabled but the router service is not bound. '
+                . 'The UnregisteredRouteName check will be skipped.',
             );
 
             return;
@@ -873,8 +873,8 @@ final class Plugin implements PluginEntryPointInterface
             // __invoke()'s outer catch and disable the whole plugin — same per-probe
             // policy as resolveViewFactory(). Keep the real cause reachable for --debug.
             $output->warning(
-                'Laravel plugin: findMissingRoutes is enabled but the router could not be resolved '
-                . '(run with --debug for the underlying cause). The MissingRoute check will be skipped.',
+                'Laravel plugin: findUnregisteredRouteNames is enabled but the router could not be resolved '
+                . '(run with --debug for the underlying cause). The UnregisteredRouteName check will be skipped.',
             );
             $output->debug("Laravel plugin: resolving the 'router' binding threw: {$throwable->getMessage()}\n");
 
@@ -903,8 +903,8 @@ final class Plugin implements PluginEntryPointInterface
 
             if ($routesAreCached) {
                 $output->warning(
-                    'Laravel plugin: findMissingRoutes is enabled but the application has a route cache '
-                    . 'that carries no named routes. The MissingRoute check will be skipped for this run. '
+                    'Laravel plugin: findUnregisteredRouteNames is enabled but the application has a route cache '
+                    . 'that carries no named routes. The UnregisteredRouteName check will be skipped for this run. '
                     . 'Run `php artisan route:cache` to regenerate it, or `php artisan route:clear` to '
                     . 'remove it and analyse against the live route files instead.',
                 );
@@ -922,14 +922,14 @@ final class Plugin implements PluginEntryPointInterface
         if ($this->hasMissingNamedRouteResolver($app, $output)) {
             $output->debug(
                 "Laravel plugin: the application registers a missing-named-route resolver, so a name "
-                . "absent from the route table can still resolve at runtime. The MissingRoute check "
+                . "absent from the route table can still resolve at runtime. The UnregisteredRouteName check "
                 . "will be skipped.\n",
             );
 
             return;
         }
 
-        Handlers\Rules\MissingRouteHandler::init($names);
+        Handlers\Rules\UnregisteredRouteNameHandler::init($names);
     }
 
     /**

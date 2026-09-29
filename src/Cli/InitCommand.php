@@ -75,7 +75,7 @@ final class InitCommand extends Command
                     <resolveDynamicWhereClauses value="true" />
                     <findMissingTranslations value="false" />
                     <findMissingViews value="false" />
-                    <findMissingRoutes value="false" />
+                    <findUnregisteredRouteNames value="false" />
                 </pluginClass>
             </plugins>
 

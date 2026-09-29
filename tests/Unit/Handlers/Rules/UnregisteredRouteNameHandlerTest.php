@@ -21,47 +21,47 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation;
 use Psalm\Context;
-use Psalm\LaravelPlugin\Handlers\Rules\MissingRouteHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\UnregisteredRouteNameHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
 /**
- * Unit-level coverage for {@see MissingRouteHandler}'s pure gate logic (literal extraction,
+ * Unit-level coverage for {@see UnregisteredRouteNameHandler}'s pure gate logic (literal extraction,
  * method-name gate, enabled/disabled state). Every scenario here asserts the handler declines
  * (returns non-Union) — it never reaches IssueBuffer::accepts() in-process, since no Psalm
  * runtime is initialized in a plain PHPUnit test (same convention as MissingViewHandlerTest).
  * The actual positive emission is guarded end-to-end by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\MissingRouteEmissionTest}, a real Psalm
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnregisteredRouteNameEmissionTest}, a real Psalm
  * subprocess against a fixture with a populated route table.
  */
-#[CoversClass(MissingRouteHandler::class)]
-final class MissingRouteHandlerTest extends TestCase
+#[CoversClass(UnregisteredRouteNameHandler::class)]
+final class UnregisteredRouteNameHandlerTest extends TestCase
 {
     protected function setUp(): void
     {
-        MissingRouteHandler::init(['dashboard' => true, 'posts.show' => true]);
+        UnregisteredRouteNameHandler::init(['dashboard' => true, 'posts.show' => true]);
     }
 
     protected function tearDown(): void
     {
-        MissingRouteHandler::reset();
+        UnregisteredRouteNameHandler::reset();
     }
 
     #[Test]
     public function returns_route_and_to_route_function_ids(): void
     {
-        $this->assertSame(['route', 'to_route'], MissingRouteHandler::getFunctionIds());
+        $this->assertSame(['route', 'to_route'], UnregisteredRouteNameHandler::getFunctionIds());
     }
 
     #[Test]
     public function registers_the_service_classes_and_canonical_facades(): void
     {
         // FacadeMapProvider is not initialized in unit tests, so only the hardcoded
-        // entries are present — the type test (MissingRouteTest.phpt) verifies the
+        // entries are present — the type test (UnregisteredRouteNameTest.phpt) verifies the
         // FacadeMapProvider-discovered aliases are included when fully booted.
-        $classNames = MissingRouteHandler::getClassLikeNames();
+        $classNames = UnregisteredRouteNameHandler::getClassLikeNames();
 
         $this->assertContains(UrlGenerator::class, $classNames);
         $this->assertContains(Redirector::class, $classNames);
@@ -77,7 +77,7 @@ final class MissingRouteHandlerTest extends TestCase
         // resolves to and that the handler would otherwise never see.
         $this->assertContains(
             \Illuminate\Contracts\Routing\UrlGenerator::class,
-            MissingRouteHandler::getClassLikeNames(),
+            UnregisteredRouteNameHandler::getClassLikeNames(),
         );
     }
 
@@ -86,7 +86,7 @@ final class MissingRouteHandlerTest extends TestCase
     {
         $event = $this->createFunctionEvent('route', []);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -94,7 +94,7 @@ final class MissingRouteHandlerTest extends TestCase
     {
         $event = $this->createFunctionEvent('route', [new Arg(new Variable('routeName'))]);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -107,7 +107,7 @@ final class MissingRouteHandlerTest extends TestCase
         // non-String_ nodes — this shape is required to give the guard real teeth.
         $event = $this->createFunctionEvent('route', [new Arg(new String_('anything-unregistered'), false, true)]);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -121,7 +121,7 @@ final class MissingRouteHandlerTest extends TestCase
         $arg = new Arg(new String_('not-a-registered-route'), false, false, [], new Identifier('parameters'));
         $event = $this->createFunctionEvent('route', [$arg]);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -130,23 +130,23 @@ final class MissingRouteHandlerTest extends TestCase
         // route(absolute: false, name: 'dashboard') — offset 0 is `absolute`, so a positional
         // read would skip the call entirely. Resolution by identifier finds the REGISTERED name
         // at offset 1 and declines silently; the positive (unregistered) counterpart needs a
-        // real Psalm runtime and lives in MissingRouteEmissionTest.
+        // real Psalm runtime and lives in UnregisteredRouteNameEmissionTest.
         $absolute = new Arg(new ConstFetch(new Name('false')), false, false, [], new Identifier('absolute'));
         $name = new Arg(new String_('dashboard'), false, false, [], new Identifier('name'));
         $event = $this->createFunctionEvent('route', [$absolute, $name]);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
     public function skips_empty_route_name(): void
     {
-        // route('') is skipped by design (see MissingRouteHandler's class docblock). The empty
+        // route('') is skipped by design (see UnregisteredRouteNameHandler's class docblock). The empty
         // name is not in the registered-names table, so without that guard this would reach
         // IssueBuffer::accepts() and throw.
         $event = $this->createFunctionEvent('route', [new Arg(new String_(''))]);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -155,7 +155,7 @@ final class MissingRouteHandlerTest extends TestCase
         $enumFetch = new ClassConstFetch(new Name('RouteEnum'), new Identifier('Dashboard'));
         $event = $this->createFunctionEvent('route', [new Arg($enumFetch)]);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -165,19 +165,19 @@ final class MissingRouteHandlerTest extends TestCase
 
         // If the handler incorrectly tried to emit an issue for a registered name, it
         // would throw here (no Psalm runtime initialized in a plain unit test).
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
     public function skips_when_not_enabled(): void
     {
-        MissingRouteHandler::reset();
+        UnregisteredRouteNameHandler::reset();
 
         $event = $this->createFunctionEvent('route', [new Arg(new String_('anything'))]);
 
         // An unregistered name would normally emit; with the handler disabled it must
         // decline instead of throwing (no Psalm runtime available here).
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     #[Test]
@@ -187,7 +187,7 @@ final class MissingRouteHandlerTest extends TestCase
         // type is left alone, not narrowed or replaced.
         $event = $this->createFunctionEvent('route', [new Arg(new String_('dashboard'))]);
 
-        $this->assertNull(MissingRouteHandler::getFunctionReturnType($event));
+        $this->assertNull(UnregisteredRouteNameHandler::getFunctionReturnType($event));
     }
 
     /**
@@ -210,7 +210,7 @@ final class MissingRouteHandlerTest extends TestCase
     {
         $event = $this->createMethodEvent($methodName, 'dashboard');
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
     }
 
     #[Test]
@@ -221,7 +221,7 @@ final class MissingRouteHandlerTest extends TestCase
         // early on the isset() check — this shape is required to give the gate real teeth.
         $event = $this->createMethodEvent('previous', 'not-a-registered-route');
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
     }
 
     #[Test]
@@ -229,7 +229,7 @@ final class MissingRouteHandlerTest extends TestCase
     {
         $event = $this->createMethodEvent('route', null);
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
     }
 
     #[Test]
@@ -254,7 +254,7 @@ final class MissingRouteHandlerTest extends TestCase
             new CodeLocation($source, $methodCall),
         );
 
-        $this->assertNotInstanceOf(Union::class, MissingRouteHandler::getMethodReturnType($event));
+        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
     }
 
     /**

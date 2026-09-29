@@ -7,11 +7,11 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Handlers\Rules\MissingRouteHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\UnregisteredRouteNameHandler;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end guard for {@see MissingRouteHandler}'s actual emission. The `MissingRouteTest.phpt`
+ * End-to-end guard for {@see UnregisteredRouteNameHandler}'s actual emission. The `UnregisteredRouteNameTest.phpt`
  * type test only guards the empty-table defer — the psalm-tester harness boots through the
  * Testbench package fallback, which never loads an application's route files, so the named-route
  * table there is always empty and the handler never gets to fire positively. This points a real
@@ -25,8 +25,8 @@ use Symfony\Component\Process\Process;
  * Lives in tests/Unit for proximity to the handler it guards, same convention as
  * {@see UnknownModelAttributeEmissionTest}.
  */
-#[CoversClass(MissingRouteHandler::class)]
-final class MissingRouteEmissionTest extends TestCase
+#[CoversClass(UnregisteredRouteNameHandler::class)]
+final class UnregisteredRouteNameEmissionTest extends TestCase
 {
     #[Test]
     public function it_reports_undefined_route_names_through_every_covered_receiver_and_stays_silent_on_clean_calls(): void
@@ -48,7 +48,7 @@ final class MissingRouteEmissionTest extends TestCase
         // The clean calls, the spread, the non-literal name, the enum name, and the empty name must
         // stay silent — asserting an exact count proves both that the rule fires on every covered
         // receiver and that it does not over-fire on the forms it deliberately skips.
-        $this->assertCount(11, $findings, "Expected exactly 11 MissingRoute findings, got:\n{$joined}");
+        $this->assertCount(11, $findings, "Expected exactly 11 UnregisteredRouteName findings, got:\n{$joined}");
         $this->assertStringContainsString("'dashboard-legacy'", $joined, 'Every URL/Redirect-family typo must be flagged.');
         $this->assertStringContainsString("'posts.hsow'", $joined, 'to_route() with a typo must be flagged.');
         $this->assertStringNotContainsString(
@@ -74,10 +74,10 @@ final class MissingRouteEmissionTest extends TestCase
     }
 
     /**
-     * PluginConfig::fromXml() enables findMissingRoutes under `<experimental>` unless the
+     * PluginConfig::fromXml() enables findUnregisteredRouteNames under `<experimental>` unless the
      * project sets it explicitly (matching findSerializedQueuedModels's own convention), and
-     * ExperimentalIssuePolicy separately promotes MissingRoute's severity to error whenever
-     * `<experimental>` is set. This fixture config carries neither `findMissingRoutes` nor an
+     * ExperimentalIssuePolicy separately promotes UnregisteredRouteName's severity to error whenever
+     * `<experimental>` is set. This fixture config carries neither `findUnregisteredRouteNames` nor an
      * explicit `issueHandlers` entry, so both mechanisms fire from `<experimental value="true" />`
      * alone: the rule turns on AND its findings report as errors, proving the two independent
      * gates (enablement and severity) combine coherently rather than one silently overriding
@@ -98,7 +98,7 @@ final class MissingRouteEmissionTest extends TestCase
     private function runPsalmAndCollectFindings(string $config = 'psalm.xml'): array
     {
         $projectRoot = \dirname(__DIR__, 3);
-        $fixtureDir = __DIR__ . '/Fixtures/MissingRoute';
+        $fixtureDir = __DIR__ . '/Fixtures/UnregisteredRouteName';
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
 
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
@@ -122,7 +122,7 @@ final class MissingRouteEmissionTest extends TestCase
                 continue;
             }
 
-            if ($finding['type'] === 'MissingRoute') {
+            if ($finding['type'] === 'UnregisteredRouteName') {
                 $findings[] = [
                     'type' => $finding['type'],
                     'message' => (string) $finding['message'],

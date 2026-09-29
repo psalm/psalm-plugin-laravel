@@ -14,11 +14,11 @@ enum RouteEnum: string
 /**
  * The psalm-tester harness boots via the Testbench package fallback, which never loads an
  * application's route files (ApplicationProvider::doGetApp() branch 3): the named-route table
- * is always empty there. Plugin::initMissingRouteHandler() skips calling
- * MissingRouteHandler::init() on an empty table, so the handler stays disabled and every call
+ * is always empty there. Plugin::initUnregisteredRouteNameHandler() skips calling
+ * UnregisteredRouteNameHandler::init() on an empty table, so the handler stays disabled and every call
  * below — including ones that would be flagged against a real route table — must stay silent.
  * The positive (actual emission against a real, non-empty route table) is covered by
- * tests/Unit/Handlers/MissingRouteEmissionTest.php, a subprocess fixture with a real
+ * tests/Unit/Handlers/UnregisteredRouteNameEmissionTest.php, a subprocess fixture with a real
  * bootstrap/app.php and withRouting().
  */
 function literal_undefined_name(): string
@@ -33,7 +33,7 @@ function non_literal_name(string $name): string
 
 /**
  * @param list<mixed> $args
- * @psalm-suppress MixedArgument unrelated to MissingRoute — spread hides the argument types too
+ * @psalm-suppress MixedArgument unrelated to UnregisteredRouteName — spread hides the argument types too
  */
 function spread_args(array $args): string
 {

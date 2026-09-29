@@ -10,16 +10,16 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
-use Psalm\LaravelPlugin\Handlers\Rules\MissingRouteHandler;
+use Psalm\LaravelPlugin\Handlers\Rules\UnregisteredRouteNameHandler;
 use Psalm\LaravelPlugin\Plugin;
 
 /**
- * Fast, in-process guard for `Plugin::initMissingRouteHandler()`'s decline branches, which a phpt
+ * Fast, in-process guard for `Plugin::initUnregisteredRouteNameHandler()`'s decline branches, which a phpt
  * type test cannot exercise as a POSITIVE assertion (the psalm-tester harness boots the Testbench
  * fallback, where the rule never arms) and that a real Psalm subprocess would be needlessly slow
  * to pin. The Testbench fallback is gated off by boot mode; the empty-table branches boot the
- * MissingRoute fixture (a real bootstrap/app.php) and clear its route collection, so
- * `MissingRouteHandler::init()` is never called with zero known names.
+ * UnregisteredRouteName fixture (a real bootstrap/app.php) and clear its route collection, so
+ * `UnregisteredRouteNameHandler::init()` is never called with zero known names.
  *
  * A second scenario shares that same empty table for a different, more surprising reason.
  * A compiled route cache (`bootstrap/cache/routes-v7.php`) is read the same way a live
@@ -29,23 +29,23 @@ use Psalm\LaravelPlugin\Plugin;
  * (clean) rather than "not checked" (untracked), so that path must warn.
  *
  * The positive path (a real, non-empty route table) is guarded end-to-end by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\MissingRouteEmissionTest}.
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnregisteredRouteNameEmissionTest}.
  */
 #[CoversClass(Plugin::class)]
-final class PluginMissingRouteInitializationTest extends TestCase
+final class PluginUnregisteredRouteNameInitializationTest extends TestCase
 {
     #[\Override]
     protected function setUp(): void
     {
         ApplicationProvider::reset();
-        MissingRouteHandler::reset();
+        UnregisteredRouteNameHandler::reset();
     }
 
     #[\Override]
     protected function tearDown(): void
     {
         ApplicationProvider::reset();
-        MissingRouteHandler::reset();
+        UnregisteredRouteNameHandler::reset();
     }
 
     /**
@@ -60,9 +60,9 @@ final class PluginMissingRouteInitializationTest extends TestCase
         $this->assertSame('testbench_fallback', ApplicationProvider::getBootMode());
 
         $progress = new RecordingProgress();
-        $this->invokeInitMissingRouteHandler($progress);
+        $this->invokeInitUnregisteredRouteNameHandler($progress);
 
-        $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled under the Testbench fallback.');
+        $this->assertFalse($this->isEnabled(), 'UnregisteredRouteNameHandler must stay disabled under the Testbench fallback.');
         $this->assertSame([], $this->registeredNames());
         $this->assertSame(0, $progress->warningCount, 'A package/library boot is the expected shape and must not warn.');
     }
@@ -74,7 +74,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
             ApplicationProvider::getApp()->make('router')->setRoutes(new RouteCollection());
         });
 
-        $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled when the named-route table is empty.');
+        $this->assertFalse($this->isEnabled(), 'UnregisteredRouteNameHandler must stay disabled when the named-route table is empty.');
         $this->assertSame([], $this->registeredNames());
         $this->assertSame(0, $progress->warningCount, 'An uncached empty table must not warn.');
     }
@@ -92,7 +92,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
             $app->instance('routes.cached', true);
         });
 
-        $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled when the route cache yields no named routes.');
+        $this->assertFalse($this->isEnabled(), 'UnregisteredRouteNameHandler must stay disabled when the route cache yields no named routes.');
         $this->assertSame(1, $progress->warningCount, 'A cached-routes empty table must warn exactly once.');
         $this->assertStringContainsString('route:cache', $progress->lastWarning);
         $this->assertStringContainsString('route:clear', $progress->lastWarning);
@@ -104,10 +104,10 @@ final class PluginMissingRouteInitializationTest extends TestCase
      * fixture this test chdir()s into never completes BootProviders (no bootstrap/cache
      * directory — see that fixture's own bootstrap/app.php docblock), so 'files' is never
      * bound there at all. Before this was caught, the resulting BindingResolutionException
-     * escaped initMissingRouteHandler() uncaught, propagated through __invoke()'s try block,
+     * escaped initUnregisteredRouteNameHandler() uncaught, propagated through __invoke()'s try block,
      * and disabled the WHOLE plugin for the run via the outer catch — not just the
-     * MissingRoute feature. This is exactly how UnknownModelAttributeEmissionTest's
-     * experimental fixture broke once findMissingRoutes started auto-enabling under
+     * UnregisteredRouteName feature. This is exactly how UnknownModelAttributeEmissionTest's
+     * experimental fixture broke once findUnregisteredRouteNames started auto-enabling under
      * <experimental> (that fixture's own findings dropped to zero with this bug present).
      *
      * A plain `unset($app['files'])` does not reproduce this: the Testbench-fallback app
@@ -118,7 +118,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
     #[Test]
     public function a_throwing_routes_are_cached_check_degrades_only_this_feature(): void
     {
-        $fixtureDir = __DIR__ . '/Handlers/Fixtures/MissingRoute/partial-boot';
+        $fixtureDir = __DIR__ . '/Handlers/Fixtures/UnregisteredRouteName/partial-boot';
         $originalCwd = \getcwd();
         \assert(\is_string($originalCwd));
 
@@ -134,12 +134,12 @@ final class PluginMissingRouteInitializationTest extends TestCase
             $this->assertFalse($app->bound('files'), "Fixture assumption broken: 'files' is bound, so this no longer reproduces the regression.");
 
             $progress = new RecordingProgress();
-            $this->invokeInitMissingRouteHandler($progress);
+            $this->invokeInitUnregisteredRouteNameHandler($progress);
         } finally {
             \chdir($originalCwd);
         }
 
-        $this->assertFalse($this->isEnabled(), 'MissingRouteHandler must stay disabled, not crash the whole invocation.');
+        $this->assertFalse($this->isEnabled(), 'UnregisteredRouteNameHandler must stay disabled, not crash the whole invocation.');
         $this->assertSame(0, $progress->warningCount, 'Cannot determine cache state, so this must fall through to the silent path, same as a genuinely empty table.');
     }
 
@@ -201,7 +201,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
     }
 
     /**
-     * Boot the complete-boot MissingRoute fixture in-process (a real bootstrap/app.php with
+     * Boot the complete-boot UnregisteredRouteName fixture in-process (a real bootstrap/app.php with
      * withRouting(), so the named-route table is genuinely populated: 'dashboard', 'posts.show'),
      * run $configure against its url service, then invoke the initializer.
      *
@@ -209,7 +209,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
      */
     private function bootRouteFixture(\Closure $configure): RecordingProgress
     {
-        $fixtureDir = __DIR__ . '/Handlers/Fixtures/MissingRoute';
+        $fixtureDir = __DIR__ . '/Handlers/Fixtures/UnregisteredRouteName';
         $originalCwd = \getcwd();
         \assert(\is_string($originalCwd));
 
@@ -223,7 +223,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
             $configure($url);
 
             $progress = new RecordingProgress();
-            $this->invokeInitMissingRouteHandler($progress);
+            $this->invokeInitUnregisteredRouteNameHandler($progress);
         } finally {
             \chdir($originalCwd);
         }
@@ -231,15 +231,15 @@ final class PluginMissingRouteInitializationTest extends TestCase
         return $progress;
     }
 
-    private function invokeInitMissingRouteHandler(\Psalm\Progress\Progress $progress): void
+    private function invokeInitUnregisteredRouteNameHandler(\Psalm\Progress\Progress $progress): void
     {
-        $method = new \ReflectionMethod(Plugin::class, 'initMissingRouteHandler');
+        $method = new \ReflectionMethod(Plugin::class, 'initUnregisteredRouteNameHandler');
         $method->invoke(new Plugin(), $progress);
     }
 
     private function isEnabled(): bool
     {
-        $property = new \ReflectionProperty(MissingRouteHandler::class, 'enabled');
+        $property = new \ReflectionProperty(UnregisteredRouteNameHandler::class, 'enabled');
 
         /** @var bool $value */
         $value = $property->getValue();
@@ -250,7 +250,7 @@ final class PluginMissingRouteInitializationTest extends TestCase
     /** @return array<string, true> */
     private function registeredNames(): array
     {
-        $property = new \ReflectionProperty(MissingRouteHandler::class, 'names');
+        $property = new \ReflectionProperty(UnregisteredRouteNameHandler::class, 'names');
 
         /** @var array<string, true> $value */
         $value = $property->getValue();

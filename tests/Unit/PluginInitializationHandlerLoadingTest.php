@@ -43,7 +43,7 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             'FacadeMapProvider::reset()',
             'Handlers\\Translations\\TranslationKeyHandler::reset()',
             'Handlers\\Views\\MissingViewHandler::reset()',
-            'Handlers\\Rules\\MissingRouteHandler::reset()',
+            'Handlers\\Rules\\UnregisteredRouteNameHandler::reset()',
             'Handlers\\Eloquent\\Metadata\\ModelMetadataRegistryBuilder::reset()',
         ] as $reset) {
             $this->assertStringContainsString($reset, $resetMethod);
@@ -54,7 +54,7 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             '/Handlers/Rules/NoEnvOutsideConfigHandler.php',
             '/Handlers/Translations/TranslationKeyHandler.php',
             '/Handlers/Views/MissingViewHandler.php',
-            '/Handlers/Rules/MissingRouteHandler.php',
+            '/Handlers/Rules/UnregisteredRouteNameHandler.php',
         ] as $handlerFile) {
             $this->assertStringContainsString($handlerFile, $loadMethod);
             $this->assertSame(2, \substr_count($source, $handlerFile), "{$handlerFile} must remain explicitly loaded for both initialization and registration.");
@@ -65,7 +65,7 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             'initTranslationKeyHandler' => 'Handlers\\Translations\\TranslationKeyHandler::init(',
             'initMissingViewHandler' => 'Handlers\\Views\\MissingViewHandler::init(',
             'initViewFactoryHandler' => 'Handlers\\Views\\MissingViewHandler::initViewFactory(',
-            'initMissingRouteHandler' => 'Handlers\\Rules\\MissingRouteHandler::init(',
+            'initUnregisteredRouteNameHandler' => 'Handlers\\Rules\\UnregisteredRouteNameHandler::init(',
         ] as $method => $staticTouch) {
             $methodBody = $this->methodBody($source, $method);
 

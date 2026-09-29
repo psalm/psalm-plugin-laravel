@@ -5,7 +5,7 @@ declare(strict_types=1);
 // Standalone autoloader for the fixture — kept isolated from the package autoloader, same
 // convention as tests/Unit/Handlers/Fixtures/UnknownModelAttribute/autoload.php.
 \spl_autoload_register(static function (string $class): void {
-    $prefix = 'MissingRouteFixture\\';
+    $prefix = 'UnregisteredRouteNameFixture\\';
 
     if (!\str_starts_with($class, $prefix)) {
         return;

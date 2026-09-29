@@ -10,7 +10,7 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Issues\MissingRoute;
+use Psalm\LaravelPlugin\Issues\UnregisteredRouteName;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -21,7 +21,7 @@ use Psalm\Type\Union;
 /**
  * Detects calls to route(), to_route(), URL::route()/signedRoute()/temporarySignedRoute(),
  * Redirect::route(), redirect()->route(), and url()->route() whose route name is not
- * registered anywhere in the booted application, and flags it as {@see MissingRoute}.
+ * registered anywhere in the booted application, and flags it as {@see UnregisteredRouteName}.
  *
  * Diagnostic only — every provider method below always returns null; stub/native return
  * types are left untouched.
@@ -46,7 +46,7 @@ use Psalm\Type\Union;
  * empty literal reads as unfinished scaffolding rather than a typo'd name.
  *
  * The named-route table is populated once per invocation from the booted app's router
- * (see `Plugin::initMissingRouteHandler()`). A compiled route cache
+ * (see `Plugin::initUnregisteredRouteNameHandler()`). A compiled route cache
  * (`bootstrap/cache/routes-v7.php`) is read the same way a live route-file boot is; the
  * plugin does not treat a cached boot any differently. When the table comes back empty,
  * the handler stays disabled entirely rather than reporting every route name as missing.
@@ -69,7 +69,7 @@ use Psalm\Type\Union;
  *
  * @see https://laravel.com/docs/routing#named-routes
  */
-final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
+final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /**
      * Parameter identifiers the route name can arrive under, for named-argument call sites.
@@ -240,7 +240,7 @@ final class MissingRouteHandler implements FunctionReturnTypeProviderInterface, 
         }
 
         IssueBuffer::accepts(
-            new MissingRoute("Route '{$routeName}' is not defined", $codeLocation),
+            new UnregisteredRouteName("Route name '{$routeName}' is not registered", $codeLocation),
             $suppressedIssues,
         );
     }

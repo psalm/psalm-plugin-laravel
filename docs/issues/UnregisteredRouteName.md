@@ -1,14 +1,14 @@
 ---
-title: MissingRoute
+title: UnregisteredRouteName
 parent: Custom Issues
 nav_order: 12
 ---
 
-# MissingRoute
+# UnregisteredRouteName
 
 Emitted when `route()`, `to_route()`, `URL::route()` / `signedRoute()` / `temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered anywhere in the booted application.
 
-Controlled by the `findMissingRoutes` flag (see [Configuration](../config.md)).
+Controlled by the `findUnregisteredRouteNames` flag (see [Configuration](../config.md)).
 
 ## Why this is a problem
 
@@ -18,7 +18,7 @@ Laravel throws a `RouteNotFoundException` at runtime when `route()` or `URL::rou
 
 ```php
 // Bad: stale reference to a removed route
-route('dashboard-legacy'); // MissingRoute
+route('dashboard-legacy'); // UnregisteredRouteName
 
 // Good — the route is registered
 route('dashboard');
@@ -26,12 +26,12 @@ route('dashboard');
 
 ```php
 // Named arguments are resolved by parameter name, not by position
-route(absolute: false, name: 'dashboard-legacy'); // MissingRoute
+route(absolute: false, name: 'dashboard-legacy'); // UnregisteredRouteName
 ```
 
 ```php
 // Bad — the route was renamed and the redirect wasn't updated
-return redirect()->route('users.show', $user); // MissingRoute, if the route is now 'members.show'
+return redirect()->route('users.show', $user); // UnregisteredRouteName, if the route is now 'members.show'
 
 // Good
 return redirect()->route('members.show', $user);
@@ -50,7 +50,7 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <findMissingRoutes value="true" />
+        <findUnregisteredRouteNames value="true" />
     </pluginClass>
 </plugins>
 ```
