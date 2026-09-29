@@ -17,8 +17,8 @@ Laravel throws a `RouteNotFoundException` at runtime when `route()` or `URL::rou
 ## Examples
 
 ```php
-// Bad — typo in the route name
-route('dashbaord'); // MissingRoute
+// Bad: stale reference to a removed route
+route('dashboard-legacy'); // MissingRoute
 
 // Good — the route is registered
 route('dashboard');
@@ -26,7 +26,7 @@ route('dashboard');
 
 ```php
 // Named arguments are resolved by parameter name, not by position
-route(absolute: false, name: 'dashbaord'); // MissingRoute
+route(absolute: false, name: 'dashboard-legacy'); // MissingRoute
 ```
 
 ```php

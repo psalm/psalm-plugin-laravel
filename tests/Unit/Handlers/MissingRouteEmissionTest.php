@@ -49,7 +49,7 @@ final class MissingRouteEmissionTest extends TestCase
         // stay silent — asserting an exact count proves both that the rule fires on every covered
         // receiver and that it does not over-fire on the forms it deliberately skips.
         $this->assertCount(11, $findings, "Expected exactly 11 MissingRoute findings, got:\n{$joined}");
-        $this->assertStringContainsString("'dashbaord'", $joined, 'Every URL/Redirect-family typo must be flagged.');
+        $this->assertStringContainsString("'dashboard-legacy'", $joined, 'Every URL/Redirect-family typo must be flagged.');
         $this->assertStringContainsString("'posts.hsow'", $joined, 'to_route() with a typo must be flagged.');
         $this->assertStringNotContainsString(
             "'dashboard'",

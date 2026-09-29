@@ -18,7 +18,7 @@ final class UsesRoutes
 {
     public function routeHelperTypo(): string
     {
-        return route('dashbaord');
+        return route('dashboard-legacy');
     }
 
     public function routeHelperClean(): string
@@ -38,27 +38,27 @@ final class UsesRoutes
 
     public function urlFacadeRouteTypo(): string
     {
-        return URL::route('dashbaord');
+        return URL::route('dashboard-legacy');
     }
 
     public function urlFacadeSignedRouteTypo(): string
     {
-        return URL::signedRoute('dashbaord');
+        return URL::signedRoute('dashboard-legacy');
     }
 
     public function urlFacadeTemporarySignedRouteTypo(): string
     {
-        return URL::temporarySignedRoute('dashbaord', now()->addMinutes(5));
+        return URL::temporarySignedRoute('dashboard-legacy', now()->addMinutes(5));
     }
 
     public function redirectFacadeRouteTypo(): RedirectResponse
     {
-        return Redirect::route('dashbaord');
+        return Redirect::route('dashboard-legacy');
     }
 
     public function redirectHelperRouteTypo(): RedirectResponse
     {
-        return redirect()->route('dashbaord');
+        return redirect()->route('dashboard-legacy');
     }
 
     public function redirectHelperRouteClean(): RedirectResponse
@@ -73,7 +73,7 @@ final class UsesRoutes
      */
     public function urlHelperRouteTypo(): string
     {
-        return url()->route('dashbaord');
+        return url()->route('dashboard-legacy');
     }
 
     public function urlHelperRouteClean(): string
@@ -88,7 +88,7 @@ final class UsesRoutes
      */
     public function routeHelperNamedArgsReorderedTypo(): string
     {
-        return route(absolute: false, name: 'dashbaord');
+        return route(absolute: false, name: 'dashboard-legacy');
     }
 
     /** The same shape with a registered name must stay silent. */
@@ -110,7 +110,7 @@ final class UsesRoutes
     /** Redirector's route family also names the parameter `$route`. */
     public function redirectHelperRouteNamedArgTypo(): RedirectResponse
     {
-        return redirect()->route(route: 'dashbaord');
+        return redirect()->route(route: 'dashboard-legacy');
     }
 
     /**
@@ -130,7 +130,7 @@ final class UsesRoutes
     public function spreadArgsNeverFlagged(): string
     {
         /** @var list<mixed> $args */
-        $args = ['dashbaord'];
+        $args = ['dashboard-legacy'];
 
         return route(...$args);
     }
