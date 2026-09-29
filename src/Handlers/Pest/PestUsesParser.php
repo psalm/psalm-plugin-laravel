@@ -41,9 +41,11 @@ final class PestUsesParser
     private const CLASS_METHODS = ['extend' => true, 'extends' => true, 'use' => true, 'uses' => true];
 
     /**
+     * @param bool $bootFile false for a test file: its closures run after Pest resolved the file's
+     *                       TestCase, so an include inside one cannot configure it
      * @return list<PestUsesEntry>|null null when the file holds a chain that cannot be read statically
      */
-    public static function parse(string $filePath, string $contents): ?array
+    public static function parse(string $filePath, string $contents, bool $bootFile = true): ?array
     {
         // Cheap bail: most test files never mention either name, nor include another file. Any
         // mention at all (a comment before the parenthesis, an alias import) takes the AST path.
@@ -60,7 +62,7 @@ final class PestUsesParser
         $traverser = new NodeTraverser(new NameResolver());
         $statements = $traverser->traverse($statements);
 
-        if (!self::isLinear($statements)) {
+        if (!self::isLinear($statements, $bootFile)) {
             return null;
         }
 
@@ -113,13 +115,28 @@ final class PestUsesParser
      *
      * @param array<Node> $statements
      */
-    private static function isLinear(array $statements): bool
+    private static function isLinear(array $statements, bool $bootFile): bool
     {
         $finder = new NodeFinder();
-        $opaque = $finder->findFirst($statements, static fn(Node $node): bool => $node instanceof Expr\Include_
-            || ($node instanceof String_ && \in_array(\strtolower(\ltrim($node->value, '\\')), ['uses', 'pest'], true)));
+        $opaque = $finder->findFirst($statements, static fn(Node $node): bool => $node instanceof String_
+            && \in_array(\strtolower(\ltrim($node->value, '\\')), ['uses', 'pest'], true));
         if ($opaque instanceof \PhpParser\Node) {
             return false;
+        }
+
+        $deferredIncludes = [];
+        if (!$bootFile) {
+            foreach ($finder->find($statements, static fn(Node $node): bool => $node instanceof Expr\Closure || $node instanceof Expr\ArrowFunction) as $closure) {
+                foreach ($finder->findInstanceOf($closure, Expr\Include_::class) as $include) {
+                    $deferredIncludes[\spl_object_id($include)] = true;
+                }
+            }
+        }
+
+        foreach ($finder->findInstanceOf($statements, Expr\Include_::class) as $include) {
+            if (!isset($deferredIncludes[\spl_object_id($include)])) {
+                return false;
+            }
         }
 
         foreach ($finder->find($statements, static fn(Node $node): bool => $node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) as $use) {

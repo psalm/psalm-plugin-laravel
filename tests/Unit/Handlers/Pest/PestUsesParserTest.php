@@ -109,6 +109,22 @@ final class PestUsesParserTest extends TestCase
     }
 
     #[Test]
+    public function test_files_ignore_includes_inside_closures_but_boot_files_do_not(): void
+    {
+        // A test closure runs after Pest resolved the file's TestCase, so what it includes cannot
+        // configure it; boot files stay strict, any include there may carry configuration.
+        $testFile = $this->root . '/tests/Feature/Api/UserTest.php';
+        $source = "<?php\nuses(Tests\\ApiCase::class);\ntest('x', function () { \$m = require 'migration.php'; });";
+
+        $this->assertSame(
+            [['classes' => ['Tests\ApiCase'], 'targets' => [$testFile]]],
+            PestUsesParser::parse($testFile, $source, bootFile: false),
+        );
+        $this->assertNull(PestUsesParser::parse($testFile, $source));
+        $this->assertNull(PestUsesParser::parse($testFile, "<?php\nrequire 'config.php';", bootFile: false));
+    }
+
+    #[Test]
     public function comments_between_name_and_arguments_still_parse(): void
     {
         $this->assertSame(

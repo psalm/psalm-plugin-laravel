@@ -53,7 +53,7 @@ final class PestTestCaseResolver
     /** @param \Closure(string): ?bool $isClass */
     private static function doResolve(string $testsDir, string $testFile, string $testContents, \Closure $isClass): ?string
     {
-        $inFile = PestUsesParser::parse($testFile, $testContents);
+        $inFile = PestUsesParser::parse($testFile, $testContents, bootFile: false);
         if ($inFile === null) {
             return null;
         }
