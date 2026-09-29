@@ -38,6 +38,7 @@ flowchart TD
     I -.->|afterCodebasePopulated| FMB["FactoryModelBindingHandler (injects @extends Factory&lt;TModel&gt; on bare factory subclasses, #780)"]
     I -.->|afterCodebasePopulated| FSP["FacadeStubPrecedenceHandler (drops conflicting facade @method pseudos when the plugin ships a real stubbed static method)"]
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
+    I -.->|afterCodebasePopulated| PEST["Pest (only when scanned): PestClosureThisHandler (registers a params provider rebinding $this in test()/it()/beforeEach()/afterEach() to the TestCase from tests/Pest.php), PestInternalDslHandler (lifts @internal from Pest's DSL classes)"]
     J --- models["
         Discover Model subclasses
         Register per-model property/method closures:

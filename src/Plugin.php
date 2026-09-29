@@ -197,6 +197,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Jobs\DispatchableHandler::reset();
         Handlers\Magic\MacroRegistry::reset();
         Handlers\Producers\ProducerReturnTypeHandler::reset();
+        Handlers\Pest\PestTestCaseResolver::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -447,8 +448,13 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrGetHandler::class);
 
-        // Pest: lift `@internal` from Pest's public DSL classes. Self-gates on the classes
-        // being scanned (AfterCodebasePopulated).
+        // Pest: rebind `$this` in test()/it()/beforeEach()/afterEach() closures from Pest's
+        // `@param-closure-this TestCall` to the configured TestCase, and lift `@internal` from
+        // Pest's public DSL classes. Both self-gate on Pest being scanned (AfterCodebasePopulated).
+        require_once __DIR__ . '/Handlers/Pest/PestUsesParser.php';
+        require_once __DIR__ . '/Handlers/Pest/PestTestCaseResolver.php';
+        require_once __DIR__ . '/Handlers/Pest/PestClosureThisHandler.php';
+        $registration->registerHooksFromClass(Handlers\Pest\PestClosureThisHandler::class);
         require_once __DIR__ . '/Handlers/Pest/PestInternalDslHandler.php';
         $registration->registerHooksFromClass(Handlers\Pest\PestInternalDslHandler::class);
 

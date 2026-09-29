@@ -329,3 +329,11 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Decision:** The plugin provides type support for `laravel/framework` (Illuminate namespace) and first-party packages that ship with a default Laravel install. Third-party packages (Sanctum, Cashier, Livewire, Filament, etc.) are out of scope unless their model subclasses are naturally discovered.
 
 **Why:** Third-party packages evolve independently, have their own type stubs, and may ship their own Psalm plugins. Supporting them would multiply the maintenance surface. The plugin's model discovery will pick up any `Model` subclass in the scanned codebase (including vendor), and the generic handlers work for those. But package-specific magic (e.g. Livewire's component properties) belongs in a package-specific plugin.
+
+### Pest test closures are the exception
+
+**Decision:** The plugin corrects `$this` in Pest's `test()`/`it()`/`beforeEach()`/`afterEach()` closures and lifts `@internal` from Pest's public DSL classes (`src/Handlers/Pest/`).
+
+**Why:** Pest is the default test framework of the Laravel installer, and Psalm 6.19 turned Pest's `@param-closure-this TestCall` into thousands of false positives per Pest suite (Psalm does not resolve `TestCall`'s union `@mixin`, which is how PHPStan reaches the TestCase). The runtime class is a per-directory fact from `tests/Pest.php`, so no stub can express it.
+
+**How:** a `FunctionParamsProvider` answers per call site with the TestCase read statically from `tests/Pest.php` and the file's own `uses()`/`pest()->extend()`, never executing either. A per-file swap of the shared `closure_this_type` storage (Before/AfterFileAnalysis) was considered and rejected: it needs restore bookkeeping for no gain. Anything not statically readable declines to Pest's own binding.

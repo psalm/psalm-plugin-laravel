@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+>
+    <projectFiles>
+        <directory name="tests" />
+    </projectFiles>
+    <stubs>
+        <file name="../../../../Type/pest-fixtures.phpstub" />
+    </stubs>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin" />
+    </plugins>
+    <issueHandlers>
+        <PropertyNotSetInConstructor errorLevel="suppress" />
+        <UnusedClass errorLevel="suppress" />
+        <ClassMustBeFinal errorLevel="suppress" />
+    </issueHandlers>
+</psalm>
