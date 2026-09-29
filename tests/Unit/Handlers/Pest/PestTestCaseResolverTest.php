@@ -163,6 +163,37 @@ final class PestTestCaseResolverTest extends TestCase
     }
 
     #[Test]
+    public function datasets_in_hidden_directories_are_skipped_like_pest_does(): void
+    {
+        $this->writePest('');
+        \mkdir($this->root . '/tests/.archive', 0o777, true);
+        \file_put_contents($this->root . '/tests/.archive/Datasets.php', "<?php\nuses(Tests\\Other::class)->in(__DIR__ . '/../Feature');");
+
+        $this->assertSame(PestTestCaseResolver::DEFAULT_TEST_CASE, $this->resolve('Feature/UserTest.php'));
+    }
+
+    #[Test]
+    public function symlinked_directory_in_the_test_tree_declines(): void
+    {
+        $this->writePest('');
+        \mkdir($this->root . '/shared/Datasets', 0o777, true);
+        \file_put_contents($this->root . '/shared/Datasets/Cases.php', "<?php\nuses(Tests\\Other::class)->in(__DIR__ . '/../../tests/Feature');");
+        \symlink($this->root . '/shared', $this->root . '/tests/Shared');
+
+        $this->assertNull($this->resolve('Feature/UserTest.php'));
+    }
+
+    #[Test]
+    public function symlinked_boot_file_declines(): void
+    {
+        \mkdir($this->root . '/support', 0o777, true);
+        \file_put_contents($this->root . '/support/PestConfig.php', "<?php\npest()->extend(Tests\\TestCase::class);");
+        \symlink($this->root . '/support/PestConfig.php', $this->root . '/tests/Pest.php');
+
+        $this->assertNull($this->resolve('Feature/UserTest.php'));
+    }
+
+    #[Test]
     public function unreadable_boot_file_declines(): void
     {
         $this->writePest('');

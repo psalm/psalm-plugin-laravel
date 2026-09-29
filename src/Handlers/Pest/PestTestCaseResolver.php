@@ -100,13 +100,19 @@ final class PestTestCaseResolver
             return self::$configs[$testsDir];
         }
 
-        if (!\is_file($testsDir . \DIRECTORY_SEPARATOR . 'Pest.php')) {
+        $realTestsDir = \realpath($testsDir);
+        $files = $realTestsDir === false || !\is_file($realTestsDir . \DIRECTORY_SEPARATOR . 'Pest.php')
+            ? null
+            : self::bootFiles($realTestsDir);
+        if ($files === null) {
             return self::$configs[$testsDir] = null;
         }
 
         $entries = [];
-        foreach (self::bootFiles($testsDir) as $file) {
-            $contents = \file_get_contents($file);
+        foreach ($files as $file) {
+            // PHP runs a symlinked file from its target, so `__DIR__`, `in()` and Pest's Pest.php
+            // detection all resolve elsewhere: not modeled.
+            $contents = \realpath($file) === $file ? \file_get_contents($file) : false;
             $parsed = $contents === false ? null : PestUsesParser::parse($file, $contents);
             if ($parsed === null) {
                 return self::$configs[$testsDir] = null;
@@ -118,38 +124,54 @@ final class PestTestCaseResolver
         return self::$configs[$testsDir] = $entries;
     }
 
-    /** @return list<string> */
-    private static function bootFiles(string $testsDir): array
+    /** @return list<string>|null null when the tree cannot be walked */
+    private static function bootFiles(string $testsDir): ?array
     {
         $files = [];
-        foreach (self::BOOT_FILES as $name) {
-            $path = $testsDir . \DIRECTORY_SEPARATOR . $name;
-            if (\is_file($path)) {
-                $files[] = $path;
-            } elseif (\is_dir($path)) {
-                \array_push($files, ...self::phpFiles($path));
-            }
-        }
 
-        // BootFiles::bootDatasets(): every `Datasets.php`, and every file below a `Datasets/` directory.
-        foreach (self::phpFiles($testsDir) as $file) {
-            $relativeDirs = \explode(\DIRECTORY_SEPARATOR, \dirname(\substr($file, \strlen($testsDir) + 1)));
-            if (\basename($file) === self::DATASETS . '.php' || \in_array(self::DATASETS, $relativeDirs, true)) {
-                $files[] = $file;
+        try {
+            foreach (self::BOOT_FILES as $name) {
+                $path = $testsDir . \DIRECTORY_SEPARATOR . $name;
+                if (\is_file($path) || \is_link($path)) {
+                    $files[] = $path;
+                } elseif (\is_dir($path)) {
+                    // BootFiles::boot(): RecursiveDirectoryIterator without FOLLOW_SYMLINKS.
+                    \array_push($files, ...self::phpFiles(new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS)));
+                }
             }
+
+            // BootFiles::bootDatasets(): PHPUnit's file iterator (symlinks followed, files in hidden
+            // directories skipped), keeping every `Datasets.php` and every file below `Datasets/`.
+            $datasets = new \RecursiveCallbackFilterIterator(
+                new \RecursiveDirectoryIterator($testsDir, \FilesystemIterator::FOLLOW_SYMLINKS | \FilesystemIterator::SKIP_DOTS),
+                static fn(mixed $entry): bool => !$entry instanceof \SplFileInfo
+                    || !$entry->isDir()
+                    || !\str_starts_with($entry->getFilename(), '.'),
+            );
+            foreach (self::phpFiles($datasets) as $file) {
+                $relativeDirs = \explode(\DIRECTORY_SEPARATOR, \dirname(\substr($file, \strlen($testsDir) + 1)));
+                if (\basename($file) === self::DATASETS . '.php' || \in_array(self::DATASETS, $relativeDirs, true)) {
+                    $files[] = $file;
+                }
+            }
+        } catch (\UnexpectedValueException) {
+            // Unreadable directory or a symlink cycle.
+            return null;
         }
 
         return $files;
     }
 
-    /** @return list<string> */
-    private static function phpFiles(string $dir): array
+    /**
+     * @param \RecursiveIterator<array-key, \SplFileInfo|string> $directory
+     * @return list<string>
+     */
+    private static function phpFiles(\RecursiveIterator $directory): array
     {
         $files = [];
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
-        /** @var \SplFileInfo $file */
-        foreach ($iterator as $file) {
-            if (\str_ends_with($file->getPathname(), '.php')) {
+        /** @psalm-var \SplFileInfo|string $file */
+        foreach (new \RecursiveIteratorIterator($directory) as $file) {
+            if ($file instanceof \SplFileInfo && \str_ends_with($file->getPathname(), '.php')) {
                 $files[] = $file->getPathname();
             }
         }
