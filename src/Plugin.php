@@ -93,8 +93,8 @@ final class Plugin implements PluginEntryPointInterface
                 $this->initMissingViewHandler($output, $viewFactory);
             }
 
-            if ($pluginConfig->findUnknownFilesystemDisks) {
-                $this->initUnknownFilesystemDiskHandler($output);
+            if ($pluginConfig->findUnconfiguredFilesystemDisks) {
+                $this->initUnconfiguredFilesystemDiskHandler($output);
             }
 
             // Always called — provides type narrowing for the view() helper regardless
@@ -816,7 +816,7 @@ final class Plugin implements PluginEntryPointInterface
 
     /**
      * Read `filesystems.disks` once from the booted app and arm StorageHandler's
-     * UnknownFilesystemDisk diagnostic with the configured disk names.
+     * UnconfiguredFilesystemDisk diagnostic with the configured disk names.
      *
      * Restricted to a real `bootstrap/app.php` boot (ApplicationProvider::getBootMode()
      * === 'bootstrap'): the Testbench package-mode fallback boots Testbench's own bundled
@@ -826,7 +826,7 @@ final class Plugin implements PluginEntryPointInterface
      * bootstrap error also disarms the diagnostic and the disk list is required to be
      * non-empty before it is armed.
      */
-    private function initUnknownFilesystemDiskHandler(\Psalm\Progress\Progress $output): void
+    private function initUnconfiguredFilesystemDiskHandler(\Psalm\Progress\Progress $output): void
     {
         if (ApplicationProvider::getBootMode() !== 'bootstrap') {
             return;
@@ -837,8 +837,8 @@ final class Plugin implements PluginEntryPointInterface
         // would flag those disks as unknown.
         if (ApplicationProvider::getBootstrapError() instanceof \Throwable) {
             $output->warning(
-                'Laravel plugin: findUnknownFilesystemDisks is enabled but the application boot was '
-                . 'degraded. The UnknownFilesystemDisk check will be skipped.',
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but the application boot was '
+                . 'degraded. The UnconfiguredFilesystemDisk check will be skipped.',
             );
 
             return;
@@ -848,8 +848,8 @@ final class Plugin implements PluginEntryPointInterface
             $configured = ConfigRepositoryProvider::get()->get('filesystems.disks');
         } catch (\Throwable $throwable) {
             $output->warning(
-                'Laravel plugin: findUnknownFilesystemDisks is enabled but reading filesystems.disks '
-                . "threw: {$throwable->getMessage()}. The UnknownFilesystemDisk check will be skipped.",
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but reading filesystems.disks '
+                . "threw: {$throwable->getMessage()}. The UnconfiguredFilesystemDisk check will be skipped.",
             );
 
             return;
@@ -857,8 +857,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!\is_array($configured) || $configured === []) {
             $output->warning(
-                'Laravel plugin: findUnknownFilesystemDisks is enabled but filesystems.disks resolved '
-                . 'empty (possibly a degraded boot). The UnknownFilesystemDisk check will be skipped.',
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks resolved '
+                . 'empty (possibly a degraded boot). The UnconfiguredFilesystemDisk check will be skipped.',
             );
 
             return;

@@ -10,7 +10,7 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <findUnknownFilesystemDisks value="true" />
+            <findUnconfiguredFilesystemDisks value="true" />
         </pluginClass>
     </plugins>
 </psalm>

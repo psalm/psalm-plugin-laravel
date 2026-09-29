@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace UnknownDiskFixture;
+namespace UnconfiguredDiskFixture;
 
 use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Facades\Storage;

@@ -11,9 +11,9 @@ use Psalm\Issue\PluginIssue;
  * FilesystemManager/Factory contract) is given a literal disk name that is not
  * configured in filesystems.disks.
  */
-final class UnknownFilesystemDisk extends PluginIssue
+final class UnconfiguredFilesystemDisk extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnknownFilesystemDisk/';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnconfiguredFilesystemDisk/';
 
-    // No ERROR_LEVEL override: controlled by the plugin setting findUnknownFilesystemDisks
+    // No ERROR_LEVEL override: controlled by the plugin setting findUnconfiguredFilesystemDisks
 }

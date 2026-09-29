@@ -5,7 +5,7 @@ declare(strict_types=1);
 // Standalone autoloader for the fixture app class. A dedicated, non-Composer namespace keeps the
 // fixture isolated from the package autoloader, same idiom as Fixtures/UnknownModelAttribute.
 \spl_autoload_register(static function (string $class): void {
-    $prefix = 'UnknownDiskFixture\\';
+    $prefix = 'UnconfiguredDiskFixture\\';
 
     if (!\str_starts_with($class, $prefix)) {
         return;

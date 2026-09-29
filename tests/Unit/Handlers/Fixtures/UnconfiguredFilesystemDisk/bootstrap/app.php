@@ -8,5 +8,5 @@ use Illuminate\Foundation\Application;
 // package-mode fallback (branch 3). config('filesystems.disks') only resolves to THIS directory's
 // config/filesystems.php under a real bootstrap boot; the Testbench branch boots its own bundled
 // skeleton config regardless of the analysed project, so it can never see this fixture's disk list
-// (see initUnknownFilesystemDiskHandler()'s boot-mode gate in src/Plugin.php).
+// (see initUnconfiguredFilesystemDiskHandler()'s boot-mode gate in src/Plugin.php).
 return Application::configure(basePath: \dirname(__DIR__))->create();

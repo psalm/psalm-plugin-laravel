@@ -1,10 +1,10 @@
 ---
-title: UnknownFilesystemDisk
+title: UnconfiguredFilesystemDisk
 parent: Custom Issues
 nav_order: 12
 ---
 
-# UnknownFilesystemDisk
+# UnconfiguredFilesystemDisk
 
 Emitted when `Storage::disk()` / `Storage::drive()` (or the same call on the root `\Storage` alias) is given a disk name that is not a key in `filesystems.disks`. The name can be a string literal, an enum case, or a class constant.
 
@@ -18,12 +18,12 @@ An unconfigured disk name is not a silent fallback to the `local` disk. `Filesys
 // filesystems.disks configures: local, public, s3
 
 // Bad — typo, no 's3-old' disk configured
-Storage::disk('s3-old')->put('file.txt', $contents); // UnknownFilesystemDisk
+Storage::disk('s3-old')->put('file.txt', $contents); // UnconfiguredFilesystemDisk
 
 // Also resolved: enum cases (backing value, or case name for a pure enum) and class constants
 enum Disk: string { case Legacy = 'archive-legacy'; }
-Storage::disk(Disk::Legacy);         // UnknownFilesystemDisk: 'archive-legacy'
-Storage::disk(Paths::LEGACY_DISK);   // UnknownFilesystemDisk when the constant is an unknown literal
+Storage::disk(Disk::Legacy);         // UnconfiguredFilesystemDisk: 'archive-legacy'
+Storage::disk(Paths::LEGACY_DISK);   // UnconfiguredFilesystemDisk when the constant is an unknown literal
 
 // Good
 Storage::disk('s3')->put('file.txt', $contents);
@@ -41,7 +41,7 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <findUnknownFilesystemDisks value="true" />
+        <findUnconfiguredFilesystemDisks value="true" />
     </pluginClass>
 </plugins>
 ```

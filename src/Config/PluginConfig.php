@@ -29,7 +29,7 @@ final readonly class PluginConfig
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
-        public bool $findUnknownFilesystemDisks,
+        public bool $findUnconfiguredFilesystemDisks,
         public bool $findSerializedQueuedModels,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
@@ -75,7 +75,7 @@ final readonly class PluginConfig
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
-        $findUnknownFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnknownFilesystemDisks, 'findUnknownFilesystemDisks') ?? $experimental;
+        $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks') ?? $experimental;
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
@@ -92,7 +92,7 @@ final readonly class PluginConfig
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
-            findUnknownFilesystemDisks: $findUnknownFilesystemDisks,
+            findUnconfiguredFilesystemDisks: $findUnconfiguredFilesystemDisks,
             findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             findPromptInjection: $findPromptInjection,

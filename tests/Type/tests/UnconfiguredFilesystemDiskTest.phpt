@@ -8,15 +8,15 @@ use Illuminate\Filesystem\FilesystemManager;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Issue #1391: findUnknownFilesystemDisks flags a literal disk name that is not a key in
+ * Issue #1391: findUnconfiguredFilesystemDisks flags a literal disk name that is not a key in
  * filesystems.disks. The psalm-tester harness boots the Testbench package-mode fallback (no
  * bootstrap/app.php resolved for cwd = repo root), so StorageHandler's boot-mode gate
- * (Plugin::initUnknownFilesystemDiskHandler()) never arms the check — every case below must
- * stay silent here. Positive emission is covered by UnknownFilesystemDiskEmissionTest, a
+ * (Plugin::initUnconfiguredFilesystemDiskHandler()) never arms the check — every case below must
+ * stay silent here. Positive emission is covered by UnconfiguredFilesystemDiskEmissionTest, a
  * subprocess psalm run against a fixture with its own bootstrap/app.php.
  */
 
-// An unknown disk — would emit UnknownFilesystemDisk under a real bootstrap boot.
+// An unconfigured disk — would emit UnconfiguredFilesystemDisk under a real bootstrap boot.
 Storage::disk('s3-old');
 Storage::drive('s3-old');
 

@@ -11,7 +11,7 @@ use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
-use Psalm\LaravelPlugin\Issues\UnknownFilesystemDisk;
+use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -112,7 +112,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static ?array $facade_disk_params = null;
 
-    /** Guards the {@see UnknownFilesystemDisk} diagnostic — off unless {@see self::init()} ran. */
+    /** Guards the {@see UnconfiguredFilesystemDisk} diagnostic — off unless {@see self::init()} ran. */
     private static bool $enabled = false;
 
     /**
@@ -134,7 +134,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
     }
 
     /**
-     * Arm the {@see UnknownFilesystemDisk} diagnostic with the booted app's configured disk names.
+     * Arm the {@see UnconfiguredFilesystemDisk} diagnostic with the booted app's configured disk names.
      *
      * @param list<string> $disks
      * @psalm-external-mutation-free
@@ -249,7 +249,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
         $configured = \implode(', ', self::$disks);
 
         IssueBuffer::accepts(
-            new UnknownFilesystemDisk(
+            new UnconfiguredFilesystemDisk(
                 "Disk '{$diskName}' is not configured in filesystems.disks (configured: {$configured})",
                 $codeLocation,
             ),

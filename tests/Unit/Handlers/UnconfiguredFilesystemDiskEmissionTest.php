@@ -12,8 +12,8 @@ use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end guard for {@see StorageHandler}'s UnknownFilesystemDisk emission. The
- * `UnknownFilesystemDiskTest.phpt` type test can only assert silence: the psalm-tester harness boots
+ * End-to-end guard for {@see StorageHandler}'s UnconfiguredFilesystemDisk emission. The
+ * `UnconfiguredFilesystemDiskTest.phpt` type test can only assert silence: the psalm-tester harness boots
  * the Testbench fallback, which leaves the rule disarmed. This forks a real `vendor/bin/psalm` (~6s)
  * against a fixture with its own `bootstrap/app.php` and `config/filesystems.php`, so the rule arms
  * with the fixture's disks and every name shape (literal, enum case, class constant) and receiver
@@ -21,10 +21,10 @@ use Symfony\Component\Process\Process;
  */
 #[CoversClass(StorageHandler::class)]
 #[CoversClass(ClassConstStringResolver::class)]
-final class UnknownFilesystemDiskEmissionTest extends TestCase
+final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
 {
     #[Test]
-    public function it_reports_unknown_disk_names_across_name_shapes_and_receivers(): void
+    public function it_reports_unconfigured_disk_names_across_name_shapes_and_receivers(): void
     {
         $projectRoot = \dirname(__DIR__, 3);
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
@@ -33,7 +33,7 @@ final class UnknownFilesystemDiskEmissionTest extends TestCase
 
         $process = new Process(
             [\PHP_BINARY, $psalmBinary, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            __DIR__ . '/Fixtures/UnknownFilesystemDisk',
+            __DIR__ . '/Fixtures/UnconfiguredFilesystemDisk',
         );
         $process->setTimeout(300);
         // Psalm exits non-zero when it reports issues; that is expected here, so do not mustRun().
@@ -46,7 +46,7 @@ final class UnknownFilesystemDiskEmissionTest extends TestCase
 
         $reported = [];
         foreach ($decoded as $finding) {
-            if (\is_array($finding) && ($finding['type'] ?? null) === 'UnknownFilesystemDisk') {
+            if (\is_array($finding) && ($finding['type'] ?? null) === 'UnconfiguredFilesystemDisk') {
                 $message = (string) $finding['message'];
                 $reported[] = \preg_match("/^Disk '([^']*)'/", $message, $m) === 1 ? $m[1] : $message;
             }

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace UnknownDiskFixture;
+namespace UnconfiguredDiskFixture;
 
 use Illuminate\Support\Facades\Storage;
 
 final class DiskUsage
 {
-    /** Not a key in config/filesystems.php's `disks` — must emit UnknownFilesystemDisk. */
+    /** Not a key in config/filesystems.php's `disks` — must emit UnconfiguredFilesystemDisk. */
     public function readsFromAnUnconfiguredDisk(): string
     {
         return Storage::disk('s3-old')->get('report.csv');
