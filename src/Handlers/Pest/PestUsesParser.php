@@ -29,8 +29,10 @@ use PhpParser\ParserFactory;
  *   (`UsesCall::in()`).
  *
  * The answer is all-or-nothing: any `uses()` / `pest()` call this cannot read (a non-literal
- * argument, a call nested outside a top-level statement, a parse error) makes the file
- * unreadable (`null`), because a guessed TestCase is worse than Pest's own `TestCall` binding.
+ * argument, a call nested outside a top-level statement, a first-class callable, an aliased
+ * import, the name as a string), and any file whose top-level run is not linear (an include, a
+ * top-level `return` / `exit`) makes the file unreadable (`null`), because a guessed TestCase is
+ * worse than Pest's own `TestCall` binding.
  *
  * @psalm-type PestUsesEntry = array{classes: list<string>, targets: list<string>}
  */
@@ -43,8 +45,9 @@ final class PestUsesParser
      */
     public static function parse(string $filePath, string $contents): ?array
     {
-        // Cheap bail: the vast majority of test files declare neither call.
-        if (\preg_match('/\b(?:uses|pest)\s*\(/i', $contents) !== 1) {
+        // Cheap bail: most test files never mention either name, nor include another file. Any
+        // mention at all (a comment before the parenthesis, an alias import) takes the AST path.
+        if (\preg_match('/\b(?:uses|pest|include|require|include_once|require_once)\b/i', $contents) !== 1) {
             return [];
         }
 
@@ -57,6 +60,10 @@ final class PestUsesParser
         $traverser = new NodeTraverser(new NameResolver());
         $statements = $traverser->traverse($statements);
 
+        if (!self::isLinear($statements)) {
+            return null;
+        }
+
         $entries = [];
         /** @var array<int, true> $readRoots */
         $readRoots = [];
@@ -64,7 +71,7 @@ final class PestUsesParser
         foreach (self::topLevelExpressions($statements) as $expression) {
             $chain = [];
             while ($expression instanceof MethodCall) {
-                if (!$expression->name instanceof Identifier) {
+                if (!$expression->name instanceof Identifier || $expression->isFirstClassCallable()) {
                     return null;
                 }
 
@@ -74,6 +81,10 @@ final class PestUsesParser
 
             if (!self::isRootCall($expression)) {
                 continue;
+            }
+
+            if ($expression->isFirstClassCallable()) {
+                return null;
             }
 
             $readRoots[\spl_object_id($expression)] = true;
@@ -94,6 +105,60 @@ final class PestUsesParser
         }
 
         return $entries;
+    }
+
+    /**
+     * False when Pest could run config this parser does not see (an include, a call through an
+     * aliased import or a string name) or skip config it does see (top-level `return` / `exit`).
+     *
+     * @param array<Node> $statements
+     */
+    private static function isLinear(array $statements): bool
+    {
+        $finder = new NodeFinder();
+        $opaque = $finder->findFirst($statements, static fn(Node $node): bool => $node instanceof Expr\Include_
+            || ($node instanceof String_ && \in_array(\strtolower(\ltrim($node->value, '\\')), ['uses', 'pest'], true)));
+        if ($opaque instanceof \PhpParser\Node) {
+            return false;
+        }
+
+        foreach ($finder->find($statements, static fn(Node $node): bool => $node instanceof Stmt\Use_ || $node instanceof Stmt\GroupUse) as $use) {
+            \assert($use instanceof Stmt\Use_ || $use instanceof Stmt\GroupUse);
+            foreach ($use->uses as $item) {
+                // A plain `use` carries the kind on the statement, a group `use` may carry it per item.
+                $name = $use instanceof Stmt\GroupUse ? Name::concat($use->prefix, $item->name) : $item->name;
+                if (($item->type !== Stmt\Use_::TYPE_UNKNOWN ? $item->type : $use->type) === Stmt\Use_::TYPE_FUNCTION
+                    && $name instanceof Name
+                    && \in_array($name->toLowerString(), ['uses', 'pest'], true)
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        $visitor = new class extends \PhpParser\NodeVisitorAbstract {
+            public bool $terminates = false;
+
+            #[\Override]
+            public function enterNode(Node $node): ?int
+            {
+                // Bodies of functions and classes do not run while the file loads.
+                if ($node instanceof Node\FunctionLike || $node instanceof Stmt\ClassLike) {
+                    return \PhpParser\NodeVisitor::DONT_TRAVERSE_CHILDREN;
+                }
+
+                if ($node instanceof Stmt\Return_ || $node instanceof Expr\Exit_
+                    || $node instanceof Stmt\HaltCompiler || $node instanceof Stmt\Goto_
+                ) {
+                    $this->terminates = true;
+                }
+
+                return null;
+            }
+        };
+        (new NodeTraverser($visitor))->traverse($statements);
+
+        return !$visitor->terminates;
     }
 
     /** @psalm-assert-if-true FuncCall $node */

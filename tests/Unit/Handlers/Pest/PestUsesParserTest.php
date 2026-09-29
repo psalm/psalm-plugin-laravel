@@ -109,6 +109,24 @@ final class PestUsesParserTest extends TestCase
     }
 
     #[Test]
+    public function comments_between_name_and_arguments_still_parse(): void
+    {
+        $this->assertSame(
+            [['classes' => ['Tests\TestCase'], 'targets' => [$this->pestFile]]],
+            $this->parsePest('uses /* comment */ (Tests\TestCase::class);'),
+        );
+    }
+
+    #[Test]
+    public function returns_inside_function_bodies_do_not_decline(): void
+    {
+        $this->assertSame(
+            [['classes' => ['Tests\TestCase'], 'targets' => [$this->root . '/tests']]],
+            $this->parsePest("function helper(): int { return 1; }\npest()->extend(Tests\\TestCase::class);"),
+        );
+    }
+
+    #[Test]
     public function files_without_uses_or_pest_calls_have_no_entries(): void
     {
         $this->assertSame([], $this->parsePest("expect()->extend('toBeOne', fn () => \$this->toBe(1));"));
@@ -128,6 +146,15 @@ final class PestUsesParserTest extends TestCase
         yield 'assigned' => ['$config = pest()->extend(Tests\TestCase::class);'];
         yield 'nested in a closure' => ['beforeEach(function () { uses(Tests\TestCase::class); });'];
         yield 'parse error' => ['uses(Tests\TestCase::class)->in('];
+        // External review findings: every shape Pest honors but this parser cannot model declines.
+        yield 'aliased function import' => ["use function uses as bindCase;\nbindCase(Tests\\TestCase::class);"];
+        yield 'function name as string' => ["call_user_func('uses', Tests\\TestCase::class);"];
+        yield 'early return before config' => ["if (getenv('PEST_USE_DEFAULT')) {\n    return;\n}\npest()->extend(Tests\\TestCase::class);"];
+        yield 'exit before config' => ["getenv('CI') or exit;\npest()->extend(Tests\\TestCase::class);"];
+        yield 'include of more config' => ["require __DIR__ . '/bindings.php';"];
+        yield 'include inside a function' => ["function boot(): void { include_once 'x.php'; }"];
+        yield 'first-class callable method' => ['pest()->extend(...)->__invoke(Tests\TestCase::class);'];
+        yield 'first-class callable root' => ['uses(...);'];
     }
 
     #[Test]
