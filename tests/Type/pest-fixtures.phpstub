@@ -45,6 +45,17 @@ namespace Pest\PendingCalls {
         {
             return $this;
         }
+
+        public function __get(string $name): self
+        {
+            return $this;
+        }
+
+        /** @param array<int, mixed> $arguments */
+        public function __call(string $name, array $arguments): self
+        {
+            return $this;
+        }
     }
 
     /** @internal */

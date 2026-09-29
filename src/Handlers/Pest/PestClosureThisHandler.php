@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Pest;
 
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\FunctionParamsProviderEvent;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -83,12 +85,13 @@ final class PestClosureThisHandler implements AfterCodebasePopulatedInterface
         );
 
         // ClosureAnalyzer binds only a class it has storage for; otherwise `$this` would be unbound.
-        if ($testCase === null || !$codebase->classlike_storage_provider->has($testCase)) {
+        $storage = $testCase === null ? null : self::storage($codebase, $testCase);
+        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage) {
             return $params;
         }
 
         $param = clone $params[$offset];
-        $param->closure_this_type = new Union([new TNamedObject($testCase)]);
+        $param->closure_this_type = new Union([new TNamedObject($storage->name)]);
         $params[$offset] = $param;
 
         return $params;
@@ -113,12 +116,20 @@ final class PestClosureThisHandler implements AfterCodebasePopulatedInterface
 
     private static function isClass(Codebase $codebase, string $class): ?bool
     {
-        try {
-            $storage = $codebase->classlike_storage_provider->get($class);
-        } catch (\InvalidArgumentException) {
+        $storage = self::storage($codebase, $class);
+        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage) {
             return null;
         }
 
         return !$storage->is_trait && !$storage->is_interface && !$storage->is_enum;
+    }
+
+    private static function storage(Codebase $codebase, string $class): ?ClassLikeStorage
+    {
+        try {
+            return $codebase->classlike_storage_provider->get($class);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
     }
 }
