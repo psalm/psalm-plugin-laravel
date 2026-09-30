@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790788060359,
+  "lastUpdate": 1790799619859,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11505,6 +11505,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.35,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "033f292e54a5b0d2bf35221aa5ebedf0df57f795",
+          "message": "Merge pull request #1603 from psalm/chore/drop-master-refs\n\nRetarget `master` references to `4.x` ahead of removing the `master` branch",
+          "timestamp": "2026-09-30T22:17:42+02:00",
+          "tree_id": "82acd8f76167fa9c9546ef78ecb9094d6b42f4e3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/033f292e54a5b0d2bf35221aa5ebedf0df57f795"
+        },
+        "date": 1790799618160,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.78,
+            "range": "± 0.21",
             "unit": "s"
           },
           {
