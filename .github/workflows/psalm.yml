@@ -86,6 +86,18 @@ jobs:
       - name: Install composer dependencies
         run: composer install -n --prefer-dist
 
+      # TEMPORARY: laravel/framework v13.32.0 added a `@phpstan-this-out` carrying a parameter
+      # conditional (Collection::prepend()). Psalm cannot parse that shape and dies with an
+      # uncaught TypeParseTreeException during its scan phase, before any issue is reported, so
+      # self-analysis cannot run at all. Held here rather than in composer.json so contributors
+      # installing locally still see the crash. Ahead of the cache restore on purpose: the cache
+      # key hashes composer.lock, which this step rewrites. Drop it once Psalm parses the tag.
+      # @see https://github.com/vimeo/psalm/issues/11958
+      - name: Hold laravel/framework below 13.32
+        run: >-
+          composer update --with="laravel/framework:>=13.3 <13.32" --with-all-dependencies
+          -n --prefer-dist
+
       # Restores the parsed statements and file/class-like storage for vendor, which is where
       # this job spends most of its time. Deliberately after the install: the key hashes
       # composer.lock, hashFiles is evaluated when the step runs, and this repository does not

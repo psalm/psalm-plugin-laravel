@@ -16,6 +16,13 @@ set -u
 # See https://github.com/laravel/laravel/tags for Laravel versions
 LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-dev-master}"
 
+# Optional Composer constraint applied to laravel/framework after the project is scaffolded.
+# Empty means whatever laravel/laravel resolves. Set it to hold the framework back when a
+# release breaks the analysis itself rather than the plugin. Currently set by the workflow to
+# dodge the Psalm scan-phase crash on laravel/framework >= 13.32.
+# @see https://github.com/vimeo/psalm/issues/11958
+LARAVEL_FRAMEWORK_CONSTRAINT="${LARAVEL_FRAMEWORK_CONSTRAINT:-}"
+
 # Terminal colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,6 +50,7 @@ Options:
 
 Environment variables:
     LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.12.2)
+    LARAVEL_FRAMEWORK_CONSTRAINT Composer constraint forced on laravel/framework (default: none)
     COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
@@ -175,6 +183,14 @@ quiet_run "composer create-project" \
     composer create-project ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --prefer-dist --no-security-blocking --no-ansi -n \
         laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
+
+# @see https://github.com/vimeo/psalm/issues/11958
+if [ -n "$LARAVEL_FRAMEWORK_CONSTRAINT" ]; then
+    info "Forcing laravel/framework:${LARAVEL_FRAMEWORK_CONSTRAINT}"
+    quiet_run "composer require laravel/framework" \
+        composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n -W \
+            "laravel/framework:${LARAVEL_FRAMEWORK_CONSTRAINT}"
+fi
 
 info "Generating example Laravel classes for analysis"
 # Invoke every generator inside a single bootstrapped Laravel process — spawning
