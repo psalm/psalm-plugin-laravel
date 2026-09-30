@@ -44,10 +44,13 @@ filename), independent of the content sink below. The attachment/content-type
 exemption applies only to the `TaintedHtml` content finding and never
 suppresses a genuinely tainted header value.
 
-The finding is dropped for a positional call whose headers array proves either
-that the browser downloads the response instead of rendering it, or that the
-declared content type is never sniffed as HTML. It is dropped as it is
-reported, so no other flow through the same code is affected.
+For `ResponseFactory::make()` (in its direct, contract, and facade forms) and
+the `Illuminate\Http\Response` constructor, the XSS finding is dropped for a
+positional call whose headers array proves either that the browser downloads
+the response instead of rendering it, or that the declared content type is
+never sniffed as HTML. It is dropped as it is reported, so no other flow
+through the same code is affected. The `response()` helper's direct 3-argument
+form is not part of this exemption and always keeps its XSS finding.
 
 The proof is deliberately syntactic, never control-flow aware. Two independent
 checks over the header entries; either alone is enough:
