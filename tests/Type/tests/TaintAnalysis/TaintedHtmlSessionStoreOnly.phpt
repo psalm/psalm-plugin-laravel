@@ -3,14 +3,13 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderOnlySessionData(\Illuminate\Session\Store $session) {
+function renderOnlySessionData(\Illuminate\Session\Store $session): void {
     $data = $session->only(['name']);
 
     echo $data['name'];
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method renderOnlySessionData does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string
