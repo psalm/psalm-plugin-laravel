@@ -32,31 +32,49 @@ Version difference that bites when testing: Psalm 6 runs in exactly one mode per
 
 ### Optional third-party integrations: `stubs/integrations/<package>/`
 
-Stubs for packages that ship outside `laravel/framework` (currently: `laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only when the host application has the package installed. The plugin probes Composer's runtime metadata in `Plugin::optionalIntegrationStubs()`:
+Stubs for packages that ship outside `laravel/framework` (currently:
+`laravel/ai`) live under `stubs/integrations/<package>/` and are loaded only
+when the host application has the package installed. `laravel/ai` is enabled by
+`LaravelAiIntegration::isEnabled()` for `>=0.11.0 <2.0.0`, covering 0.11.x and
+1.x. `Plugin::optionalIntegrationStubs()` then always loads
+`stubs/integrations/laravel-ai/shared/` and exactly one major-specific
+directory:
 
-```php
-if (LaravelAiIntegration::isEnabled()) {
-    \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
-}
-```
+- `pre-1.0/` for the supported 0.11.x release line.
+- `v1/` for laravel/ai `>=1.0.0`.
 
-Two reasons for the version range:
+This follows the Carbon `shared/` + `pre-3.12/` precedent: the shared directory
+contains declarations valid on every supported release, while an active variant
+contains declarations that cannot be correct for both majors. For laravel/ai,
+1.0 renamed `Usage` to `TextUsage` / `TranscriptionUsage`, widened prompt input
+to `AgentInput|UserMessage|Decisions|string`, changed
+`usingVercelDataProtocol(bool, ?string)` to `usingVercelDataProtocol(?string)`,
+removed `pausedProviderContentBlocks()`, and added
+`Promptable::withMessages()` / `withTools()`.
 
-1. **Absent packages contribute zero cost** (no class lookups, no stub parsing).
-2. **A future major bump won't silently load stubs that reference removed or renamed classes**: `satisfies()` traps the mismatch and falls back to no-op.
+Where a new laravel/ai stub belongs:
+
+- The declaration is identical on 0.11.x and 1.x: `shared/`.
+- The declaration differs between the majors: matching files in both `pre-1.0/` and `v1/`.
+- The class exists only in 1.x: `v1/` only.
 
 When adding a new integration, centralize its `isInstalled()` (cheap presence check) and `satisfies()` (range guard) in a shared gate, then use that gate at every integration call site and drop the stubs into a new directory under `stubs/integrations/`.
 
-**Drift canary.** The `laravel/ai` range has no upper ceiling below 1.0: silently dropping coverage on every minor release would be worse than an occasional false positive from drift. The dedicated `type_tests_laravel_ai` job runs exact `0.11.0` and floating `>=0.11.0 <1.0.0` stable legs weekly (Friday 06:00 UTC), on `workflow_dispatch`, and on relevant changes. It also has a scheduled/manual-only `0.x-dev` leg marked non-blocking. The PHP >= 8.3 cells of `test-laravel-app.yml` independently exercise the floating stable release.
+**Drift canary.** The dedicated `type_tests_laravel_ai` job runs exact `0.11.0`
+and `1.0.0` legs plus floating 0.11.x and 1.x stable legs weekly (Friday 06:00
+UTC), on `workflow_dispatch`, and on relevant changes.
+It also has scheduled/manual-only `0.x-dev` and `1.x-dev` legs marked
+non-blocking. The PHP >= 8.3 cells of `test-laravel-app.yml` independently
+exercise the floating stable releases.
 
 What they catch:
 
 - `laravel/ai` failing to install. Every PromptInjection phpt carries a SKIPIF gated on `laravel/ai` class presence, so a failed install SKIPs every phpt; `type_tests_laravel_ai` asserts the suite actually executed rather than trusting a green exit code on an all-skipped run.
 - A stubbed class being renamed, moved, or removed, via the same SKIPIF/all-skipped guard.
 - The plugin's own regressions, via the normal test suite.
-- A stubbed method's native parameter/return type drifting on a `laravel/ai` release, via `bin/ci/check-laravel-ai-stub-parity.php` (run from `type_tests_laravel_ai`). Nothing else here can see this: Psalm resolves calls against a redeclaration stub's signature, not the vendor's, and a registered stub is never diffed against the real class it redeclares, so the phpt and app-leg checks above stay green through it. This script parses the stub source with php-parser, reflects the installed classes directly, and diffs native types independent of Psalm. Confirmed to catch a synthetic vendor-only mutation; see [psalm/psalm-plugin-laravel#1331](https://github.com/psalm/psalm-plugin-laravel/issues/1331) for the reproduction that motivated it.
+- A stubbed method's native parameter/return type drifting on a `laravel/ai` release, via `bin/ci/check-laravel-ai-stub-parity.php` (run from `type_tests_laravel_ai`). With no argument, it scans `shared/` plus the installed release's active `v1/` or `pre-1.0/` directory; the inactive variant is deliberately skipped because it targets the other major. Nothing else here can see this: Psalm resolves calls against a redeclaration stub's signature, not the vendor's, and a registered stub is never diffed against the real class it redeclares, so the phpt and app-leg checks above stay green through it. This script parses the stub source with php-parser, reflects the installed classes directly, and diffs native types independent of Psalm. Confirmed to catch a synthetic vendor-only mutation; see [psalm/psalm-plugin-laravel#1331](https://github.com/psalm/psalm-plugin-laravel/issues/1331) for the reproduction that motivated it.
 
-`KNOWN_GAPS` covers declaration mismatches only when a narrow exception is unavoidable; `INTENTIONAL_OMISSIONS` covers a deliberately un-restated public/protected member when full parity is out of scope. Both allowlists report consumed entries and warn when an entry becomes stale, so they cannot silently mask future drift. The current stable v0.11.0 surface has no entries in either list.
+`KNOWN_GAPS` covers declaration mismatches only when a narrow exception is unavoidable; `INTENTIONAL_OMISSIONS` covers a deliberately un-restated public/protected member when full parity is out of scope. Both allowlists report consumed entries and warn when an entry becomes stale, so they cannot silently mask future drift. The current allowlists are empty.
 
 ## Annotations quick reference
 
@@ -322,21 +340,26 @@ one are treated alike.
 recipe calls it recommended rather than required. It still matters for the ordinary reason: a bare
 escape strips every taint kind from the annotated method's return value.
 
-**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision.** `laravel/ai` runs prompt
-middleware through a bare pipeline, and `carry()` tests `is_callable($pipe)` before it looks for
-`handle()`, so the dispatched method depends on how the entry is written:
+**Which method counts depends on the installed major.** In laravel/ai 1.x,
+`TextGenerationLoop` wraps each generation step and invokes non-closure
+middleware as `handle(PendingStep $step, Closure $next)`.
+`HasMiddleware::middleware()` is unchanged. In 0.11.x, laravel/ai runs prompt
+middleware through a bare `Illuminate\Pipeline\Pipeline`; `carry()` tests
+`is_callable($pipe)` before it looks for `handle()`, so the dispatched method
+depends on how the entry is written:
 
-| `middleware()` returns | Method the pipeline calls | Why |
+| 0.11.x `middleware()` returns | Method the pipeline calls | Why |
 |---|---|---|
 | an OBJECT (`[new Guard()]`) whose class declares `__invoke` | `__invoke` | `is_callable($object)` is true, so the pipe is invoked directly and `handle()` is never reached |
 | an OBJECT with no `__invoke` | `handle` | not callable, so the object branch falls through to `method_exists($pipe, 'handle')` |
 | a class-STRING (`[Guard::class]`, `class-string<Guard>`) | `handle`, falling back to `__invoke` | a class-string is not callable, so it takes the container branch and then hits the same `method_exists` test |
 
-The handler mirrors both orders per candidate and consults only the first method that exists: there
-is no fallthrough to the other one on a missing annotation, because runtime has none either.
+The handler reads the escape on the runtime-dispatched `handle()` or `__invoke()`
+method. A cross-major guard should implement and annotate `handle()` with the
+major's parameter type; see the copy-paste recipe for both signatures.
 
 **Both the receiver and the declared element type are BOUNDS**, not exact runtime classes: the
-journey label names the static receiver while `gatherMiddlewareFor()` calls `middleware()` on the
+journey label names the static receiver while runtime calls `middleware()` on the
 actual object, and `list<Guard>` is satisfied by any subclass. The handler therefore walks the analysed classlikes below each, reading
 `ClassLikeStorage::$dependent_classlikes`, which is populated before analysis and still readable at
 emission. A receiver declines when any descendant resolves `middleware()` to a different DECLARING

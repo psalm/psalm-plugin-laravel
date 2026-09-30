@@ -233,10 +233,12 @@ final class Plugin implements PluginEntryPointInterface
     /**
      * Stubs for optional first/third-party AI packages. Each entry guards on
      * Composer's runtime metadata so absent packages contribute zero stubs and
-     * we avoid triggering the project autoloader for a class lookup. The
-     * version constraint additionally protects against a future major bump
-     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
-     * renamed classes.
+     * we avoid triggering the project autoloader for a class lookup.
+     *
+     * laravel/ai stubs are split by major: `shared/` holds every declaration
+     * that is identical on both supported majors, and exactly one of `v1/` or
+     * `pre-1.0/` supplies the declarations that 1.0 changed. Loading both
+     * variants would redeclare the same classes with conflicting signatures.
      *
      * @return list<string>
      */
@@ -245,7 +247,16 @@ final class Plugin implements PluginEntryPointInterface
         $stubs = [];
 
         if ($this->laravelAiIntegrationEnabled()) {
-            \array_push($stubs, ...StubFileFinder::integrationStubs($stubsRoot, 'laravel-ai', $output));
+            $laravelAiRoot = $stubsRoot . '/integrations/laravel-ai';
+
+            \array_push($stubs, ...StubFileFinder::findIn($laravelAiRoot . '/shared', $output));
+            \array_push(
+                $stubs,
+                ...StubFileFinder::findIn(
+                    $laravelAiRoot . '/' . LaravelAiIntegration::stubVariantDirectory(),
+                    $output,
+                ),
+            );
         }
 
         return $stubs;
@@ -255,9 +266,10 @@ final class Plugin implements PluginEntryPointInterface
      * Single gate for every laravel/ai call site (stubs, LlmOutputTaintHandler,
      * PromptInjectionIssuePolicy). They must move in lockstep: a stub loaded
      * without its handler, or an issue policy applied without the stubs that
-     * feed it, is a silent half-integration. The version range has no ceiling
-     * below 1.0 because disabling coverage on every minor is worse than the
-     * rare drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
+     * feed it, is a silent half-integration. The range covers every supported
+     * major (see LaravelAiIntegration::CONSTRAINT) and has no ceiling below the
+     * next one, because disabling coverage on every minor is worse than the rare
+     * drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
      */
     private function laravelAiIntegrationEnabled(): bool
     {

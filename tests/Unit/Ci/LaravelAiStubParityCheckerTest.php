@@ -19,18 +19,111 @@ use PHPUnit\Framework\TestCase;
  */
 final class LaravelAiStubParityCheckerTest extends TestCase
 {
-    private const CLEAN_STUB = <<<'PHP'
+    private const CLEAN_V1_STUB = <<<'PHP'
         <?php
 
         namespace Laravel\Ai;
 
         use Illuminate\Broadcasting\Channel;
         use Laravel\Ai\Approvals\Decisions;
+        use Laravel\Ai\Contracts\AgentInput;
+        use Laravel\Ai\Contracts\Providers\TextProvider;
         use Laravel\Ai\Enums\Lab;
+        use Laravel\Ai\Gateway\FakeTextGateway;
+        use Laravel\Ai\Messages\UserMessage;
         use Laravel\Ai\Responses\AgentResponse;
         use Laravel\Ai\Responses\QueuedAgentResponse;
         use Laravel\Ai\Responses\StreamableAgentResponse;
+        use Laravel\SerializableClosure\SerializableClosure;
+        use Closure;
+
+        trait Promptable
+        {
+            protected ?array $adHocMessages = null;
+            protected ?SerializableClosure $runtimeTools = null;
+
+            public static function make(...$arguments): static {}
+
+            public function prompt(
+                AgentInput|UserMessage|Decisions|string $prompt,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+                ?int $timeout = null,
+            ): AgentResponse {}
+
+            public function stream(
+                AgentInput|UserMessage|Decisions|string $prompt,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+                ?int $timeout = null,
+            ): StreamableAgentResponse {}
+
+            public function queue(
+                AgentInput|UserMessage|Decisions|string $prompt,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): QueuedAgentResponse {}
+
+            public function broadcast(
+                AgentInput|UserMessage|Decisions|string $prompt,
+                Channel|array $channels,
+                array $attachments = [],
+                bool $now = false,
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): StreamableAgentResponse {}
+
+            public function broadcastNow(
+                AgentInput|UserMessage|Decisions|string $prompt,
+                Channel|array $channels,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): StreamableAgentResponse {}
+
+            public function broadcastOnQueue(
+                AgentInput|UserMessage|Decisions|string $prompt,
+                Channel|array $channels,
+                array $attachments = [],
+                Lab|array|string|null $provider = null,
+                ?string $model = null,
+            ): QueuedAgentResponse {}
+
+            public function withMessages(iterable $messages): static {}
+            public function withTools(Closure|iterable $tools): static {}
+            protected function resolveAgentTools(): ?array {}
+            protected function getProvidersAndModels(Lab|array|string|null $provider, ?string $model): array {}
+            protected function getDefaultModelFor(TextProvider $provider): string {}
+            protected function getTimeout(?int $timeout): int {}
+
+            public static function fake(Closure|array $responses = []): FakeTextGateway {}
+            public static function assertPrompted(Closure|string $callback): void {}
+            public static function assertPromptedTimes(int $times = 1): void {}
+            public static function assertNotPrompted(Closure|string $callback): void {}
+            public static function assertNeverPrompted(): void {}
+            public static function assertQueued(Closure|string $callback): void {}
+            public static function assertNotQueued(Closure|string $callback): void {}
+            public static function assertNeverQueued(): void {}
+            public static function isFaked(): bool {}
+        }
+        PHP;
+
+    private const CLEAN_PRE_1_0_STUB = <<<'PHP'
+        <?php
+
+        namespace Laravel\Ai;
+
+        use Illuminate\Broadcasting\Channel;
+        use Laravel\Ai\Approvals\Decisions;
+        use Laravel\Ai\Contracts\Providers\TextProvider;
+        use Laravel\Ai\Enums\Lab;
         use Laravel\Ai\Gateway\FakeTextGateway;
+        use Laravel\Ai\Responses\AgentResponse;
+        use Laravel\Ai\Responses\QueuedAgentResponse;
+        use Laravel\Ai\Responses\StreamableAgentResponse;
         use Closure;
 
         trait Promptable
@@ -86,7 +179,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ): QueuedAgentResponse {}
 
             protected function getProvidersAndModels(Lab|array|string|null $provider, ?string $model): array {}
-            protected function getDefaultModelFor(\Laravel\Ai\Contracts\Providers\TextProvider $provider): string {}
+            protected function getDefaultModelFor(TextProvider $provider): string {}
             protected function getTimeout(?int $timeout): int {}
 
             public static function fake(Closure|array $responses = []): FakeTextGateway {}
@@ -98,6 +191,48 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             public static function assertNotQueued(Closure|string $callback): void {}
             public static function assertNeverQueued(): void {}
             public static function isFaked(): bool {}
+        }
+        PHP;
+
+    private const CLEAN_PENDING_STEP_STUB = <<<'PHP'
+        <?php
+
+        namespace Laravel\Ai;
+
+        use Laravel\Ai\Gateway\TextGenerationOptions;
+        use Laravel\Ai\Responses\Data\TextUsage;
+
+        class PendingStep
+        {
+            public function __construct(
+                public readonly int $number,
+                public readonly bool $isFinalStep,
+                public readonly string $provider,
+                public readonly string $model,
+                public readonly ?string $instructions,
+                public readonly array $messages,
+                public readonly array $tools,
+                public readonly ?array $schema,
+                public readonly ?TextGenerationOptions $options,
+                public readonly array $steps = [],
+                public readonly TextUsage $usage = new TextUsage,
+                public readonly ?int $timeout = null,
+                public readonly ?string $invocationId = null,
+            ) {}
+
+            public function isFirstStep(): bool {}
+            public function withModel(string $model): self {}
+            public function withInstructions(?string $instructions): self {}
+            public function withMessages(iterable $messages): self {}
+            public function withTools(iterable $tools): self {}
+            public function onlyTools(string ...$names): self {}
+            public function withoutTools(string ...$names): self {}
+            public function withToolChoice(ToolChoice|string|array|null $toolChoice): self {}
+            public function withMaxTokens(?int $maxTokens): self {}
+            public function withProviderOptions(array $providerOptions): self {}
+            protected function withOptions(TextGenerationOptions $options): self {}
+            protected function resolvedOptions(): TextGenerationOptions {}
+            protected function with(array $overrides): self {}
         }
         PHP;
 
@@ -144,7 +279,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     #[Test]
     public function a_stub_matching_the_installed_package_passes(): void
     {
-        [$exitCode, $output] = $this->check(self::CLEAN_STUB);
+        [$exitCode, $output] = $this->check($this->cleanPromptableStub());
 
         $this->assertSame(0, $exitCode, $output);
     }
@@ -152,7 +287,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     #[Test]
     public function a_stub_missing_a_trailing_parameter_fails(): void
     {
-        $stub = \str_replace("        ?int \$timeout = null,\n", '', self::CLEAN_STUB);
+        $stub = \str_replace("        ?int \$timeout = null,\n", '', $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -169,7 +304,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     #[Test]
     public function a_renamed_parameter_fails(): void
     {
-        $stub = \str_replace('Decisions|string $prompt,', 'Decisions|string $text,', self::CLEAN_STUB);
+        $stub = \str_replace($this->promptParameter('$prompt'), $this->promptParameter('$text'), $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -180,7 +315,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     #[Test]
     public function a_drifted_parameter_type_still_fails(): void
     {
-        $stub = \str_replace('Decisions|string $prompt,', 'string $prompt,', self::CLEAN_STUB);
+        $stub = \str_replace($this->promptParameter('$prompt'), 'string $prompt,', $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -189,9 +324,33 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     }
 
     #[Test]
+    public function an_iterable_union_parameter_matching_the_installed_package_does_not_drift(): void
+    {
+        $this->requireV1AgentInput();
+
+        [$exitCode, $output] = $this->check($this->cleanPromptableStub());
+
+        $this->assertSame(0, $exitCode, $output);
+        $this->assertStringNotContainsString('Laravel\Ai\Promptable::withTools($tools)', $output);
+    }
+
+    #[Test]
+    public function a_changed_iterable_union_parameter_type_still_drifts(): void
+    {
+        $this->requireV1AgentInput();
+
+        $stub = \str_replace('Closure|iterable $tools', 'Closure|array $tools', $this->cleanPromptableStub());
+
+        [$exitCode, $output] = $this->check($stub);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('Laravel\Ai\Promptable::withTools($tools): stub says "Closure|array"', $output);
+    }
+
+    #[Test]
     public function by_reference_drift_fails(): void
     {
-        $stub = \str_replace('Decisions|string $prompt,', 'Decisions|string &$prompt,', self::CLEAN_STUB);
+        $stub = \str_replace($this->promptParameter('$prompt'), $this->promptParameter('&$prompt'), $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -202,7 +361,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     #[Test]
     public function variadic_drift_fails(): void
     {
-        $stub = \str_replace('Decisions|string $prompt,', 'Decisions|string ...$prompt,', self::CLEAN_STUB);
+        $stub = \str_replace($this->promptParameter('$prompt'), $this->promptParameter('...$prompt'), $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -213,7 +372,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     #[Test]
     public function default_value_drift_fails(): void
     {
-        $stub = \str_replace('?int $timeout = null,', '?int $timeout = 30,', self::CLEAN_STUB);
+        $stub = \str_replace('?int $timeout = null,', '?int $timeout = 30,', $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -222,9 +381,49 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     }
 
     #[Test]
+    public function a_matching_object_default_does_not_drift(): void
+    {
+        $this->requirePendingStep();
+
+        [$exitCode, $output] = $this->checkFiles(['PendingStep.phpstub' => self::CLEAN_PENDING_STEP_STUB]);
+
+        $this->assertSame(0, $exitCode, $output);
+    }
+
+    #[Test]
+    public function an_object_default_with_a_different_class_drifts(): void
+    {
+        $this->requirePendingStep();
+
+        $stub = \str_replace('new TextUsage,', 'new \stdClass,', self::CLEAN_PENDING_STEP_STUB);
+
+        [$exitCode, $output] = $this->checkFiles(['PendingStep.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('Laravel\Ai\PendingStep::__construct(): parameter at position 10 default/optionality differs', $output);
+    }
+
+    #[Test]
+    public function an_object_default_that_disappears_drifts(): void
+    {
+        $this->requirePendingStep();
+
+        $stub = \str_replace(
+            'public readonly TextUsage $usage = new TextUsage,',
+            'public readonly TextUsage $usage,',
+            self::CLEAN_PENDING_STEP_STUB,
+        );
+
+        [$exitCode, $output] = $this->checkFiles(['PendingStep.phpstub' => $stub]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('Laravel\Ai\PendingStep::__construct(): parameter at position 10 default/optionality differs', $output);
+    }
+
+    #[Test]
     public function a_vendor_only_public_method_fails(): void
     {
-        $stub = \str_replace("public static function assertNeverQueued(): void {}\n", '', self::CLEAN_STUB);
+        $stub = \str_replace("public static function assertNeverQueued(): void {}\n", '', $this->cleanPromptableStub());
 
         [$exitCode, $output] = $this->check($stub);
 
@@ -238,7 +437,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $stub = \str_replace(
             "    protected function getTimeout(?int \$timeout): int {}\n",
             '',
-            self::CLEAN_STUB,
+            $this->cleanPromptableStub(),
         );
 
         [$exitCode, $output] = $this->check($stub);
@@ -412,6 +611,43 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         [, $output] = $this->checkFiles(['TextResponse.phpstub' => self::CLEAN_TEXT_RESPONSE_STUB]);
 
         $this->assertStringNotContainsString('Laravel\Ai\Responses\TextResponse: implements', $output);
+    }
+
+    private function cleanPromptableStub(): string
+    {
+        // AgentInput is an interface: class_exists() returns false for one.
+        return $this->laravelAiIsV1()
+            ? self::CLEAN_V1_STUB
+            : self::CLEAN_PRE_1_0_STUB;
+    }
+
+    private function promptParameter(string $parameter): string
+    {
+        $type = $this->laravelAiIsV1()
+            ? 'AgentInput|UserMessage|Decisions|string'
+            : 'Decisions|string';
+
+        return "{$type} {$parameter},";
+    }
+
+    private function requireV1AgentInput(): void
+    {
+        if (!$this->laravelAiIsV1()) {
+            $this->markTestSkipped('needs Laravel\Ai\Contracts\AgentInput (the withTools() iterable-union parity capability)');
+        }
+    }
+
+    /** The widened prompt input union laravel/ai 1.0 introduced, probed by capability rather than version. */
+    private function laravelAiIsV1(): bool
+    {
+        return \interface_exists(\Laravel\Ai\Contracts\AgentInput::class);
+    }
+
+    private function requirePendingStep(): void
+    {
+        if (!\class_exists(\Laravel\Ai\PendingStep::class)) {
+            $this->markTestSkipped('needs Laravel\Ai\PendingStep (the object-default parity capability)');
+        }
     }
 
     /** @return array{int, string} exit code and combined output */

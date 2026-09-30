@@ -121,9 +121,9 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_only_taints_the_known_payload_properties(): void
+    public function it_only_taints_the_known_model_output_properties(): void
     {
-        $this->assertSame(['text', 'structured'], array_keys($this->taintedProperties()));
+        $this->assertSame(['text', 'structured', 'reasoning', 'citations'], array_keys($this->taintedProperties()));
     }
 
     /** @return array<string, list<string>> */
