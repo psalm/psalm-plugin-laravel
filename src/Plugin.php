@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -90,6 +91,10 @@ final class Plugin implements PluginEntryPointInterface
 
             if ($pluginConfig->findMissingViews) {
                 $this->initMissingViewHandler($output, $viewFactory);
+            }
+
+            if ($pluginConfig->findUnconfiguredFilesystemDisks) {
+                $this->initUnconfiguredFilesystemDiskHandler($output);
             }
 
             // Always called — provides type narrowing for the view() helper regardless
@@ -807,6 +812,76 @@ final class Plugin implements PluginEntryPointInterface
         $extensions = $finder->getExtensions();
 
         Handlers\Views\MissingViewHandler::init($paths, $extensions);
+    }
+
+    /**
+     * Read `filesystems.disks` once from the booted app and arm StorageHandler's
+     * UnconfiguredFilesystemDisk diagnostic with the configured disk names.
+     *
+     * Restricted to a real `bootstrap/app.php` boot (ApplicationProvider::getBootMode()
+     * === 'bootstrap'): the Testbench package-mode fallback boots Testbench's own bundled
+     * skeleton config, not the analysed project's, so flagging disk names against that
+     * config would be pure noise rather than project truth. A degraded boot can still
+     * leave the mode at 'bootstrap' with an incomplete config load, so a recorded
+     * bootstrap error also disarms the diagnostic and the disk list is required to be
+     * non-empty before it is armed.
+     */
+    private function initUnconfiguredFilesystemDiskHandler(\Psalm\Progress\Progress $output): void
+    {
+        if (ApplicationProvider::getBootMode() !== 'bootstrap') {
+            return;
+        }
+
+        // A non-empty disk list does not prove the boot completed: a provider that threw
+        // after config loaded may have skipped merging additional disks, so arming here
+        // would flag those disks as unknown.
+        if (ApplicationProvider::getBootstrapError() instanceof \Throwable) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but the application boot was '
+                . 'degraded. The UnconfiguredFilesystemDisk check will be skipped.',
+            );
+
+            return;
+        }
+
+        try {
+            $configured = ConfigRepositoryProvider::get()->get('filesystems.disks');
+        } catch (\Throwable $throwable) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but reading filesystems.disks '
+                . "threw: {$throwable->getMessage()}. The UnconfiguredFilesystemDisk check will be skipped.",
+            );
+
+            return;
+        }
+
+        if (!\is_array($configured) || $configured === []) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks resolved '
+                . 'empty (possibly a degraded boot). The UnconfiguredFilesystemDisk check will be skipped.',
+            );
+
+            return;
+        }
+
+        // A key without a `driver` is a nested group (`disks.tenant.assets`), not a disk:
+        // `disk('tenant')` throws at runtime just like an absent key, and must not be suggested.
+        $withDriver = \array_filter(
+            $configured,
+            static fn(mixed $diskConfig): bool => \is_array($diskConfig) && isset($diskConfig['driver']),
+        );
+        $disks = \array_map(static fn(int|string $name): string => (string) $name, \array_keys($withDriver));
+
+        if ($disks === []) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks has no '
+                . 'entry with a driver. The UnconfiguredFilesystemDisk check will be skipped.',
+            );
+
+            return;
+        }
+
+        Handlers\Filesystem\StorageHandler::init($disks);
     }
 
     /**

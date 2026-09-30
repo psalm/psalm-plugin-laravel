@@ -12,6 +12,7 @@ return RectorConfig::configure()
     ->withRootFiles()
     ->withSkip([
         'tests/Unit/Handlers/Eloquent/Schema/migrations',
+        'tests/Unit/*/Fixtures/*', // Fixture projects are analysis input, so a rewrite changes what the test checks (e.g. `static::X` to `self::X` in final classes, dropped `disk(null)`). fnmatch `*` spans `/`; shared helpers in tests/Unit/Fixtures stay covered.
         'bin/ci', // Standalone procedural scripts, not part of the analysed plugin surface. Rector rewrote every `report(...)` call here down to a single argument while leaving the 5-parameter declaration untouched, so the auto-fix workflow committed a file that fatals on load.
         'tests/Type/macro-fixtures-vendor-style.php', // The vendor-style macro fixture (PR #991 + PR #994) deliberately exercises closures without native return types or docblock `@return` so the AST-scan + body-inference paths are the only sources of narrowing.
         \Rector\PHPUnit\CodeQuality\Rector\FuncCall\AssertFuncCallToPHPUnitAssertRector::class => ['tests/*'], //  Rewrites `assert($x instanceof Foo)` inside test classes to `Assert::assertInstanceOf(...)`,  the two are not equivalent

@@ -4,10 +4,21 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Filesystem;
 
+use PhpParser\Node\Arg;
+use PhpParser\Node\Scalar\String_;
+use Psalm\Codebase;
+use Psalm\CodeLocation;
+use Psalm\Internal\MethodIdentifier;
+use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
+use Psalm\LaravelPlugin\Internal\ClosestName;
+use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
+use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter as Param;
 use Psalm\Type;
 
@@ -102,21 +113,49 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static ?array $facade_disk_params = null;
 
+    /** Guards the {@see UnconfiguredFilesystemDisk} diagnostic — off unless {@see self::init()} ran. */
+    private static bool $enabled = false;
+
+    /**
+     * Disk names from `filesystems.disks` that carry a `driver`, used for membership and the
+     * "did you mean" suggestion. Small enough in real apps that a set is not worth building.
+     *
+     * @var list<string>
+     */
+    private static array $disks = [];
+
     /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$adapter_return_type = null;
         self::$facade_disk_params = null;
+        self::$enabled = false;
+        self::$disks = [];
+    }
+
+    /**
+     * Arm the {@see UnconfiguredFilesystemDisk} diagnostic with the booted app's configured disk names.
+     *
+     * @param list<string> $disks
+     * @psalm-external-mutation-free
+     */
+    public static function init(array $disks): void
+    {
+        self::$enabled = true;
+        self::$disks = $disks;
     }
 
     /**
      * Register for every surface that exposes `disk()` / `drive()`:
      * - the `Storage` facade (calls go through `__callStatic` → forwarded by Laravel's `@method`),
      * - the concrete `FilesystemManager` (common DI target),
-     * - the `Factory` contract (DI by interface — `disk()` is its only method).
+     * - the `Factory` contract (DI by interface — `disk()` is its only method),
+     * - the app's root aliases of the facade (`\Storage`): Psalm dispatches by exact FQCN and the
+     *   alias is a separate stub class, so it needs its own registration. FacadeMapProvider only
+     *   lists aliases the booted app's AliasLoader actually registers.
      *
      * @return list<string>
-     * @psalm-pure
+     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
@@ -125,6 +164,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             \Illuminate\Support\Facades\Storage::class,
             \Illuminate\Filesystem\FilesystemManager::class,
             \Illuminate\Contracts\Filesystem\Factory::class,
+            ...FacadeMapProvider::getFacadeClasses(\Illuminate\Filesystem\FilesystemManager::class),
         ];
     }
 
@@ -134,9 +174,11 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      * the configured driver and a dynamic `disk($name)` narrows just as a literal
      * `disk('s3')` does.
      *
-     * @inheritDoc
+     * Not `@psalm-external-mutation-free`: {@see self::checkDiskExists()} calls
+     * `IssueBuffer::accepts()`, impure like {@see \Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler::getMethodReturnType()}'s
+     * `checkViewExists()`.
      *
-     * @psalm-external-mutation-free
+     * @inheritDoc
      */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
@@ -145,37 +187,121 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             return null;
         }
 
+        // Diagnostic is facade-only (the `Storage` facade and its root aliases, where `disk()` is a
+        // `@method` pseudo-method): a DI-injected manager may be a userland FilesystemManager
+        // subclass with its own disk resolution (an overridden getConfig() resolving
+        // tenant-specific disks, for example), and this base-class provider also fires for
+        // subclass receivers. Checking those against the booted app's global disk names would be
+        // a false positive. The facade always resolves the app's own manager.
+        if (
+            self::$enabled
+            && !self::isRealMethod($event->getSource()->getCodebase(), $event->getFqClasslikeName(), $event->getMethodNameLowercase())
+        ) {
+            self::checkDiskExists($event->getCallArgs(), $event->getSource(), $event->getCodeLocation());
+        }
+
         return self::$adapter_return_type ??= new Type\Union([
             new Type\Atomic\TNamedObject(\Illuminate\Filesystem\FilesystemAdapter::class),
         ]);
     }
 
     /**
+     * Flag `disk('s3-old')` / `drive('s3-old')` when the name is not a key in `filesystems.disks`.
+     * The name is a string literal, an enum case (what `enum_value()` yields: backing value, or case
+     * name of a pure enum; Laravel 12.21+ accepts enums here), or a class constant with a single string
+     * literal type. Laravel's `FilesystemManager::resolve()` throws a hard
+     * `InvalidArgumentException` for an unconfigured disk — this is not a silent fallback to
+     * `local`, so an unknown name is an availability bug, not a wrong write target.
+     *
+     * @param list<Arg> $callArgs
+     */
+    private static function checkDiskExists(array $callArgs, StatementsSource $source, CodeLocation $codeLocation): void
+    {
+        if ($callArgs === []) {
+            return;
+        }
+
+        $value = $callArgs[0]->value;
+
+        $diskName = $value instanceof String_
+            ? $value->value
+            : ClassConstStringResolver::enumValueOrConstant($value, $source);
+
+        // Dynamic/null/unresolvable names answer null. Falsy names are skipped too:
+        // `enum_value($name) ?: $this->getDefaultDriver()` sends both '' and '0' to the default
+        // disk at runtime, not to a lookup failure.
+        if (in_array($diskName, [null, '', '0'], true)) {
+            return;
+        }
+
+        // Dotted names resolve through Laravel's dotted config lookup
+        // (`config["filesystems.disks.{$name}"]`), reaching nested groups like
+        // `disks.tenant.assets`. The armed list holds top-level keys only, so dotted
+        // names are skipped rather than guessed at (accepted detection gap).
+        if (\str_contains($diskName, '.')) {
+            return;
+        }
+
+        if (\in_array($diskName, self::$disks, true)) {
+            return;
+        }
+
+        // No list of configured disks: it repeats on every finding and grows with the app.
+        $suggestion = ClosestName::find($diskName, self::$disks);
+        $hint = $suggestion === null ? '' : ", did you mean '{$suggestion}'?";
+
+        IssueBuffer::accepts(
+            new UnconfiguredFilesystemDisk(
+                "Disk '{$diskName}' is not configured in filesystems.disks{$hint}",
+                $codeLocation,
+            ),
+            $source->getSuppressedIssues(),
+        );
+    }
+
+    /**
      * Provide explicit params for `disk()` / `drive()` when reached through the
-     * `Storage` facade. The facade only declares these as `@method` (no real
-     * method on the Facade class), and registering a return type provider on a
+     * `Storage` facade or its root alias. Those only declare these as `@method` (no
+     * real method on the Facade class), and registering a return type provider on a
      * class without a matching params provider crashes Psalm 7's
      * `Methods::getMethodParams()` with "Cannot get method params for ..." — the
      * same failure mode documented on {@see \Psalm\LaravelPlugin\Handlers\Auth\AuthHandler::getMethodParams()}.
      *
-     * For non-facade receivers (`FilesystemManager`, `Factory` contract) `disk()`
-     * is a real method, so Psalm can derive params itself — we return null and
-     * let Laravel's signature drift through.
-     *
-     * @psalm-external-mutation-free
+     * For receivers where `disk()` is a real method (`FilesystemManager`, `Factory`
+     * contract) Psalm derives params itself — we return null and let Laravel's
+     * signature drift through. Discriminating on real-vs-pseudo rather than a class
+     * list keeps this in lockstep with every name getClassLikeNames() registers.
      */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
-        if ($event->getFqClasslikeName() !== \Illuminate\Support\Facades\Storage::class) {
+        $methodNameLower = $event->getMethodNameLowercase();
+
+        if ($methodNameLower !== 'disk' && $methodNameLower !== 'drive') {
             return null;
         }
 
-        if (!isset(self::DISK_METHODS[$event->getMethodNameLowercase()])) {
+        $source = $event->getStatementsSource();
+
+        if (!$source instanceof StatementsSource) {
+            return null;
+        }
+
+        if (self::isRealMethod($source->getCodebase(), $event->getFqClasslikeName(), $methodNameLower)) {
             return null;
         }
 
         return self::$facade_disk_params ??= self::buildFacadeDiskParams();
+    }
+
+    /**
+     * `methodExists()` excludes `@method` pseudo-methods (its `$with_pseudo` flag stays false).
+     *
+     * @param lowercase-string $methodNameLower
+     */
+    private static function isRealMethod(Codebase $codebase, string $fqClassName, string $methodNameLower): bool
+    {
+        return $codebase->methods->methodExists($codebase, new MethodIdentifier($fqClassName, $methodNameLower));
     }
 
     /**
