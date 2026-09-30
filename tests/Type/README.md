@@ -79,3 +79,19 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    `.phpt`. Use a subprocess test running Psalm over a fixture project with `<projectFiles>` instead
    (see `tests/Unit/` fixtures for the pattern). The same limit applies to any rule that emits only
    during a full-project scan; cover those with unit tests plus `composer test:app`.
+
+6. **`*KnownLimitation.phpt` and `--XFAIL--` cover opposite things; do not swap them.**
+
+   A `*KnownLimitation.phpt` fixture pins the current, known-wrong output: its `--EXPECTF--` asserts
+   what Psalm actually emits today (often under-reporting, sometimes nothing), and its docblock points
+   at the source class's caveats section explaining why the gap is accepted rather than fixed. It
+   passes every run, by design, and only a future code change that closes the gap will turn it red,
+   which is the signal to rename the fixture and rewrite it as positive coverage
+   (`StructuredArrayElementRead.phpt` is the worked example of that promotion).
+
+   `--XFAIL--` is for a fixture whose `--EXPECTF--` already encodes the desired, not-yet-implemented
+   output. It reports incomplete while the behavior is missing (not a failure) and turns into a hard
+   failure the moment the fixture starts matching (XPASS), which is the prompt to delete the
+   `--XFAIL--` section and let the test pass normally. Nothing in this suite uses it yet; reach for it
+   when a fixture is written ahead of the handler or stub that will satisfy it, not when documenting a
+   gap nobody is planning to close.
