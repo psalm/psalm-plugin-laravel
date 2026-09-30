@@ -132,9 +132,10 @@ jobs:
         run: composer test:unit
 
       - name: Run Unit tests
-        # Constraint installs may resolve PHPUnit 11 (Testbench 10), which lacks --display-phpunit-notices.
+        # Constraint installs may resolve PHPUnit 11 (Testbench 10), whose paired paratest release
+        # lacks --display-phpunit-notices (the flag is proxied from the installed PHPUnit, not paratest itself).
         if: matrix.laravel
-        run: vendor/bin/phpunit --testsuite=unit --display-deprecations --display-notices
+        run: vendor/bin/paratest --processes=auto --testsuite=unit --display-deprecations --display-notices
 
 
   type_tests:
