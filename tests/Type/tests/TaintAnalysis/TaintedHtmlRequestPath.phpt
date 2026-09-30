@@ -3,11 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderBreadcrumb(\Illuminate\Http\Request $request) {
+function renderBreadcrumb(\Illuminate\Http\Request $request): void {
     echo $request->path();
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method renderBreadcrumb does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

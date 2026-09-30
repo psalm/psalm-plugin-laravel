@@ -461,6 +461,97 @@ final class InitCommandTest extends TestCase
         }
     }
 
+    #[Test]
+    public function pest_project_without_the_plugin_gets_the_pest_hint_and_skips_tests(): void
+    {
+        // pestphp/pest alone isn't enough to trust tests/: Pest closures still need
+        // the Pest-aware plugin, or scanning tests/ floods output with false positives.
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['require-dev' => ['pestphp/pest' => '^3.0']]),
+        );
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'tests');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertNotContains('tests', $this->scannedDirectories($contents));
+        $this->assertStringContainsString('alies-dev/psalm-plugin-pest psalm/plugin-mockery', $contents);
+        $this->assertStringContainsString('composer require --dev alies-dev/psalm-plugin-pest', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function pest_project_with_the_pest_plugin_installed_scans_tests_without_a_hint(): void
+    {
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['require-dev' => [
+                'pestphp/pest' => '^3.0',
+                'alies-dev/psalm-plugin-pest' => '^1.0',
+            ]]),
+        );
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'tests');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertContains('tests', $this->scannedDirectories($contents));
+        $this->assertStringNotContainsString('composer require', $contents);
+        $this->assertStringNotContainsString('tests/ dir skipped', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function pest_project_with_only_plugin_phpunit_still_gets_the_pest_hint(): void
+    {
+        // Pest closures produce $this false positives under plugin-phpunit alone, so
+        // having only the PHPUnit plugin must not be treated as "test support installed".
+        \file_put_contents(
+            $this->tempDir . \DIRECTORY_SEPARATOR . 'composer.json',
+            (string) \json_encode(['require-dev' => [
+                'pestphp/pest' => '^3.0',
+                'psalm/plugin-phpunit' => '^0.19',
+            ]]),
+        );
+        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'tests');
+
+        $tester = $this->makeTester();
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit);
+        $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $this->assertNotContains('tests', $this->scannedDirectories($contents));
+        $this->assertStringContainsString('alies-dev/psalm-plugin-pest psalm/plugin-mockery', $contents);
+    }
+
+    /**
+     * Directory names actually scanned (parsed as XML elements, so the
+     * commented-out `<!-- <directory name="tests"/>-->` hint never counts).
+     *
+     * @return list<string>
+     */
+    private function scannedDirectories(string $contents): array
+    {
+        $previous = \libxml_use_internal_errors(true);
+        try {
+            $xml = \simplexml_load_string($contents);
+            $this->assertNotFalse($xml, 'Generated psalm.xml must be well-formed XML.');
+        } finally {
+            \libxml_clear_errors();
+            \libxml_use_internal_errors($previous);
+        }
+
+        $names = [];
+        foreach ($xml->projectFiles->directory as $directory) {
+            $names[] = (string) $directory['name'];
+        }
+
+        return $names;
+    }
+
     /** Create a nested directory tree under the temp dir (POSIX-style path). */
     private function makeDir(string $relative): void
     {
