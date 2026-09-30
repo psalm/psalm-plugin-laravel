@@ -108,7 +108,7 @@ jobs:
       # HARNESS = default branch (trusted), NOT base/head_sha (only the versions
       # MEASURED). Sourcing tooling from them would freeze it at the PR's branch
       # point, so harness fixes never reach in-flight PRs. issue_comment runs from
-      # the default branch, so a ref-less checkout is master HEAD.
+      # the default branch, so a ref-less checkout is 4.x HEAD.
       - name: Checkout harness (default branch, for the registry)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
