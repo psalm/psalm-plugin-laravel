@@ -1,3 +1,5 @@
+--CONFLICTS--
+psalm-1418-TaintedHeaderResponseFactoryMakeHeaders
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --no-cache --threads=1
 --FILE--
@@ -10,7 +12,8 @@ use Illuminate\Http\Request;
  * escaped, so a tainted header value is a header-injection sink on its own, independent of the
  * existing html sink on $content. Routed through the `response()` helper, which resolves to the
  * contract (see Foundation/helpers.phpstub). $csv stays a clean parameter so only the header sink
- * fires.
+ * fires. The unique CONFLICTS key runs this file in its own batch: co-batched make() calls meet at
+ * one shared sink node and later-arriving flows are pruned.
  */
 function makeExportWithTaintedHeaderFilename(Request $request, string $csv): void
 {
