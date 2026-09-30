@@ -3,12 +3,11 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showGreeting(\Illuminate\Http\Request $request) {
+function showGreeting(\Illuminate\Http\Request $request): void {
     echo $request->cookie('username');
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method showGreeting does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string
