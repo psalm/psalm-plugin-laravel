@@ -88,6 +88,7 @@ final class IssueUrlGenerator
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findSerializedQueuedModels: ' . self::formatBool($pluginConfig->findSerializedQueuedModels),
+            '- findMassAssignmentFromRequest: ' . self::formatBool($pluginConfig->findMassAssignmentFromRequest),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
             '- findPromptInjection: ' . self::formatNullableBool($pluginConfig->findPromptInjection),
             '- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(),
