@@ -1,6 +1,6 @@
 name: Benchmark
 
-# Push to master (or manual dispatch): benchmarks Monica with the plugin
+# Push to 4.x (or manual dispatch): benchmarks Monica with the plugin
 # installed, stores the result for historical trend tracking (GH Pages chart,
 # regression alert at 150%).
 #
@@ -20,7 +20,7 @@ name: Benchmark
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [4.x]
     paths:
       - 'src/**'
       - 'stubs/**'
