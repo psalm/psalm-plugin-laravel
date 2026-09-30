@@ -2,7 +2,7 @@ name: Code Style
 
 on:
   push:
-    branches: [master]
+    branches: [4.x]
     paths:
       - '**.php'
       - 'composer.json'
