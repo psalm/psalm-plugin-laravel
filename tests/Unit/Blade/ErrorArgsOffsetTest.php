@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * `$__errorArgs`, not a wide family that would also swallow this.
  */
 #[CoversNothing]
+#[Group('subprocess')]
 final class ErrorArgsOffsetTest extends TestCase
 {
     use AnalysesFixtureApp;

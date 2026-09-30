@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeIssueRemapHandler;
@@ -30,6 +31,7 @@ use Symfony\Component\Process\Process;
 #[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(JourneyRemapper::class)]
 #[CoversClass(ShadowIssueRelocator::class)]
+#[Group('subprocess')]
 final class BladeThreadParityTest extends TestCase
 {
     private const REMAP_FIXTURE = __DIR__ . '/Fixtures/BladeIssueRemap';

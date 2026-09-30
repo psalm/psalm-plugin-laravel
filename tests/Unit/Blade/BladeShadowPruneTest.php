@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
@@ -19,6 +20,7 @@ use Symfony\Component\Process\Process;
  */
 #[CoversClass(BladeBootstrapper::class)]
 #[CoversClass(ShadowManifest::class)]
+#[Group('subprocess')]
 final class BladeShadowPruneTest extends TestCase
 {
     private const FIXTURE = __DIR__ . '/Fixtures/BladeIssueRemap';
