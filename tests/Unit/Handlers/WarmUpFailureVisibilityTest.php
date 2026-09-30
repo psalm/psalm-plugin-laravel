@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Symfony\Component\Process\Process;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 
 /**
  * End-to-end guard that a {@see ModelMetadataRegistryBuilder::warmUp()} failure stays visible under
@@ -36,24 +37,36 @@ use Symfony\Component\Process\Process;
 #[Group('subprocess')]
 final class WarmUpFailureVisibilityTest extends TestCase
 {
+    use CopiesFixtureDirectories;
+
     #[Test]
     public function a_warm_up_failure_reaches_stderr_under_no_progress_and_does_not_crash_the_run(): void
     {
         $projectRoot = \dirname(__DIR__, 3);
-        $fixtureDir = __DIR__ . '/Fixtures/UnknownModelAttribute';
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
 
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress'],
-            $fixtureDir,
-        );
-        $process->setTimeout(300);
-        // Psalm exits non-zero when it reports issues (expected: the fixture has several unrelated
-        // ones), so do not mustRun() — only an UNCAUGHT crash (exit 255, or the "crashed due to an
-        // uncaught Throwable" banner) would indicate the regression this test guards against.
-        $process->run();
+        // UnknownModelAttributeEmissionTest analyses the same fixture with different flags. Even with
+        // --no-cache the plugin rewrites its per-cwd stub cache on every run, so a private copy keeps
+        // concurrent paratest workers apart. The copy sits outside the fixture's projectFiles (`app`).
+        $fixture = __DIR__ . '/Fixtures/UnknownModelAttribute';
+        $fixtureDir = $fixture . '/.warm-up-' . (int) \getmypid();
+        $this->copyDirectory($fixture, $fixtureDir);
+
+        try {
+            $process = new Process(
+                [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress'],
+                $fixtureDir,
+            );
+            $process->setTimeout(300);
+            // Psalm exits non-zero when it reports issues (expected: the fixture has several unrelated
+            // ones), so do not mustRun() — only an UNCAUGHT crash (exit 255, or the "crashed due to an
+            // uncaught Throwable" banner) would indicate the regression this test guards against.
+            $process->run();
+        } finally {
+            $this->removeDirectory($fixtureDir);
+        }
 
         $stderr = $process->getErrorOutput();
 

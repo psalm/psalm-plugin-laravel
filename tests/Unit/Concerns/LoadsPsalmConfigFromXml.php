@@ -14,6 +14,8 @@ use Psalm\Config;
  * worker passes `--test-result-file <path-not-yet-created>`, which kills the
  * worker mid-test. Hiding the arguments keeps the loaded config independent of
  * how the suite was invoked.
+ *
+ * @see \Psalm\Config::loadFromXMLElement() `global $argv` -> `CliUtils::getPathsToCheck()` exits on a missing path
  */
 trait LoadsPsalmConfigFromXml
 {

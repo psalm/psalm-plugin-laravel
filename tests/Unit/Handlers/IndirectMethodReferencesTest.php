@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\References\IndirectMethodReferenceHandler;
 use Symfony\Component\Process\Process;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 
 /**
  * Whole-project regression coverage for Laravel's indirect method references. Psalm's dead-code
@@ -26,6 +27,8 @@ use Symfony\Component\Process\Process;
 #[Group('subprocess')]
 final class IndirectMethodReferencesTest extends TestCase
 {
+    use CopiesFixtureDirectories;
+
     private const FIXTURE = __DIR__ . '/Fixtures/IndirectMethodReferences';
 
     /** @var list<string> */
@@ -241,47 +244,5 @@ final class IndirectMethodReferencesTest extends TestCase
         }
 
         return $findings;
-    }
-
-    private function copyDirectory(string $source, string $destination): void
-    {
-        \mkdir($destination, 0777, true);
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::SELF_FIRST,
-        );
-
-        /** @var \SplFileInfo $item */
-        foreach ($iterator as $item) {
-            $target = $destination . '/' . $iterator->getSubPathName();
-            if ($item->isDir()) {
-                \mkdir($target, 0777, true);
-            } else {
-                \copy($item->getPathname(), $target);
-            }
-        }
-    }
-
-    private function removeDirectory(string $directory): void
-    {
-        if (!\is_dir($directory)) {
-            return;
-        }
-
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST,
-        );
-
-        /** @var \SplFileInfo $item */
-        foreach ($iterator as $item) {
-            if ($item->isDir()) {
-                \rmdir($item->getPathname());
-            } else {
-                \unlink($item->getPathname());
-            }
-        }
-
-        \rmdir($directory);
     }
 }
