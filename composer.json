@@ -45,6 +45,7 @@
     ],
     "require-dev": {
         "alies-dev/psalm-tester": "^0.4",
+        "brianium/paratest": "^7.7",
         "friendsofphp/php-cs-fixer": "^3.94",
         "laravel/framework": "^12.14 || ^13.3",
         "phpunit/phpunit": "^11.5 || ^12.5 || ^13.0",
@@ -108,6 +109,7 @@
             "./bin/ci/check-phpt-conventions.sh",
             "phpunit --testsuite=type"
         ],
-        "test:unit": "phpunit --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices"
+        "test:unit": "paratest --processes=auto --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices",
+        "test:unit:fast": "phpunit --testsuite=unit --exclude-group=subprocess --display-deprecations --display-notices --display-phpunit-notices"
     }
 }
