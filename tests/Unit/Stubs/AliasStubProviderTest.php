@@ -93,7 +93,7 @@ final class AliasStubProviderTest extends TestCase
             AliasStubProvider::register($registration, $location);
             $this->fail('Expected a RuntimeException');
         } catch (\RuntimeException $runtimeException) {
-            $this->assertStringContainsString("Failed to write alias stub file to '{$location}': cannot rename", $runtimeException->getMessage());
+            $this->assertStringContainsString("Failed to write alias stub file to '{$location}': rename(", $runtimeException->getMessage());
         }
 
         $this->assertSame(['aliases.phpstub'], \array_values(\array_diff(\scandir($this->dir) ?: [], ['.', '..'])));

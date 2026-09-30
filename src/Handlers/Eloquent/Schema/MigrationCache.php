@@ -210,7 +210,7 @@ final class MigrationCache
         if ($failure === null) {
             $this->cacheWritten = true;
         } else {
-            $this->writeFailureReason = $failure;
+            $this->writeFailureReason = "cannot write cache file '{$cachePath}': {$failure}";
         }
     }
 

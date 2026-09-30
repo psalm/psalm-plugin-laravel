@@ -13,41 +13,24 @@ namespace Psalm\LaravelPlugin\Internal;
 final class AtomicFileWriter
 {
     /**
-     * @return null|string null on success, otherwise a human-readable failure reason.
+     * @return null|string null on success, otherwise the PHP error behind the failure.
      *                     No temporary file is left behind in either case.
      */
     public static function write(string $path, string $contents): ?string
     {
-        // The temp file must live in the target's directory: rename() is only atomic within
-        // one filesystem. The uniqid() suffix keeps concurrent writers apart even when they
-        // share a pid (separate containers mounting the same volume all run as pid 1).
-        $pid = \getmypid();
-        $tmpPath = \sprintf('%s.tmp.%d.%s', $path, $pid === false ? 0 : $pid, \uniqid('', true));
+        // Same directory as the target: rename() is only atomic within one filesystem.
+        $tmpPath = $path . '.tmp.' . \bin2hex(\random_bytes(8));
 
         \error_clear_last();
 
-        if (@\file_put_contents($tmpPath, $contents) !== \strlen($contents)) {
-            // Read the error before unlink(), which would overwrite it.
-            $reason = "cannot write temp file '{$tmpPath}'" . self::lastErrorSuffix();
-            @\unlink($tmpPath);
-
-            return $reason;
+        if (@\file_put_contents($tmpPath, $contents) === \strlen($contents) && @\rename($tmpPath, $path)) {
+            return null;
         }
 
-        if (!@\rename($tmpPath, $path)) {
-            $reason = "cannot rename temp file to '{$path}'" . self::lastErrorSuffix();
-            @\unlink($tmpPath);
-
-            return $reason;
-        }
-
-        return null;
-    }
-
-    private static function lastErrorSuffix(): string
-    {
+        // Read the error before unlink(), which would overwrite it.
         $error = \error_get_last();
+        @\unlink($tmpPath);
 
-        return $error !== null ? ": {$error['message']}" : '';
+        return $error['message'] ?? 'unknown error';
     }
 }

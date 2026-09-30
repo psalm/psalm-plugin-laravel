@@ -39,14 +39,12 @@ final class AliasStubProvider
             $stub .= "class {$alias} extends \\{$fqcn} {}\n";
         }
 
-        // Skipping identical content avoids needless writes; the atomic write guarantees this
-        // read (and Psalm's later read of the stub) never sees a half-written file.
+        // Unchanged aliases skip the write; the atomic write keeps this read from seeing a partial file.
         if (@\file_get_contents($location) !== $stub) {
             $failure = AtomicFileWriter::write($location, $stub);
 
-            // Re-check: a concurrent run may have written the same content first, and on Windows
-            // rename() is refused while another process holds the target open. Either way the
-            // file is already correct, so only a still-wrong file is an error.
+            // A concurrent run may have written the same stub first, or Windows refused rename()
+            // over a file another process holds open: only a still-wrong file is an error.
             if ($failure !== null && @\file_get_contents($location) !== $stub) {
                 throw new \RuntimeException(
                     "Failed to write alias stub file to '{$location}': {$failure}. "
