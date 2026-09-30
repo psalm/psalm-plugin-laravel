@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790587967148,
+  "lastUpdate": 1790788060359,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11470,6 +11470,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.98,
             "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "21e7ab1e01d1b1b289ffb7506b46c3f3ec8236a4",
+          "message": "Merge pull request #1594 from psalm/chore/psalm-tester-0.4\n\nMove the type suite to psalm-tester 0.4",
+          "timestamp": "2026-09-30T19:03:14+02:00",
+          "tree_id": "24ddc3720311b2891181567d1f26ac31bf6920d3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/21e7ab1e01d1b1b289ffb7506b46c3f3ec8236a4"
+        },
+        "date": 1790788059331,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.35,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
