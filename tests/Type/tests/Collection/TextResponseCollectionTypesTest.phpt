@@ -2,8 +2,6 @@
 <?php
 require getcwd() . '/vendor/autoload.php';
 \Tests\Psalm\LaravelPlugin\Type\LaravelAiCapability::skipUnlessInstalled();
---ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml
 --FILE--
 <?php declare(strict_types=1);
 
