@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotateRequest;
@@ -27,6 +28,7 @@ use Symfony\Component\Process\Process;
 #[CoversClass(AnnotationWriter::class)]
 #[CoversClass(TemplateAnnotator::class)]
 #[CoversClass(AnnotateRequest::class)]
+#[Group('subprocess')]
 final class AnnotateEndToEndTest extends TestCase
 {
     private const FIXTURE = __DIR__ . '/Fixtures/Annotate';

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
@@ -23,6 +24,7 @@ use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 #[CoversClass(ViewContractHandler::class)]
 #[CoversClass(ViewCallChain::class)]
 #[CoversClass(ContractRegistry::class)]
+#[Group('subprocess')]
 final class ViewContractValidationTest extends TestCase
 {
     use AnalysesFixtureApp;

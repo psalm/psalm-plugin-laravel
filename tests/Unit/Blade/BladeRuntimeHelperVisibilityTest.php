@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\RuntimeHelperVisibility;
@@ -22,6 +23,7 @@ use Symfony\Component\Process\Process;
  * codebase, neither of which a unit test can assemble.
  */
 #[CoversClass(RuntimeHelperVisibility::class)]
+#[Group('subprocess')]
 final class BladeRuntimeHelperVisibilityTest extends TestCase
 {
     use AnalysesFixtureApp;

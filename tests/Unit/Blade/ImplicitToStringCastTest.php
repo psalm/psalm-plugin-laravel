@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -16,6 +17,7 @@ use PHPUnit\Framework\TestCase;
  * report: only `e()`'s own contract was widened, not the issue class.
  */
 #[CoversNothing]
+#[Group('subprocess')]
 final class ImplicitToStringCastTest extends TestCase
 {
     use AnalysesFixtureApp;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -31,6 +32,7 @@ use PHPUnit\Framework\TestCase;
  * fixture's `sealAllProperties="true"` config and a real magic-property access are analyzed together.
  */
 #[CoversNothing]
+#[Group('subprocess')]
 final class UndefinedThisPropertyDuplicateTest extends TestCase
 {
     use AnalysesFixtureApp;
