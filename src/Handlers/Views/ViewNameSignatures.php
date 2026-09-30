@@ -118,6 +118,26 @@ final class ViewNameSignatures
     }
 
     /**
+     * Every receiver class one family dispatches on; registration order is observable, so the
+     * concrete class stays first.
+     *
+     * @param key-of<self::FAMILIES> $role
+     * @return list<string>
+     * @psalm-external-mutation-free
+     */
+    private static function classesFor(string $role): array
+    {
+        $family = self::FAMILIES[$role];
+        $classes = [$family['concrete'], ...$family['extra']];
+
+        if ($family['facade'] !== null) {
+            $classes[] = $family['facade'];
+        }
+
+        return [...$classes, ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
+    }
+
+    /**
      * @return list<string>
      * @psalm-external-mutation-free
      */
@@ -125,14 +145,10 @@ final class ViewNameSignatures
     {
         $names = [];
 
-        foreach (self::FAMILIES as $family) {
-            $names = [...$names, $family['concrete'], ...$family['extra']];
-
-            if ($family['facade'] !== null) {
-                $names[] = $family['facade'];
+        foreach (\array_keys(self::FAMILIES) as $role) {
+            foreach (self::classesFor($role) as $class) {
+                $names[] = $class;
             }
-
-            $names = [...$names, ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
         }
 
         return \array_values(\array_unique($names));
@@ -147,14 +163,8 @@ final class ViewNameSignatures
         if (self::$classToRole === null) {
             $classToRole = [];
 
-            foreach (self::FAMILIES as $role => $family) {
-                $classes = [$family['concrete'], ...$family['extra'], ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
-
-                if ($family['facade'] !== null) {
-                    $classes[] = $family['facade'];
-                }
-
-                foreach ($classes as $class) {
+            foreach (\array_keys(self::FAMILIES) as $role) {
+                foreach (self::classesFor($role) as $class) {
                     $classToRole[\strtolower($class)] = $role;
                 }
             }

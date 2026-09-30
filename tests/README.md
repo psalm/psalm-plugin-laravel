@@ -3,9 +3,11 @@
 There are 3 types of tests:
 1. **Type** (the main one): uses .phpt files to run Psalm over code snippets in the context of a fake Laravel app [using orchestra/testbench]
 2. **Application**: creates an empty Laravel app, adds some typical classes of different types and run Psalm over its codebase.
-3. **Unit**: uses PHPUnit to test internal logic. Most cases run in process, but 8 classes fork a real `vendor/bin/psalm` over a fixture project, for regressions that only reproduce under whole-program analysis. Those 13 runs cover 12 distinct (command, directory) pairs, and the one repeated pair is an incremental-cache sequence whose second run must stay real, so there is no shared report to memoize. Each is tagged `#[Group('subprocess')]`.
+3. **Unit**: uses PHPUnit to test internal logic. Most cases run in process, but some classes fork a real `vendor/bin/psalm` over a fixture project, for regressions that only reproduce under whole-program analysis. The Blade classes share one run per distinct command through `tests/Unit/Blade/AnalysesFixtureApp`. Each forking class is tagged `#[Group('subprocess')]`.
 
 `composer test:unit` runs everything (via `paratest --processes=auto`); `composer test:unit:fast` excludes the subprocess group for a local loop of about one second.
+
+[audit-2026-09.md](audit-2026-09.md) inventories all three suites with measured wall-clock, records where the runtime actually goes, and lists the traps (taint phpt batch interference, version-gate pairs, fixture-shape assumptions in the Rector and php-cs-fixer skip globs) that a later reorganisation has to respect.
 
 ## Fixture ownership (unit suite, subprocess and otherwise)
 
