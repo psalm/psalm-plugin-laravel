@@ -290,9 +290,7 @@ jobs:
         # composer test:type still exits 0. A canary that goes silently green is worse
         # than no canary, so assert real execution instead of trusting the exit code
         # alone. Reads the JUnit log the previous step already produced rather than
-        # running phpunit a second time: this repo's phpt runner batches every
-        # discovered phpt through Psalm in setUpBeforeClass() regardless of PHPUnit's
-        # --filter, so a filtered re-run pays the same ~1 minute for no benefit.
+        # running phpunit a second time.
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-junit.xml PromptInjection
 
   # This intentionally separate job avoids evaluating a matrix-dependent job
