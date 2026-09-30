@@ -95,3 +95,21 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    `--XFAIL--` section and let the test pass normally. Nothing in this suite uses it yet; reach for it
    when a fixture is written ahead of the handler or stub that will satisfy it, not when documenting a
    gap nobody is planning to close.
+
+7. **`--CONFLICTS--` key choice controls concurrency, not just isolation.** A fixture with any
+   `--CONFLICTS--` key already gets its own Psalm run (psalm-tester groups by the key, and a
+   conflicting fixture is never folded into a shared run). The key text then decides whether that
+   run can overlap other runs: `all` is a global lock, it waits for every other run to finish before
+   starting and blocks every other run from starting while it is live, so several `all` fixtures
+   serialize against the whole suite one at a time. A unique key (for example
+   `psalm-11959-<FixtureName>`) gives the fixture its own run without that lock: it starts as soon as
+   a concurrency slot is free and runs alongside everything else. Use a unique key when a fixture
+   only needs to avoid being co-analyzed with other fixtures (the common case, for example a finding
+   that a shared batch drops); reserve `all` for a fixture that must not run at the same time as
+   anything else in the suite, which should be rare. Picking `all` by habit serializes the whole
+   suite behind those runs for no benefit.
+
+   The `psalm-11959-*` keys (`grep -rl 'psalm-11959-' tests/Type/tests`) exist only for
+   vimeo/psalm#11959; remove them together with their `PsalmVersion::skipOnRange` gate once that
+   issue is fixed, not before, since the key is what lets the fixture skip batch co-analysis while
+   the bug is still present.
