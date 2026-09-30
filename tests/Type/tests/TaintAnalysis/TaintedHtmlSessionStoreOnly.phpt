@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderOnlySessionData(\Illuminate\Session\Store $session) {
+function renderOnlySessionData(\Illuminate\Session\Store $session): void {
     $data = $session->only(['name']);
 
     echo $data['name'];

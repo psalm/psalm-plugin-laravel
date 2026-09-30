@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function filterPosts(\Illuminate\Http\Request $request) {
+function filterPosts(\Illuminate\Http\Request $request): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $builder->whereRaw((string) $request->filter);
 }

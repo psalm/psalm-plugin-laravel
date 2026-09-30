@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderExceptSessionData(\Illuminate\Session\Store $session) {
+function renderExceptSessionData(\Illuminate\Session\Store $session): void {
     $data = $session->except(['password']);
 
     echo $data['name'];

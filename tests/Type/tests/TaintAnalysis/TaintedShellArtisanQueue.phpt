@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function queueArtisanCommand(\Illuminate\Http\Request $request) {
+function queueArtisanCommand(\Illuminate\Http\Request $request): void {
     $command = $request->input('task');
     /** @var \Illuminate\Contracts\Console\Kernel $kernel */
     $kernel = app(\Illuminate\Contracts\Console\Kernel::class);

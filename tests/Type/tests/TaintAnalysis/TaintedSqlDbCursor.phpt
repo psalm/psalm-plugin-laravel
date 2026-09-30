@@ -5,7 +5,7 @@
 
 use Illuminate\Support\Facades\DB;
 
-function showPosts(\Illuminate\Http\Request $request) {
+function showPosts(\Illuminate\Http\Request $request): void {
     $postId = $request->input('id');
     foreach (DB::cursor("SELECT * FROM posts WHERE id = " . $postId) as $_post) {
     }

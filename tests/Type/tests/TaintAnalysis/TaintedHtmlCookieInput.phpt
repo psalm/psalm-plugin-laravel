@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showGreeting(\Illuminate\Http\Request $request) {
+function showGreeting(\Illuminate\Http\Request $request): void {
     echo $request->cookie('username');
 }
 ?>

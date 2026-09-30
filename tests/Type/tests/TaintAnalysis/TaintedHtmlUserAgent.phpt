@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function logVisitor(\Illuminate\Http\Request $request) {
+function logVisitor(\Illuminate\Http\Request $request): void {
     echo $request->userAgent();
 }
 ?>

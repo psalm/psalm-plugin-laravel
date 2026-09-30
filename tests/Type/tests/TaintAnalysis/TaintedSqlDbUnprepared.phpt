@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function exportPosts(\Illuminate\Http\Request $request) {
+function exportPosts(\Illuminate\Http\Request $request): void {
     $conn = new \Illuminate\Database\Connection(new \PDO('sqlite::memory:'));
     $sql = $request->input('query');
     $conn->unprepared($sql);

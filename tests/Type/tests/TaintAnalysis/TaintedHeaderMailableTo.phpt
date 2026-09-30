@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function sendWelcome(\Illuminate\Http\Request $request) {
+function sendWelcome(\Illuminate\Http\Request $request): void {
     $mailable = new \Illuminate\Mail\Mailable();
     $mailable->to($request->input('email'));
 }

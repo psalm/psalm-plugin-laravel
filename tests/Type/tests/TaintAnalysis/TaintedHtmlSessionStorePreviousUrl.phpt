@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderPreviousUrl(\Illuminate\Session\Store $session) {
+function renderPreviousUrl(\Illuminate\Session\Store $session): void {
     echo $session->previousUrl();
 }
 ?>

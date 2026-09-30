@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function fetchEmbed(\Illuminate\Http\Request $request) {
+function fetchEmbed(\Illuminate\Http\Request $request): void {
     $embedUrl = $request->input('embed_url');
     $http = new \Illuminate\Http\Client\PendingRequest();
     $http->get($embedUrl);

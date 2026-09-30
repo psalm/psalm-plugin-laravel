@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function searchPosts(\Illuminate\Http\Request $request) {
+function searchPosts(\Illuminate\Http\Request $request): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $searchTerm = $request->input('search');
 

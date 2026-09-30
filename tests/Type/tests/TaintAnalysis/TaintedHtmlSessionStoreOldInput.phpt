@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderOldInput(\Illuminate\Session\Store $session) {
+function renderOldInput(\Illuminate\Session\Store $session): void {
     echo $session->getOldInput('email');
 }
 ?>
