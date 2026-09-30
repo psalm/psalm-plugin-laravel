@@ -3,12 +3,11 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderPulledSessionData(\Illuminate\Session\Store $session) {
+function renderPulledSessionData(\Illuminate\Session\Store $session): void {
     echo $session->pull('user_input');
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method renderPulledSessionData does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string
