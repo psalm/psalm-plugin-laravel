@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790800838898,
+  "lastUpdate": 1790803804542,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11575,6 +11575,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 31.96,
             "range": "± 0.01",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e032435d5ee769183ba79851dcc177daa984bccf",
+          "message": "Merge pull request #1604 from psalm/fix/1601-atomic-alias-stub\n\nWrite the facade alias stub atomically",
+          "timestamp": "2026-09-30T23:27:37+02:00",
+          "tree_id": "5a92e1f1baf9b89405301fc20365ff52801df777",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e032435d5ee769183ba79851dcc177daa984bccf"
+        },
+        "date": 1790803803473,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.03,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
