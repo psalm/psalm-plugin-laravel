@@ -23,7 +23,8 @@ flowchart TD
     C --> D["Build migration schema\n(only if columnFallback=migrations)"]
     D --> E["Init facade→service map\n(FacadeMapProvider)"]
     E --> F["Init translation / view / env handlers\n(from booted app state)"]
-    F --> G["Register handlers\n(Plugin::registerHandlers)"]
+    F --> BL["Compile Blade templates into shadow files\n(only if &lt;blade enabled='true'&gt;)"]
+    BL --> G["Register handlers\n(Plugin::registerHandlers)"]
     G --> H["Register stubs\n(Plugin::registerStubs)"]
 
     H --- stubs["
@@ -48,6 +49,82 @@ flowchart TD
 The whole `__invoke` body is wrapped in a try/catch: on any internal error the plugin reports a warning and disables itself for the run (or rethrows when `failOnInternalError` is set). See `src/Internal/InternalErrorReporter.php`.
 
 Bootstrap failures are a special case: `ApplicationProvider` swallows a `bootstrap()` throw to keep the run alive (one bad `config/*.php` must not disable the plugin), so they never reach the try/catch above. `Plugin::__invoke` checks `ApplicationProvider::getBootstrapError()` right after boot and routes it through `InternalErrorReporter::reportDegradedBoot()`: a "degraded mode" warning by default, or escalation to the regular internal-error path when `failOnInternalError` is set (issue #1096). Note that Psalm's `--no-progress` flag installs a `VoidProgress`, which silences all `Progress::warning()` output, including these.
+
+### Blade shadow files
+
+Behind [`<blade enabled="true" />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
+
+Two registrations, deliberately asymmetric (`Blade\PsalmShadowRegistrar`):
+
+- the **shadow** is added via `Codebase::addFilesToAnalyze()`, which both deep-scans and analyzes it. It must stay out of `ProjectAnalyzer`'s project-file list: `TaintFlowGraph` drops a flow whose source sits in a reportable file that suppresses `TaintedInput`, and Psalm's own `addFilesToShowResults()` is redundant here because `Analyzer::addFilesToAnalyze()` already writes the same map.
+- the **template** is written into `ProjectAnalyzer::$project_files` by reflection (`Blade\ProjectFileInjector`), because that private list is built from psalm.xml before plugins initialize and is all `canReportIssues()` reads. Without the write, nothing found in a template can ever be reported. The template is never queued for analysis: it is not PHP.
+
+Both halves degrade rather than throw. Every cause (no `blade.compiler` binding, no view finder, an unwritable cache directory, a Psalm internal that moved) turns the feature off for that run with one warning; per-template compile failures are collected into a single warning with `--debug` detail. `BladeBootstrapper` holds no static state, so it needs no entry in `resetInvocationState()`.
+
+The `ProjectFileInjector` guards (`property_exists`, `is_array`, `catch (Throwable)`, and no `setAccessible()`, which is a no-op since PHP 8.1 and whose deprecation Psalm's error handler promotes to an exception) are what keep a Psalm rename from crashing a run. Re-probe them on each Psalm release, not just each major.
+
+#### Remapping a shadow issue onto its template
+
+Neither registration makes a finding visible by itself: an issue Psalm raises in a shadow is located in a file that is deliberately unreportable, so it dies in the reportability gate. `Blade\BladeIssueRemapHandler` (`BeforeAddIssueInterface`, registered from `registerHandlers()` under the same `bladeEnabled` gate as the compile step) is the only channel from shadow analysis to user-visible output.
+
+- `Blade\ShadowRegistry` maps shadow path to template path, line map and per-template-line suppressions. `BladeBootstrapper` fills it for every shadow it registers, including templates fresh enough to skip recompiling (those facts come off the manifest). It is static because Psalm instantiates event handlers itself, so it is reset in `Plugin::resetInvocationState()`.
+- On a registry hit the handler rebuilds the issue on the `.blade.php` path (`Blade\ShadowIssueRelocator`), re-emits it through `IssueBuffer::accepts()`, and returns `false` to kill the shadow-path original. `BeforeAddIssue` is the only hook that can do this: Psalm dispatches it before both the reportability gate and `IssueBuffer::isSuppressed()`.
+- The rebuild walks the constructor reflectively. 97 of Psalm 7's 320 concrete issue classes declare a required third parameter, so `new $class($message, $location)` throws for them, and inside an event handler that is a finding lost without a trace. A parameter that cannot be resolved declines with `null` (Psalm keeps the shadow-path original, invisible but not swallowed) rather than dropping the issue.
+- `accepts()` is handed the suppressions recorded for the mapped template line, which is what makes `{{-- @psalm-suppress X --}}` work: the event carries the issue but not the suppressed-issue list Psalm was about to check it against. An `<issueHandlers>` suppression scoped to the view directory needs nothing extra, because `accepts()` consults `Config::reportIssueInFile()` on the new path itself.
+- A shadow line that maps to no template line (the prelude) is re-emitted on line 1 with an ` (unmapped)` suffix. `Mixed*` issues are dropped instead, because the prelude types every unresolved template variable as `mixed` and those findings say nothing about the template.
+- A taint flow graph is not a reason to decline: Psalm 7 runs taint by default and emits type and taint issues from the same run, so both kinds have to be relocated. (The `3.x` pipeline does decline there, because Psalm 6 runs taint exclusively and `IssueBuffer::add()` discards non-`Tainted*` issues anyway.)
+- A `TaintedInput` carries two further constructor arguments describing how the taint travelled, and both are remapped by `Blade\JourneyRemapper` before the rebuild. The journey ARRAY holds the source chain, each step repositioned onto the template its shadow came from; the journey TEXT also spells out the sink-side hops the array stops short of, so it is rewritten by substituting `file:line:column` descriptors rather than regenerated. A journey crosses files, so the remap resolves a shadow per step (and for the issue's own path) instead of reusing one; steps in ordinary application code are left untouched. A shadow step whose template has no such line declines the whole issue with `null` — a half-remapped journey is worse than none.
+
+#### Validating a call site against a template contract
+
+Behind [`<blade validateViewData="true" />`](../config.md#validateviewdata), `Handlers\Views\ViewContractHandler` (`AfterStatementAnalysisInterface`) reports a declared template variable the call site never passes (`MissingViewVariable`) or one whose value does not satisfy the declared type (`InvalidViewVariableType`). The class is registered from `registerHandlers()` under `bladeEnabled && (bladeValidateViewData || bladeReportUnusedViewData)` and carries one independent bool per rule, so the two opt-ins share a single walk of the statement; `init()` sets both and `afterStatementAnalysis()` bails only when neither is on.
+
+- `Blade\ContractParser::parseDeclarations()` reads the `{{-- @var --}}` and `@props([...])` declarations from the template source. It is a SIDE CHANNEL: the declarations are deliberately NOT fed into `ShadowCompiler::compile()`, because contract types in the prelude change every shadow's content and its fingerprint. Typing the template body is a separate decision.
+- `Blade\ContractRegistry` maps view NAME to contract, filled by `BladeBootstrapper::compileAll()` from the template path relative to its view root, first root winning as `FileViewFinder` does. Static for the same reason as `ShadowRegistry`, so it is reset in `Plugin::resetInvocationState()`.
+- The contract is persisted as the manifest's sixth slot, so a template fresh enough to skip recompiling still has one. `ShadowManifest::normalizeEntries()` drops any entry that is not eight slots wide, and `normalizeContract()` drops any contract that is not four wide, which self-evicts everything written by an earlier shape at the cost of one recompile.
+- `Handlers\Views\ViewCallChain` walks the rendering expression from the OUTERMOST call inwards, collecting the view name and every data contribution in one pass. Outermost-first is the whole point: expression analysis is post-order, so a hook on the inner `view('greeting')` of a `view('greeting')->with('name', $n)` chain would report every declared variable as missing. It refuses on any link it does not model, and `MissingViewVariable` additionally needs the supplied key set to be provably closed.
+
+#### Reporting an unused template
+
+Behind [`<blade reportUnusedViews="true" />`](../config.md#reportunusedviews), `Handlers\Views\UnusedViewHandler` (`AfterCodebasePopulatedInterface`, registered from `registerHandlers()` under `bladeEnabled && bladeReportUnusedViews`) reports a template ([UnusedView](../issues/UnusedView.md)) that no statically-provable reference ever names.
+
+Collection cannot happen during analysis: Psalm runs analysis in worker processes and plugin statics never return from one (`Internal/Codebase/Analyzer.php`). Collection therefore splits across two phases that both run in the parent process, before that fork:
+
+- **Template-side, at compile time.** `Blade\ViewReferenceCollector::collectFromSource()` walks each compiled shadow right after `ShadowCompiler::compile()` succeeds, reading the `$__env->make()` / `->first()` calls that `@include` / `@extends` / `@includeFirst` compile to. The result is persisted as the manifest's seventh slot (`Blade\ShadowManifest::store()`/`referencesFor()`), so a template fresh enough to skip recompiling still contributes its references.
+- **Call-site, at `AfterCodebasePopulated`.** `UnusedViewHandler` walks every project file's statements (`Codebase::getStatementsForFile()`, reusing Psalm's parser cache) with the same collector's `collect()`, reading the `view()` helper and the static `View::make()` form.
+- Every discovered template is claimed into `Blade\ViewReferenceRegistry` by `BladeBootstrapper::registerContract()` (the same call site that claims it into `ContractRegistry`, first root wins the same way), including templates that failed to compile — `BladeBootstrapper::run()` now marks EVERY discovered template reportable, not just the ones with a shadow, or an uncompiled template's `UnusedView` would die in `ProjectAnalyzer::canReportIssues()`.
+- One reference either phase cannot resolve statically (`Blade\ViewReferenceCollector` returns `dynamic: true`) turns the whole check off for the run, with one `Progress::warning()`: a lower bound on "used" cannot prove a template unused. Only the compiled-shadow phase treats an unresolved `$__env->make()`/`->first()` argument as a dynamic reference — a plain project file's arbitrary `$obj->make($x)` is not scanned at all, so it can only ever add a false "used", never disable the rule (see the class docblock for the asymmetry).
+- Emission reuses the shadow-remap machinery without a shadow: `Blade\TemplateLocation::atLine()` (extracted from `Blade\ShadowTarget`) builds a `CodeLocation\Raw` straight from the template source and `Blade\ShadowRegistry::templateSource()`, so a template with no compiled shadow can still be reported at line 1.
+
+#### Reporting an unread data key
+
+Behind [`<blade reportUnusedViewData="true" />`](../config.md#reportunusedviewdata), the same `ViewContractHandler` reports a data key ([UnusedViewData](../issues/UnusedViewData.md)) the resolved template neither reads nor declares.
+
+- The read set comes from `ContractParser::parseDataContract()`, which is `parseDeclarations()` plus a walk of the COMPILED output. It is the same side channel: the contract is built after `ShadowCompiler::compile()` returns and never reaches it. One shared `walkReads()` feeds both consumers — `TemplateContract`'s set drops loop aliases, this one keeps them, because the question here is "does the template use this name at all".
+- `readsUnknown` is load-bearing. A parse failure, a `$$name`, an `extract()`, or a `compact()` with a non-literal argument makes the set a lower bound, and a lower bound cannot prove a key unused. `get_defined_vars()` is deliberately NOT in that list: Blade compiles it into every `@include`, so treating it as unknown would disable the rule almost everywhere. `@props` and `@aware` compile to `$$name` writes, which is why component templates decline.
+- `ViewReferenceCollector::collectDataIncludes()` collects the manifest's eighth slot: the subset of a template's references that inherit its whole scope. Membership is decided by the DATA argument, not the directive — every scope-passing directive compiles it to `array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])`, whose position shifts with the directive's own optional data array, so the whole argument list is scanned for that shape. `@includeIsolated` and `@each` compile to the same `$__env->` methods but pass no parent scope and are excluded by that gate alone.
+- `Blade\ReadSetResolver` closes each template's reads UNION its declared contract vars over that graph, recursively, with a by-reference visited set (a revisit contributes nothing, which is correct for a union and terminates on a cycle). It declines on the first template in the chain whose reads are unknown, whose data-includes hold a dynamic name, or that `ContractRegistry` never claimed.
+- `ShadowManifest::isFresh()` takes an `int-mask-of<ShadowManifest::SLOT_*>`: a slot whose collection pass was off when the entry was written is a null, and requiring it forces one recompile on flag flip rather than leaving every template permanently "fresh with nothing collected".
+- Emission re-checks `PreludeBuilder::AMBIENT_TYPES` on the PASSED side, because the read-set extraction strips those names as Blade's own. It is deliberately not gated on `ViewCallChain::$complete`: an open key set means there may be more keys, not that the ones in hand were not passed.
+
+Everything in the pipeline that reads a Psalm internal whose shape differs between Psalm 6 and Psalm 7 goes through `Blade\PsalmBridge` (`TaintedInput` detection, journey step shape, journey-text descriptor format), each method carrying the `file:line` it was read off in the Psalm this branch requires. Porting the Blade pipeline to the other line is a rewrite of that one file: the `3.x` copy additionally carries a taint-run probe, which Psalm 7 has no use for.
+
+#### Debugging a shadow
+
+Shadows live under the `cacheDir` resolved by `PluginConfig::resolveBladeCacheDir()` (default: `blade/` inside the [plugin cache directory](../config.md#cache-directory)). Each template gets one file named `sha1($templatePath) . '.php'` (`ShadowManifest::shadowPath()`), alongside a single `manifest.php` that records, per shadow, the template path, line map, extends line, source fingerprint, inline suppressions, and the template contract. Delete the whole `cacheDir` to force every template to recompile. `--clear-cache` only removes `$config->getCacheDirectory()`, so it does the same for the default location, which nests under it, but not for a custom `cacheDir` set outside Psalm's own cache directory.
+
+To inspect a shadow, run once so the cache is warm, then find the file by hashing the template's real (absolute) path, not its project-relative path: `findTemplates()` registers each template by `SplFileInfo::getRealPath()`, and `ShadowManifest::shadowPath()` hashes that same string. For example:
+
+```bash
+php -r "echo sha1(realpath('resources/views/profile.blade.php')), \"\n\";"
+```
+
+Open the resulting `<hash>.php` in the `cacheDir` directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output.
+
+Two flags matter when working on this pipeline:
+
+* `--debug` on the Psalm invocation prints the individual compile failure for every skipped template; without it, `BladeBootstrapper` only aggregates them into one warning naming up to three paths.
+* `--threads=1 --no-cache` when stepping through `BladeIssueRemapHandler` or `JourneyRemapper` with `var_dump()`: forked worker processes swallow output, and a warm shadow cache skips the compile path you are trying to observe.
 
 ## Getting started
 

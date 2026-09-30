@@ -12,6 +12,7 @@ nav_order: 6
 | SQL Injection   | A03:2021 | `DB::statement()`, `DB::unprepared()`, raw query methods      |
 | Shell Injection | A03:2021 | `Process::run()`, `Process::command()`                        |
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
+| XSS (Blade templates) | A03:2021 | `{!! $userInput !!}`                                    |
 | SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
@@ -31,6 +32,8 @@ filenames; applications that populate that registry from untrusted data must mod
 that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
+
+Blade template scanning is opt-in: enable it with `<blade enabled="true" />` to also get `TaintedHtml` findings on unescaped `{!! !!}` output inside `.blade.php` files. See [Blade template analysis](blade.md).
 
 ### `ResponseFactory::make()` and `new Response()` HTML responses
 

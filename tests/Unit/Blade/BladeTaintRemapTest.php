@@ -1,0 +1,167 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
+
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\BladeIssueRemapHandler;
+use Psalm\LaravelPlugin\Blade\JourneyRemapper;
+use Psalm\LaravelPlugin\Blade\PsalmBridge;
+use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
+use Psalm\LaravelPlugin\Blade\ShadowTarget;
+use Symfony\Component\Process\Process;
+
+/**
+ * End-to-end proof that a taint finding inside a Blade template reads as a template finding: the
+ * issue AND every step of its journey name the `.blade.php` file, never the compiled shadow.
+ *
+ * A real `vendor/bin/psalm --taint-analysis` run is the only way to pin it. The journey is built by
+ * Psalm's taint graph from `DataFlowNode`s recorded during analysis, so no in-process construction
+ * reproduces the node chain a template actually produces.
+ */
+#[CoversClass(BladeIssueRemapHandler::class)]
+#[CoversClass(JourneyRemapper::class)]
+#[CoversClass(PsalmBridge::class)]
+#[CoversClass(ShadowIssueRelocator::class)]
+#[CoversClass(ShadowTarget::class)]
+final class BladeTaintRemapTest extends TestCase
+{
+    private const FIXTURE = __DIR__ . '/Fixtures/BladeTaintRemap';
+
+    private const SHADOW_DIR = self::FIXTURE . '/.cache/blade-shadows';
+
+    /** @var array{0: string, 1: list<array<string, mixed>>}|null shared across the cases: one Psalm run costs seconds */
+    private static ?array $report = null;
+
+    public static function tearDownAfterClass(): void
+    {
+        self::$report = null;
+
+        if (!\is_dir(self::SHADOW_DIR)) {
+            return;
+        }
+
+        foreach (\array_diff(\scandir(self::SHADOW_DIR) ?: [], ['.', '..']) as $entry) {
+            \unlink(self::SHADOW_DIR . '/' . $entry);
+        }
+
+        \rmdir(self::SHADOW_DIR);
+    }
+
+    /**
+     * The raw JSON Psalm printed plus its decoded issues. Raw matters: the shadow path has to be
+     * absent from the WHOLE report, including the journey steps the decoded shape flattens away.
+     *
+     * @return array{0: string, 1: list<array<string, mixed>>}
+     */
+    private function report(): array
+    {
+        if (self::$report !== null) {
+            return self::$report;
+        }
+
+        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
+        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+
+        $process = new Process(
+            [
+                \PHP_BINARY,
+                $psalmBinary,
+                '-c',
+                'psalm.xml',
+                '--no-cache',
+                '--threads=1',
+                '--no-progress',
+                '--taint-analysis',
+                '--output-format=json',
+            ],
+            self::FIXTURE,
+        );
+        $process->setTimeout(300);
+        // Not mustRun(): the fixture reports a taint issue on purpose.
+        $process->run();
+
+        $output = $process->getOutput();
+        $decoded = \json_decode($output, true);
+        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$output}\n{$process->getErrorOutput()}");
+
+        $issues = [];
+
+        foreach ($decoded as $issue) {
+            $this->assertIsArray($issue);
+            $issues[] = $issue;
+        }
+
+        return self::$report = [$output, $issues];
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function issuesFor(string $template): array
+    {
+        [, $issues] = $this->report();
+
+        return \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with((string) $issue['file_path'], $template),
+        ));
+    }
+
+    /**
+     * Taint issues only. Psalm 7 emits type and taint findings from one run, so a template that is
+     * taint-clean still carries whatever type issues its prelude and its expressions earn.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function taintIssuesFor(string $template): array
+    {
+        return \array_values(\array_filter(
+            $this->issuesFor($template),
+            static fn(array $issue): bool => \str_starts_with((string) $issue['type'], 'Tainted'),
+        ));
+    }
+
+    #[Test]
+    public function an_unescaped_echo_of_request_input_is_tainted_on_the_template_line(): void
+    {
+        [$raw] = $this->report();
+        $issues = $this->issuesFor('resources/views/tainted.blade.php');
+
+        $tainted = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['type'] === 'TaintedHtml',
+        ));
+
+        $this->assertCount(1, $tainted, $raw);
+        $this->assertSame(2, $tainted[0]['line_from'], $raw);
+    }
+
+    #[Test]
+    public function no_journey_step_names_the_compiled_shadow(): void
+    {
+        [$raw] = $this->report();
+
+        // The whole report, not just the issue location: a journey step still pointing at the
+        // shadow leaks a path that does not exist in the user's source tree.
+        $this->assertStringNotContainsString('blade-shadows', $raw, $raw);
+        $this->assertStringContainsString(
+            'resources/views/tainted.blade.php',
+            \str_replace('\/', '/', $raw),
+            $raw,
+        );
+    }
+
+    #[Test]
+    public function an_escaped_echo_reports_no_taint(): void
+    {
+        $this->assertSame([], $this->taintIssuesFor('resources/views/escaped.blade.php'), $this->report()[0]);
+    }
+
+    #[Test]
+    public function an_echo_of_a_template_literal_reports_no_taint(): void
+    {
+        $this->assertSame([], $this->taintIssuesFor('resources/views/literal.blade.php'), $this->report()[0]);
+    }
+}

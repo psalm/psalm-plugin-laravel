@@ -39,6 +39,36 @@ final class Arg
     }
 
     /**
+     * Resolve one parameter's Arg node whether the call used positional or named arguments.
+     *
+     * PHP requires every positional argument to precede any named one, so a non-named node already
+     * at $index is authoritative; otherwise the parameter can only have been supplied by name, in
+     * whatever order — `Route::view(view: 'welcome', uri: '/x')` must not read '/x' as the view
+     * name just because $paramName's usual slot is 1.
+     *
+     * $paramName is compared lowercased, so callers pass it that way.
+     *
+     * Not annotated mutation-free: `Identifier::toLowerString()` is not, and Psalm 6 rejects the
+     * annotation on any caller of a method that lacks it.
+     *
+     * @param list<\PhpParser\Node\Arg> $args
+     */
+    public static function byNameOrPosition(array $args, int $index, string $paramName): ?\PhpParser\Node\Arg
+    {
+        if (isset($args[$index]) && $args[$index]->name === null) {
+            return $args[$index];
+        }
+
+        foreach ($args as $arg) {
+            if ($arg->name !== null && $arg->name->toLowerString() === $paramName) {
+                return $arg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Return the inferred Psalm type of the argument at $index, or null if
      * the argument is missing or its type is unknown.
      *
