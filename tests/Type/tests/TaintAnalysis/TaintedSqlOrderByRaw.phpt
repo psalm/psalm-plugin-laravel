@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function listPosts(\Illuminate\Http\Request $request) {
+function listPosts(\Illuminate\Http\Request $request): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $sortClause = $request->input('sort');
     $builder->orderByRaw($sortClause);

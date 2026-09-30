@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showPost(\Illuminate\Http\Request $request) {
+function showPost(\Illuminate\Http\Request $request): void {
     $conn = new \Illuminate\Database\Connection(new \PDO('sqlite::memory:'));
     $postId = $request->input('id');
     $conn->select("SELECT * FROM posts WHERE id = " . $postId);

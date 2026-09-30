@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderBreadcrumb(\Illuminate\Http\Request $request) {
+function renderBreadcrumb(\Illuminate\Http\Request $request): void {
     echo (string) $request->term;
 }
 ?>

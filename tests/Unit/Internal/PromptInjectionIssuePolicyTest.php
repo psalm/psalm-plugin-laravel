@@ -11,11 +11,14 @@ use PHPUnit\Framework\TestCase;
 use Psalm\Config;
 use Psalm\LaravelPlugin\Internal\DefaultIssueLevels;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\LoadsPsalmConfigFromXml;
 
 #[CoversClass(PromptInjectionIssuePolicy::class)]
 #[CoversClass(DefaultIssueLevels::class)]
 final class PromptInjectionIssuePolicyTest extends TestCase
 {
+    use LoadsPsalmConfigFromXml;
+
     protected function tearDown(): void
     {
         (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
@@ -127,7 +130,7 @@ final class PromptInjectionIssuePolicyTest extends TestCase
 
     private function loadConfig(string $body = ''): Config
     {
-        return Config::loadFromXML(
+        return self::loadPsalmConfigFromXml(
             \dirname(__DIR__, 3),
             '<?xml version="1.0"?><psalm errorLevel="1" xmlns="https://getpsalm.org/schema/config">' . $body . '</psalm>',
         );

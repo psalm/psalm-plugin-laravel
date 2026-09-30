@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function getPostStats(\Illuminate\Http\Request $request) {
+function getPostStats(\Illuminate\Http\Request $request): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $column = $request->input('column');
     $builder->selectRaw($column);

@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function convertImage(\Illuminate\Http\Request $request) {
+function convertImage(\Illuminate\Http\Request $request): void {
     $filename = $request->input('filename');
     $process = new \Illuminate\Process\PendingProcess();
     $process->run($filename);

@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function unsafeColumnWhere(\Illuminate\Http\Request $request) {
+function unsafeColumnWhere(\Illuminate\Http\Request $request): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $column = $request->input('column');
 

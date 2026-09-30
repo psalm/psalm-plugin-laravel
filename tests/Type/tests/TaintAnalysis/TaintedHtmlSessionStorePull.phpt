@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderPulledSessionData(\Illuminate\Session\Store $session) {
+function renderPulledSessionData(\Illuminate\Session\Store $session): void {
     echo $session->pull('user_input');
 }
 ?>

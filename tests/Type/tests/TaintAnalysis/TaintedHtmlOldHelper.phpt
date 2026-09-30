@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderOldInput() {
+function renderOldInput(): void {
     echo old('name');
 }
 ?>

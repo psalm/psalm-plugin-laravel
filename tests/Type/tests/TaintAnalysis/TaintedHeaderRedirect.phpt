@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function loginRedirect(\Illuminate\Http\Request $request) {
+function loginRedirect(\Illuminate\Http\Request $request): void {
     $returnUrl = $request->input('return_url');
     redirect($returnUrl);
 }

@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function sendCustomHtml(\Illuminate\Http\Request $request) {
+function sendCustomHtml(\Illuminate\Http\Request $request): void {
     $mailable = new \Illuminate\Mail\Mailable();
     $mailable->html($request->input('body'));
 }

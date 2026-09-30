@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function unsafeSessionHelperQuery() {
+function unsafeSessionHelperQuery(): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $searchTerm = session('search');
 

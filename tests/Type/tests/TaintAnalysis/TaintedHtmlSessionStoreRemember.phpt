@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderRememberedSessionData(\Illuminate\Session\Store $session) {
+function renderRememberedSessionData(\Illuminate\Session\Store $session): void {
     echo $session->remember('user_input', fn () => 'default');
 }
 ?>

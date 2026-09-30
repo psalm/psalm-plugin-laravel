@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderSessionData() {
+function renderSessionData(): void {
     echo session('last_query');
 }
 ?>
