@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showSearchResults(\Illuminate\Http\Request $request) {
+function showSearchResults(\Illuminate\Http\Request $request): void {
     echo $request->query('q');
 }
 ?>

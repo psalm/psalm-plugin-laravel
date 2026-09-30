@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderAllSessionData(\Illuminate\Session\Store $session) {
+function renderAllSessionData(\Illuminate\Session\Store $session): void {
     $data = $session->all();
 
     echo $data['name'];

@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function runArtisanCommand(\Illuminate\Http\Request $request) {
+function runArtisanCommand(\Illuminate\Http\Request $request): void {
     $command = $request->input('command');
     /** @var \Illuminate\Contracts\Console\Kernel $kernel */
     $kernel = app(\Illuminate\Contracts\Console\Kernel::class);

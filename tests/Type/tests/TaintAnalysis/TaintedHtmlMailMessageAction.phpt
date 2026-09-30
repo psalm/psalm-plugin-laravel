@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function notifyWithAction(\Illuminate\Http\Request $request) {
+function notifyWithAction(\Illuminate\Http\Request $request): void {
     $message = new \Illuminate\Notifications\Messages\MailMessage();
     $message->action($request->input('label'), $request->input('url'));
 }

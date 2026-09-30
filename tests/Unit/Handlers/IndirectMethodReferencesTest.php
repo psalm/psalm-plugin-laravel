@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\References\IndirectMethodReferenceHandler;
 use Symfony\Component\Process\Process;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 
 /**
  * Whole-project regression coverage for Laravel's indirect method references. Psalm's dead-code
@@ -16,8 +18,11 @@ use Symfony\Component\Process\Process;
  * fixture project with findUnusedCode enabled, matching a consuming application's lifecycle.
  */
 #[CoversClass(IndirectMethodReferenceHandler::class)]
+#[Group('subprocess')]
 final class IndirectMethodReferencesTest extends TestCase
 {
+    use CopiesFixtureDirectories;
+
     #[Test]
     public function it_records_only_proven_container_and_relationship_references(): void
     {
@@ -294,47 +299,5 @@ final class IndirectMethodReferencesTest extends TestCase
         } finally {
             $this->removeDirectory($fixtureDir);
         }
-    }
-
-    private function copyDirectory(string $source, string $destination): void
-    {
-        \mkdir($destination, 0777, true);
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::SELF_FIRST,
-        );
-
-        /** @var \SplFileInfo $item */
-        foreach ($iterator as $item) {
-            $target = $destination . '/' . $iterator->getSubPathName();
-            if ($item->isDir()) {
-                \mkdir($target, 0777, true);
-            } else {
-                \copy($item->getPathname(), $target);
-            }
-        }
-    }
-
-    private function removeDirectory(string $directory): void
-    {
-        if (!\is_dir($directory)) {
-            return;
-        }
-
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST,
-        );
-
-        /** @var \SplFileInfo $item */
-        foreach ($iterator as $item) {
-            if ($item->isDir()) {
-                \rmdir($item->getPathname());
-            } else {
-                \unlink($item->getPathname());
-            }
-        }
-
-        \rmdir($directory);
     }
 }

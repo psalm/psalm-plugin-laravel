@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderTitle() {
+function renderTitle(): void {
     echo request('title');
 }
 ?>

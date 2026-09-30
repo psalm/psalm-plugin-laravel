@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showOriginalParam(\Illuminate\Routing\Route $route) {
+function showOriginalParam(\Illuminate\Routing\Route $route): void {
     echo $route->originalParameter('id');
 }
 ?>

@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderSessionData(\Illuminate\Session\Store $session) {
+function renderSessionData(\Illuminate\Session\Store $session): void {
     echo $session->get('user_input');
 }
 ?>
