@@ -20,8 +20,8 @@ use Illuminate\Validation\Rule;
  * `$request->validate([...])` tests in `SafeInlineValidateWildcardArrayRule*`.
  *
  * TaintedSSRF still fires: a valid email's domain may still resolve to an
- * internal host. The sink call is reported once, as expected since Psalm
- * 7.0.0-beta21 (earlier betas duplicated it via #1359).
+ * internal host. Psalm 6 reports it TWICE for this single sink call (same
+ * type, line, and message, #1359); Psalm 7.0.0-beta21+ reports it once.
  */
 final class WildcardEmailRequest extends FormRequest
 {
@@ -38,4 +38,5 @@ function storeWildcardFormRequest(WildcardEmailRequest $request): \Illuminate\Ht
 }
 ?>
 --EXPECTF--
+TaintedSSRF on line %d: Detected tainted network request
 TaintedSSRF on line %d: Detected tainted network request
