@@ -6,10 +6,6 @@ declare(strict_types=1);
  * Assert that a PHPUnit JUnit log actually exercised a subset of tests,
  * rather than every one of them being silently SKIPIF'd.
  *
- * Filtering with `--filter=<needle>` does not avoid this problem here: this
- * repo's phpt runner (`tests/Type/PsalmTest::setUpBeforeClass()`) batches
- * every discovered phpt through Psalm regardless of PHPUnit's `--filter`, so
- * a filtered re-run pays the same cost as the full suite for no benefit.
  * Read the JUnit log the full run already produced instead of running a
  * second time.
  *

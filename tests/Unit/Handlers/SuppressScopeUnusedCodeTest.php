@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Diagnostics\SuppressHandler;
@@ -33,6 +34,7 @@ use Symfony\Component\Process\Process;
  * than in tests/Application, which is reserved for the fresh-app shell harness (laravel-test.sh).
  */
 #[CoversClass(SuppressHandler::class)]
+#[Group('subprocess')]
 final class SuppressScopeUnusedCodeTest extends TestCase
 {
     /**

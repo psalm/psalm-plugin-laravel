@@ -3,12 +3,11 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showRouteParam(\Illuminate\Routing\Route $route) {
+function showRouteParam(\Illuminate\Routing\Route $route): void {
     echo $route->parameter('id');
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method showRouteParam does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 PossiblyInvalidCast on line %d: object cannot be cast to string
