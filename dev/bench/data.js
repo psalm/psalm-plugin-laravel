@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790799619859,
+  "lastUpdate": 1790800838898,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11540,6 +11540,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.78,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1166,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b6d94035541a8e9cf937cc448173f7ed9999761",
+          "message": "Report tainted response header values as a header-injection sink (#1575)\n\n* fix(taint): mark response header values as header-injection sinks\n\n`ResponseFactory::make()` and the `Illuminate\\Http\\Response` constructor\nnever sank their $headers argument, so a tainted header value (e.g. a\nContent-Disposition filename) went unreported. Add `@psalm-taint-sink\nheader $headers` beside the existing html content sink on all three\ndeclaring stubs (contract, concrete, and the Response constructor).\n\nThe existing attachment/content-type exemption for the html sink gates\non `instanceof TaintedHtml` only, so it never suppresses the new header\nfinding; a regression test pins that.\n\nRefs #1418\n\n* fix(taint): sink the response() helper header argument #1418\n\nThe response() helper forwards its arguments straight to\nResponseFactory::make(), but only $content carried a sink, so the\nhelper's direct 3-arg form (response($content, $status, $headers))\nwent unreported while response()->make(...) already did. Add the\nsame header sink beside the existing html one.",
+          "timestamp": "2026-09-30T22:37:35+02:00",
+          "tree_id": "1698926e2dda5820010140a6c9c4ac849828d615",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0b6d94035541a8e9cf937cc448173f7ed9999761"
+        },
+        "date": 1790800837585,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.96,
+            "range": "± 0.01",
             "unit": "s"
           },
           {
