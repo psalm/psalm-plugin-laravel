@@ -15,7 +15,7 @@ on:
       - 'resources/ci/**'
   push:
     branches:
-      - master
+      - "4.x"
       - "3.x"
     paths:
       - '.github/**'

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Stubs;
 
 use Illuminate\Foundation\AliasLoader;
+use Psalm\LaravelPlugin\Internal\AtomicFileWriter;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
@@ -38,13 +39,18 @@ final class AliasStubProvider
             $stub .= "class {$alias} extends \\{$fqcn} {}\n";
         }
 
-        $result = \file_put_contents($location, $stub);
+        // Unchanged aliases skip the write; the atomic write keeps this read from seeing a partial file.
+        if (@\file_get_contents($location) !== $stub) {
+            $failure = AtomicFileWriter::write($location, $stub);
 
-        if ($result === false) {
-            throw new \RuntimeException(
-                "Failed to write alias stub file to '{$location}'. "
-                . 'Check that the directory exists and is writable.',
-            );
+            // A concurrent run may have written the same stub first, or Windows refused rename()
+            // over a file another process holds open: only a still-wrong file is an error.
+            if ($failure !== null && @\file_get_contents($location) !== $stub) {
+                throw new \RuntimeException(
+                    "Failed to write alias stub file to '{$location}': {$failure}. "
+                    . 'Check that the directory exists and is writable.',
+                );
+            }
         }
 
         $registration->addStubFile($location);
