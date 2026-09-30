@@ -82,20 +82,33 @@ final class PluginUnregisteredRouteNameInitializationTest extends TestCase
     #[Test]
     public function warns_and_stays_disabled_when_the_empty_table_is_caused_by_a_route_cache(): void
     {
-        $progress = $this->bootRouteFixture(static function (): void {
-            $app = ApplicationProvider::getApp();
-            $app->make('router')->setRoutes(new RouteCollection());
-            // routesAreCached() checks this binding before ever touching the filesystem
-            // (Illuminate\Foundation\Application::routesAreCached()), so this is the cheapest
-            // way to simulate "a compiled route cache is present" without shipping a real
-            // bootstrap/cache/routes-v7.php fixture.
-            $app->instance('routes.cached', true);
-        });
+        $cachedRoutesPath = null;
 
-        $this->assertFalse($this->isEnabled(), 'UnregisteredRouteNameHandler must stay disabled when the route cache yields no named routes.');
-        $this->assertSame(1, $progress->warningCount, 'A cached-routes empty table must warn exactly once.');
-        $this->assertStringContainsString('route:cache', $progress->lastWarning);
-        $this->assertStringContainsString('route:clear', $progress->lastWarning);
+        try {
+            $progress = $this->bootRouteFixture(static function () use (&$cachedRoutesPath): void {
+                $app = ApplicationProvider::getApp();
+                $app->make('router')->setRoutes(new RouteCollection());
+
+                // Illuminate\Foundation\Application::routesAreCached(): on the 12.14 floor it is
+                // only a filesystem check against getCachedRoutesPath(), so a real file is required
+                // to arm it there. 13.x added a 'routes.cached' container binding checked first and
+                // memoized via instance() — that memoization can already hold a stale `false` from
+                // boot (recorded before this file existed), so the binding must also be set
+                // explicitly to cover that Laravel line.
+                $cachedRoutesPath = $app->getCachedRoutesPath();
+                \file_put_contents($cachedRoutesPath, '<?php return [];');
+                $app->instance('routes.cached', true);
+            });
+
+            $this->assertFalse($this->isEnabled(), 'UnregisteredRouteNameHandler must stay disabled when the route cache yields no named routes.');
+            $this->assertSame(1, $progress->warningCount, 'A cached-routes empty table must warn exactly once.');
+            $this->assertStringContainsString('route:cache', $progress->lastWarning);
+            $this->assertStringContainsString('route:clear', $progress->lastWarning);
+        } finally {
+            if ($cachedRoutesPath !== null && \is_file($cachedRoutesPath)) {
+                \unlink($cachedRoutesPath);
+            }
+        }
     }
 
     /**
