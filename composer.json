@@ -43,7 +43,7 @@
         "bin/psalm-laravel"
     ],
     "require-dev": {
-        "alies-dev/psalm-tester": "dev-feature/parallel-batch",
+        "alies-dev/psalm-tester": "^0.4",
         "friendsofphp/php-cs-fixer": "^3.94",
         "laravel/framework": "^11.35 || ^12.14 || ^13.3",
         "phpunit/phpunit": "^11.5 || ^12.5 || ^13.0",
@@ -52,12 +52,6 @@
         "symfony/http-foundation": "^7.1 || ^8.0",
         "symfony/process": "^7.1 || ^8.0"
     },
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/alies-dev/psalm-tester"
-        }
-    ],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "autoload": {
