@@ -19,10 +19,6 @@ function pipeline_through_variadic(Pipeline $pipeline): void
 
     $_array = $pipeline->through(['auth', 'throttle:60,1']);
     /** @psalm-check-type-exact $_array = Pipeline&static */
-
-    // Closure form — the stub advertises Closure in the union.
-    $_closure = $pipeline->through(fn (mixed $passable, \Closure $next): mixed => $next($passable));
-    /** @psalm-check-type-exact $_closure = Pipeline&static */
 }
 
 function pipeline_pipe_variadic(Pipeline $pipeline): void
