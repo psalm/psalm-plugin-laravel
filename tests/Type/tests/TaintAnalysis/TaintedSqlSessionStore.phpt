@@ -3,7 +3,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function unsafeSessionQuery(\Illuminate\Session\Store $session) {
+function unsafeSessionQuery(\Illuminate\Session\Store $session): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $searchTerm = $session->get('search');
 
@@ -11,7 +11,6 @@ function unsafeSessionQuery(\Illuminate\Session\Store $session) {
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method unsafeSessionQuery does not have a return type, expecting void
 TooFewArguments on line %d: Too few arguments for Illuminate\Database\Query\Builder::__construct - expecting connection to be passed
 MixedAssignment on line %d: Unable to determine the type that $searchTerm is being assigned to
 TaintedSql on line %d: Detected tainted SQL

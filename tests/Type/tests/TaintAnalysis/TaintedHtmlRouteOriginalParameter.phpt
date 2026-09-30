@@ -3,11 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function showOriginalParam(\Illuminate\Routing\Route $route) {
+function showOriginalParam(\Illuminate\Routing\Route $route): void {
     echo $route->originalParameter('id');
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method showOriginalParam does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

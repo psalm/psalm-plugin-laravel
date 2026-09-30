@@ -153,20 +153,21 @@ final class InitCommand extends Command
         }
 
         $composer = $this->readComposerJson($cwd);
-        $hasPhpunitPlugin = $this->composerHasPackage($composer, 'psalm/plugin-phpunit');
-        [$directories, $files] = $this->detectSourceRoots($cwd, $composer, $hasPhpunitPlugin);
+        $testPluginPackage = $this->testSupportPackage($composer);
+        $hasTestPlugin = $this->composerHasPackage($composer, $testPluginPackage);
+        [$directories, $files] = $this->detectSourceRoots($cwd, $composer, $hasTestPlugin);
         $ignores = $this->detectIgnoreDirs($cwd, $composer);
 
         $contents = \strtr(self::PSALM_XML_TEMPLATE, [
             '{{LEVEL}}' => $level,
-            '{{PROJECT_FILES}}' => $this->buildProjectFiles($directories, $files, $ignores, $hasPhpunitPlugin),
+            '{{PROJECT_FILES}}' => $this->buildProjectFiles($directories, $files, $ignores, $hasTestPlugin, $testPluginPackage),
         ]);
 
         if (!$this->writeFile($targetPath, $contents, $io)) {
             return Command::FAILURE;
         }
 
-        $this->reportSuccess($io, $cwd, $targetPath, $existingPath !== null, $level, $directories, $files);
+        $this->reportSuccess($io, $cwd, $targetPath, $existingPath !== null, $level, $directories, $files, $testPluginPackage);
         return Command::SUCCESS;
     }
 
@@ -247,6 +248,7 @@ final class InitCommand extends Command
         string $level,
         array $directories,
         array $files,
+        string $testPluginPackage,
     ): void {
         $io->success(\sprintf(
             '%s %s.',
@@ -261,12 +263,13 @@ final class InitCommand extends Command
         }
 
         // Mirror inline XML hint when tests/ exists but isn't scanned,
-        // usually because psalm/plugin-phpunit isn't installed.
+        // usually because the test-support plugin isn't installed.
         if (!\in_array('tests', $directories, true) && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')) {
             $io->writeln('');
-            $io->writeln(
-                '<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev psalm/plugin-phpunit</info> and add tests dir to <projectFiles>',
-            );
+            $io->writeln(\sprintf(
+                '<comment>Note:</comment> tests/ dir skipped. To scan it: <info>composer require --dev %s</info> and add tests dir to <projectFiles>',
+                $testPluginPackage,
+            ));
         }
 
         // Path-repo monorepos not enumerated in root composer autoload can't be
@@ -290,7 +293,7 @@ final class InitCommand extends Command
      * @param ComposerJson|null $composer
      * @return array{0: list<string>, 1: list<string>} [directories, files]
      */
-    private function detectSourceRoots(string $cwd, ?array $composer, bool $hasPhpunitPlugin): array
+    private function detectSourceRoots(string $cwd, ?array $composer, bool $hasTestPlugin): array
     {
         $isLaravelApp = \is_file($cwd . \DIRECTORY_SEPARATOR . 'artisan');
 
@@ -319,9 +322,9 @@ final class InitCommand extends Command
             $files = self::LARAVEL_APP_FILES;
         }
 
-        // Scanning tests/ without psalm/plugin-phpunit floods output with PHPUnit-magic
-        // false positives, so opt in only when the plugin is already wired up.
-        if ($hasPhpunitPlugin
+        // Scanning tests/ without the matching test-support plugin floods output with
+        // PHPUnit- or Pest-magic false positives, so opt in only once it's wired up.
+        if ($hasTestPlugin
             && \is_dir($cwd . \DIRECTORY_SEPARATOR . 'tests')
             && !\in_array('tests', $directories, true)
         ) {
@@ -372,7 +375,7 @@ final class InitCommand extends Command
     /**
      * On-disk source roots from the root composer autoload.psr-4 map — the shared
      * contributor for both layouts (paths canonicalised by extractComposerAutoloadDirs).
-     * Reads only autoload.psr-4; test dirs live in autoload-dev, opt-in via plugin-phpunit.
+     * Reads only autoload.psr-4; test dirs live in autoload-dev, opt-in via the test-support plugin.
      * Emits the exact mapped src roots, so each package's vendor/ and tests/ stay out.
      *
      * @param ComposerJson|null $composer
@@ -459,6 +462,22 @@ final class InitCommand extends Command
 
         return \array_key_exists($package, $composer['require'] ?? [])
             || \array_key_exists($package, $composer['require-dev'] ?? []);
+    }
+
+    /**
+     * The test-support plugin this project should install: the Pest plugin when
+     * pestphp/pest is required, else the stock PHPUnit plugin. Pest closures still
+     * produce `$this` false positives under plugin-phpunit alone, so a Pest project
+     * is pointed at its own plugin even if plugin-phpunit happens to be present too.
+     *
+     * @param ComposerJson|null $composer
+     * @psalm-mutation-free
+     */
+    private function testSupportPackage(?array $composer): string
+    {
+        return $this->composerHasPackage($composer, 'pestphp/pest')
+            ? 'alies-dev/psalm-plugin-pest'
+            : 'psalm/plugin-phpunit';
     }
 
     /**
@@ -553,7 +572,7 @@ final class InitCommand extends Command
      * @param list<string> $ignores
      * @psalm-pure
      */
-    private function buildProjectFiles(array $directories, array $files, array $ignores, bool $hasPhpunitPlugin): string
+    private function buildProjectFiles(array $directories, array $files, array $ignores, bool $hasTestPlugin, string $testPluginPackage): string
     {
         // Two-level indent matches the heredoc: <projectFiles> at one TAB, its
         // children at two, ignoreFiles' grandchildren at three.
@@ -572,10 +591,10 @@ final class InitCommand extends Command
             $lines[] = \sprintf('%s<directory name="%s"/>', $itemIndent, $dir);
         }
 
-        // Nudge toward psalm/plugin-phpunit only when not already wired up;
-        // once present, scanning tests/ is handled in detectSourceRoots().
-        if (! $hasPhpunitPlugin) {
-            $lines[] = $itemIndent . '<!-- composer require psalm/plugin-phpunit psalm/plugin-mockery for the full tests support -->';
+        // Nudge toward the matching test-support plugin only when not already wired
+        // up; once present, scanning tests/ is handled in detectSourceRoots().
+        if (! $hasTestPlugin) {
+            $lines[] = $itemIndent . \sprintf('<!-- composer require %s psalm/plugin-mockery for the full tests support -->', $testPluginPackage);
             $lines[] = $itemIndent . '<!-- <directory name="tests"/>-->';
             $lines[] = '';
         }

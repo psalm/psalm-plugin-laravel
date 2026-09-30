@@ -3,12 +3,11 @@
 --FILE--
 <?php declare(strict_types=1);
 
-function renderOldInput(\Illuminate\Session\Store $session) {
+function renderOldInput(\Illuminate\Session\Store $session): void {
     echo $session->getOldInput('email');
 }
 ?>
 --EXPECTF--
-MissingReturnType on line %d: Method renderOldInput does not have a return type, expecting void
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 MixedArgument on line %d: Argument 1 of echo cannot be mixed, expecting string

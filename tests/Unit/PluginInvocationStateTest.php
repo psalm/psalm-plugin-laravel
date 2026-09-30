@@ -30,10 +30,13 @@ use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\RegistrationInterface;
 use Psalm\StatementsSource;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\LoadsPsalmConfigFromXml;
 
 #[CoversClass(Plugin::class)]
 final class PluginInvocationStateTest extends TestCase
 {
+    use LoadsPsalmConfigFromXml;
+
     private string $originalCwd;
 
     /** @var list<string> */
@@ -46,7 +49,7 @@ final class PluginInvocationStateTest extends TestCase
         $cwd = \getcwd();
         \assert(\is_string($cwd));
         $this->originalCwd = $cwd;
-        Config::loadFromXML($cwd, '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config" />');
+        self::loadPsalmConfigFromXml($cwd, '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config" />');
         ApplicationProvider::reset();
     }
 
@@ -94,8 +97,10 @@ final class PluginInvocationStateTest extends TestCase
         (new \ReflectionProperty(RelationResolver::class, 'relatedModelCache'))->setValue(null, ['App\\Models\\Post::comments' => 'App\\Models\\Comment']);
 
         \chdir($secondRoot);
+        // findMissingTranslations off: with the translator unbound, `true` only adds a warning that a
+        // stub registration writes straight to STDERR. The translator-reset assertion holds either way.
         $plugin($this->createStub(RegistrationInterface::class), new \SimpleXMLElement(
-            '<plugin><modelProperties columnFallback="none" /><findMissingViews value="false" /><findMissingTranslations value="true" /></plugin>',
+            '<plugin><modelProperties columnFallback="none" /><findMissingViews value="false" /><findMissingTranslations value="false" /></plugin>',
         ));
 
         $this->assertNull($this->functionReturn('view', 'only-in-first-application'));
