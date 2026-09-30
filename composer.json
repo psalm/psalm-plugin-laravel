@@ -108,6 +108,7 @@
             "./bin/ci/check-phpt-conventions.sh",
             "phpunit --testsuite=type"
         ],
-        "test:unit": "phpunit --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices"
+        "test:unit": "phpunit --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices",
+        "test:unit:fast": "phpunit --testsuite=unit --exclude-group=subprocess --display-deprecations --display-notices --display-phpunit-notices"
     }
 }

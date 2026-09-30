@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler;
@@ -19,6 +20,7 @@ use Symfony\Component\Process\Process;
  * fixture instead, like {@see UnknownModelAttributeEmissionTest}.
  */
 #[CoversClass(UndefinedModelRelationHandler::class)]
+#[Group('subprocess')]
 final class UndefinedRelationAutoloadCrashTest extends TestCase
 {
     #[Test]

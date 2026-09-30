@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -32,6 +33,7 @@ use Symfony\Component\Process\Process;
  * just dropping the one model — asserted here via the process exit code.
  */
 #[CoversClass(ModelMetadataRegistryBuilder::class)]
+#[Group('subprocess')]
 final class WarmUpFailureVisibilityTest extends TestCase
 {
     #[Test]
