@@ -172,7 +172,8 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             'request',
             'routes',
         ],
-        // Assigned in Dispatcher::__construct(), hidden by the Events\Dispatcher stub the same way.
+        // Assigned in Dispatcher::__construct(), hidden by the Events\Dispatcher stub the same way,
+        // with the same gap (DispatcherSkippedParentConstructorKnownLimitation.phpt).
         // $queueResolver and $transactionManagerResolver are deliberately absent: only their
         // setters assign them, so the vendor declaration reports them too.
         'Illuminate\Events\Dispatcher' => [
