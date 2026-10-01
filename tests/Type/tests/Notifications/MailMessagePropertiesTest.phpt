@@ -14,10 +14,10 @@ function mail_message_properties(MailMessage $mail): void
     /** @psalm-check-type-exact $view = array<array-key, mixed>|null|string */
     $view = $mail->view;
 
-    /** @psalm-check-type-exact $from = array{0?: string, 1?: null|string} */
+    /** @psalm-check-type-exact $from = array{0?: array<array-key, mixed>|string, 1?: null|string} */
     $from = $mail->from;
 
-    /** @psalm-check-type-exact $replyTo = array<array-key, array{0: string, 1?: null|string}> */
+    /** @psalm-check-type-exact $replyTo = array<array-key, array{0: array<array-key, mixed>|string, 1?: null|string}> */
     $replyTo = $mail->replyTo;
 
     /** @psalm-check-type-exact $attachments = array<array-key, array{file: Illuminate\Contracts\Mail\Attachable|Illuminate\Mail\Attachment|string, options: array<array-key, mixed>}> */
@@ -34,6 +34,13 @@ function mail_message_sender_without_name(MailMessage $mail): void
 {
     $mail->from = ['noreply@example.com'];
     $mail->replyTo = [['support@example.com']];
+}
+
+// Mail\Message::from() and replyTo() take string|array, so grouped addresses pass through.
+function mail_message_grouped_senders(MailMessage $mail): void
+{
+    $mail->from = [['author@example.com', 'coauthor@example.com']];
+    $mail->replyTo = [[['billing@example.com' => 'Billing']]];
 }
 
 // The arrays need not stay lists: MailChannel only iterates them.

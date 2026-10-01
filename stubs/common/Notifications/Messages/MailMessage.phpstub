@@ -23,18 +23,20 @@ class MailMessage extends SimpleMessage implements Renderable
     /**
      * The "from" information for the message.
      *
-     * The name is optional: MailChannel reads it with Arr::get($from, 1).
+     * The name is optional: MailChannel reads it with Arr::get($from, 1). The address may be an array,
+     * MailChannel passes it to Mail\Message::from(), which takes string|array.
      *
-     * @var array{}|array{0: string, 1?: string|null}
+     * @var array{}|array{0: string|array<array-key, mixed>, 1?: string|null}
      */
     public $from = [];
 
     /**
      * The "reply to" information for the message.
      *
-     * The name is optional: MailChannel reads it with Arr::get($replyTo, 1).
+     * The name is optional: MailChannel reads it with Arr::get($replyTo, 1). The address may be an array
+     * (replyTo([[...]]) keeps nested arrays), MailChannel passes it to Mail\Message::replyTo(), which takes string|array.
      *
-     * @var array<array-key, array{0: string, 1?: string|null}>
+     * @var array<array-key, array{0: string|array<array-key, mixed>, 1?: string|null}>
      */
     public $replyTo = [];
 
