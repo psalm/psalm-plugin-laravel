@@ -818,8 +818,6 @@ final class WhereColumnTaintHandler implements
      * throw. Collision safety comes from the weak keying, not from this flush: see the class docblock
      * for why an id-keyed record could outlive its node, and why this is per-file rather than
      * per-function-like.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void

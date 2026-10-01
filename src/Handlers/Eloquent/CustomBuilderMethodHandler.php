@@ -58,7 +58,6 @@ final class CustomBuilderMethodHandler
      */
     private static array $traitBuilderMethods = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$builderToModelMap = [];
@@ -73,7 +72,6 @@ final class CustomBuilderMethodHandler
      *
      * @param class-string<Model> $modelClass
      * @param class-string<Builder> $builderClass
-     * @psalm-external-mutation-free
      */
     public static function registerBuilderToModelMapping(string $modelClass, string $builderClass): void
     {
@@ -89,7 +87,6 @@ final class CustomBuilderMethodHandler
      *
      * @param class-string<Model> $modelClass
      * @param array<lowercase-string, list<FunctionLikeParameter>> $methods method name → params
-     * @psalm-external-mutation-free
      */
     public static function registerTraitBuilderMethods(string $modelClass, array $methods): void
     {
@@ -101,8 +98,6 @@ final class CustomBuilderMethodHandler
      *
      * Used by {@see ModelMethodHandler} to check trait method existence in the
      * model-level handlers (isUnresolvedBuilderMethod, getMethodParams, etc.).
-     *
-     * @psalm-external-mutation-free
      */
     public static function hasTraitMethod(string $modelClass, string $methodName): bool
     {
@@ -113,7 +108,6 @@ final class CustomBuilderMethodHandler
      * Get params for a trait-declared builder method on a model.
      *
      * @return list<FunctionLikeParameter>|null
-     * @psalm-external-mutation-free
      */
     public static function getTraitMethodParams(string $modelClass, string $methodName): ?array
     {
@@ -126,8 +120,6 @@ final class CustomBuilderMethodHandler
 
     /**
      * Confirm trait-declared builder methods exist on custom builder instances.
-     *
-     * @psalm-external-mutation-free
      */
     public static function doesTraitMethodExistOnBuilder(MethodExistenceProviderEvent $event): ?bool
     {
@@ -138,8 +130,6 @@ final class CustomBuilderMethodHandler
 
     /**
      * Trait-declared builder methods forwarded via macros are effectively public.
-     *
-     * @psalm-external-mutation-free
      */
     public static function isTraitMethodVisibleOnBuilder(MethodVisibilityProviderEvent $event): ?bool
     {
@@ -152,7 +142,6 @@ final class CustomBuilderMethodHandler
      * Provide params for trait-declared builder methods on custom builder instances.
      *
      * @return list<FunctionLikeParameter>|null
-     * @psalm-external-mutation-free
      */
     public static function getTraitMethodParamsOnBuilder(MethodParamsProviderEvent $event): ?array
     {
@@ -168,8 +157,6 @@ final class CustomBuilderMethodHandler
 
     /**
      * Provide return type for trait-declared builder methods on custom builder instances.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getTraitMethodReturnTypeOnBuilder(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -194,8 +181,6 @@ final class CustomBuilderMethodHandler
 
     /**
      * Check if a trait-declared builder method exists for the given custom builder class.
-     *
-     * @psalm-external-mutation-free
      */
     private static function hasTraitMethodOnBuilder(string $builderClass, string $methodName): bool
     {

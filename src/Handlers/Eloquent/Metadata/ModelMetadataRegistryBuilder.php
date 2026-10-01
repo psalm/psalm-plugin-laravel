@@ -136,7 +136,6 @@ final class ModelMetadataRegistryBuilder
      * @internal for tests under `tests/Unit/`
      * @param class-string<Model> $modelFqcn
      * @param ModelMetadata<Model> $metadata
-     * @psalm-external-mutation-free
      */
     public static function overrideForTesting(string $modelFqcn, ModelMetadata $metadata): void
     {
@@ -145,7 +144,6 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * Clear all state derived from the current Laravel app and Psalm Codebase.
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -548,6 +546,7 @@ final class ModelMetadataRegistryBuilder
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
      * @param array<non-empty-lowercase-string, ScopeInfo>    $scopes
      * @param array<non-empty-lowercase-string, RelationInfo> $relations
+     *
      * @return ModelMetadata<Model>
      */
     private static function computeWithoutInstance(
@@ -787,6 +786,9 @@ final class ModelMetadataRegistryBuilder
      * models and abstract bases (#901/#1058) and is safe at warm-up time.
      *
      * @return array{0: array<non-empty-lowercase-string, AccessorInfo>, 1: array<non-empty-lowercase-string, MutatorInfo>, 2: array<non-empty-lowercase-string, ScopeInfo>}
+     *
+     * Not marked mutation-free (nor is callableMethodStorages() or computeWithoutInstance()): Psalm 6
+     * treats Generator::current()/key() in a foreach as ImpureMethodCall, unlike Psalm 7.
      */
     private static function computeMethodMetadata(
         ClassLikeStorage $storage,
@@ -845,8 +847,11 @@ final class ModelMetadataRegistryBuilder
      *
      * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     *
      * @param-out array<non-empty-lowercase-string, AccessorInfo> $accessors
      * @param-out array<non-empty-lowercase-string, MutatorInfo>  $mutators
+     *
+     * @psalm-external-mutation-free
      */
     private static function classifyAccessorMethod(
         MethodStorage $methodStorage,
@@ -962,7 +967,10 @@ final class ModelMetadataRegistryBuilder
      * attribute-style wins over legacy; otherwise the first (most-derived) entry stays.
      *
      * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     *
      * @param-out array<non-empty-lowercase-string, AccessorInfo> $accessors
+     *
+     * @psalm-external-mutation-free
      */
     private static function insertAccessor(array &$accessors, AccessorInfo $info): void
     {
@@ -976,7 +984,10 @@ final class ModelMetadataRegistryBuilder
      * Insert a mutator under its property key, mirroring {@see insertAccessor}'s precedence.
      *
      * @param array<non-empty-lowercase-string, MutatorInfo> $mutators
+     *
      * @param-out array<non-empty-lowercase-string, MutatorInfo> $mutators
+     *
+     * @psalm-external-mutation-free
      */
     private static function insertMutator(array &$mutators, MutatorInfo $info): void
     {
@@ -1006,7 +1017,10 @@ final class ModelMetadataRegistryBuilder
      * work the handler keeps (Correction 4 of the Phase-2 plan); the builder does NOT expand them.
      *
      * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
+     *
      * @param-out array<non-empty-lowercase-string, ScopeInfo> $scopes
+     *
+     * @psalm-external-mutation-free
      */
     private static function classifyScopeMethod(MethodStorage $methodStorage, array &$scopes): void
     {
@@ -1063,7 +1077,10 @@ final class ModelMetadataRegistryBuilder
      * ancestors) stays. Mirrors {@see insertAccessor}.
      *
      * @param array<non-empty-lowercase-string, ScopeInfo> $scopes
+     *
      * @param-out array<non-empty-lowercase-string, ScopeInfo> $scopes
+     *
+     * @psalm-external-mutation-free
      */
     private static function insertScope(array &$scopes, ScopeInfo $info): void
     {
@@ -1179,7 +1196,10 @@ final class ModelMetadataRegistryBuilder
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutators
      * @param array<non-empty-lowercase-string, RelationInfo> $relations
      * @param list<non-empty-string>                          $appends
+     *
      * @return array<non-empty-lowercase-string, PropertyOrigins>
+     *
+     * @psalm-external-mutation-free
      */
     private static function computeKnownProperties(
         TableSchema $schema,
@@ -1225,7 +1245,10 @@ final class ModelMetadataRegistryBuilder
      * empty string is dropped. Mirrors {@see insertAccessor}'s by-ref accumulator convention.
      *
      * @param array<non-empty-lowercase-string, PropertyOrigins> $known
+     *
      * @param-out array<non-empty-lowercase-string, PropertyOrigins> $known
+     *
+     * @psalm-external-mutation-free
      */
     private static function tagKnownProperty(array &$known, string $rawName, PropertyOrigin $origin): void
     {

@@ -435,8 +435,6 @@ final class NamedArgumentTaintHandler implements
      * The only branch here with no test: deleting this flush fails nothing, because a stale
      * record needs PHP to reissue a freed node's object handle, which no fixture can force.
      * WhereColumn's equivalent bug was found in the wild, so treat a change here as unguarded.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void

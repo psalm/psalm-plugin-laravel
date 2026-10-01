@@ -186,4 +186,15 @@ class DB extends Facade
      * @psalm-flow ($value) -> return
      */
     public static function escape($value, $binary = false) {}
+
+    /**
+     * Get the connection query log.
+     *
+     * The facade's generated `@method` tag only says `array[]`. `readWriteType` is optional because
+     * Laravel only started logging it during 12.x, after the plugin's 12.14 floor, and a plain string
+     * because setReadWriteType() accepts any.
+     *
+     * @return list<array{query: string, bindings: array, time: float|null, readWriteType?: string|null}>
+     */
+    public static function getQueryLog() {}
 }

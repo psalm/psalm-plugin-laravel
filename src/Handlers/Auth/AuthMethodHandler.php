@@ -52,7 +52,6 @@ final class AuthMethodHandler implements MethodReturnTypeProviderInterface, Meth
      * and surface `Auth::guard('web')->logout()` as `Guard::logout does not exist`.
      *
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array

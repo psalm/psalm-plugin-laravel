@@ -94,7 +94,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * per method name wins, since SoftDeletes' signatures are consistent across all models.
      *
      * @param array<lowercase-string, list<FunctionLikeParameter>> $methods
-     * @psalm-external-mutation-free
      */
     public static function registerBaseBuilderTraitMethods(array $methods): void
     {
@@ -109,8 +108,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      *
      * $pendingScopeModel in particular is a short-lived producer->consumer hand-off; clearing it
      * here guarantees no entry survives into a fresh run even if a producer write went unconsumed.
-     *
-     * @psalm-external-mutation-free
      */
     public static function init(): void
     {
@@ -726,7 +723,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * @param lowercase-string $methodName
      * @return list<FunctionLikeParameter>|null
      * @internal Used by relation forwarding for base-Builder related models
-     * @psalm-external-mutation-free
      */
     public static function getTraitMethodParamsForModel(
         Codebase $codebase,
@@ -753,7 +749,6 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      *
      * @param class-string<Model> $modelClass
      * @param lowercase-string $methodName
-     * @psalm-external-mutation-free
      */
     private static function isTraitBuilderMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {

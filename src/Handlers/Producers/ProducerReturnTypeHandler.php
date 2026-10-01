@@ -100,8 +100,6 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
      * language server, or back-to-back analyses) can boot a different app whose
      * alias registry differs. Must run before the handler's providers are
      * registered so getClassLikeNames() and resolveFamily() agree.
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -111,7 +109,6 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
     /**
      * @inheritDoc
      * @return list<class-string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
@@ -213,7 +210,6 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
      *     contract: class-string,
      *     concrete: class-string,
      * }|null
-     * @psalm-external-mutation-free
      */
     private static function resolveFamily(string $fqClasslikeName): ?array
     {
@@ -239,7 +235,6 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
      *
      * @param array{producer: class-string, facade: class-string, ...} $family
      * @return list<class-string>
-     * @psalm-external-mutation-free
      */
     private static function familyClassNames(array $family): array
     {

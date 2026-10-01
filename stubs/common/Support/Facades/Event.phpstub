@@ -1,0 +1,35 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * Real methods outrank the facade's generated `@method static array|null` tags
+ * (FacadeStubPrecedenceHandler).
+ */
+class Event extends Facade
+{
+    /**
+     * Fire an event until the first non-null response is returned.
+     *
+     * Returns that listener response (any type), or null when no listener answers.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @return mixed
+     */
+    public static function until($event, $payload = []) {}
+
+    /**
+     * Fire an event and call the listeners.
+     *
+     * With $halt, returns the first non-null listener response (any type). Without it, returns
+     * the collected responses, or null when the event is deferred or queued until after commit.
+     * Not a list: after Event::fake() the root is EventFake, which forwards to any contract implementation.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @param  bool  $halt
+     * @return ($halt is true ? mixed : array<array-key, mixed>|null)
+     */
+    public static function dispatch($event, $payload = [], $halt = false) {}
+}
