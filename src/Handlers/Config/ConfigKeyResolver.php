@@ -76,7 +76,6 @@ final class ConfigKeyResolver
      * invocation drops the singleton before booting the next application.
      *
      * @psalm-api
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {

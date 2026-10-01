@@ -204,7 +204,6 @@ final class MacroRegistry
      * All macros registered on the given Macroable class.
      *
      * @return array<lowercase-string, MacroDefinition>
-     * @psalm-external-mutation-free
      */
     public static function for(string $fqcn): array
     {
@@ -216,7 +215,6 @@ final class MacroRegistry
      *
      * @psalm-api Used by unit tests and any handler that needs to look up a single macro
      *            without enumerating the whole class. The handler currently uses {@see self::for()}.
-     * @psalm-external-mutation-free
      */
     public static function get(string $fqcn, string $methodName): ?MacroDefinition
     {
@@ -225,7 +223,6 @@ final class MacroRegistry
 
     /**
      * @return list<class-string> Macroable-shaped classes that have at least one macro
-     * @psalm-external-mutation-free
      */
     public static function getKnownMacroableClasses(): array
     {
@@ -238,7 +235,6 @@ final class MacroRegistry
      * @param array<lowercase-string, array<lowercase-string, MacroDefinition>> $macros
      * @param list<class-string> $knownMacroableClasses
      * @psalm-api Tests only.
-     * @psalm-external-mutation-free
      */
     public static function overrideForTesting(array $macros, array $knownMacroableClasses): void
     {
@@ -250,7 +246,6 @@ final class MacroRegistry
      * Reset registry to empty state. Tests use this to isolate runs.
      *
      * @psalm-api Tests only.
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {

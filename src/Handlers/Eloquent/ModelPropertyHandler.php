@@ -204,7 +204,6 @@ final class ModelPropertyHandler
      *
      * @param class-string<Model> $fqClasslikeName
      * @return array<non-empty-string, ColumnInfo>
-     * @psalm-external-mutation-free
      */
     public static function resolveAllColumns(string $fqClasslikeName): array
     {
@@ -218,7 +217,6 @@ final class ModelPropertyHandler
 
     /**
      * @param class-string<Model> $fqClasslikeName
-     * @psalm-external-mutation-free
      */
     private static function schemaHasColumn(string $fqClasslikeName, string $propertyName): bool
     {
@@ -250,7 +248,6 @@ final class ModelPropertyHandler
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
     private static array $nativePropertyCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$nativePropertyCache = [];
@@ -262,7 +259,6 @@ final class ModelPropertyHandler
      * (doesPropertyExist, isPropertyVisible, getPropertyType).
      *
      * @param class-string $fqcn
-     * @psalm-external-mutation-free
      */
     private static function hasNativeProperty(string $fqcn, string $propertyName): bool
     {

@@ -36,7 +36,6 @@ final class ModelPropertyAccessorHandler
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property". */
     private static array $nativePropertyCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$nativePropertyCache = [];
@@ -101,7 +100,6 @@ final class ModelPropertyAccessorHandler
      * pre-registry handler's own `str_replace('_', '')` + case-insensitive `methodExists` matching).
      *
      * @param class-string<Model> $fqcn
-     * @psalm-external-mutation-free
      */
     private static function resolveAccessor(Codebase $codebase, string $fqcn, string $propertyName): ?AccessorInfo
     {
@@ -124,7 +122,6 @@ final class ModelPropertyAccessorHandler
         return $metadata->accessor($propertyName);
     }
 
-    /** @psalm-external-mutation-free */
     private static function hasNativeProperty(string $fqcn, string $property_name): bool
     {
         $key = $fqcn . '::' . $property_name;

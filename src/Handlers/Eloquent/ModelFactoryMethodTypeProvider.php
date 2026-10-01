@@ -50,7 +50,6 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
     /** @var array<lowercase-string, true> */
     private static array $explicitHasFactoryBindings = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$factoryUnionCache = [];
@@ -340,8 +339,6 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
      * True when the model, an ancestor, or a composed application trait
      * supplied an explicit @use binding. The signal is captured before omitted
      * uses are normalized to the trait's populated default arity.
-     *
-     * @psalm-external-mutation-free
      */
     private static function hasUserBoundTFactory(
         ClassLikeStorage $storage,

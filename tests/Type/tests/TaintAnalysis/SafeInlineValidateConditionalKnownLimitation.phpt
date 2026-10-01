@@ -1,5 +1,3 @@
---CONFLICTS--
-psalm-11959-SafeInlineValidateConditionalKnownLimitation
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
 --FILE--

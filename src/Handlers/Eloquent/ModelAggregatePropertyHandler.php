@@ -85,7 +85,6 @@ final class ModelAggregatePropertyHandler
      */
     private static array $typeCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$pseudoPropertyCache = [];
@@ -368,8 +367,6 @@ final class ModelAggregatePropertyHandler
      *
      * Types match Laravel's raw database output before any model casts are applied.
      * Results are cached to avoid repeated allocation across analysis runs.
-     *
-     * @psalm-external-mutation-free
      */
     private static function buildTypeForSuffix(string $suffix): Union
     {
@@ -403,8 +400,6 @@ final class ModelAggregatePropertyHandler
     /**
      * Check whether the user has declared a @property PHPDoc for this property.
      * If so, we defer to their declaration instead of providing an aggregate type.
-     *
-     * @psalm-external-mutation-free
      */
     private static function hasUserPseudoProperty(
         Codebase $codebase,

@@ -53,7 +53,6 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
 
     private static bool $recorded = false;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$methodReferences = [];
@@ -293,7 +292,6 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         }
     }
 
-    /** @psalm-external-mutation-free */
     private static function queueMethodReference(MethodIdentifier $calling, MethodIdentifier $target): void
     {
         self::$methodReferences[strtolower((string) $calling) . '>' . strtolower((string) $target)] = [

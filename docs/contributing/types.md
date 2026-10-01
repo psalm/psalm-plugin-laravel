@@ -270,8 +270,11 @@ Negated assertions (`!Type`) assert the param is **not** of the given type. Comm
 | `@psalm-impure`                 | Explicitly marks side effects                             |
 | `@psalm-mutation-free`          | Method: no mutation of any state                          |
 | `@psalm-external-mutation-free` | Method: may mutate `$this`, nothing external              |
+| `@psalm-capabilities a\|b`      | Exact capability set, e.g. `read-props\|read-globals`     |
 | `@psalm-immutable`              | Class: all properties readonly, all methods mutation-free |
 | `@psalm-mutable`                | Class: explicitly not immutable (default)                 |
+
+Static property access needs `read-globals` / `write-globals`, which none of the purity annotations grant: leave methods touching a static cache unannotated.
 
 ### Readonly
 

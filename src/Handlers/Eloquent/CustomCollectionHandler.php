@@ -60,7 +60,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      */
     private static array $modelToCollectionMap = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$modelToCollectionMap = [];
@@ -85,7 +84,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * @param class-string<Model> $modelClass
      * @param class-string<EloquentCollection> $collectionClass
-     * @psalm-external-mutation-free
      */
     public static function registerCustomCollection(string $modelClass, string $collectionClass): void
     {
@@ -136,7 +134,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         ];
     }
 
-    /** @psalm-external-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -181,8 +178,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      * A userland paginator subclass that overrides getCollection() shifts the declaring
      * class off AbstractPaginator/AbstractCursorPaginator, so the provider correctly stops
      * firing for it — the override's own return type wins.
-     *
-     * @psalm-external-mutation-free
      */
     private static function paginatorCollectionType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -224,8 +219,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * Registered per-model by {@see ModelRegistrationHandler} because Psalm's
      * provider lookup requires exact class name matching.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getModelMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -249,8 +242,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Look up the custom collection class for a model, or null if using default.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getCollectionClassForModel(string $modelClass): ?string
     {
