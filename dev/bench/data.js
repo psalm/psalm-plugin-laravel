@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790868743068,
+  "lastUpdate": 1790869278445,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11715,6 +11715,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.72,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1358,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "89fad18fef985494cfe950f9a4a73a1ef78efe5a",
+          "message": "Stop reporting `Dispatcher::$container` as uninitialized in subclasses (#1615)\n\n* fix(stubs): keep Dispatcher::$container initialized for subclasses\n\nThe Events\\Dispatcher stub hides the vendor constructor, so subclasses calling parent::__construct() were asked to initialize $container.\n\n* test: pin the Dispatcher skipped-parent-constructor gap\n\nSame accepted limitation as UrlGenerator: stub method bodies are not analyzed, so the suppression cannot be conditional on the parent::__construct() call.",
+          "timestamp": "2026-10-01T17:37:51+02:00",
+          "tree_id": "4be8e9603d0897fee0f90539e28013adecb97d3f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/89fad18fef985494cfe950f9a4a73a1ef78efe5a"
+        },
+        "date": 1790869277217,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.35,
+            "range": "± 0.31",
             "unit": "s"
           },
           {
