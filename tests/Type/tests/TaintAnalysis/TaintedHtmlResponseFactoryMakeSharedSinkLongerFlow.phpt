@@ -12,10 +12,6 @@ use Illuminate\Routing\ResponseFactory;
  * download), the longer one is not: the exemption must drop only its own finding, and the longer
  * flow arriving at the shared node later must still report.
  *
- * Before Psalm 7.0.0-beta23 the `visited_source_ids` guard in `TaintFlowGraph::getChildNodes()`
- * discarded every flow into an already-walked sink longer than the first, so with the shorter flow
- * exempt the sink reported nothing (vimeo/psalm#11959, fixed by vimeo/psalm#12037).
- *
  * The unique ARGS line runs this file in its own batch, so no other fixture's `make()` flow shares
  * the node.
  */

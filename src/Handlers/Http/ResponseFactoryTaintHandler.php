@@ -56,10 +56,8 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * "direct top-level statement" to belong to. Superglobals and `$this` are rejected outright. Each
  * such miss fails toward a retained finding, never a dropped one.
  *
- * Every `make()` call in a project shares one sink node (and, separately, every constructor call
- * shares its own). Psalm reports each flow into a shared sink separately (since 7.0.0-beta23,
- * vimeo/psalm#12037), so exempting one flow never hides another; pinned for `make()` by
- * `TaintedHtmlResponseFactoryMakeSharedSinkLongerFlow.phpt`.
+ * Every `make()` call shares one sink node; Psalm reports each flow into it separately, so
+ * exempting one never hides another (`TaintedHtmlResponseFactoryMakeSharedSinkLongerFlow.phpt`).
  *
  * Every private helper below is free of side effects, but the purity annotations follow what Psalm
  * can verify rather than what is true: helpers that reach for a call's arguments or walk the AST
