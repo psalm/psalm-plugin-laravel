@@ -66,4 +66,4 @@ function test_each_wrong_model_type_still_errors(): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::each expects impure-callable(App\Models\Customer, int):mixed, but impure-Closure(App\Models\Vehicle):void provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::each expects callable[impure](App\Models\Customer, int):mixed, but Closure[impure](App\Models\Vehicle):void provided
