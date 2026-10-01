@@ -1,11 +1,12 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use Illuminate\Mail\Attachment;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\HtmlString;
 
 // Shapes follow what MailMessage's own setters write: from() stores [address, name],
-// replyTo() appends [address, name] pairs, attach() stores a resolved path, attachData()
+// replyTo() appends [address, name] pairs, attach() stores a path (MailChannel accepts any Mail\Message::attach() input), attachData()
 // stores raw data. $view is null until view()/text() runs and markdown() resets it.
 
 function mail_message_properties(MailMessage $mail): void
@@ -19,7 +20,7 @@ function mail_message_properties(MailMessage $mail): void
     /** @psalm-check-type-exact $replyTo = array<array-key, array{0: string, 1?: null|string}> */
     $replyTo = $mail->replyTo;
 
-    /** @psalm-check-type-exact $attachments = array<array-key, array{file: string, options: array<array-key, mixed>}> */
+    /** @psalm-check-type-exact $attachments = array<array-key, array{file: Illuminate\Contracts\Mail\Attachable|Illuminate\Mail\Attachment|string, options: array<array-key, mixed>}> */
     $attachments = $mail->attachments;
 
     /** @psalm-check-type-exact $rawAttachments = array<array-key, array{data: resource|string, name: string, options: array<array-key, mixed>}> */
@@ -39,6 +40,7 @@ function mail_message_sender_without_name(MailMessage $mail): void
 function mail_message_drop_attachments(MailMessage $mail): void
 {
     $mail->attachments = array_filter($mail->attachments, static fn (array $a): bool => $a['file'] !== 'internal.pdf');
+    $mail->attachments[] = ['file' => Attachment::fromData(static fn (): string => 'contents', 'invoice.txt'), 'options' => []];
     $mail->rawAttachments = array_filter($mail->rawAttachments, static fn (array $a): bool => $a['name'] !== 'internal.txt');
     $mail->replyTo = array_filter($mail->replyTo, static fn (array $r): bool => $r[0] !== 'internal@example.com');
 }

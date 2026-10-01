@@ -44,9 +44,10 @@ class MailMessage extends SimpleMessage implements Renderable
      * Not a list (same for $replyTo and $rawAttachments): the property is public and MailChannel only
      * iterates it, so array_filter() on it is valid.
      *
-     * attach() converts Attachable and Attachment instances before storing, so only paths remain.
+     * attach() itself only stores paths, but MailChannel hands each `file` to Mail\Message::attach(),
+     * so anything that method accepts is valid here.
      *
-     * @var array<array-key, array{file: string, options: array<array-key, mixed>}>
+     * @var array<array-key, array{file: string|\Illuminate\Contracts\Mail\Attachable|\Illuminate\Mail\Attachment, options: array<array-key, mixed>}>
      */
     public $attachments = [];
 
