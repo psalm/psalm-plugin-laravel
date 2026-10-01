@@ -16,13 +16,13 @@ function mail_message_properties(MailMessage $mail): void
     /** @psalm-check-type-exact $from = array{0?: string, 1?: null|string} */
     $from = $mail->from;
 
-    /** @psalm-check-type-exact $replyTo = list<array{0: string, 1?: null|string}> */
+    /** @psalm-check-type-exact $replyTo = array<array-key, array{0: string, 1?: null|string}> */
     $replyTo = $mail->replyTo;
 
-    /** @psalm-check-type-exact $attachments = list<array{file: string, options: array<array-key, mixed>}> */
+    /** @psalm-check-type-exact $attachments = array<array-key, array{file: string, options: array<array-key, mixed>}> */
     $attachments = $mail->attachments;
 
-    /** @psalm-check-type-exact $rawAttachments = list<array{data: resource|string, name: string, options: array<array-key, mixed>}> */
+    /** @psalm-check-type-exact $rawAttachments = array<array-key, array{data: resource|string, name: string, options: array<array-key, mixed>}> */
     $rawAttachments = $mail->rawAttachments;
 
     echo \count([$view, $from, $replyTo, $attachments, $rawAttachments]);
@@ -33,6 +33,14 @@ function mail_message_sender_without_name(MailMessage $mail): void
 {
     $mail->from = ['noreply@example.com'];
     $mail->replyTo = [['support@example.com']];
+}
+
+// The arrays need not stay lists: MailChannel only iterates them.
+function mail_message_drop_attachments(MailMessage $mail): void
+{
+    $mail->attachments = array_filter($mail->attachments, static fn (array $a): bool => $a['file'] !== 'internal.pdf');
+    $mail->rawAttachments = array_filter($mail->rawAttachments, static fn (array $a): bool => $a['name'] !== 'internal.txt');
+    $mail->replyTo = array_filter($mail->replyTo, static fn (array $r): bool => $r[0] !== 'internal@example.com');
 }
 
 // The view() branch of render() returns Mailer::render(), a plain string.

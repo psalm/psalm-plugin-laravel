@@ -34,16 +34,19 @@ class MailMessage extends SimpleMessage implements Renderable
      *
      * The name is optional: MailChannel reads it with Arr::get($replyTo, 1).
      *
-     * @var list<array{0: string, 1?: string|null}>
+     * @var array<array-key, array{0: string, 1?: string|null}>
      */
     public $replyTo = [];
 
     /**
      * The attachments for the message.
      *
+     * Not a list (same for $replyTo and $rawAttachments): the property is public and MailChannel only
+     * iterates it, so array_filter() on it is valid.
+     *
      * attach() converts Attachable and Attachment instances before storing, so only paths remain.
      *
-     * @var list<array{file: string, options: array<array-key, mixed>}>
+     * @var array<array-key, array{file: string, options: array<array-key, mixed>}>
      */
     public $attachments = [];
 
@@ -52,7 +55,7 @@ class MailMessage extends SimpleMessage implements Renderable
      *
      * `data` can be a resource: Attachment::fromData() passes its closure's result through unchanged.
      *
-     * @var list<array{data: string|resource, name: string, options: array<array-key, mixed>}>
+     * @var array<array-key, array{data: string|resource, name: string, options: array<array-key, mixed>}>
      */
     public $rawAttachments = [];
 
