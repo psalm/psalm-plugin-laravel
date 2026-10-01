@@ -12,6 +12,44 @@ use Illuminate\Contracts\Support\Renderable;
 class MailMessage extends SimpleMessage implements Renderable
 {
     /**
+     * The view to be rendered.
+     *
+     * Null until view() or text() is called, and reset to null by markdown().
+     *
+     * @var array<array-key, mixed>|string|null
+     */
+    public $view;
+
+    /**
+     * The "from" information for the message.
+     *
+     * @var array{}|array{0: string, 1: string|null}
+     */
+    public $from = [];
+
+    /**
+     * The "reply to" information for the message.
+     * @var list<array{0: string, 1: string|null}> Where the first value is email, second — name (optional).
+     */
+    public $replyTo = [];
+
+    /**
+     * The attachments for the message.
+     *
+     * attach() converts Attachable and Attachment instances before storing, so only paths remain.
+     *
+     * @var list<array{file: string, options: array<array-key, mixed>}>
+     */
+    public $attachments = [];
+
+    /**
+     * The raw attachments for the message.
+     *
+     * @var list<array{data: string, name: string, options: array<array-key, mixed>}>
+     */
+    public $rawAttachments = [];
+
+    /**
      * The "cc" information for the message.
      * @var list<array{0: string, 1: string|null}> Where the first value is email, second — name (optional).
      */
@@ -132,4 +170,14 @@ class MailMessage extends SimpleMessage implements Renderable
      * @psalm-taint-sink html_url $url
      */
     public function action($text, $url) {}
+
+    /**
+     * Render the mail notification message into an HTML string.
+     *
+     * Laravel documents HtmlString only, but the view() branch returns Mailer::render(),
+     * which is a plain string; only the Markdown branch yields an HtmlString.
+     *
+     * @return \Illuminate\Support\HtmlString|string
+     */
+    public function render() {}
 }
