@@ -1,0 +1,15 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+class Artisan extends Facade
+{
+    /**
+     * Get all of the commands registered with the console.
+     *
+     * Laravel's generated `@method static array all()` loses the command map shape.
+     *
+     * @return array<string, \Symfony\Component\Console\Command\Command>
+     */
+    public static function all() {}
+}
