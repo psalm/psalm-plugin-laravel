@@ -45,7 +45,9 @@ class MailMessage extends SimpleMessage implements Renderable
     /**
      * The raw attachments for the message.
      *
-     * @var list<array{data: string, name: string, options: array<array-key, mixed>}>
+     * `data` can be a resource: Attachment::fromData() passes its closure's result through unchanged.
+     *
+     * @var list<array{data: string|resource, name: string, options: array<array-key, mixed>}>
      */
     public $rawAttachments = [];
 

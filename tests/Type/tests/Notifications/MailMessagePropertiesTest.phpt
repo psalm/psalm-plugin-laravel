@@ -22,7 +22,7 @@ function mail_message_properties(MailMessage $mail): void
     /** @psalm-check-type-exact $attachments = list<array{file: string, options: array<array-key, mixed>}> */
     $attachments = $mail->attachments;
 
-    /** @psalm-check-type-exact $rawAttachments = list<array{data: string, name: string, options: array<array-key, mixed>}> */
+    /** @psalm-check-type-exact $rawAttachments = list<array{data: resource|string, name: string, options: array<array-key, mixed>}> */
     $rawAttachments = $mail->rawAttachments;
 
     echo \count([$view, $from, $replyTo, $attachments, $rawAttachments]);

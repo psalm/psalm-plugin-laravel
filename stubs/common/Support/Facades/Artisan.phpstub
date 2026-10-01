@@ -9,7 +9,7 @@ class Artisan extends Facade
      *
      * Laravel's generated `@method static array all()` loses the command map shape.
      *
-     * @return array<string, \Symfony\Component\Console\Command\Command>
+     * @return array<array-key, \Symfony\Component\Console\Command\Command>
      */
     public static function all() {}
 }

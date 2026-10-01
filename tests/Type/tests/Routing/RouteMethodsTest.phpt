@@ -3,10 +3,10 @@
 
 use Illuminate\Routing\Route;
 
-/** @return list<string> */
+/** @return array<string> */
 function route_verbs(Route $route): array
 {
-    /** @psalm-check-type-exact $methods = list<string> */
+    /** @psalm-check-type-exact $methods = array<array-key, string> */
     $methods = $route->methods();
 
     return $methods;

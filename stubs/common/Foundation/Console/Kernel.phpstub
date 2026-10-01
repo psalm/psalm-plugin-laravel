@@ -35,9 +35,10 @@ class Kernel implements KernelContract
     /**
      * Get all of the commands registered with the console.
      *
-     * Forwards Symfony's Application::all(), which keys commands by name.
+     * Forwards Symfony's Application::all(), which keys commands by name. A numeric name
+     * becomes an int key.
      *
-     * @return array<string, \Symfony\Component\Console\Command\Command>
+     * @return array<array-key, \Symfony\Component\Console\Command\Command>
      */
     public function all() {}
 }

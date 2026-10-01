@@ -99,7 +99,9 @@ class Route
     /**
      * Get the HTTP verbs the route responds to.
      *
-     * @return list<string>
+     * Not a list: the constructor and Router::match() keep the keys of the array they are given.
+     *
+     * @return array<string>
      */
     public function methods() {}
 }

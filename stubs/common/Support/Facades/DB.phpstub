@@ -190,9 +190,10 @@ class DB extends Facade
     /**
      * Get the connection query log.
      *
-     * Mirrors Connection::getQueryLog(); the facade's generated `@method` tag only says `array[]`.
+     * The facade's generated `@method` tag only says `array[]`. `readWriteType` is optional because
+     * Laravel only started logging it during 12.x, after the plugin's 12.14 floor.
      *
-     * @return list<array{query: string, bindings: array, time: float|null}>
+     * @return list<array{query: string, bindings: array, time: float|null, readWriteType?: 'read'|'write'|'direct'|null}>
      */
     public static function getQueryLog() {}
 }
