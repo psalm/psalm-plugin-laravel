@@ -3,10 +3,10 @@
 
 use Illuminate\Support\Reflector;
 
-/** @return list<class-string> */
+/** @return list<string> */
 function parameter_classes(\ReflectionParameter $parameter): array
 {
-    /** @psalm-check-type-exact $classes = list<class-string> */
+    /** @psalm-check-type-exact $classes = list<string> */
     $classes = Reflector::getParameterClassNames($parameter);
 
     return $classes;

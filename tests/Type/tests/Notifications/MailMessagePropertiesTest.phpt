@@ -16,7 +16,7 @@ function mail_message_properties(MailMessage $mail): void
     /** @psalm-check-type-exact $from = array{0?: string, 1?: null|string} */
     $from = $mail->from;
 
-    /** @psalm-check-type-exact $replyTo = list<array{0: string, 1: null|string}> */
+    /** @psalm-check-type-exact $replyTo = list<array{0: string, 1?: null|string}> */
     $replyTo = $mail->replyTo;
 
     /** @psalm-check-type-exact $attachments = list<array{file: string, options: array<array-key, mixed>}> */
@@ -26,6 +26,13 @@ function mail_message_properties(MailMessage $mail): void
     $rawAttachments = $mail->rawAttachments;
 
     echo \count([$view, $from, $replyTo, $attachments, $rawAttachments]);
+}
+
+// The name is optional in direct assignments, MailChannel reads it with Arr::get().
+function mail_message_sender_without_name(MailMessage $mail): void
+{
+    $mail->from = ['noreply@example.com'];
+    $mail->replyTo = [['support@example.com']];
 }
 
 // The view() branch of render() returns Mailer::render(), a plain string.
