@@ -59,8 +59,6 @@ final class ApplicationProvider
      * Forget the Laravel application and framework globals from a previous plugin
      * invocation. This must run before the next boot: a failed or optional init
      * path must not keep resolving services or aliases from the old application.
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -75,7 +73,6 @@ final class ApplicationProvider
         // Keep the one registered loader and clear its aliases. Replacing the
         // singleton leaves its bound load() closure on PHP's autoload stack, so a
         // name that belonged only to the previous application could still resolve.
-        /** @psalm-suppress ImpureMethodCall framework global reset */
         \Illuminate\Foundation\AliasLoader::getInstance()->setAliases([]);
         \Illuminate\Container\Container::setInstance();
     }
@@ -83,8 +80,6 @@ final class ApplicationProvider
     /**
      * Throwable raised during eager Laravel bootstrap (LoadConfiguration etc.).
      * Null when no bootstrap was attempted yet, or when bootstrap succeeded.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getBootstrapError(): ?\Throwable
     {
@@ -100,8 +95,6 @@ final class ApplicationProvider
      * Read by `bin/psalm-laravel diagnose` to surface the #766 silent-Testbench-fallback case.
      *
      * @return 'bootstrap'|'testbench_fallback'|null
-     *
-     * @psalm-external-mutation-free
      */
     public static function getBootMode(): ?string
     {
@@ -113,8 +106,6 @@ final class ApplicationProvider
      * or the Testbench skeleton root (testbench_fallback).
      *
      * Null until the app has been booted.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getBootPath(): ?string
     {

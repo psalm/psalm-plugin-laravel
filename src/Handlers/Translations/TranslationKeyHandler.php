@@ -74,8 +74,6 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      * Forget the current app's translator and translation lookup results. The
      * zero-argument unions are keyed solely by concrete class and immutable, so
      * they can safely remain cached between invocations.
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -84,7 +82,6 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         self::$resolvedKeys = [];
     }
 
-    /** @psalm-external-mutation-free */
     public static function init(Translator $translator, bool $reportMissing): void
     {
         self::$translator = $translator;

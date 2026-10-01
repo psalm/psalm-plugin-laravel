@@ -259,19 +259,16 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
         };
     }
 
-    /** @psalm-external-mutation-free */
     private static function singleCountUnion(): Union
     {
         return self::$singleCountUnion ??= new Union([new TNull()]);
     }
 
-    /** @psalm-external-mutation-free */
     private static function pluralCountUnion(): Union
     {
         return self::$pluralCountUnion ??= new Union([new TLiteralInt(2)]);
     }
 
-    /** @psalm-external-mutation-free */
     private static function unknownCountUnion(): Union
     {
         return self::$unknownCountUnion ??= new Union([new TNull(), new TLiteralInt(2)]);

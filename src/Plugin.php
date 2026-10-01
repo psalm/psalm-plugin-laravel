@@ -826,8 +826,6 @@ final class Plugin implements PluginEntryPointInterface
      * process. Null falls back to the stub's contract type. Unlike
      * initMissingViewHandler(), no warning is emitted: this is bonus type narrowing,
      * not an opt-in diagnostic.
-     *
-     * @psalm-external-mutation-free
      */
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {

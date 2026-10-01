@@ -39,7 +39,6 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
      */
     private static array $modelClassCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function init(): void
     {
         self::$modelClassCache = [];
@@ -118,7 +117,6 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
 
     /**
      * @return class-string<Model>|null
-     * @psalm-external-mutation-free
      */
     private static function extractModelClassFromMixinCaller(
         MethodReturnTypeProviderEvent $event,

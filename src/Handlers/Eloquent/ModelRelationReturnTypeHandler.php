@@ -105,7 +105,6 @@ final class ModelRelationReturnTypeHandler
      */
     private static array $unionCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$unionCache = [];

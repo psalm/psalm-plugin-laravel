@@ -61,7 +61,6 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
      */
     private static array $dispatchableCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$dispatchableCache = [];
@@ -190,8 +189,6 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
      * (either Bus\Dispatchable or Events\Dispatchable).
      * If the class overrides the method itself, this returns false and we skip validation
      * (Psalm already handles the actual declared signature).
-     *
-     * @psalm-external-mutation-free
      */
     private static function isDispatchableMethod(string $className, string $methodName, Codebase $codebase): bool
     {
