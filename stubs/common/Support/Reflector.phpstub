@@ -1,0 +1,17 @@
+<?php
+
+namespace Illuminate\Support;
+
+class Reflector
+{
+    /**
+     * Get the class names of the given parameter's type, including union types.
+     *
+     * A list: array_filter() only ever drops the single null entry of the non-union branch.
+     * Plain strings, not class-string: PHP accepts type declarations naming classes that do not exist.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @return list<string>
+     */
+    public static function getParameterClassNames($parameter) {}
+}
