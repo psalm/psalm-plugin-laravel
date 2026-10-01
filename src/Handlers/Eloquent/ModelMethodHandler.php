@@ -117,8 +117,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * dynamic-where branch of {@see isUnresolvedBuilderMethod} depends on the
      * runtime-mutable {@see DynamicWhereResolver::isEnabled} flag; clearing the cache
      * here ensures a `resolveDynamicWhereClauses` flip is honoured on the next run.
-     *
-     * @psalm-external-mutation-free
      */
     public static function init(): void
     {
@@ -132,7 +130,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      *
      * @param class-string<Model> $modelClass
      * @param class-string<Builder> $builderClass
-     * @psalm-external-mutation-free
      */
     public static function registerCustomBuilder(string $modelClass, string $builderClass): void
     {
@@ -142,8 +139,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Get the builder class for a model — custom builder if registered, base Builder otherwise.
-     *
-     * @psalm-external-mutation-free
      */
     private static function getBuilderClassForModel(string $modelClass): string
     {
@@ -154,7 +149,6 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      * Build the Psalm type for the builder used by a model.
      *
      * @internal Used by magic forwarding handlers that intercept Model's @mixin path
-     * @psalm-external-mutation-free
      */
     public static function resolvedBuilderTypeFor(string $modelClass, Codebase $codebase): Type\Atomic\TNamedObject
     {

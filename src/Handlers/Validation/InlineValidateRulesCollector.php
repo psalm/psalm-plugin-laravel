@@ -441,12 +441,6 @@ final class InlineValidateRulesCollector implements
      * property fetch `foreach (... as $this->x)`, or a variable variable
      * `$$name`) is left alone — those patterns can't occupy a named slot
      * in the per-variable cache.
-     *
-     * `@psalm-external-mutation-free` is the same self-`static` overclaim
-     * disclaimed on `afterStatementAnalysis`; Psalm 7's
-     * `MissingPureAnnotation` check demands it here too.
-     *
-     * @psalm-external-mutation-free
      */
     private static function evictForeachTarget(Expr $target, int $functionId): void
     {
@@ -468,12 +462,6 @@ final class InlineValidateRulesCollector implements
      * Handles the nested case recursively (`[$a, [$b, $c]] = ...`).
      * Null items (skipped slots, `[, $v] = ...`) and non-Variable items
      * are ignored — no named slot to evict.
-     *
-     * `@psalm-external-mutation-free` is the same self-`static` overclaim
-     * disclaimed on `afterStatementAnalysis`; Psalm 7's
-     * `MissingPureAnnotation` check demands it here too.
-     *
-     * @psalm-external-mutation-free
      */
     private static function evictDestructuredItem(?ArrayItem $item, int $functionId): void
     {
@@ -582,18 +570,7 @@ final class InlineValidateRulesCollector implements
      * analyzer is garbage-collected, which happens after we've already
      * cleared the entry).
      *
-     * Annotation note: `@psalm-external-mutation-free` is a slight overclaim
-     * per `docs/contributing/types.md` (which says the marker permits
-     * $this-only mutation), because this method mutates a `self::$` static.
-     * Psalm 7's `MissingPureAnnotation` check nevertheless demands it here
-     * (security-analysis optimisation tied to the event being marked
-     * `@psalm-external-mutation-free`), and the project policy forbids
-     * new entries in `psalm-baseline.xml`, so the annotation stays with
-     * this disclaimer rather than a baseline suppress.
-     *
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterStatementAnalysis(AfterFunctionLikeAnalysisEvent $event): ?bool
@@ -621,8 +598,6 @@ final class InlineValidateRulesCollector implements
      * @return array<string, ResolvedRule>|null
      *
      * @internal shared only with {@see ValidationTaintHandler}.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getRulesForVariable(int $functionId, string $variableName): ?array
     {
@@ -642,8 +617,6 @@ final class InlineValidateRulesCollector implements
      * clears the slot on every fresh assignment to the same name).
      *
      * @internal shared only with {@see ValidationTaintHandler}.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getEscapeForVariable(int $functionId, string $variableName): ?int
     {
@@ -660,8 +633,6 @@ final class InlineValidateRulesCollector implements
      * is safe to call on every `removeTaints` firing.
      *
      * @internal shared only with {@see ValidationTaintHandler}.
-     *
-     * @psalm-external-mutation-free
      */
     public static function hasAnyVariableBindings(): bool
     {

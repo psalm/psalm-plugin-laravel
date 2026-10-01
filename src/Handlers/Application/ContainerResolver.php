@@ -21,7 +21,6 @@ final class ContainerResolver
      */
     private static array $cache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$cache = [];

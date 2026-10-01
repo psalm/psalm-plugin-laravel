@@ -264,14 +264,17 @@ Negated assertions (`!Type`) assert the param is **not** of the given type. Comm
 
 ### Purity and Mutability
 
-| Annotation                      | Scope                                                     |
-|---------------------------------|-----------------------------------------------------------|
-| `@psalm-pure`                   | Function: output depends only on input                    |
-| `@psalm-impure`                 | Explicitly marks side effects                             |
-| `@psalm-mutation-free`          | Method: no mutation of any state                          |
-| `@psalm-external-mutation-free` | Method: may mutate `$this`, nothing external              |
-| `@psalm-immutable`              | Class: all properties readonly, all methods mutation-free |
-| `@psalm-mutable`                | Class: explicitly not immutable (default)                 |
+| Annotation                      | Scope                                                                                    |
+|---------------------------------|------------------------------------------------------------------------------------------|
+| `@psalm-pure`                   | Function: output depends only on input (empty capability set)                            |
+| `@psalm-impure`                 | Explicitly marks side effects (every capability)                                         |
+| `@psalm-mutation-free`          | Method: reads properties, mutates nothing (`read-props`)                                 |
+| `@psalm-external-mutation-free` | Method: may mutate `$this` and references, nothing else (`read-props\|write-this-props\|write-refs`) |
+| `@psalm-capabilities a\|b`      | Function-like or class: exact capability set (`read-props`, `write-this-props`, `write-props`, `read-globals`, `write-globals`, `write-refs`, `io`) |
+| `@psalm-immutable`              | Class: all properties readonly, all methods mutation-free                                |
+| `@psalm-mutable`                | Class: explicitly not immutable (default)                                                |
+
+Since Psalm `7.0.0-beta23`, reading a static property needs `read-globals` and writing one needs `write-globals`, so none of `@psalm-pure` / `@psalm-mutation-free` / `@psalm-external-mutation-free` fits a method that touches a static cache (`reset()`, memoizers). Leave such methods unannotated; `MissingPureAnnotation` only asks for sets without the global capabilities.
 
 ### Readonly
 

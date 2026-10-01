@@ -60,7 +60,6 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
     /** @var array<string, ?Union> retyped return type per method, cached for the run */
     private static array $returnCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$configuredClass = null;
@@ -70,7 +69,6 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
     /**
      * @inheritDoc
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array

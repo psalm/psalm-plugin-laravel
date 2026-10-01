@@ -21,7 +21,6 @@ use Psalm\Config;
  * an ordinary fix.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class PromptInjectionIssuePolicy
 {
@@ -31,7 +30,6 @@ final class PromptInjectionIssuePolicy
      */
     private const ISSUE_TYPE = 'TaintedLlmPrompt';
 
-    /** @psalm-external-mutation-free */
     public static function apply(?bool $configured): void
     {
         // Plugin::__invoke() calls this only after the supported laravel/ai gate

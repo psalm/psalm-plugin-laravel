@@ -18,7 +18,6 @@ use Psalm\Config\IssueHandler;
  * so a second plugin invocation can refresh it when the governing flag flips.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class DefaultIssueLevels
 {
@@ -34,8 +33,6 @@ final class DefaultIssueLevels
     /**
      * @param list<string> $issueTypes
      * @param Config::REPORT_* $level
-     *
-     * @psalm-external-mutation-free
      */
     public static function apply(array $issueTypes, string $level): void
     {
