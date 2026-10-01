@@ -164,6 +164,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         'Illuminate\Support\ServiceProvider' => [
             'app',
         ],
+        // Assigned in UrlGenerator::__construct(). The plugin's UrlGenerator stub re-declares the
+        // class, which hides that constructor body when a subclass calls parent::__construct().
+        'Illuminate\Routing\UrlGenerator' => [
+            'request',
+            'routes',
+        ],
     ];
 
     /** @var array<string, array<string, list<string>>> */

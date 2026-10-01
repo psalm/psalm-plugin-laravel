@@ -14,16 +14,16 @@ function mail_message_properties(MailMessage $mail): void
     /** @psalm-check-type-exact $view = array<array-key, mixed>|null|string */
     $view = $mail->view;
 
-    /** @psalm-check-type-exact $from = array{0?: array<array-key, mixed>|string, 1?: null|string} */
+    /** @psalm-check-type-exact $from = array{0?: array<array-key, mixed>|string, 1?: null|string, ...<array-key, mixed>} */
     $from = $mail->from;
 
-    /** @psalm-check-type-exact $replyTo = array<array-key, array{0: array<array-key, mixed>|string, 1?: null|string}> */
+    /** @psalm-check-type-exact $replyTo = array<array-key, array{0: array<array-key, mixed>|string, 1?: null|string, ...<array-key, mixed>}> */
     $replyTo = $mail->replyTo;
 
-    /** @psalm-check-type-exact $attachments = array<array-key, array{file: Illuminate\Contracts\Mail\Attachable|Illuminate\Mail\Attachment|string, options: array<array-key, mixed>}> */
+    /** @psalm-check-type-exact $attachments = array<array-key, array{file: Illuminate\Contracts\Mail\Attachable|Illuminate\Mail\Attachment|string, options: array<array-key, mixed>, ...<array-key, mixed>}> */
     $attachments = $mail->attachments;
 
-    /** @psalm-check-type-exact $rawAttachments = array<array-key, array{data: resource|string, name: string, options: array<array-key, mixed>}> */
+    /** @psalm-check-type-exact $rawAttachments = array<array-key, array{data: resource|string, name: string, options: array<array-key, mixed>, ...<array-key, mixed>}> */
     $rawAttachments = $mail->rawAttachments;
 
     echo \count([$view, $from, $replyTo, $attachments, $rawAttachments]);
@@ -49,6 +49,7 @@ function mail_message_drop_attachments(MailMessage $mail): void
     $mail->attachments = array_filter($mail->attachments, static fn (array $a): bool => $a['file'] !== 'internal.pdf');
     $mail->attachments[] = ['file' => Attachment::fromData(static fn (): string => 'contents', 'invoice.txt'), 'options' => []];
     $mail->rawAttachments = array_filter($mail->rawAttachments, static fn (array $a): bool => $a['name'] !== 'internal.txt');
+    $mail->rawAttachments[] = ['data' => 'contents', 'name' => 'invoice.txt', 'options' => [], 'id' => 42];
     $mail->replyTo = array_filter($mail->replyTo, static fn (array $r): bool => $r[0] !== 'internal@example.com');
 }
 

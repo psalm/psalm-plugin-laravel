@@ -26,7 +26,7 @@ class MailMessage extends SimpleMessage implements Renderable
      * The name is optional: MailChannel reads it with Arr::get($from, 1). The address may be an array,
      * MailChannel passes it to Mail\Message::from(), which takes string|array.
      *
-     * @var array{}|array{0: string|array<array-key, mixed>, 1?: string|null}
+     * @var array{}|array{0: string|array<array-key, mixed>, 1?: string|null, ...}
      */
     public $from = [];
 
@@ -36,20 +36,21 @@ class MailMessage extends SimpleMessage implements Renderable
      * The name is optional: MailChannel reads it with Arr::get($replyTo, 1). The address may be an array
      * (replyTo([[...]]) keeps nested arrays), MailChannel passes it to Mail\Message::replyTo(), which takes string|array.
      *
-     * @var array<array-key, array{0: string|array<array-key, mixed>, 1?: string|null}>
+     * @var array<array-key, array{0: string|array<array-key, mixed>, 1?: string|null, ...}>
      */
     public $replyTo = [];
 
     /**
      * The attachments for the message.
      *
-     * Not a list (same for $replyTo and $rawAttachments): the property is public and MailChannel only
-     * iterates it, so array_filter() on it is valid.
+     * Not a list and not sealed (same for $from, $replyTo and $rawAttachments): the property is public
+     * and MailChannel only iterates it and reads the known keys, so array_filter() or extra
+     * bookkeeping keys are valid.
      *
      * attach() itself only stores paths, but MailChannel hands each `file` to Mail\Message::attach(),
      * so anything that method accepts is valid here.
      *
-     * @var array<array-key, array{file: string|\Illuminate\Contracts\Mail\Attachable|\Illuminate\Mail\Attachment, options: array<array-key, mixed>}>
+     * @var array<array-key, array{file: string|\Illuminate\Contracts\Mail\Attachable|\Illuminate\Mail\Attachment, options: array<array-key, mixed>, ...}>
      */
     public $attachments = [];
 
@@ -58,7 +59,7 @@ class MailMessage extends SimpleMessage implements Renderable
      *
      * `data` can be a resource: Attachment::fromData() passes its closure's result through unchanged.
      *
-     * @var array<array-key, array{data: string|resource, name: string, options: array<array-key, mixed>}>
+     * @var array<array-key, array{data: string|resource, name: string, options: array<array-key, mixed>, ...}>
      */
     public $rawAttachments = [];
 

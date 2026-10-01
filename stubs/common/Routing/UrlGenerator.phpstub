@@ -1,0 +1,61 @@
+<?php
+
+namespace Illuminate\Routing;
+
+use Illuminate\Contracts\Routing\UrlGenerator as UrlGeneratorContract;
+use Illuminate\Support\InteractsWithTime;
+use Illuminate\Support\Traits\Macroable;
+
+/**
+ * Laravel documents these properties as non-null, but they stay unset until their setters
+ * (or the RoutingServiceProvider) run, and UrlGenerator itself null-checks them before use.
+ *
+ * Re-declaring the class hides the vendor constructor body from Psalm, so `$routes` and
+ * `$request` are marked framework-initialized in SuppressHandler.
+ */
+class UrlGenerator implements UrlGeneratorContract
+{
+    use InteractsWithTime, Macroable;
+
+    /**
+     * The root namespace being applied to controller actions.
+     *
+     * @var string|null
+     */
+    protected $rootNamespace;
+
+    /**
+     * The session resolver callable.
+     *
+     * @var callable|null
+     */
+    protected $sessionResolver;
+
+    /**
+     * The encryption key resolver callable.
+     *
+     * @var callable|null
+     */
+    protected $keyResolver;
+
+    /**
+     * The missing named route resolver callable.
+     *
+     * @var callable|null
+     */
+    protected $missingNamedRouteResolver;
+
+    /**
+     * The callback to use to format hosts.
+     *
+     * @var \Closure|null
+     */
+    protected $formatHostUsing;
+
+    /**
+     * The callback to use to format paths.
+     *
+     * @var \Closure|null
+     */
+    protected $formatPathUsing;
+}
