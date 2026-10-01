@@ -165,7 +165,9 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             'app',
         ],
         // Assigned in UrlGenerator::__construct(). The plugin's UrlGenerator stub re-declares the
-        // class, which hides that constructor body when a subclass calls parent::__construct().
+        // class, which hides that constructor body when a subclass calls parent::__construct()
+        // (stub method bodies are not analyzed). Known gap: a subclass that skips
+        // parent::__construct() is not reported either (UrlGeneratorSkippedParentConstructorKnownLimitation.phpt).
         'Illuminate\Routing\UrlGenerator' => [
             'request',
             'routes',

@@ -18,6 +18,27 @@ class UrlGenerator implements UrlGeneratorContract
     use InteractsWithTime, Macroable;
 
     /**
+     * The asset root URL. Laravel 13.32 corrected this docblock to nullable.
+     *
+     * @var string|null
+     */
+    protected $assetRoot;
+
+    /**
+     * The forced URL root. Laravel 13.32 corrected this docblock to nullable.
+     *
+     * @var string|null
+     */
+    protected $forcedRoot;
+
+    /**
+     * The forced scheme for URLs. Laravel 13.32 corrected this docblock to nullable.
+     *
+     * @var string|null
+     */
+    protected $forceScheme;
+
+    /**
      * The root namespace being applied to controller actions.
      *
      * @var string|null

@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Event;
 
 // With halting (until(), or dispatch() with $halt = true) the dispatcher returns the first
 // non-null listener response as is, so the result is mixed rather than Laravel's array|null.
-// Without halting it returns the list of responses, or null for deferred/after-commit events.
+// Without halting the concrete dispatcher returns the list of responses, or null for
+// deferred/after-commit events; the contract and the (fakeable) facade only promise array|null.
 
 function halting(Dispatcher $dispatcher, DispatcherContract $contract): void
 {
@@ -34,10 +35,10 @@ function collecting(Dispatcher $dispatcher, DispatcherContract $contract): void
     /** @psalm-check-type-exact $responses = list<mixed>|null */
     $responses = $dispatcher->dispatch('event');
 
-    /** @psalm-check-type-exact $contractResponses = list<mixed>|null */
+    /** @psalm-check-type-exact $contractResponses = array<array-key, mixed>|null */
     $contractResponses = $contract->dispatch('event');
 
-    /** @psalm-check-type-exact $facadeResponses = list<mixed>|null */
+    /** @psalm-check-type-exact $facadeResponses = array<array-key, mixed>|null */
     $facadeResponses = Event::dispatch('event');
 
     echo \count([$responses, $contractResponses, $facadeResponses]);
