@@ -95,4 +95,11 @@ class Route
      * @psalm-taint-source input
      */
     public function originalParameters() {}
+
+    /**
+     * Get the HTTP verbs the route responds to.
+     *
+     * @return list<string>
+     */
+    public function methods() {}
 }

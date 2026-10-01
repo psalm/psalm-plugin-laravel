@@ -1,0 +1,19 @@
+<?php
+
+namespace Illuminate\Contracts\Support;
+
+use Countable;
+
+interface MessageBag extends Arrayable, Countable
+{
+    /**
+     * Get all of the messages for every key in the bag.
+     *
+     * Matches the concrete Illuminate\Support\MessageBag::all(), so contract-typed callers keep
+     * the string element type.
+     *
+     * @param  string|null  $format
+     * @return array<string>
+     */
+    public function all($format = null);
+}

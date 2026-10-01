@@ -1,0 +1,17 @@
+<?php
+
+namespace Illuminate\Support;
+
+class Reflector
+{
+    /**
+     * Get the class names of the given parameter's type, including union types.
+     *
+     * Built-in types are skipped and the result passes through array_filter(), so keys are
+     * ints but not necessarily sequential.
+     *
+     * @param  \ReflectionParameter  $parameter
+     * @return array<int, class-string>
+     */
+    public static function getParameterClassNames($parameter) {}
+}
