@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790862294161,
+  "lastUpdate": 1790868743068,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11685,6 +11685,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1362,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7926d5dca877a8bc904fa8287498b1f14aaaf1a3",
+          "message": "Tighten Laravel docblock types for console, facades, mail, relations (#1612)\n\n* fix(stubs): type console kernel all() as a command map\n\nKernel::all() forwards Symfony's Application::all(), keyed by command name. Laravel documents a bare array on the contract, the concrete kernel and the Artisan facade.\n\n* fix(stubs): keep getQueryLog() and getColumnListing() shapes on facades\n\nThe generated facade @method tags widen Connection::getQueryLog() and Schema\\Builder::getColumnListing() to plain arrays.\n\n* fix(stubs): type MailMessage properties, render() and Notification::$id\n\nProperty shapes follow what MailMessage's setters write. render() returns a plain string on the view() branch, and Notification::$id stays null until the notification is sent.\n\n* fix(stubs): accept int-keyed collections in BelongsToMany::saveMany()\n\nLaravel bounds the container by Collection<array-key, TRelatedModel>; Collection's TKey is invariant, so an Eloquent Collection<int, TRelatedModel> failed the bound and lost its type on the return.\n\n* fix(stubs): narrow MessageBag contract all(), Reflector and Route::methods()\n\nThe contract now matches the concrete MessageBag::all(); Reflector::getParameterClassNames() returns class names; Route::methods() returns the verb list.\n\n* fix(stubs): widen docblock shapes that reject valid Laravel values\n\n- Route::methods(): array<string>, Router::match() keeps the given keys\n- DB::getQueryLog(): optional readWriteType key, logged since Laravel 12.x\n- Reflector::getParameterClassNames(): list<class-string>\n- MailMessage::$rawAttachments data: string|resource, Attachment::fromData() passes streams through\n- Kernel/Artisan all(): array-key keys, numeric command names become int keys\n\n* fix(stubs): make MailMessage sender names optional, Reflector names plain strings\n\n- MailMessage $from / $replyTo: the name index is optional, MailChannel reads it with Arr::get()\n- Reflector::getParameterClassNames(): list<string>, type declarations may name missing classes\n\n* fix(stubs): let MailMessage recipient and attachment arrays be non-lists\n\nThe properties are public and MailChannel only iterates them, so array_filter() on them is valid.\n\n* fix(stubs): type MailMessage attachment files as Mail\\Message::attach() input\n\nMailChannel hands each file to Mail\\Message::attach(), which also resolves Attachable and Attachment instances.\n\n* fix(stubs): allow array addresses in MailMessage $from and $replyTo\n\nMailChannel passes them to Mail\\Message::from()/replyTo(), which take string|array; replyTo([[...]]) keeps nested arrays.\n\n* fix(stubs): drop the MessageBag contract override, widen query log and mail record shapes\n\n- Contracts\\Support\\MessageBag::all(): dropped, the constructor accepts Arrayable values, so string elements are not guaranteed\n- DB::getQueryLog(): readWriteType is string|null, setReadWriteType() accepts any string\n- MailMessage sender and attachment records are open shapes, MailChannel only reads the known keys\n\n* fix(stubs): finish the UrlGenerator and event dispatcher stubs\n\n- UrlGenerator: $assetRoot, $forcedRoot and $forceScheme are nullable on every supported line (Laravel 13.32 fixed the docblocks upstream; older lines still say string)\n- Document the SuppressHandler gap for subclasses that skip parent::__construct() with a known-limitation test\n- Contracts\\Events\\Dispatcher and the Event facade promise array|null for collected responses: other implementations (and EventFake forwarding to them) may key them; the concrete dispatcher keeps list",
+          "timestamp": "2026-10-01T17:28:04+02:00",
+          "tree_id": "daa36606ca3fab8ece5ffdabd3a76e0cda181b21",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7926d5dca877a8bc904fa8287498b1f14aaaf1a3"
+        },
+        "date": 1790868741660,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.72,
+            "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1358,
             "unit": "MB"
           }
         ]
