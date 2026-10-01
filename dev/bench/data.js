@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790857696585,
+  "lastUpdate": 1790862294161,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11650,6 +11650,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1359,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1dcb3e86a8e10e747781064568d8ec399507c8fc",
+          "message": "chore(deps): bump step-security/harden-runner from 2.21.0 to 2.21.1 (#1608)\n\nBumps [step-security/harden-runner](https://github.com/step-security/harden-runner) from 2.21.0 to 2.21.1.\n- [Release notes](https://github.com/step-security/harden-runner/releases)\n- [Commits](https://github.com/step-security/harden-runner/compare/05e31511f85b41b11d1cf0ef85d0992719546e2c...e14015d583714f6e62063499dc959a02595150a1)\n\n---\nupdated-dependencies:\n- dependency-name: step-security/harden-runner\n  dependency-version: 2.21.1\n  dependency-type: direct:production\n  update-type: version-update:semver-patch\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-10-01T15:40:21+02:00",
+          "tree_id": "18265edffbdc0c65ac87dc13ec6435048afa44c2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1dcb3e86a8e10e747781064568d8ec399507c8fc"
+        },
+        "date": 1790862292432,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.05,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1362,
             "unit": "MB"
           }
         ]
