@@ -21,4 +21,14 @@ class Schema extends Facade
      * @psalm-taint-sink sql $table
      */
     public static function hasTable($table) {}
+
+    /**
+     * Get the column listing for a given table.
+     *
+     * Mirrors Schema\Builder::getColumnListing(); the facade's generated `@method` tag only says `array`.
+     *
+     * @param  string  $table
+     * @return list<string>
+     */
+    public static function getColumnListing($table) {}
 }

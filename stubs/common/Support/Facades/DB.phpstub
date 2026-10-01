@@ -186,4 +186,13 @@ class DB extends Facade
      * @psalm-flow ($value) -> return
      */
     public static function escape($value, $binary = false) {}
+
+    /**
+     * Get the connection query log.
+     *
+     * Mirrors Connection::getQueryLog(); the facade's generated `@method` tag only says `array[]`.
+     *
+     * @return list<array{query: string, bindings: array, time: float|null}>
+     */
+    public static function getQueryLog() {}
 }
