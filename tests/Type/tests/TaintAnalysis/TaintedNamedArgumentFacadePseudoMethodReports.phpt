@@ -13,10 +13,13 @@ function tainted(): string { return 'attacker'; }
 
 /**
  * A facade's `@method static` tag declares params but no real MethodStorage, so
- * `Codebase::getFunctionLikeStorage()` cannot see it and the callee used to count as
- * "unresolvable" — stripping every named argument on every facade call. Both names below
- * match the declared parameter at their own written offset, so upstream attributes them
- * correctly and the findings must survive.
+ * `Codebase::getFunctionLikeStorage()` cannot see it and `pseudoMethodParams()` is the only
+ * route to its parameter names. Named arguments on facade calls must report.
+ *
+ * This pins the PRESERVE direction only, for the same reason as the builtin sibling: a
+ * resolution failure now preserves, so breaking `pseudoMethodParams()` would not fail this file.
+ * No stock facade pseudo-method pairs a variadic with a sink on a non-variadic parameter, and a
+ * userland `@method` tag cannot carry `@psalm-taint-sink`, so that half has no fixture.
  */
 function facadeNamedArgumentsKeepTaint(): void
 {

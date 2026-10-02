@@ -256,6 +256,116 @@ annotation instead keeps the plugin package-agnostic and makes the exemption opt
 author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
 records that a mitigation is attached, not that a payload is neutralised.
 
+### Named-argument taint: strip only a variadic capture that actually collides
+
+**Decision:** `NamedArgumentTaintHandler` strips taint from a named argument only when all three
+hold: the callee's declared parameters resolve; upstream's matcher binds the argument to the
+variadic; and the argument's WRITTEN offset lands on a declared parameter that is not itself the
+variadic. Every other named argument is preserved, including one on a callee the handler cannot
+resolve.
+
+Both conditions after resolution mirror one piece of vendor source and neither is sufficient alone:
+
+- The binding test mirrors `ArgumentsAnalyzer::checkArgumentsMatch()`, which scans in declaration
+  order and breaks on the first parameter satisfying `name === $arg->name || is_variadic`. So the
+  variadic takes the argument when no parameter carries its name AND when it names the variadic
+  itself; `w(rest: 'X')` really yields `$rest === ['rest' => 'X']` at runtime. A scan treating any
+  name match as "not captured" misses the second route.
+- The collision test mirrors `DataFlowNode::getParameterOffset()`, which returns the declared index
+  for a parameter it can locate and the written offset otherwise. Two paths reach that fallback: a
+  variadic parameter, which returns early, and a parameter whose name is absent from the callee's
+  storage. Only the first is gated on here, because the matcher can only bind a parameter drawn from
+  that same storage. When the written offset IS the variadic's own declared index
+  (`f(cmd: $x)` on `f(string ...$rest)`, or `g('a', 'b', zzz: $x)` on `g($a, $b, ...$rest)`), or is
+  past every declared parameter, the node is keyed exactly as a positional call would be and
+  stripping it is pure loss. Measured: four such shapes reported correctly under vanilla and were
+  silenced by an offset-blind gate.
+
+**Why:** the handler shipped with the opposite gate, preserving only an argument whose name
+matched the declared parameter at its own WRITTEN offset and stripping everything else. That was
+correct against the Psalm the bug was filed on, but `DataFlowNode::getParameterOffset()` has since
+keyed every argument node by the matched parameter's DECLARED index, landing in 7.0.0-beta21 —
+which is exactly the `^7.0.0-beta21` floor in `composer.json`, so no supported Psalm still has the
+bug the handler was written against. On every supported Psalm the old gate was a
+pure false-negative generator: measured against vanilla on the same fixtures, it silenced a
+correct `TaintedHtml` for `sink(label: $tainted)`, for `$sink->report(label: $tainted)`, for an
+unresolved receiver, for a reordered call, and for the static form, while the false positive the
+issue claimed for the resolvable case did not reproduce at all.
+
+`getParameterOffset()` still falls back to the written offset for a variadic parameter, so a
+collision does remain where that offset belongs to another parameter. Inverting the gate keeps that
+one case and returns everything else to upstream.
+
+**An intersection receiver declines.** `Union::isSingle()` counts union members, so an intersection
+passes it as one member while `getSingleAtomic()` answers with the primary atomic and leaves the
+siblings in `extra_types`. Resolving one component alone let a variadic there prove a capture and
+strip the shared argument node, erasing a sibling's correctly attributed finding — measured with a
+`VariadicWriter&HtmlWriter` receiver, where the `html` sink on the fixed `$label` vanished. Proving
+the collision across every component is the sound alternative; it buys nothing measurable, so the
+resolver declines instead, which is what the "exactly one known class" rule already required.
+Pinned in `TaintedNamedArgumentIntersectionReceiverReports.phpt`, in both intersection orders,
+because which component becomes the primary atomic is Psalm's choice.
+
+**Direction of failure flipped deliberately.** Under the old gate a resolution miss stripped, so
+every gap in `resolveReceiverClass()` / `pseudoMethodParams()` / the CallMap fallback cost a real
+finding. Under the new one a resolution miss preserves, so the same gaps cost at most a retained
+upstream false positive. Those resolvers therefore became precision, not correctness, and their
+phpts say so: only a fixture that pairs a variadic with a sink on a non-variadic parameter can
+still fail on them.
+
+**Zero corpus movement is not evidence of value.** The prevalence argument that justified the
+original gate reads the other way once the strip is the only thing producing silence.
+
+**Measured, not assumed:** vanilla reports nothing against the variadic parameter itself for
+`v(zzz: $tainted)` where `$rest` carries a sink — only the mis-attributed findings against offset
+0. So the strip costs no detection on that fixture. It removes `TaintKind::ALL_INPUT`, which is every
+input kind but NOT the secret kinds or any custom kind a project defines, so it is broad rather than
+total; a mis-routed secret or custom taint still reports against the wrong parameter.
+
+**#1395's own fixture is NOT suppressed, by decision.** The reported shape,
+`Action::run(page: $input)` forwarding `mixed ...$arguments`, writes its argument at offset 0, which
+is the variadic's own declared index — keyed correctly, so the handler preserves it and the
+`TaintedFile` reopens. Three facts made that the right call. The finding is spelling-independent:
+`forward(...['page' => $p])` emits the byte-identical finding with no named `Arg` node anywhere, and
+the plugin's output there was already equal to vanilla's, so the handler was suppressing one
+spelling of an imprecision it could not suppress in general. It is born a hop later, at the spread
+fan-out in `handle(...$arguments)`, not at the named argument. And suppressing it worked by killing
+the source flow out of the call site, which also killed the genuine finding whenever the argument's
+true destination carried a sink of its own. The fixture was renamed from `Safe…` to
+`TaintedNamedArgumentVariadicRespreadSpreadFanOutFalsePositive.phpt` and its sibling
+`…VariadicRespreadGenuineDestinationReports.phpt` pins the finding that the old strip destroyed.
+
+**Three upstream defects disclosed, none filed yet, none plugin-fixable.** All three belong in a
+report against vimeo/psalm:
+
+1. Spread fan-out, above.
+2. A shared inheritance edge. `ArgumentAnalyzer` passes a call site's `removed_taints` into the
+   `Contract::method#n -> Impl::method#n` edge, and `DataFlowGraph::addPath()` ASSIGNS
+   `forward_edges[$from][$to]` rather than merging, so a strip at one call site can erase a
+   different call site's genuine finding through the same hop, with declaration order deciding which
+   survives. This widens the blast radius of every `RemoveTaintsInterface` handler, not just this
+   one, and is a standing argument for emission-time suppression where that is available (see the
+   call-site sink exemption decision above).
+3. A subclass declaring a variadic where its parent does not, called through `static::`.
+   `resolveClassNamePart()` maps `static` to the enclosing class, the parent's parameter name
+   matches, and the capture is invisible. Prevalence unmeasurable; direction is a retained FP.
+
+**Dead end (#1406 §3):** the re-entrant `beforeFileAnalysis` flush was to be replaced by an
+`array<string, WeakMap>` keyed per file path, since `BeforeFileAnalysisEvent` exposes no depth or
+root flag but does reach a path through its statements source. Rejected: a depth counter is
+unsound because no decrement survives a mid-file throw, and the per-path map retains one WeakMap
+per analysed file with no disposal hook. Under the inverted gate a dropped record means preserve,
+which is the correct answer for everything but variadic capture, so the bug direction is
+near-harmless and the cost is not worth paying.
+
+**Not backported.** Psalm 6 has no `getParameterOffset()`, so `3.x` keeps the original gate.
+
+**See:** [#1395](https://github.com/psalm/psalm-plugin-laravel/issues/1395),
+[#1406](https://github.com/psalm/psalm-plugin-laravel/issues/1406),
+[vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923),
+`tests/Type/tests/TaintAnalysis/SafeNamedArgumentUnmatchedNameCapturedByVariadicStripped.phpt`,
+`tests/Type/tests/TaintAnalysis/TaintedNamedArgumentVariadicAtWrittenOffsetReports.phpt`.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in

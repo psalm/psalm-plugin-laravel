@@ -52,9 +52,9 @@ final class Child extends Base {}
 
 /**
  * `New_` and `StaticCall` callees resolve through `resolveClassNamePart()`, including the
- * `self::` / `static::` special names, which map to the enclosing class. `label:` names the
- * declared parameter at its own written offset in every call, so upstream attributes each one
- * correctly and none may be stripped.
+ * `self::` / `static::` special names, which map to the enclosing class. `label:` names a
+ * declared parameter of every callee and no callee declares a variadic, so nothing is captured
+ * and none of these may be stripped.
  */
 function constructorAndStaticNamedArgumentsKeepTaint(): void
 {

@@ -90,20 +90,48 @@ the call reports nothing at all instead of reporting one of its flows. The
 longer flows are discarded whether or not the exemption applies, so this costs
 no coverage relative to running without the plugin.
 
-### Known limitation: named arguments
+### Known limitation: named arguments captured by a variadic
 
-Psalm keys a named argument's taint node by the argument's written position rather than by the
-parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
-can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
-taint from a named argument it cannot prove is attributed correctly.
+Psalm keys a named argument's taint node by the declared index of the parameter the argument binds
+to, so an ordinary named argument is attributed correctly. A variadic parameter is the exception:
+for it, the key falls back to the argument's written position
+([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)). An argument binds to the
+callee's variadic both when no parameter carries its name and when it names the variadic itself, so
+its node can collide with a different, non-variadic parameter declared at that written position,
+and taint is then reported against that parameter.
 
-Detection is unaffected when the callee is statically known (a plain function, a facade, a
-static call, a constructor, or a method on a receiver typed as exactly one class) and the
-argument names the parameter at its own position, which covers ordinary application code. It is
-lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
-chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
-expression rather than a variable), an argument captured by a variadic, and a `static::` call
-resolved through a subclass override. Passing the same values positionally always reports.
+The plugin drops taint from exactly that shape, where both halves hold: the variadic takes the
+argument, and the written position belongs to some other, non-variadic parameter. So
+`format(unknown: $input)` on `format(string $path, string ...$rest)` no longer reports `$path`'s
+sink. Two caveats on how much it drops. It removes every *input* taint kind, not the kind the
+colliding sink happens to care about, but secret kinds and any kind your project defines are left
+untouched, so a mis-attributed secret still reports against the wrong parameter. And a genuine flow
+reaching a sink through the variadic is not reported either, so pass such a value positionally to
+have it analyzed.
+
+Everything else is analyzed normally, including an argument whose written position is the variadic's
+own declared index (`format(unknown: $input)` on `format(string ...$rest)`, where nothing collides),
+and an argument on a callee the plugin cannot resolve: a dynamic callee, a chained receiver such as
+`Storage::disk('local')->put(path: $input)`, a union-typed receiver, or an intersection-typed one
+(only one component's signature is reachable, so a variadic in that component must not speak for
+the others).
+
+Three imprecisions belong to Psalm itself and are left in place, to be filed upstream:
+
+- **Spread fan-out.** A forwarder re-spreading `mixed ...$arguments` onto a method with several
+  parameters reports the forwarded value against each of them, so a value destined for one is
+  reported against the others. This is independent of named arguments:
+  `forward(...['page' => $input])` produces the identical finding with no named argument present.
+  The plugin used to hide the named spelling of it, which also hid the genuine finding whenever the
+  argument's real destination carried a sink, so it no longer does.
+- **Shared inheritance edge.** A taint removal at one call site is written onto the edge between a
+  contract's parameter and its implementation's, replacing what is already there rather than merging
+  with it, so a removal at one call site can silence a different call site's genuine finding through
+  the same interface. Which one wins depends on declaration order. This affects every call-site
+  taint removal, not just named arguments.
+- **Subclass variadic through `static::`.** A subclass declaring a variadic where its parent does
+  not resolves to the parent, whose parameter the argument names, so the capture is invisible and
+  the mis-attribution survives.
 
 ### Timing-unsafe secret comparison (CWE-208)
 

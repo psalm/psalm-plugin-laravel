@@ -23,24 +23,33 @@ final class OtherWriter
 }
 
 /**
+ * A union receiver is not "exactly one known class", so `resolveReceiverClass()` declines and the
+ * callee's declared parameters stay unreachable. That is no longer a reason to strip: upstream
+ * keys the argument node by the declared index of the parameter `path:` names, in both union
+ * members, so both findings must survive. The narrowing only decides whether a variadic capture
+ * can be PROVEN ({@see SafeNamedArgumentVariadicCaptureReceiverAndConstructorStripped.phpt});
+ * failing to prove one preserves.
+ */
+function unionReceiverKeepsTaint(Writer|OtherWriter $writer): void
+{
+    $writer->store(path: tainted());
+}
+
+/**
  * A DI-injected receiver is a plain `$var` whose type is already in scope, so the handler
- * resolves `Filesystem::delete` and sees that `paths:` names the declared parameter at its own
- * written offset. Upstream attributes it correctly, so the finding must survive.
+ * resolves `Filesystem::delete` and reads its declared parameters. `paths:` names one of them, so
+ * nothing is captured by a variadic and the vendor `file` sink reports.
  */
 function resolvedReceiverKeepsTaint(Filesystem $filesystem): void
 {
     $filesystem->delete(paths: tainted());
 }
-
-/**
- * The negative half of the same narrowing: a union receiver is not "exactly one known class",
- * so the callee stays unresolvable and the argument is stripped. Reports nothing, even though
- * both members declare the same sunk parameter at the same offset.
- */
-function unionReceiverIsStripped(Writer|OtherWriter $writer): void
-{
-    $writer->store(path: tainted());
-}
 ?>
 --EXPECTF--
+TaintedFile on line %d: Detected tainted file handling
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedFile on line %d: Detected tainted file handling
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedFile on line %d: Detected tainted file handling
