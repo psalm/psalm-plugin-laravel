@@ -225,11 +225,13 @@ final class Plugin implements PluginEntryPointInterface
             $registration->addStubFile($stubFilePath);
         }
 
-        $this->queueStubbedClassesForScanning($registration, $stubs);
-
         AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
-        CarbonStubProvider::register($registration, $output);
+        $carbonStubs = CarbonStubProvider::register($registration, $output);
+
+        // The alias stub stays out: its classes exist only as runtime class_alias() targets, and
+        // queueing them would let Psalm's reflection fallback autoload the alias.
+        $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
     /**
