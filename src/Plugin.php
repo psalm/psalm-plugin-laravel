@@ -225,9 +225,37 @@ final class Plugin implements PluginEntryPointInterface
             $registration->addStubFile($stubFilePath);
         }
 
+        $this->queueStubbedClassesForScanning($registration, $stubs);
+
         AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
         CarbonStubProvider::register($registration, $output);
+    }
+
+    /**
+     * Workaround for #1616 (Psalm-side, reproduces on Psalm 6 and 7). Scanning a stub records it
+     * as the file of every class it declares, after which Scanner::queueClassLikeForScanning()
+     * never queues the class's vendor file. A stubbed class that nothing queues during the main
+     * scan (e.g. reached only through `app('events')` narrowing) then holds only its stubbed
+     * members, and with `__call` every other method silently resolves to `mixed`.
+     *
+     * Plugins initialize before Psalm's main scan and stubs load after it, so queueing here gets
+     * the vendor file scanned first and the stub merges into it. `store_failure: false`: a
+     * stubbed class absent from vendor must not be recorded as missing before its stub declares it.
+     *
+     * @param list<string> $stubs
+     */
+    private function queueStubbedClassesForScanning(RegistrationInterface $registration, array $stubs): void
+    {
+        if (!$registration instanceof \Psalm\PluginRegistrationSocket) {
+            return;
+        }
+
+        foreach ($stubs as $stubFilePath) {
+            foreach (StubFileFinder::declaredClassLikes($stubFilePath) as $classLike) {
+                $registration->codebase->queueClassLikeForScanning($classLike, store_failure: false);
+            }
+        }
     }
 
     /**

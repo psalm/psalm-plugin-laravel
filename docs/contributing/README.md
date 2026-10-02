@@ -124,6 +124,8 @@ When a **class stub and a trait stub** both declare the same method, Psalm creat
 
 Registration order (`Plugin::registerStubs()`): all `common` files, then version dirs ascending (`array_merge`). Since type annotations are last-loaded-wins, this order (not alphabetical path) decides overrides.
 
+A stub that re-declares a class merges into the class's vendor file only when Psalm scans the vendor file first. Psalm records a scanned stub as the class's file and then never queues the vendor file. A class that nothing names before stubs load therefore ends up with only its stubbed members (#1616). `Plugin::registerStubs()` queues every class a plugin stub declares (`StubFileFinder::declaredClassLikes()`) during plugin init, which runs before Psalm's main scan, so a partial stub can rely on its unstubbed vendor members resolving.
+
 ### Version-specific overrides (conditional stub loading)
 
 A file in a version dir (`stubs/13.16.0/...`, loaded when installed Laravel `>=` that version) overrides the same-named `common` file **per method**. Multiple version dirs cascade ascending: per method, the highest dir `<=` the installed version wins; a method it doesn't redeclare falls through to lower dirs, then `common`. (Verified: with `common` + `12.6.0` + `12.8.0` all declaring `MessageBag::has`, `12.8.0` won; `missing()` declared only in `12.6.0` survived; `isEmpty()` came from `common`.)
