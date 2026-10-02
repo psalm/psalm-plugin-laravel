@@ -233,11 +233,12 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * Workaround for #1616 (Psalm-side, reproduces on Psalm 6 and 7). Scanning a stub records it
-     * as the file of every class it declares, after which Scanner::queueClassLikeForScanning()
-     * never queues the class's vendor file. A stubbed class that nothing queues during the main
-     * scan (e.g. reached only through `app('events')` narrowing) then holds only its stubbed
-     * members, and with `__call` every other method silently resolves to `mixed`.
+     * Workaround for #1616 / vimeo/psalm#12075 (reproduces on Psalm 6 and 7); remove once Psalm
+     * merges stubs order-independently. Scanning a stub records it as the file of every class it
+     * declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
+     * file. A stubbed class that nothing queues during the main scan (e.g. reached only through
+     * `app('events')` narrowing) then holds only its stubbed members, and with `__call` every
+     * other method silently resolves to `mixed`.
      *
      * Plugins initialize before Psalm's main scan and stubs load after it, so queueing here gets
      * the vendor file scanned first and the stub merges into it. `store_failure: false`: a
