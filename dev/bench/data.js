@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790869278445,
+  "lastUpdate": 1790935824232,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11755,6 +11755,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1358,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "61677a3bdae5a90cdd676f13b3fb75ebaab34c86",
+          "message": "Merge pull request #1618 from psalm/alies-dev/stubs-that-re-declare-a-class-can-prevent-its-ve\n\nFix: stubbed classes lose unstubbed vendor methods when nothing names them before stubs load",
+          "timestamp": "2026-10-02T12:07:38+02:00",
+          "tree_id": "a377b74ff0bcc8d52f18585383d3e4f966f77fec",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/61677a3bdae5a90cdd676f13b3fb75ebaab34c86"
+        },
+        "date": 1790935822778,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.78,
+            "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1366,
             "unit": "MB"
           }
         ]
