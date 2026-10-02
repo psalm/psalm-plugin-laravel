@@ -157,4 +157,64 @@ final class StubFileFinder
 
         return $matched;
     }
+
+    /**
+     * Fully qualified names of the classes, interfaces, traits and enums a stub file declares.
+     *
+     * A token pass rather than a parse: every stub has at most one `namespace X;` statement,
+     * and a declaration keyword followed by an identifier excludes `Foo::class` and
+     * `new class`. Cost is a few milliseconds for the whole stub tree.
+     *
+     * @return list<string>
+     */
+    public static function declaredClassLikes(string $stubFile): array
+    {
+        $contents = \file_get_contents($stubFile);
+
+        if ($contents === false) {
+            return [];
+        }
+
+        $tokens = \PhpToken::tokenize($contents);
+        $namespace = '';
+        $declared = [];
+
+        foreach ($tokens as $index => $token) {
+            if ($token->is(\T_NAMESPACE)) {
+                $name = self::nextSignificantToken($tokens, $index);
+
+                if ($name?->is([\T_STRING, \T_NAME_QUALIFIED]) === true) {
+                    $namespace = $name->text . '\\';
+                }
+
+                continue;
+            }
+
+            if (!$token->is([\T_CLASS, \T_INTERFACE, \T_TRAIT, \T_ENUM])) {
+                continue;
+            }
+
+            $name = self::nextSignificantToken($tokens, $index);
+
+            if ($name?->is(\T_STRING) === true) {
+                $declared[] = $namespace . $name->text;
+            }
+        }
+
+        return $declared;
+    }
+
+    /** @param list<\PhpToken> $tokens */
+    private static function nextSignificantToken(array $tokens, int $index): ?\PhpToken
+    {
+        $count = \count($tokens);
+
+        for ($next = $index + 1; $next < $count; $next++) {
+            if (!$tokens[$next]->isIgnorable()) {
+                return $tokens[$next];
+            }
+        }
+
+        return null;
+    }
 }
