@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790935824232,
+  "lastUpdate": 1790974977469,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11790,6 +11790,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1366,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a6d0e794370f7ac80d7e69173025453dbf2fa81",
+          "message": "Merge pull request #1626 from psalm/alies-dev/model-consistent-constructor\n\nMark Model `@psalm-consistent-constructor`  to get rid of `UnsafeInstantiation` issues",
+          "timestamp": "2026-10-02T22:59:33+02:00",
+          "tree_id": "f7c41230f44d1671651feaad3d3fc78b4d36b390",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3a6d0e794370f7ac80d7e69173025453dbf2fa81"
+        },
+        "date": 1790974976536,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.73,
+            "range": "± 0.33",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
