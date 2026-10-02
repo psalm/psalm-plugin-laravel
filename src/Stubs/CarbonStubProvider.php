@@ -50,16 +50,21 @@ final class CarbonStubProvider
      */
     public const DUAL_PURPOSE_NARROWINGS_CONSTRAINT = '>=3.0 <3.12';
 
-    public static function register(RegistrationInterface $registration, Progress $output): void
+    /**
+     * @return list<string> the plugin-shipped Carbon stubs registered, for the stubbed-class scan
+     *         queue. Carbon's own lazy files are left out: they are its real source, and queueing
+     *         their runtime-declared classes would make Psalm scan them as plain code first (#922).
+     */
+    public static function register(RegistrationInterface $registration, Progress $output): array
     {
         if (!InstalledVersions::isInstalled('nesbot/carbon')) {
-            return;
+            return [];
         }
 
         $carbonRoot = InstalledVersions::getInstallPath('nesbot/carbon');
 
         if ($carbonRoot === null) {
-            return;
+            return [];
         }
 
         $versionParser = new VersionParser();
@@ -127,13 +132,9 @@ final class CarbonStubProvider
         //                 methods. Registered ONLY for nesbot/carbon >=3.0 <3.12 (see the gate below).
         $integrationStubsDir = \dirname(__DIR__, 2) . '/stubs/integrations/carbon';
 
-        foreach (StubFileFinder::findIn($integrationStubsDir . '/shared', $output) as $stub) {
-            $registration->addStubFile($stub);
-        }
+        $integrationStubs = StubFileFinder::findIn($integrationStubsDir . '/shared', $output);
 
-        foreach (StubFileFinder::findIn($integrationStubsDir . ($isCarbon3 ? '/3' : '/2'), $output) as $stub) {
-            $registration->addStubFile($stub);
-        }
+        \array_push($integrationStubs, ...StubFileFinder::findIn($integrationStubsDir . ($isCarbon3 ? '/3' : '/2'), $output));
 
         // Carbon 3.12.0 gave four dual-purpose getter/setter methods an inline *param*
         // conditional `@return ($value is null ? <scalar> : static)`: isoWeekday(), weekday(),
@@ -174,10 +175,14 @@ final class CarbonStubProvider
         // forces a Carbon-3 signature onto Carbon 2's untyped methods (UndefinedClass at WeekDay
         // use-sites, #1142). Carbon 2 keeps its own `@return static|int` instead.
         if (InstalledVersions::satisfies($versionParser, 'nesbot/carbon', self::DUAL_PURPOSE_NARROWINGS_CONSTRAINT)) {
-            foreach (StubFileFinder::findIn($integrationStubsDir . '/pre-3.12', $output) as $stub) {
-                $registration->addStubFile($stub);
-            }
+            \array_push($integrationStubs, ...StubFileFinder::findIn($integrationStubsDir . '/pre-3.12', $output));
         }
+
+        foreach ($integrationStubs as $stub) {
+            $registration->addStubFile($stub);
+        }
+
+        return $integrationStubs;
     }
 
     /**
