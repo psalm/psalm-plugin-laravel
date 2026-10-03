@@ -33,12 +33,14 @@ use Psalm\Type\Union;
  *
  * | Method       | Example alias              | Suffix match              | Type                |
  * |--------------|----------------------------|---------------------------|---------------------|
- * | withCount    | contacts_count             | ends with _count          | int                 |
- * | withExists   | contacts_exists            | ends with _exists         | bool                |
+ * | withCount    | contacts_count             | ends with _count          | int|null            |
+ * | withExists   | contacts_exists            | ends with _exists         | bool|null           |
  * | withMin      | contacts_min_amount        | contains _min_            | string|null         |
  * | withMax      | contacts_max_amount        | contains _max_            | string|null         |
  * | withSum      | contacts_sum_amount        | contains _sum_            | numeric-string|null |
  * | withAvg      | contacts_avg_amount        | contains _avg_            | numeric-string|null |
+ *
+ * All types are nullable: the attribute is absent (read as null) until the aggregate is loaded.
  *
  * @see https://laravel.com/docs/eloquent-relationships#other-aggregate-functions
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/503
@@ -365,6 +367,10 @@ final class ModelAggregatePropertyHandler
     /**
      * Build the Psalm Union type for the given aggregate suffix.
      *
+     * All six are nullable because the attribute is absent (Model::getAttribute() returns null)
+     * until withXxx()/loadXxx() runs, so `$model->x_count ?? ...` is a legitimate guard.
+     * min/max/sum/avg are additionally null for an empty relation.
+     *
      * Types match Laravel's raw database output before any model casts are applied.
      * Results are cached to avoid repeated allocation across analysis runs.
      */
@@ -374,15 +380,15 @@ final class ModelAggregatePropertyHandler
             return self::$typeCache[$suffix];
         }
 
-        $type = match ($suffix) {
-            'count' => new Union([new TInt()]),
-            'exists' => new Union([new TBool()]),
-            'min', 'max' => new Union([new TString(), new TNull()]),
-            'sum', 'avg' => new Union([new TNumericString(), new TNull()]),
+        $loaded = match ($suffix) {
+            'count' => new TInt(),
+            'exists' => new TBool(),
+            'min', 'max' => new TString(),
+            'sum', 'avg' => new TNumericString(),
             default => throw new \LogicException("Unexpected aggregate suffix: {$suffix}"),
         };
 
-        return self::$typeCache[$suffix] = $type;
+        return self::$typeCache[$suffix] = new Union([$loaded, new TNull()]);
     }
 
     /**
