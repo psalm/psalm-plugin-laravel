@@ -12,7 +12,6 @@ trait InteractsWithInput
      * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
-     * @psalm-mutation-free
      */
     public function input($key = null, $default = null) {}
 
