@@ -192,7 +192,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             // Psalm follows this return type with checkMethodArgs for Builder::<scope>, which
             // has no real method storage and would otherwise throw UnexpectedValueException in
             // Codebase\Methods::getMethodParams.
-            self::$pendingScopeModel[$methodName] = $modelClass;
+            self::handOffScopeModel($codebase, Builder::class, $methodName, $modelClass);
 
             // A value-returning scope surfaces its declared return via Laravel's `?? $this`
             // coalesce; a plain void/fluent scope keeps $builderReturn unchanged (issue #1053).
@@ -238,10 +238,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         // stale value can never shadow a later call. No isRealBuilderMethod guard is needed: the
         // producer already excluded real Eloquent\Builder methods, and consume-once prevents
         // cross-call leaks.
-        $modelClass = self::$pendingScopeModel[$methodName] ?? null;
+        $modelClass = self::consumePendingScopeModel($methodName);
         if ($modelClass !== null) {
-            unset(self::$pendingScopeModel[$methodName]);
-
             $source = $event->getStatementsSource();
             if ($source instanceof StatementsSource) {
                 $scopeParams = self::getScopeParams($source->getCodebase(), $modelClass, $methodName);
@@ -252,6 +250,70 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         return self::$baseBuilderTraitMethods[$methodName] ?? null;
+    }
+
+    /**
+     * Single producer gate for the scope hand-off ({@see $pendingScopeModel}): both the base-Builder
+     * and the custom-builder return providers record through it.
+     *
+     * Records nothing when the builder's codebase storage already declares the method (real or
+     * stub-declared, e.g. the stub's `count`): Psalm checks those calls' args against the declaration
+     * before the return provider runs, so nothing would consume the entry and it would later
+     * shadow the params of an unrelated call. Uses storage rather than PHP reflection because
+     * stub-only declarations are invisible to reflection.
+     *
+     * @param class-string<Builder> $builderClass
+     * @param lowercase-string $methodName
+     * @param class-string<Model> $modelClass
+     */
+    public static function handOffScopeModel(
+        Codebase $codebase,
+        string $builderClass,
+        string $methodName,
+        string $modelClass,
+    ): void {
+        if (self::builderDeclaresMethod($codebase, $builderClass, $methodName)) {
+            return;
+        }
+
+        self::$pendingScopeModel[$methodName] = $modelClass;
+    }
+
+    /**
+     * Whether the builder's codebase storage declares $methodName (real or stub-declared).
+     * Storage, not PHP reflection, because stub-only declarations are invisible to reflection.
+     *
+     * @param class-string<Builder> $builderClass
+     * @param lowercase-string $methodName
+     * @psalm-mutation-free
+     */
+    public static function builderDeclaresMethod(Codebase $codebase, string $builderClass, string $methodName): bool
+    {
+        return $codebase->methods->getDeclaringMethodId(new MethodIdentifier($builderClass, $methodName)) instanceof MethodIdentifier;
+    }
+
+    /**
+     * Non-consuming peek, for a params provider that must yield to the scope provider (the one consumer).
+     *
+     * @param lowercase-string $methodName
+     */
+    public static function hasPendingScopeModel(string $methodName): bool
+    {
+        return isset(self::$pendingScopeModel[$methodName]);
+    }
+
+    /**
+     * Consume-once, so a stale entry can never shadow a later call.
+     *
+     * @param lowercase-string $methodName
+     * @return class-string<Model>|null
+     */
+    public static function consumePendingScopeModel(string $methodName): ?string
+    {
+        $modelClass = self::$pendingScopeModel[$methodName] ?? null;
+        unset(self::$pendingScopeModel[$methodName]);
+
+        return $modelClass;
     }
 
     /**
