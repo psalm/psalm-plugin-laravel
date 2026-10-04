@@ -69,6 +69,21 @@ final class SuppressionInjectorTest extends TestCase
     }
 
     #[Test]
+    public function resolve_counts_bare_cr_lines_before_the_suppression(): void
+    {
+        // A bare `\r` ends a line for Blade and PHP alike; counting `\n` alone would place both
+        // comments on line 1 and keep only one of them.
+        $shadow = "prelude\n<?php /* blade:2 */ ?><?php echo e(\$bar); ?>\n<?php /* blade:4 */ ?><?php echo e(\$foo); ?>\n";
+        $bladeSource = "{{-- @psalm-suppress MixedArgument --}}\r{{ \$bar }}\r{{-- @psalm-suppress UndefinedVariable --}}\r{{ \$foo }}\r";
+        $lineMap = [1 => 0, 2 => 2, 3 => 4];
+
+        $this->assertSame(
+            [2 => ['MixedArgument'], 4 => ['UndefinedVariable']],
+            (new SuppressionInjector())->resolve($shadow, $bladeSource, $lineMap),
+        );
+    }
+
+    #[Test]
     public function resolve_drops_a_suppression_with_nothing_to_attach_to(): void
     {
         $shadow = "<?php /* blade:1 */ ?>content\n";

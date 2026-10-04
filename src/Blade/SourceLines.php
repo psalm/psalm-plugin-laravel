@@ -36,4 +36,19 @@ final class SourceLines
 
         return $lines;
     }
+
+    /**
+     * Line terminators in `$source[$offset, $offset + $length)`, counted the way {@see self::split()}
+     * cuts lines: `\n`, `\r\n` and a bare `\r` each end one. A `\r` that is the range's last byte
+     * counts as a bare CR even when a `\n` follows outside the range; callers measure up to a
+     * directive or token start, never into a terminator.
+     *
+     * @psalm-pure
+     */
+    public static function breaksIn(string $source, int $offset = 0, ?int $length = null): int
+    {
+        return \substr_count($source, "\n", $offset, $length)
+            + \substr_count($source, "\r", $offset, $length)
+            - \substr_count($source, "\r\n", $offset, $length);
+    }
 }

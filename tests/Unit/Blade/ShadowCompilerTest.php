@@ -56,6 +56,9 @@ final class ShadowCompilerTest extends TestCase
         yield 'raw string' => ["<?php\n\$tag = '?>';\nstrlen([]);\n?>\n"];
         yield 'raw comment' => ["<?php\n/* ?> */\nstrlen([]);\n?>\n"];
         yield 'escaped directive quote' => ["@if(str_contains('it\\'s)',\n 'x'))\n@php strlen([]); @endphp\n@endif\n"];
+        // Bare-CR endings: a marker counted against `\n` alone lands inside the PHP body.
+        yield 'bare CR php directive block' => ["@php\r\$x = 1;\rstrlen([]);\r@endphp\r{{ \$x }}\r"];
+        yield 'bare CR raw php block' => ["<?php\r\$x = 1;\rstrlen([]);\r?>\r{{ \$x }}\r"];
     }
 
     #[Test]

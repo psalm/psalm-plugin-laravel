@@ -162,12 +162,14 @@ final class SuppressionInjector
     {
         $suppressions = [];
 
-        if (\preg_match_all('/^.*\{\{--\s*@psalm-suppress\s+(.+?)\s*--\}\}.*$/m', $bladeSource, $matches, \PREG_OFFSET_CAPTURE) !== false) {
-            foreach ($matches[0] as $index => [, $offset]) {
-                $rules = self::parseRuleList($matches[1][$index][0]);
+        // Unanchored: PCRE's `^`/`$` only know `\n`, so under bare-CR endings an anchored `^.*` would
+        // swallow every comment but the last on a run of CR-separated lines.
+        if (\preg_match_all('/\{\{--\s*@psalm-suppress\s+(.+?)\s*--\}\}/', $bladeSource, $matches, \PREG_OFFSET_CAPTURE) !== false) {
+            foreach ($matches[1] as [$ruleList, $offset]) {
+                $rules = self::parseRuleList($ruleList);
 
                 if ($rules !== []) {
-                    $line = 1 + \substr_count($bladeSource, "\n", 0, $offset);
+                    $line = 1 + SourceLines::breaksIn($bladeSource, 0, $offset);
                     $suppressions[$line] = $rules;
                 }
             }

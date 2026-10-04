@@ -201,7 +201,7 @@ final class MarkerPrePass
 
         foreach ($matches[0] as $i => [, $offset]) {
             $name = \strtolower($matches[1][$i][0]);
-            $line += \substr_count($source, "\n", $cursor, $offset - $cursor);
+            $line += SourceLines::breaksIn($source, $cursor, $offset - $cursor);
             $cursor = $offset;
 
             if ($name === 'switch') {
@@ -251,7 +251,7 @@ final class MarkerPrePass
         $openLine = 1;
 
         foreach ($masked as [$text, $offset]) {
-            $openLine += \substr_count($source, "\n", $cursor, $offset - $cursor);
+            $openLine += SourceLines::breaksIn($source, $cursor, $offset - $cursor);
             $cursor = $offset;
 
             $openerLength = self::phpOpenerLength($text);
@@ -273,7 +273,7 @@ final class MarkerPrePass
             // opener's own template line.
             foreach (@\token_get_all('<?php ' . \substr($text, $openerLength)) as $token) {
                 $id = \is_array($token) ? $token[0] : null;
-                $newlines = \substr_count(\is_array($token) ? $token[1] : $token, "\n");
+                $newlines = SourceLines::breaksIn(\is_array($token) ? $token[1] : $token);
 
                 if ($id === \T_OPEN_TAG || $id === \T_OPEN_TAG_WITH_ECHO) {
                     $inPhp = true;
@@ -350,9 +350,9 @@ final class MarkerPrePass
         $startLine = 1;
 
         foreach ($matches as [$text, $offset]) {
-            $startLine += \substr_count($source, "\n", $cursor, $offset - $cursor);
+            $startLine += SourceLines::breaksIn($source, $cursor, $offset - $cursor);
             $cursor = $offset;
-            $endLine = $startLine + \substr_count($text, "\n");
+            $endLine = $startLine + SourceLines::breaksIn($text);
 
             for ($line = $startLine + 1; $line <= $endLine; $line++) {
                 $skip[$line] = true;
@@ -435,7 +435,7 @@ final class MarkerPrePass
 
         foreach ($candidates as [, $offset]) {
             if (!self::isMasked($offset, $masked)) {
-                return 1 + \substr_count($source, "\n", 0, $offset);
+                return 1 + SourceLines::breaksIn($source, 0, $offset);
             }
         }
 

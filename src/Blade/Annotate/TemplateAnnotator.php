@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
 use Psalm\LaravelPlugin\Blade\ContractParser;
+use Psalm\LaravelPlugin\Blade\SourceLines;
 
 /**
  * Splices `{{-- @var T $name --}}` lines into a Blade template.
@@ -66,7 +67,7 @@ final class TemplateAnnotator
 
         return [
             $prefix . $block . \substr($source, $offset),
-            1 + \substr_count($prefix, "\n"),
+            1 + SourceLines::breaksIn($prefix),
             $comments,
         ];
     }
