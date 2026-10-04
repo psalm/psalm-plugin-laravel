@@ -91,6 +91,26 @@ function test_count_then_exists_alias_collision_declines(): mixed
     return $model->total;
 }
 
+final class NotEloquent
+{
+    public ?int $count = null;
+
+    /** @psalm-external-mutation-free */
+    public function refresh(): void {}
+}
+
+function test_refresh_on_a_non_eloquent_object_keeps_its_property_facts(NotEloquent $plain): void
+{
+    if ($plain->count === null) {
+        return;
+    }
+
+    $plain->refresh();
+    /** @psalm-check-type-exact $count = int */
+    $count = $plain->count;
+    echo $count;
+}
+
 function test_refresh_after_a_load_chain_drops_the_fact(Shop $shop): void
 {
     $shop->loadCount('workOrders')->refresh();

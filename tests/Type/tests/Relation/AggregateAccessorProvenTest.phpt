@@ -201,6 +201,13 @@ function test_direct_chain_fetch(): void
     echo $count;
 }
 
+function test_select_raw_appends_columns_and_keeps_the_proof(): void
+{
+    /** @psalm-check-type-exact $count = int<0, max> */
+    $count = Shop::withCount('workOrders')->selectRaw('1 as one')->firstOrFail()->work_orders_count;
+    echo $count;
+}
+
 function test_direct_load_chain_fetch(Shop $shop): void
 {
     /** @psalm-check-type-exact $count = int<0, max> */

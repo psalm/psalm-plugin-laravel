@@ -77,7 +77,7 @@ They produce no false positives, and there's no real-world scenario where a user
 3. `$m = M::withCount('x')->...->firstOrFail()`: same facts for the assigned variable.
 4. `M::withCount('x')->firstOrFail()->x_count` / `$m->loadCount('x')->x_count`: the PropertyFetch node type is overridden (conventional names only; an alias name fails the existence check first).
 
-Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`selectRaw()`/`selectSub()`/`setQuery()` end the walk because they replace the aggregate columns. `$m->refresh()` drops every `$m->…` fact. A user `@property` always wins.
+Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` end the walk because they replace the aggregate columns (`selectRaw()`/`selectSub()`/`addSelect()` append and keep the proof). `$m->refresh()` drops every `$m->…` fact. A user `@property` always wins.
 
 **Dead end:** carrying the fact in the type (`Shop&object{x_count: int}`). The intersection flows through `Builder` (its `TModel` is covariant), but `Collection<int, Shop&object{…}>` is not assignable to `Collection<int, Shop>`, so `->get()` results then fail every `Collection<int, Shop>` parameter. Flow facts avoid changing any model type.
 
@@ -85,7 +85,8 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Known imprecision (same class as Psalm keeping property facts after impure calls):**
 - `refresh()` unsets the `$m->…` facts, but a branch merge ignores a key missing from one side, so a `refresh()` inside only one branch leaves the pre-branch proof in place (`AggregateAccessorRefreshInBranchKnownLimitationTest`).
-- One alias produced by different aggregate functions in a single chain records no fact (`withExists` casts the alias to bool for good). Across separate in-place loads the latest write wins, so `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>`.
+- One alias produced by different aggregate functions in a single chain records no fact (`withExists` casts the alias to bool for good). Across in-place loads, separate or chained, the latest write wins, so `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>`.
+- `refresh()` invalidates only receivers typed as exactly one Model; other objects keep their property facts.
 
 **Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
 

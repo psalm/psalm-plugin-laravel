@@ -42,7 +42,7 @@ use Psalm\Type\Union;
  *    node type is overridden (conventional names only; alias names fail existence earlier).
  *
  * Chains are walked from the terminal call inward. Past the first retrieval method (first, find, …)
- * only Builder/Relation-typed calls keep the query, and `select()` & co. drop the aggregate columns,
+ * only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` drop the aggregate columns,
  * so the walk stops there. Collection hops, variable-held builders and foreach are not tracked: those
  * reads stay nullable. A closure that captures `$m` sees the fact like any other property narrowing.
  *
@@ -50,7 +50,7 @@ use Psalm\Type\Union;
  * - A `refresh()` inside only one branch leaves the pre-branch proof in place after the merge, because a
  *   merge ignores a key missing from one side (AggregateAccessorRefreshInBranchKnownLimitationTest).
  * - One alias produced by different aggregate functions in ONE chain records no fact (`withExists` casts
- *   the alias to bool for good). Across separate in-place loads the latest write wins, so
+ *   the alias to bool for good). Across in-place loads, separate or chained, the latest write wins, so
  *   `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>` although the bool cast persists.
  *
  * Carrying the fact in an intersection type (`M&object{x_count: int}`) was probed and rejected:
@@ -70,11 +70,12 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         'firstwhere' => true,
     ];
 
-    /** Replace the select list, discarding the aggregate sub-selects added earlier in the chain. */
+    /**
+     * Replace the select list, discarding the aggregate sub-selects added earlier in the chain.
+     * selectRaw()/selectSub()/addSelect() append, so they keep the proof.
+     */
     private const COLUMN_REPLACING_METHODS = [
         'select' => true,
-        'selectraw' => true,
-        'selectsub' => true,
         'setquery' => true,
     ];
 
@@ -102,11 +103,14 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         return null;
     }
 
-    /** `$m->refresh()` reloads the attributes, so every cached `$m->…` fact is dropped. */
+    /**
+     * `$m->refresh()` reloads the attributes, so every cached `$m->…` fact is dropped. Only for a
+     * receiver that is exactly one Model: other objects with a `refresh()` keep their property facts.
+     */
     private static function forgetLoadedAggregates(MethodCall $call, Context $context): void
     {
         $varId = self::varId(self::identityRoot($call->var));
-        if ($varId === null) {
+        if ($varId === null || self::singleModel($context->vars_in_scope[$varId] ?? null) === null) {
             return;
         }
 
