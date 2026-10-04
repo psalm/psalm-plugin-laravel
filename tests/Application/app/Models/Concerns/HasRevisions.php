@@ -33,4 +33,15 @@ trait HasRevisions
     {
         return $this->belongsTo(Mechanic::class, 'revised_by');
     }
+
+    /** Delegates to a private helper, which binds to the composing class even if a child redeclares it. */
+    public function priorRevisions(): HasMany
+    {
+        return $this->revisionChain()->latest();
+    }
+
+    private function revisionChain(): HasMany
+    {
+        return $this->hasMany(self::class, 'revision_of');
+    }
 }

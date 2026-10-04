@@ -82,6 +82,12 @@ abstract class AbstractDocument extends Model
         return $this->revisions()->whereNull('signed_at');
     }
 
+    /** Delegates to documentParts(), which Receipt overrides: dispatch follows the receiver (#1613). */
+    public function pendingParts(): HasMany
+    {
+        return $this->documentParts()->whereNull('signed_at');
+    }
+
     /**
      * @param  Builder<self>  $query
      */

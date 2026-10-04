@@ -5,9 +5,11 @@ use App\Collections\WorkOrderCollection;
 use App\Models\AbstractDocument;
 use App\Models\Contract;
 use App\Models\DamageReport;
+use App\Models\Invoice;
 use App\Models\Mechanic;
 use App\Models\MechanicSpecialization;
 use App\Models\Part;
+use App\Models\Receipt;
 use App\Models\Shop;
 use App\Models\SpecializationPivot;
 use App\Models\Vehicle;
@@ -24,7 +26,9 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * type, no docblock generic) used to collapse to the stub default `Relation<Model, Model>`: the
  * body parser recognised only relation factory calls. The delegated call now resolves like a
  * top-level one (own, trait-hosted or inherited method), keeping through and pivot slots. An outer
- * `->using()` / `->as()` overrides the delegated relation's own one, matching runtime order.
+ * `->using()` / `->as()` overrides the delegated relation's own one, matching runtime order. The
+ * delegated method follows runtime dispatch: the receiver's override wins, while a private method
+ * binds to the class whose body (or composed trait) makes the call.
  */
 
 function issue1613_delegated_own(WorkOrder $workOrder): MorphMany
@@ -52,6 +56,34 @@ function issue1613_delegated_to_trait_on_abstract(AbstractDocument $document): H
 {
     $relation = $document->draftRevisions();
     /** @psalm-check-type-exact $relation = HasMany<AbstractDocument, AbstractDocument> */
+    return $relation;
+}
+
+function issue1613_delegation_follows_receiver_override(Receipt $receipt): HasMany
+{
+    $relation = $receipt->pendingParts();
+    /** @psalm-check-type-exact $relation = HasMany<Invoice, Receipt> */
+    return $relation;
+}
+
+function issue1613_delegation_without_override(Contract $contract): HasMany
+{
+    $relation = $contract->pendingParts();
+    /** @psalm-check-type-exact $relation = HasMany<Part, Contract> */
+    return $relation;
+}
+
+function issue1613_private_helper_binds_to_composing_class(Contract $contract): HasMany
+{
+    $relation = $contract->priorRevisions();
+    /** @psalm-check-type-exact $relation = HasMany<AbstractDocument, Contract> */
+    return $relation;
+}
+
+function issue1613_private_helper_on_direct_composer(WorkOrder $workOrder): HasMany
+{
+    $relation = $workOrder->priorRevisions();
+    /** @psalm-check-type-exact $relation = HasMany<WorkOrder, WorkOrder> */
     return $relation;
 }
 

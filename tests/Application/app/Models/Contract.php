@@ -29,4 +29,13 @@ final class Contract extends AbstractDocument
     {
         return $this->documentParts()->whereNotNull('signed_at');
     }
+
+    /**
+     * Same name as HasRevisions' private helper composed on the parent. Private methods bind
+     * lexically, so the trait's priorRevisions() still calls the parent's copy (#1613).
+     */
+    private function revisionChain(): HasMany
+    {
+        return $this->hasMany(Part::class);
+    }
 }

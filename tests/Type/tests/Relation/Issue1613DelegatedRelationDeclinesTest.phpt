@@ -12,8 +12,10 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  *
  * Delegated relation bodies the parser cannot prove decline (the return-type handler yields null),
  * so Psalm's own inference stays: a declared non-relation type, a chain that changes the relation
- * class (`->one()`, declared as the new class or as a `Relation` supertype), a helper with no
- * parseable relation body, and a delegation cycle.
+ * class (`->one()`, declared as the new class, as a `Relation` supertype or as a union), an earlier
+ * conditional return, a chain call that may swap the relation (`when()`) or leave it
+ * (`getRelated()`), a helper with no parseable relation body, a delegation cycle, and a trait
+ * method picked with `insteadof` (Psalm records the losing trait's body).
  */
 
 function issue1613_non_relation_return_stays(Shop $shop): int
@@ -34,6 +36,41 @@ function issue1613_declared_supertype_declines(Shop $shop): Relation
 {
     $relation = $shop->onlyWorkOrder();
     /** @psalm-check-type-exact $relation = Relation<Model, Model, mixed> */
+    return $relation;
+}
+
+function issue1613_declared_union_declines(Shop $shop): HasMany|HasOne
+{
+    $relation = $shop->workOrderOrFirst();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model>|HasOne<Model, Model> */
+    return $relation;
+}
+
+function issue1613_conditional_return_declines(Shop $shop): HasMany
+{
+    $relation = $shop->workOrdersOrInvoices();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
+    return $relation;
+}
+
+function issue1613_when_chain_declines(Shop $shop): HasMany
+{
+    $relation = $shop->conditionalWorkOrders();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
+    return $relation;
+}
+
+function issue1613_get_related_chain_declines(Shop $shop): HasMany
+{
+    $relation = $shop->workOrderRevisions();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
+    return $relation;
+}
+
+function issue1613_insteadof_trait_declines(Shop $shop): HasMany
+{
+    $relation = $shop->revisions();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
     return $relation;
 }
 

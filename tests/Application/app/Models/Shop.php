@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\HasArchivedRevisions;
+use App\Models\Concerns\HasRevisions;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +29,11 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  */
 final class Shop extends Model
 {
+    use HasRevisions;
+    use HasArchivedRevisions {
+        HasArchivedRevisions::revisions insteadof HasRevisions;
+    }
+
     protected $table = 'shops';
 
     /** Default aggregates: proof source for `artists_count` and the `supplier_total` alias. */
@@ -202,6 +209,34 @@ final class Shop extends Model
     public function onlyWorkOrder(): Relation
     {
         return $this->workOrders()->one();
+    }
+
+    /** A union declaration does not pin the class either: runtime is the HasOne alternative. */
+    public function workOrderOrFirst(): HasMany|HasOne
+    {
+        return $this->workOrders()->one();
+    }
+
+    /** An earlier conditional return can yield another relation, so the final delegation proves nothing. */
+    public function workOrdersOrInvoices(): HasMany
+    {
+        if ($this->exists) {
+            return $this->hasMany(Invoice::class);
+        }
+
+        return $this->workOrders();
+    }
+
+    /** `when()` may return its callback's relation instead of the receiver. */
+    public function conditionalWorkOrders(): HasMany
+    {
+        return $this->workOrders()->when($this->exists, fn(): HasMany => $this->hasMany(Invoice::class));
+    }
+
+    /** getRelated() leaves the relation: the result is the related model's own relation. */
+    public function workOrderRevisions(): HasMany
+    {
+        return $this->workOrders()->getRelated()->revisions();
     }
 
     /** Delegates to a helper whose relation is built dynamically: not statically resolvable. */
