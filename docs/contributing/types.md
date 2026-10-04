@@ -1,348 +1,192 @@
-# Psalm Type Annotations Reference
+---
+title: Psalm Type Syntax
+parent: Contributing
+nav_order: 3
+---
 
-Quick reference of all type annotations supported by Psalm 7. Useful when writing stubs and handlers.
+# Psalm Type Syntax
 
-Source of truth: `vendor/vimeo/psalm/src/Psalm/Internal/Type/TypeTokenizer.php` (`PSALM_RESERVED_WORDS`) and `vendor/vimeo/psalm/src/Psalm/DocComment.php` (`PSALM_ANNOTATIONS`).
+Every type expression Psalm 7 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers. Verified against Psalm `7.0.0-beta24` (the plugin requires `^7.0.0-beta23`; the type grammar did not change between them).
 
-Psalm docs (deep links):
-- [Typing in Psalm](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/typing_in_psalm.md)
-- [Supported Annotations](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/supported_annotations.md)
-- [Templated Annotations](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/templated_annotations.md)
-- [Adding Assertions](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/adding_assertions.md)
-- [Assertion Syntax](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/assertion_syntax.md)
-- Type syntax: [Atomic](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/atomic_types.md), [Scalar](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/scalar_types.md), [Value](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/value_types.md), [Object](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/object_types.md), [Array](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/array_types.md), [Callable](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/callable_types.md), [Utility](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/utility_types.md), [Union](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/union_types.md), [Intersection](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/intersection_types.md), [Conditional](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/conditional_types.md), [Top/Bottom](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/top_bottom_types.md), [Other](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/other_types.md)
+Companion pages: [Docblock Annotations](annotations.md) (the tags that carry these types), [Purity and Capabilities](purity.md) (the `[pure]` part of callable and iterable types), [Taint Analysis Stubs](taint-analysis.md).
 
-## Scalar Types
+Ground truth when this page and Psalm disagree:
 
-| Type                                   | Atomic              | Notes                                                              |
-|----------------------------------------|---------------------|--------------------------------------------------------------------|
-| `int`                                  | `TInt`              |                                                                    |
-| `float`                                | `TFloat`            |                                                                    |
-| `string`                               | `TString`           |                                                                    |
-| `bool`                                 | `TBool`             |                                                                    |
-| `true`                                 | `TTrue`             |                                                                    |
-| `false`                                | `TFalse`            |                                                                    |
-| `null`                                 | `TNull`             |                                                                    |
-| `void`                                 | `TVoid`             |                                                                    |
-| `scalar`                               | `TScalar`           | `int\|float\|string\|bool`                                         |
-| `numeric`                              | `TNumeric`          | `int\|float\|numeric-string`                                       |
-| `array-key`                            | `TArrayKey`         | `int\|string`                                                      |
-| `mixed`                                | `TMixed`            | Top type                                                           |
-| `iterable`                             |                     | `array\|Traversable`; accepts generics: `iterable<TKey, TValue>`   |
-| `never`                                | `TNever`            | Bottom type. Aliases: `no-return`, `never-return`, `never-returns` |
-| `object`                               | `TObject`           | Any object                                                         |
-| `resource`                             | `TResource`         |                                                                    |
-| `open-resource`                        | `TResource`         | Active resource                                                    |
-| `closed-resource`                      | `TClosedResource`   | Closed resource                                                    |
-| `boolean`, `integer`, `double`, `real` |                     | Deprecated aliases                                                 |
+- `vendor/vimeo/psalm/src/Psalm/Internal/Type/TypeTokenizer.php`: `PSALM_RESERVED_WORDS`, the words never resolved as class names
+- `vendor/vimeo/psalm/src/Psalm/Type/Atomic.php`: `createInner()`, keyword to `Atomic` map
+- `vendor/vimeo/psalm/src/Psalm/Internal/Type/TypeParser.php` and `ParseTreeCreator.php`: generics, shapes, callables, conditionals
+- Upstream prose: [type syntax docs](https://github.com/vimeo/psalm/tree/master/docs/annotating_code/type_syntax)
 
-## Integer Subtypes
+To check what Psalm makes of an expression, put `/** @psalm-trace $x */` on a statement and run `vendor/bin/psalm --no-cache --threads=1` on a scratch file. The `Atomic` column names the class a handler gets back or constructs.
 
-| Type                       | Atomic                   | Adoption | Notes                                           |
-|----------------------------|--------------------------|----------|-------------------------------------------------|
-| `positive-int`             | `TIntRange`              | Wide     | `int<1, max>`                                   |
-| `non-negative-int`         | `TIntRange`              | Wide     | `int<0, max>`                                   |
-| `negative-int`             | `TIntRange`              | Rare     | `int<min, -1>`                                  |
-| `non-positive-int`         | `TIntRange`              | Rare     | `int<min, 0>`                                   |
-| `literal-int`              | `TNonspecificLiteralInt` | Niche    | An int known at analysis time                   |
-| `int<min, max>`            | `TIntRange`              | Medium   | Range. `min` = PHP_INT_MIN, `max` = PHP_INT_MAX |
-| `int-mask<1, 2, 4>`        | `TIntMask`               | Niche    | Bitmask of listed values                        |
-| `int-mask-of<Foo::FLAG_*>` | `TIntMaskOf`             | Niche    | Bitmask from class constants                    |
+## Scalars, top and bottom
 
-## String Subtypes
+| Type | Atomic | Notes |
+|---|---|---|
+| `int`, `float`, `string`, `bool` | `TInt`, `TFloat`, `TString`, `TBool` | `integer`, `double`, `real`, `boolean` are legacy aliases |
+| `true`, `false`, `null` | `TTrue`, `TFalse`, `TNull` | |
+| `void` | `TVoid` | Return position only |
+| `scalar` | `TScalar` | `int\|float\|string\|bool` |
+| `numeric` | `TNumeric` | `int\|float\|numeric-string` |
+| `array-key` | `TArrayKey` | `int\|string` |
+| `mixed` | `TMixed` | Top type |
+| `never` | `TNever` | Bottom type. Aliases: `no-return`, `never-return`, `never-returns`, `empty` |
+| `object` | `TObject` | Any object |
+| `resource` | `TResource` | |
+| `closed-resource` | `TClosedResource` | |
+| `iterable`, `iterable<V>`, `iterable<K, V>` | `TIterable` | `array\|Traversable`. Takes a purity: `iterable[pure]<K, V>` ([purity](purity.md#iterables-and-generators)) |
 
-| Type                         | Atomic                              | Adoption    | Notes                                           |
-|------------------------------|-------------------------------------|-------------|-------------------------------------------------|
-| `non-empty-string`           | `TNonEmptyString`                   | Wide        |                                                 |
-| `non-falsy-string`           | `TNonFalsyString`                   | Medium      | Not empty and not `'0'`. Alias: `truthy-string` |
-| `numeric-string`             | `TNumericString`                    | Wide        | Passes `is_numeric()`                           |
-| `literal-string`             | `TNonspecificLiteralString`         | Medium      | Composed entirely of literals in source         |
-| `non-empty-literal-string`   | `TNonEmptyNonspecificLiteralString` | Niche       |                                                 |
-| `lowercase-string`           | `TLowercaseString`                  | Niche       | Psalm-only                                      |
-| `non-empty-lowercase-string` | `TNonEmptyLowercaseString`          | Niche       | Psalm-only                                      |
-| `callable-string`            | `TCallableString`                   | Medium      | Passes `is_callable()`                          |
-| `class-string`               | `TClassString`                      | Wide        | Valid FQCN                                      |
-| `class-string<Foo>`          | `TClassString`                      | Wide        | FQCN of `Foo` or subclass                       |
-| `interface-string`           | `TClassString`                      | Niche       |                                                 |
-| `trait-string`               | `TTraitString`                      | Niche       |                                                 |
-| `enum-string`                | `TClassString`                      | Niche       |                                                 |
+## Integer subtypes
 
-## Literal Types
+| Type | Atomic | Notes |
+|---|---|---|
+| `positive-int` | `TIntRange` | `int<1, max>` |
+| `non-negative-int` | `TIntRange` | `int<0, max>` |
+| `negative-int` | `TIntRange` | `int<min, -1>` |
+| `non-positive-int` | `TIntRange` | `int<min, 0>` |
+| `int<5, 10>`, `int<min, 0>`, `int<1, max>` | `TIntRange` | Bounds are int literals or `min`/`max`. `int<min, max>` is plain `int` |
+| `literal-int` | `TNonspecificLiteralInt` | Any int written as a literal in source |
+| `int-mask<1, 2, 4>` | `TIntMask` | Any bitwise OR of the listed values (literals or single class constants) |
+| `int-mask-of<Foo::FLAG_*>` | `TIntMaskOf` | Same, from a wildcard constant set; also accepts `key-of<...>` / `value-of<...>` |
 
-```
-42              // literal int
-3.14            // literal float
-'hello'         // literal string
-"hello"         // literal string
-Foo::class      // literal class-string
-Foo::CONST      // class constant value
-```
+## String subtypes
 
-## Array / List Types
+| Type | Atomic | Notes |
+|---|---|---|
+| `non-empty-string` | `TNonEmptyString` | |
+| `non-falsy-string` | `TNonFalsyString` | Not `''` and not `'0'`. Alias: `truthy-string` |
+| `numeric-string` | `TNumericString` | Passes `is_numeric()` |
+| `lowercase-string`, `non-empty-lowercase-string` | `TLowercaseString`, `TNonEmptyLowercaseString` | |
+| `literal-string`, `non-empty-literal-string` | `TNonspecificLiteralString`, `TNonEmptyNonspecificLiteralString` | Built only from literals in source |
+| `callable-string` | `TCallableString` | Passes `is_callable()` |
+| `class-string`, `class-string<Foo>` | `TClassString` | FQCN of `Foo` or a subtype; `Foo` may be a template |
+| `interface-string`, `interface-string<Foo>` | `TClassString` | Interface names only |
+| `enum-string`, `enum-string<Foo>` | `TClassString` | Enum names only |
+| `trait-string` | `TTraitString` | |
+| `Foo::class` | `TLiteralClassString` | |
 
-| Type                            | Atomic           | Notes                                    |
-|---------------------------------|------------------|------------------------------------------|
-| `array`                         | `TArray`         | Untyped                                  |
-| `array<TValue>`                 | `TArray`         | Shorthand for `array<array-key, TValue>` |
-| `array<TKey, TValue>`           | `TArray`         |                                          |
-| `non-empty-array<TKey, TValue>` | `TNonEmptyArray` | At least one element                     |
-| `associative-array`             | `TArray`         |                                          |
-| `list<TValue>`                  | `TKeyedArray`    | Sequential `int`-keyed array             |
-| `non-empty-list<TValue>`        | `TKeyedArray`    |                                          |
-| `non-empty-countable`           |                  | `Countable` with at least one element    |
+Intersections of string refinements collapse: `non-empty-string&lowercase-string` is `non-empty-lowercase-string`.
 
-### Array Shapes
+## Literals and constants
+
+| Type | Atomic | Notes |
+|---|---|---|
+| `42`, `-3`, `1_000` | `TLiteralInt` | `_` separators allowed for ints only |
+| `3.14`, `-0.5` | `TLiteralFloat` | No `_` separators |
+| `'foo'`, `"foo"` | `TLiteralString` | No heredoc/nowdoc form |
+| `Foo::BAR` | `TClassConstant` | Resolved to the constant's literal type |
+| `Foo::BAR_*`, `Foo::*` | `TClassConstant` | Union of the matching constants. Trailing `*` or bare `*` only |
+| `Suit::Hearts` | `TEnumCase` | Same syntax as a constant; becomes an enum case when `Suit` is an enum |
+
+## Arrays and lists
+
+| Type | Atomic | Notes |
+|---|---|---|
+| `array` | `TArray` | `array<array-key, mixed>` |
+| `array<V>`, `array<K, V>` | `TArray` | One parameter means `array<array-key, V>`. `V[]` also works |
+| `non-empty-array<K, V>` | `TNonEmptyArray` | |
+| `list<V>`, `non-empty-list<V>` | `TKeyedArray` | Keys `0..n-1` in order |
+| `associative-array<K, V>` | `TArray` | Plain alias of `array` |
+| `callable-array`, `callable-list` | `TKeyedArray` | `[class-string\|object, non-empty-string]` pair |
+
+### Shapes
 
 ```php
-array{key: string, id: int}        // required keys
-array{key?: string}                // optional key
-array{0: string, 1: int, ...}     // known prefix + open-ended
-list{string, int, float}          // positional list shape
+array{id: int, name?: string}       // sealed; `?` = key may be absent
+array{0: string, 1: int}            // explicit int keys
+array{string, int}                  // implicit keys 0, 1 (cannot mix with explicit)
+list{string, int}                   // list shape
+array{id: int, ...}                 // unsealed: more keys of array-key => mixed
+array{id: int, ...<string, int>}    // unsealed with typed extras
+list{string, ...<int>}              // unsealed list
+array{}                             // the empty array
+callable-array{Foo, 'bar'}          // shape that must be callable
+object{id: int, name?: string}      // object shape (TObjectWithProperties)
 ```
 
-### Object Shapes
+Keys may be quoted (`'quoted key': T`) or `Foo::class`; other `Foo::CONST` keys are rejected. Object shapes have no unsealed form: `object{id: int, ...}` parses and drops the `...`.
+
+## Objects
+
+| Type | Atomic | Notes |
+|---|---|---|
+| `Foo` | `TNamedObject` | |
+| `Foo<A, B>` | `TGenericObject` | Class must declare matching `@template`s |
+| `Foo[pure]<A>` | `TGenericObject` | Purity argument for a class with `@psalm-purity-template` ([purity](purity.md#purity-templates)) |
+| `self`, `static`, `parent` | `TNamedObject` | `self` and `parent` resolve to the FQCN; `static` stays late-bound |
+| `$this` | `TNamedObject` | Same as `static` |
+| `Generator<K, V, TSend, TReturn>` | `TGenericObject` | Fewer parameters: missing ones become `mixed`; `Generator<V>` sets the value |
+| `Traversable<K, V>`, `Iterator<K, V>`, `IteratorAggregate<K, V>` | `TGenericObject` | One parameter is the value type. All take a purity: `Iterator[pure]<K, V>` |
+| `callable-object` | `TCallableObject` | Has `__invoke()` |
+| `stringable-object` | `TObjectWithProperties` | Has `__toString()` |
+| `arraylike-object<K, V>` | intersection | `Traversable<K, V>&ArrayAccess<K, V>&Countable` |
+
+## Callables
 
 ```php
-object{foo: string, bar: int}
-object{foo?: string}               // optional property
+callable                                // TCallable
+Closure                                 // TClosure
+callable(int, string): bool             // typed
+Closure(int, string=): void             // `=` optional parameter
+callable(int, string...): void          // `...` variadic parameter
+callable(int $id, string ...$rest): void // named parameters
+pure-callable(int): int                 // same as callable[pure](int): int
+Closure[read-props|io](): void          // explicit capability set
+Closure[P](): void                      // purity template
+Closure[pure]                           // any pure closure, no parameter list
 ```
 
-## Callable Types
+By-reference parameters are not expressible: `callable(int &$x): void` is an `InvalidDocblock`. A named parameter cannot carry `=` (`string $name=`) or a `...` before its name (`string... $rest`): Psalm `7.0.0-beta24` crashes the whole scan on both; write the name only on required or `...$rest` parameters. The bracket part is a capability set; see [Purity and Capabilities](purity.md#callable-types) for the names, templates, and the `Closure[_]` parameter form.
 
-| Type                             | Atomic            | Adoption | Notes                      |
-|----------------------------------|-------------------|----------|----------------------------|
-| `callable`                       | `TCallable`       | Wide     |                            |
-| `Closure`                        | `TClosure`        | Wide     |                            |
-| `callable(int, string): bool`    | `TCallable`       | Wide     | Typed callable             |
-| `Closure(int, string): bool`     | `TClosure`        | Wide     | Typed closure              |
-| `callable(int, string=): void`   | `TCallable`       | Medium   | `=` marks optional param   |
-| `callable(int, string...): void` | `TCallable`       | Medium   | `...` marks variadic param |
-| `callable-string`                | `TCallableString` | Medium   | String that is callable    |
-| `callable-array`                 | `TKeyedArray`     | Niche    | Array that is callable     |
-| `callable-list`                  | `TKeyedArray`     | Niche    | List that is callable      |
-| `callable-object`                | `TCallableObject` | Niche    | Object with `__invoke`     |
-| `stringable-object`              | `TNamedObject`    | Niche    | Object with `__toString`   |
+## Utility types
 
-### Callable Mutation Modifiers
+| Type | Atomic | Notes |
+|---|---|---|
+| `key-of<T>` | `TKeyOf`, `TTemplateKeyOf` | Keys of an array, shape, constant array, or template |
+| `value-of<T>` | `TValueOf`, `TTemplateValueOf` | Values; on a backed enum, the backing values (`value-of<Suit>` is `'h'\|'s'`) |
+| `properties-of<T>` | `TPropertiesOf`, `TTemplatePropertiesOf` | Properties as a keyed array |
+| `public-properties-of<T>`, `protected-properties-of<T>`, `private-properties-of<T>` | `TPropertiesOf` | Visibility filtered |
+| `class-string-map<T of Foo, T>` | `TClassStringMap` | Maps each class-string key to an instance of it. `as` works in place of `of` |
+| `T[K]` | `TTemplateIndexedAccess` | `T` and `K` must both be templates of the same declaration |
 
-| Type                                                 | Adoption | Notes                      |
-|------------------------------------------------------|----------|----------------------------|
-| `pure-callable` / `pure-Closure`                     | Niche    | No side effects            |
-| `impure-callable` / `impure-Closure`                 | Rare     | Default behavior, explicit |
-| `self-accessing-callable` / `self-accessing-Closure` | Rare     | Reads `$this` properties   |
-| `self-mutating-callable` / `self-mutating-Closure`   | Rare     | Reads and writes `$this`   |
+## Conditional types
 
-## Generics
+`(Subject is Type ? IfTrue : IfFalse)`, where `Subject` is a template, a `$param`, or `func_num_args()`. Parameter subjects work in `@return`, `@psalm-self-out` and `@psalm-this-out`.
 
 ```php
-/** @template T */
-/** @template T of SomeType */           // upper bound
-/** @template-covariant T */
-/** @extends Base<int, string> */
-/** @implements Interface<Foo> */
-/** @use TraitName<Bar> */
-```
-
-## Utility Types
-
-| Type                            | Atomic                   | Adoption | Notes                            |
-|---------------------------------|--------------------------|----------|----------------------------------|
-| `key-of<T>`                     | `TKeyOf`                 | Medium   | Array key type                   |
-| `value-of<T>`                   | `TValueOf`               | Medium   | Array value type                 |
-| `properties-of<T>`              | `TPropertiesOf`          | Niche    | All properties as keyed array    |
-| `public-properties-of<T>`       | `TPropertiesOf`          | Niche    | Psalm-only                       |
-| `protected-properties-of<T>`    | `TPropertiesOf`          | Niche    | Psalm-only                       |
-| `private-properties-of<T>`      | `TPropertiesOf`          | Niche    | Psalm-only                       |
-| `class-string-map<T of Foo, T>` | `TClassStringMap`        | Niche    | Maps class-strings to instances  |
-| `T[K]`                          | `TTemplateIndexedAccess` | Niche    | Indexed access on template types |
-| `arraylike-object`              | `TNamedObject`           | Rare     | Object usable as array           |
-
-## Conditional Types
-
-Syntax: `(condition ? TypeIfTrue : TypeIfFalse)`. Conditions can test `is`, type narrowing on params, or even `func_num_args()`.
-
-```php
-// Basic: narrow return type based on a template param
+/** @return ($key is null ? array<string, mixed> : mixed) */
 /** @return (T is string ? int : float) */
-
-// Nullable input → nullable output
-/** @return ($path is null ? null : string) */
-
-// Return type depends on a boolean flag
-/** @return ($choose is true ? TA : TB) */
-
-// Non-empty guard
-/** @return ($format is non-empty-string ? non-empty-string : string) */
-
-// Lowercase propagation
-/** @return ($lowercase is true ? lowercase-string : string) */
-
-// Null-or-value pattern (common in Laravel)
-/** @return ($location is null ? int : int|null) */
-
-// Ternary with union fallback
-/** @return ($return is true ? string : void) */
-/** @return ($return is true ? string : true) */
-/** @return ($return is true ? string : bool) */
-
-// Array emptiness drives return type
-/** @return (TArray is non-empty-array ? non-empty-list<key-of<TArray>> : list<key-of<TArray>>) */
+/** @return (func_num_args() is 0 ? static : string) */
+/** @return ($num is int ? int : ($num is float ? float : int|float)) */
 /** @return (TArray is array<never, never> ? null : TValue) */
-/** @return (TArray is array<never, never> ? false : TValue|false) */
-
-// Nested conditionals
-/**
- * @return ($num is int ? positive-int|0 : ($num is float ? float : positive-int|0|float))
- */
-
-// Overload based on argument count
-/** @return (func_num_args() is 2 ? (null|list<float|int|string|null>) : int) */
-/** @return (func_num_args() is 0 ? array<string, string> : string|false) */
 ```
 
-## Union and Intersection
+Plugin traps: write `static`, never `$this`, on the chainable branch of a stub conditional (#888, hard rule 3 in `AGENTS.md`); `func_num_args()` is unsound under a leading spread argument.
+
+## Union, intersection, nullable
 
 ```php
-int|string              // union
-?string                 // shorthand for string|null
-Foo&Bar                 // intersection (must satisfy both)
+int|string      // union
+?string         // string|null
+Foo&Bar         // intersection: object types only (or keyed arrays)
 ```
 
-## Type Aliases
+## Templates and aliases
 
-```php
-/** @psalm-type UserId = positive-int */
-/** @psalm-import-type UserId from UserService */
-```
+A declared `@template T` is a `TTemplateParam` wherever it appears as a type. Type aliases are declared with `@psalm-type Name = ...` and pulled in with `@psalm-import-type Name from Foo [as Local]` (`TTypeAlias`). Declaration tags live on the [annotations page](annotations.md#generics-and-templates).
 
----
+## Accepted but misleading
 
-## Docblock Annotations
+Syntax that parses without the meaning its name suggests. Do not use it in stubs.
 
-### Standard PHPDoc (Psalm-aware)
-
-`@var`, `@param`, `@return`, `@property`, `@property-read`, `@property-write`, `@method`, `@throws`, `@deprecated`, `@internal`, `@mixin`
-
-The type-carrying tags (`@var`, `@param`, `@return`, `@property*`, `@method`) also accept a `@psalm-` prefix (e.g. `@psalm-param`) for advanced type syntax that phpDocumentor can't parse. PHPStan prefix (`@phpstan-param`, etc.) is also recognized. `@psalm-throws`, `@psalm-deprecated`, and `@psalm-mixin` do NOT exist — Psalm rejects unknown `@psalm-*` tags with `Unrecognised annotation` (see `DocComment::PSALM_ANNOTATIONS`).
-
-### Assertions
-
-| Annotation                            | When it applies           |
-|---------------------------------------|---------------------------|
-| `@psalm-assert Type $param`           | Function returns normally |
-| `@psalm-assert !Type $param`          | Function returns normally |
-| `@psalm-assert-if-true Type $param`   | Function returns `true`   |
-| `@psalm-assert-if-true !Type $param`  | Function returns `true`   |
-| `@psalm-assert-if-false Type $param`  | Function returns `false`  |
-| `@psalm-assert-if-false !Type $param` | Function returns `false`  |
-| `@psalm-assert-untainted $param`      | Function returns normally (taint analysis: marks param untainted) |
-
-Negated assertions (`!Type`) assert the param is **not** of the given type. Common examples: `!null`, `!false`, `!string`.
-
-### Output Type Narrowing
-
-| Annotation                     | Notes                           |
-|--------------------------------|---------------------------------|
-| `@psalm-param-out Type $param` | By-ref param type after call    |
-| `@psalm-self-out Type`         | `$this` type changes after call |
-| `@psalm-this-out Type`         | Same as `self-out`              |
-| `@psalm-if-this-is Type`       | Precondition on `$this` type    |
-
-### Suppression and Debugging
-
-| Annotation                        | Notes                                 |
-|-----------------------------------|---------------------------------------|
-| `@psalm-suppress IssueType`       | Suppress a specific issue             |
-| `@psalm-trace`                    | Print inferred type (debug)           |
-| `@psalm-check-type`               | Assert inferred type matches          |
-| `@psalm-check-type-exact`         | Assert exact type match               |
-| `@psalm-ignore-var`               | Ignore `@var` in same docblock        |
-| `@psalm-ignore-nullable-return`   | Suppress nullable return issues       |
-| `@psalm-ignore-falsable-return`   | Suppress false return issues          |
-| `@psalm-ignore-variable-method`   | Ignore variable method in dead code   |
-| `@psalm-ignore-variable-property` | Ignore variable property in dead code |
-
-### Purity and Mutability
-
-| Annotation                      | Scope                                                     |
-|---------------------------------|-----------------------------------------------------------|
-| `@psalm-pure`                   | Function: output depends only on input                    |
-| `@psalm-impure`                 | Explicitly marks side effects                             |
-| `@psalm-mutation-free`          | Method: no mutation of any state                          |
-| `@psalm-external-mutation-free` | Method: may mutate `$this`, nothing external              |
-| `@psalm-capabilities a\|b`      | Exact capability set, e.g. `read-props\|read-globals`     |
-| `@psalm-immutable`              | Class: all properties readonly, all methods mutation-free |
-| `@psalm-mutable`                | Class: explicitly not immutable (default)                 |
-
-Static property access needs `read-globals` / `write-globals`, which none of the purity annotations grant: leave methods touching a static cache unannotated.
-
-### Readonly
-
-| Annotation                               | Notes                                    |
-|------------------------------------------|------------------------------------------|
-| `@psalm-readonly` / `@readonly`          | Property only writable in constructor    |
-| `@psalm-allow-private-mutation`          | Readonly but writable in private methods |
-| `@psalm-readonly-allow-private-mutation` | Shorthand for both                       |
-
-### Sealing
-
-| Annotation                  | Notes                                |
-|-----------------------------|--------------------------------------|
-| `@psalm-seal-properties`    | No undeclared `__get`/`__set` access |
-| `@psalm-seal-methods`       | No undeclared `__call` access        |
-| `@psalm-no-seal-properties` | Reverse seal                         |
-| `@psalm-no-seal-methods`    | Reverse seal                         |
-
-### Visibility Overrides
-
-| Annotation                            | Notes                        |
-|---------------------------------------|------------------------------|
-| `@psalm-override-property-visibility` | Override property visibility |
-| `@psalm-override-method-visibility`   | Override method visibility   |
-
-### Class-Level
-
-| Annotation                            | Notes                                         |
-|---------------------------------------|-----------------------------------------------|
-| `@psalm-consistent-constructor`       | All child constructors match signature        |
-| `@psalm-consistent-templates`         | Template params stay consistent in children   |
-| `@psalm-inheritors`                   | Restrict which classes can extend             |
-| `@psalm-require-extends ClassName`    | Trait only usable in subclasses of ClassName  |
-| `@psalm-require-implements Interface` | Trait only usable in implementors             |
-| `@psalm-api` / `@api`                 | Mark as used (suppress unused code detection) |
-| `@psalm-internal Namespace`           | Restrict usage to a namespace                 |
-
-### Generators and Scope
-
-| Annotation               | Notes                                                                                                                                                                                                         |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `@psalm-yield TValue`    | On a class/interface: declares what type a generator receives when yielding this object. Used for Promise/Deferred patterns -- `TValue` must be a `@template` param. Psalm resolves it via template expansion |
-| `@psalm-variadic`        | On a function: marks it as accepting unlimited arguments even without `...` in the signature. Useful for functions that rely on `func_get_args()` internally                                                  |
-| `@psalm-scope-this Type` | On a statement block: overrides the type of `$this` for the enclosed code. Useful for closures bound to other objects at runtime (e.g. `Closure::bind()`, Laravel macros)                                     |
-
-### Stub-Specific
-
-| Annotation             | Notes                                                                                                                                                                                            |
-|------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `@psalm-stub-override` | Safety guard for stubs: asserts that the annotated class/method exists in the original codebase. Psalm throws an error if no original counterpart is found, catching typos and stale stubs early |
-
-### Other
-
-| Annotation            | Notes                                     |
-|-----------------------|-------------------------------------------|
-| `@no-named-arguments` | Disallow named arguments on this function |
-
----
-
-## Taint Analysis Annotations
-
-| Annotation                           | Notes                                                     |
-|--------------------------------------|-----------------------------------------------------------|
-| `@psalm-taint-source TaintType`      | Mark return as taint source (e.g. `html`, `sql`, `shell`) |
-| `@psalm-taint-sink TaintType $param` | Mark param as taint sink                                  |
-| `@psalm-taint-escape TaintType`      | Mark return as escaped/sanitized                          |
-| `@psalm-taint-unescape TaintType`    | Mark return as unescaped                                  |
-| `@psalm-taint-specialize`            | Track taint per-instance or per-call                      |
-| `@psalm-flow ($param) -> return`     | Define explicit taint flow path                           |
-
-Taint kinds: `html`, `has_quotes`, `sql`, `shell`, `file`, `cookie`, `header`, `ldap`, `ssrf`, `xpath`, `sleep`, `extract`, `user_secret`, `system_secret`, `callable`, `eval`, `unserialize`, `include`, `llm_prompt`, plus the aliases `input` / `tainted` / `input_except_sleep` — see `Psalm\Type\TaintKind::TAINT_NAMES`. Arbitrary custom kind names are also accepted (they report as `TaintedCustom`). Full table with attack vectors: [Taint Analysis](taint-analysis.md#taint-kinds).
+| Written | What Psalm does |
+|---|---|
+| `uppercase-string`, `non-empty-uppercase-string` | Plain `string` / `non-empty-string` (unimplemented in Psalm) |
+| `open-resource` | Reserved word but no type: `InvalidDocblock` |
+| `non-empty-countable` | Reserved word Psalm uses internally (from `count()` checks); not writable, `InvalidDocblock` even in `@psalm-assert` |
+| `empty` | `never`, not "empty value" |
+| `self-accessing-callable`, `self-mutating-callable` (and `-Closure`) | Removed in `7.0.0-beta23`; now parse as impure `callable`. Use `callable[read-props]` / `callable[read-props\|write-this-props\|write-refs]` |
+| `impure-callable`, `impure-Closure` | Same as bare `callable` / `Closure` |
+| `object{a: int, ...}` | Unsealed marker silently dropped |
+| `callable(int &$x): void` | `InvalidDocblock`, the whole type is lost |
+| `callable(string $name=): void`, `callable(string... $rest): void` | Uncaught exception, Psalm aborts the run |
