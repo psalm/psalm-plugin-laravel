@@ -238,10 +238,11 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
     /**
      * Returns `'int'` / `'float'` only when the column is one of those (optionally nullable).
      * Mixed numerics, strings, numeric-string, TNumeric, objects → null (defer to stub).
+     * Also classifies the raw column for {@see ModelAggregatePropertyHandler::columnAwareType()}.
      *
      * @psalm-mutation-free
      */
-    private static function numericShape(Union $type): ?string
+    public static function numericShape(Union $type): ?string
     {
         $hasInt = false;
         $hasFloat = false;

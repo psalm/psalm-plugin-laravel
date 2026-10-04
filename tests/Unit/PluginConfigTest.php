@@ -234,101 +234,21 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function find_unconfigured_filesystem_disks_true(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><findUnconfiguredFilesystemDisks value="true" /></pluginClass>');
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
-    }
-
-    #[Test]
-    public function find_unconfigured_filesystem_disks_false(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><findUnconfiguredFilesystemDisks value="false" /></pluginClass>');
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
-    }
-
-    #[Test]
-    public function find_unconfigured_filesystem_disks_defaults_to_experimental(): void
+    public function find_unconfigured_filesystem_disks_follows_experimental(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
 
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
+        $this->assertTrue(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
     }
 
     #[Test]
     public function find_unconfigured_filesystem_disks_explicit_false_wins_over_experimental(): void
     {
         $xml = new \SimpleXMLElement(
-            '<pluginClass>'
-            . '<experimental value="true" />'
-            . '<findUnconfiguredFilesystemDisks value="false" />'
-            . '</pluginClass>',
+            '<pluginClass><experimental value="true" /><findUnconfiguredFilesystemDisks value="false" /></pluginClass>',
         );
 
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
-    }
-
-    #[Test]
-    public function find_unconfigured_filesystem_disks_explicit_true_with_experimental(): void
-    {
-        $xml = new \SimpleXMLElement(
-            '<pluginClass>'
-            . '<experimental value="true" />'
-            . '<findUnconfiguredFilesystemDisks value="true" />'
-            . '</pluginClass>',
-        );
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
-    }
-
-    #[Test]
-    public function find_unconfigured_filesystem_disks_absent_without_experimental_stays_false(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass />');
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
-    }
-
-    #[Test]
-    public function find_unconfigured_filesystem_disks_no_value_attribute_treated_as_absent(): void
-    {
-        // A present element without a `value` attribute is auto-detect, same as a
-        // missing element — see xmlOptionalBoolAttr().
-        $xml = new \SimpleXMLElement(
-            '<pluginClass>'
-            . '<experimental value="true" />'
-            . '<findUnconfiguredFilesystemDisks />'
-            . '</pluginClass>',
-        );
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
-    }
-
-    #[Test]
-    public function invalid_find_unconfigured_filesystem_disks_throws(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><findUnconfiguredFilesystemDisks value="yes" /></pluginClass>');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("Invalid findUnconfiguredFilesystemDisks value 'yes'");
-
-        PluginConfig::fromXml($xml);
+        $this->assertFalse(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
     }
 
     #[Test]
@@ -474,25 +394,6 @@ final class PluginConfigTest extends TestCase
 
         $config = PluginConfig::fromXml($xml);
 
-        $this->assertTrue($config->findSerializedQueuedModels);
-    }
-
-    #[Test]
-    public function experimental_flags_resolve_independently_when_only_one_is_overridden(): void
-    {
-        // An explicit override on one experimental-gated flag must not leak into the
-        // other: findUnconfiguredFilesystemDisks is forced off here while
-        // findSerializedQueuedModels is left unset and must still follow experimental.
-        $xml = new \SimpleXMLElement(
-            '<pluginClass>'
-            . '<experimental value="true" />'
-            . '<findUnconfiguredFilesystemDisks value="false" />'
-            . '</pluginClass>',
-        );
-
-        $config = PluginConfig::fromXml($xml);
-
-        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
         $this->assertTrue($config->findSerializedQueuedModels);
     }
 

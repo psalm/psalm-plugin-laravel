@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler;
@@ -15,6 +16,7 @@ use Symfony\Component\Process\Process;
  * dedicated fixture project rather than a PHPT source file.
  */
 #[CoversClass(UndefinedModelRelationHandler::class)]
+#[Group('subprocess')]
 final class UndefinedModelRelationDefaultsEmissionTest extends TestCase
 {
     #[Test]

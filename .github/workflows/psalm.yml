@@ -2,7 +2,7 @@ name: Psalm
 
 on:
   push:
-    branches: [master]
+    branches: [4.x]
     paths:
       - '**.php'
       - 'psalm*'
@@ -20,7 +20,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Pull requests supersede freely, to save CI minutes on fast pushes. Pushes to master do
+  # Pull requests supersede freely, to save CI minutes on fast pushes. Pushes to 4.x do
   # not: cancelling one loses the Psalm cache generation every later pull request restores.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -43,7 +43,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden the runner (Block all outbound calls except allowlist)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           # No Actions cache hosts here on purpose: in block mode harden-runner resolves the cache
           # blob host itself and appends it. Listing it by hand would mean a broad
@@ -120,7 +120,7 @@ jobs:
           restore-keys: |
             psalm-cache-php${{ env.PHP_VERSION }}-${{ hashFiles('psalm.xml', 'composer.lock') }}-
 
-      # --shepherd only on push: the type-coverage history it feeds is a master-branch series,
+      # --shepherd only on push: the type-coverage history it feeds is a 4.x-branch series,
       # and a pull request run posting into it adds nothing a reviewer reads.
       #
       # The thread counts are read as shell variables rather than interpolated as
@@ -137,17 +137,17 @@ jobs:
       # Split from the restore rather than one combined actions/cache step: a combined step
       # skips its save on a key hit, so a snapshot whose key does not move never rolls forward.
       # Only the default branch writes, tested by name rather than by event: the push trigger
-      # above happens to list master alone, but adding 3.x there would otherwise give it a full
+      # above happens to list 4.x alone, but adding 3.x there would otherwise give it a full
       # second copy per commit. Pull request runs do not store anything under
       # refs/pull/<n>/merge that nothing else can read; restore-keys already lets them fall
-      # back to the newest master snapshot.
+      # back to the newest 4.x snapshot.
       #
       # The implicit success() is load-bearing, do not relax it to !cancelled(). Cache::saveItem()
       # writes an entry's hash sidecar before the value it describes, and getItem() reads that
       # value back through an assertion rather than treating a short read as a miss, so a run
       # killed mid-write (OOM, fatal) leaves an entry that throws on every later read. Keys are
       # immutable and the cache-hit guard refuses to overwrite, so a re-run at that commit cannot
-      # repair it. Skipping the save on a red master costs a stale snapshot until the next green
+      # repair it. Skipping the save on a red 4.x costs a stale snapshot until the next green
       # one; taking it can cost a wedged snapshot that every pull request then restores.
       - name: Save Psalm's cache
         if: ${{ github.ref_name == github.event.repository.default_branch && steps.psalm-cache.outputs.cache-hit != 'true' }}

@@ -175,8 +175,6 @@ final class CastResolver
     /**
      * Framework-shipped Castable classes whose castUsing() returns null on malformed data, so the
      * read type is implicitly nullable regardless of the column's nullability.
-     *
-     * @psalm-external-mutation-free
      */
     private static function resolveFrameworkCast(string $castClass): ?Union
     {

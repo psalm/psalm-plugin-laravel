@@ -18,6 +18,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
@@ -307,7 +308,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * skipped.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function resolveModelFromType(Codebase $codebase, Union $type): ?string
     {
@@ -339,7 +339,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * model as their first generic parameter; a `Model` atomic is the model itself.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function modelFromAtomic(Codebase $codebase, Atomic $atomic): ?string
     {
@@ -371,8 +370,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * $class is $ancestor or a subclass, without autoloading (unlike `\is_a(..., true)` — see class
      * docblock). classExtends() is non-reflexive → identity checked first. All ancestors here
      * (Builder, Relation, Model) are classes, so classExtends() alone suffices, no classImplements().
-     *
-     * @psalm-external-mutation-free
      */
     private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
     {
@@ -398,7 +395,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * them would be a false positive.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function concreteModel(Codebase $codebase, string $fqcn): ?string
     {
@@ -506,10 +502,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             // relation maps to a PHP method, which never contains a space, so this can
             // only ever remove alias syntax, never mask a typo.
             if ($allowsAlias) {
-                $aliasParts = \explode(' ', $name);
-                if (\count($aliasParts) === 3 && \strtolower($aliasParts[1]) === 'as') {
-                    $name = $aliasParts[0];
-                }
+                [$name] = AggregateCallParser::splitAlias($name);
             }
 
             if ($name === '') {

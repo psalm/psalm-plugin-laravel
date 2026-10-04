@@ -37,11 +37,6 @@ extend-ignore-re = [
     # tests/Type/psalm-with-optin-custom-issues.xml — fixture filename
     # ("opt-in" mashed into one word); renaming would churn many test refs.
     "optin",
-    # UnconfiguredFilesystemDisk (#1391): ClosestNameTest and its emission-test/docs
-    # fixtures deliberately typo 'public' (one deletion, one transposition) to exercise
-    # the closest-name suggestion algorithm.
-    "publc",
-    "pubilc",
 ]
 
 [default.extend-identifiers]

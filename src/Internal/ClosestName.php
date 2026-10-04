@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 /**
- * "Did you mean" lookup for diagnostics that reject a name against a known set (disks, routes).
+ * "Did you mean" lookup for diagnostics that reject a name against a known set.
  *
  * @internal
  * @psalm-immutable

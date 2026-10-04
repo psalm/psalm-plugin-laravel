@@ -18,8 +18,8 @@ final class ClosestNameTest extends TestCase
      */
     public static function cases(): iterable
     {
-        yield 'one deletion' => ['publc', ['local', 'public', 's3'], 'public'];
-        yield 'transposition within threshold' => ['pubilc', ['local', 'public'], 'public'];
+        yield 'one deletion' => ['publik', ['local', 'public', 's3'], 'public'];
+        yield 'transposition within threshold' => ['plubic', ['local', 'public'], 'public'];
         yield 'nearest of several close names wins' => ['s4', ['s3', 'sftp'], 's3'];
         yield 'short name, one edit allowed' => ['s', ['s3'], 's3'];
         yield 'too far to read as a typo' => ['s3-old', ['local', 'public', 's3'], null];

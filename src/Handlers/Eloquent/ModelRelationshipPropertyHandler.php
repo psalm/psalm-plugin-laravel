@@ -40,7 +40,6 @@ final class ModelRelationshipPropertyHandler
     /** @var array<string, bool> Cache for hasUserPseudoProperty() keyed by "class::$property" */
     private static array $pseudoPropertyCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$relationExistsCache = [];
@@ -232,8 +231,6 @@ final class ModelRelationshipPropertyHandler
      * Works when the method has explicit @psalm-return or @return with generics.
      *
      * e.g. HasOne<Phone, User> → extracts Phone as the model type
-     *
-     * @psalm-external-mutation-free
      */
     private static function resolveFromGenericParams(Union $methodReturnType): ?Union
     {
@@ -308,8 +305,6 @@ final class ModelRelationshipPropertyHandler
      * Single relations (HasOne, BelongsTo, MorphOne, MorphTo, HasOneThrough) → ?RelatedModel
      * Collection relations (HasMany, BelongsToMany, etc.) → Collection<int, RelatedModel>
      *   — uses the model's custom collection class when registered (e.g. #[CollectedBy])
-     *
-     * @psalm-external-mutation-free
      */
     private static function buildPropertyType(string $relationClassName, Union $modelType): Union
     {
@@ -339,8 +334,6 @@ final class ModelRelationshipPropertyHandler
     /**
      * Check whether the user has declared a @property PHPDoc for this property.
      * If so, we defer to their declaration instead of providing a relationship type.
-     *
-     * @psalm-external-mutation-free
      */
     private static function hasUserPseudoProperty(
         Codebase $codebase,
@@ -425,8 +418,6 @@ final class ModelRelationshipPropertyHandler
      * $property_name). The parser is itself own-class (it resolves a factory call only in the
      * receiver's own body), so the map matches it name-for-name; an inherited / trait-hosted relation
      * is absent from both, and this handler's getMethodReturnType tiers cover those.
-     *
-     * @psalm-external-mutation-free
      */
     private static function registryRelation(string $fq_classlike_name, string $property_name): ?RelationInfo
     {

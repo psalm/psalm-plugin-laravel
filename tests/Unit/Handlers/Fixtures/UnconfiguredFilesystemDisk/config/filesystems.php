@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-// Deliberately minimal: only the disks the fixture references as "known".
 return [
     'default' => 'local',
 
@@ -15,17 +14,10 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => __DIR__ . '/../storage/app/public',
-            'url' => '/storage',
-            'visibility' => 'public',
         ],
 
-        'archive' => [
-            'driver' => 'local',
-            'root' => __DIR__ . '/../storage/archive',
-        ],
-
-        // Nested group: Laravel resolves disk('tenant.assets') through its dotted
-        // config lookup (FilesystemManager::getConfig() reads "filesystems.disks.{$name}").
+        // Nested group, no `driver` of its own: Laravel reaches `tenant.assets` through its dotted
+        // config lookup, but `disk('tenant')` throws.
         'tenant' => [
             'assets' => [
                 'driver' => 'local',

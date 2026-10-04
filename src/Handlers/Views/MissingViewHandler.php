@@ -83,8 +83,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * Return to the disabled state before each application boot. The narrowed and
      * spread unions are immutable and independent of the application, so they are
      * deliberately retained.
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -98,7 +96,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
     /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
      * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
-     * @psalm-external-mutation-free
      */
     public static function init(array $viewPaths, array $extensions = ['blade.php', 'php']): void
     {
@@ -119,7 +116,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * binding. Null disables the narrowing and the stub's contract fallback applies.
      *
      * @param class-string|null $class
-     * @psalm-external-mutation-free
      */
     public static function initViewFactory(?string $class): void
     {
@@ -197,7 +193,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      *   may override `viewInstance()` to construct a different implementation.
      *
      * @return class-string|null
-     * @psalm-external-mutation-free
      */
     private static function narrowedHelperReturn(int $argCount): ?string
     {
@@ -210,7 +205,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
 
     /**
      * @param class-string $class
-     * @psalm-external-mutation-free
      */
     private static function narrowedUnion(string $class): Union
     {
@@ -221,8 +215,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * Sound return for a leading-spread view() call of unknown cardinality: the
      * union of both func_num_args() branches, on the contracts so no concrete-only
      * call is falsely accepted regardless of which branch runs.
-     *
-     * @psalm-external-mutation-free
      */
     private static function spreadReturn(): Union
     {
@@ -239,7 +231,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * facade so an app that trims its alias registry still gets the diagnostic).
      *
      * @inheritDoc
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array

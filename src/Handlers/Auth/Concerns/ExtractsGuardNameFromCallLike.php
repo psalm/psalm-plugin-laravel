@@ -6,10 +6,13 @@ namespace Psalm\LaravelPlugin\Handlers\Auth\Concerns;
 
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\CallLike;
+use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\ConstFetch;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
-use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
 use Psalm\StatementsSource;
+use Psalm\Type\Atomic\TLiteralString;
 
 trait ExtractsGuardNameFromCallLike
 {
@@ -39,7 +42,12 @@ trait ExtractsGuardNameFromCallLike
      * Resolves `guard(Guards::Admin)` for a string-backed enum case to its backing value
      * ('admin'), the same guard name a literal `guard('admin')` resolves to.
      *
-     * AST-based for the facade form (`Auth::guard(...)`); see {@see ClassConstStringResolver}.
+     * Reads the argument's AST directly (a `ClassConstFetch`) rather than its inferred
+     * Psalm type: for the facade form (`Auth::guard(...)`) `guard` only exists as a parent
+     * `@method` pseudo-declaration, and — unlike a real method call — Psalm has not yet
+     * populated the node type provider for the argument by the time this return-type
+     * provider runs, so `$source->getNodeTypeProvider()->getType(...)` comes back null
+     * there. The AST shape is available regardless of that ordering.
      *
      * Deliberately declines (returns null) for:
      *  - int-backed enums — Laravel guard names are always strings.
@@ -53,6 +61,42 @@ trait ExtractsGuardNameFromCallLike
      */
     private static function getGuardNameFromEnumCase(Expr $expr, StatementsSource $source): ?string
     {
-        return ClassConstStringResolver::backedEnumCase($expr, $source);
+        if (
+            !$expr instanceof ClassConstFetch
+            || !$expr->class instanceof Name
+            || !$expr->name instanceof Identifier
+            || $expr->class->isSpecialClassName()
+        ) {
+            return null;
+        }
+
+        /** @var string|null $fqcn */
+        $fqcn = $expr->class->getAttribute('resolvedName');
+        if (!\is_string($fqcn)) {
+            $fqcn = $expr->class->toString();
+        }
+
+        try {
+            $storage = $source->getCodebase()->classlike_storage_provider->get(\strtolower($fqcn));
+        } catch (\InvalidArgumentException) {
+            return null; // unresolvable enum class
+        }
+
+        $case = $storage->enum_cases[$expr->name->name] ?? null;
+        if ($case === null) {
+            return null; // not an enum case (e.g. a plain class constant) or unknown case
+        }
+
+        try {
+            $value = $case->getValue($source->getCodebase()->classlikes);
+        } catch (\UnexpectedValueException) {
+            return null; // unresolvable case value (deferred constant expression)
+        }
+
+        // getValue() answers TLiteralInt for an int-backed case and null for a well-formed pure
+        // one, so this single check declines both without a separate enum_type gate. It does
+        // answer TLiteralString for a pure enum whose case illegally carries a value, but PHP
+        // refuses to compile that and Psalm flags the declaration itself.
+        return $value instanceof TLiteralString ? $value->value : null;
     }
 }

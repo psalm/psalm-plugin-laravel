@@ -171,13 +171,6 @@ final class ConsoleClosureScopeHandler implements
         return null;
     }
 
-    /**
-     * `setFQCLN()` is the only side effect, and Psalm models it as
-     * external-mutation-free (it touches the analyzer's own `fake_this_class`),
-     * so the method analyses as pure even though it steers later analysis.
-     *
-     * @psalm-external-mutation-free
-     */
     #[\Override]
     public static function beforeStatementAnalysis(BeforeStatementAnalysisEvent $event): ?bool
     {
@@ -245,8 +238,6 @@ final class ConsoleClosureScopeHandler implements
      * closure node in the next file (ids are unique only among live objects).
      * Resetting at the *start* (rather than end) keeps it correct even if a prior
      * file's analysis threw before any end-of-file hook could run.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void
@@ -293,7 +284,6 @@ final class ConsoleClosureScopeHandler implements
         return $callback;
     }
 
-    /** @psalm-external-mutation-free */
     private static function resolvesToArtisanFacade(string $className, Codebase $codebase): bool
     {
         if ($className === self::ARTISAN_FACADE) {

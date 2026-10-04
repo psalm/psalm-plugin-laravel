@@ -8,7 +8,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Filesystem\StorageHandler;
-use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
 use Symfony\Component\Process\Process;
 
 /**
@@ -16,15 +15,13 @@ use Symfony\Component\Process\Process;
  * `UnconfiguredFilesystemDiskTest.phpt` type test can only assert silence: the psalm-tester harness boots
  * the Testbench fallback, which leaves the rule disarmed. This forks a real `vendor/bin/psalm` (~6s)
  * against a fixture with its own `bootstrap/app.php` and `config/filesystems.php`, so the rule arms
- * with the fixture's disks and every name shape (literal, enum case, class constant) and receiver
- * form (facade, root `\Storage` alias, DI manager) is observed firing, or declining, for real.
+ * with the fixture's disks and each reported and declined call shape is observed for real.
  */
 #[CoversClass(StorageHandler::class)]
-#[CoversClass(ClassConstStringResolver::class)]
 final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
 {
     #[Test]
-    public function it_reports_unconfigured_disk_names_across_name_shapes_and_receivers(): void
+    public function it_reports_only_unconfigured_disk_names(): void
     {
         $projectRoot = \dirname(__DIR__, 3);
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
@@ -44,38 +41,24 @@ final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
 
         $this->assertIsArray($decoded, "Psalm did not return a JSON array.\nstdout:\n{$stdout}\nstderr:\n{$process->getErrorOutput()}");
 
-        $reported = [];
         $messages = [];
         foreach ($decoded as $finding) {
             if (\is_array($finding) && ($finding['type'] ?? null) === 'UnconfiguredFilesystemDisk') {
-                $message = (string) $finding['message'];
-                $messages[] = $message;
-                $reported[] = \preg_match("/^Disk '([^']*)'/", $message, $m) === 1 ? $m[1] : $message;
+                $messages[] = (string) $finding['message'];
             }
         }
 
-        // Exact multiset: proves each shape fires AND that the known names, `static::`, the DI
-        // manager, the int-backed enum, falsy and dotted names, and dynamic/null/empty names stay
-        // silent. Order-insensitive because the fixture spans two files.
+        // Exact set: each flagged shape fires; the configured disk, falsy, dotted, dynamic and
+        // DI-manager calls stay silent.
         $this->assertEqualsCanonicalizing(
             [
-                's3-old',          // self::OLD
-                'missing-literal', // Storage::disk('...')
-                'missing-alias',   // \Storage::disk('...')
-                'archive-legacy',  // string-backed enum case
-                'backups',         // pure enum: enum_value() yields the case name
-                'archive-legacy',  // \Storage::drive() with an enum case
-                's3-old',          // DiskNames::OLD
-                'archive-copy',    // constant expression resolved by Psalm
-                's3-old',          // DiskUsage: Storage::disk('s3-old')
-                'publc',           // DiskUsage: one edit from 'public'
-                'tenant',          // DiskUsage: nested group, no driver
+                "Disk 's3-old' is not configured in filesystems.disks",
+                "Disk 's3-old' is not configured in filesystems.disks",
+                "Disk 'missing-alias' is not configured in filesystems.disks",
+                "Disk 'publik' is not configured in filesystems.disks, did you mean 'public'?",
+                "Disk 'tenant' is not configured in filesystems.disks",
             ],
-            $reported,
+            $messages,
         );
-
-        // A close name gets a suggestion; a distant one gets neither a suggestion nor a disk list.
-        $this->assertContains("Disk 'publc' is not configured in filesystems.disks, did you mean 'public'?", $messages);
-        $this->assertContains("Disk 'missing-literal' is not configured in filesystems.disks", $messages);
     }
 }

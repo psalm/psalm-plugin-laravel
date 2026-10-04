@@ -124,6 +124,8 @@ When a **class stub and a trait stub** both declare the same method, Psalm creat
 
 Registration order (`Plugin::registerStubs()`): all `common` files, then version dirs ascending (`array_merge`). Since type annotations are last-loaded-wins, this order (not alphabetical path) decides overrides.
 
+A stub that re-declares a class merges into the class's vendor file only when Psalm scans the vendor file first. Psalm records a scanned stub as the class's file and then never queues the vendor file. A class that nothing names before stubs load therefore ends up with only its stubbed members (#1616, upstream vimeo/psalm#12075). `Plugin::registerStubs()` queues every class a plugin stub declares (`StubFileFinder::declaredClassLikes()`) during plugin init, which runs before Psalm's main scan, so a partial stub can rely on its unstubbed vendor members resolving.
+
 ### Version-specific overrides (conditional stub loading)
 
 A file in a version dir (`stubs/13.16.0/...`, loaded when installed Laravel `>=` that version) overrides the same-named `common` file **per method**. Multiple version dirs cascade ascending: per method, the highest dir `<=` the installed version wins; a method it doesn't redeclare falls through to lower dirs, then `common`. (Verified: with `common` + `12.6.0` + `12.8.0` all declaring `MessageBag::has`, `12.8.0` won; `missing()` declared only in `12.6.0` survived; `isEmpty()` came from `common`.)
@@ -230,6 +232,8 @@ There are two ways to register:
 Every class registration keeps the matching `require_once` beside
 `registerHooksFromClass()`.
 
+`ModelAggregateLoadHandler` (`AfterExpressionAnalysisInterface`) is the reference for flow facts: after a literal `$m->loadCount('x')` or `$m = M::withCount('x')->firstOrFail()` it writes `$context->vars_in_scope['$m->x_count']`, which Psalm's property fetch reads before any property provider, and it overrides the node type of a directly fetched chain (`M::withCount('x')->firstOrFail()->x_count`). Its only state is the set of aliases it recorded per variable id, so `$m->refresh()` can drop those facts without touching user narrowings; `reset()` clears it from `Plugin::resetInvocationState()`. It gates on the node class and method name before touching the codebase and declines (`null`) on anything not proven. See [Architecture Decisions](decisions.md), "Aggregate accessor proof".
+
 #### Exempting one call site from a stub's taint sink
 
 Narrow the finding at emission time, not in the taint graph.
@@ -247,7 +251,7 @@ cache. The hook fires for every issue in the run, so bail on the issue class fir
 and only then do anything expensive. Every uncertain path returns `null` and keeps
 the finding.
 
-See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
+See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Syntax](types.md), [Docblock Annotations](annotations.md) and [Purity and Capabilities](purity.md) for Psalm references, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 
 ## External resources
 

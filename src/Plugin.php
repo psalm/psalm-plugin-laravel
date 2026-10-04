@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin;
 use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
-use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -94,7 +93,7 @@ final class Plugin implements PluginEntryPointInterface
             }
 
             if ($pluginConfig->findUnconfiguredFilesystemDisks) {
-                $this->initUnconfiguredFilesystemDiskHandler($output);
+                Handlers\Filesystem\StorageHandler::init($output);
             }
 
             // Always called — provides type narrowing for the view() helper regardless
@@ -186,6 +185,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\CustomCollectionHandler::reset();
         Handlers\Eloquent\FactoryModelBindingHandler::reset();
         Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
+        Handlers\Eloquent\ModelAggregateLoadHandler::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
         Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
         Handlers\Eloquent\ModelPropertyAccessorHandler::reset();
@@ -232,7 +232,38 @@ final class Plugin implements PluginEntryPointInterface
 
         AliasStubProvider::register($registration, self::getAliasStubLocation($pluginConfig));
 
-        CarbonStubProvider::register($registration, $output);
+        $carbonStubs = CarbonStubProvider::register($registration, $output);
+
+        // The alias stub stays out: its classes exist only as runtime class_alias() targets, and
+        // queueing them would let Psalm's reflection fallback autoload the alias.
+        $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
+    }
+
+    /**
+     * Workaround for #1616 / vimeo/psalm#12075 (reproduces on Psalm 6 and 7); remove once Psalm
+     * merges stubs order-independently. Scanning a stub records it as the file of every class it
+     * declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
+     * file. A stubbed class that nothing queues during the main scan (e.g. reached only through
+     * `app('events')` narrowing) then holds only its stubbed members, and with `__call` every
+     * other method silently resolves to `mixed`.
+     *
+     * Plugins initialize before Psalm's main scan and stubs load after it, so queueing here gets
+     * the vendor file scanned first and the stub merges into it. `store_failure: false`: a
+     * stubbed class absent from vendor must not be recorded as missing before its stub declares it.
+     *
+     * @param list<string> $stubs
+     */
+    private function queueStubbedClassesForScanning(RegistrationInterface $registration, array $stubs): void
+    {
+        if (!$registration instanceof \Psalm\PluginRegistrationSocket) {
+            return;
+        }
+
+        foreach ($stubs as $stubFilePath) {
+            foreach (StubFileFinder::declaredClassLikes($stubFilePath) as $classLike) {
+                $registration->codebase->queueClassLikeForScanning($classLike, store_failure: false);
+            }
+        }
     }
 
     /**
@@ -421,6 +452,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderAggregateHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderAggregateHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAggregateLoadHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelAggregateLoadHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\CustomCollectionHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectHandler.php';
@@ -815,76 +848,6 @@ final class Plugin implements PluginEntryPointInterface
     }
 
     /**
-     * Read `filesystems.disks` once from the booted app and arm StorageHandler's
-     * UnconfiguredFilesystemDisk diagnostic with the configured disk names.
-     *
-     * Restricted to a real `bootstrap/app.php` boot (ApplicationProvider::getBootMode()
-     * === 'bootstrap'): the Testbench package-mode fallback boots Testbench's own bundled
-     * skeleton config, not the analysed project's, so flagging disk names against that
-     * config would be pure noise rather than project truth. A degraded boot can still
-     * leave the mode at 'bootstrap' with an incomplete config load, so a recorded
-     * bootstrap error also disarms the diagnostic and the disk list is required to be
-     * non-empty before it is armed.
-     */
-    private function initUnconfiguredFilesystemDiskHandler(\Psalm\Progress\Progress $output): void
-    {
-        if (ApplicationProvider::getBootMode() !== 'bootstrap') {
-            return;
-        }
-
-        // A non-empty disk list does not prove the boot completed: a provider that threw
-        // after config loaded may have skipped merging additional disks, so arming here
-        // would flag those disks as unknown.
-        if (ApplicationProvider::getBootstrapError() instanceof \Throwable) {
-            $output->warning(
-                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but the application boot was '
-                . 'degraded. The UnconfiguredFilesystemDisk check will be skipped.',
-            );
-
-            return;
-        }
-
-        try {
-            $configured = ConfigRepositoryProvider::get()->get('filesystems.disks');
-        } catch (\Throwable $throwable) {
-            $output->warning(
-                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but reading filesystems.disks '
-                . "threw: {$throwable->getMessage()}. The UnconfiguredFilesystemDisk check will be skipped.",
-            );
-
-            return;
-        }
-
-        if (!\is_array($configured) || $configured === []) {
-            $output->warning(
-                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks resolved '
-                . 'empty (possibly a degraded boot). The UnconfiguredFilesystemDisk check will be skipped.',
-            );
-
-            return;
-        }
-
-        // A key without a `driver` is a nested group (`disks.tenant.assets`), not a disk:
-        // `disk('tenant')` throws at runtime just like an absent key, and must not be suggested.
-        $withDriver = \array_filter(
-            $configured,
-            static fn(mixed $diskConfig): bool => \is_array($diskConfig) && isset($diskConfig['driver']),
-        );
-        $disks = \array_map(static fn(int|string $name): string => (string) $name, \array_keys($withDriver));
-
-        if ($disks === []) {
-            $output->warning(
-                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks has no '
-                . 'entry with a driver. The UnconfiguredFilesystemDisk check will be skipped.',
-            );
-
-            return;
-        }
-
-        Handlers\Filesystem\StorageHandler::init($disks);
-    }
-
-    /**
      * Resolve the booted app's view factory class and hand it to MissingViewHandler
      * so the view() helper can narrow past the stub's contract fallback.
      *
@@ -893,8 +856,6 @@ final class Plugin implements PluginEntryPointInterface
      * process. Null falls back to the stub's contract type. Unlike
      * initMissingViewHandler(), no warning is emitted: this is bonus type narrowing,
      * not an opt-in diagnostic.
-     *
-     * @psalm-external-mutation-free
      */
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {

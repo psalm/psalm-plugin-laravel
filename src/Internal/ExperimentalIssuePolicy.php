@@ -15,7 +15,6 @@ use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
  * Psalm's normal issueHandlers configuration.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class ExperimentalIssuePolicy
 {
@@ -25,7 +24,6 @@ final class ExperimentalIssuePolicy
         UndefinedModelRelation::class,
     ];
 
-    /** @psalm-external-mutation-free */
     public static function apply(bool $enforced): void
     {
         DefaultIssueLevels::apply(

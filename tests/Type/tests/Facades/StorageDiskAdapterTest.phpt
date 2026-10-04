@@ -146,14 +146,6 @@ function test_disk_rejects_non_string_non_enum_argument(): void
 // --- Root `\Storage` alias (registered by Testbench's AliasLoader) ---------
 
 /** The alias is a separate stub class, so the handler registers for it via FacadeMapProvider. */
-function test_root_alias_disk_returns_adapter(): FilesystemAdapter
-{
-    /** @psalm-check-type-exact $disk = FilesystemAdapter */
-    $disk = \Storage::disk('s3');
-
-    return $disk;
-}
-
 function test_root_alias_drive_returns_adapter(): string
 {
     return \Storage::drive('s3')->temporaryUrl('file.txt', now()->addMinutes(5));

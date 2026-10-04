@@ -10,7 +10,8 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Internal\Ast\ClassConstStringResolver;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 use Psalm\LaravelPlugin\Internal\ClosestName;
 use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
@@ -18,6 +19,7 @@ use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Progress\Progress;
 use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter as Param;
 use Psalm\Type;
@@ -113,36 +115,75 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static ?array $facade_disk_params = null;
 
-    /** Guards the {@see UnconfiguredFilesystemDisk} diagnostic — off unless {@see self::init()} ran. */
-    private static bool $enabled = false;
-
     /**
-     * Disk names from `filesystems.disks` that carry a `driver`, used for membership and the
-     * "did you mean" suggestion. Small enough in real apps that a set is not worth building.
+     * Disk names from `filesystems.disks` that carry a `driver`; null leaves the
+     * {@see UnconfiguredFilesystemDisk} diagnostic off. A short list, so no set is built.
      *
-     * @var list<string>
+     * @var list<string>|null
      */
-    private static array $disks = [];
+    private static ?array $disks = null;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$adapter_return_type = null;
         self::$facade_disk_params = null;
-        self::$enabled = false;
-        self::$disks = [];
+        self::$disks = null;
     }
 
     /**
-     * Arm the {@see UnconfiguredFilesystemDisk} diagnostic with the booted app's configured disk names.
+     * Arm the {@see UnconfiguredFilesystemDisk} diagnostic with the booted app's disk names.
      *
-     * @param list<string> $disks
-     * @psalm-external-mutation-free
+     * Stays off unless the project's own `bootstrap/app.php` booted cleanly: the Testbench fallback
+     * carries only its own `local, public, s3`, which would flag every project-specific disk.
      */
-    public static function init(array $disks): void
+    public static function init(Progress $output): void
     {
-        self::$enabled = true;
+        if (!ApplicationProvider::isProjectBootTrusted()) {
+            return;
+        }
+
+        try {
+            $disks = self::namesWithDriver(ConfigRepositoryProvider::get()->get('filesystems.disks'));
+        } catch (\Throwable $throwable) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but reading filesystems.disks '
+                . "threw: {$throwable->getMessage()}. The UnconfiguredFilesystemDisk check will be skipped.",
+            );
+
+            return;
+        }
+
+        if ($disks === []) {
+            $output->warning(
+                'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks has no '
+                . 'entry with a driver. The UnconfiguredFilesystemDisk check will be skipped.',
+            );
+
+            return;
+        }
+
         self::$disks = $disks;
+    }
+
+    /**
+     * A key without a `driver` is a nested group (`disks.tenant.assets`), not a disk:
+     * `disk('tenant')` throws at runtime just like an absent key.
+     *
+     * @return list<string>
+     * @psalm-pure
+     */
+    private static function namesWithDriver(mixed $configured): array
+    {
+        if (!\is_array($configured)) {
+            return [];
+        }
+
+        $withDriver = \array_filter(
+            $configured,
+            static fn(mixed $diskConfig): bool => \is_array($diskConfig) && isset($diskConfig['driver']),
+        );
+
+        return \array_map(\strval(...), \array_keys($withDriver));
     }
 
     /**
@@ -155,7 +196,6 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      *   lists aliases the booted app's AliasLoader actually registers.
      *
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
@@ -174,10 +214,6 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      * the configured driver and a dynamic `disk($name)` narrows just as a literal
      * `disk('s3')` does.
      *
-     * Not `@psalm-external-mutation-free`: {@see self::checkDiskExists()} calls
-     * `IssueBuffer::accepts()`, impure like {@see \Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler::getMethodReturnType()}'s
-     * `checkViewExists()`.
-     *
      * @inheritDoc
      */
     #[\Override]
@@ -187,17 +223,14 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             return null;
         }
 
-        // Diagnostic is facade-only (the `Storage` facade and its root aliases, where `disk()` is a
-        // `@method` pseudo-method): a DI-injected manager may be a userland FilesystemManager
-        // subclass with its own disk resolution (an overridden getConfig() resolving
-        // tenant-specific disks, for example), and this base-class provider also fires for
-        // subclass receivers. Checking those against the booted app's global disk names would be
-        // a false positive. The facade always resolves the app's own manager.
+        // Facade-only (where `disk()` is a `@method` pseudo-method): a DI-injected manager may be a
+        // userland FilesystemManager subclass resolving disks its own way (an overridden getConfig()),
+        // and this provider also fires for subclass receivers. The facade always resolves the app's own manager.
         if (
-            self::$enabled
+            self::$disks !== null
             && !self::isRealMethod($event->getSource()->getCodebase(), $event->getFqClasslikeName(), $event->getMethodNameLowercase())
         ) {
-            self::checkDiskExists($event->getCallArgs(), $event->getSource(), $event->getCodeLocation());
+            self::checkDiskExists(self::$disks, $event->getCallArgs(), $event->getSource(), $event->getCodeLocation());
         }
 
         return self::$adapter_return_type ??= new Type\Union([
@@ -206,48 +239,31 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
     }
 
     /**
-     * Flag `disk('s3-old')` / `drive('s3-old')` when the name is not a key in `filesystems.disks`.
-     * The name is a string literal, an enum case (what `enum_value()` yields: backing value, or case
-     * name of a pure enum; Laravel 12.21+ accepts enums here), or a class constant with a single string
-     * literal type. Laravel's `FilesystemManager::resolve()` throws a hard
-     * `InvalidArgumentException` for an unconfigured disk — this is not a silent fallback to
-     * `local`, so an unknown name is an availability bug, not a wrong write target.
+     * Flag `disk('s3-old')` / `drive('s3-old')` when a string-literal name is not a configured disk.
+     * Laravel's `FilesystemManager::resolve()` throws a hard `InvalidArgumentException` for it (no
+     * silent fallback to `local`), so the failure mode is availability, not a wrong write target.
      *
+     * @param list<string> $disks
      * @param list<Arg> $callArgs
      */
-    private static function checkDiskExists(array $callArgs, StatementsSource $source, CodeLocation $codeLocation): void
+    private static function checkDiskExists(array $disks, array $callArgs, StatementsSource $source, CodeLocation $codeLocation): void
     {
-        if ($callArgs === []) {
+        $name = $callArgs[0]->value ?? null;
+
+        if (!$name instanceof String_) {
             return;
         }
 
-        $value = $callArgs[0]->value;
+        $diskName = $name->value;
 
-        $diskName = $value instanceof String_
-            ? $value->value
-            : ClassConstStringResolver::enumValueOrConstant($value, $source);
-
-        // Dynamic/null/unresolvable names answer null. Falsy names are skipped too:
-        // `enum_value($name) ?: $this->getDefaultDriver()` sends both '' and '0' to the default
-        // disk at runtime, not to a lookup failure.
-        if (in_array($diskName, [null, '', '0'], true)) {
+        // '' and '0' are falsy: `enum_value($name) ?: $this->getDefaultDriver()` sends them to the
+        // default disk. Dotted names reach nested config groups (`disks.tenant.assets`) through
+        // Laravel's dotted config lookup; `$disks` holds top-level keys only.
+        if ($diskName === '' || $diskName === '0' || \str_contains($diskName, '.') || \in_array($diskName, $disks, true)) {
             return;
         }
 
-        // Dotted names resolve through Laravel's dotted config lookup
-        // (`config["filesystems.disks.{$name}"]`), reaching nested groups like
-        // `disks.tenant.assets`. The armed list holds top-level keys only, so dotted
-        // names are skipped rather than guessed at (accepted detection gap).
-        if (\str_contains($diskName, '.')) {
-            return;
-        }
-
-        if (\in_array($diskName, self::$disks, true)) {
-            return;
-        }
-
-        // No list of configured disks: it repeats on every finding and grows with the app.
-        $suggestion = ClosestName::find($diskName, self::$disks);
+        $suggestion = ClosestName::find($diskName, $disks);
         $hint = $suggestion === null ? '' : ", did you mean '{$suggestion}'?";
 
         IssueBuffer::accepts(

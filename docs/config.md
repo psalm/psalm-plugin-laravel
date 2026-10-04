@@ -174,9 +174,9 @@ See [MissingView](issues/MissingView.md) for details.
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnconfiguredFilesystemDisks />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
 
-When enabled, the plugin checks that disk names passed to `Storage::disk()` / `Storage::drive()` (string literals, enum cases, and class constants) are present in `filesystems.disks`. An unconfigured disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local`, so the failure mode is availability, not a wrong write target.
+When enabled, the plugin checks that string-literal disk names passed to `Storage::disk()` / `Storage::drive()` are present in `filesystems.disks`. An unconfigured disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local`, so the failure mode is availability, not a wrong write target.
 
-Only calls through the `Storage` facade are checked (an injected `FilesystemManager` may be a userland subclass with its own disk resolution), and only string literal disk names are validated — dynamic, enum, `null`, falsy (`''`, `'0'`), and dotted (nested-group) names are skipped. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve cleanly; it stays off under the Testbench package-mode fallback and after a degraded boot.
+Only calls through the `Storage` facade (and its root `\Storage` alias) are checked (an injected `FilesystemManager` may be a userland subclass with its own disk resolution). Dynamic, `null`, falsy (`''`, `'0'`), and dotted (nested-group) names are skipped. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve cleanly; it stays off under the Testbench package-mode fallback and after a degraded boot.
 
 See [UnconfiguredFilesystemDisk](issues/UnconfiguredFilesystemDisk.md) for details.
 
