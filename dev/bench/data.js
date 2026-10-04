@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791134800078,
+  "lastUpdate": 1791136721091,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12030,6 +12030,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 20.92,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "beb310ff0d26aa211edad2f1a8b395a82d4c06d7",
+          "message": "Fix scope params hand-off leaking into later same-named `Builder` calls (#1643)\n\n* fix(eloquent): skip scope params hand-off for stub-declared Builder methods\n\nFor a scope colliding with a method declared on the Eloquent Builder stub\n(scopeCount vs count), Psalm checks the call's args before invoking the\nreturn-type provider, so the $pendingScopeModel entry written by the\nproducer was never consumed by that call and shadowed the params of the\nnext same-named call (InvalidNamedArgument on count(columns: ...)).\n\nThe producer now writes the hand-off only when Eloquent\\Builder storage\ndoes not declare the method; the scope return type is unchanged.\n\nFixes #1640\n\n* fix(eloquent): keep scope hand-off for non-public Builder method collisions #1640\n\nisStorageDeclaredBuilderMethod() now checks PUBLIC visibility, not just\ndeclaration. Protected/private Builder methods are inaccessible from\noutside, so Psalm routes them to __call (MissingMethodCallHandler) where\nthe return-type provider runs BEFORE checkMethodArgs — matching the\nordering for mixin-forwarded methods.\n\nFixes scopeEnforceOrderBy() colliding with protected Builder::enforceOrderBy():\nthe scope params are now correctly checked instead of silently skipped.",
+          "timestamp": "2026-10-04T19:55:18+02:00",
+          "tree_id": "0ce35ebf0c2015e7fea3c917f71384d9191b2909",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/beb310ff0d26aa211edad2f1a8b395a82d4c06d7"
+        },
+        "date": 1791136719780,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.53,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
