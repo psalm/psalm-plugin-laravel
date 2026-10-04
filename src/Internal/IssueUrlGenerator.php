@@ -88,6 +88,7 @@ final class IssueUrlGenerator
             '- findMissingTranslations: ' . self::formatBool($pluginConfig->findMissingTranslations),
             '- findMissingViews: ' . self::formatBool($pluginConfig->findMissingViews),
             '- findUnconfiguredFilesystemDisks: ' . self::formatBool($pluginConfig->findUnconfiguredFilesystemDisks),
+            '- findUnregisteredRouteNames: ' . self::formatBool($pluginConfig->findUnregisteredRouteNames),
             '- findSerializedQueuedModels: ' . self::formatBool($pluginConfig->findSerializedQueuedModels),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
             '- findPromptInjection: ' . self::formatNullableBool($pluginConfig->findPromptInjection),

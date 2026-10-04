@@ -102,9 +102,9 @@ final class ApplicationProvider
     }
 
     /**
-     * True only when the analysed project's own `bootstrap/app.php` booted without a recorded error.
-     * Opt-in rules that compare names against the booted app's config must not run on the Testbench
-     * fallback (its skeleton is not the project) or after a swallowed bootstrap error (partial state).
+     * True only when the analysed project's own bootstrap/app.php booted cleanly. Opt-in rules that
+     * compare names against the booted app's config/routes must not run on the Testbench fallback
+     * (its skeleton is not the project) or after a swallowed bootstrap error (partial state).
      */
     public static function isProjectBootTrusted(): bool
     {
