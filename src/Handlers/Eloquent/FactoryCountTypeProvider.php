@@ -15,6 +15,7 @@ use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -152,6 +153,16 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
         }
 
         foreach ($type->getAtomicTypes() as $atomic) {
+            // TModel inside a generic Factory subclass (`@extends Factory<TModel>`) is kept as
+            // the template, so the subclass's own create()/make() return Collection<int, TModel>.
+            if ($atomic instanceof TTemplateParam) {
+                if (!self::isModelType($atomic->as, $codebase)) {
+                    return false;
+                }
+
+                continue;
+            }
+
             if (!$atomic instanceof TNamedObject) {
                 return false;
             }
