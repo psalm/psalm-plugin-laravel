@@ -92,14 +92,14 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
 
         yield 'min int' => ['min', Type::getInt(), 'int|null'];
         yield 'max unsigned int' => ['max', $unsignedInt, 'int<0, max>|null'];
-        // The schema maps DECIMAL to float and PDO returns DECIMAL as a string.
-        yield 'min float' => ['min', Type::getFloat(), 'float|null|numeric-string'];
+        // The schema maps DECIMAL to float; PDO returns it as a string, and SQLite as int when integral.
+        yield 'min float' => ['min', Type::getFloat(), 'float|int|null|numeric-string'];
         yield 'max string (datetime, varchar)' => ['max', Type::getString(), 'null|string'];
         yield 'min bool column keeps the fallback' => ['min', Type::getBool(), 'null|string'];
         yield 'max unresolvable' => ['max', null, 'null|string'];
 
         yield 'sum int' => ['sum', Type::getInt(), 'int|null|numeric-string'];
-        yield 'sum float' => ['sum', Type::getFloat(), 'float|null|numeric-string'];
+        yield 'sum float' => ['sum', Type::getFloat(), 'float|int|null|numeric-string'];
         yield 'sum string column' => ['sum', Type::getString(), 'float|int|null|numeric-string'];
         yield 'sum unresolvable' => ['sum', null, 'float|int|null|numeric-string'];
 

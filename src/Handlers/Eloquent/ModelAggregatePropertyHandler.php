@@ -55,14 +55,14 @@ use Psalm\Type\Union;
  * min/max/sum/avg are column-aware: the aggregated column of the RELATED model is resolved from the
  * migration schema ONLY, never casts or `@property` (Laravel does not cast aggregate aliases except
  * `exists`, so a datetime column stays a string). The schema maps DECIMAL to float, but PDO returns
- * DECIMAL as a string (and MySQL's SUM/AVG over exact values is DECIMAL), so every float cell also
- * admits numeric-string:
+ * DECIMAL as a string (and MySQL's SUM/AVG over exact values is DECIMAL) and SQLite returns integral
+ * NUMERIC values as int, so min/max/sum over a float column also admit int and numeric-string:
  *
- * | Column | min / max                 | sum                     | avg                       |
- * |--------|---------------------------|-------------------------|---------------------------|
- * | int    | the int type|null         | int|numeric-string|null  | float|numeric-string|null   |
- * | float  | float|numeric-string|null | float|numeric-string|null | float|numeric-string|null   |
- * | other  | string|null               | int|float|numeric-string|null | float|numeric-string|null |
+ * | Column | min / max                    | sum                          | avg                     |
+ * |--------|------------------------------|------------------------------|-------------------------|
+ * | int    | the int type|null            | int|numeric-string|null       | float|numeric-string|null |
+ * | float  | int|float|numeric-string|null | int|float|numeric-string|null | float|numeric-string|null |
+ * | other  | string|null                  | int|float|numeric-string|null | float|numeric-string|null |
  *
  * @see https://laravel.com/docs/eloquent-relationships#other-aggregate-functions
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/503
@@ -494,8 +494,9 @@ final class ModelAggregatePropertyHandler
      * Always nullable: SQL NULL for an empty relation.
      *
      * The schema maps DECIMAL to float, yet PDO returns DECIMAL as a string and MySQL's SUM/AVG
-     * over exact values is DECIMAL, so a float column admits numeric-string; SUM over an int
-     * column is int on SQLite/PostgreSQL-bigint but DECIMAL (string) on MySQL.
+     * over exact values is DECIMAL and SQLite returns integral NUMERIC values as int, so min/max/sum
+     * over a float column admit int and numeric-string (AVG is always a real or DECIMAL); SUM over an
+     * int column is int on SQLite/PostgreSQL-bigint but DECIMAL (string) on MySQL.
      *
      * @param 'sum'|'min'|'max'|'avg' $function
      * @psalm-external-mutation-free
@@ -508,12 +509,11 @@ final class ModelAggregatePropertyHandler
             'avg' => [new TFloat(), new TNumericString()],
             'sum' => match ($shape) {
                 'int' => [new TInt(), new TNumericString()],
-                'float' => [new TFloat(), new TNumericString()],
                 default => [new TInt(), new TFloat(), new TNumericString()],
             },
             'min', 'max' => match ($shape) {
                 'int' => \array_values($rawColumnType?->getAtomicTypes() ?? []),
-                'float' => [new TFloat(), new TNumericString()],
+                'float' => [new TInt(), new TFloat(), new TNumericString()],
                 default => [new TString()],
             },
         };
