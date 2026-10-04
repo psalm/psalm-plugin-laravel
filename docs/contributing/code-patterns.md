@@ -1,7 +1,7 @@
 ---
 title: Code Patterns
 parent: Contributing
-nav_order: 7
+nav_order: 8
 ---
 
 # Code patterns
