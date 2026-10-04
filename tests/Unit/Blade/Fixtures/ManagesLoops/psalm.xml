@@ -12,4 +12,9 @@
             <blade enabled="true" cacheDir=".cache/blade-shadows" />
         </pluginClass>
     </plugins>
+    <issueHandlers>
+        <!-- Psalm 7 suggests purity tags on the type-only fixture classes; they are not what these tests pin. -->
+        <MissingPureAnnotation errorLevel="info" />
+        <MissingImmutableAnnotation errorLevel="info" />
+    </issueHandlers>
 </psalm>

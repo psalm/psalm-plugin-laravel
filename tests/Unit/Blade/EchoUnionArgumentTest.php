@@ -32,6 +32,9 @@ final class EchoUnionArgumentTest extends TestCase
     private const ARGUMENTS = ['-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
 
     /**
+     * Type issues only. Psalm 7 runs taint in the same pass, so `old()` echoed raw also earns a
+     * genuine `TaintedHtml`; that is not the argument-type family these tests pin.
+     *
      * @return list<array{type: string, file: string, message: string}>
      */
     private function analyze(): array
@@ -39,6 +42,10 @@ final class EchoUnionArgumentTest extends TestCase
         $issues = [];
 
         foreach ($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS) as $issue) {
+            if (\str_starts_with((string) $issue['type'], 'Tainted')) {
+                continue;
+            }
+
             $issues[] = [
                 'type' => (string) $issue['type'],
                 'file' => \basename((string) $issue['file_name']),

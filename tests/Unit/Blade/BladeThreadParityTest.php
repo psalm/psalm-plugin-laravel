@@ -208,18 +208,28 @@ final class BladeThreadParityTest extends TestCase
 
     /**
      * An issue with no journey compares equal to any other journeyless issue, so a taint run whose
-     * findings lost their trails would pass equality by vacuity.
+     * findings lost their trails would pass equality by vacuity. Only `Tainted*` issues are held to
+     * it: Psalm 7 reports type issues from the same run, and those never carry a journey.
      *
      * @param list<array<string, mixed>> $issues
      */
     private function assertEveryFindingCarriesAJourney(array $issues, string $label): void
     {
+        $taintFindings = 0;
+
         foreach ($issues as $issue) {
+            if (!\str_starts_with((string) $issue['type'], 'Tainted')) {
+                continue;
+            }
+
+            $taintFindings++;
             $trace = $issue['taint_trace'] ?? null;
 
             $this->assertIsArray($trace, "{$label}: a taint finding carries no journey.");
             $this->assertNotSame([], $trace, "{$label}: a taint finding carries an empty journey.");
         }
+
+        $this->assertGreaterThan(0, $taintFindings, "{$label}: the taint fixture reported no taint finding at all.");
     }
 
     #[Test]

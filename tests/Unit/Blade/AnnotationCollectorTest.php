@@ -126,7 +126,7 @@ final class AnnotationCollectorTest extends TestCase
     {
         // `{{-- @var array{'--}}': string} $payload --}}` closes at the key, and Laravel renders the
         // rest of the declaration into the page.
-        $keyed = new Type\Union([new Type\Atomic\TKeyedArray(['--}}' => Type::getString()])]);
+        $keyed = new Type\Union([Type\Atomic\TKeyedArray::make(['--}}' => Type::getString()])]);
 
         AnnotationCollector::record('home', ['payload' => $keyed], true);
 
@@ -236,7 +236,7 @@ final class AnnotationCollectorTest extends TestCase
         $nodeData = new NodeDataProvider();
 
         foreach ((new NodeFinder())->findInstanceOf($statements, Expr\Array_::class) as $index => $literal) {
-            $nodeData->setType($literal, new Type\Union([new Type\Atomic\TKeyedArray($shapes[$index])]));
+            $nodeData->setType($literal, new Type\Union([Type\Atomic\TKeyedArray::make($shapes[$index])]));
         }
 
         $source = $this->createStub(StatementsSource::class);

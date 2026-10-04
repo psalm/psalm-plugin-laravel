@@ -147,8 +147,15 @@ final class BladeTaintRemapTest extends TestCase
             static fn(array $step): bool => ($step['file_name'] ?? null) === 'resources/views/external.blade.php',
         ));
 
-        $this->assertCount(1, $templateSteps, $raw);
-        $this->assertSame(1, $templateSteps[0]['line_from'], $raw);
+        // Psalm 7 records the template's `(string)` cast and the call into `Sink::raw()` as two
+        // separate hops on the same template line; both must name the template, never its shadow.
+        $this->assertNotSame([], $templateSteps, $raw);
+
+        foreach ($templateSteps as $step) {
+            $this->assertSame(1, $step['line_from'], $raw);
+        }
+
+        $this->assertStringNotContainsString('blade-shadows', \json_encode($trace, \JSON_THROW_ON_ERROR), $raw);
     }
 
     #[Test]
