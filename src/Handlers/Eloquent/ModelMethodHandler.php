@@ -178,13 +178,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Same as {@see self::builderType()} but with an arbitrary model union, e.g. a receiver's template
-     * parameter that must be preserved.
-     *
-     * @internal Used by {@see CustomBuilderMethodHandler}
      * @psalm-mutation-free
      */
-    public static function builderTypeWithModelType(
+    private static function builderTypeWithModelType(
         string $builderClass,
         Union $modelType,
         Codebase $codebase,

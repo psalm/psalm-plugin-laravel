@@ -115,7 +115,7 @@ These models test specific Psalm plugin features (PK types, traits) and are not 
 | `CustomPkUuidModel` | `HasUuids` with custom `$primaryKey`                                  |
 | `Secret`            | Extends abstract UUID model + custom collection via `newCollection()` |
 | `Shop`              | Non-generic relationship resolution testing (#497)                    |
-| `InheritedBuilderModel` / `InheritedBuilderChild` | Non-final base with generic `InheritedModelBuilder` (via `newEloquentBuilder()`), SoftDeletes, and a legacy scope; the final child inherits the builder (so one builder maps to two models), overrides the scope with an extra optional parameter, and alone declares a fluent `scopeCount()` (#1620) |
+| `InheritedBuilderModel` / `InheritedBuilderChild` | Non-final base with generic `InheritedModelBuilder` (via `newEloquentBuilder()`), SoftDeletes, and a legacy scope; the final child inherits the builder (so one builder maps to two models), overrides the scope with an extra optional parameter, and alone declares `scopeChildOnly()` (#1620) |
 
 ### Contributing
 

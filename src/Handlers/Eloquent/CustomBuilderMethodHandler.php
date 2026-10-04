@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
-use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -16,8 +15,8 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodVisibilityProviderEvent;
 use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -40,24 +39,21 @@ use Psalm\Type\Union;
 final class CustomBuilderMethodHandler
 {
     /**
-     * Reverse map: custom builder FQCN → models using it, in registration order.
+     * Reverse map: custom builder FQCN → models using it, ancestor-first.
      *
-     * A builder is shared by a model and every descendant that inherits its
-     * `newEloquentBuilder()` / `$builder` (issue #1620), so the mapping is 1:N.
-     *
-     * Existence, visibility and params providers receive no template parameters and no receiver,
-     * so they answer for registered models without one. Accepted compromises:
-     *  - Existence/visibility: any registered model suffices, so `Base::query()->childOnlyScope()`
-     *    is a false negative.
-     *  - Scope params: the most-derived model declaring the scope wins (see
-     *    {@see getScopeMethodParamsOnBuilder()}); a base receiver calling with a child-only extra
-     *    argument is accepted, and sibling overrides with different signatures are order-dependent.
-     *  - A descendant replacing a legacy `scopeX` with a `#[Scope] x` (or vice versa), or narrowing a param type only
-     *    in PHPDoc, can reject ancestor-valid calls: PHP checks override compatibility only for same-name methods
-     *    and native types.
-     *  - A scope and a trait method with the same name on one shared builder are answered by whichever
-     *    provider Psalm registered first.
-     * Return-type providers pick the model from the receiver's TModel instead.
+     * A builder is shared by a model and every descendant that inherits its `newEloquentBuilder()` /
+     * `$builder` (issue #1620). Keying one builder to one model (last registration wins) made
+     * `Base::query()->withTrashed()` resolve to a descendant, depending on registration order.
+     * Return types now come from the receiver's model; existence, visibility and params providers see
+     * no receiver, so they consult the list. Accepted compromises:
+     *  - A descendant override with extra parameters is validated against the ancestor's signature
+     *    (`Child::query()->visible(true)` reports TooManyArguments).
+     *  - Sibling-only scopes (no common ancestor declaring them) are order-dependent.
+     *  - A template-typed receiver (`Builder<T>`) falls back to the least-derived declaring model.
+     *  - Existence is true if any model declares the method, so a receiver whose model cannot be
+     *    resolved (e.g. template-typed) is not rejected for a method only a descendant declares.
+     *    A resolved `Base::query()->childOnlyScope()` is rejected: the return providers decline and
+     *    Psalm reports the magic call.
      *
      * @var array<class-string<Builder>, list<class-string<Model>>>
      */
@@ -82,6 +78,8 @@ final class CustomBuilderMethodHandler
     }
 
     /**
+     * Register the builder-to-model reverse mapping.
+     *
      * Called by {@see ModelMethodHandler::registerCustomBuilder} when a model declares
      * a custom builder.
      *
@@ -90,158 +88,19 @@ final class CustomBuilderMethodHandler
      */
     public static function registerBuilderToModelMapping(string $modelClass, string $builderClass): void
     {
-        if (\in_array($modelClass, self::$builderToModelMap[$builderClass] ?? [], true)) {
+        $models = self::$builderToModelMap[$builderClass] ?? [];
+        if (\in_array($modelClass, $models, true)) {
             return;
         }
 
-        self::$builderToModelMap[$builderClass][] = $modelClass;
-    }
-
-    /**
-     * Psalm passes no template params to return providers for magic (`__call`) calls such as scopes,
-     * so the receiver expression's type is the fallback, as in {@see BuilderAggregateHandler}.
-     *
-     * A receiver whose model argument is a bare template parameter (`@template T of Child`,
-     * `Builder<T>`) resolves through the template's `as` bound when that is a single model class;
-     * `$modelType` then carries the original template union so the returned builder stays generic in it.
-     *
-     * @return array{modelClass: class-string<Model>|null, modelType: Union|null}
-     */
-    private static function receiverModel(MethodReturnTypeProviderEvent $event, \Psalm\Codebase $codebase): array
-    {
-        $stmt = $event->getStmt();
-        $lhsType = $stmt instanceof MethodCall
-            ? $event->getSource()->getNodeTypeProvider()->getType($stmt->var)
-            : null;
-        $templateParams = $event->getTemplateTypeParameters();
-
-        $templateType = self::templateParamModelType($templateParams[0] ?? null);
-
-        // Providers fire per receiver atomic but the LHS type is the whole union: only the one arm of this
-        // builder class may supply the template argument, never a sibling arm's (that would fabricate this
-        // builder from another arm's model).
-        if (!$templateType instanceof Union && $lhsType instanceof Union) {
-            $builderClass = \strtolower($event->getFqClasslikeName());
-            $single = $lhsType->isSingle();
-            $arms = \array_filter(
-                $lhsType->getAtomicTypes(),
-                static fn(\Psalm\Type\Atomic $atomic): bool => $atomic instanceof TGenericObject
-                    && ($single || \strtolower($atomic->value) === $builderClass),
-            );
-            if (\count($arms) === 1) {
-                $templateType = self::templateParamModelType(\reset($arms)->type_params[0] ?? null);
-            }
+        // Ancestor-first: an ancestor registered after its descendant goes to the front.
+        if ($models !== [] && \is_subclass_of($models[0], $modelClass)) {
+            \array_unshift($models, $modelClass);
+        } else {
+            $models[] = $modelClass;
         }
 
-        if ($templateType instanceof Union) {
-            /** @var TTemplateParam $templateParam single atomic, checked by templateParamModelType() */
-            $templateParam = $templateType->getSingleAtomic();
-            $bound = ModelPropertyResolver::extractExactlyOneModelFromUnion($templateParam->as);
-            if ($bound !== null) {
-                return ['modelClass' => $bound, 'modelType' => $templateType];
-            }
-        }
-
-        return [
-            'modelClass' => ModelPropertyResolver::resolveExactlyOneModelClass(
-                $templateParams,
-                0,
-                $lhsType,
-                $codebase,
-            ),
-            'modelType' => null,
-        ];
-    }
-
-    /**
-     * @psalm-mutation-free
-     */
-    private static function templateParamModelType(?Union $type): ?Union
-    {
-        return $type instanceof Union && $type->isSingle() && $type->getSingleAtomic() instanceof TTemplateParam
-            ? $type
-            : null;
-    }
-
-    /**
-     * Builder type for the picked model: the receiver's own template union when it was template-typed,
-     * otherwise the concrete `Builder<Model>`.
-     *
-     * @param class-string<Builder> $builderClass
-     * @param class-string<Model> $modelClass
-     * @psalm-mutation-free
-     */
-    private static function returnBuilderType(
-        string $builderClass,
-        string $modelClass,
-        ?Union $receiverModelType,
-        \Psalm\Codebase $codebase,
-    ): Union {
-        return new Union([
-            $receiverModelType instanceof Union
-                ? ModelMethodHandler::builderTypeWithModelType($builderClass, $receiverModelType, $codebase)
-                : ModelMethodHandler::builderType($builderClass, $modelClass, $codebase),
-        ]);
-    }
-
-    /**
-     * A resolved receiver model is authoritative: Laravel's `Builder::__call` checks scopes and
-     * macros on the actual model, so when that model does not declare the method the answer is
-     * null (decline, let Psalm infer natively) rather than another registered model's. Only an
-     * unresolved receiver (non-generic builder, unresolved template) falls back to the
-     * least-derived model that declares the method.
-     *
-     * @param class-string<Builder> $builderClass
-     * @param class-string<Model>|null $receiverModel
-     * @param callable(class-string<Model>): bool $declares
-     * @return class-string<Model>|null
-     */
-    private static function pickModel(
-        string $builderClass,
-        ?string $receiverModel,
-        callable $declares,
-        \Psalm\Codebase $codebase,
-    ): ?string {
-        if ($receiverModel !== null) {
-            return $declares($receiverModel) ? $receiverModel : null;
-        }
-
-        return self::pickByDepth(self::declaringModels($builderClass, $declares), $codebase, mostDerived: false);
-    }
-
-    /**
-     * Existence checks and the trait params lookup need no ordering: any declaring model will do.
-     *
-     * @param class-string<Builder> $builderClass
-     * @param callable(class-string<Model>): bool $declares
-     * @return list<class-string<Model>>
-     */
-    private static function declaringModels(string $builderClass, callable $declares): array
-    {
-        return \array_values(\array_filter(self::$builderToModelMap[$builderClass] ?? [], $declares));
-    }
-
-    /**
-     * Depth is the parent-class count, read here rather than at registration so registration order
-     * never matters. Ties keep registration order (first wins).
-     *
-     * @param list<class-string<Model>> $models
-     * @return class-string<Model>|null
-     * @psalm-mutation-free
-     */
-    private static function pickByDepth(array $models, \Psalm\Codebase $codebase, bool $mostDerived): ?string
-    {
-        $picked = null;
-        $pickedDepth = 0;
-        foreach ($models as $model) {
-            $depth = \count($codebase->classlike_storage_provider->get(\strtolower($model))->parent_classes);
-            if ($picked === null || ($mostDerived ? $depth > $pickedDepth : $depth < $pickedDepth)) {
-                $picked = $model;
-                $pickedDepth = $depth;
-            }
-        }
-
-        return $picked;
+        self::$builderToModelMap[$builderClass] = $models;
     }
 
     /**
@@ -316,8 +175,7 @@ final class CustomBuilderMethodHandler
 
         /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
-
-        $modelClass = self::declaringModels($builderClass, static fn(string $model): bool => self::hasTraitMethod($model, $methodName))[0] ?? null;
+        $modelClass = self::declaringModel($builderClass, static fn(string $model): bool => self::hasTraitMethod($model, $methodName));
 
         return $modelClass !== null ? self::$traitBuilderMethods[$modelClass][$methodName] ?? null : null;
     }
@@ -335,18 +193,12 @@ final class CustomBuilderMethodHandler
         /** @var class-string<Builder> $builderClass */
         $builderClass = $event->getFqClasslikeName();
         $methodName = $event->getMethodNameLowercase();
-        $receiver = self::receiverModel($event, $source->getCodebase());
-        $modelClass = self::pickModel(
-            $builderClass,
-            $receiver['modelClass'],
-            static fn(string $model): bool => self::hasTraitMethod($model, $methodName),
-            $source->getCodebase(),
-        );
+        $modelClass = self::returnModel($event, static fn(string $model): bool => self::hasTraitMethod($model, $methodName));
         if ($modelClass === null) {
             return null;
         }
 
-        return self::returnBuilderType($builderClass, $modelClass, $receiver['modelType'], $source->getCodebase());
+        return new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $source->getCodebase())]);
     }
 
     /**
@@ -355,7 +207,7 @@ final class CustomBuilderMethodHandler
     private static function hasTraitMethodOnBuilder(string $builderClass, string $methodName): bool
     {
         /** @var class-string<Builder> $builderClass */
-        return self::declaringModels($builderClass, static fn(string $model): bool => self::hasTraitMethod($model, $methodName)) !== [];
+        return self::declaringModel($builderClass, static fn(string $model): bool => self::hasTraitMethod($model, $methodName)) !== null;
     }
 
     // -----------------------------------------------------------------------
@@ -403,17 +255,6 @@ final class CustomBuilderMethodHandler
     /**
      * Provide params for scope methods on custom builder instances.
      *
-     * Psalm asks for params before any receiver-aware provider runs, so there is no receiver to pick
-     * the model. The most-derived registered model declaring the scope answers: PHP override
-     * compatibility means its signature accepts every call valid for its ancestors, so this normally
-     * only misses errors (a base receiver calling with a child-only extra argument). Sibling overrides
-     * with different signatures are order-dependent, and PHP does not enforce compatibility across a
-     * scope-style change or a PHPDoc-only narrowing (see {@see $builderToModelMap}).
-     *
-     * Known limitation: when the builder itself declares the method (real or stub, e.g. `count`), params
-     * are validated against that declaration, although Laravel runs a like-named scope on a model that
-     * declares it. See InheritedGenericBuilderScopeCollisionKnownLimitation.phpt.
-     *
      * @return list<FunctionLikeParameter>|null
      */
     public static function getScopeMethodParamsOnBuilder(MethodParamsProviderEvent $event): ?array
@@ -425,20 +266,12 @@ final class CustomBuilderMethodHandler
 
         /** @var class-string<Builder> $builderClass */
         $builderClass = $event->getFqClasslikeName();
-
-        /** @var lowercase-string $methodName */
-        $methodName = $event->getMethodNameLowercase();
         $codebase = $source->getCodebase();
-
-        $models = self::declaringModels(
+        $methodName = $event->getMethodNameLowercase();
+        $modelClass = self::declaringModel(
             $builderClass,
             static fn(string $model): bool => BuilderScopeHandler::hasScopeMethod($codebase, $model, $methodName),
         );
-        if ($models === [] || self::builderDeclaresMethod($builderClass, $methodName, $codebase)) {
-            return null;
-        }
-
-        $modelClass = self::pickByDepth($models, $codebase, mostDerived: true);
         if ($modelClass === null) {
             return null;
         }
@@ -447,19 +280,6 @@ final class CustomBuilderMethodHandler
         // so non-scope model methods like __construct return null and custom builder
         // constructors keep their own params.
         return BuilderScopeHandler::getScopeParams($codebase, $modelClass, $methodName);
-    }
-
-    /**
-     * Storage, not PHP reflection, because stub-only declarations (e.g. the stub's `count`) are invisible
-     * to reflection.
-     *
-     * @param class-string<Builder> $builderClass
-     * @param lowercase-string $methodName
-     * @psalm-mutation-free
-     */
-    private static function builderDeclaresMethod(string $builderClass, string $methodName, \Psalm\Codebase $codebase): bool
-    {
-        return $codebase->methods->getDeclaringMethodId(new MethodIdentifier($builderClass, $methodName)) instanceof MethodIdentifier;
     }
 
     /**
@@ -479,12 +299,9 @@ final class CustomBuilderMethodHandler
         $builderClass = $event->getFqClasslikeName();
         $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
-        $receiver = self::receiverModel($event, $codebase);
-        $modelClass = self::pickModel(
-            $builderClass,
-            $receiver['modelClass'],
+        $modelClass = self::returnModel(
+            $event,
             static fn(string $model): bool => BuilderScopeHandler::hasScopeMethod($codebase, $model, $methodName),
-            $codebase,
         );
         if ($modelClass === null) {
             return null;
@@ -492,7 +309,7 @@ final class CustomBuilderMethodHandler
 
         // A value-returning scope surfaces its declared return via Laravel's `?? $this` coalesce;
         // a plain void/fluent scope keeps the custom builder type, CustomBuilder<Model> (issue #1053).
-        $scopeFallback = self::returnBuilderType($builderClass, $modelClass, $receiver['modelType'], $codebase);
+        $scopeFallback = new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $codebase)]);
 
         return BuilderScopeHandler::forwardedScopeReturnType(
             $codebase,
@@ -503,14 +320,65 @@ final class CustomBuilderMethodHandler
     }
 
     /**
-     * Existence providers receive no receiver, so any registered model declaring the scope suffices.
+     * Check if a scope method exists for the given custom builder class.
+     *
+     * Looks up the model associated with the builder, then delegates to
+     * BuilderScopeHandler for scope detection.
      */
     private static function hasScopeOnBuilder(\Psalm\Codebase $codebase, string $builderClass, string $methodName): bool
     {
         /** @var class-string<Builder> $builderClass */
-        return self::declaringModels(
+        return self::declaringModel(
             $builderClass,
             static fn(string $model): bool => BuilderScopeHandler::hasScopeMethod($codebase, $model, $methodName),
-        ) !== [];
+        ) !== null;
+    }
+
+    /**
+     * First model of the builder (ancestor-first) satisfying `$declares`.
+     *
+     * @param class-string<Builder> $builderClass
+     * @param callable(class-string<Model>): bool $declares
+     * @return class-string<Model>|null
+     */
+    private static function declaringModel(string $builderClass, callable $declares): ?string
+    {
+        foreach (self::$builderToModelMap[$builderClass] ?? [] as $model) {
+            if ($declares($model)) {
+                return $model;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Model for a return type: the receiver's model when known (a resolved receiver lacking the method
+     * declines), else the first declaring model. The model comes from the event's template parameter, or
+     * for magic (`__call`) calls, which carry none, from the single receiver-type arm of this builder class.
+     *
+     * @param callable(class-string<Model>): bool $declares
+     * @return class-string<Model>|null
+     */
+    private static function returnModel(MethodReturnTypeProviderEvent $event, callable $declares): ?string
+    {
+        /** @var class-string<Builder> $builderClass */
+        $builderClass = $event->getFqClasslikeName();
+        $stmt = $event->getStmt();
+        $lhsType = $stmt instanceof MethodCall ? $event->getSource()->getNodeTypeProvider()->getType($stmt->var) : null;
+        $arms = \array_filter(
+            $lhsType instanceof Union ? $lhsType->getAtomicTypes() : [],
+            static fn(Atomic $atomic): bool => $atomic instanceof TGenericObject
+                && \strtolower($atomic->value) === \strtolower($builderClass),
+        );
+        $arm = \count($arms) === 1 ? \reset($arms) : null;
+        $receiver = ModelPropertyResolver::extractExactlyOneModelFromUnion($event->getTemplateTypeParameters()[0] ?? null)
+            ?? ModelPropertyResolver::extractExactlyOneModelFromUnion($arm instanceof TGenericObject ? $arm->type_params[0] ?? null : null);
+
+        if ($receiver !== null) {
+            return $declares($receiver) ? $receiver : null;
+        }
+
+        return self::declaringModel($builderClass, $declares);
     }
 }
