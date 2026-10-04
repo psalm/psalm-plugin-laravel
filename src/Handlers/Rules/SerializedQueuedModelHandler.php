@@ -142,8 +142,6 @@ final class SerializedQueuedModelHandler implements AfterClassLikeAnalysisInterf
     /**
      * Whether the declared type carries a model or an Eloquent collection, the two shapes
      * `getSerializedPropertyValue()` converts.
-     *
-     * @psalm-external-mutation-free
      */
     private static function carriesModel(?Union $type, Codebase $codebase): bool
     {
@@ -159,7 +157,6 @@ final class SerializedQueuedModelHandler implements AfterClassLikeAnalysisInterf
         return false;
     }
 
-    /** @psalm-external-mutation-free */
     private static function isOrExtends(string $className, string $parent, Codebase $codebase): bool
     {
         if (\strtolower($className) === \strtolower($parent)) {

@@ -29,7 +29,6 @@ use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
  * consulted, so registration and dispatch never see different alias sets).
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class ViewNameSignatures
 {
@@ -109,8 +108,6 @@ final class ViewNameSignatures
      * lookup — a reused process can boot a different app with a different alias
      * registry. See the class docblock for why this is called from
      * Plugin::registerHandlers(), not resetInvocationState().
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -119,7 +116,6 @@ final class ViewNameSignatures
 
     /**
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     public static function getClassLikeNames(): array
     {
@@ -140,7 +136,6 @@ final class ViewNameSignatures
 
     /**
      * @return 'view-factory'|'response-factory'|'router'|'mail-message'|'mailable'|'test-response'|'interacts-with-views'|null
-     * @psalm-external-mutation-free
      */
     public static function resolveRole(string $fqClasslikeName): ?string
     {

@@ -151,6 +151,20 @@ final class ModelPropertyHandler
     }
 
     /**
+     * Schema-only column type, ignoring `@property` and casts: aggregate accessors
+     * (`withMin()`, `withSum()`, ...) hold the raw driver value, so a datetime column is a
+     * string here even when the model casts it to Carbon.
+     *
+     * @param class-string<Model> $fqClasslikeName
+     */
+    public static function resolveRawColumnType(string $fqClasslikeName, string $columnName): ?Union
+    {
+        $column = ModelMetadataRegistry::for($fqClasslikeName)?->schema()->column($columnName);
+
+        return $column instanceof ColumnInfo ? ColumnTypeMapper::mapBaseType($column) : null;
+    }
+
+    /**
      * Registry-backed column type: cast override wins over the schema mapping. Shared by
      * {@see getPropertyType} and {@see resolveColumnType} so the two read paths cannot drift
      * (pre-registry they shared `resolveColumn()` + `resolveCasts()`). Returns null when the
@@ -204,7 +218,6 @@ final class ModelPropertyHandler
      *
      * @param class-string<Model> $fqClasslikeName
      * @return array<non-empty-string, ColumnInfo>
-     * @psalm-external-mutation-free
      */
     public static function resolveAllColumns(string $fqClasslikeName): array
     {
@@ -218,7 +231,6 @@ final class ModelPropertyHandler
 
     /**
      * @param class-string<Model> $fqClasslikeName
-     * @psalm-external-mutation-free
      */
     private static function schemaHasColumn(string $fqClasslikeName, string $propertyName): bool
     {
@@ -250,7 +262,6 @@ final class ModelPropertyHandler
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
     private static array $nativePropertyCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$nativePropertyCache = [];
@@ -262,7 +273,6 @@ final class ModelPropertyHandler
      * (doesPropertyExist, isPropertyVisible, getPropertyType).
      *
      * @param class-string $fqcn
-     * @psalm-external-mutation-free
      */
     private static function hasNativeProperty(string $fqcn, string $propertyName): bool
     {

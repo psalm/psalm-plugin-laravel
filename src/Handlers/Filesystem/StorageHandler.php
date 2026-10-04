@@ -102,7 +102,6 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static ?array $facade_disk_params = null;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$adapter_return_type = null;
@@ -135,8 +134,6 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      * `disk('s3')` does.
      *
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Type\Union
@@ -161,8 +158,6 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      * For non-facade receivers (`FilesystemManager`, `Factory` contract) `disk()`
      * is a real method, so Psalm can derive params itself — we return null and
      * let Laravel's signature drift through.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array

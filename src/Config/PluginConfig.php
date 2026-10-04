@@ -166,7 +166,6 @@ final readonly class PluginConfig
     /**
      * Read a named attribute of an XML element as a string.
      * Returns $default when the element is absent or the attribute is missing.
-     * @psalm-pure
      */
     private static function xmlStringAttr(?\SimpleXMLElement $element, string $attribute, string $default): string
     {
@@ -181,7 +180,6 @@ final readonly class PluginConfig
      * Read a boolean attribute of an XML element, `value` unless $attribute says otherwise.
      * Expects `<element value="true" />` or `<element value="false" />`.
      * Returns $default when the element or the attribute is absent.
-     * @psalm-pure
      */
     private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false, string $attribute = 'value'): bool
     {
@@ -203,8 +201,6 @@ final readonly class PluginConfig
      * when unset. Returns null when the element is absent so callers can fall back
      * to runtime detection (e.g. `class_exists()`); returns true/false when the
      * user explicitly opts in or out via XML.
-     *
-     * @psalm-pure
      */
     private static function xmlOptionalBoolAttr(?\SimpleXMLElement $element, string $name): ?bool
     {

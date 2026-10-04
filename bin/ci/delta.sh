@@ -9,7 +9,7 @@
 # untouched. Apps come from bin/ci/test-apps.yml (requires `yq`).
 #
 # Usage:
-#   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(master, head)
+#   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(4.x, head)
 #   bash bin/ci/delta.sh <base-ref> vs <head-ref>   # explicit base + head
 #   APPS="monica,coolify" bash bin/ci/delta.sh <head-ref>   # subset
 #
@@ -57,8 +57,8 @@ fi
 
 if [[ $# -eq 1 ]]; then
     HEAD_REF="$1"
-    BASE_REF=$(git merge-base master "$HEAD_REF") \
-        || { echo "ERROR: cannot compute merge-base(master, $HEAD_REF)" >&2; exit 1; }
+    BASE_REF=$(git merge-base 4.x "$HEAD_REF") \
+        || { echo "ERROR: cannot compute merge-base(4.x, $HEAD_REF)" >&2; exit 1; }
 elif [[ $# -eq 3 && "$2" == "vs" ]]; then
     BASE_REF="$1"; HEAD_REF="$3"
 else
@@ -146,7 +146,7 @@ done
 
 echo "" >&2
 APPS_CSV=$(IFS=,; echo "${RUN_APPS[*]}")
-php "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
+php -d memory_limit=-1 "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
     --apps="$APPS_CSV" --base-ref="$BASE_REF" --head-ref="$HEAD_REF" \
     --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" --date-marker=cache
 

@@ -46,7 +46,6 @@ final class RelationResolver
     /** @var array<string, ?string> Cache for relatedModel() keyed by "class::lowername" */
     private static array $relatedModelCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$methodExistsCache = [];
@@ -136,8 +135,6 @@ final class RelationResolver
     /**
      * Extract the related model FQCN from the first generic parameter of a
      * `Relation<TRelated, ...>` return type.
-     *
-     * @psalm-external-mutation-free
      */
     private static function extractRelatedFromReturnType(Codebase $codebase, ?Union $returnType): ?string
     {
@@ -163,8 +160,6 @@ final class RelationResolver
      * dot-notation walking, so it defers rather than guessing one arm. In practice
      * Psalm collapses morphTo's `<..., $this>` generic before this is reached; this
      * keeps the deferral correct even when it does not.
-     *
-     * @psalm-external-mutation-free
      */
     private static function singleModel(Codebase $codebase, ?Union $type): ?string
     {
@@ -197,8 +192,6 @@ final class RelationResolver
      * fixed for its own sites but not for this resolver it delegates to). Mirrors that handler's own
      * non-autoloading check. classExtends() is non-reflexive → identity is checked first; every ancestor
      * passed here (Relation, Model) is a class, so classExtends() alone suffices.
-     *
-     * @psalm-external-mutation-free
      */
     private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
     {

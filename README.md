@@ -19,7 +19,7 @@ User::query()->orderBy($sortBy)->get(); // tainted sink: reaches a column name
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/master/docs/assets/screenshot-taint.png" alt="Psalm reporting a tainted SQL finding, tracing $sortBy from Request::input() into orderBy()" width="100%">
+    <img src="https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/4.x/docs/assets/screenshot-taint.png" alt="Psalm reporting a tainted SQL finding, tracing $sortBy from Request::input() into orderBy()" width="100%">
 </p>
 
 Real output on a fresh Laravel app, tracing the two lines above from source to sink.

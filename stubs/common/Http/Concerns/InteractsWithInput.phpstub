@@ -7,12 +7,14 @@ trait InteractsWithInput
     /**
      * Retrieve an input item from the request.
      *
+     * No purity tag: `json()` lazily writes `$this->json` and `getContent()` reads `php://input`,
+     * and any tag becomes the contract every userland override must meet (#1622).
+     *
      * @param  string|null  $key
      * @param  mixed  $default
      * @return ($key is null ? array<string, mixed> : mixed)
      *
      * @psalm-taint-source input
-     * @psalm-mutation-free
      */
     public function input($key = null, $default = null) {}
 

@@ -50,7 +50,6 @@ final class FacadeMethodHandler
      */
     private static array $pseudoMethodCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$methodCache = [];
@@ -124,7 +123,6 @@ final class FacadeMethodHandler
 
     /**
      * @param class-string $rootClass
-     * @psalm-external-mutation-free
      */
     private static function resolveMethod(
         Codebase $codebase,
@@ -159,8 +157,6 @@ final class FacadeMethodHandler
      * declares `@method $methodNameLower`. Psalm's Populator already merges ancestor
      * pseudo-methods into child `pseudo_static_methods`, so walking ancestors is a superset
      * kept defensively against Populator changes.
-     *
-     * @psalm-external-mutation-free
      */
     private static function hasPseudoStaticMethod(
         Codebase $codebase,

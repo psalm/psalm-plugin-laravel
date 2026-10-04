@@ -1,0 +1,40 @@
+<?php
+
+namespace Illuminate\Events;
+
+use Illuminate\Contracts\Events\Dispatcher as DispatcherContract;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\ReflectsClosures;
+
+/**
+ * The header carries the traits common to every supported Laravel line; trait methods added
+ * on newer lines (e.g. ResolvesQueueRoutes) still resolve from the vendor declaration.
+ */
+class Dispatcher implements DispatcherContract
+{
+    use Macroable, ReflectsClosures;
+
+    /**
+     * Fire an event until the first non-null response is returned.
+     *
+     * Returns that listener response (any type), or null when no listener answers.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @return mixed
+     */
+    public function until($event, $payload = []) {}
+
+    /**
+     * Fire an event and call the listeners.
+     *
+     * With $halt, returns the first non-null listener response (any type). Without it, returns
+     * the collected responses, or null when the event is deferred or queued until after commit.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @param  bool  $halt
+     * @return ($halt is true ? mixed : list<mixed>|null)
+     */
+    public function dispatch($event, $payload = [], $halt = false) {}
+}
