@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\HasFlaggedScope;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Child of AbstractDocument: exercises inherited and trait-hosted scopes
@@ -22,4 +23,10 @@ final class Contract extends AbstractDocument
     use HasFlaggedScope;
 
     protected $table = 'contracts';
+
+    /** Delegates to the inherited documentParts() relation (#1613). */
+    public function signedParts(): HasMany
+    {
+        return $this->documentParts()->whereNotNull('signed_at');
+    }
 }

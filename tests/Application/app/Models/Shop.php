@@ -173,6 +173,55 @@ final class Shop extends Model
         return $this->workOrders()->where('created_at', '>=', '2025-01-01');
     }
 
+    // --- Delegated relation bodies without docblock generics (#1613) ---
+
+    public function openWorkOrders(): HasMany
+    {
+        return $this->workOrders()->where('status', 'open');
+    }
+
+    public function seniorMechanics(): HasManyThrough
+    {
+        return $this->mechanics()->where('years_experience', '>', 10);
+    }
+
+    /** Declares a non-relation type: the delegated relation must not leak into the result. */
+    public function workOrderTotal(): int
+    {
+        return $this->workOrders()->count();
+    }
+
+    /** `one()` turns the delegated HasMany into a HasOne, so the parsed HasMany must not be used. */
+    public function firstWorkOrder(): HasOne
+    {
+        return $this->workOrders()->one();
+    }
+
+    /** Delegates to a helper whose relation is built dynamically: not statically resolvable. */
+    public function namedWorkOrders(): HasMany
+    {
+        return $this->relationNamed('workOrders');
+    }
+
+    private function relationNamed(string $name): HasMany
+    {
+        $relation = $this->{$name}();
+        \assert($relation instanceof HasMany);
+
+        return $relation;
+    }
+
+    /** Delegation cycle (never called at runtime): resolution must terminate and decline. */
+    public function cyclicWorkOrders(): HasMany
+    {
+        return $this->mirroredWorkOrders();
+    }
+
+    public function mirroredWorkOrders(): HasMany
+    {
+        return $this->cyclicWorkOrders()->latest();
+    }
+
     // --- `$this` receiver (#1623 shape) ---
 
     /** The `??` fallback is meaningful (left side unproven); the loadCount() proof makes the right side `int`. */

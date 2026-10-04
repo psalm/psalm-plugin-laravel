@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\ComparesRank;
+use App\Models\Concerns\HasRevisions;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 abstract class AbstractDocument extends Model
 {
     use ComparesRank;
+    use HasRevisions;
 
     /**
      * Cast declaration on the abstract base (see class docblock for why it is concrete-only).
@@ -67,6 +69,17 @@ abstract class AbstractDocument extends Model
     public function documentParts(): HasMany
     {
         return $this->hasMany(Part::class);
+    }
+
+    /**
+     * `$this->revisions()` in this non-final base must bind TDeclaringModel to `AbstractDocument&static`
+     * for the trait-hosted relation too (#1613); a plain binding is less specific than `$this`.
+     *
+     * @return HasMany<AbstractDocument, $this>
+     */
+    public function draftRevisions(): HasMany
+    {
+        return $this->revisions()->whereNull('signed_at');
     }
 
     /**
