@@ -475,6 +475,21 @@ final class ModelAggregatePropertyHandler
     }
 
     /**
+     * The not-yet-loaded counterpart of a proven count/exists fact (`int<0, max>` → `int|null`,
+     * `bool` → `bool|null`), or null for any other type. min/max/sum/avg facts are nullable already.
+     *
+     * @psalm-mutation-free
+     */
+    public static function unprovenType(Union $proven): ?Union
+    {
+        return match ($proven->getId()) {
+            'int<0, max>' => new Union([new TInt(), new TNull()]),
+            'bool' => new Union([new TBool(), new TNull()]),
+            default => null,
+        };
+    }
+
+    /**
      * min/max/sum/avg type from the aggregated column's RAW schema type (null when unresolvable).
      * Always nullable: SQL NULL for an empty relation.
      *

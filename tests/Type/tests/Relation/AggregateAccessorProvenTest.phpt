@@ -133,18 +133,6 @@ function test_assigned_chain_static_with_exists(): void
     echo $exists;
 }
 
-function test_assigned_chain_nullable_first(): void
-{
-    $shop = Shop::withCount('workOrders')->first();
-    if ($shop === null) {
-        return;
-    }
-
-    /** @psalm-check-type-exact $count = int<0, max> */
-    $count = $shop->work_orders_count;
-    echo $count;
-}
-
 function test_assigned_chain_alias(): void
 {
     $shop = Shop::withCount('workOrders as total_orders')->firstOrFail();
@@ -159,6 +147,22 @@ function test_assigned_chain_with_sum_alias(): void
     /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->total_price;
     echo $sum;
+}
+
+function test_assigned_chain_last_alias_wins(): void
+{
+    $shop = Shop::withCount('workOrders as total')->withExists('parts as total')->firstOrFail();
+    /** @psalm-check-type-exact $total = bool */
+    $total = $shop->total;
+    echo $total;
+}
+
+function test_chained_loads_last_alias_wins(Shop $shop): void
+{
+    $shop->loadCount('workOrders as total')->loadExists('parts as total');
+    /** @psalm-check-type-exact $total = bool */
+    $total = $shop->total;
+    echo $total;
 }
 
 function test_assigned_chain_through_relation(Shop $shop): void

@@ -42,9 +42,57 @@ function test_select_after_with_count_drops_the_aggregate(): void
     echo $count;
 }
 
-function test_relation_not_on_final_model_is_not_proof(Shop $shop): void
+function test_relation_not_on_final_model_is_not_proof(Shop $shop): mixed
 {
-    $shop->loadCount('vehicles');
+    // Shop has no `vehicles` relation, so neither the conventional name nor the alias may become a fact.
+    $shop->loadCount(['vehicles', 'vehicles as vehicle_total']);
+
+    return [$shop->vehicles_count, $shop->vehicle_total];
+}
+
+function test_nullable_terminal_records_no_fact(): void
+{
+    $shop = Shop::withCount('workOrders')->first();
+    /** @psalm-check-type-exact $count = int|null */
+    $count = $shop->work_orders_count;
+    echo $count;
+}
+
+function test_nullable_find_records_no_fact(): void
+{
+    $shop = Shop::withCount('workOrders')->find(1);
+    /** @psalm-check-type-exact $count = int|null */
+    $count = $shop->work_orders_count;
+    echo $count;
+}
+
+function test_refresh_in_a_branch_widens_on_merge(Shop $shop, bool $flag): void
+{
+    $shop->loadCount('workOrders');
+    if ($flag) {
+        $shop->refresh();
+    }
+
+    /** @psalm-check-type-exact $count = int|null */
+    $count = $shop->work_orders_count;
+    echo $count;
+}
+
+function test_refresh_in_a_branch_widens_a_proven_alias_on_merge(Shop $shop, bool $flag): void
+{
+    $shop->loadCount('workOrders as total');
+    if ($flag) {
+        $shop->refresh();
+    }
+
+    /** @psalm-check-type-exact $total = int|null */
+    $total = $shop->total;
+    echo $total;
+}
+
+function test_refresh_after_a_load_chain_drops_the_fact(Shop $shop): void
+{
+    $shop->loadCount('workOrders')->refresh();
     /** @psalm-check-type-exact $count = int|null */
     $count = $shop->work_orders_count;
     echo $count;
@@ -113,3 +161,7 @@ function test_user_property_wins_over_a_proven_load(Customer $customer): void
 }
 ?>
 --EXPECTF--
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$vehicles_count is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$vehicle_total is not defined
+PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $shop of type App\Models\Shop|null
+PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $shop of type App\Models\Shop|null

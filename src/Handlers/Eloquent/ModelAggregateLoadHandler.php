@@ -16,7 +16,6 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
-use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateEntry;
@@ -43,8 +42,8 @@ use Psalm\Type\Union;
  *
  * Chains are walked from the terminal call inward. Past the first retrieval method (first, find, …)
  * only Builder/Relation-typed calls keep the query, and `select()` & co. drop the aggregate columns,
- * so the walk stops there. Collection hops, variable-held builders, closures and foreach are not
- * tracked: those reads stay nullable.
+ * so the walk stops there. Collection hops, variable-held builders and foreach are not tracked: those
+ * reads stay nullable. A closure that captures `$m` sees the fact like any other property narrowing.
  *
  * Carrying the fact in an intersection type (`M&object{x_count: int}`) was probed and rejected:
  * decisions.md, "Aggregate accessor proof".
@@ -82,7 +81,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             $described = $name === null ? null : AggregateCallParser::describe($name);
 
             if ($name === 'refresh') {
-                self::forgetLoadedAggregates($expr, $event->getContext());
+                self::forgetLoadedAggregates($expr, $event);
             } elseif ($described !== null && $described[1]) {
                 self::trackLoad($expr, $described[0], $event);
             }
@@ -95,34 +94,64 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         return null;
     }
 
-    /** `$m->refresh()` reloads the attributes, so every aggregate loaded on `$m` is gone. */
-    private static function forgetLoadedAggregates(MethodCall $call, Context $context): void
+    /**
+     * `$m->refresh()` reloads the attributes, so every aggregate loaded on `$m` is gone. A proven
+     * count/exists fact is overwritten with its unproven type rather than unset: a branch merge
+     * ignores keys missing from one side, so only an overwrite widens `if (...) { $m->refresh(); }`.
+     */
+    private static function forgetLoadedAggregates(MethodCall $call, AfterExpressionAnalysisEvent $event): void
     {
-        $varId = self::varId($call->var);
+        $varId = self::varId(self::identityRoot($call->var));
         if ($varId === null) {
             return;
         }
 
-        foreach (\array_keys($context->vars_in_scope) as $key) {
-            if (\str_starts_with($key, $varId . '->')) {
+        $context = $event->getContext();
+        $model = self::singleModel($context->vars_in_scope[$varId] ?? null);
+        $prefix = $varId . '->';
+
+        foreach ($context->vars_in_scope as $key => $type) {
+            if (!\str_starts_with($key, $prefix)) {
+                continue;
+            }
+
+            $property = \substr($key, \strlen($prefix));
+            $widened = $model === null || \str_contains($property, '->') || ModelPropertyHandler::resolveRawColumnType($model, $property) instanceof Union
+                ? null
+                : ModelAggregatePropertyHandler::unprovenType($type);
+
+            if ($widened instanceof Union) {
+                $context->vars_in_scope[$key] = $widened;
+            } else {
                 unset($context->vars_in_scope[$key]);
             }
         }
+    }
+
+    /**
+     * `$m->loadCount('x')->refresh()` evaluates to `$m` itself: load*() and refresh() return `$this`.
+     *
+     * @psalm-mutation-free
+     */
+    private static function identityRoot(Expr $expr): Expr
+    {
+        while ($expr instanceof MethodCall && $expr->name instanceof Identifier) {
+            $name = \strtolower($expr->name->name);
+            if ($name !== 'refresh' && !(AggregateCallParser::describe($name)[1] ?? false)) {
+                break;
+            }
+
+            $expr = $expr->var;
+        }
+
+        return $expr;
     }
 
     /** @param 'count'|'exists'|'sum'|'min'|'max'|'avg' $function */
     private static function trackLoad(MethodCall $call, string $function, AfterExpressionAnalysisEvent $event): void
     {
         // `$m->loadCount('a')->loadExists('b')`: the inner call already recorded `a`; both mutate `$m`.
-        // Only load calls are transparent: any other method may return a different model.
-        $receiver = $call->var;
-        while (
-            $receiver instanceof MethodCall
-            && $receiver->name instanceof Identifier
-            && (AggregateCallParser::describe(\strtolower($receiver->name->name))[1] ?? false)
-        ) {
-            $receiver = $receiver->var;
-        }
+        $receiver = self::identityRoot($call->var);
 
         $varId = self::varId($receiver);
         if ($varId === null) {
@@ -144,10 +173,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             return;
         }
 
-        $entries = self::chainEntries($value, $event);
-        if ($entries !== []) {
-            self::recordFacts($event, $varId, $entries);
-        }
+        self::recordFacts($event, $varId, self::chainEntries($value, $event));
     }
 
     private static function overrideChainFetch(PropertyFetch $fetch, AfterExpressionAnalysisEvent $event): void
@@ -174,30 +200,29 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             return;
         }
 
-        foreach (self::chainEntries($receiver, $event) as $entry) {
-            if ($entry->alias !== $property) {
-                continue;
-            }
-
-            $type = self::provenType($codebase, $model, $entry);
-            if ($type instanceof Union) {
-                // A nullable receiver (`?->`, first()) short-circuits the read to null.
-                $source->getNodeTypeProvider()->setType(
-                    $fetch,
-                    $receiverType?->isNullable() === true ? Type::combineUnionTypes($type, Type::getNull()) : $type,
-                );
-            }
-
-            return;
+        $entry = self::chainEntries($receiver, $event)[$property] ?? null;
+        $type = $entry instanceof AggregateEntry ? self::provenType($codebase, $model, $entry) : null;
+        if ($type instanceof Union) {
+            // A nullable receiver (`?->`, first()) short-circuits the read to null.
+            $source->getNodeTypeProvider()->setType(
+                $fetch,
+                $receiverType?->isNullable() === true ? Type::combineUnionTypes($type, Type::getNull()) : $type,
+            );
         }
     }
 
-    /** @param list<AggregateEntry> $entries */
-    private static function recordFacts(AfterExpressionAnalysisEvent $event, string $varId, array $entries): void
+    /**
+     * @param iterable<AggregateEntry> $entries in execution order: a later entry with the same alias wins
+     */
+    private static function recordFacts(AfterExpressionAnalysisEvent $event, string $varId, iterable $entries): void
     {
         $context = $event->getContext();
-        $model = self::singleModel($context->vars_in_scope[$varId] ?? null);
-        if ($model === null) {
+        $varType = $context->vars_in_scope[$varId] ?? null;
+        $model = self::singleModel($varType);
+
+        // A cached `$m->alias` is read before the receiver is checked, so a nullable `$m` would lose
+        // its PossiblyNullPropertyFetch.
+        if ($model === null || $varType?->isNullable() === true) {
             return;
         }
 
@@ -212,8 +237,9 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     /**
      * Aggregates the chain provably loaded on the model it returns. Walks from the outermost call to
      * the root; collection hops and non-Builder calls end the walk, keeping what was collected.
+     * Keyed by alias: calls execute innermost-first, so the outermost entry for an alias wins.
      *
-     * @return list<AggregateEntry>
+     * @return array<string, AggregateEntry>
      */
     private static function chainEntries(Expr $expr, AfterExpressionAnalysisEvent $event): array
     {
@@ -235,7 +261,12 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
                     break;
                 }
 
-                \array_push($entries, ...AggregateCallParser::entries($described[0], $expr->isFirstClassCallable() ? [] : $expr->getArgs()));
+                $call = [];
+                foreach (AggregateCallParser::entries($described[0], $expr->isFirstClassCallable() ? [] : $expr->getArgs()) as $entry) {
+                    $call[$entry->alias] = $entry;
+                }
+
+                $entries += $call;
             } elseif (!$buildingQuery) {
                 if (!isset(self::RETRIEVAL_METHODS[$name])) {
                     break;
