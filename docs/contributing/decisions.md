@@ -193,6 +193,26 @@ Document every workaround with a comment linking to the upstream issue.
 
 **See:** [#815](https://github.com/psalm/psalm-plugin-laravel/issues/815), [#776](https://github.com/psalm/psalm-plugin-laravel/issues/776), [PR #784](https://github.com/psalm/psalm-plugin-laravel/pull/784), `tests/Type/tests/Builder/WhereClosureSubclassCoercionTest.phpt`.
 
+### Conditionable `when()`/`unless()` callback params via a params provider
+
+**Decision:** `ConditionableCallbackParamsHandler` replaces the stub's `callback`/`default` params per call site with `callable(<receiver>, <truthy|falsy $value>): mixed|null` (swapped for `unless`). The stub keeps plain `callable|null`.
+
+**Why, mechanism by mechanism:**
+- **Params provider, not Laravel's `@template` docblock.** The template form brings back the `mixed` chain return (#704) and types `$value` as nullable inside the callback.
+- **Per-host `registerClosure` in `AfterCodebasePopulated`.** Params providers dispatch on the called class (`Methods::getMethodParams()`) with no declaring-class fallback, so registering on the trait never fires (return-type providers do fall back). Hosts are non-trait classes whose `when`/`unless` resolve to `Conditionable`; classes declaring their own `when()` (Container, Enumerable, ...) are excluded automatically.
+- **`BeforeExpressionAnalysis` stash.** The provider event carries no call node, and the class name alone loses generics (false `MixedArgumentTypeCoercion`). The hook stashes the `when`/`unless` `MethodCall` in a `WeakMap` keyed by its first `Arg`; the provider reads the receiver's node type from it.
+- **Pre-analysis of `$value`, on a cloned `Context`.** Params are fetched before args are analyzed (`CallAnalyzer::checkMethodArgs()` calls `Methods::getMethodParams()` before `ArgumentsAnalyzer::analyze()`), so the handler analyzes the arg itself. Psalm's own callmap path in `Methods::getMethodParams()` uses the live context, and that applies side effects twice (`++$i` leaves `$i === 2`, `$a[] = $x` yields `list{T, T}`), so the handler analyzes a clone. Closure values contribute their return type.
+- **Truthy/falsy via `AssertionReconciler`** with `Truthy`/`Falsy` assertions, so narrowing matches Psalm's own `if ($x)` semantics (`?int` → `int` minus `0`, etc.).
+- **Closure/arrow-fn literals only.** Only a slot whose argument is a `Closure`/`ArrowFunction` literal gets the typed callable. A passed-through callable that declares fewer params is rejected against a 2-param `callable` (param-count check in `UnionTypeComparator::isContainedBy()`, false `PossiblyInvalidArgument`/`MixedArgumentTypeCoercion`). A first-class callable has no declared-type escape for a subclass receiver. A literal whose first param is variadic (`function (...$args)`) is skipped too: Psalm fills a variadic param from the container's param 0 only, so every element would be typed as the receiver.
+- **Declared-type preference.** If a closure literal declares a param type that contains the computed type, the declared type wins. Otherwise defensive code (`?int $x` then `if ($x === null)`) gets new `TypeDoesNotContainNull`/`RedundantCondition` noise. For the receiver slot only, a declared subclass of the receiver class also wins, because at runtime `$this` may be a custom builder Psalm cannot see (`#[UseEloquentBuilder]`, docblock-only `newEloquentBuilder`). `isContainedBy` cannot express that check. Declared types are memoized in a `WeakMap` keyed by the literal node on first sight: `ArgumentsAnalyzer::handleClosureArg()` overwrites the storage param type with the inferred one, and a loop's second pass re-analyzes the same node.
+- **Final hosts drop `&static`.** `$this` inside a trait is `Host&static`, and against a final host Psalm compares it with the plain host type (false `ArgumentTypeCoercion`).
+
+**Declines (returns null = stock stub behavior):** union receivers (per-atomic closure re-analysis, last wins → FPs); receiver class ≠ dispatched class (relation `@mixin` forwarding to `Builder`); any `mixed` in `$value`; a `$value` atomic that may be a Closure with an unknown return type (`callable`, `object`, template params, bare `Closure`); unpacked args; fewer than 2 args; no closure-literal slot. A slot keeps the stub callable when its literal declares a late-bound `self`/`static`/`parent` type at any depth (`list<self>`, `Collection<int, static>`) (closure storage keeps it unexpanded and Psalm never matches it against the host, false `InvalidArgument`) or its closure storage cannot be read, and when a branch reconciles to `never` (dead branch, avoids `NoValue`).
+
+**Out of scope:** 0/1-arg `HigherOrderWhenProxy`, static `Model::when(...)`, `__call`-forwarded calls, narrowing `use`d variables, `Enumerable`-typed receivers.
+
+**See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
