@@ -45,7 +45,7 @@ return redirect()->route('members.show', $user);
 
 ## Configuration
 
-This check is disabled by default. Enable it in your `psalm.xml`:
+Disabled by default; enable it in your `psalm.xml` (or via `<experimental value="true" />`, see [Configuration](../config.md#findunregisteredroutenames)):
 
 ```xml
 <plugins>
@@ -55,26 +55,22 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 </plugins>
 ```
 
-## Missing-named-route resolvers
+Once enabled it reports at Psalm's normal `error` level; override per issue with `<issueHandlers>`.
 
-`UrlGenerator::route()` consults a callback registered through `resolveMissingNamedRoutesUsing()` before it throws, so in an application that registers one, a name absent from the route table can still produce a working URL at runtime. The plugin detects that during boot and disables this check entirely (silently, since registering the resolver is an explicit opt-in to dynamic route resolution, not a degradation). A project-specific `url` service that is not an `Illuminate\Routing\UrlGenerator` cannot be probed, so it disables the check as well, rather than reporting names the plugin cannot judge.
+## When the check stays off
 
-A resolver registered after boot, for instance inside middleware or a controller, is invisible to static analysis and remains a false-positive source.
+The plugin arms the check only when the route table can be trusted, and otherwise stays silent:
 
-## When the check bails
-
-The check runs only when the plugin boots the project's own `bootstrap/app.php`. A package/library project analysed through the Testbench fallback is skipped without a warning: that boot never loads the project's route files, so its route table (which on Laravel 12 still carries framework routes such as `storage.local`) says nothing about the names the package uses.
-
-Under a real boot, the plugin also bails, with no findings at all, when the application resolves zero named routes, rather than reporting every route name as missing. When that empty table comes from a route cache carrying no named routes, it warns and names `route:cache` and `route:clear`, since a real application with real routes silently going unchecked is worth flagging.
+- The plugin booted through the Testbench fallback (a package/library project): that boot never loads the project's route files, and on Laravel 12 its table still carries framework routes such as `storage.local`.
+- The project's `bootstrap/app.php` threw during boot, so the table may be partial.
+- The booted application resolves zero named routes, including a route cache (`bootstrap/cache/routes-v7.php`) that carries none.
+- The application registers a missing-named-route resolver (`UrlGenerator::resolveMissingNamedRoutesUsing()`), which `route()` consults before throwing. A `url` service that is not Laravel's `UrlGenerator` cannot be probed and counts as having one.
 
 ## Limitations
 
-- Only string literal route names are checked — dynamic or concatenated names are skipped
-- `\BackedEnum` route names (Laravel 11+) are skipped
-- An empty name (`route('')`) is skipped by design. It can never match a registered route, so a finding would restate a mistake that is already plain at the call site, and an empty literal usually means unfinished scaffolding rather than a typo'd name
-- A call site guarded by `Route::has('name')` is not tracked — the guarded branch still reports if the name is unregistered in the analysed boot
-- Routes registered conditionally (behind a feature flag, an env check, or a package's own conditional registration) can produce a false positive if the plugin's boot doesn't register them the same way production does
-- Blade templates are out of scope — only PHP call sites are checked
-- When `bootstrap/cache/routes-v7.php` is present, named routes are read from it, the same as from a live route-file boot
-- A missing-named-route resolver registered after boot (in middleware, a controller, or a test) cannot be detected, so names it would have resolved are still reported
-- A stale route cache (one written before a route was added, renamed, or given a name) can produce a false positive, reporting a route that does exist because the cache predates it. Running `php artisan route:cache` again, or `php artisan route:clear`, resolves it. This is a known, accepted limitation of checking against whatever route table the analysed boot actually resolves
+- Only string literal route names are checked; dynamic names and `\BackedEnum` names (Laravel 11+) are skipped
+- A call site guarded by `Route::has('name')` is not tracked
+- Routes registered conditionally (feature flag, env check, package-specific registration) can produce a false positive if the analysed boot does not register them like production does
+- A stale route cache (written before a route was added, renamed, or named) can produce a false positive; `php artisan route:cache` or `route:clear` fixes it
+- A missing-named-route resolver registered after boot (middleware, controller, test) cannot be detected
+- Blade templates are out of scope

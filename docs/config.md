@@ -175,13 +175,11 @@ See [MissingView](issues/MissingView.md) for details.
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnregisteredRouteNames />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
 
-When enabled, the plugin checks that `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, and `url()->route()` calls reference a route name registered in the booted application.
+When enabled, the plugin flags a string literal route name passed to `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` that is not registered in the booted application. Dynamic and `\BackedEnum` names are skipped; named arguments are resolved by parameter name.
 
-Only string literal route names are checked — dynamic names and `\BackedEnum` route names (Laravel 11+) are skipped. Named arguments are honoured, so the name is found wherever it sits (`route(absolute: false, name: 'dashboard')`). The check runs only under the project's own `bootstrap/app.php` boot (never the Testbench fallback used for packages), and bails entirely when the application boots with no named routes at all, rather than reporting every route name as missing. It also bails when the application registers a missing-named-route resolver, since `route()` then resolves names that are absent from the table.
+The check stays off, silently, when the route table cannot be trusted: the Testbench package fallback boot or a swallowed bootstrap error, an application with no named routes, or an application that registers a missing-named-route resolver. Once enabled it reports at Psalm's normal `error` level.
 
-`UnregisteredRouteName` is also one of the issues [`<experimental>`](#experimental) reports at `error` instead of `info`, so turning `<experimental>` on both enables this check (via the flag above) and raises its severity at the same time.
-
-See [UnregisteredRouteName](issues/UnregisteredRouteName.md) for details, including its known false-positive sources (conditionally registered routes, stale route caches) and the call shapes it deliberately skips.
+See [UnregisteredRouteName](issues/UnregisteredRouteName.md) for details and known false-positive sources.
 
 ### Example
 
@@ -283,7 +281,7 @@ PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 Early access to plugin features that are still on their way to becoming the default in a later minor or major release. Enabling it pulls in two directions at once, tightening some checks while turning others on:
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
-- [`findUnregisteredRouteNames`](#findunregisteredroutenames) and [`findSerializedQueuedModels`](#findserializedqueuedmodels), both off by default, turn on unless the project sets them explicitly. `findUnregisteredRouteNames` is also one of the experimental issues from the first bullet, so it gets both effects at once.
+- [`findUnregisteredRouteNames`](#findunregisteredroutenames) and [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turn on unless the project sets them explicitly.
 
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 

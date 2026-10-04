@@ -14,10 +14,4 @@ use Psalm\Issue\PluginIssue;
 final class UnregisteredRouteName extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnregisteredRouteName/';
-
-    // No ERROR_LEVEL override: controlled by the plugin setting findUnregisteredRouteNames.
-    // Also entered in ExperimentalIssuePolicy::ISSUES — defaults to 'info' until
-    // graduated, given the false-POSITIVE sources documented on the handler
-    // (Route::has() guards, conditionally-registered routes, stale route caches):
-    // each one can report a route that does resolve at runtime.
 }

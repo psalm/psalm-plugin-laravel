@@ -19,7 +19,6 @@
             <reportImplicitQueryBuilderCalls value="true" />
             <findMissingTranslations value="true" />
             <findMissingViews value="true" />
-            <findUnregisteredRouteNames value="true" />
             <findSerializedQueuedModels value="true" />
             <findOctaneIncompatibleBinding value="true" />
             <failOnInternalError value="true" />

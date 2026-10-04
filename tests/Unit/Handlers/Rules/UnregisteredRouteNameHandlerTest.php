@@ -4,302 +4,148 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Rules;
 
-use Illuminate\Routing\Redirector;
+use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\UrlGenerator;
-use PhpParser\Node\Arg;
-use PhpParser\Node\Expr\ClassConstFetch;
-use PhpParser\Node\Expr\ConstFetch;
-use PhpParser\Node\Expr\FuncCall;
-use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Expr\Variable;
-use PhpParser\Node\Identifier;
-use PhpParser\Node\Name;
-use PhpParser\Node\Scalar\String_;
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\CodeLocation;
-use Psalm\Context;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Handlers\Rules\UnregisteredRouteNameHandler;
-use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
-use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
-use Psalm\StatementsSource;
-use Psalm\Type\Union;
 
 /**
- * Unit-level coverage for {@see UnregisteredRouteNameHandler}'s pure gate logic (literal extraction,
- * method-name gate, enabled/disabled state). Every scenario here asserts the handler declines
- * (returns non-Union) — it never reaches IssueBuffer::accepts() in-process, since no Psalm
- * runtime is initialized in a plain PHPUnit test (same convention as MissingViewHandlerTest).
- * The actual positive emission is guarded end-to-end by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnregisteredRouteNameEmissionTest}, a real Psalm
- * subprocess against a fixture with a populated route table.
+ * Guards the conditions under which {@see UnregisteredRouteNameHandler::init()} must NOT arm the
+ * rule, since arming against an untrustworthy route table turns every `route()` call into a false
+ * positive. The positive emission is guarded end-to-end by
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnregisteredRouteNameEmissionTest}; the
+ * positive control below only proves the fixture still arms the rule, so each decline test
+ * cannot pass because the fixture stopped resolving routes.
  */
 #[CoversClass(UnregisteredRouteNameHandler::class)]
 final class UnregisteredRouteNameHandlerTest extends TestCase
 {
+    #[\Override]
     protected function setUp(): void
     {
-        UnregisteredRouteNameHandler::init(['dashboard' => true, 'posts.show' => true]);
+        ApplicationProvider::reset();
+        UnregisteredRouteNameHandler::reset();
     }
 
+    #[\Override]
     protected function tearDown(): void
     {
+        ApplicationProvider::reset();
         UnregisteredRouteNameHandler::reset();
     }
 
     #[Test]
-    public function returns_route_and_to_route_function_ids(): void
+    public function arms_with_the_route_table_of_a_clean_project_boot(): void
     {
-        $this->assertSame(['route', 'to_route'], UnregisteredRouteNameHandler::getFunctionIds());
-    }
+        $this->bootFixtureAndInit();
 
-    #[Test]
-    public function registers_the_service_classes_and_canonical_facades(): void
-    {
-        // FacadeMapProvider is not initialized in unit tests, so only the hardcoded
-        // entries are present — the type test (UnregisteredRouteNameTest.phpt) verifies the
-        // FacadeMapProvider-discovered aliases are included when fully booted.
-        $classNames = UnregisteredRouteNameHandler::getClassLikeNames();
-
-        $this->assertContains(UrlGenerator::class, $classNames);
-        $this->assertContains(Redirector::class, $classNames);
-        $this->assertContains(\Illuminate\Support\Facades\URL::class, $classNames);
-        $this->assertContains(\Illuminate\Support\Facades\Redirect::class, $classNames);
-    }
-
-    #[Test]
-    public function registers_the_url_generator_contract_that_url_helper_returns(): void
-    {
-        // url() with no path returns \Illuminate\Contracts\Routing\UrlGenerator, not the
-        // concrete class registered above — a distinct receiver that url()->route()
-        // resolves to and that the handler would otherwise never see.
-        $this->assertContains(
-            \Illuminate\Contracts\Routing\UrlGenerator::class,
-            UnregisteredRouteNameHandler::getClassLikeNames(),
-        );
-    }
-
-    #[Test]
-    public function skips_no_arguments(): void
-    {
-        $event = $this->createFunctionEvent('route', []);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_dynamic_variable_argument(): void
-    {
-        $event = $this->createFunctionEvent('route', [new Arg(new Variable('routeName'))]);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_leading_spread_argument_even_when_it_wraps_a_literal_string(): void
-    {
-        // Deliberately a String_ node (not a Variable) inside the spread: extractLiteralStringArg()
-        // alone would happily read 'anything-unregistered' out of this node, so this only stays
-        // silent because the ->unpack guard short-circuits first. A Variable arg here would pass
-        // even with that guard deleted, since extractLiteralStringArg() already returns null for
-        // non-String_ nodes — this shape is required to give the guard real teeth.
-        $event = $this->createFunctionEvent('route', [new Arg(new String_('anything-unregistered'), false, true)]);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_when_the_first_argument_is_named_for_a_different_parameter(): void
-    {
-        // route(parameters: 'not-a-registered-route') — the name is absent (spread in, or the
-        // call is simply wrong), so the positional fallback must NOT claim this argument.
-        // Deliberately an UNREGISTERED String_: reading it would reach IssueBuffer::accepts()
-        // and throw here (no Psalm runtime in a plain unit test), so deleting the
-        // "first argument must be positional" guard turns this test red.
-        $arg = new Arg(new String_('not-a-registered-route'), false, false, [], new Identifier('parameters'));
-        $event = $this->createFunctionEvent('route', [$arg]);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function resolves_a_reordered_named_route_argument_rather_than_the_first_argument(): void
-    {
-        // route(absolute: false, name: 'dashboard') — offset 0 is `absolute`, so a positional
-        // read would skip the call entirely. Resolution by identifier finds the REGISTERED name
-        // at offset 1 and declines silently; the positive (unregistered) counterpart needs a
-        // real Psalm runtime and lives in UnregisteredRouteNameEmissionTest.
-        $absolute = new Arg(new ConstFetch(new Name('false')), false, false, [], new Identifier('absolute'));
-        $name = new Arg(new String_('dashboard'), false, false, [], new Identifier('name'));
-        $event = $this->createFunctionEvent('route', [$absolute, $name]);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_empty_route_name(): void
-    {
-        // route('') is skipped by design (see UnregisteredRouteNameHandler's class docblock). The empty
-        // name is not in the registered-names table, so without that guard this would reach
-        // IssueBuffer::accepts() and throw.
-        $event = $this->createFunctionEvent('route', [new Arg(new String_(''))]);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_backed_enum_route_name(): void
-    {
-        $enumFetch = new ClassConstFetch(new Name('RouteEnum'), new Identifier('Dashboard'));
-        $event = $this->createFunctionEvent('route', [new Arg($enumFetch)]);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_registered_route_name(): void
-    {
-        $event = $this->createFunctionEvent('route', [new Arg(new String_('dashboard'))]);
-
-        // If the handler incorrectly tried to emit an issue for a registered name, it
-        // would throw here (no Psalm runtime initialized in a plain unit test).
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function skips_when_not_enabled(): void
-    {
-        UnregisteredRouteNameHandler::reset();
-
-        $event = $this->createFunctionEvent('route', [new Arg(new String_('anything'))]);
-
-        // An unregistered name would normally emit; with the handler disabled it must
-        // decline instead of throwing (no Psalm runtime available here).
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
-    public function function_return_type_is_always_null(): void
-    {
-        // Diagnostic-only: even on the "unregistered" path, the return type stub/native
-        // type is left alone, not narrowed or replaced.
-        $event = $this->createFunctionEvent('route', [new Arg(new String_('dashboard'))]);
-
-        $this->assertNull(UnregisteredRouteNameHandler::getFunctionReturnType($event));
+        $this->assertTrue($this->isEnabled());
+        // Not an exact match: the framework registers named routes of its own (storage.local*).
+        $this->assertArrayHasKey('dashboard', $this->names());
+        $this->assertArrayHasKey('posts.show', $this->names());
     }
 
     /**
-     * Psalm always passes an already-lowercased method name to getMethodNameLowercase()
-     * (the property is typed `lowercase-string`) — these are the exact strings the gate
-     * must match, one per method the handler covers.
+     * The Testbench table is not reliably empty (on Laravel 12 the skeleton's local disk registers
+     * `storage.local*`), so only the boot-mode gate keeps a package analysis silent.
+     */
+    #[Test]
+    public function stays_off_under_the_testbench_fallback_boot(): void
+    {
+        ApplicationProvider::bootApp();
+        $this->assertSame('testbench_fallback', ApplicationProvider::getBootMode());
+
+        UnregisteredRouteNameHandler::init(ApplicationProvider::getApp());
+
+        $this->assertFalse($this->isEnabled());
+    }
+
+    #[Test]
+    public function stays_off_after_a_swallowed_bootstrap_error(): void
+    {
+        $this->bootFixtureAndInit(static function (): void {
+            // A real partial boot is not a usable fixture: the router is empty there, which would
+            // decline for the emptiness reason. Record the error on an otherwise populated app.
+            (new \ReflectionProperty(ApplicationProvider::class, 'bootstrapError'))->setValue(null, new \RuntimeException('config failed'));
+        });
+
+        $this->assertFalse($this->isEnabled());
+    }
+
+    #[Test]
+    public function stays_off_when_the_route_table_has_no_names(): void
+    {
+        $this->bootFixtureAndInit(static function (): void {
+            ApplicationProvider::getApp()->make('router')->setRoutes(new RouteCollection());
+        });
+
+        $this->assertFalse($this->isEnabled());
+    }
+
+    #[Test]
+    public function stays_off_when_the_app_registers_a_missing_named_route_resolver(): void
+    {
+        $this->bootFixtureAndInit(static function (): void {
+            ApplicationProvider::getApp()->make('url')->resolveMissingNamedRoutesUsing(static fn(string $name): string => "/legacy/{$name}");
+        });
+
+        $this->assertFalse($this->isEnabled());
+    }
+
+    #[Test]
+    public function stays_off_when_the_url_service_cannot_be_probed_for_a_resolver(): void
+    {
+        $this->bootFixtureAndInit(static function (): void {
+            ApplicationProvider::getApp()->instance('url', new \stdClass());
+        });
+
+        $this->assertFalse($this->isEnabled());
+    }
+
+    /**
+     * Boot the fixture's real bootstrap/app.php (withRouting(), so 'dashboard' and 'posts.show'
+     * are genuinely registered), apply $tweak to the booted app, then arm the handler.
      *
-     * @return iterable<string, array{string}>
+     * @param (\Closure():void)|null $tweak
      */
-    public static function coveredMethodNameProvider(): iterable
+    private function bootFixtureAndInit(?\Closure $tweak = null): void
     {
-        yield 'route' => ['route'];
-        yield 'signedroute' => ['signedroute'];
-        yield 'temporarysignedroute' => ['temporarysignedroute'];
+        $originalCwd = \getcwd();
+        \assert(\is_string($originalCwd));
+
+        \chdir(__DIR__ . '/../Fixtures/UnregisteredRouteName');
+
+        try {
+            ApplicationProvider::bootApp();
+            $this->assertInstanceOf(UrlGenerator::class, ApplicationProvider::getApp()->make('url'));
+
+            if ($tweak instanceof \Closure) {
+                $tweak();
+            }
+
+            UnregisteredRouteNameHandler::init(ApplicationProvider::getApp());
+        } finally {
+            \chdir($originalCwd);
+        }
     }
 
-    #[Test]
-    #[DataProvider('coveredMethodNameProvider')]
-    public function method_skips_registered_route_name_for_every_covered_method(string $methodName): void
+    private function isEnabled(): bool
     {
-        $event = $this->createMethodEvent($methodName, 'dashboard');
+        /** @var bool $enabled */
+        $enabled = (new \ReflectionProperty(UnregisteredRouteNameHandler::class, 'enabled'))->getValue();
 
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
+        return $enabled;
     }
 
-    #[Test]
-    public function method_skips_uncovered_method_names(): void
+    /** @return array<string, true> */
+    private function names(): array
     {
-        // An UNREGISTERED name on purpose: a registered name would pass this test even
-        // with the method-name gate deleted, since checkRouteExists() would still return
-        // early on the isset() check — this shape is required to give the gate real teeth.
-        $event = $this->createMethodEvent('previous', 'not-a-registered-route');
+        /** @var array<string, true> $names */
+        $names = (new \ReflectionProperty(UnregisteredRouteNameHandler::class, 'names'))->getValue();
 
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
-    }
-
-    #[Test]
-    public function method_skips_no_arguments(): void
-    {
-        $event = $this->createMethodEvent('route', null);
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
-    }
-
-    #[Test]
-    public function method_skips_dynamic_variable_argument(): void
-    {
-        $source = $this->createStub(StatementsSource::class);
-        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
-        $source->method('getFileName')->willReturn('TestController.php');
-        $source->method('getSuppressedIssues')->willReturn([]);
-
-        $methodCall = new MethodCall(new Variable('url'), 'route');
-        $methodCall->setAttribute('startFilePos', 0);
-        $methodCall->setAttribute('endFilePos', 10);
-        $methodCall->args = [new Arg(new Variable('routeName'))];
-
-        $event = new MethodReturnTypeProviderEvent(
-            $source,
-            UrlGenerator::class,
-            'route',
-            $methodCall,
-            new Context(),
-            new CodeLocation($source, $methodCall),
-        );
-
-        $this->assertNotInstanceOf(Union::class, UnregisteredRouteNameHandler::getMethodReturnType($event));
-    }
-
-    /**
-     * @param list<Arg> $args
-     */
-    private function createFunctionEvent(string $functionName, array $args): FunctionReturnTypeProviderEvent
-    {
-        $source = $this->createStub(StatementsSource::class);
-        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
-        $source->method('getFileName')->willReturn('TestController.php');
-        $source->method('getSuppressedIssues')->willReturn([]);
-
-        $funcCall = new FuncCall(new Name($functionName));
-        $funcCall->setAttribute('startFilePos', 0);
-        $funcCall->setAttribute('endFilePos', 10);
-        $funcCall->args = $args;
-
-        return new FunctionReturnTypeProviderEvent(
-            $source,
-            $functionName,
-            $funcCall,
-            new Context(),
-            new CodeLocation($source, $funcCall),
-        );
-    }
-
-    private function createMethodEvent(string $methodName, ?string $routeName): MethodReturnTypeProviderEvent
-    {
-        $source = $this->createStub(StatementsSource::class);
-        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
-        $source->method('getFileName')->willReturn('TestController.php');
-        $source->method('getSuppressedIssues')->willReturn([]);
-
-        $methodCall = new MethodCall(new Variable('url'), $methodName);
-        $methodCall->setAttribute('startFilePos', 0);
-        $methodCall->setAttribute('endFilePos', 10);
-        $methodCall->args = $routeName === null ? [] : [new Arg(new String_($routeName))];
-
-        return new MethodReturnTypeProviderEvent(
-            $source,
-            UrlGenerator::class,
-            $methodName,
-            $methodCall,
-            new Context(),
-            new CodeLocation($source, $methodCall),
-        );
+        return $names;
     }
 }

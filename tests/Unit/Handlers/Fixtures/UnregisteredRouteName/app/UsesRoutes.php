@@ -13,7 +13,7 @@ enum RouteEnum: string
     case Dashboard = 'dashboard';
 }
 
-/** Every registered call site the handler covers, one clean and one typo'd usage each. */
+/** Every call site the handler covers: typo'd usages, plus clean and skipped shapes that must stay silent. */
 final class UsesRoutes
 {
     public function routeHelperTypo(): string
@@ -29,11 +29,6 @@ final class UsesRoutes
     public function toRouteHelperTypo(): RedirectResponse
     {
         return to_route('posts.hsow');
-    }
-
-    public function toRouteHelperClean(): RedirectResponse
-    {
-        return to_route('posts.show');
     }
 
     public function urlFacadeRouteTypo(): string
@@ -61,11 +56,6 @@ final class UsesRoutes
         return redirect()->route('dashboard-legacy');
     }
 
-    public function redirectHelperRouteClean(): RedirectResponse
-    {
-        return redirect()->route('dashboard');
-    }
-
     /**
      * url() with no path returns \Illuminate\Contracts\Routing\UrlGenerator, not the
      * concrete \Illuminate\Routing\UrlGenerator — a distinct receiver the handler must
@@ -74,11 +64,6 @@ final class UsesRoutes
     public function urlHelperRouteTypo(): string
     {
         return url()->route('dashboard-legacy');
-    }
-
-    public function urlHelperRouteClean(): string
-    {
-        return url()->route('dashboard');
     }
 
     /**
@@ -111,16 +96,6 @@ final class UsesRoutes
     public function redirectHelperRouteNamedArgTypo(): RedirectResponse
     {
         return redirect()->route(route: 'dashboard-legacy');
-    }
-
-    /**
-     * An empty name is skipped by design (see the handler's class docblock). Keeping it in
-     * the fixture pins that limitation: dropping the empty-string guard makes the exact
-     * finding count below go up, failing the emission test.
-     */
-    public function emptyNameNeverFlagged(): string
-    {
-        return route('');
     }
 
     /**

@@ -8,7 +8,6 @@ use Psalm\Config;
 use Psalm\Issue\PluginIssue;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
-use Psalm\LaravelPlugin\Issues\UnregisteredRouteName;
 
 /**
  * Applies the default reporting policy for plugin diagnostics that are still
@@ -23,7 +22,6 @@ final class ExperimentalIssuePolicy
     private const ISSUES = [
         UnknownModelAttribute::class,
         UndefinedModelRelation::class,
-        UnregisteredRouteName::class,
     ];
 
     public static function apply(bool $enforced): void

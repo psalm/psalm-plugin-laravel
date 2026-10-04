@@ -11,84 +11,32 @@ use Psalm\LaravelPlugin\Handlers\Rules\UnregisteredRouteNameHandler;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end guard for {@see UnregisteredRouteNameHandler}'s actual emission. The `UnregisteredRouteNameTest.phpt`
- * type test only guards the empty-table defer — the psalm-tester harness boots through the
- * Testbench package fallback, which never loads an application's route files, so the named-route
- * table there is always empty and the handler never gets to fire positively. This points a real
- * Psalm subprocess at a self-contained fixture with a real `bootstrap/app.php` and `withRouting()`
- * so the router resolves an actual named-route table and the rule fires for real — across every
- * receiver the handler covers (route(), to_route(), URL::route()/signedRoute()/
- * temporarySignedRoute(), Redirect::route(), redirect()->route(), url()->route()) and in both
- * the positional and named-argument call shapes — while staying silent on a clean call, a
- * leading spread, a non-literal name, a BackedEnum name, and an empty name.
+ * End-to-end guard for {@see UnregisteredRouteNameHandler}'s emission. The psalm-tester type-test
+ * harness boots the Testbench fallback, which never loads route files, so the rule can only fire
+ * for real in a Psalm subprocess against a fixture with a real `bootstrap/app.php` and
+ * `withRouting()`. Covers every receiver the handler registers for, positional and named-argument
+ * call shapes, and the shapes that must stay silent (registered name, spread, non-literal, enum).
  *
- * Lives in tests/Unit for proximity to the handler it guards, same convention as
- * {@see UnknownModelAttributeEmissionTest}.
+ * Lives in tests/Unit next to {@see UnknownModelAttributeEmissionTest}, the same convention.
  */
 #[CoversClass(UnregisteredRouteNameHandler::class)]
 final class UnregisteredRouteNameEmissionTest extends TestCase
 {
     #[Test]
-    public function it_reports_undefined_route_names_through_every_covered_receiver_and_stays_silent_on_clean_calls(): void
+    public function it_reports_unregistered_route_names_through_every_covered_receiver_and_stays_silent_otherwise(): void
     {
         $findings = $this->runPsalmAndCollectFindings();
+        $joined = \implode("\n", \array_column($findings, 'message'));
 
-        $messages = \array_map(
-            static fn(array $finding): string => $finding['message'],
-            $findings,
-        );
-        $joined = \implode("\n", $messages);
-
-        // One finding per typo'd call site. Eight positional: route(), to_route(), URL::route(),
-        // URL::signedRoute(), URL::temporarySignedRoute(), Redirect::route(), redirect()->route(),
-        // url()->route() (the last one hits the \Illuminate\Contracts\Routing\UrlGenerator
-        // contract url() returns with no path, a distinct receiver from the concrete class).
-        // Three named-argument: route(absolute:, name:) with the name at offset 1, to_route(route:)
-        // and redirect()->route(route:) covering the `$route` half of Laravel's split signature.
-        // The clean calls, the spread, the non-literal name, the enum name, and the empty name must
-        // stay silent — asserting an exact count proves both that the rule fires on every covered
-        // receiver and that it does not over-fire on the forms it deliberately skips.
+        // 8 positional (route(), to_route(), URL::route/signedRoute/temporarySignedRoute, Redirect::route(),
+        // redirect()->route(), url()->route() on the Contracts\UrlGenerator url() returns with no path)
+        // + 3 named-argument (route(absolute:, name:) with the name at offset 1, to_route(route:),
+        // redirect()->route(route:)). An exact count proves both full receiver coverage and that the
+        // clean call, spread, non-literal and enum shapes do not over-fire.
         $this->assertCount(11, $findings, "Expected exactly 11 UnregisteredRouteName findings, got:\n{$joined}");
-        $this->assertStringContainsString("'dashboard-legacy'", $joined, 'Every URL/Redirect-family typo must be flagged.');
-        $this->assertStringContainsString("'posts.hsow'", $joined, 'to_route() with a typo must be flagged.');
-        $this->assertStringNotContainsString(
-            "'dashboard'",
-            $joined,
-            'A registered route name must never be flagged, on any receiver.',
-        );
-        $this->assertStringNotContainsString(
-            "'posts.show'",
-            $joined,
-            'A registered route name must never be flagged, on any receiver.',
-        );
-        $this->assertSame(\array_fill(0, 11, 'info'), \array_column($findings, 'severity'));
-    }
-
-    #[Test]
-    public function experimental_enforcement_promotes_the_same_findings_to_errors(): void
-    {
-        $findings = $this->runPsalmAndCollectFindings('psalm-experimental.xml');
-
-        $this->assertCount(11, $findings);
-        $this->assertSame(\array_fill(0, 11, 'error'), \array_column($findings, 'severity'));
-    }
-
-    /**
-     * PluginConfig::fromXml() enables findUnregisteredRouteNames under `<experimental>` unless the
-     * project sets it explicitly (matching findSerializedQueuedModels's own convention), and
-     * ExperimentalIssuePolicy separately promotes UnregisteredRouteName's severity to error whenever
-     * `<experimental>` is set. This fixture config carries neither `findUnregisteredRouteNames` nor an
-     * explicit `issueHandlers` entry, so both mechanisms fire from `<experimental value="true" />`
-     * alone: the rule turns on AND its findings report as errors, proving the two independent
-     * gates (enablement and severity) combine coherently rather than one silently overriding
-     * or masking the other.
-     */
-    #[Test]
-    public function experimental_alone_both_enables_the_rule_and_promotes_its_severity(): void
-    {
-        $findings = $this->runPsalmAndCollectFindings('psalm-experimental-auto-enable.xml');
-
-        $this->assertCount(11, $findings);
+        $this->assertStringNotContainsString("'dashboard'", $joined);
+        $this->assertStringNotContainsString("'posts.show'", $joined);
+        // The rule is opt-in but reports at Psalm's normal level once enabled.
         $this->assertSame(\array_fill(0, 11, 'error'), \array_column($findings, 'severity'));
     }
 

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
+use Illuminate\Foundation\Application;
 use Illuminate\Routing\Redirector;
 use Illuminate\Routing\UrlGenerator;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Issues\UnregisteredRouteName;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
@@ -21,51 +23,25 @@ use Psalm\Type\Union;
 /**
  * Detects calls to route(), to_route(), URL::route()/signedRoute()/temporarySignedRoute(),
  * Redirect::route(), redirect()->route(), and url()->route() whose route name is not
- * registered anywhere in the booted application, and flags it as {@see UnregisteredRouteName}.
+ * registered in the booted application, and flags it as {@see UnregisteredRouteName}.
  *
- * Diagnostic only — every provider method below always returns null; stub/native return
- * types are left untouched.
+ * Diagnostic only: every provider method returns null, so stub/native return types are untouched.
  *
- * Registers for the service classes (UrlGenerator, Redirector) and their canonical
- * facades/aliases via {@see FacadeMapProvider}, so the diagnostic fires regardless of
- * how the developer reaches the route() family. The canonical facades are hardcoded
- * (not left to FacadeMapProvider) so the diagnostic still fires on
- * `\Illuminate\Support\Facades\URL::route()` / `...\Redirect::route()` in apps that trim
- * their alias registry — matches {@see \Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler}'s
- * convention.
+ * The canonical URL/Redirect facades are hardcoded next to {@see FacadeMapProvider}'s aliases so
+ * the rule still fires in apps that trim their alias registry (same convention as
+ * {@see \Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler}).
  *
- * Only string literal route names are checked. A leading spread (`route(...$args)`) hides
- * the name entirely and is skipped, same as an already-non-literal first argument. A
- * `\BackedEnum` route name (Laravel 11+) is a `ClassConstFetch` node, never a `String_`,
- * so it is skipped too — a deliberate false-negative, not a bug. Named arguments are
- * resolved by parameter identifier, so `route(absolute: false, name: 'typo')` is checked at
- * the offset it actually occupies (see {@see self::resolveRouteName()}).
+ * Only string literal names are checked. A leading spread, a non-literal expression, and a
+ * `\BackedEnum` name (a `ClassConstFetch`, not a `String_`) are skipped.
  *
- * An empty name (`route('')`) is skipped by design: it can never match a registered route,
- * so a finding here would restate a mistake that is already obvious at the call site, and an
- * empty literal reads as unfinished scaffolding rather than a typo'd name.
+ * The rule arms itself in {@see self::init()} and stays off (no findings, no warning) when
+ * the route table cannot be trusted: the Testbench fallback or a swallowed bootstrap error, an
+ * empty table (a package/library project, or a route cache without named routes), or an app that
+ * registers a missing-named-route resolver, which `UrlGenerator::route()` consults before throwing.
  *
- * The named-route table is populated once per invocation from the booted app's router
- * (see `Plugin::initUnregisteredRouteNameHandler()`). A compiled route cache
- * (`bootstrap/cache/routes-v7.php`) is read the same way a live route-file boot is; the
- * plugin does not treat a cached boot any differently. When the table comes back empty,
- * the handler stays disabled entirely rather than reporting every route name as missing.
- * Two situations produce that empty table: a package/library project analysed through the
- * Testbench fallback (never loads user route files, no warning) and a route cache that
- * itself carries no named routes (warns, naming `route:cache` and `route:clear`).
- *
- * The rule also stands down entirely when the booted app registers a missing-named-route
- * resolver: `UrlGenerator::route()` consults it before throwing, so absence from the table
- * stops implying failure at runtime (see `Plugin::hasMissingNamedRouteResolver()`).
- *
- * Known limitations (by design, not pre-waived accidents): `Route::has()` guards around a
- * call site are not tracked, so a name that is only conditionally missing still reports;
- * a missing-named-route resolver registered after boot cannot be detected;
- * conditionally-registered routes (feature flags, env-gated route files) can produce a
- * false positive if the analysing environment doesn't register them; a stale route cache
- * (one written before a route was added, renamed, or before its name was added) can also
- * produce a false positive, reporting a route that does exist because the cache predates
- * it, and `route:cache` or `route:clear` resolves it; Blade templates are out of scope.
+ * Known limitations: `Route::has()` guards are not tracked; a resolver registered after boot is
+ * invisible; conditionally-registered routes and a stale route cache can produce false
+ * positives; Blade templates are out of scope.
  *
  * @see https://laravel.com/docs/routing#named-routes
  */
@@ -74,13 +50,10 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     /**
      * Parameter identifiers the route name can arrive under, for named-argument call sites.
      *
-     * Laravel's own signatures disagree across the family: the `route()` helper and
-     * UrlGenerator's route()/signedRoute()/temporarySignedRoute() (plus the
-     * Contracts\Routing\UrlGenerator interface) name it `$name`, while `to_route()` and
-     * Redirector's route family name it `$route`. No signature in the family declares both,
-     * so accepting either identifier cannot retarget a valid call: on a receiver from the
-     * other family that identifier is already an unknown-named-argument error at the call
-     * site, which Psalm reports on its own.
+     * The `route()` helper and UrlGenerator's route family name it `$name`; `to_route()` and
+     * Redirector's route family name it `$route`. No signature declares both, so accepting
+     * either cannot retarget a valid call: on the other family it is already an
+     * unknown-named-argument error that Psalm reports itself.
      *
      * @var list<string>
      */
@@ -91,7 +64,6 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
 
     private static bool $enabled = false;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$names = [];
@@ -99,13 +71,55 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     }
 
     /**
-     * @param array<string, true> $names
-     * @psalm-external-mutation-free
+     * Read the booted app's named-route table and arm the rule when it can be trusted.
+     *
+     * The Testbench fallback is excluded even though its table is non-empty on Laravel 12
+     * (the skeleton's local disk registers `storage.local*`), so an emptiness check alone
+     * would arm the rule and flag every route name a package uses.
      */
-    public static function init(array $names): void
+    public static function init(Application $app): void
     {
+        if (!ApplicationProvider::isProjectBootTrusted()) {
+            return;
+        }
+
+        /** @var \Illuminate\Routing\Router $router */
+        $router = $app->make('router');
+
+        /** @var array<string, true> $names */
+        $names = \array_fill_keys(\array_keys($router->getRoutes()->getRoutesByName()), true);
+
+        // No known names would make every route name "missing".
+        if ($names === [] || self::hasMissingNamedRouteResolver($app)) {
+            return;
+        }
+
         self::$names = $names;
         self::$enabled = true;
+    }
+
+    /**
+     * `UrlGenerator::route()` consults a resolver registered through `resolveMissingNamedRoutesUsing()`
+     * BEFORE throwing, so with one registered, "absent from the table" no longer implies "fails at
+     * runtime". There is no public accessor, hence the reflection. A `url` service that is not
+     * Laravel's UrlGenerator cannot be probed and counts as "resolver present".
+     */
+    private static function hasMissingNamedRouteResolver(Application $app): bool
+    {
+        $url = $app->make('url');
+
+        if (!$url instanceof UrlGenerator) {
+            return true;
+        }
+
+        try {
+            /** @psalm-var callable|null $resolver */
+            $resolver = (new \ReflectionProperty(UrlGenerator::class, 'missingNamedRouteResolver'))->getValue($url);
+        } catch (\ReflectionException) {
+            return true;
+        }
+
+        return $resolver !== null;
     }
 
     /**
@@ -135,10 +149,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
         return null;
     }
 
-    /**
-     * @inheritDoc
-     * @psalm-external-mutation-free
-     */
+    /** @inheritDoc */
     #[\Override]
     public static function getClassLikeNames(): array
     {
@@ -178,12 +189,10 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     /**
      * Resolve the literal route name from a call's arguments, honouring named arguments.
      *
-     * `route(absolute: false, name: 'typo')` puts the name at offset 1, so reading offset 0
-     * positionally would check the wrong node. Resolve by parameter identifier first
-     * ({@see self::ROUTE_NAME_PARAMETERS}); only fall back to the first argument when it is
-     * genuinely positional. Decline when the name cannot be located confidently rather than
-     * guess: a leading spread hides it, and a first argument named for some OTHER parameter
-     * means the name is either spread in or absent.
+     * `route(absolute: false, name: 'typo')` puts the name at offset 1, so resolve by parameter
+     * identifier first and fall back to the first argument only when it is genuinely positional.
+     * Decline when the name cannot be located: a leading spread hides it, and a first argument
+     * named for some OTHER parameter means the name is spread in or absent.
      *
      * @param list<Arg> $callArgs
      * @psalm-mutation-free
@@ -192,37 +201,23 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     {
         foreach ($callArgs as $arg) {
             if ($arg->name !== null && \in_array($arg->name->name, self::ROUTE_NAME_PARAMETERS, true)) {
-                return self::extractLiteralStringArg($arg);
+                return self::literalString($arg);
             }
         }
 
-        if ($callArgs === []) {
+        $firstArg = $callArgs[0] ?? null;
+
+        if ($firstArg === null || $firstArg->name !== null || $firstArg->unpack) {
             return null;
         }
 
-        $firstArg = $callArgs[0];
-
-        if ($firstArg->name !== null || $firstArg->unpack) {
-            return null;
-        }
-
-        return self::extractLiteralStringArg($firstArg);
+        return self::literalString($firstArg);
     }
 
-    /**
-     * Extract a literal string value from a call argument's AST node.
-     *
-     * Returns null for non-literal arguments (including a `\BackedEnum` case, which is a
-     * `ClassConstFetch`) — the handler only validates route names it can statically
-     * determine from the source code.
-     *
-     * @psalm-mutation-free
-     */
-    private static function extractLiteralStringArg(Arg $arg): ?string
+    /** @psalm-mutation-free */
+    private static function literalString(Arg $arg): ?string
     {
-        $value = $arg->value;
-
-        return $value instanceof String_ ? $value->value : null;
+        return $arg->value instanceof String_ ? $arg->value->value : null;
     }
 
     /**
@@ -230,12 +225,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
      */
     private static function checkRouteExists(string $routeName, CodeLocation $codeLocation, array $suppressedIssues): void
     {
-        if (!self::$enabled) {
-            return;
-        }
-
-        // The empty name is an intentional limitation, not an oversight: see the class docblock.
-        if ($routeName === '' || isset(self::$names[$routeName])) {
+        if (!self::$enabled || isset(self::$names[$routeName])) {
             return;
         }
 

@@ -74,15 +74,9 @@ final readonly class PluginConfig
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         // experimental = early access to rules not yet promoted to default; an explicit
-        // value always overrides it, in either direction. This governs ENABLEMENT, distinct
-        // from ExperimentalIssuePolicy, which governs SEVERITY (info vs error) for issues
-        // already listed there — UnregisteredRouteName is in both, so <experimental value="true" />
-        // both turns the rule on and reports it as an error, the same combined effect
-        // findSerializedQueuedModels gets below.
-        $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames') ?? $experimental;
-        // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
+        $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $findPromptInjection = self::xmlPromptInjectionAttr($config);

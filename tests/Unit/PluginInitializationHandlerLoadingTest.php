@@ -65,7 +65,6 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             'initTranslationKeyHandler' => 'Handlers\\Translations\\TranslationKeyHandler::init(',
             'initMissingViewHandler' => 'Handlers\\Views\\MissingViewHandler::init(',
             'initViewFactoryHandler' => 'Handlers\\Views\\MissingViewHandler::initViewFactory(',
-            'initUnregisteredRouteNameHandler' => 'Handlers\\Rules\\UnregisteredRouteNameHandler::init(',
         ] as $method => $staticTouch) {
             $methodBody = $this->methodBody($source, $method);
 
