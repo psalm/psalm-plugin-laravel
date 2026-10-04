@@ -9,6 +9,7 @@ use App\Models\Supplier;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
@@ -92,6 +93,66 @@ function issue1647_declared_class_mismatch_declines(Shop $shop): HasOne
 {
     $relation = $shop->mismatchedWorkOrder();
     /** @psalm-check-type-exact $relation = HasOne<Model, Model> */
+    return $relation;
+}
+
+function issue1647_query_builder_only_method_keeps_relation(Shop $shop): HasMany
+{
+    $relation = $shop->beforeCallbackWorkOrders();
+    /** @psalm-check-type-exact $relation = HasMany<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_passthru_method_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedWorkOrdersExist();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_new_instance_clone_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedClonedLastWorkOrder();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_new_instance_apply_scopes_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedScopedWorkOrders();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_dynamic_method_name_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedDynamicChainWorkOrders();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_union_mismatch_declines(Shop $shop): HasMany|Builder
+{
+    $relation = $shop->unionMismatchedWorkOrder();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model>|Builder<Model> */
+    return $relation;
+}
+
+function issue1647_union_containing_parsed_class_maps(Shop $shop): HasOne|HasMany
+{
+    $relation = $shop->unionLastWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_nullable_declaration_maps(Shop $shop): HasOne
+{
+    $relation = $shop->nullableLastWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
     return $relation;
 }
 ?>
