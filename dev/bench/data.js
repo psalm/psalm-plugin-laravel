@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791136721091,
+  "lastUpdate": 1791144647617,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12064,6 +12064,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Wall time",
             "value": 35.53,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c08acd29fd6bbca1a4f68233180bfe7e4db3ea9",
+          "message": "fix(stubs): accept any Collection in BelongsToMany::sync() family ids (#1644)\n\nLaravel types $ids as a bare Collection, which Psalm expands to Collection<array-key, mixed>; with invariant Collection templates, Collection<int, int> matched no arm. Override sync, syncWithoutDetaching and syncWithPivotValues in common, and the sync*OrFail variants (Laravel 13.0+) in stubs/13, with method-level templates.\n\nRefs #1621",
+          "timestamp": "2026-10-04T22:06:40+02:00",
+          "tree_id": "06185377d1e6931f1941fc8da3e96e03f6987ab4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3c08acd29fd6bbca1a4f68233180bfe7e4db3ea9"
+        },
+        "date": 1791144646200,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.35,
             "range": "± 0.12",
             "unit": "s"
           },
