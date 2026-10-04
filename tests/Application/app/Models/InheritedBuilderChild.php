@@ -9,8 +9,9 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Concrete descendant of {@see InheritedBuilderModel} that inherits its custom builder; it must not
  * displace the base model when the builder's scope and SoftDeletes methods are resolved. It also
- * overrides `scopeVisible()` with an extra optional parameter, and is the only model declaring
- * `scopeCount()`, so calls on a base receiver must not pick up either.
+ * overrides `scopeVisible()` with an extra optional parameter and is the only model declaring
+ * `scopeCount()`. Scope params are receiver-less, so the override's signature also applies to base
+ * receivers (an accepted false negative); `scopeCount()` must not affect a base receiver's native `count()`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1620
  */

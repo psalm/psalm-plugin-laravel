@@ -116,7 +116,6 @@ These models test specific Psalm plugin features (PK types, traits) and are not 
 | `Secret`            | Extends abstract UUID model + custom collection via `newCollection()` |
 | `Shop`              | Non-generic relationship resolution testing (#497)                    |
 | `InheritedBuilderModel` / `InheritedBuilderChild` | Non-final base with generic `InheritedModelBuilder` (via `newEloquentBuilder()`), SoftDeletes, and a legacy scope; the final child inherits the builder (so one builder maps to two models), overrides the scope with an extra optional parameter, and alone declares a fluent `scopeCount()` (#1620) |
-| `SharedBuilderSoftModel` / `SharedBuilderWithScopeModel` | Two models on one `SharedSoftScopeBuilder`: one uses SoftDeletes, the other declares its own `scopeWithTrashed($query, int $mode = 0)` (#1620) |
 
 ### Contributing
 
