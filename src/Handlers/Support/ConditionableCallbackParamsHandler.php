@@ -317,7 +317,8 @@ final class ConditionableCallbackParamsHandler implements
      * The value Laravel tests for truthiness: a Closure `$value` is invoked first, so its return
      * type stands in (`void` returns null; `never` leaves both branches dead). Absent arg means
      * the `null` default; a mixed part or a possibly-Closure atomic with no known return type
-     * declines.
+     * declines. The pre-analysis restores the file's type-coverage counters afterwards: Psalm
+     * analyzes the arg again, and counts every sub-expression each time (issues dedupe, counts don't).
      */
     private static function valueType(StatementsAnalyzer $source, Context $context, ?Arg $arg): ?Union
     {
@@ -331,7 +332,16 @@ final class ConditionableCallbackParamsHandler implements
         if (!$type instanceof Union) {
             $probe = clone $context;
             $probe->inside_call = true;
-            ExpressionAnalyzer::analyze($source, $arg->value, $probe);
+            $analyzer = $source->getCodebase()->analyzer;
+            $filePath = $source->getFilePath();
+            $counts = $analyzer->getMixedCountsForFile($filePath);
+
+            try {
+                ExpressionAnalyzer::analyze($source, $arg->value, $probe);
+            } finally {
+                $analyzer->setMixedCountsForFile($filePath, $counts);
+            }
+
             $type = $nodeTypes->getType($arg->value);
         }
 
