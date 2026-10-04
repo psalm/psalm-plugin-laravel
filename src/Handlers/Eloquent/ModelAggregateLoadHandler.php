@@ -16,7 +16,6 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
-use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateEntry;
@@ -36,7 +35,8 @@ use Psalm\Type\Union;
  *
  * 1. `$m->loadCount('x')` on a variable: `vars_in_scope['$m->x_count']` is set. Psalm reads that
  *    entry before any property provider, so alias names (which fail the provider's existence
- *    check) work too. `$m->refresh()` drops every `$m->…` entry; reassigning `$m` is dropped by Psalm.
+ *    check) work too. `$m->refresh()` drops only the facts this handler recorded (user narrowings stay);
+ *    reassigning `$m` is dropped by Psalm.
  * 2. `$m = M::withCount('x')->where(…)->firstOrFail();`: same facts for the assigned variable.
  * 3. `M::withCount('x')->firstOrFail()->x_count`, `$m->loadCount('x')->x_count`: the PropertyFetch
  *    node type is overridden (conventional names only; alias names fail existence earlier).
@@ -79,6 +79,21 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         'setquery' => true,
     ];
 
+    /**
+     * Aliases this handler wrote into `vars_in_scope`, by variable id; only for {@see self::$recordedFile}.
+     *
+     * @var array<string, array<array-key, true>>
+     */
+    private static array $recordedAliases = [];
+
+    private static ?string $recordedFile = null;
+
+    public static function reset(): void
+    {
+        self::$recordedAliases = [];
+        self::$recordedFile = null;
+    }
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -90,7 +105,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             $described = $name === null ? null : AggregateCallParser::describe($name);
 
             if ($name === 'refresh') {
-                self::forgetLoadedAggregates($expr, $event->getContext());
+                self::forgetLoadedAggregates($expr, $event);
             } elseif ($described !== null && $described[1]) {
                 self::trackLoad($expr, $described[0], $event);
             }
@@ -104,22 +119,25 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     }
 
     /**
-     * `$m->refresh()` reloads the attributes, so every cached `$m->…` fact is dropped. Only for a
-     * receiver that is exactly one Model: other objects with a `refresh()` keep their property facts.
+     * `$m->refresh()` reloads the attributes, so the aggregate facts recorded for `$m` in this file are
+     * dropped; user narrowings (`assert($m->owner instanceof X)`) stay, like after any other impure call.
+     * An alias recorded elsewhere in the file for the same variable name is dropped too: over-approximate, sound.
+     * Only for a receiver that is exactly one Model: other objects with a `refresh()` keep their property facts.
      */
-    private static function forgetLoadedAggregates(MethodCall $call, Context $context): void
+    private static function forgetLoadedAggregates(MethodCall $call, AfterExpressionAnalysisEvent $event): void
     {
+        $context = $event->getContext();
         $varId = self::varId(self::identityRoot($call->var));
-        if ($varId === null || self::singleModel($context->vars_in_scope[$varId] ?? null) === null) {
+        if (
+            $varId === null
+            || self::$recordedFile !== $event->getStatementsSource()->getFilePath()
+            || self::singleModel($context->vars_in_scope[$varId] ?? null) === null
+        ) {
             return;
         }
 
-        $prefix = $varId . '->';
-
-        foreach (\array_keys($context->vars_in_scope) as $key) {
-            if (\str_starts_with($key, $prefix)) {
-                unset($context->vars_in_scope[$key]);
-            }
+        foreach (\array_keys(self::$recordedAliases[$varId] ?? []) as $alias) {
+            unset($context->vars_in_scope[$varId . '->' . $alias]);
         }
     }
 
@@ -221,6 +239,12 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             return;
         }
 
+        $filePath = $event->getStatementsSource()->getFilePath();
+        if ($filePath !== self::$recordedFile) {
+            self::$recordedFile = $filePath;
+            self::$recordedAliases = [];
+        }
+
         foreach ($entries as $entry) {
             $type = self::provenType($event->getCodebase(), $model, $entry);
             if (!$type instanceof Union) {
@@ -228,6 +252,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             }
 
             $context->vars_in_scope[$varId . '->' . $entry->alias] = $type;
+            self::$recordedAliases[$varId][$entry->alias] = true;
         }
     }
 

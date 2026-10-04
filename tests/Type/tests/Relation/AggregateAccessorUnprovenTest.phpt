@@ -137,6 +137,14 @@ function test_refresh_drops_loaded_aggregates(Shop $shop): void
     echo $count;
 }
 
+function test_refresh_drops_a_loaded_alias_fact(Shop $shop): mixed
+{
+    $shop->loadCount('workOrders as order_total');
+    $shop->refresh();
+
+    return $shop->order_total;
+}
+
 function test_first_or_new_terminal_is_not_proof(): void
 {
     $shop = Shop::withCount('workOrders')->firstOrNew(['id' => 1]);
@@ -188,3 +196,4 @@ PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null varia
 PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $shop of type App\Models\Shop|null
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$order_total is not defined
