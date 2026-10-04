@@ -193,6 +193,9 @@ function test_refresh_drops_an_aggregate_fact_recorded_on_a_loaded_relation(Cust
 {
     \assert($customer->primary_vehicle !== null);
     $customer->primary_vehicle->loadCount('workOrders as order_total');
+    /** @psalm-check-type-exact $before = int<0, max> */
+    $before = $customer->primary_vehicle->order_total;
+    echo $before;
     $customer->refresh();
 
     return $customer->primary_vehicle->order_total;
