@@ -20,6 +20,14 @@
 #     [--psalm-args '--php-version=8.0'] \
 #     [--app-src /cache/monica-src] [--mem 4G]
 #
+#   delta-app.sh --install-only \
+#     --app monica --repo ... --ref e08e917 --plugin-base /path/plugin-base \
+#     --out /path/output-dir [--app-src ...] [--prime ...] [--project-dir ...]
+#
+# --install-only stops after the source install (clone + composer + psalm.xml in
+# --app-src), so a trusted workflow can save it to the cache that comment-
+# triggered runs only restore. --plugin-head and the labels are not needed.
+#
 # Output (per side, <label> in {base-label, head-label}):
 #   <out>/<app>/<app>-<label>-<date-marker>--issues.json   (Psalm --report JSON)
 #   <out>/<app>/<app>-<label>-<date-marker>--perf.json      (wall, coverage, count)
@@ -35,7 +43,7 @@ set -euo pipefail
 
 APP="" REPO="" REF="" PLUGIN_BASE="" PLUGIN_HEAD="" OUT=""
 BASE_LABEL="" HEAD_LABEL="" PROJECT_DIR=""
-DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G" PSALM_ARGS=""
+DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G" PSALM_ARGS="" INSTALL_ONLY=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -56,11 +64,16 @@ while [[ $# -gt 0 ]]; do
         --psalm-args) PSALM_ARGS="$2"; shift 2 ;;
         --app-src) APP_SRC="$2"; shift 2 ;;
         --mem) MEM="$2"; shift 2 ;;
+        --install-only) INSTALL_ONLY=1; shift ;;
         *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
     esac
 done
 
-for req in APP REPO REF PLUGIN_BASE PLUGIN_HEAD OUT BASE_LABEL HEAD_LABEL; do
+required=(APP REPO REF PLUGIN_BASE OUT)
+if [[ "$INSTALL_ONLY" == 0 ]]; then
+    required+=(PLUGIN_HEAD BASE_LABEL HEAD_LABEL)
+fi
+for req in "${required[@]}"; do
     if [[ -z "${!req}" ]]; then
         # tr for the flag name: bash 3.2 (macOS default) lacks ${var,,}.
         echo "ERROR: --$(echo "$req" | tr '[:upper:]' '[:lower:]') is required" >&2
@@ -70,7 +83,9 @@ done
 
 # Canonicalise plugin dirs so the composer path repo records an absolute target.
 PLUGIN_BASE=$(cd "$PLUGIN_BASE" && pwd -P)
-PLUGIN_HEAD=$(cd "$PLUGIN_HEAD" && pwd -P)
+if [[ "$INSTALL_ONLY" == 0 ]]; then
+    PLUGIN_HEAD=$(cd "$PLUGIN_HEAD" && pwd -P)
+fi
 mkdir -p "$OUT/$APP"
 
 # Default app source dir — a cacheable working copy keyed on the frozen ref.
@@ -289,6 +304,11 @@ if [[ "$need_install" == 1 ]]; then
 else
     echo "[$APP] reusing installed vendor" >&2
     write_psalm_xml
+fi
+
+if [[ "$INSTALL_ONLY" == 1 ]]; then
+    echo "[$APP] installed at $APP_SRC" >&2
+    exit 0
 fi
 
 # --- 3. Run one side: relink plugin, run Psalm, emit JSON --------------------

@@ -1,0 +1,134 @@
+name: Psalm delta cache
+
+# Saves the per-app install (clone + vendor + psalm.xml) that psalm-delta.yml
+# restores. psalm-delta.yml runs on issue_comment, which GitHub gives a
+# read-only cache token for the default-branch scope (changelog 2026-06-26), so
+# it can never save its own installs: every /psalm-delta run re-solved every app
+# with `composer update`, paying the cold install and letting dependency drift
+# move base numbers between reports. Only trusted triggers save, from the
+# default branch, without PR code: no cache-poisoning path.
+#
+# Key and path MUST stay byte-identical to the restore step in psalm-delta.yml.
+# A workflow_dispatch from another branch saves into that branch's scope, which
+# psalm-delta.yml cannot read; dispatch from the default branch.
+
+on:
+  push:
+    branches: ["4.x"]
+    paths:
+      - composer.json
+      - bin/ci/test-apps.yml
+      - bin/ci/delta-app.sh
+      - .github/workflows/psalm-delta-cache.yml
+  # Daily: re-creates entries GitHub evicted after 7 days unused, and picks up a
+  # 3.x composer.json change, whose push runs in the 3.x scope and cannot save here.
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: psalm-delta-cache
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare (app list)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      apps: ${{ steps.apps.outputs.apps }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout registry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read app registry
+        id: apps
+        run: printf 'apps=%s\n' "$(yq -o=json -I=0 '.apps' bin/ci/test-apps.yml)" >> "$GITHUB_OUTPUT"
+
+  warm:
+    name: Warm (${{ matrix.app.name }}, ${{ matrix.line }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Active plugin lines: /psalm-delta measures PRs against either base, and
+        # the key namespaces each by its composer.json hash.
+        line: ["4.x", "3.x"]
+        app: ${{ fromJSON(needs.prepare.outputs.apps) }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      # Same workspace-relative dir as psalm-delta.yml: the cached vendor
+      # symlinks the plugin path repo to this absolute path.
+      - name: Checkout plugin line
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.line }}
+          path: plugin-base
+          persist-credentials: false
+
+      - name: Look up cache
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app-cache/${{ matrix.app.name }}
+          key: psalm-delta-app-${{ matrix.app.name }}-${{ matrix.app.ref }}-php${{ matrix.app.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
+          lookup-only: true
+
+      - name: Checkout harness (default branch)
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: harness
+          persist-credentials: false
+
+      - name: Setup PHP
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ matrix.app.php }}
+          ini-values: memory_limit=-1
+          coverage: none
+          tools: composer:v2
+
+      - name: Install ${{ matrix.app.name }}
+        if: steps.lookup.outputs.cache-hit != 'true'
+        env:
+          NAME: ${{ matrix.app.name }}
+          REPO: ${{ matrix.app.repo }}
+          REF: ${{ matrix.app.ref }}
+          PROJECT_DIR: ${{ matrix.app.project_dir }}
+          PRIME: ${{ matrix.app.prime }}
+        run: |
+          args=(
+            --install-only
+            --app "$NAME" --repo "$REPO" --ref "$REF"
+            --plugin-base "$GITHUB_WORKSPACE/plugin-base"
+            --out "$RUNNER_TEMP/out"
+            --app-src "$GITHUB_WORKSPACE/app-cache/$NAME"
+          )
+          [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
+          [ -n "$PRIME" ] && args+=(--prime "$PRIME")
+          bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
+
+      - name: Save cache
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: app-cache/${{ matrix.app.name }}
+          key: ${{ steps.lookup.outputs.cache-primary-key }}

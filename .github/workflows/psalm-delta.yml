@@ -19,12 +19,12 @@ name: Psalm delta
 # maintainer types `/psalm-delta` after reading the diff, (2) contents:read +
 # persist-credentials:false — no write token, no git creds reach the code. The
 # harness (runner/registry/comparator) is always default-branch, so base/head_sha
-# are only the versions MEASURED, not how. The one cross-run vector — a fork
-# poisoning the shared app cache trusted runs restore — is closed by making the
-# cache restore-only on forks (prepare emits is_fork; delta saves only when
-# is_fork != 'true'). The privileged `report` job never runs PR code, and the
-# fork-controlled JSON reaches the comment only as a file body (-F body=@file),
-# never a `run:` expansion — no injection sink.
+# are only the versions MEASURED, not how. The shared app cache cannot be
+# poisoned from here: GitHub issues issue_comment runs a read-only cache token,
+# and only psalm-delta-cache.yml (push / schedule / dispatch, no PR code) writes
+# it. The privileged `report` job never runs PR code, and the fork-controlled
+# JSON reaches the comment only as a file body (-F body=@file), never a `run:`
+# expansion — no injection sink.
 
 on:
   issue_comment:
@@ -64,7 +64,6 @@ jobs:
       base_label: ${{ steps.refs.outputs.base_label }}
       head_label: ${{ steps.refs.outputs.head_label }}
       pr_number: ${{ steps.refs.outputs.pr_number }}
-      is_fork: ${{ steps.refs.outputs.is_fork }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -91,15 +90,10 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
-            // Fork heads are ALLOWED but flagged, not refused: the delta job that
-            // runs this code is unprivileged (contents:read, no creds/secrets,
+            // Fork heads are ALLOWED: the delta job that runs this code is
+            // unprivileged (contents:read, no creds/secrets, read-only cache,
             // default-branch harness) = GitHub's pull_request fork model, and the
-            // author gate means a maintainer triggered it. is_fork makes the delta
-            // job's app cache restore-only on forks (poisoning vector, see below).
-            const expectedRepo = `${context.repo.owner}/${context.repo.repo}`;
-            const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
-            const isFork = headRepo !== expectedRepo;
-            core.setOutput('is_fork', isFork ? 'true' : 'false');
+            // author gate means a maintainer triggered it.
             const baseSha = pr.base.sha;
             const headSha = pr.head.sha;
             core.setOutput('base_sha', baseSha);
@@ -178,22 +172,22 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      # Cache installed app source (clone + vendor) keyed on the immutable ref, so
-      # steady-state runs skip the cold composer install (dominant cost). Workspace
-      # path is stable, so the plugin path-repo symlink in vendor stays valid.
+      # Restore the app source (clone + vendor) that psalm-delta-cache.yml saves,
+      # keyed on the immutable ref, so steady-state runs skip the cold composer
+      # install (dominant cost) and every report measures the same vendor. Restore
+      # only: issue_comment gets a read-only cache token (GitHub, 2026-06-26), so a
+      # save here would just warn. A miss falls back to a fresh install.
+      # Workspace path is stable, so the plugin path-repo symlink in vendor stays
+      # valid.
       #
       # hashFiles(plugin-base/composer.json) namespaces the key by the measured
       # plugin's deps (superset of delta-app.sh's plugin_dep_sig, which determines
       # the vendor). 3.x and 4.x lines pin the same app refs; without this they
       # collide on one entry and poison each other with an incompatible vendor
       # (e.g. AddTaintsInterface return type mismatches every handler, fatals at
-      # class-load). The hash shifts whenever a dep does — exactly when a reinstall
-      # is warranted. delta-app.sh re-validates the sig on reuse, so a poisoned
-      # cache self-heals even on a key hit.
-      #
-      # RESTORE-ONLY; matching save is a separate non-fork-gated step (see below).
+      # class-load). delta-app.sh re-validates the sig on reuse, so a stale entry
+      # self-heals. Key and path MUST match psalm-delta-cache.yml.
       - name: Restore app source cache
-        id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app-cache/${{ matrix.name }}
@@ -230,29 +224,6 @@ jobs:
           [ -n "$PSALM_ARGS" ] && args+=(--psalm-args "$PSALM_ARGS")
           # Harness (default branch) owns measurement; the PR cannot alter it.
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
-
-      # Save ONLY on a same-repo head. A fork's composer install could write into
-      # the app cache pre-save, and since issue_comment runs on the default ref that
-      # entry lands in the scope TRUSTED runs restore — a backdoored-vendor vector
-      # the plugin_dep_sig self-heal does NOT catch (it only detects a dep-sig
-      # mismatch). So forks read the cache, never write it. cache-hit skips a
-      # redundant same-key save.
-      #
-      # always(): a failed or timed-out analysis must still save the installed
-      # vendor, or the next run is cold again. delta-app.sh stamps .plugin-dep-sig
-      # only after a successful install, so the stamp gates the save. It is tested
-      # with hashFiles() (workspace files only, hence app-cache/ lives there)
-      # because this job runs PR code and must not write $GITHUB_OUTPUT/$GITHUB_ENV.
-      - name: Save app source cache
-        if: >-
-          always()
-          && needs.prepare.outputs.is_fork != 'true'
-          && steps.cache.outputs.cache-hit != 'true'
-          && hashFiles(format('app-cache/{0}/.plugin-dep-sig', matrix.name)) != ''
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: app-cache/${{ matrix.name }}
-          key: ${{ steps.cache.outputs.cache-primary-key }}
 
       # always(): crash.log files from a failed or timed-out run must reach the
       # report. The per-side app copy (a full vendor tree) stays out.
