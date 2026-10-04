@@ -19,10 +19,15 @@ use PhpParser\Node\Expr\Instanceof_;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\Node\Name\FullyQualified;
 use PhpParser\Node\Stmt\Return_;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\Type\Comparator\TypeComparisonResult;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\DependentType;
@@ -30,13 +35,14 @@ use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TClassString;
+use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TIterable;
 use Psalm\Type\Atomic\TKeyedArray;
-use Psalm\Type\Atomic\TLiteralClassString;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNonEmptyArray;
@@ -58,7 +64,9 @@ use Psalm\Type\Union;
  * filter(callable) and where(callable) with a recognized predicate body:
  *   Laravel forwards a callable where() to filter() at runtime, so both share one
  *   matcher. It needs a single-param (non-variadic, non-by-ref) closure or arrow fn whose
- *   body is one expression of these AST shapes:
+ *   native param type (if any) accepts every TValue atomic without coercion, and whose
+ *   body is one expression of these AST shapes (function calls must resolve to the
+ *   global builtin, not a namespaced or imported function):
  *
  *   - Identity: `fn ($x) => $x` / `function ($x) { return $x; }` → removeFalsy (drops
  *     null/false, narrows string→non-falsy-string, array→non-empty-array).
@@ -180,6 +188,18 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
         [$paramName, $bodyExpr] = $body;
         $tValue = $templateTypeParameters[1];
+        $source = $event->getSource();
+        $codebase = $source->getCodebase();
+
+        $call = $bodyExpr instanceof BooleanNot ? $bodyExpr->expr : $bodyExpr;
+        if ($call instanceof FuncCall && !self::callsGlobalFunction($call, $source)) {
+            return null;
+        }
+
+        if (!self::paramReceivesItemUnchanged($args[0]->value, $tValue, $source)) {
+            return null;
+        }
+
         $classCheck = self::classCheckTarget($bodyExpr, $paramName);
 
         if (self::isVarRef($bodyExpr, $paramName)) {
@@ -188,9 +208,9 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         } elseif (self::isNotNullCheck($bodyExpr, $paramName)) {
             $narrowed = self::removeNullType($tValue);
         } elseif ($classCheck !== null) {
-            $narrowed = self::narrowByClassCheck($tValue, $classCheck[0], $classCheck[1], $event->getSource()->getCodebase());
+            $narrowed = self::narrowByClassCheck($tValue, $classCheck[0], $classCheck[1], $codebase);
         } else {
-            $narrowed = self::narrowByTypeCheck($bodyExpr, $paramName, $tValue, $event->getSource()->getCodebase());
+            $narrowed = self::narrowByTypeCheck($bodyExpr, $paramName, $tValue, $codebase);
         }
 
         if (!$narrowed instanceof Union) {
@@ -198,6 +218,58 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
+    }
+
+    /**
+     * Whether the call resolves to a global function the way PHP does: a same-named function
+     * in the current namespace or a `use function` import wins over the builtin.
+     */
+    private static function callsGlobalFunction(FuncCall $call, StatementsSource $source): bool
+    {
+        if (!$call->name instanceof Name || !$source instanceof StatementsAnalyzer) {
+            return false;
+        }
+
+        $name = $call->name->toString();
+        if ($call->name instanceof FullyQualified) {
+            return !\str_contains($name, '\\');
+        }
+
+        $functions = $source->getCodebase()->functions;
+        $resolved = $functions->getFullyQualifiedFunctionNameFromString($name, $source);
+
+        return $resolved === $name || !$functions->functionExists($source, \strtolower($resolved));
+    }
+
+    /**
+     * Laravel invokes the callback in coercive typing mode, so a scalar-typed param may receive
+     * a converted item (`Stringable` → string, int → string). Narrowing is only sound when every
+     * TValue atomic already fits the param's native type without a cast.
+     */
+    private static function paramReceivesItemUnchanged(Expr $closure, Union $tValue, StatementsSource $source): bool
+    {
+        foreach ($source->getNodeTypeProvider()->getType($closure)?->getAtomicTypes() ?? [] as $atomic) {
+            if (!$atomic instanceof TClosure) {
+                continue;
+            }
+
+            $signature = $atomic->params[0]->signature_type ?? null;
+            if (!$signature instanceof Union) {
+                return true;
+            }
+
+            $comparison = new TypeComparisonResult();
+
+            return UnionTypeComparator::isContainedBy(
+                $source->getCodebase(),
+                $tValue,
+                $signature,
+                union_comparison_result: $comparison,
+                allow_float_int_equality: false,
+            ) && $comparison->to_string_cast !== true;
+        }
+
+        return false;
     }
 
     /** @psalm-mutation-free */
@@ -375,7 +447,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             'is_null' => new Union([new TNull()]),
             'is_callable' => new Union([new TCallable()]),
             'is_scalar' => new Union([new TScalar()]),
-            'is_iterable' => new Union([new TIterable()]),
+            // Objects pass is_iterable() only as Traversable; plain TIterable would drop them.
+            'is_iterable' => new Union([new TIterable(), new TNamedObject(\Traversable::class)]),
             'is_resource' => new Union([new TResource()]),
             default => null,
         };
@@ -494,7 +567,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     /**
      * Objects intersect with Foo; strings become `class-string<…&Foo>` when allowed; other
      * scalars, null, and arrays drop out ([]). Null for atomics these rules don't cover
-     * (templates, mixed variants, literal or dependent class strings, callable, ...).
+     * (templates, mixed variants, literal or dependent strings, callable, ...).
      *
      * @return list<Atomic>|null
      */
@@ -513,7 +586,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($atomic instanceof TString && $allowString) {
-            if ($atomic instanceof TLiteralClassString
+            if ($atomic instanceof TLiteralString
                 || $atomic instanceof DependentType
                 || ($atomic instanceof TClassString && $atomic::class !== TClassString::class)
             ) {

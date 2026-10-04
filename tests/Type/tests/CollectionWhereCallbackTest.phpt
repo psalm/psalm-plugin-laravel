@@ -386,6 +386,65 @@ final class CollectionWhereCallbackTest
         $_result = $items->where(fn (?string &$value) => $value);
         /** @psalm-check-type-exact $_result = Collection<int, null|string>&static */
     }
+
+    /**
+     * Objects pass is_iterable() when Traversable, so object atomics narrow rather than drop.
+     * The non-array branch proves the object part survives.
+     * @param Collection<int, object|array<int, int>> $items
+     */
+    public function whereWithIsIterableKeepsTraversableObjects(Collection $items): void
+    {
+        foreach ($items->where(fn (object|array $value) => is_iterable($value)) as $value) {
+            if (!is_array($value)) {
+                /** @psalm-check-type-exact $value = Traversable */
+            }
+        }
+    }
+
+    /**
+     * Callbacks run in coercive mode: a Stringable item reaches a `string` param as its
+     * __toString() value, so the predicate does not describe the stored item.
+     * @param Collection<int, CollectionWhereCallbackTestLabel|string> $items
+     */
+    public function whereWithCoercedClassCheckDoesNotNarrow(Collection $items): void
+    {
+        $_result = $items->where(fn (string $value) => is_a($value, Countable::class, true));
+        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestLabel|string>&static */
+    }
+
+    /** @param Collection<int, int|string> $items */
+    public function whereWithCoercedIntDoesNotNarrow(Collection $items): void
+    {
+        $_result = $items->where(fn (string $value) => is_a($value, Countable::class, true));
+        /** @psalm-check-type-exact $_result = Collection<int, int|string>&static */
+    }
+
+    /**
+     * A literal string is a specific value, not a provable class-string.
+     * @param Collection<int, 'ArrayObject'> $items
+     */
+    public function whereWithClassCheckOnLiteralStringDoesNotNarrow(Collection $items): void
+    {
+        $_result = $items->where(fn (string $value) => is_a($value, Countable::class, true));
+        /** @psalm-check-type-exact $_result = Collection<int, 'ArrayObject'>&static */
+    }
+
+    /**
+     * @template T
+     * @param Collection<int, T> $items
+     */
+    public function whereWithClassCheckOnTemplateDoesNotNarrow(Collection $items): void
+    {
+        $_result = $items->where(fn (mixed $value) => is_a($value, Countable::class));
+        /** @psalm-check-type-exact $_result = Collection<int, T>&static */
+    }
+
+    /** @param Collection<int, Countable|string> $items */
+    public function whereWithNonLiteralAllowStringDoesNotNarrow(Collection $items, bool $allowString): void
+    {
+        $_result = $items->where(fn (Countable|string $value) => is_a($value, Stringable::class, $allowString));
+        /** @psalm-check-type-exact $_result = Collection<int, Countable|string>&static */
+    }
 }
 
 final class CollectionWhereCallbackTestUser
@@ -396,6 +455,15 @@ final class CollectionWhereCallbackTestUser
 final class CollectionWhereCallbackTestAccount
 {
     public int $id = 0;
+}
+
+final class CollectionWhereCallbackTestLabel implements Stringable
+{
+    #[\Override]
+    public function __toString(): string
+    {
+        return 'ArrayObject';
+    }
 }
 ?>
 --EXPECTF--
