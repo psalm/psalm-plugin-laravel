@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
+use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateEntry;
@@ -43,8 +44,14 @@ use Psalm\Type\Union;
  * Chains are walked from the terminal call inward. Past the first retrieval method (first, find, …)
  * only Builder/Relation-typed calls keep the query, and `select()` & co. drop the aggregate columns,
  * so the walk stops there. Collection hops, variable-held builders and foreach are not tracked: those
- * reads stay nullable. One alias produced by different aggregate functions (`withExists` casts it to bool for
- * good) records no fact. A closure that captures `$m` sees the fact like any other property narrowing.
+ * reads stay nullable. A closure that captures `$m` sees the fact like any other property narrowing.
+ *
+ * Known limitations (accepted imprecision, same class as Psalm keeping property facts after impure calls):
+ * - A `refresh()` inside only one branch leaves the pre-branch proof in place after the merge, because a
+ *   merge ignores a key missing from one side (AggregateAccessorRefreshInBranchKnownLimitationTest).
+ * - One alias produced by different aggregate functions in ONE chain records no fact (`withExists` casts
+ *   the alias to bool for good). Across separate in-place loads the latest write wins, so
+ *   `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>` although the bool cast persists.
  *
  * Carrying the fact in an intersection type (`M&object{x_count: int}`) was probed and rejected:
  * decisions.md, "Aggregate accessor proof".
@@ -82,7 +89,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             $described = $name === null ? null : AggregateCallParser::describe($name);
 
             if ($name === 'refresh') {
-                self::forgetLoadedAggregates($expr, $event);
+                self::forgetLoadedAggregates($expr, $event->getContext());
             } elseif ($described !== null && $described[1]) {
                 self::trackLoad($expr, $described[0], $event);
             }
@@ -95,31 +102,18 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         return null;
     }
 
-    /**
-     * `$m->refresh()` reloads the attributes, so every aggregate loaded on `$m` is gone. A count/exists
-     * fact this handler wrote is overwritten with its unproven type rather than unset: a branch merge
-     * ignores keys missing from one side, so only an overwrite widens `if (...) { $m->refresh(); }`.
-     * Any other cached `$m->…` type (e.g. Model's own `$exists`) is simply dropped.
-     */
-    private static function forgetLoadedAggregates(MethodCall $call, AfterExpressionAnalysisEvent $event): void
+    /** `$m->refresh()` reloads the attributes, so every cached `$m->…` fact is dropped. */
+    private static function forgetLoadedAggregates(MethodCall $call, Context $context): void
     {
         $varId = self::varId(self::identityRoot($call->var));
         if ($varId === null) {
             return;
         }
 
-        $context = $event->getContext();
         $prefix = $varId . '->';
 
-        foreach ($context->vars_in_scope as $key => $type) {
-            if (!\str_starts_with($key, $prefix)) {
-                continue;
-            }
-
-            $widened = ModelAggregatePropertyHandler::unprovenType($type);
-            if ($widened instanceof Union) {
-                $context->vars_in_scope[$key] = $widened;
-            } else {
+        foreach (\array_keys($context->vars_in_scope) as $key) {
+            if (\str_starts_with($key, $prefix)) {
                 unset($context->vars_in_scope[$key]);
             }
         }
@@ -229,20 +223,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
                 continue;
             }
 
-            $key = $varId . '->' . $entry->alias;
-
-            // withExists() casts the alias to bool for good, so a later different aggregate on the
-            // same alias (or the reverse) has a type we do not model: decline.
-            if (
-                isset($context->vars_in_scope[$key])
-                && $context->vars_in_scope[$key] !== $type
-                && (ModelAggregatePropertyHandler::isProvenExists($type) || ModelAggregatePropertyHandler::isProvenExists($context->vars_in_scope[$key]))
-            ) {
-                unset($context->vars_in_scope[$key]);
-                continue;
-            }
-
-            $context->vars_in_scope[$key] = $type;
+            $context->vars_in_scope[$varId . '->' . $entry->alias] = $type;
         }
     }
 

@@ -165,6 +165,25 @@ function test_chained_loads_same_function_alias_last_wins(Shop $shop): void
     echo $total;
 }
 
+function test_read_then_load_exists_in_place(Shop $shop): void
+{
+    // The unproven read is cached as `bool|null`; the load must replace it, not decline.
+    $before = $shop->parts_exists;
+    $shop->loadExists('parts');
+    /** @psalm-check-type-exact $after = bool */
+    $after = $shop->parts_exists;
+    echo $before, $after;
+}
+
+function test_in_place_exists_then_count_same_alias_last_write_wins(Shop $shop): void
+{
+    $shop->loadExists('parts as total');
+    $shop->loadCount('workOrders as total');
+    /** @psalm-check-type-exact $total = int<0, max> */
+    $total = $shop->total;
+    echo $total;
+}
+
 function test_assigned_chain_through_relation(Shop $shop): void
 {
     $order = $shop->workOrders()->withCount('parts')->where('status', 'open')->firstOrFail();

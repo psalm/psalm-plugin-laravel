@@ -83,6 +83,10 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Known limitations (reads stay nullable):** `->get()->first()` Collection hops, variable-held builders, closures, `foreach` over models, `getAttribute('x_count')`.
 
+**Known imprecision (same class as Psalm keeping property facts after impure calls):**
+- `refresh()` unsets the `$m->…` facts, but a branch merge ignores a key missing from one side, so a `refresh()` inside only one branch leaves the pre-branch proof in place (`AggregateAccessorRefreshInBranchKnownLimitationTest`).
+- One alias produced by different aggregate functions in a single chain records no fact (`withExists` casts the alias to bool for good). Across separate in-place loads the latest write wins, so `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>`.
+
 **Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
 
 ## Config
