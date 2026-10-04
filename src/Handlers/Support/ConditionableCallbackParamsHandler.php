@@ -65,10 +65,13 @@ use Psalm\Type\Union;
  *    may declare fewer params, which Psalm rejects against a 2-param callable, and a first-class
  *    callable has no declared-type escape for a subclass receiver. A literal whose first param is
  *    variadic is skipped too: Psalm fills every element from the receiver slot alone.
- *  - A closure literal's declared param type wins when it already contains the computed slot
- *    type (Psalm would otherwise narrow a defensive `?int $x` to `int` and report its null check),
- *    or, for the receiver slot, when it names a subclass of the receiver class (`?Child` and
- *    `Child|Other` included): at runtime `$this` may be a custom builder Psalm cannot see.
+ *  - A declared receiver param type (native or docblock) is trusted as written: at runtime `$this`
+ *    may be any subclass or implementer of the host (a custom builder Psalm cannot see, an
+ *    intersection with an interface), so only an untyped receiver param gets the computed type.
+ *    Accepted loss: a declared type unrelated to the host (`Query\Builder` on an Eloquent Builder)
+ *    is no longer reported; Psalm never reported it against the stub either.
+ *  - A declared value param type wins when it already contains the computed slot type (Psalm
+ *    would otherwise narrow a defensive `?int $x` to `int` and report its null check).
  *    Declared types are memoized per literal node on first sight because Psalm overwrites
  *    closure storage param types with inferred ones, and loops re-analyze the same node.
  *  - A `void` Closure value is `null` at runtime, so it reconciles as `null`.
@@ -411,35 +414,13 @@ final class ConditionableCallbackParamsHandler implements
 
             $declaredType = $declared[$offset] ?? null;
             $keep = $declaredType instanceof Union
-                && (UnionTypeComparator::isContainedBy($codebase, $computed, $declaredType)
-                    || ($name === 'instance' && self::namesSubclasses($codebase, $declaredType, $receiver->value)));
+                && ($name === 'instance' || UnionTypeComparator::isContainedBy($codebase, $computed, $declaredType));
             $type = $keep ? $declaredType : $computed;
 
             $params[] = new FunctionLikeParameter($name, false, $type, $type, is_optional: false);
         }
 
         return new Union([new TCallable($params, Type::getMixed()), new TNull()]);
-    }
-
-    /**
-     * Some object atomic of `$declared` is a class extending or implementing `$parent`; null and
-     * other atomics (`?Child`, `Child|Other`) do not void the escape.
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function namesSubclasses(Codebase $codebase, Union $declared, string $parent): bool
-    {
-        foreach ($declared->getAtomicTypes() as $atomic) {
-            try {
-                if ($atomic instanceof TNamedObject && $codebase->classExtendsOrImplements($atomic->value, $parent)) {
-                    return true;
-                }
-            } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-                continue;
-            }
-        }
-
-        return false;
     }
 
     /**

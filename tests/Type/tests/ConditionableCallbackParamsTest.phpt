@@ -119,7 +119,9 @@ class ConditionableParent
     use Conditionable;
 }
 
-final class ConditionableChild extends ConditionableParent {}
+interface ConditionableMarker {}
+
+final class ConditionableChild extends ConditionableParent implements ConditionableMarker {}
 
 final class UnrelatedToConditionable {}
 
@@ -274,10 +276,16 @@ function test_union_receiver_declines(Builder|Collection $r, ?int $n): void
     });
 }
 
-/** Relation forwarding dispatches on Builder but the receiver is the relation: decline (runtime passes the Builder). */
+/**
+ * Relation forwarding dispatches on Builder but the receiver is the relation: decline (runtime
+ * passes the Builder), so an untyped `$q` is not typed as the relation.
+ */
 function test_relation_forwarded_when_declines(Tool $tool, ?int $n): void
 {
     $tool->replacementTool()->when($n, function (Builder $_q, int $_v): void {});
+    $tool->replacementTool()->when($n, function ($q, int $_v): void {
+        takes_mixed($q);
+    });
 }
 
 /**
@@ -371,11 +379,12 @@ function test_declared_receiver_subclass_is_kept(Builder $query, ?string $term):
 }
 
 /**
- * A declared class unrelated to the receiver is still reported.
+ * A declared receiver type is trusted as written, even one unrelated to the host: runtime `$this`
+ * may be any subclass or implementer, and Psalm never reported this against the stub either.
  *
  * @param Builder<Vehicle> $query
  */
-function test_declared_unrelated_receiver_is_reported(Builder $query, ?string $term): void
+function test_declared_unrelated_receiver_is_trusted(Builder $query, ?string $term): void
 {
     $query->when($term, function (QueryBuilder $_q, string $_t): void {});
 }
@@ -472,10 +481,25 @@ function test_nullable_declared_receiver_subclass_is_kept(): void
     $host->when(true, function (ConditionableChild|UnrelatedToConditionable $_host): void {});
 }
 
-/** A nullable declaration with no class related to the receiver is still reported. */
-function test_nullable_declared_unrelated_receiver_is_reported(ConditionableParent $host): void
+/** A nullable declaration with no class related to the receiver is trusted too (see above). */
+function test_nullable_declared_unrelated_receiver_is_trusted(ConditionableParent $host): void
 {
     $host->when(true, function (?UnrelatedToConditionable $_host): void {});
+}
+
+/**
+ * Intersection and interface declarations of the receiver are trusted as declared, in the
+ * callback and default slots of both when() and unless().
+ */
+function test_intersection_and_interface_receiver_declarations_are_kept(): void
+{
+    /** @var ConditionableParent $host */
+    $host = new ConditionableChild();
+    $host->when(true, function ((ConditionableMarker&ConditionableChild)|null $_host): void {});
+    $host->when(true, function ((ConditionableParent&ConditionableMarker)|null $_host): void {});
+    $host->when(true, function (?ConditionableMarker $_host): void {});
+    $host->unless(false, function (?ConditionableMarker $_host): void {});
+    $host->when(false, null, function (?ConditionableMarker $_host): void {});
 }
 
 /** A `void` Closure value resolves to null at runtime (Laravel passes `$value($this)`). */
@@ -544,11 +568,10 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $_v has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method count
 MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $_v has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method count
-InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>, string):mixed|null, but Closure[pure](Illuminate\Database\Query\Builder, string):void provided
 ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>):mixed|null, but parent type Closure[pure](Illuminate\Database\Eloquent\Builder, App\Builders\VehicleBuilder):void provided
 MissingClosureParamType on line %d: Parameter $args has no provided type
 MixedAssignment on line %d: Unable to determine the type that $a is being assigned to
-InvalidArgument on line %d: Argument 2 of ConditionableParent::when expects callable[impure](ConditionableParent, true):mixed|null, but Closure[pure](UnrelatedToConditionable|null):void provided
 MissingClosureParamType on line %d: Parameter $value has no provided type
