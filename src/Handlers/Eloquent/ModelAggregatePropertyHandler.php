@@ -11,11 +11,15 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
 use Psalm\StatementsSource;
+use Psalm\Type;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TBool;
+use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TIntRange;
 use Psalm\Type\Atomic\TNamedObject;
@@ -34,20 +38,31 @@ use Psalm\Type\Union;
  * For withCount/withExists, the column is '*' which is stripped, yielding `{relation}_{function}`.
  * For withMin/withMax/withSum/withAvg, the column is included: `{relation}_{function}_{column}`.
  *
- * | Method       | Example alias              | Suffix match     | Unproven (default)  | Proven loaded |
- * |--------------|----------------------------|------------------|---------------------|---------------|
- * | withCount    | contacts_count             | ends with _count | int|null            | int<0, max>   |
- * | withExists   | contacts_exists            | ends with _exists| bool|null           | bool          |
- * | withMin      | contacts_min_amount        | contains _min_   | string|null         | same          |
- * | withMax      | contacts_max_amount        | contains _max_   | string|null         | same          |
- * | withSum      | contacts_sum_amount        | contains _sum_   | numeric-string|null | same          |
- * | withAvg      | contacts_avg_amount        | contains _avg_   | numeric-string|null | same          |
+ * | Method       | Example alias              | Suffix match     | Unproven (default)                         | Proven loaded |
+ * |--------------|----------------------------|------------------|--------------------------------------------|---------------|
+ * | withCount    | contacts_count             | ends with _count | int|null                                   | int<0, max>   |
+ * | withExists   | contacts_exists            | ends with _exists| bool|null                                  | bool          |
+ * | withMin/Max  | contacts_max_amount        | contains _max_   | string|null (int column: int|null)           | same          |
+ * | withSum      | contacts_sum_amount        | contains _sum_   | int|float|numeric-string|null (see below)  | same          |
+ * | withAvg      | contacts_avg_amount        | contains _avg_   | float|numeric-string|null                  | same          |
  *
  * Unproven means nothing shows the aggregate was loaded: the attribute is absent (read as null)
  * until withXxx()/loadXxx() runs, so `$model->x_count ?? ...` is a legitimate guard. Proof comes from
  * a model `$withCount` default (this class) or from a literal withXxx()/loadXxx() call that
  * {@see ModelAggregateLoadHandler} tracks. min/max/sum/avg stay nullable even when proven (SQL NULL
  * for an empty relation).
+ *
+ * min/max/sum/avg are column-aware: the aggregated column of the RELATED model is resolved from the
+ * migration schema ONLY, never casts or `@property` (Laravel does not cast aggregate aliases except
+ * `exists`, so a datetime column stays a string). The schema maps DECIMAL to float, but PDO returns
+ * DECIMAL as a string (and MySQL's SUM/AVG over exact values is DECIMAL), so every float cell also
+ * admits numeric-string:
+ *
+ * | Column | min / max                 | sum                     | avg                       |
+ * |--------|---------------------------|-------------------------|---------------------------|
+ * | int    | the int type|null         | int|numeric-string|null  | float|numeric-string|null   |
+ * | float  | float|numeric-string|null | float|numeric-string|null | float|numeric-string|null   |
+ * | other  | string|null               | int|float|numeric-string|null | float|numeric-string|null |
  *
  * @see https://laravel.com/docs/eloquent-relationships#other-aggregate-functions
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/503
@@ -450,13 +465,45 @@ final class ModelAggregatePropertyHandler
             return self::$typeCache[$key] = new Union($proven ? [$loaded] : [$loaded, new TNull()]);
         }
 
-        $key = $function;
-        if (!isset(self::$typeCache[$key])) {
-            $loaded = $function === 'min' || $function === 'max' ? new TString() : new TNumericString();
-            self::$typeCache[$key] = new Union([$loaded, new TNull()]);
-        }
+        /** @var class-string<Model>|null $related */
+        $related = RelationResolver::relatedModel($codebase, $model, $relation);
 
-        return self::$typeCache[$key];
+        return self::columnAwareType(
+            $function,
+            $related === null ? null : ModelPropertyHandler::resolveRawColumnType($related, $column),
+        );
+    }
+
+    /**
+     * min/max/sum/avg type from the aggregated column's RAW schema type (null when unresolvable).
+     * Always nullable: SQL NULL for an empty relation.
+     *
+     * The schema maps DECIMAL to float, yet PDO returns DECIMAL as a string and MySQL's SUM/AVG
+     * over exact values is DECIMAL, so a float column admits numeric-string; SUM over an int
+     * column is int on SQLite/PostgreSQL-bigint but DECIMAL (string) on MySQL.
+     *
+     * @param 'sum'|'min'|'max'|'avg' $function
+     * @psalm-external-mutation-free
+     */
+    public static function columnAwareType(string $function, ?Union $rawColumnType): Union
+    {
+        $shape = $rawColumnType instanceof Union ? BuilderAggregateHandler::numericShape($rawColumnType) : null;
+        /** @var non-empty-list<Atomic> $atoms */
+        $atoms = match ($function) {
+            'avg' => [new TFloat(), new TNumericString()],
+            'sum' => match ($shape) {
+                'int' => [new TInt(), new TNumericString()],
+                'float' => [new TFloat(), new TNumericString()],
+                default => [new TInt(), new TFloat(), new TNumericString()],
+            },
+            'min', 'max' => match ($shape) {
+                'int' => \array_values($rawColumnType?->getAtomicTypes() ?? []),
+                'float' => [new TFloat(), new TNumericString()],
+                default => [new TString()],
+            },
+        };
+
+        return Type::combineUnionTypes(new Union($atoms), Type::getNull());
     }
 
     /**

@@ -79,19 +79,19 @@ function test_max_camelCase_relation(Shop $shop): string|null
     return $max;
 }
 
-// --- withSum / withAvg / loadSum / loadAvg: numeric-string|null ---
+// --- withSum / withAvg / loadSum / loadAvg: column unknown (no schema) → widest driver-dependent type ---
 // alias: Str::snake("work_orders sum amount") = "work_orders_sum_amount"
 
-function test_sum_camelCase_relation(Shop $shop): string|null
+function test_sum_camelCase_relation(Shop $shop): float|int|string|null
 {
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->work_orders_sum_amount;
     return $sum;
 }
 
-function test_avg_camelCase_relation(Shop $shop): string|null
+function test_avg_camelCase_relation(Shop $shop): float|string|null
 {
-    /** @psalm-check-type-exact $avg = numeric-string|null */
+    /** @psalm-check-type-exact $avg = float|numeric-string|null */
     $avg = $shop->work_orders_avg_rating;
     return $avg;
 }
@@ -107,9 +107,9 @@ function test_count_snake_named_relation(Shop $shop): ?int
     return $count;
 }
 
-function test_sum_snake_named_relation(Shop $shop): string|null
+function test_sum_snake_named_relation(Shop $shop): float|int|string|null
 {
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->damage_reports_sum_amount;
     return $sum;
 }
@@ -135,9 +135,9 @@ function test_count_body_parsed_relation(Shop $shop): ?int
     return $count;
 }
 
-function test_sum_body_parsed_relation(Shop $shop): string|null
+function test_sum_body_parsed_relation(Shop $shop): float|int|string|null
 {
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->supplier_list_sum_amount;
     return $sum;
 }

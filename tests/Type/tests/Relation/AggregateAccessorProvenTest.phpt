@@ -92,7 +92,7 @@ function test_load_count_alias_is_case_insensitive(Shop $shop): void
 function test_load_sum_alias(Shop $shop): void
 {
     $shop->loadSum('workOrders as total_price', 'price');
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->total_price;
     echo $sum;
 }
@@ -156,7 +156,7 @@ function test_assigned_chain_alias(): void
 function test_assigned_chain_with_sum_alias(): void
 {
     $shop = Shop::query()->withSum('workOrders as total_price', 'price')->sole();
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->total_price;
     echo $sum;
 }
