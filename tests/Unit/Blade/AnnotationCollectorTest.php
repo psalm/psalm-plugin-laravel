@@ -220,6 +220,18 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
 
+    #[Test]
+    public function marks_a_view_unreadable_when_the_declined_call_names_its_view_argument(): void
+    {
+        // Named arguments may come in any order, so the view name is not always argument zero.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\n\$v = view(data: ['title' => 42], view: 'home');",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
     /**
      * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
      * in source order: no analysis runs here, so nothing else would type the data arguments.

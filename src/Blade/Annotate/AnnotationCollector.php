@@ -10,6 +10,7 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\Type;
@@ -147,10 +148,11 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            $first = $call->getArgs()[0] ?? null;
+            // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
+            $nameArg = ArgUtil::byNameOrPosition(\array_values($call->getArgs()), 0, 'view');
 
-            if ($first !== null && !$first->unpack && $first->value instanceof String_ && $first->value->value !== '') {
-                $names[] = $first->value->value;
+            if ($nameArg instanceof Node\Arg && !$nameArg->unpack && $nameArg->value instanceof String_ && $nameArg->value->value !== '') {
+                $names[] = $nameArg->value->value;
             }
         }
 
