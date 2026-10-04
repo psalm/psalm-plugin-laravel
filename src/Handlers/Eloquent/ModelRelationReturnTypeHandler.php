@@ -316,7 +316,16 @@ final class ModelRelationReturnTypeHandler
         // should resolve to at the call site (User for `(new User())->posts()`), even if
         // the method body lives on a parent class. The `&static` marker is kept when the
         // receiver itself is `static` (`$this->posts()` in a non-final model).
-        $typeParams[] = new Union([new TNamedObject($bindingClass, $bindingIsStatic)]);
+        //
+        // The nested `&static` is flagged as already resolved on purpose. Psalm expands the
+        // `@return $this` of real methods such as `take()` / `limit()` with the receiver as the
+        // static class type, and TypeExpander::expandNamedObject re-binds any unresolved `static`
+        // it meets, including the one nested in the generic params. That intersects it with the
+        // outer receiver and yields the malformed `Model&Relation<…>` as TDeclaringModel.
+        $bindingType = $bindingIsStatic
+            ? (new TNamedObject($bindingClass, true))->setIsStatic(true, true)
+            : new TNamedObject($bindingClass);
+        $typeParams[] = new Union([$bindingType]);
 
         // Always emit TPivotModel / TAccessor (slots 3 and 4) for pivot-aware relations,
         // filling declared defaults when the parser didn't capture a chain mutation.
