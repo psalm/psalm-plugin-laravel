@@ -43,7 +43,8 @@ use Psalm\Type\Union;
  * Chains are walked from the terminal call inward. Past the first retrieval method (first, find, …)
  * only Builder/Relation-typed calls keep the query, and `select()` & co. drop the aggregate columns,
  * so the walk stops there. Collection hops, variable-held builders and foreach are not tracked: those
- * reads stay nullable. A closure that captures `$m` sees the fact like any other property narrowing.
+ * reads stay nullable. One alias produced by different aggregate functions (`withExists` casts it to bool for
+ * good) records no fact. A closure that captures `$m` sees the fact like any other property narrowing.
  *
  * Carrying the fact in an intersection type (`M&object{x_count: int}`) was probed and rejected:
  * decisions.md, "Aggregate accessor proof".
@@ -95,9 +96,10 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     }
 
     /**
-     * `$m->refresh()` reloads the attributes, so every aggregate loaded on `$m` is gone. A proven
-     * count/exists fact is overwritten with its unproven type rather than unset: a branch merge
+     * `$m->refresh()` reloads the attributes, so every aggregate loaded on `$m` is gone. A count/exists
+     * fact this handler wrote is overwritten with its unproven type rather than unset: a branch merge
      * ignores keys missing from one side, so only an overwrite widens `if (...) { $m->refresh(); }`.
+     * Any other cached `$m->…` type (e.g. Model's own `$exists`) is simply dropped.
      */
     private static function forgetLoadedAggregates(MethodCall $call, AfterExpressionAnalysisEvent $event): void
     {
@@ -107,7 +109,6 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         }
 
         $context = $event->getContext();
-        $model = self::singleModel($context->vars_in_scope[$varId] ?? null);
         $prefix = $varId . '->';
 
         foreach ($context->vars_in_scope as $key => $type) {
@@ -115,11 +116,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
                 continue;
             }
 
-            $property = \substr($key, \strlen($prefix));
-            $widened = $model === null || \str_contains($property, '->') || ModelPropertyHandler::resolveRawColumnType($model, $property) instanceof Union
-                ? null
-                : ModelAggregatePropertyHandler::unprovenType($type);
-
+            $widened = ModelAggregatePropertyHandler::unprovenType($type);
             if ($widened instanceof Union) {
                 $context->vars_in_scope[$key] = $widened;
             } else {
@@ -228,9 +225,24 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
 
         foreach ($entries as $entry) {
             $type = self::provenType($event->getCodebase(), $model, $entry);
-            if ($type instanceof Union) {
-                $context->vars_in_scope[$varId . '->' . $entry->alias] = $type;
+            if (!$type instanceof Union) {
+                continue;
             }
+
+            $key = $varId . '->' . $entry->alias;
+
+            // withExists() casts the alias to bool for good, so a later different aggregate on the
+            // same alias (or the reverse) has a type we do not model: decline.
+            if (
+                isset($context->vars_in_scope[$key])
+                && $context->vars_in_scope[$key] !== $type
+                && (ModelAggregatePropertyHandler::isProvenExists($type) || ModelAggregatePropertyHandler::isProvenExists($context->vars_in_scope[$key]))
+            ) {
+                unset($context->vars_in_scope[$key]);
+                continue;
+            }
+
+            $context->vars_in_scope[$key] = $type;
         }
     }
 
@@ -244,6 +256,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     private static function chainEntries(Expr $expr, AfterExpressionAnalysisEvent $event): array
     {
         $entries = [];
+        $clashing = [];
         $buildingQuery = false;
         $types = null;
 
@@ -266,7 +279,14 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
                     $call[$entry->alias] = $entry;
                 }
 
-                $entries += $call;
+                foreach ($call as $alias => $entry) {
+                    if (!isset($entries[$alias])) {
+                        $entries[$alias] = $entry;
+                    } elseif ($entries[$alias]->function !== $entry->function) {
+                        // A withExists() cast sticks to the alias whichever call comes last: decline.
+                        $clashing[$alias] = true;
+                    }
+                }
             } elseif (!$buildingQuery) {
                 if (!isset(self::RETRIEVAL_METHODS[$name])) {
                     break;
@@ -283,7 +303,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             $expr = $expr instanceof StaticCall ? null : $expr->var;
         }
 
-        return $entries;
+        return \array_diff_key($entries, $clashing);
     }
 
     /** Relation check against the final model + user `@property` precedence; null declines. */

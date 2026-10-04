@@ -455,14 +455,7 @@ final class ModelAggregatePropertyHandler
         bool $proven,
     ): Union {
         if ($function === 'count' || $function === 'exists') {
-            $key = $function . ($proven ? '+' : '');
-            if (isset(self::$typeCache[$key])) {
-                return self::$typeCache[$key];
-            }
-
-            $loaded = $function === 'exists' ? new TBool() : ($proven ? new TIntRange(0, null) : new TInt());
-
-            return self::$typeCache[$key] = new Union($proven ? [$loaded] : [$loaded, new TNull()]);
+            return self::countOrExistsType($function, $proven);
         }
 
         /** @var class-string<Model>|null $related */
@@ -475,18 +468,40 @@ final class ModelAggregatePropertyHandler
     }
 
     /**
-     * The not-yet-loaded counterpart of a proven count/exists fact (`int<0, max>` → `int|null`,
-     * `bool` → `bool|null`), or null for any other type. min/max/sum/avg facts are nullable already.
+     * Shared instances: ModelAggregateLoadHandler tells its own facts from real model properties
+     * (`$m->exists` is also `bool`) by identity.
      *
-     * @psalm-mutation-free
+     * @param 'count'|'exists' $function
      */
-    public static function unprovenType(Union $proven): ?Union
+    private static function countOrExistsType(string $function, bool $proven): Union
     {
-        return match ($proven->getId()) {
-            'int<0, max>' => new Union([new TInt(), new TNull()]),
-            'bool' => new Union([new TBool(), new TNull()]),
+        $key = $function . ($proven ? '+' : '');
+        if (isset(self::$typeCache[$key])) {
+            return self::$typeCache[$key];
+        }
+
+        $loaded = $function === 'exists' ? new TBool() : ($proven ? new TIntRange(0, null) : new TInt());
+
+        return self::$typeCache[$key] = new Union($proven ? [$loaded] : [$loaded, new TNull()]);
+    }
+
+    /**
+     * The not-yet-loaded counterpart of a proven count/exists fact this class produced
+     * (`int<0, max>` → `int|null`, `bool` → `bool|null`); null for any other type, including an
+     * equal-looking type of a real model property.
+     */
+    public static function unprovenType(Union $fact): ?Union
+    {
+        return match ($fact) {
+            self::countOrExistsType('count', true) => self::countOrExistsType('count', false),
+            self::countOrExistsType('exists', true) => self::countOrExistsType('exists', false),
             default => null,
         };
+    }
+
+    public static function isProvenExists(?Union $fact): bool
+    {
+        return $fact === self::countOrExistsType('exists', true);
     }
 
     /**

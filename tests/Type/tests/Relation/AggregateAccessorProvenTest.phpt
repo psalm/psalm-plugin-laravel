@@ -149,18 +149,18 @@ function test_assigned_chain_with_sum_alias(): void
     echo $sum;
 }
 
-function test_assigned_chain_last_alias_wins(): void
+function test_assigned_chain_same_function_alias_last_wins(): void
 {
-    $shop = Shop::withCount('workOrders as total')->withExists('parts as total')->firstOrFail();
-    /** @psalm-check-type-exact $total = bool */
+    $shop = Shop::withCount('workOrders as total')->withCount('parts as total')->firstOrFail();
+    /** @psalm-check-type-exact $total = int<0, max> */
     $total = $shop->total;
     echo $total;
 }
 
-function test_chained_loads_last_alias_wins(Shop $shop): void
+function test_chained_loads_same_function_alias_last_wins(Shop $shop): void
 {
-    $shop->loadCount('workOrders as total')->loadExists('parts as total');
-    /** @psalm-check-type-exact $total = bool */
+    $shop->loadCount('workOrders as total')->loadCount('parts as total');
+    /** @psalm-check-type-exact $total = int<0, max> */
     $total = $shop->total;
     echo $total;
 }

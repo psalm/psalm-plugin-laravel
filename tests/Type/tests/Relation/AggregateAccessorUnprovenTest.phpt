@@ -90,6 +90,50 @@ function test_refresh_in_a_branch_widens_a_proven_alias_on_merge(Shop $shop, boo
     echo $total;
 }
 
+function test_refresh_keeps_the_type_of_a_real_model_property(Shop $shop): void
+{
+    // `exists` is Model's own bool property, not an aggregate fact: refresh() must not widen it.
+    $before = $shop->exists;
+    $shop->refresh();
+    /** @psalm-check-type-exact $after = bool */
+    $after = $shop->exists;
+    echo $before, $after;
+}
+
+function test_conditional_refresh_keeps_the_type_of_a_real_model_property(Shop $shop, bool $flag): void
+{
+    $before = $shop->exists;
+    if ($flag) {
+        $shop->refresh();
+    }
+
+    /** @psalm-check-type-exact $after = bool */
+    $after = $shop->exists;
+    echo $before, $after;
+}
+
+function test_exists_then_count_alias_collision_declines(): mixed
+{
+    // withExists() installs a bool cast on the alias that outlives the later count: no fact.
+    $model = Shop::withExists('parts as total')->withCount('workOrders as total')->firstOrFail();
+
+    return $model->total;
+}
+
+function test_count_then_exists_alias_collision_declines(): mixed
+{
+    $model = Shop::withCount('workOrders as total')->withExists('parts as total')->firstOrFail();
+
+    return $model->total;
+}
+
+function test_in_place_exists_then_count_alias_collision_declines(Shop $shop): mixed
+{
+    $shop->loadExists('parts as total')->loadCount('workOrders as total');
+
+    return $shop->total;
+}
+
 function test_refresh_after_a_load_chain_drops_the_fact(Shop $shop): void
 {
     $shop->loadCount('workOrders')->refresh();
@@ -165,3 +209,6 @@ UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop:
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$vehicle_total is not defined
 PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $shop of type App\Models\Shop|null
 PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $shop of type App\Models\Shop|null
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
