@@ -43,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
         $this->assertFalse($config->findUnregisteredRouteNames);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
@@ -231,6 +232,24 @@ final class PluginConfigTest extends TestCase
         $config = PluginConfig::fromXml($xml);
 
         $this->assertFalse($config->findMissingViews);
+    }
+
+    #[Test]
+    public function find_unconfigured_filesystem_disks_follows_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $this->assertTrue(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unconfigured_filesystem_disks_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental value="true" /><findUnconfiguredFilesystemDisks value="false" /></pluginClass>',
+        );
+
+        $this->assertFalse(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
     }
 
     #[Test]
@@ -634,6 +653,7 @@ final class PluginConfigTest extends TestCase
             . '<resolveConfigReturnTypes value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUnconfiguredFilesystemDisks value="true" />'
             . '<experimental value="true" />'
             . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
@@ -648,6 +668,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
         $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);

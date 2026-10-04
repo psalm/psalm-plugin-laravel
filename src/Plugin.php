@@ -92,6 +92,10 @@ final class Plugin implements PluginEntryPointInterface
                 $this->initMissingViewHandler($output, $viewFactory);
             }
 
+            if ($pluginConfig->findUnconfiguredFilesystemDisks) {
+                Handlers\Filesystem\StorageHandler::init($output);
+            }
+
             // Always called — provides type narrowing for the view() helper regardless
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
