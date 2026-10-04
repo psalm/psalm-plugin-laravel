@@ -25,8 +25,11 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
+use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TObject;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -235,7 +238,7 @@ final class RelationMethodParser
             $methodStorage = $context['methodStorage'];
             $declaredReturnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
             if ($parsed !== null) {
-                return self::applyDirectChain($codebase, $parsed, $chain, $declaredReturnType);
+                return self::applyDirectChain($codebase, $parsed, $chain, $methodStorage->return_type, $methodStorage->signature_return_type);
             }
 
             return self::parseDelegation(
@@ -425,7 +428,7 @@ final class RelationMethodParser
      * @param list<lowercase-string> $chain outermost call first
      * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
-    private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $declaredReturnType): ?array
+    private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $docblockType, ?Union $nativeType): ?array
     {
         foreach (\array_reverse($chain) as $name) {
             $sibling = $name === 'one' ? self::singleResultSibling($parsed['relationClass']) : null;
@@ -436,12 +439,13 @@ final class RelationMethodParser
             }
         }
 
-        return self::declarationAdmits($declaredReturnType, $parsed['relationClass']) ? $parsed : null;
+        return self::declarationAdmits($docblockType, $parsed['relationClass']) && self::declarationAdmits($nativeType, $parsed['relationClass']) ? $parsed : null;
     }
 
     /**
-     * Whether the declared return type leaves room for $relationClass: no declaration, a non-class
-     * alternative (`mixed`, `object`) or a class alternative it is / extends (`null` aside).
+     * Whether the declared return type leaves room for $relationClass: no declaration, `mixed` /
+     * `object`, a template whose bound leaves room, or a plain class it is / extends (`null` aside).
+     * Scalars and intersections never admit it.
      *
      * @psalm-capabilities read-props
      */
@@ -456,14 +460,20 @@ final class RelationMethodParser
                 continue;
             }
 
-            if (!$atomic instanceof TNamedObject) {
+            if ($atomic instanceof TMixed || $atomic::class === TObject::class) {
                 return true;
             }
 
-            /** @psalm-var class-string $declaredClass */
-            $declaredClass = $atomic->value;
-            if (\is_a($relationClass, $declaredClass, true)) {
+            if ($atomic instanceof TTemplateParam && !$atomic->extra_types && self::declarationAdmits($atomic->as, $relationClass)) {
                 return true;
+            }
+
+            if ($atomic instanceof TNamedObject && !$atomic->extra_types) {
+                /** @psalm-var class-string $declaredClass */
+                $declaredClass = $atomic->value;
+                if (\is_a($relationClass, $declaredClass, true)) {
+                    return true;
+                }
             }
         }
 

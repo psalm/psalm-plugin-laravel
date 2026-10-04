@@ -10,6 +10,7 @@ use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
@@ -153,6 +154,34 @@ function issue1647_nullable_declaration_maps(Shop $shop): HasOne
 {
     $relation = $shop->nullableLastWorkOrder();
     /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_scalar_union_declines(Shop $shop): HasMany|false
+{
+    $relation = $shop->scalarUnionWorkOrder();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model>|false */
+    return $relation;
+}
+
+function issue1647_template_bound_declines(Shop $shop): Relation
+{
+    $relation = $shop->templatedBoundWorkOrder(HasMany::class);
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
+    return $relation;
+}
+
+function issue1647_intersection_declines(Shop $shop): HasOne
+{
+    $relation = $shop->intersectionWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop>&Countable */
+    return $relation;
+}
+
+function issue1647_wider_docblock_declines(Shop $shop): Relation
+{
+    $relation = $shop->widerDocblockWorkOrder();
+    /** @psalm-check-type-exact $relation = Relation<Model, Model, mixed> */
     return $relation;
 }
 ?>

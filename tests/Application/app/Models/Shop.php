@@ -360,6 +360,37 @@ final class Shop extends Model
         return $this->hasMany(WorkOrder::class)->one();
     }
 
+    /** A scalar alternative is no room for a relation: the parsed HasOne is not admitted. */
+    public function scalarUnionWorkOrder(): HasMany|false
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /**
+     * A template admits only through its bound: HasOne is not a HasMany.
+     *
+     * @template TRelation of HasMany
+     *
+     * @param class-string<TRelation> $class
+     * @return TRelation
+     */
+    public function templatedBoundWorkOrder(string $class): Relation
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** @return HasOne<WorkOrder, self>&\Countable */
+    public function intersectionWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** @return Relation */
+    public function widerDocblockWorkOrder(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
     // --- `$this` receiver (#1623 shape) ---
 
     /** The `??` fallback is meaningful (left side unproven); the loadCount() proof makes the right side `int`. */
