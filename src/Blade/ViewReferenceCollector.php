@@ -177,7 +177,11 @@ final class ViewReferenceCollector
         }
     }
 
-    /** @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args */
+    /**
+     * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
+     *
+     * @psalm-mutation-free
+     */
     private function findArg(array $args, int $position): ?Arg
     {
         $positionsReliable = true;

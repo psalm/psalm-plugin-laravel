@@ -112,6 +112,8 @@ final class ContractParser
      * a spelling it reads differently is one it appends a duplicate declaration for, forever.
      *
      * @return list<string>
+     *
+     * @psalm-pure
      */
     public static function rawDeclaredNames(string $source): array
     {
@@ -444,6 +446,8 @@ final class ContractParser
             /**
              * Every name one binding construct introduces, list destructuring included: `as [$id,
              * $name]` binds both, and a call site is expected to pass neither.
+             *
+             * @psalm-external-mutation-free
              */
             private function bindLocals(?Node\Expr $target): void
             {

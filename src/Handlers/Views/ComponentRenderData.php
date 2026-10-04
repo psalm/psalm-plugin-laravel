@@ -111,6 +111,8 @@ final class ComponentRenderData
     /**
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
+     *
+     * @psalm-mutation-free
      */
     private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -148,6 +150,8 @@ final class ComponentRenderData
      * checked by nothing here, and a declaration for it would compare against the wrong thing.
      *
      * @return array<string, Union>|null
+     *
+     * @psalm-mutation-free
      */
     private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -176,11 +180,17 @@ final class ComponentRenderData
         return $methods;
     }
 
+    /**
+     * @psalm-pure
+     */
     private static function ignored(string $name): bool
     {
         return \str_starts_with($name, '__') || \in_array(\strtolower($name), self::IGNORED, true);
     }
 
+    /**
+     * @psalm-mutation-free
+     */
     private static function storage(Codebase $codebase, string $fqClassName): ?ClassLikeStorage
     {
         try {

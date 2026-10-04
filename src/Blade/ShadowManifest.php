@@ -87,6 +87,8 @@ final class ShadowManifest
      * dropped rather than failing the whole load.
      *
      * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     *
+     * @psalm-mutation-free
      */
     private function normalizeEntries(mixed $data): array
     {

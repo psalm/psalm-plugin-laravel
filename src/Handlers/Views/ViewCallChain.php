@@ -55,6 +55,8 @@ final class ViewCallChain
      *                                            but were never PASSED — {@see ComponentRenderData}
      * @param bool                 $complete      every contribution was proven, so a name absent
      *                                            from both sets is provably not supplied
+     *
+     * @psalm-mutation-free
      */
     private function __construct(
         public readonly string $viewName,
@@ -67,6 +69,8 @@ final class ViewCallChain
      * Every key the rendered template actually receives, whatever supplied it.
      *
      * @return array<string, Union>
+     *
+     * @psalm-mutation-free
      */
     public function supplied(): array
     {
