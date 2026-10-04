@@ -30,11 +30,9 @@ on:
   issue_comment:
     types: [created]
 
-# Workflow-level concurrency is evaluated before any job `if`, so a key shared by
-# every PR comment would let a bot/review/"thanks" comment cancel an in-flight
-# run (:eyes: sticks, no report). Only an authorised trigger comment shares the
-# per-PR 'run' key (a re-trigger supersedes the old run); anything else gets a
-# unique key, and its skipped run cancels nothing.
+# Only an authorised trigger comment shares the per-PR 'run' key (a re-trigger
+# supersedes the old run); any other comment gets a unique key, so its skipped
+# run cancels nothing.
 concurrency:
   group: psalm-delta-${{ github.event.issue.number }}-${{ (startsWith(github.event.comment.body, '/psalm-delta') && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)) && 'run' || github.run_id }}
   cancel-in-progress: true
@@ -240,17 +238,11 @@ jobs:
       # mismatch). So forks read the cache, never write it. cache-hit skips a
       # redundant same-key save.
       #
-      # always(): a failed or timed-out analysis must still save a freshly
-      # installed vendor, or the next run is cold again and times out the same way.
-      # delta-app.sh stamps .plugin-dep-sig only after a successful install, so the
-      # stamp gates the save (a half-installed vendor must not be cached).
-      #
-      # The stamp is tested with hashFiles() rather than a step that writes
-      # $GITHUB_OUTPUT: this job executes PR code, so it must hold no write to
-      # $GITHUB_OUTPUT/$GITHUB_ENV at all (octoscan flags it). hashFiles() only
-      # sees files under the workspace, hence app-cache/ lives there instead of
-      # $HOME. Safe from the path:-checkouts above (they only clean their own dir)
-      # and from the artifact (upload covers out/ only).
+      # always(): a failed or timed-out analysis must still save the installed
+      # vendor, or the next run is cold again. delta-app.sh stamps .plugin-dep-sig
+      # only after a successful install, so the stamp gates the save. It is tested
+      # with hashFiles() (workspace files only, hence app-cache/ lives there)
+      # because this job runs PR code and must not write $GITHUB_OUTPUT/$GITHUB_ENV.
       - name: Save app source cache
         if: >-
           always()
@@ -262,9 +254,8 @@ jobs:
           path: app-cache/${{ matrix.name }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-      # always(): hard failures and timeouts leave crash.log files that the report
-      # needs to say what happened. The per-side app copy (a full vendor tree)
-      # stays out of the artifact.
+      # always(): crash.log files from a failed or timed-out run must reach the
+      # report. The per-side app copy (a full vendor tree) stays out.
       - name: Upload per-app JSON
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -342,9 +333,6 @@ jobs:
           FOOTER
 
           # Sticky: edit existing delta comment if present, else create.
-          # Bot-authored, one id: --jq runs per page and a spoofed comment starting
-          # with the marker must not become the PATCH target. sed (not head) so the
-          # pipe is read to the end and pipefail cannot trip on SIGPIPE.
           EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" \
             | sed -n 1p)

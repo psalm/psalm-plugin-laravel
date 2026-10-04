@@ -22,23 +22,12 @@
 #
 # Output (per side, <label> in {base-label, head-label}):
 #   <out>/<app>/<app>-<label>-<date-marker>--issues.json   (Psalm --report JSON)
-#   <out>/<app>/<app>-<label>-<date-marker>--perf.json      (see below)
-#   <out>/<app>/<app>-<label>-<date-marker>--crash.log      (side has no report)
+#   <out>/<app>/<app>-<label>-<date-marker>--perf.json      (wall, coverage, count)
 #
-# perf.json: app, version, date, wall_seconds, type_coverage_pct, total_issues,
-#   exit_code, plus the fields delta-report.php uses to qualify a comparison:
-#   plugin_status   "ok" | "degraded" | "disabled", from the plugin's stderr warnings
-#   versions        {php, vimeo/psalm, laravel/framework} from the app's vendor
-#   deps_diverged   HEAD only: true when app vendor, minus the plugin itself,
-#                   differs from the base vendor (head's relink changed a dependency)
-# crash.log is written whenever a side yields no usable report (missing, or not a
-# JSON list), and for ANY failure inside a side (copy, config, relink, parse); the
-# other side still runs. It is also written for clone/install failures. Its first
-# line is "=== <app>/<label> exit N after Ms ===".
-#
-# A per-side failure exits 0 so delta-report.php renders the app as crashed
-# instead of blocking the whole report. Hard setup errors (bad args, clone/install
-# failure) record the crash log for both sides, then exit non-zero.
+# Exit 0 even on a per-app Psalm failure: a crash log is written and the side's
+# JSON is omitted so delta-report.php renders the app as (missing) instead of
+# blocking the whole report. Hard setup errors (bad args, clone/install failure)
+# exit non-zero.
 
 set -euo pipefail
 
@@ -124,90 +113,6 @@ plugin_dep_sig() {
     ' "$1"
 }
 
-# Psalm runs with its default parallelism (--threads/--scan-threads = CPU count).
-# It merges worker results in completion order, so the few issue types derived
-# from first-merge-wins state (MissingPureAnnotation) can flap between identical
-# runs; delta-report.php counts those separately instead of serialising Psalm.
-
-# All scratch (logs, per-side plugin caches) lives under one dir, removed on any
-# exit; the per-side app copy sits inside $OUT and is excluded from the artifact.
-TMP_ROOT=$(mktemp -d)
-: > "$TMP_ROOT/setup.log"
-
-side_file() { echo "${OUT}/${APP}/${APP}-$1-${DATE_MARKER}--$2"; }
-
-# write_crash <label> <exit> <wall-seconds> <stderr-file> [stdout-file]
-write_crash() {
-    {
-        echo "=== $APP/$1 exit $2 after ${3}s ==="
-        echo "--- stderr ---"; cat "$4"
-        echo "--- stdout ---"; cat "${5:-/dev/null}"
-    } > "$(side_file "$1" crash.log)"
-}
-
-# A side is "settled" once it has a complete cached result or run_side recorded
-# its outcome (report or crash.log). The EXIT trap treats every unsettled side as
-# crashed, so ANY abort — set -e anywhere in setup, a signal — still leaves a
-# crash.log instead of a silent hole the report cannot explain. setup.log carries
-# the failing step's output.
-side_settled() {
-    [[ -f "$TMP_ROOT/settled-$1" ]] \
-        || [[ -f "$(side_file "$1" issues.json)" && -f "$(side_file "$1" perf.json)" ]]
-}
-
-on_exit() {
-    local rc=$? label
-    if [[ "$rc" != 0 ]]; then
-        for label in "$BASE_LABEL" "$HEAD_LABEL"; do
-            side_settled "$label" && continue
-            rm -f "$(side_file "$label" issues.json)" "$(side_file "$label" perf.json)"
-            write_crash "$label" "${SETUP_RC:-$rc}" "$SECONDS" "$TMP_ROOT/setup.log" || true
-        done
-    fi
-    rm -rf "$TMP_ROOT" "$OUT/$APP/work"
-}
-trap on_exit EXIT
-
-# Hard setup failure: neither side can run; on_exit records both as crashed,
-# keeping the failing step's own exit code as the crash.log headline.
-SETUP_RC=""
-setup_failed() {
-    SETUP_RC="$2"
-    echo "[$APP] $1 failed (exit $2)" >&2
-    cat "$TMP_ROOT/setup.log" >&2
-    exit 1
-}
-
-# Versions that decide analysis results, read from the app's own installed.json
-# (what Psalm actually loads), because the install floats on Packagist.
-installed_versions() {
-    php -d memory_limit=-1 -r '
-        $f = $argv[1] . "/vendor/composer/installed.json";
-        $j = is_file($f) ? json_decode(file_get_contents($f), true) : null;
-        $v = ["php" => PHP_VERSION, "vimeo/psalm" => null, "laravel/framework" => null];
-        foreach ($j["packages"] ?? $j ?? [] as $p) {
-            if (is_array($p) && array_key_exists($p["name"] ?? "", $v)) { $v[$p["name"]] = $p["version"] ?? null; }
-        }
-        echo json_encode($v);
-    ' "$1"
-}
-
-# md5 of every installed package except the plugin under test (name, version,
-# source revision): equal between sides iff only the plugin differs.
-deps_sig() {
-    php -d memory_limit=-1 -r '
-        $f = $argv[1] . "/vendor/composer/installed.json";
-        $j = is_file($f) ? json_decode(file_get_contents($f), true) : null;
-        $s = [];
-        foreach ($j["packages"] ?? $j ?? [] as $p) {
-            if (!is_array($p) || ($p["name"] ?? "") === "psalm/plugin-laravel") { continue; }
-            $s[] = ($p["name"] ?? "") . "@" . ($p["version"] ?? "") . "@" . ($p["source"]["reference"] ?? $p["dist"]["reference"] ?? "");
-        }
-        sort($s);
-        echo md5(implode("\n", $s));
-    ' "$1"
-}
-
 # --- 1. Clone app at the frozen commit (cache-friendly) ----------------------
 #
 # The ref is an immutable commit, so a populated APP_SRC is reusable across runs
@@ -218,14 +123,14 @@ if [[ ! -d "$APP_SRC/.git" ]]; then
     echo "[$APP] cloning $REPO @ $REF" >&2
     rm -rf "$APP_SRC"
     mkdir -p "$APP_SRC"
-    # Explicit `|| return`s: errexit is off inside a function run on the left of `||`.
-    clone_app() {
-        git clone --quiet --no-checkout "$REPO" "$APP_SRC" || return
-        cd "$APP_SRC" || return
-        git checkout --quiet "$REF" 2>/dev/null \
-            || { git fetch --quiet origin "$REF" && git checkout --quiet "$REF"; }
-    }
-    (clone_app) >"$TMP_ROOT/setup.log" 2>&1 || setup_failed clone "$?"
+    git clone --quiet --no-checkout "$REPO" "$APP_SRC"
+    (
+        cd "$APP_SRC"
+        git checkout --quiet "$REF" 2>/dev/null || {
+            git fetch --quiet origin "$REF"
+            git checkout --quiet "$REF"
+        }
+    )
 else
     echo "[$APP] reusing cached source at $APP_SRC" >&2
 fi
@@ -361,40 +266,34 @@ elif [[ ! -f "$PLUGIN_SIG_FILE" || "$(cat "$PLUGIN_SIG_FILE")" != "$want_sig" ]]
 fi
 
 # Run the one-time source install only when needed (cache-friendly otherwise).
-install_app() {
-    if [[ -n "$PRIME" ]]; then
-        echo "[$APP] prime: $PRIME" >&2
-        (cd "$APP_SRC" && eval "$PRIME") || return
-    fi
-    configure_plugin_repo "$APP_SRC" "$PLUGIN_BASE" 1 || return
-    write_psalm_xml || return
+if [[ "$need_install" == 1 ]]; then
+    echo "[$APP] installing dependencies" >&2
+    (
+        cd "$APP_SRC"
+        if [[ -n "$PRIME" ]]; then
+            echo "[$APP] prime: $PRIME" >&2
+            eval "$PRIME"
+        fi
+    )
+    configure_plugin_repo "$APP_SRC" "$PLUGIN_BASE" 1
+    write_psalm_xml
     # Don't let Composer's security-advisory policy block the solve. Some apps
     # pin a transitive (e.g. symfony/http-foundation) to an advisory-flagged
     # version; we only type-analyse the code, never run it, so the advisory is
     # irrelevant here and would otherwise fail the whole install. The setting is
     # written into composer.json, so the per-side COW copies inherit it.
     (cd "$APP_SRC" && composer config --no-interaction policy.advisories.block false 2>/dev/null || true)
-    (cd "$APP_SRC" && composer update "${COMPOSER_FLAGS[@]}") || return
+    (cd "$APP_SRC" && composer update "${COMPOSER_FLAGS[@]}" --quiet)
     # Stamp what this vendor was solved against, so a future run can verify reuse.
     printf '%s' "$want_sig" > "$PLUGIN_SIG_FILE"
-}
-
-if [[ "$need_install" == 1 ]]; then
-    echo "[$APP] installing dependencies" >&2
-    install_app >"$TMP_ROOT/setup.log" 2>&1 || setup_failed install "$?"
 else
     echo "[$APP] reusing installed vendor" >&2
-    write_psalm_xml >"$TMP_ROOT/setup.log" 2>&1 || setup_failed config "$?"
+    write_psalm_xml
 fi
-
-# Base vendor fingerprint (minus the plugin) for the head deps-divergence check.
-BASE_DEPS_SIG=$(deps_sig "$APP_SRC")
 
 # --- 3. Run one side: relink plugin, run Psalm, emit JSON --------------------
 
-# relink: base | symlink | composer (head). Head's composer relink is the only
-# step that can change app dependencies, hence the divergence check below.
-run_side_body() {
+run_side() {
     local label="$1" plugin_dir="$2" relink="$3"
     # Both sides use the SAME absolute work-dir path (not work-<label>). Psalm
     # bakes the analysis path into the report in ways that survive any post-hoc
@@ -405,10 +304,9 @@ run_side_body() {
     # so only real changes differ. Safe because base and head run sequentially
     # for an app (one matrix job), each starting with rm -rf below.
     local app_dir="${OUT}/${APP}/work"
-    local issues_file perf_file crash_log
-    issues_file=$(side_file "$label" issues.json)
-    perf_file=$(side_file "$label" perf.json)
-    crash_log=$(side_file "$label" crash.log)
+    local issues_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--issues.json"
+    local perf_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--perf.json"
+    local crash_log="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--crash.log"
 
     # Skip-if-cached: a complete side is reused verbatim on rerun.
     if [[ -f "$issues_file" && -f "$perf_file" ]]; then
@@ -416,201 +314,118 @@ run_side_body() {
         return 0
     fi
 
-    # Drop leftovers of an interrupted run: a stale report would pass the
-    # "usable report" check below even if Psalm dies before writing a new one.
-    rm -f "$issues_file" "$perf_file" "$crash_log"
-
-    local t_side=$SECONDS
-    local out_txt="$TMP_ROOT/$label.out" err_txt="$TMP_ROOT/$label.err"
-    local raw_report="$TMP_ROOT/$label.report.json"
-
     # Fresh working copy off the source (the shared work dir is rebuilt per side).
     rm -rf "$app_dir"
     fast_copy "$APP_SRC" "$app_dir"
 
-    # Point this copy's plugin at $plugin_dir. The PSR-4 map resolves through the
-    # vendor symlink, so the cheapest relink is a symlink swap — no Composer solve.
-    # Composer runs only when head changed the plugin's installed dependency shape
-    # (see plugin_dep_sig), and only for the plugin package itself: no
-    # --with-dependencies, so it cannot silently upgrade app dependencies the
-    # base side did not get (an unsatisfiable plugin constraint fails the side
-    # and surfaces as a crash instead).
+    # Point this copy's plugin at $plugin_dir. The source install already linked
+    # vendor/psalm/plugin-laravel at PLUGIN_BASE (symlink path repo), and the
+    # PSR-4 map resolves through that symlink, so the cheapest relink is a symlink
+    # swap — no Composer solve. Only fall back to Composer when head changed the
+    # plugin's installed dependency shape (see plugin_dep_sig).
     #
     # Critical: `composer update psalm/plugin-laravel` does NOT re-point the path
     # symlink when the package version string is unchanged (both checkouts carry
     # the same dev version), so Composer alone would leave the copy linked to
-    # PLUGIN_BASE and silently analyse head with the base plugin. Every side
-    # therefore sets the symlink explicitly — base too, because a cached vendor
-    # may link to a worktree that no longer exists.
+    # PLUGIN_BASE and silently analyse head with the base plugin. Every branch
+    # therefore sets the symlink explicitly; Composer runs only to pull head's
+    # new dependencies into vendor.
     local link="$app_dir/vendor/psalm/plugin-laravel"
-    if [[ "$relink" == composer ]]; then
-        configure_plugin_repo "$app_dir" "$plugin_dir"
-        local relink_rc=0
-        # Not --quiet: on failure the log is the crash report, and --quiet drops the
-        # resolver's reasons.
-        (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}") \
-            >"$TMP_ROOT/relink.log" 2>&1 || relink_rc=$?
-        if [[ "$relink_rc" != 0 ]]; then
-            echo "[$APP/$label] composer relink failed (exit $relink_rc)" >&2
-            write_crash "$label" "$relink_rc" "$((SECONDS - t_side))" "$TMP_ROOT/relink.log"
-            rm -rf "$app_dir"
-            return 0
-        fi
-    fi
-    rm -rf "$link"
-    ln -s "$plugin_dir" "$link"
+    case "$relink" in
+        none)
+            : # base side: the copied vendor already symlinks to PLUGIN_BASE
+            ;;
+        symlink)
+            rm -rf "$link"
+            ln -s "$plugin_dir" "$link"
+            ;;
+        composer)
+            configure_plugin_repo "$app_dir" "$plugin_dir"
+            (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --quiet) \
+                || { echo "[$APP/$label] composer relink failed" >&2; rm -rf "$app_dir"; return 0; }
+            rm -rf "$link"
+            ln -s "$plugin_dir" "$link"
+            ;;
+    esac
 
-    local deps_diverged=""
-    if [[ "$relink" != base ]]; then
-        deps_diverged=false
-        [[ "$(deps_sig "$app_dir")" == "$BASE_DEPS_SIG" ]] || deps_diverged=true
-    fi
-    local versions
-    versions=$(installed_versions "$app_dir")
-
-    local t0 exit_code wall coverage count plugin_status
+    local out_txt err_txt side_tmp t0 exit_code wall coverage count
+    out_txt=$(mktemp); err_txt=$(mktemp); side_tmp=$(mktemp -d)
     # Sub-second wall time via PHP microtime — portable (macOS `date` lacks %N)
     # and finer than whole-second `date +%s`. Still threshold-filtered downstream
     # because CI runner jitter dominates small deltas.
     t0=$(php -r 'echo microtime(true);')
     exit_code=0
-    # A private plugin cache per side: with --no-cache the plugin falls back to
-    # <sys_get_temp_dir()>/psalm-laravel-<md5(cwd)> (PluginConfig::resolveCachePath),
-    # and both sides share the cwd, so head would read the schema base cached.
-    # A per-side TMPDIR moves that fallback (and any other temp use) out of reach.
-    # PSALM_LARAVEL_PLUGIN_CACHE_PATH would also work but is deprecated, and
-    # Psalm's error handler turns its E_USER_DEPRECATED notice into a crash.
-    local side_tmp="$TMP_ROOT/tmp-$label"
-    mkdir -p "$side_tmp"
+    # Own TMPDIR per side: both sides share the work-dir cwd, so the plugin's
+    # psalm-laravel-<md5(cwd)> temp cache would otherwise carry base's migration
+    # schema into head.
     (
         cd "$app_dir"
-        # --long-progress (not --no-progress): VoidProgress::write() is a no-op, so
-        # it would swallow the plugin's InternalErrorReporter warnings that
-        # plugin_status below is read from. Piped stderr selects the quiet,
-        # carriage-return-free variant.
-        TMPDIR="$side_tmp" \
-        php -d memory_limit="$MEM" \
+        TMPDIR="$side_tmp" php -d memory_limit="$MEM" \
             vendor/bin/psalm -c psalm.xml \
-            --no-cache --no-diff --long-progress --no-suggestions --monochrome \
+            --no-cache --no-diff --no-progress --no-suggestions --monochrome \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
-            --report="$raw_report" >"$out_txt" 2>"$err_txt"
+            --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
     wall=$(php -r 'printf("%.3f", microtime(true) - (float) $argv[1]);' "$t0")
     rm -rf "$side_tmp"
 
-    # Psalm exits non-zero whenever issues are found, so its exit code says nothing
-    # about the report. The report itself is the signal: it must exist and decode
-    # as a JSON list (a crash mid-write leaves truncated JSON), and only then is
-    # it published to issues.json — a bad one becomes a crash, never a partial file.
-    #
-    # The same pass makes file_path relative to the (now side-independent) work
-    # dir, so stored identities are readable. Because both sides share the
-    # work-dir path, every other place Psalm embeds it (messages, anon-class
-    # names, literal types) is already byte-identical across sides and needs no
-    # normalisation. Use the canonical (symlink-resolved) dir — Psalm reports
-    # realpath'd paths, so on macOS the report says /private/tmp/... while
-    # $app_dir is /tmp/... memory_limit=-1: the decoded report of a big app
-    # exceeds PHP's 128M default locally (CI sets it via setup-php).
-    local app_dir_real
-    app_dir_real=$(cd "$app_dir" && pwd -P)
-    if ! count=$(php -d memory_limit=-1 -r '
-        $file = $argv[1]; $prefix = rtrim($argv[2], "/") . "/";
-        try {
-            if (!is_file($file) || filesize($file) === 0) {
-                throw new RuntimeException("Psalm wrote no report");
-            }
-            $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($d) || !array_is_list($d)) {
-                throw new RuntimeException("report is not a JSON list");
-            }
-            foreach ($d as &$i) {
-                if (!is_array($i)) {
-                    throw new RuntimeException("report entry is not an object");
-                }
-                if (isset($i["file_path"]) && str_starts_with($i["file_path"], $prefix)) {
-                    $i["file_path"] = substr($i["file_path"], strlen($prefix));
-                }
-            }
-            file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        } catch (Throwable $e) {
-            fwrite(STDERR, "delta-app: unusable Psalm report: " . $e->getMessage() . "\n");
-            exit(1);
-        }
-        echo count($d);
-    ' "$raw_report" "$app_dir_real" 2>>"$err_txt"); then
-        echo "[$APP/$label] no usable report (exit $exit_code) — recording crash" >&2
-        write_crash "$label" "$exit_code" "$wall" "$err_txt" "$out_txt"
-        rm -rf "$app_dir"
+    # Psalm exits non-zero whenever issues are found, so a non-empty report is
+    # the real success signal; treat a missing/empty report as a crash.
+    if [[ ! -s "$issues_file" ]]; then
+        echo "[$APP/$label] no report (exit $exit_code) — recording (missing)" >&2
+        { echo "=== $APP/$label exit $exit_code after ${wall}s ==="; echo "--- stderr ---"; cat "$err_txt"; echo "--- stdout ---"; cat "$out_txt"; } > "$crash_log"
+        rm -f "$issues_file"
+        rm -rf "$app_dir" "$out_txt" "$err_txt"
         return 0
     fi
-    mv "$raw_report" "$issues_file"
 
-    # InternalErrorReporter only warns (failOnInternalError=false in psalm.xml), so
-    # a side that lost its plugin analyses fine but with hundreds of bogus Mixed*
-    # issues. Detect it from the warning text; "disabled" outranks "degraded".
-    plugin_status=ok
-    if grep -qsF 'Laravel plugin is running in degraded mode' "$err_txt" "$out_txt"; then
-        plugin_status=degraded
-    fi
-    if grep -qsF 'Laravel plugin has been disabled for this run' "$err_txt" "$out_txt"; then
-        plugin_status=disabled
-    fi
+    # Make file_path relative to the (now side-independent) work dir, so stored
+    # identities are readable. Because both sides share the work-dir path, every
+    # other place Psalm embeds it (messages, anon-class names, literal types) is
+    # already byte-identical across sides and needs no normalisation.
+    # Use the canonical (symlink-resolved) dir — Psalm reports realpath'd paths,
+    # so on macOS the report says /private/tmp/... while $app_dir is /tmp/...
+    local app_dir_real
+    app_dir_real=$(cd "$app_dir" && pwd -P)
+    php -d memory_limit=-1 -r '
+        $file = $argv[1]; $prefix = rtrim($argv[2], "/") . "/";
+        $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        foreach ($d as &$i) {
+            if (isset($i["file_path"]) && str_starts_with($i["file_path"], $prefix)) {
+                $i["file_path"] = substr($i["file_path"], strlen($prefix));
+            }
+        }
+        file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    ' "$issues_file" "$app_dir_real"
 
     coverage=$(sed -n 's/.*infer types for \([0-9.]*\)%.*/\1/p' "$out_txt" | tail -1)
+    count=$(php -d memory_limit=-1 -r '$d=json_decode(file_get_contents($argv[1]),true); echo is_array($d)?count($d):0;' "$issues_file")
 
     php -r '
         $cov = $argv[6];
-        $perf = [
+        file_put_contents($argv[1], json_encode([
             "app" => $argv[2], "version" => $argv[3], "date" => $argv[4],
             "wall_seconds" => (float) $argv[5],
             "type_coverage_pct" => $cov === "" ? null : (float) $cov,
             "total_issues" => (int) $argv[7], "exit_code" => (int) $argv[8],
-            "plugin_status" => $argv[9],
-            "versions" => json_decode($argv[10], true),
-        ];
-        if ($argv[11] !== "") { $perf["deps_diverged"] = $argv[11] === "true"; }
-        file_put_contents($argv[1], json_encode($perf, JSON_PRETTY_PRINT));
-    ' "$perf_file" "$APP" "$label" "$DATE_MARKER" "$wall" "${coverage:-}" "${count:-0}" "$exit_code" \
-        "$plugin_status" "$versions" "$deps_diverged"
+        ], JSON_PRETTY_PRINT));
+    ' "$perf_file" "$APP" "$label" "$DATE_MARKER" "$wall" "${coverage:-}" "${count:-0}" "$exit_code"
 
-    echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s, plugin $plugin_status${deps_diverged:+, deps_diverged=$deps_diverged}" >&2
-    rm -rf "$app_dir"
+    rm -f "$crash_log"
+    echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s" >&2
+    rm -rf "$app_dir" "$out_txt" "$err_txt"
 }
 
-# Run one side so ANY failure inside it (copy, config, relink, psalm, report
-# parse) is recorded as that side's crash.log and the other side still runs.
-run_side() {
-    local label="$1" rc=0 t_side=$SECONDS
-    local side_log="$TMP_ROOT/$label.side.log"
-    # errexit is suspended for any command whose status is tested (`||`, `if`),
-    # even after `set -e` inside a subshell, so the body must run as a plain
-    # pipeline stage with its status read back from PIPESTATUS. tee keeps the
-    # output live on stderr and keeps a copy as crash.log material.
-    set +e
-    ( set -e; run_side_body "$@" ) 2>&1 | tee "$side_log" >&2
-    rc=${PIPESTATUS[0]}
-    set -e
-    if [[ "$rc" != 0 ]]; then
-        echo "[$APP/$label] side aborted (exit $rc) — recording crash" >&2
-        # Never leave a half-written side behind: no report may sit next to a crash.
-        rm -f "$(side_file "$label" issues.json)" "$(side_file "$label" perf.json)"
-        [[ -f "$(side_file "$label" crash.log)" ]] \
-            || write_crash "$label" "$rc" "$((SECONDS - t_side))" "$side_log"
-        rm -rf "${OUT}/${APP}/work"
-    fi
-    : > "$TMP_ROOT/settled-$label"
-}
-
-# Base reuses the source install; head re-points a symlink when the plugin's
-# dependency shape is unchanged (the common case), and only re-solves with
-# Composer when it differs.
+# Base reuses the source install verbatim (its vendor already links PLUGIN_BASE).
+# Head re-points a symlink when the plugin's dependency shape is unchanged
+# (the common case), and only re-solves with Composer when it differs.
 if [[ "$(plugin_dep_sig "$PLUGIN_BASE")" == "$(plugin_dep_sig "$PLUGIN_HEAD")" ]]; then
     HEAD_RELINK=symlink
 else
     HEAD_RELINK=composer
 fi
 
-run_side "$BASE_LABEL" "$PLUGIN_BASE" base
+run_side "$BASE_LABEL" "$PLUGIN_BASE" none
 run_side "$HEAD_LABEL" "$PLUGIN_HEAD" "$HEAD_RELINK"
 
 echo "[$APP] done" >&2
