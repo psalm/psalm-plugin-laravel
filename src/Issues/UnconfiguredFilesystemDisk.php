@@ -7,9 +7,9 @@ namespace Psalm\LaravelPlugin\Issues;
 use Psalm\Issue\PluginIssue;
 
 /**
- * Reported when Storage::disk()/drive() (or the same call on a DI-injected
- * FilesystemManager/Factory contract) is given a literal disk name that is not
- * configured in filesystems.disks.
+ * Reported when Storage::disk()/drive() (or the same call on the root \Storage
+ * alias) is given a statically known disk name that is not configured in
+ * filesystems.disks.
  */
 final class UnconfiguredFilesystemDisk extends PluginIssue
 {

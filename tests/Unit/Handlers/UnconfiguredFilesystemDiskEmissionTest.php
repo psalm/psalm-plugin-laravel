@@ -48,8 +48,8 @@ final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
             }
         }
 
-        // Exact set: each flagged shape fires; the configured disk, falsy, dotted, dynamic and
-        // DI-manager calls stay silent.
+        // Exact set: each flagged shape (literal, enum case, class constant) fires; the configured
+        // disk, falsy, dotted, dynamic, union, int-enum and DI-manager calls stay silent.
         $this->assertEqualsCanonicalizing(
             [
                 "Disk 's3-old' is not configured in filesystems.disks",
@@ -57,6 +57,9 @@ final class UnconfiguredFilesystemDiskEmissionTest extends TestCase
                 "Disk 'missing-alias' is not configured in filesystems.disks",
                 "Disk 'publik' is not configured in filesystems.disks, did you mean 'public'?",
                 "Disk 'tenant' is not configured in filesystems.disks",
+                "Disk 'legacy' is not configured in filesystems.disks",
+                "Disk 'old-archive' is not configured in filesystems.disks",
+                "Disk 'old-archive' is not configured in filesystems.disks",
             ],
             $messages,
         );

@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Filesystem;
 
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
@@ -239,7 +244,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
     }
 
     /**
-     * Flag `disk('s3-old')` / `drive('s3-old')` when a string-literal name is not a configured disk.
+     * Flag `disk('s3-old')` / `drive('s3-old')` when a statically known name is not a configured disk.
      * Laravel's `FilesystemManager::resolve()` throws a hard `InvalidArgumentException` for it (no
      * silent fallback to `local`), so the failure mode is availability, not a wrong write target.
      *
@@ -248,13 +253,11 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static function checkDiskExists(array $disks, array $callArgs, StatementsSource $source, CodeLocation $codeLocation): void
     {
-        $name = $callArgs[0]->value ?? null;
+        $diskName = self::knownDiskName($callArgs[0]->value ?? null, $source);
 
-        if (!$name instanceof String_) {
+        if ($diskName === null) {
             return;
         }
-
-        $diskName = $name->value;
 
         // '' and '0' are falsy: `enum_value($name) ?: $this->getDefaultDriver()` sends them to the
         // default disk. Dotted names reach nested config groups (`disks.tenant.assets`) through
@@ -273,6 +276,57 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             ),
             $source->getSuppressedIssues(),
         );
+    }
+
+    /**
+     * A literal, a string-backed enum case (`disk()` unwraps it with `enum_value()`), or a class
+     * constant typed as one string literal. Reads the AST, not the inferred type: on the facade's
+     * `@method` path Psalm runs return-type providers before analysing the arguments.
+     */
+    private static function knownDiskName(?Expr $name, StatementsSource $source): ?string
+    {
+        if ($name instanceof String_) {
+            return $name->value;
+        }
+
+        if (!$name instanceof ClassConstFetch || !$name->class instanceof Name || !$name->name instanceof Identifier) {
+            return null;
+        }
+
+        // `static::` / `parent::` decline: late static binding and rare in a disk argument.
+        /** @psalm-var string|null $resolved */
+        $resolved = $name->class->getAttribute('resolvedName');
+        $fqcn = $name->class->toLowerString() === 'self'
+            ? $source->getFQCLN()
+            : ($name->class->isSpecialClassName() ? null : $resolved ?? $name->class->toString());
+
+        if ($fqcn === null) {
+            return null;
+        }
+
+        $const = $name->name->name;
+        $codebase = $source->getCodebase();
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($fqcn));
+            // `self::` in a trait binds to the using class, which the trait's storage cannot see.
+            if ($storage->is_trait) {
+                return null;
+            }
+
+            if (isset($storage->enum_cases[$const])) {
+                $value = $storage->enum_cases[$const]->getValue($codebase->classlikes);
+
+                // Int-backed and pure cases decline: disk keys are strings.
+                return $value instanceof Type\Atomic\TLiteralString ? $value->value : null;
+            }
+
+            $type = $codebase->classlikes->getClassConstantType($storage->name, $const, \ReflectionProperty::IS_PRIVATE);
+        } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
+            return null;
+        }
+
+        return $type?->isSingleStringLiteral() === true ? $type->getSingleStringLiteral()->value : null;
     }
 
     /**
