@@ -1,6 +1,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Builders\InheritedModelBuilder;
 use App\Models\CollidingScopeModel;
 use App\Models\Customer;
 use App\Models\InheritedBuilderChild;
@@ -127,6 +128,51 @@ function trait_params_provider_consumes_pending_scope_handoff(): void
 
     $_trashed = Customer::query()->withTrashed(false);
     /** @psalm-check-type-exact $_trashed = \Illuminate\Database\Eloquent\Builder<\App\Models\Customer> */
+}
+
+/**
+ * A template-typed receiver resolves through the template's `as` bound: the descendant's overriding
+ * scope signature applies, and the returned builder keeps the template instead of collapsing to the bound.
+ * `@psalm-check-type-exact` cannot express the printed `T:fn-... as ...` form, so the preserved template
+ * is asserted through the declared return type.
+ *
+ * @template T of InheritedBuilderChild
+ * @param InheritedModelBuilder<T> $builder
+ * @return InheritedModelBuilder<T>
+ */
+function template_receiver_bound_to_descendant_scope(InheritedModelBuilder $builder): InheritedModelBuilder
+{
+    return $builder->visible(true);
+}
+
+/**
+ * @template T of InheritedBuilderChild
+ * @param InheritedModelBuilder<T> $builder
+ * @return InheritedModelBuilder<T>
+ */
+function template_receiver_bound_to_descendant_trait_method(InheritedModelBuilder $builder): InheritedModelBuilder
+{
+    return $builder->withTrashed();
+}
+
+/**
+ * @template T of InheritedBuilderModel
+ * @param InheritedModelBuilder<T> $builder
+ * @return InheritedModelBuilder<T>
+ */
+function template_receiver_bound_to_base_scope(InheritedModelBuilder $builder): InheritedModelBuilder
+{
+    return $builder->visible();
+}
+
+/**
+ * @template T of InheritedBuilderModel
+ * @param InheritedModelBuilder<T> $builder
+ * @return InheritedModelBuilder<T>
+ */
+function template_receiver_bound_to_base_trait_method(InheritedModelBuilder $builder): InheritedModelBuilder
+{
+    return $builder->withTrashed();
 }
 ?>
 --EXPECTF--

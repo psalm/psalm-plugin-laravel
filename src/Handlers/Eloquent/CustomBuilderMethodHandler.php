@@ -15,6 +15,8 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodVisibilityProviderEvent;
 use Psalm\StatementsSource;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -103,21 +105,79 @@ final class CustomBuilderMethodHandler
      * Psalm passes no template params to return providers for magic (`__call`) calls such as scopes,
      * so the receiver expression's type is the fallback, as in {@see BuilderAggregateHandler}.
      *
-     * @return class-string<Model>|null
+     * A receiver whose model argument is a bare template parameter (`@template T of Child`,
+     * `Builder<T>`) resolves through the template's `as` bound when that is a single model class;
+     * `$modelType` then carries the original template union so the returned builder stays generic in it.
+     *
+     * @return array{modelClass: class-string<Model>|null, modelType: Union|null}
      */
-    private static function receiverModel(MethodReturnTypeProviderEvent $event, \Psalm\Codebase $codebase): ?string
+    private static function receiverModel(MethodReturnTypeProviderEvent $event, \Psalm\Codebase $codebase): array
     {
         $stmt = $event->getStmt();
         $lhsType = $stmt instanceof MethodCall
             ? $event->getSource()->getNodeTypeProvider()->getType($stmt->var)
             : null;
+        $templateParams = $event->getTemplateTypeParameters();
 
-        return ModelPropertyResolver::resolveExactlyOneModelClass(
-            $event->getTemplateTypeParameters(),
-            0,
-            $lhsType,
-            $codebase,
-        );
+        $templateType = self::templateParamModelType($templateParams[0] ?? null);
+        if (!$templateType instanceof Union && $lhsType instanceof Union) {
+            foreach ($lhsType->getAtomicTypes() as $atomic) {
+                if ($atomic instanceof TGenericObject) {
+                    $templateType = self::templateParamModelType($atomic->type_params[0] ?? null);
+                    break;
+                }
+            }
+        }
+
+        if ($templateType instanceof Union) {
+            /** @var TTemplateParam $templateParam single atomic, checked by templateParamModelType() */
+            $templateParam = $templateType->getSingleAtomic();
+            $bound = ModelPropertyResolver::extractExactlyOneModelFromUnion($templateParam->as);
+            if ($bound !== null) {
+                return ['modelClass' => $bound, 'modelType' => $templateType];
+            }
+        }
+
+        return [
+            'modelClass' => ModelPropertyResolver::resolveExactlyOneModelClass(
+                $templateParams,
+                0,
+                $lhsType,
+                $codebase,
+            ),
+            'modelType' => null,
+        ];
+    }
+
+    /**
+     * @psalm-mutation-free
+     */
+    private static function templateParamModelType(?Union $type): ?Union
+    {
+        return $type instanceof Union && $type->isSingle() && $type->getSingleAtomic() instanceof TTemplateParam
+            ? $type
+            : null;
+    }
+
+    /**
+     * Builder type for the picked model: the receiver's own template union when it was template-typed,
+     * otherwise the concrete `Builder<Model>`.
+     *
+     * @param class-string<Builder> $builderClass
+     * @param class-string<Model> $modelClass
+     * @psalm-mutation-free
+     */
+    private static function returnBuilderType(
+        string $builderClass,
+        string $modelClass,
+        ?Union $receiverModelType,
+        \Psalm\Codebase $codebase,
+    ): Union {
+        return new Union([
+            $receiverModelType instanceof Union
+                ? ModelMethodHandler::builderTypeWithModelType($builderClass, $receiverModelType, $codebase)
+                : ModelMethodHandler::builderType($builderClass, $modelClass, $codebase),
+        ]);
     }
 
     /**
@@ -247,16 +307,17 @@ final class CustomBuilderMethodHandler
         /** @var class-string<Builder> $builderClass */
         $builderClass = $event->getFqClasslikeName();
         $methodName = $event->getMethodNameLowercase();
+        $receiver = self::receiverModel($event, $source->getCodebase());
         $modelClass = self::pickModel(
             $builderClass,
-            self::receiverModel($event, $source->getCodebase()),
+            $receiver['modelClass'],
             static fn(string $model): bool => self::hasTraitMethod($model, $methodName),
         );
         if ($modelClass === null) {
             return null;
         }
 
-        return new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $source->getCodebase())]);
+        return self::returnBuilderType($builderClass, $modelClass, $receiver['modelType'], $source->getCodebase());
     }
 
     /**
@@ -381,9 +442,10 @@ final class CustomBuilderMethodHandler
         $builderClass = $event->getFqClasslikeName();
         $codebase = $source->getCodebase();
         $methodName = $event->getMethodNameLowercase();
+        $receiver = self::receiverModel($event, $codebase);
         $modelClass = self::pickModel(
             $builderClass,
-            self::receiverModel($event, $codebase),
+            $receiver['modelClass'],
             static fn(string $model): bool => BuilderScopeHandler::hasScopeMethod($codebase, $model, $methodName),
         );
         if ($modelClass === null) {
@@ -394,7 +456,7 @@ final class CustomBuilderMethodHandler
 
         // A value-returning scope surfaces its declared return via Laravel's `?? $this` coalesce;
         // a plain void/fluent scope keeps the custom builder type, CustomBuilder<Model> (issue #1053).
-        $scopeFallback = new Union([ModelMethodHandler::builderType($builderClass, $modelClass, $codebase)]);
+        $scopeFallback = self::returnBuilderType($builderClass, $modelClass, $receiver['modelType'], $codebase);
 
         return BuilderScopeHandler::forwardedScopeReturnType(
             $codebase,
