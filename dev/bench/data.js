@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790974977469,
+  "lastUpdate": 1791099354169,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11825,6 +11825,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6386f114fe010e3c300d0c5167e7b8e0a16d69d",
+          "message": "Merge pull request #1627 from psalm/alies-dev/input-is-wrongly-stubbed-psalm-mutation-free-cau\n\nDrop `@psalm-mutation-free` from `Request::input()`",
+          "timestamp": "2026-10-04T09:32:51+02:00",
+          "tree_id": "c87e84641485288d6b0025e25235958fc5baec8c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f6386f114fe010e3c300d0c5167e7b8e0a16d69d"
+        },
+        "date": 1791099352531,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.69,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1369,
             "unit": "MB"
           }
         ]
