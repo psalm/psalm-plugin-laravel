@@ -167,7 +167,7 @@ final class DeltaReportTest extends TestCase
         $this->issues('app', self::BASE, [$this->issue('a.php', 1, 'TypeA', 'x')]);
         $this->crashLog('app', self::HEAD, 'HeadBoom');
 
-        $report = $this->report(['app']);
+        $report = $this->report(['app'], ['--details']);
 
         $this->assertMatchesRegularExpression('/^- \*\*app\*\* \(head only[^)]*\): `HeadBoom`$/m', $report);
         $this->assertNull($this->row($report, 'app'));
@@ -179,7 +179,7 @@ final class DeltaReportTest extends TestCase
         $this->crashLog('app', self::BASE, 'BaseBoom');
         $this->issues('app', self::HEAD, [$this->issue('a.php', 1, 'TypeA', 'x')]);
 
-        $this->assertMatchesRegularExpression('/^- \*\*app\*\* \(base only[^)]*\): `BaseBoom`$/m', $this->report(['app']));
+        $this->assertMatchesRegularExpression('/^- \*\*app\*\* \(base only[^)]*\): `BaseBoom`$/m', $this->report(['app'], ['--details']));
     }
 
     #[Test]
@@ -188,7 +188,7 @@ final class DeltaReportTest extends TestCase
         $this->crashLog('app', self::BASE, 'SameBoom');
         $this->crashLog('app', self::HEAD, 'SameBoom');
 
-        $this->assertMatchesRegularExpression('/^- \*\*app\*\* \(base and head\): `SameBoom`$/m', $this->report(['app']));
+        $this->assertMatchesRegularExpression('/^- \*\*app\*\* \(base and head\): `SameBoom`$/m', $this->report(['app'], ['--details']));
     }
 
     #[Test]
@@ -197,7 +197,7 @@ final class DeltaReportTest extends TestCase
         $this->crashLog('app', self::BASE, 'BaseBoom');
         $this->crashLog('app', self::HEAD, 'HeadBoom');
 
-        $report = $this->report(['app']);
+        $report = $this->report(['app'], ['--details']);
 
         $this->assertMatchesRegularExpression('/^- \*\*app\*\*: base: `BaseBoom`; head: `HeadBoom`$/m', $report);
     }
@@ -209,9 +209,33 @@ final class DeltaReportTest extends TestCase
         $this->write('app', self::HEAD, 'crash.log', "=== app/pr-bbbb2222 exit 2 after 3s ===\n");
         $this->issues('app', self::BASE, []);
 
-        $report = $this->report(['app']);
+        $report = $this->report(['app'], ['--details']);
 
         $this->assertMatchesRegularExpression('/^- \*\*app\*\* \(head only[^)]*\): `=== app\/pr-bbbb2222 exit 2/m', $report);
+    }
+
+    #[Test]
+    public function crash_text_is_printed_only_with_details(): void
+    {
+        $this->issues('headonly', self::BASE, []);
+        $this->crashLog('headonly', self::HEAD, 'Secret\\PrivateClass failed on db.internal.example');
+        $this->crashLog('both', self::BASE, 'BaseSecret host-a.internal');
+        $this->crashLog('both', self::HEAD, 'HeadSecret host-b.internal');
+
+        $plain = $this->report(['headonly', 'both']);
+
+        $this->assertStringContainsString('### Crashed', $plain);
+        $this->assertMatchesRegularExpression('/^- \*\*headonly\*\* \(head only\)$/m', $plain);
+        $this->assertMatchesRegularExpression('/^- \*\*both\*\* \(base and head\)$/m', $plain);
+        foreach (['Secret', 'internal', 'PrivateClass'] as $leak) {
+            $this->assertStringNotContainsString($leak, $plain);
+        }
+
+        $detailed = $this->report(['headonly', 'both'], ['--details']);
+
+        $this->assertStringContainsString('Secret\\PrivateClass failed on db.internal.example', $detailed);
+        $this->assertStringContainsString('BaseSecret host-a.internal', $detailed);
+        $this->assertStringContainsString('HeadSecret host-b.internal', $detailed);
     }
 
     #[Test]
@@ -244,7 +268,7 @@ final class DeltaReportTest extends TestCase
         // The workflow adds a marker and footer (< 500 chars) around the body.
         $this->assertLessThan(65_536 - 500, \strlen($report));
         $this->assertSame([0, 0, 3000, 0, 0], $this->row($report, 'big'), 'summary stays accurate');
-        $this->assertMatchesRegularExpression('/^- \*\*broken\*\* \(head only[^)]*\): `HeadBoom`$/m', $report);
+        $this->assertMatchesRegularExpression('/^- \*\*broken\*\* \(head only[^)]*\)$/m', $report);
         $this->assertStringContainsString('truncated', $report);
         $this->assertSame(\substr_count($report, '<details'), \substr_count($report, '</details>'), 'details block stays closed');
     }
@@ -341,6 +365,62 @@ final class DeltaReportTest extends TestCase
         $this->issues('app', self::HEAD, [$this->issue('a.php', 10, 'TypeA', 'new text', lineTo: 11)]);
 
         $this->assertSame([0, 0, 1, 0, 0], $this->row($this->report(['app']), 'app'));
+    }
+
+    #[Test]
+    public function an_end_line_only_shift_is_moved_not_changed(): void
+    {
+        $this->issues('app', self::BASE, [$this->issue('a.php', 10, 'TypeA', 'same text', lineTo: 10)]);
+        $this->issues('app', self::HEAD, [$this->issue('a.php', 10, 'TypeA', 'same text', lineTo: 11)]);
+
+        $report = $this->report(['app'], ['--details']);
+
+        $this->assertSame([0, 0, 0, 1, 0], $this->row($report, 'app'));
+        $this->assertStringNotContainsString('**Message changed**', $report);
+        $this->assertStringContainsString('`a.php:10:1` → `a.php:10-11:1`', $report);
+    }
+
+    #[Test]
+    public function a_changed_pair_never_has_identical_old_and_new_messages(): void
+    {
+        $shapes = [
+            'end line only' => [
+                [$this->issue('a.php', 5, 'TypeA', 'm', lineTo: 5)],
+                [$this->issue('a.php', 5, 'TypeA', 'm', lineTo: 6)],
+            ],
+            'column only' => [
+                [$this->issue('a.php', 5, 'TypeA', 'm', column: 1)],
+                [$this->issue('a.php', 5, 'TypeA', 'm', column: 4)],
+            ],
+            'end line and column' => [
+                [$this->issue('a.php', 5, 'TypeA', 'm', column: 1, lineTo: 5)],
+                [$this->issue('a.php', 5, 'TypeA', 'm', column: 2, lineTo: 7)],
+            ],
+            'end line shift beside a message change' => [
+                [$this->issue('a.php', 5, 'TypeA', 'm', lineTo: 5), $this->issue('a.php', 5, 'TypeA', 'old', lineTo: 5)],
+                [$this->issue('a.php', 5, 'TypeA', 'm', lineTo: 6), $this->issue('a.php', 5, 'TypeA', 'new', lineTo: 6)],
+            ],
+            'duplicates shifting' => [
+                [$this->issue('a.php', 5, 'TypeA', 'm', lineTo: 5), $this->issue('a.php', 5, 'TypeA', 'm', lineTo: 5)],
+                [$this->issue('a.php', 5, 'TypeA', 'm', lineTo: 6), $this->issue('a.php', 5, 'TypeA', 'm', lineTo: 7)],
+            ],
+        ];
+
+        foreach ($shapes as $name => [$base, $head]) {
+            $this->issues('app', self::BASE, $base);
+            $this->issues('app', self::HEAD, $head);
+
+            $report = $this->report(['app'], ['--details']);
+
+            \preg_match_all('/^  - old: (.*)$\n  - new: (.*)$/m', $report, $pairs, \PREG_SET_ORDER);
+            foreach ($pairs as $pair) {
+                $this->assertNotSame($pair[1], $pair[2], "{$name}: a changed pair must differ in message");
+            }
+
+            $row = $this->row($report, 'app');
+            $this->assertNotNull($row, $name);
+            $this->assertSame(\count($pairs), $row[2], "{$name}: changed count matches rendered pairs");
+        }
     }
 
     #[Test]

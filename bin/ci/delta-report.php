@@ -423,9 +423,12 @@ foreach ($apps as $app) {
     unset($baseCounts, $headCounts);
 
     // Key parts: 0 file, 1 line_from, 2 line_to, 3 type, 4 message, 5/6 columns.
-    // A message change groups by (file, line_from, type) only: the end line of a
-    // multi-line issue can shift together with its message.
-    $sameLineMoves = $pairUp($removed, $added, [0, 1, 2, 3, 4]);
+    // Order matters: identical text at the same start line whose range/column
+    // differs is a move first, so "changed" pairs can only differ by message
+    // (an end-line-only shift of a multi-line issue must not become a changed
+    // pair with identical old/new text). Then a message change groups by
+    // (file, line_from, type) only, and the rest is a relocation elsewhere.
+    $sameLineMoves = $pairUp($removed, $added, [0, 1, 3, 4]);
     $messageChanges = $pairUp($removed, $added, [0, 1, 3]);
     $relocations = $pairUp($removed, $added, [3, 4]);
 
@@ -443,6 +446,10 @@ foreach ($apps as $app) {
         ];
     }
 
+    // Shows the end line too: a move that only shifted line_to would otherwise
+    // print identical from/to.
+    $place = static fn(array $k): string => ($k[1] === $k[2] ? "{$k[0]}:{$k[1]}" : "{$k[0]}:{$k[1]}-{$k[2]}") . ":{$k[5]}";
+
     $movedByType = [];
     $movedList = [];
     foreach ([...$sameLineMoves, ...$relocations] as [$oldKey, $newKey]) {
@@ -451,8 +458,8 @@ foreach ($apps as $app) {
         $movedByType[$o[3]] = ($movedByType[$o[3]] ?? 0) + 1;
         $movedList[] = [
             'type' => $o[3],
-            'from' => "{$o[0]}:{$o[1]}:{$o[5]}",
-            'to' => "{$nw[0]}:{$nw[1]}:{$nw[5]}",
+            'from' => $place($o),
+            'to' => $place($nw),
             'message' => $o[4],
         ];
     }
@@ -551,7 +558,9 @@ foreach ($apps as $app) {
     foreach (['base' => $basePerf, 'head' => $headPerf] as $side => $perf) {
         $status = is_array($perf) ? ($perf['plugin_status'] ?? 'ok') : 'ok';
         if (is_string($status) && $status !== 'ok') {
-            $warnings[] = "**{$app}**: Laravel plugin {$status} on {$side} — the issue delta for this app is not meaningful.";
+            // Interpolated into a default-mode line: only a short token may pass.
+            $token = preg_match('/^[a-z_-]{1,20}$/', $status) === 1 ? $status : 'status unknown';
+            $warnings[] = "**{$app}**: Laravel plugin {$token} on {$side} — the issue delta for this app is not meaningful.";
         }
     }
 
@@ -874,17 +883,26 @@ if ($missing !== []) {
         $out[] = 'No usable report — Psalm crashed or analysis aborted. A crash on base (or both sides) is not caused by this PR; a head-only crash is.';
         $out[] = '';
         foreach ($crashed as $app => $sides) {
+            // Exception text can name private classes or hosts, so the excerpt
+            // is opt-in like the other per-issue text; default shows only who crashed.
             if ($sides['base'] !== null && $sides['head'] !== null) {
-                $out[] = $sides['base'] === $sides['head']
-                    ? "- **{$app}** (base and head): `{$sides['base']}`"
-                    : "- **{$app}**: base: `{$sides['base']}`; head: `{$sides['head']}`";
+                if (!$showDetails) {
+                    $out[] = "- **{$app}** (base and head)";
+                } else {
+                    $out[] = $sides['base'] === $sides['head']
+                        ? "- **{$app}** (base and head): `{$sides['base']}`"
+                        : "- **{$app}**: base: `{$sides['base']}`; head: `{$sides['head']}`";
+                }
+
                 continue;
             }
 
             $side = $sides['base'] !== null ? 'base' : 'head';
             $other = $side === 'base' ? 'head' : 'base';
             $note = $usable[$app][$other] ? '' : "; {$other} left no report either";
-            $out[] = "- **{$app}** ({$side} only{$note}): `{$sides[$side]}`";
+            $out[] = $showDetails
+                ? "- **{$app}** ({$side} only{$note}): `{$sides[$side]}`"
+                : "- **{$app}** ({$side} only{$note})";
         }
     }
 
