@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791105914922,
+  "lastUpdate": 1791112252964,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11895,6 +11895,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a600d2d71418654bb92d34d5bea540c7d9b1c550",
+          "message": "fix(eloquent): keep nested static declaring model resolved through take/limit (#1632)\n\nRegression from #1629. Inside a non-final model, `$this->rel()->take(3)` and `->limit(3)` (real methods declared `@return $this`) inferred the malformed `HasMany<Vehicle, SubCustomer&HasMany<Vehicle, SubCustomer&static>>&static`: TypeExpander re-bound the unresolved nested `static` declaring-model atomic to the outer receiver. Mark it as resolved so Psalm treats it as already bound.",
+          "timestamp": "2026-10-04T13:07:25+02:00",
+          "tree_id": "d5249c4934ce90637f09225b0dabed4ef2a088dd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a600d2d71418654bb92d34d5bea540c7d9b1c550"
+        },
+        "date": 1791112251829,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.94,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1368,
             "unit": "MB"
           }
         ]
