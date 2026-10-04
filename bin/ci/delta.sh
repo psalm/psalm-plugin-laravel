@@ -146,7 +146,7 @@ done
 
 echo "" >&2
 APPS_CSV=$(IFS=,; echo "${RUN_APPS[*]}")
-php "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
+php -d memory_limit=-1 "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
     --apps="$APPS_CSV" --base-ref="$BASE_REF" --head-ref="$HEAD_REF" \
     --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" --date-marker=cache
 
