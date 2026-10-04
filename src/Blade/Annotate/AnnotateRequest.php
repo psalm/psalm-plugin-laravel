@@ -27,6 +27,9 @@ final class AnnotateRequest
     /** Key that identifies a control file as this CLI's own. */
     public const MARKER = 'psalm-laravel-annotate';
 
+    /**
+     * @psalm-mutation-free
+     */
     private function __construct(
         private readonly string $controlFile,
         public readonly bool $dryRun,

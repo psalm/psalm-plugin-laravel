@@ -446,6 +446,8 @@ final class ShadowIssueRelocator
      * "generated" (#1540). A rewrite an arbitrary precompiler or `prepareStringsForCompilationUsing()`
      * callback makes is NOT mirrored and still drops the issue; not fixable without knowing what
      * that rewrite does.
+     *
+     * @psalm-external-mutation-free
      */
     private static function isGeneratedArityMismatch(TooManyArguments $issue, ShadowTarget $target): bool
     {
@@ -488,6 +490,8 @@ final class ShadowIssueRelocator
      * what the gate drops. Caveat it accepts: when Blade rewrote the argument of a genuinely
      * GENERATED echo (`{{ old('@@foo') }}`), the callee can no longer be proven and the issue is
      * kept. Noise on a rare shape, the same direction every other decline here takes.
+     *
+     * @psalm-mutation-free
      */
     private static function isGeneratedEchoArgument(ArgumentIssue $issue, ShadowTarget $target): bool
     {
@@ -522,6 +526,8 @@ final class ShadowIssueRelocator
      * {@see self::callExpression()}.
      *
      * @return array{string, string}|null `[enclosing call, argument]`
+     *
+     * @psalm-mutation-free
      */
     private static function echoArgumentSlice(CodeLocation $location, string $callee): ?array
     {
@@ -546,6 +552,8 @@ final class ShadowIssueRelocator
      * Whether one of `$names` (a `|`-separated alternation, no leading `$`) is the checked KEY in an
      * ambient-guard issue message, matched at the two anchored positions documented above, never as
      * a bare substring search.
+     *
+     * @psalm-pure
      */
     private static function isAmbientGuardName(string $message, string $names): bool
     {
@@ -562,6 +570,8 @@ final class ShadowIssueRelocator
      * inferred — uses this instead of `isAmbientGuardName()`, so an author's own reassignment
      * (which replaces the docblock type with an inferred one, dropping that text from the
      * message) survives instead of being silently swallowed by the wider match.
+     *
+     * @psalm-pure
      */
     private static function isAmbientDocblockGuardName(string $message, string $names): bool
     {
@@ -573,6 +583,8 @@ final class ShadowIssueRelocator
      * The called expression an issue points at, read out of the shadow, or null to decline —
      * fail open, since dropping a real author issue is the costly direction and an unreadable
      * location is no evidence of anything.
+     *
+     * @psalm-external-mutation-free
      */
     private static function callExpression(CodeLocation $location): ?string
     {

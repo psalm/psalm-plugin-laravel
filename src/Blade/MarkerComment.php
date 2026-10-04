@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-/** @internal */
+/**
+ * @internal
+ *
+ * @psalm-immutable
+ */
 final class MarkerComment
 {
     /**

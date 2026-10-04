@@ -53,7 +53,6 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      */
     private static array $targets = [];
 
-    /** @psalm-external-mutation-free */
     public static function init(bool $reportMixedIssues): void
     {
         self::$reportMixedIssues = $reportMixedIssues;

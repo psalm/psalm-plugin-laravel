@@ -86,9 +86,6 @@ final class ShadowRegistry
         return $source === false ? null : $source;
     }
 
-    /**
-     * @psalm-external-mutation-free
-     */
     public static function reset(): void
     {
         self::$entries = [];

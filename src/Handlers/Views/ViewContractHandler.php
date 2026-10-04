@@ -55,14 +55,12 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     /** @var array<string, array<string, true>|null> view name => include-chain read set, null when unprovable */
     private static array $readSets = [];
 
-    /** @psalm-external-mutation-free */
     public static function init(bool $validateViewData, bool $reportUnusedViewData): void
     {
         self::$validateViewData = $validateViewData;
         self::$reportUnusedViewData = $reportUnusedViewData;
     }
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$validateViewData = false;

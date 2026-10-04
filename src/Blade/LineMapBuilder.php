@@ -10,7 +10,7 @@ namespace Psalm\LaravelPlugin\Blade;
  *
  * @internal
  *
- * @psalm-pure
+ * @psalm-immutable
  */
 final class LineMapBuilder
 {

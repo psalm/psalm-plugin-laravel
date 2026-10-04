@@ -14,7 +14,7 @@ use Psalm\CodeLocation\Raw;
  *
  * @internal
  *
- * @psalm-pure
+ * @psalm-immutable
  */
 final class TemplateLocation
 {

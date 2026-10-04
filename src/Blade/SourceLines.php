@@ -17,10 +17,16 @@ namespace Psalm\LaravelPlugin\Blade;
  * (#1545 review).
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class SourceLines
 {
-    /** @return list<string> */
+    /**
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
     public static function split(string $source): array
     {
         // `(?<=\r)(?!\n)` fires only on a `\r` NOT followed by `\n`, so a `\r\n` pair is never cut

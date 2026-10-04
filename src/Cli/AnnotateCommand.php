@@ -301,7 +301,11 @@ final class AnnotateCommand extends Command
         return $offending;
     }
 
-    /** Whether the token is a long option spelled without its value, which the next token supplies. */
+    /**
+     * Whether the token is a long option spelled without its value, which the next token supplies.
+     *
+     * @psalm-pure
+     */
     private function takesASeparateValue(string $token): bool
     {
         return \str_starts_with($token, '--')

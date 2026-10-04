@@ -15,6 +15,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * the shadow line so {@see self::occursIn()} has something the template can actually contain.
  *
  * @internal
+ *
+ * @psalm-external-mutation-free
  */
 final class TemplateSnippetMatcher
 {
@@ -35,6 +37,8 @@ final class TemplateSnippetMatcher
      * no template contains those. Safe because $markerPrefix is collision-checked out of the
      * template source ({@see MarkerComment::prefixFor()}), so the strip can never reach an author's
      * own comment or string literal.
+     *
+     * @psalm-pure
      */
     public static function occursIn(string $snippet, string $source, string $markerPrefix): bool
     {
@@ -66,6 +70,8 @@ final class TemplateSnippetMatcher
      * grow it. Not exhaustive: a registered precompiler or `prepareStringsForCompilationUsing()`
      * callback can rewrite template text arbitrarily and is not mirrored here, so a call whose text
      * one of THOSE rewrote can still be misjudged as generated.
+     *
+     * @psalm-pure
      */
     public static function occursInWithRawTextRewrites(string $snippet, string $source, string $markerPrefix): bool
     {
@@ -98,6 +104,8 @@ final class TemplateSnippetMatcher
      * identifier-then-arguments call is judged here, which is the shape Psalm reports
      * `TooManyArguments` on (its location is the callee-name node); a location pointing anywhere
      * else is not something this class can reason about.
+     *
+     * @psalm-external-mutation-free
      */
     public static function callExpressionAt(string $snippet, int $offset): ?string
     {
@@ -125,6 +133,8 @@ final class TemplateSnippetMatcher
      * the tokens do not start that way.
      *
      * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     *
+     * @psalm-external-mutation-free
      */
     private static function consumeCallee(array &$tokens): ?string
     {
@@ -149,6 +159,8 @@ final class TemplateSnippetMatcher
      * the end of the tokens, which happens whenever the call spans more lines than the snippet.
      *
      * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     *
+     * @psalm-pure
      */
     private static function consumeArguments(array $tokens, string $text): ?string
     {
@@ -193,6 +205,8 @@ final class TemplateSnippetMatcher
      * expression; the only consumer is {@see self::occursIn()}, a substring search.
      *
      * Null is a decline and the caller keeps the issue, so every unreadable shape fails open.
+     *
+     * @psalm-pure
      */
     public static function enclosingCallAt(string $snippet, int $argStart, int $argEnd, string $callee): ?string
     {
@@ -240,7 +254,11 @@ final class TemplateSnippetMatcher
         return \substr($snippet, $start, $argEnd - $start);
     }
 
-    /** The index of the last non-whitespace character at or before $index, or -1. */
+    /**
+     * The index of the last non-whitespace character at or before $index, or -1.
+     *
+     * @psalm-pure
+     */
     private static function skipSpaceBack(string $text, int $index): int
     {
         while ($index >= 0 && \ctype_space($text[$index])) {
@@ -250,11 +268,17 @@ final class TemplateSnippetMatcher
         return $index;
     }
 
+    /**
+     * @psalm-pure
+     */
     private static function isIdentifierChar(string $char): bool
     {
         return $char === '_' || \ctype_alnum($char) || \ord($char) >= 0x80;
     }
 
+    /**
+     * @psalm-pure
+     */
     private static function normalize(string $text): string
     {
         return \preg_replace('/\s+/', ' ', \trim($text)) ?? $text;

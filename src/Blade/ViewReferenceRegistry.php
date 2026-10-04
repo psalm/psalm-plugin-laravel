@@ -12,8 +12,6 @@ namespace Psalm\LaravelPlugin\Blade;
  * Psalm instantiates itself and hands nothing but the event.
  *
  * @internal
- *
- * @psalm-external-mutation-free
  */
 final class ViewReferenceRegistry
 {
@@ -30,9 +28,6 @@ final class ViewReferenceRegistry
     /** @var array<array-key, array{0: int, 1: string}> view name => [view root index, template path] */
     private static array $templates = [];
 
-    /**
-     * @psalm-external-mutation-free
-     */
     public static function addReference(string $viewName): void
     {
         self::$references[$viewName] = true;
@@ -40,17 +35,12 @@ final class ViewReferenceRegistry
 
     /**
      * One unresolvable reference anywhere makes the whole enumerated set untrustworthy.
-     *
-     * @psalm-external-mutation-free
      */
     public static function markDynamic(): void
     {
         self::$dynamic = true;
     }
 
-    /**
-     * @psalm-external-mutation-free
-     */
     public static function isDynamic(): bool
     {
         return self::$dynamic;
@@ -59,8 +49,6 @@ final class ViewReferenceRegistry
     /**
      * A template claims its view name the same way {@see ContractRegistry} does: the lowest root
      * index wins, because that is the file Laravel actually renders for that name.
-     *
-     * @psalm-external-mutation-free
      */
     public static function registerTemplate(string $viewName, int $rootIndex, string $templatePath): void
     {
@@ -135,9 +123,6 @@ final class ViewReferenceRegistry
         return $unused;
     }
 
-    /**
-     * @psalm-external-mutation-free
-     */
     public static function reset(): void
     {
         self::$references = [];

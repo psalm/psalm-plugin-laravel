@@ -42,6 +42,8 @@ interface ShadowRegistrar
      * and report UndefinedDocblockClass the first time nothing else in the project names them in code.
      *
      * @param list<string> $classNames fully-qualified, `\`-prefixed or not
+     *
+     * @psalm-impure
      */
     public function queueClassLikesForScanning(array $classNames): void;
 
@@ -55,6 +57,8 @@ interface ShadowRegistrar
      *
      * @param list<string> $candidates class-like names harvested from shadow string literals,
      *                     `\`-prefixed or not
+     *
+     * @psalm-impure
      */
     public function queueResolvableClassLikesForScanning(array $candidates): void;
 
@@ -64,6 +68,8 @@ interface ShadowRegistrar
      * `FileStorage` at all and {@see RuntimeHelperVisibility} has nothing to read.
      *
      * @param list<string> $paths absolute paths to existing PHP files
+     *
+     * @psalm-impure
      */
     public function queueFilesForScanning(array $paths): void;
 }

@@ -38,6 +38,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * the raw template source for that and {@see ShadowCompiler} skips the whole pass when it finds one.
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class AttributesRestoreReassert
 {
@@ -67,7 +69,11 @@ final class AttributesRestoreReassert
     /** `[$a, $attributes] = ...` / `[$attributes] = ...` destructuring. */
     private const DESTRUCTURE_PATTERN = '/\[[^\[\]]*\$attributes\b[^\[\]]*\]\s*=(?!=)/';
 
-    /** Only called for a template {@see PreludeBuilder::isComponentView()} already recognises. */
+    /**
+     * Only called for a template {@see PreludeBuilder::isComponentView()} already recognises.
+     *
+     * @psalm-pure
+     */
     public static function apply(string $compiled): string
     {
         $compiled = self::applyPattern(self::RESTORE_PATTERN, $compiled);
@@ -81,6 +87,8 @@ final class AttributesRestoreReassert
      * classification {@see PreludeBuilder::componentTypesFor()} already relies on), so a mention
      * inside a Blade comment or `@verbatim` body — dead text, never executed — cannot trip it; a
      * mention inside `@php`/raw PHP is live and does.
+     *
+     * @psalm-pure
      */
     public static function templateAssignsAttributes(string $source): bool
     {
@@ -91,7 +99,11 @@ final class AttributesRestoreReassert
             || \preg_match(self::DESTRUCTURE_PATTERN, $executable) === 1;
     }
 
-    /** @param non-empty-string $pattern always one of this class's own regex constants */
+    /**
+     * @param non-empty-string $pattern always one of this class's own regex constants
+     *
+     * @psalm-pure
+     */
     private static function applyPattern(string $pattern, string $compiled): string
     {
         if (\preg_match_all($pattern, $compiled, $matches, \PREG_OFFSET_CAPTURE) === false || $matches[0] === []) {
@@ -121,6 +133,8 @@ final class AttributesRestoreReassert
      * exactly the distinction `apply()` needs to leave an author's own comment alone (finding 1).
      *
      * @return array<int, true>
+     *
+     * @psalm-pure
      */
     private static function openTagOffsets(string $compiled): array
     {

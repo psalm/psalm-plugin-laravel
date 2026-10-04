@@ -38,8 +38,6 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
 
     /**
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public function registerShadowsForAnalysis(array $shadowPaths): void

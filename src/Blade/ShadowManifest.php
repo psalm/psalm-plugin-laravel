@@ -47,6 +47,9 @@ final class ShadowManifest
 
     private ?string $fingerprintSuffix = null;
 
+    /**
+     * @psalm-mutation-free
+     */
     public function __construct(
         private readonly string $shadowDir,
         /**
@@ -87,6 +90,8 @@ final class ShadowManifest
      * dropped rather than failing the whole load.
      *
      * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: array{0: list<string>, 1: bool}|null}>
+     *
+     * @psalm-mutation-free
      */
     private function normalizeEntries(mixed $data): array
     {
@@ -200,7 +205,7 @@ final class ShadowManifest
      * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>}|null
      *         null when the shape is wrong, which drops the entry
      *
-     * @psalm-pure
+     * @psalm-mutation-free
      */
     private function normalizeContract(mixed $data): ?array
     {
@@ -247,6 +252,8 @@ final class ShadowManifest
      * @param array<array-key, mixed> $data
      *
      * @return list<string>|null null when anything in there is not a variable name
+     *
+     * @psalm-pure
      */
     private function normalizeNames(array $data): ?array
     {
@@ -345,8 +352,6 @@ final class ShadowManifest
     /**
      * Where a template's shadow lives, whether or not it has been compiled yet. A caller that
      * skipped recompiling a fresh template still has to register the shadow with Psalm.
-     *
-     * @psalm-mutation-free
      */
     public function shadowPathFor(string $templatePath, string $source): string
     {
@@ -516,6 +521,9 @@ final class ShadowManifest
         return $error !== null ? ": {$error['message']}" : '';
     }
 
+    /**
+     * @psalm-mutation-free
+     */
     private function manifestPath(): string
     {
         return $this->shadowDir . \DIRECTORY_SEPARATOR . self::MANIFEST_FILE;

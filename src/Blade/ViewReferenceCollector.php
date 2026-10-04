@@ -279,6 +279,8 @@ final class ViewReferenceCollector
     /**
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
      * @param array<string, true>                                     $names
+     *
+     * @psalm-external-mutation-free
      */
     private function applyComponentView(array $args, array &$names, bool &$dynamic): void
     {
@@ -350,6 +352,8 @@ final class ViewReferenceCollector
      *
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
      * @param array<string, true>                                     $names
+     *
+     * @psalm-external-mutation-free
      */
     private function applyLiteralAddOnly(array $args, int $position, ?string $paramName, array &$names): void
     {
@@ -363,6 +367,8 @@ final class ViewReferenceCollector
     /**
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
      * @param array<string, true>           $names
+     *
+     * @psalm-external-mutation-free
      */
     private function applyLiteral(array $args, int $position, ?string $paramName, array &$names, bool &$dynamic): void
     {
@@ -384,6 +390,8 @@ final class ViewReferenceCollector
     /**
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
      * @param array<string, true>           $names
+     *
+     * @psalm-external-mutation-free
      */
     private function applyLiteralList(array $args, array &$names, bool &$dynamic): void
     {
@@ -455,6 +463,8 @@ final class ViewReferenceCollector
      * @param array<array-key, true> $names
      *
      * @return list<string>
+     *
+     * @psalm-pure
      */
     private function names(array $names): array
     {

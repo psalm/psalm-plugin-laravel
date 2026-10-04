@@ -150,6 +150,8 @@ final class SuppressionInjector
      * suppression aimed at it onto some later statement.
      *
      * @param array<int, array{0: int, 1: string, 2: int}|string> $tokens
+     *
+     * @psalm-pure
      */
     private function opensAMarkerOnlyBlock(array $tokens, int $index, string $markerPrefix): bool
     {
@@ -166,7 +168,11 @@ final class SuppressionInjector
         return \is_array($next) && $next[0] === \T_CLOSE_TAG;
     }
 
-    /** @return array<int, list<string>> blade line => suppressed rules */
+    /**
+     * @return array<int, list<string>> blade line => suppressed rules
+     *
+     * @psalm-pure
+     */
     private function findSuppressions(string $bladeSource): array
     {
         $suppressions = [];

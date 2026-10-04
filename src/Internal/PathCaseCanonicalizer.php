@@ -92,7 +92,11 @@ final class PathCaseCanonicalizer
         self::$entriesByDirectory = [];
     }
 
-    /** @param list<string> $entries */
+    /**
+     * @param list<string> $entries
+     *
+     * @psalm-pure
+     */
     private static function resolveSegment(array $entries, string $segment): string
     {
         if (\in_array($segment, $entries, true)) {

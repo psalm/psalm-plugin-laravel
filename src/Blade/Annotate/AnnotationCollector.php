@@ -63,13 +63,11 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static bool $analyzed = false;
 
-    /** @psalm-external-mutation-free */
     public static function init(): void
     {
         self::$enabled = true;
     }
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$enabled = false;
@@ -83,8 +81,6 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * Called for every analysed statement, ahead of any filtering: the question it answers is "did
      * analysis happen in this process", not "was a view() call found" — a project with no `view()`
      * call at all is legitimate, a parent that analysed nothing is not.
-     *
-     * @psalm-external-mutation-free
      */
     public static function markAnalyzed(): void
     {
@@ -277,6 +273,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $visitor = new class extends TypeVisitor {
             public bool $found = false;
 
+            /**
+             * @psalm-external-mutation-free
+             */
             #[\Override]
             protected function enterNode(TypeNode $type): ?int
             {

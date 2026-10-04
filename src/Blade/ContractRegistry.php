@@ -17,8 +17,6 @@ namespace Psalm\LaravelPlugin\Blade;
  * wins here too.
  *
  * @internal
- *
- * @psalm-external-mutation-free
  */
 final class ContractRegistry
 {
@@ -32,8 +30,6 @@ final class ContractRegistry
      * @param array{0: list<string>, 1: bool}|null $dataIncludes view names the template hands its
      *        whole scope to, and whether one of them could not be resolved; null when the collection
      *        pass was off for this run, which {@see ReadSetResolver} treats as "not proven"
-     *
-     * @psalm-external-mutation-free
      */
     public static function register(string $viewName, int $rootIndex, ViewDataContract $contract, ?array $dataIncludes = null): void
     {
@@ -48,8 +44,6 @@ final class ContractRegistry
 
     /**
      * Null for a view name no template declared — which is every view outside the compiled set.
-     *
-     * @psalm-external-mutation-free
      */
     public static function contractFor(string $viewName): ?ViewDataContract
     {
@@ -58,17 +52,12 @@ final class ContractRegistry
 
     /**
      * @return array{0: list<string>, 1: bool}|null
-     *
-     * @psalm-external-mutation-free
      */
     public static function dataIncludesFor(string $viewName): ?array
     {
         return self::$contracts[$viewName][2] ?? null;
     }
 
-    /**
-     * @psalm-external-mutation-free
-     */
     public static function reset(): void
     {
         self::$contracts = [];

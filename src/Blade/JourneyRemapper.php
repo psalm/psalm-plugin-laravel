@@ -146,6 +146,8 @@ final class JourneyRemapper
      * @param array<string, array{path: string, target: ShadowTarget}> $targets
      *
      * @return string|null null when a substitution fails outright
+     *
+     * @psalm-mutation-free
      */
     private static function rewriteText(string $journeyText, array $targets): ?string
     {

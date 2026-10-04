@@ -29,13 +29,11 @@ final class AnnotationWriter implements AfterAnalysisInterface
 {
     private static ?AnnotateRequest $request = null;
 
-    /** @psalm-external-mutation-free */
     public static function init(AnnotateRequest $request): void
     {
         self::$request = $request;
     }
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$request = null;
@@ -248,7 +246,11 @@ final class AnnotationWriter implements AfterAnalysisInterface
         return \str_starts_with($normalized, $root) ? \substr($normalized, \strlen($root)) : $normalized;
     }
 
-    /** `git apply`'s default strip removes exactly one path component: "a/" ahead of a relative path, but only "a" ahead of one already rooted at "/" — otherwise the leading slash doubles. */
+    /**
+     * `git apply`'s default strip removes exactly one path component: "a/" ahead of a relative path, but only "a" ahead of one already rooted at "/" — otherwise the leading slash doubles.
+     *
+     * @psalm-pure
+     */
     private static function prefixed(string $letter, string $path): string
     {
         return \str_starts_with($path, '/') ? "{$letter}{$path}" : "{$letter}/{$path}";

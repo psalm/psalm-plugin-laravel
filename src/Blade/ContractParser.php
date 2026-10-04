@@ -367,6 +367,8 @@ final class ContractParser
             /**
              * Every name one `foreach` binds, list destructuring included: `as [$id, $name]` binds
              * both, and a call site is expected to pass neither.
+             *
+             * @psalm-external-mutation-free
              */
             private function bindLoopLocals(?Node\Expr $target): void
             {
@@ -389,7 +391,11 @@ final class ContractParser
                 }
             }
 
-            /** @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args */
+            /**
+             * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
+             *
+             * @psalm-external-mutation-free
+             */
             private function enterCall(string $name, array $args): void
             {
                 if ($name === 'extract') {

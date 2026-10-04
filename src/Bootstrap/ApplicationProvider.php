@@ -260,8 +260,6 @@ final class ApplicationProvider
      * Empty when the boot degraded before providers registered, which makes every consumer a no-op.
      *
      * @return list<string>
-     *
-     * @psalm-external-mutation-free
      */
     public static function runtimeDeclaredFunctionFiles(): array
     {
@@ -277,8 +275,6 @@ final class ApplicationProvider
      * file. Lowercase as PHP reports them, which is how Psalm keys global function ids.
      *
      * @return list<string>
-     *
-     * @psalm-external-mutation-free
      */
     public static function runtimeDeclaredFunctionIds(): array
     {
@@ -290,8 +286,6 @@ final class ApplicationProvider
      * superset caveat as {@see runtimeDeclaredFunctionIds()} applies.
      *
      * @return list<string>
-     *
-     * @psalm-external-mutation-free
      */
     public static function runtimeDeclaredConstants(): array
     {

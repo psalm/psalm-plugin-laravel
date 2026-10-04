@@ -97,6 +97,8 @@ final class CompilerEnvironment
      * runs of the SAME subclass source.
      *
      * @return array{class: string, file?: string, hash?: string}
+     *
+     * @psalm-external-mutation-free
      */
     private static function describeCompilerClass(BladeCompiler $compiler, bool &$trustworthy): array
     {
@@ -137,6 +139,8 @@ final class CompilerEnvironment
      * `$<hex digits>` leaves the file:line portion, which IS stable. A normal class name never
      * ends in `$<hex digits>` (`$` is not a valid identifier character), so this is safe to apply
      * unconditionally.
+     *
+     * @psalm-pure
      */
     private static function normalizeClassName(string $class): string
     {
@@ -155,9 +159,9 @@ final class CompilerEnvironment
     {
         $entries = [];
 
-        /** @psalm-suppress MixedAssignment untyped data straight from BladeCompiler's own untyped array properties */
-        foreach ($map as $key => $callable) {
-            $entries[] = [$key, self::describeCallable($callable, $compiler, $fileHashes, $trustworthy)];
+        // Keys, not values: a foreach over untyped compiler data binds a mixed local per element.
+        foreach (\array_keys($map) as $key) {
+            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $trustworthy)];
         }
 
         return $entries;
@@ -258,6 +262,8 @@ final class CompilerEnvironment
      * description for it.
      *
      * @return array{t: string, v: mixed}
+     *
+     * @psalm-external-mutation-free
      */
     private static function describeValue(mixed $value, bool &$trustworthy): array
     {
@@ -268,9 +274,8 @@ final class CompilerEnvironment
         if (\is_array($value)) {
             $pairs = [];
 
-            /** @psalm-suppress MixedAssignment untyped data straight from BladeCompiler's own untyped array properties */
-            foreach ($value as $key => $item) {
-                $pairs[] = [$key, self::describeValue($item, $trustworthy)];
+            foreach (\array_keys($value) as $key) {
+                $pairs[] = [$key, self::describeValue($value[$key], $trustworthy)];
             }
 
             return ['t' => 'array', 'v' => $pairs];

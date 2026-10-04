@@ -17,6 +17,8 @@ use Psalm\LaravelPlugin\Blade\ContractParser;
  * dropped, so re-running over an annotated template inserts nothing.
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class TemplateAnnotator
 {
@@ -45,6 +47,8 @@ final class TemplateAnnotator
      * @return array{0: string, 1: int, 2: list<string>}|null the annotated source, the 1-based line
      *         the first inserted comment lands on, and the comments inserted; null when the template
      *         already declares every name
+     *
+     * @psalm-pure
      */
     public static function annotate(string $source, array $vars): ?array
     {
@@ -84,6 +88,8 @@ final class TemplateAnnotator
      * covers, and that spelling never reaches a {@see \Psalm\LaravelPlugin\Blade\ViewDataContract}.
      *
      * @return array<string, true>
+     *
+     * @psalm-pure
      */
     private static function declaredNames(string $source): array
     {
@@ -117,6 +123,8 @@ final class TemplateAnnotator
      * literal is not a declaration either.
      *
      * @return list<string>
+     *
+     * @psalm-pure
      */
     private static function declaredInPhp(string $block): array
     {
@@ -148,6 +156,8 @@ final class TemplateAnnotator
      *
      * @return array{0: int, 1: bool} the byte offset, and whether what precedes it is an existing
      *         declaration that carries no line break of its own
+     *
+     * @psalm-pure
      */
     private static function insertionPoint(string $source): array
     {
@@ -161,7 +171,11 @@ final class TemplateAnnotator
         return [\str_starts_with($source, self::BOM) ? \strlen(self::BOM) : 0, false];
     }
 
-    /** A template mixing both endings keeps the one it uses more; a template with neither gets "\n". */
+    /**
+     * A template mixing both endings keeps the one it uses more; a template with neither gets "\n".
+     *
+     * @psalm-pure
+     */
     private static function dominantLineEnding(string $source): string
     {
         $crlf = \substr_count($source, "\r\n");

@@ -101,6 +101,8 @@ final class PreludeBuilder
      * the template merely happens to use, too weak to declare a second name never written.
      *
      * @return array{attributes: ?string, slot: ?string}
+     *
+     * @psalm-pure
      */
     public static function componentTypesFor(string $source): array
     {
@@ -137,7 +139,11 @@ final class PreludeBuilder
         return ['attributes' => $attributes, 'slot' => $slot];
     }
 
-    /** Whether {@see componentTypesFor()} declares anything at all for this template's source. */
+    /**
+     * Whether {@see componentTypesFor()} declares anything at all for this template's source.
+     *
+     * @psalm-pure
+     */
     public static function isComponentView(string $source): bool
     {
         return self::componentTypesFor($source) !== ['attributes' => null, 'slot' => null];
@@ -152,6 +158,8 @@ final class PreludeBuilder
      * it. Excludes `loop`, whose value is an inline object shape, not a class name.
      *
      * @return list<string>
+     *
+     * @psalm-pure
      */
     public static function ambientClassNames(): array
     {
@@ -200,6 +208,9 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $written = [];
 
+            /**
+             * @psalm-external-mutation-free
+             */
             #[\Override]
             public function enterNode(Node $node): null
             {
@@ -225,7 +236,11 @@ final class PreludeBuilder
                 return null;
             }
 
-            /** Walks a write target down to its root variables (array append, list destructuring). */
+            /**
+             * Walks a write target down to its root variables (array append, list destructuring).
+             *
+             * @psalm-external-mutation-free
+             */
             private function markWritten(Node\Expr $target): void
             {
                 if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {

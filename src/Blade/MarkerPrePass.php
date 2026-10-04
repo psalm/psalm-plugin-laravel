@@ -12,7 +12,7 @@ namespace Psalm\LaravelPlugin\Blade;
  *
  * @internal
  *
- * @psalm-pure
+ * @psalm-external-mutation-free
  */
 final class MarkerPrePass
 {
@@ -33,6 +33,8 @@ final class MarkerPrePass
      *
      * Deliberately narrower than {@see self::maskedRanges()}, which also masks `@php` and raw
      * `<?php` bodies: those DO execute, and a mention inside them is a real one.
+     *
+     * @psalm-pure
      */
     public static function blankInertText(string $source): string
     {
@@ -53,6 +55,8 @@ final class MarkerPrePass
      * extendsLine() (an `@extends` found inside one of these is not a live directive).
      *
      * @return list<array{0: string, 1: int}>
+     *
+     * @psalm-pure
      */
     private static function maskedRanges(string $source): array
     {
@@ -102,7 +106,7 @@ final class MarkerPrePass
      *        derive them here
      * @return array<int, true>
      *
-     * @psalm-pure
+     * @psalm-external-mutation-free
      */
     public static function computeSkipLines(string $source, ?array $masked = null): array
     {
@@ -178,6 +182,8 @@ final class MarkerPrePass
      * here; Blade joins it same as a single-line one.
      *
      * @param array<int, true> $skip
+     *
+     * @psalm-external-mutation-free
      */
     private static function markSwitchGapLines(string $source, string $scanSource, array &$skip): void
     {
@@ -233,6 +239,8 @@ final class MarkerPrePass
      *
      * @param list<array{0: string, 1: int}> $masked ranges from {@see self::maskedRanges()}
      * @return array<int, true>
+     *
+     * @psalm-pure
      */
     private static function safeBlockLines(string $source, array $masked): array
     {
@@ -293,6 +301,8 @@ final class MarkerPrePass
     /**
      * Byte length of the PHP-block opener a masked range starts with, or null when the range is a
      * `@verbatim` body or a Blade comment instead — neither reaches the shadow as PHP.
+     *
+     * @psalm-pure
      */
     private static function phpOpenerLength(string $text): ?int
     {
@@ -308,6 +318,8 @@ final class MarkerPrePass
      * offsets stay identical to $source.
      *
      * @param list<array{0: string, 1: int}> $ranges
+     *
+     * @psalm-pure
      */
     private static function blankRanges(string $source, array $ranges): string
     {
@@ -328,6 +340,8 @@ final class MarkerPrePass
     /**
      * @param list<array{0: string, 1: int}> $matches
      * @param array<int, true> $skip
+     *
+     * @psalm-external-mutation-free
      */
     private static function markSkipLines(string $source, array $matches, array &$skip): void
     {
@@ -362,7 +376,7 @@ final class MarkerPrePass
      * would inherit the LAST content line's marker instead of the line the
      * `@extends` directive actually appears on.
      *
-     * @psalm-pure
+     * @psalm-external-mutation-free
      */
     public static function inject(string $source, string $markerPrefix = 'blade:'): string
     {
@@ -403,6 +417,8 @@ final class MarkerPrePass
      *
      * @param list<array{0: string, 1: int}>|null $masked as in {@see self::computeSkipLines()};
      *        a template with no `@extends` at all never needs them
+     *
+     * @psalm-pure
      */
     public static function extendsLine(string $source, ?array $masked = null): ?int
     {
@@ -426,7 +442,11 @@ final class MarkerPrePass
         return null;
     }
 
-    /** @param list<array{0: string, 1: int}> $ranges */
+    /**
+     * @param list<array{0: string, 1: int}> $ranges
+     *
+     * @psalm-pure
+     */
     private static function isMasked(int $offset, array $ranges): bool
     {
         foreach ($ranges as [$text, $rangeStart]) {
