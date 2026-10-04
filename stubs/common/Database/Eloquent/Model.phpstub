@@ -16,6 +16,11 @@ use Illuminate\Support\Traits\ForwardsCalls;
 /**
  * @implements \ArrayAccess<string, mixed>
  * @mixin \Illuminate\Database\Eloquent\Builder<static>
+ *
+ * Laravel instantiates models through `new static((array) $attributes)` (newInstance(),
+ * newFromBuilder(), replicate()), so every subclass constructor must stay compatible.
+ *
+ * @psalm-consistent-constructor
  */
 abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToString, HasBroadcastChannel, Jsonable, JsonSerializable, QueueableEntity, Stringable, UrlRoutable
 {
