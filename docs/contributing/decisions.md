@@ -77,7 +77,7 @@ They produce no false positives, and there's no real-world scenario where a user
 3. `$m = M::withCount('x')->...->firstOrFail()`: same facts for the assigned variable.
 4. `M::withCount('x')->firstOrFail()->x_count` / `$m->loadCount('x')->x_count`: the PropertyFetch node type is overridden (conventional names only; an alias name fails the existence check first).
 
-Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` end the walk because they replace the aggregate columns (`selectRaw()`/`selectSub()`/`addSelect()` append and keep the proof). `$m->refresh()` drops every `$m->…` fact. A user `@property` always wins.
+Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` end the walk because they replace the aggregate columns (`selectRaw()`/`selectSub()`/`addSelect()` append and keep the proof). `$m->refresh()` drops only the `$m->…` facts this handler recorded; user narrowings on other `$m->…` entries stay. A user `@property` always wins.
 
 **Precedence:** a real model attribute named like an aggregate shadows it: `@property`, then schema column, cast key, accessor, then aggregate (each source counts only from a complete registry section). `votes_count` as a migration column next to a `votes()` relation stays the column's type; after `loadCount('votes')` the proof fact still applies, as the alias column wins in the SELECT result.
 
@@ -86,7 +86,7 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 **Known limitations (reads stay nullable):** `->get()->first()` Collection hops, variable-held builders, closures, `foreach` over models, `getAttribute('x_count')`.
 
 **Known imprecision (same class as Psalm keeping property facts after impure calls):**
-- `refresh()` unsets the `$m->…` facts, but a branch merge ignores a key missing from one side, so a `refresh()` inside only one branch leaves the pre-branch proof in place (`AggregateAccessorRefreshInBranchKnownLimitationTest`).
+- `refresh()` unsets the recorded `$m->…` facts, but a branch merge ignores a key missing from one side, so a `refresh()` inside only one branch leaves the pre-branch proof in place (`AggregateAccessorRefreshInBranchKnownLimitationTest`).
 - One alias produced by different aggregate functions in a single chain records no fact (`withExists` casts the alias to bool for good). Across in-place loads, separate or chained, the latest write wins, so `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>`.
 - `refresh()` invalidates only receivers typed as exactly one Model; other objects keep their property facts.
 

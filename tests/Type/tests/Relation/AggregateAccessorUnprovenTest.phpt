@@ -137,6 +137,14 @@ function test_refresh_drops_loaded_aggregates(Shop $shop): void
     echo $count;
 }
 
+function test_refresh_drops_a_loaded_alias_fact(Shop $shop): mixed
+{
+    $shop->loadCount('workOrders as order_total');
+    $shop->refresh();
+
+    return $shop->order_total;
+}
+
 function test_first_or_new_terminal_is_not_proof(): void
 {
     $shop = Shop::withCount('workOrders')->firstOrNew(['id' => 1]);
@@ -180,6 +188,18 @@ function test_user_property_wins_over_a_proven_load(Customer $customer): void
     $count = $customer->work_orders_count;
     echo $count;
 }
+
+function test_refresh_drops_an_aggregate_fact_recorded_on_a_loaded_relation(Customer $customer): mixed
+{
+    \assert($customer->primary_vehicle !== null);
+    $customer->primary_vehicle->loadCount('workOrders as order_total');
+    /** @psalm-check-type-exact $before = int<0, max> */
+    $before = $customer->primary_vehicle->order_total;
+    echo $before;
+    $customer->refresh();
+
+    return $customer->primary_vehicle->order_total;
+}
 ?>
 --EXPECTF--
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$vehicles_count is not defined
@@ -188,3 +208,5 @@ PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null varia
 PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $shop of type App\Models\Shop|null
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$order_total is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Vehicle::$order_total is not defined

@@ -181,6 +181,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\CustomCollectionHandler::reset();
         Handlers\Eloquent\FactoryModelBindingHandler::reset();
         Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
+        Handlers\Eloquent\ModelAggregateLoadHandler::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
         Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
         Handlers\Eloquent\ModelPropertyAccessorHandler::reset();
