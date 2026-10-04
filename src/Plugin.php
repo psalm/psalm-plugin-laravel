@@ -92,6 +92,10 @@ final class Plugin implements PluginEntryPointInterface
                 $this->initMissingViewHandler($output, $viewFactory);
             }
 
+            if ($pluginConfig->findUnconfiguredFilesystemDisks) {
+                Handlers\Filesystem\StorageHandler::init($output);
+            }
+
             // Always called — provides type narrowing for the view() helper regardless
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
@@ -196,6 +200,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\CustomCollectionHandler::reset();
         Handlers\Eloquent\FactoryModelBindingHandler::reset();
         Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
+        Handlers\Eloquent\ModelAggregateLoadHandler::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
         Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
         Handlers\Eloquent\ModelPropertyAccessorHandler::reset();
@@ -214,6 +219,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Jobs\DispatchableHandler::reset();
         Handlers\Magic\MacroRegistry::reset();
         Handlers\Producers\ProducerReturnTypeHandler::reset();
+        Handlers\Rules\UnregisteredRouteNameHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -685,6 +691,13 @@ final class Plugin implements PluginEntryPointInterface
         if ($pluginConfig->findSerializedQueuedModels) {
             require_once __DIR__ . '/Handlers/Rules/SerializedQueuedModelHandler.php';
             $registration->registerHooksFromClass(Handlers\Rules\SerializedQueuedModelHandler::class);
+        }
+
+        // Flag route() / to_route() / URL::route() / Redirect::route() calls naming an unregistered route.
+        if ($pluginConfig->findUnregisteredRouteNames) {
+            require_once __DIR__ . '/Handlers/Rules/UnregisteredRouteNameHandler.php';
+            Handlers\Rules\UnregisteredRouteNameHandler::init(ApplicationProvider::getApp());
+            $registration->registerHooksFromClass(Handlers\Rules\UnregisteredRouteNameHandler::class);
         }
 
         // Tri-state gate for the OctaneIncompatibleBinding rule:

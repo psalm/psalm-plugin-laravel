@@ -43,6 +43,8 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
+        $this->assertFalse($config->findUnregisteredRouteNames);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -233,6 +235,24 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_unconfigured_filesystem_disks_follows_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $this->assertTrue(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unconfigured_filesystem_disks_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental value="true" /><findUnconfiguredFilesystemDisks value="false" /></pluginClass>',
+        );
+
+        $this->assertFalse(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
+    }
+
+    #[Test]
     public function find_prompt_injection_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="true" /></pluginClass>');
@@ -272,6 +292,41 @@ final class PluginConfigTest extends TestCase
         $this->expectExceptionMessage("Invalid findPromptInjection value 'yes'");
 
         PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnregisteredRouteNames value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnregisteredRouteNames value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnregisteredRouteNames);
     }
 
     #[Test]
@@ -598,6 +653,7 @@ final class PluginConfigTest extends TestCase
             . '<resolveConfigReturnTypes value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUnconfiguredFilesystemDisks value="true" />'
             . '<experimental value="true" />'
             . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
@@ -612,6 +668,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
         $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);

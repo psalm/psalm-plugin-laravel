@@ -57,14 +57,15 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      *
      * Populated by the return type provider when it resolves an instance scope call
      * (Customer::query()->active()); consumed by {@see getMethodParams} when Psalm
-     * immediately follows up with checkMethodArgs for the same call. Keyed by method name
-     * only: the producer always runs right before the consumer within one analysis thread
-     * (MissingMethodCallHandler -> checkMethodArgs is the lone follow-up), so the latest
-     * entry matches the call being checked even when two models declare a scope with the
-     * same name. The consumer {@see \unset()}s the entry immediately after reading it, so a
-     * stale entry can never shadow a later call — which is why this stores the model class
-     * and re-resolves params through {@see getScopeParams} rather than caching a param list
-     * (mirrors {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler}).
+     * follows up with checkMethodArgs. For public stub-declared methods (count, sum),
+     * ExistingAtomicMethodCallAnalyzer calls checkMethodArgs BEFORE the return-type
+     * provider, so the producer runs after the consumer for that call — a written
+     * entry would never be consumed and would shadow a later unrelated call. The
+     * producer skips the write for those names.
+     *
+     * Keyed by method name only: the producer always runs right before the consumer
+     * within one analysis thread for non-storage-declared methods. See
+     * {@see isStorageDeclaredBuilderMethod} for the gate.
      *
      * @var array<lowercase-string, class-string<Model>>
      */
@@ -188,11 +189,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
             self::getScopeParams($codebase, $modelClass, $methodName) !== null
             && !self::isRealPublicBuilderMethod($methodName)
         ) {
-            // Hand the model to the params provider, consumed once (see $pendingScopeModel):
-            // Psalm follows this return type with checkMethodArgs for Builder::<scope>, which
-            // has no real method storage and would otherwise throw UnexpectedValueException in
-            // Codebase\Methods::getMethodParams.
-            self::$pendingScopeModel[$methodName] = $modelClass;
+            // Skip hand-off for stub-declared methods: ExistingAtomicMethodCallAnalyzer
+            // calls checkMethodArgs (params provider) BEFORE return-type provider, so
+            // a write here is too late for the current call and would leak to a later one.
+            if (!self::isStorageDeclaredBuilderMethod($codebase, $methodName)) {
+                self::$pendingScopeModel[$methodName] = $modelClass;
+            }
 
             // A value-returning scope surfaces its declared return via Laravel's `?? $this`
             // coalesce; a plain void/fluent scope keeps $builderReturn unchanged (issue #1053).
@@ -233,11 +235,9 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         /** @var lowercase-string $methodName */
         $methodName = $event->getMethodNameLowercase();
 
-        // Instance scope hand-off (see $pendingScopeModel), consumed once: re-resolve the
-        // scope's params (minus the leading $query) through getScopeParams and unset the entry so a
-        // stale value can never shadow a later call. No isRealBuilderMethod guard is needed: the
-        // producer already excluded real Eloquent\Builder methods, and consume-once prevents
-        // cross-call leaks.
+        // Instance scope hand-off (see $pendingScopeModel), consumed once: the producer
+        // skipped stub-declared methods, so a storage-declared name reaching here with
+        // no entry falls through to trait-methods or null (Psalm then uses storage params).
         $modelClass = self::$pendingScopeModel[$methodName] ?? null;
         if ($modelClass !== null) {
             unset(self::$pendingScopeModel[$methodName]);
@@ -277,6 +277,39 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         try {
             return (new \ReflectionMethod(Builder::class, $methodName))->isPublic();
         } catch (\ReflectionException) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether Psalm's method storage declares $methodName as PUBLIC on Eloquent\Builder.
+     *
+     * ExistingAtomicMethodCallAnalyzer only handles visible methods; protected/private
+     * methods route to MissingMethodCallHandler (via __call), where the return-type
+     * provider runs BEFORE checkMethodArgs — same as mixin-forwarded methods. The
+     * hand-off write should only be skipped for PUBLIC declared methods.
+     *
+     * @param lowercase-string $methodName
+     * @psalm-capabilities read-props
+     */
+    private static function isStorageDeclaredBuilderMethod(Codebase $codebase, string $methodName): bool
+    {
+        try {
+            $methodId = new MethodIdentifier(Builder::class, $methodName);
+            $declaringId = $codebase->methods->getDeclaringMethodId($methodId);
+
+            // Non-declared methods (mixin-forwarded) route via MissingMethodCallHandler,
+            // where the return-type provider runs before checkMethodArgs.
+            if (!$declaringId instanceof MethodIdentifier) {
+                return false;
+            }
+
+            // Protected/private methods are inaccessible from outside, so Psalm routes
+            // them to __call (MissingMethodCallHandler) — same ordering as mixin methods.
+            $storage = $codebase->methods->getStorage($declaringId);
+
+            return $storage->visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
         }
     }
