@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
@@ -255,7 +256,7 @@ final class CastResolver
             // siphoned off the interface-itself case.
             if (
                 $atomic instanceof TNamedObject
-                && \is_a($atomic->value, CastsAttributes::class, true)
+                && ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
             ) {
                 $resolved = self::resolveCastsAttributesGet($codebase, $atomic->value, $nullable);
                 if ($resolved instanceof Union) {
@@ -269,8 +270,8 @@ final class CastResolver
             // the direct CastsInboundAttributes branch in resolve().
             if (
                 $atomic instanceof TNamedObject
-                && \is_a($atomic->value, CastsInboundAttributes::class, true)
-                && !\is_a($atomic->value, CastsAttributes::class, true)
+                && ClassLineage::isA($codebase, $atomic->value, CastsInboundAttributes::class)
+                && !ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
             ) {
                 if ($originalType instanceof Union) {
                     return self::makeNullable($originalType, $nullable);
@@ -286,7 +287,7 @@ final class CastResolver
             ) {
                 $cls = $atomic->as_type->value;
 
-                if (\is_a($cls, CastsAttributes::class, true)) {
+                if (ClassLineage::isA($codebase, $cls, CastsAttributes::class)) {
                     $resolved = self::resolveCastsAttributesGet($codebase, $cls, $nullable);
                     if ($resolved instanceof Union) {
                         return $resolved;
@@ -294,8 +295,8 @@ final class CastResolver
                 }
 
                 if (
-                    \is_a($cls, CastsInboundAttributes::class, true)
-                    && !\is_a($cls, CastsAttributes::class, true)
+                    ClassLineage::isA($codebase, $cls, CastsInboundAttributes::class)
+                    && !ClassLineage::isA($codebase, $cls, CastsAttributes::class)
                 ) {
                     if ($originalType instanceof Union) {
                         return self::makeNullable($originalType, $nullable);

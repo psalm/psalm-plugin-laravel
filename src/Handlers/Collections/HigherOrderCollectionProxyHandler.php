@@ -13,6 +13,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -216,7 +217,7 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
-        $collectionInfo = self::extractCollectionInfoFromType($collectionType);
+        $collectionInfo = self::extractCollectionInfoFromType($collectionType, $source->getCodebase());
         if ($collectionInfo === null) {
             return null;
         }
@@ -327,7 +328,7 @@ final class HigherOrderCollectionProxyHandler implements
         // - Support\Collection::map() returns Collection → use $collectionClass (same class)
         if ($proxyMethod === 'map') {
             $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
-            $mapClass = \is_a($collectionClass, EloquentCollection::class, true) ? Collection::class : $collectionClass;
+            $mapClass = ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class) ? Collection::class : $collectionClass;
 
             return new Union([
                 new TGenericObject($mapClass, [
@@ -340,7 +341,7 @@ final class HigherOrderCollectionProxyHandler implements
         // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
         // EloquentCollection falls back to base Collection; key widened to array-key.
         if ($proxyMethod === 'flatmap') {
-            $flatMapClass = \is_a($collectionClass, EloquentCollection::class, true)
+            $flatMapClass = ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class)
                 ? Collection::class
                 : $collectionClass;
             return new Union([
@@ -365,7 +366,7 @@ final class HigherOrderCollectionProxyHandler implements
         // bucket a base Collection regardless of the receiver.
         if ($proxyMethod === 'partition') {
             $innerCollection = new TGenericObject($collectionClass, [$tKey, $tValue]);
-            $outerClass = \is_a($collectionClass, EloquentCollection::class, true)
+            $outerClass = ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class)
                 ? Collection::class
                 : $collectionClass;
 
@@ -417,7 +418,7 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
-        return self::extractCollectionInfoFromType($collectionType);
+        return self::extractCollectionInfoFromType($collectionType, $source->getCodebase());
     }
 
     /**
@@ -426,7 +427,7 @@ final class HigherOrderCollectionProxyHandler implements
      * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      * @psalm-mutation-free
      */
-    private static function extractCollectionInfoFromType(Union $collectionType): ?array
+    private static function extractCollectionInfoFromType(Union $collectionType, Codebase $codebase): ?array
     {
         foreach ($collectionType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
@@ -435,19 +436,11 @@ final class HigherOrderCollectionProxyHandler implements
 
             $class = $atomic->value;
 
-            // Fast-path: equality check for the three common classes avoids is_a() inheritance
-            // walk for ~99% of real-world usage. is_a() with allow_string triggers autoloading,
-            // which can throw if the autoloader raises an error for unknown classes.
-            $isCommon = \in_array($class, [Collection::class, EloquentCollection::class, LazyCollection::class], true);
-            if (!$isCommon) {
-                try {
-                    $isCommon = \is_a($class, Enumerable::class, allow_string: true);
-                } catch (\Throwable) {
-                    $isCommon = false;
-                }
-            }
-
-            if ($isCommon) {
+            // Fast-path: equality check for the three common classes skips the storage lookup.
+            if (
+                \in_array($class, [Collection::class, EloquentCollection::class, LazyCollection::class], true)
+                || ClassLineage::isA($codebase, $class, Enumerable::class)
+            ) {
                 return [$atomic->type_params[0], $atomic->type_params[1], $class];
             }
         }

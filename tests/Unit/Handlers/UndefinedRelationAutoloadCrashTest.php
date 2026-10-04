@@ -8,18 +8,24 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelAggregateLoadHandler;
 use Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Symfony\Component\Process\Process;
 
 /**
  * Regression guard for {@see UndefinedModelRelationHandler}'s pre-fix `\is_a($fqcn, Model::class,
- * true)`, which autoloaded the receiver class and let a load-time deprecation crash the whole run.
+ * true)`, which autoloaded the receiver class and let a load-time deprecation crash the whole run,
+ * and for the same bug in {@see ModelAggregateLoadHandler}'s assignment tracking (#1652). Both now
+ * go through {@see ClassLineage::isA()}.
  *
  * Not reproducible as a `.phpt`: phpt-declared classes aren't Composer-autoloadable, so
  * `is_a(..., true)` never fires their file. Forks a real `vendor/bin/psalm` over a self-contained
  * fixture instead, like {@see UnknownModelAttributeEmissionTest}.
  */
 #[CoversClass(UndefinedModelRelationHandler::class)]
+#[CoversClass(ModelAggregateLoadHandler::class)]
+#[CoversClass(ClassLineage::class)]
 #[Group('subprocess')]
 final class UndefinedRelationAutoloadCrashTest extends TestCase
 {

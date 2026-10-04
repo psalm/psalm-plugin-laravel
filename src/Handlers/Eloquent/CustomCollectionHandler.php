@@ -26,6 +26,7 @@ use Illuminate\Pagination\AbstractPaginator;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -158,8 +159,8 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         // Skip union types (e.g., MorphTo<Post|User>) — each model may use a different
         // custom collection, making the narrowing ambiguous.
         $templateUnion = $templateTypeParameters[0] ?? null;
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion);
-        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion)) {
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion, $source->getCodebase());
+        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion, $source->getCodebase())) {
             return null;
         }
 
@@ -191,8 +192,8 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         // it's index 0.
         $templateTypeParameters = $event->getTemplateTypeParameters();
         $templateUnion = $templateTypeParameters[1] ?? null;
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion);
-        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion)) {
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion, $source->getCodebase());
+        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion, $source->getCodebase())) {
             return null;
         }
 
@@ -256,7 +257,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * @psalm-mutation-free
      */
-    private static function hasMultipleModelTypes(?Union $union): bool
+    private static function hasMultipleModelTypes(?Union $union, Codebase $codebase): bool
     {
         if (!$union instanceof Union) {
             return false;
@@ -264,7 +265,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
         $count = 0;
         foreach ($union->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 $count++;
                 if ($count > 1) {
                     return true;

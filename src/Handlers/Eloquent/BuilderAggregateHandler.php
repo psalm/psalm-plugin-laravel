@@ -157,7 +157,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
     {
         $templateParams = $event->getTemplateTypeParameters();
         foreach ($templateParams ?? [] as $param) {
-            $modelClass = ModelPropertyResolver::extractModelFromUnion($param);
+            $modelClass = ModelPropertyResolver::extractModelFromUnion($param, $event->getSource()->getCodebase());
             if ($modelClass !== null) {
                 return $modelClass;
             }
@@ -179,7 +179,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
-            $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null);
+            $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $event->getSource()->getCodebase());
             if ($model !== null) {
                 return $model;
             }

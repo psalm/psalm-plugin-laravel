@@ -56,6 +56,7 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
 
         $modelClass = ModelPropertyResolver::extractModelFromIterableValueType(
             $nodeTypeProvider->getType($args[0]->value),
+            $event->getSource()->getCodebase(),
         );
         if ($modelClass === null) {
             return null;

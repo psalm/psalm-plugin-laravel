@@ -41,6 +41,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeAccessorInfo;
@@ -1804,6 +1805,12 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
+
+        // ClassLineage::isA() reads lineage through $classlikes; wire it to the same storage provider.
+        $classLikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty(ClassLikes::class, 'classlike_storage_provider'))
+            ->setValue($classLikes, $this->classLikeStorageProvider);
+        $codebase->classlikes = $classLikes;
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');

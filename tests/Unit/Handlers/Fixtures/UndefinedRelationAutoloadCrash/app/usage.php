@@ -7,7 +7,7 @@ namespace AutoloadCrashFixture;
 // Drives resolveBaseModel() -> concreteModel(), the pre-fix autoload site.
 DeprecatedOnLoad::with('posts');
 
-// Drives resolveModelFromType() -> modelFromAtomic() -> isClassOrSubclassOf(), the other pre-fix
+// Drives resolveModelFromType() -> modelFromAtomic() -> ClassLineage::isA(), the other pre-fix
 // autoload site.
 function drive_instance_path(DeprecatedOnLoadInstance $x): void
 {
@@ -21,4 +21,10 @@ function drive_instance_path(DeprecatedOnLoadInstance $x): void
 function drive_tier_two_dot_path(TierTwoModel $model): void
 {
     $model->with('deprecatedRel.child');
+}
+
+// Drives ModelAggregateLoadHandler's assignment tracking (singleModel()), an autoload site of #1652.
+function drive_aggregate_assignment(): void
+{
+    $x = DeprecatedOnLoadAssigned::make();
 }
