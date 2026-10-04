@@ -5,23 +5,30 @@
 #   * the vendor install is reproducible, and
 #   * CI can cache vendor keyed on (name, ref, php) safely.
 #
-# This is the curated v1 set: apps that composer-install cleanly from a frozen
-# commit against Packagist Psalm (no local fork). Add an entry to grow; delete
-# one to drop a flaky app. The private codebase used by the local /psalm-delta
-# skill is intentionally absent — this file is committed (public).
+# Every app installs cleanly from its frozen commit against Packagist Psalm (no
+# local fork). Add an entry to grow; delete one to drop a flaky app. The private
+# codebase used by the local /psalm-delta skill is intentionally absent — this
+# file is committed (public).
+#
+# Selection: `/psalm-delta` (and `bin/ci/delta.sh`) runs the `default` group;
+# `/psalm-delta octane vito` adds a group and an app, `all` runs everything,
+# `help` lists the groups. bin/ci/select-apps.php resolves it from
+# `yq -o=json bin/ci/test-apps.yml`, so tags and names must be [a-z0-9_-] and
+# neither may be `all` or `help`.
 #
 # Read with mikefarah yq v4 (preinstalled on ubuntu-latest, `brew install yq`
-# locally). The CI matrix is `yq -o=json '{"include": .apps}'`.
+# locally), e.g. `yq '.apps[] | select(.groups[] == "octane") | .name'`.
 #
 # Fields:
 #   name         display + on-disk key (filename-safe)
 #   repo         public https clone URL
-#   ref          immutable commit SHA (the cache key; never a moving branch)
+#   ref          immutable commit SHA (the cache key; never a moving branch).
+#                Short SHAs work because delta-app.sh does a full clone.
 #   php          PHP version the runner sets up for install/analysis. Use 8.4:
 #                modern app deps (e.g. recent symfony/console) ship PHP 8.4
 #                syntax, and --ignore-platform-reqs would otherwise install them
 #                under an older runtime that cannot parse the files.
-#   kind         app | lib  (informational; project layout is auto-detected)
+#   groups       tags from `groups:` below; [] = reachable only by name or `all`
 #   project_dir  optional explicit Psalm projectFiles root (else auto-detected:
 #                app/ for Laravel apps, packages/*/src for monorepos, src/ for libs)
 #   prime        optional shell run in the app dir before `composer update`
@@ -30,13 +37,23 @@
 #                on whitespace (e.g. "--php-version=8.0" to pin the ANALYSIS php
 #                version when the app's composer.json declares a wrong/too-low
 #                minimum). Analysis-time only; does not affect install or caching.
+#   timeout      optional CI job timeout in minutes (default 12) for apps whose
+#                cold install + two analyses take longer
+
+groups:
+  default: Baseline set run by a bare /psalm-delta
+  octane: Apps that require laravel/octane
+  ai: Apps whose locked laravel/ai is inside the plugin's LaravelAiIntegration::CONSTRAINT gate
+  filament: Filament itself and apps built on it
+  lib: Packages and monorepos rather than full apps
+  large: Slow to install or analyse; may need a raised timeout
 
 apps:
   - name: monica
     repo: https://github.com/monicahq/monica.git
     ref: e08e917
     php: "8.4"
-    kind: app
+    groups: [default]
     # Monica's lock pins laravel-lang/http-statuses at a version Packagist flags
     # as malware; bump that one package (constraint ^3.8) before install.
     prime: composer update laravel-lang/http-statuses --no-interaction --no-progress --ignore-platform-reqs
@@ -45,45 +62,45 @@ apps:
     repo: https://github.com/pixelfed/pixelfed.git
     ref: 67606eb
     php: "8.4"
-    kind: app
+    groups: [default]
 
   - name: coolify
     repo: https://github.com/coollabsio/coolify.git
     ref: ffd69c1
     php: "8.4"
-    kind: app
+    groups: [default]
 
   - name: bookstack
     repo: https://source.bookstackapp.com/bookstack.git
     ref: 82ef735
     php: "8.4"
-    kind: app
+    groups: [default]
 
   - name: solidtime
     repo: https://github.com/solidtime-io/solidtime.git
     ref: 797fddf
     php: "8.4"
-    kind: app
+    groups: [default, octane, filament]
 
   - name: laravel-socialite
     repo: https://github.com/laravel/socialite.git
     ref: 40e0757
     php: "8.4"
-    kind: lib
+    groups: [default, lib]
     project_dir: src
 
   - name: laravel-permission
     repo: https://github.com/spatie/laravel-permission.git
     ref: ef42ecb
     php: "8.4"
-    kind: lib
+    groups: [default, lib]
     project_dir: src
 
   - name: laravel-excel
     repo: https://github.com/SpartnerNL/Laravel-Excel.git
     ref: 1854739
     php: "8.4"
-    kind: lib
+    groups: [default, lib]
     project_dir: src
     # composer.json declares a too-low PHP minimum, so Psalm would otherwise
     # analyse against that floor; pin the analysis target explicitly.

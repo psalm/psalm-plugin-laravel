@@ -29,10 +29,13 @@ declare(strict_types=1);
  *   php delta-report.php <output_dir> <base_label> <head_label> \
  *       --apps=monica,pixelfed,coolify \
  *       [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] \
- *       [--date-marker=cache] [--details]
+ *       [--date-marker=cache] [--details] [--selection='default + octane']
  *
  * --details prints the changed entries and crash text. They carry file paths
  * and issue messages, so they are OFF by default (safe for a private app).
+ *
+ * --selection is the resolved /psalm-delta selector label (bin/ci/select-apps.php),
+ * printed under the header with the app count.
  *
  * Exit codes: 0 = report produced, 2 = usage error.
  */
@@ -82,7 +85,7 @@ foreach (array_slice($argv, 1) as $arg) {
 
 $fail = static function (string $message): never {
     fwrite(STDERR, "Error: {$message}\n");
-    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache]\n");
+    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache] [--details] [--selection=label]\n");
     exit(2);
 };
 
@@ -105,6 +108,7 @@ $baseSha = $options['base-sha'] ?? '';
 $headSha = $options['head-sha'] ?? '';
 $dateMarker = $options['date-marker'] ?? 'cache';
 $details = isset($options['details']);
+$selection = $options['selection'] ?? '';
 
 // Issue types whose presence depends on the order Psalm merges parallel workers
 // (first-merge-wins CodeUseGraph::$mutation_info after the thread pool join),
@@ -478,6 +482,10 @@ $headDesc = $describe($headRef, $headLabel, $headSha);
 $out = [];
 $out[] = "## PR delta: {$baseDesc} -> {$headDesc}";
 $out[] = '';
+if ($selection !== '') {
+    $out[] = sprintf('Apps: %s → %d', $selection, count($apps));
+    $out[] = '';
+}
 
 // --- Per-app delta table (changed apps only) --------------------------------
 //
