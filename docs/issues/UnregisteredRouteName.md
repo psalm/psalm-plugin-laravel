@@ -68,7 +68,7 @@ The plugin arms the check only when the route table can be trusted, and otherwis
 
 ## Limitations
 
-- Only string literal route names are checked; dynamic names and `\BackedEnum` names (Laravel 11+) are skipped
+- Names are checked when they are string literals, string-backed enum cases, or class constants typed as one string literal (`self::` included). Variables, concatenation, int-backed and pure enum cases, `static::` / `parent::` constants, and global constants are skipped
 - A call site guarded by `Route::has('name')` is not tracked
 - Routes registered conditionally (feature flag, env check, package-specific registration) can produce a false positive if the analysed boot does not register them like production does
 - A stale route cache (written before a route was added, renamed, or named) can produce a false positive; `php artisan route:cache` or `route:clear` fixes it

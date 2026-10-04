@@ -11,11 +11,16 @@ use Illuminate\Support\Facades\URL;
 enum RouteEnum: string
 {
     case Dashboard = 'dashboard';
+    case Legacy = 'dashboard-legacy';
 }
 
 /** Every call site the handler covers: typo'd usages, plus clean and skipped shapes that must stay silent. */
 final class UsesRoutes
 {
+    private const DASHBOARD = 'dashboard';
+
+    private const LEGACY = 'dashboard-legacy';
+
     public function routeHelperTypo(): string
     {
         return route('dashboard-legacy');
@@ -116,9 +121,19 @@ final class UsesRoutes
         return route($name);
     }
 
-    /** A BackedEnum route name is a ClassConstFetch, never a String_ — never checked. */
-    public function enumNameNeverFlagged(): string
+    public function enumNameTypo(): string
     {
-        return route(RouteEnum::Dashboard);
+        return route(RouteEnum::Legacy);
+    }
+
+    /** The facade `@method` path, where Psalm has not analysed the arguments yet. */
+    public function constantNameTypo(): string
+    {
+        return URL::route(self::LEGACY);
+    }
+
+    public function enumAndConstantNamesClean(): string
+    {
+        return route(RouteEnum::Dashboard) . URL::route(self::DASHBOARD);
     }
 }

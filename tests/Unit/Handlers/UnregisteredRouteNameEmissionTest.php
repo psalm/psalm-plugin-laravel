@@ -31,13 +31,14 @@ final class UnregisteredRouteNameEmissionTest extends TestCase
         // 8 positional (route(), to_route(), URL::route/signedRoute/temporarySignedRoute, Redirect::route(),
         // redirect()->route(), url()->route() on the Contracts\UrlGenerator url() returns with no path)
         // + 3 named-argument (route(absolute:, name:) with the name at offset 1, to_route(route:),
-        // redirect()->route(route:)). An exact count proves both full receiver coverage and that the
-        // clean call, spread, non-literal and enum shapes do not over-fire.
-        $this->assertCount(11, $findings, "Expected exactly 11 UnregisteredRouteName findings, got:\n{$joined}");
+        // redirect()->route(route:)) + 2 non-literal names (string-backed enum case, class constant).
+        // An exact count proves both full receiver coverage and that the clean, spread and dynamic
+        // shapes do not over-fire.
+        $this->assertCount(13, $findings, "Expected exactly 13 UnregisteredRouteName findings, got:\n{$joined}");
         $this->assertStringNotContainsString("'dashboard'", $joined);
         $this->assertStringNotContainsString("'posts.show'", $joined);
         // The rule is opt-in but reports at Psalm's normal level once enabled.
-        $this->assertSame(\array_fill(0, 11, 'error'), \array_column($findings, 'severity'));
+        $this->assertSame(\array_fill(0, 13, 'error'), \array_column($findings, 'severity'));
     }
 
     /**

@@ -8,16 +8,17 @@ use Illuminate\Foundation\Application;
 use Illuminate\Routing\Redirector;
 use Illuminate\Routing\UrlGenerator;
 use PhpParser\Node\Arg;
-use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\Ast\StaticStringResolver;
 use Psalm\LaravelPlugin\Issues\UnregisteredRouteName;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
 /**
@@ -31,8 +32,8 @@ use Psalm\Type\Union;
  * the rule still fires in apps that trim their alias registry (same convention as
  * {@see \Psalm\LaravelPlugin\Handlers\Views\MissingViewHandler}).
  *
- * Only string literal names are checked. A leading spread, a non-literal expression, and a
- * `\BackedEnum` name (a `ClassConstFetch`, not a `String_`) are skipped.
+ * Names resolve through {@see StaticStringResolver}: string literals, string-backed enum cases, and
+ * class constants typed as one string literal. A leading spread and any other expression are skipped.
  *
  * The rule arms itself in {@see self::init()} and stays off (no findings, no warning) when
  * the route table cannot be trusted: the Testbench fallback or a swallowed bootstrap error, an
@@ -136,7 +137,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
-        $routeName = self::resolveRouteName($event->getCallArgs());
+        $routeName = self::resolveRouteName($event->getCallArgs(), $event->getStatementsSource());
 
         if ($routeName !== null) {
             self::checkRouteExists(
@@ -177,7 +178,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
             return null;
         }
 
-        $routeName = self::resolveRouteName($event->getCallArgs());
+        $routeName = self::resolveRouteName($event->getCallArgs(), $event->getSource());
 
         if ($routeName !== null) {
             self::checkRouteExists($routeName, $event->getCodeLocation(), $event->getSource()->getSuppressedIssues());
@@ -187,7 +188,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     }
 
     /**
-     * Resolve the literal route name from a call's arguments, honouring named arguments.
+     * Resolve the route name from a call's arguments, honouring named arguments.
      *
      * `route(absolute: false, name: 'typo')` puts the name at offset 1, so resolve by parameter
      * identifier first and fall back to the first argument only when it is genuinely positional.
@@ -195,13 +196,12 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
      * named for some OTHER parameter means the name is spread in or absent.
      *
      * @param list<Arg> $callArgs
-     * @psalm-mutation-free
      */
-    private static function resolveRouteName(array $callArgs): ?string
+    private static function resolveRouteName(array $callArgs, StatementsSource $source): ?string
     {
         foreach ($callArgs as $arg) {
             if ($arg->name !== null && \in_array($arg->name->name, self::ROUTE_NAME_PARAMETERS, true)) {
-                return self::literalString($arg);
+                return StaticStringResolver::resolve($arg->value, $source);
             }
         }
 
@@ -211,13 +211,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
             return null;
         }
 
-        return self::literalString($firstArg);
-    }
-
-    /** @psalm-mutation-free */
-    private static function literalString(Arg $arg): ?string
-    {
-        return $arg->value instanceof String_ ? $arg->value->value : null;
+        return StaticStringResolver::resolve($firstArg->value, $source);
     }
 
     /**
