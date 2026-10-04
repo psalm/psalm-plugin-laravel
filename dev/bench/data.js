@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791130038719,
+  "lastUpdate": 1791130838002,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11960,6 +11960,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.13,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a33a43dbebff8df92afc11193fdcefd42f473417",
+          "message": "Narrow Eloquent aggregate accessor types by load proof and column type (#1628)\n\n* fix(eloquent): type withCount/withExists aggregate accessors as nullable\n\n`{relation}_count` is now `int|null` and `{relation}_exists` is `bool|null`.\nThe attribute is absent until withCount()/loadCount() (or the Exists\nvariants) runs, so reads return null and `$m->x_count ?? $m->loadCount(..)`\nno longer reports RedundantCondition / TypeDoesNotContainType.\n\nBreaking type change: code that relied on a non-null int/bool now needs a\nnull guard or a `@property` override (which still wins). min/max/sum/avg\ntypes are unchanged.\n\nRefs #1623\n\n* feat(eloquent): narrow aggregate accessors when withCount/loadCount is proven\n\n`{rel}_count` / `{rel}_exists` stay `int|null` / `bool|null` unless the\ncode proves the aggregate was loaded; then they are `int<0, max>` /\n`bool`.\n\n- model `$withCount` defaults (`rel` and `rel as alias`)\n- `$m->loadCount()` & co. on a variable, `$m->refresh()` drops them\n- `$m = M::withCount()->...->firstOrFail()` assignments\n- `M::withCount()->firstOrFail()->x_count` / `$m->loadCount()->x_count`\n\nProof is literal-only and validated against the final model class;\n`select()`, Collection hops and `firstOrNew` terminals are not proof.\nCarrying the fact in an intersection type was probed and rejected\n(decisions.md).\n\nRefs #1623\n\n* feat(eloquent): column-aware withSum/withMin/withMax/withAvg types\n\nAggregate aliases are not cast (only `exists` is), so the attribute\nholds the raw PDO value. The type now comes from the RELATED model's\nmigration schema, never casts or `@property`:\n\n- min/max: the int column type, else `string|null` as before\n- sum: `int|numeric-string|null` for int columns\n- avg: `float|numeric-string|null`\n\nThe schema maps DECIMAL to float while PDO returns DECIMAL as a\nstring, so float columns also admit numeric-string; this widens the\nsum/avg fallback for unresolvable columns to every driver result.\n\nRefs #1623\n\n* fix(eloquent): harden aggregate proof facts against nullables and refresh\n\n- nullable `first()`/`find()` assignments record no fact: a cached\n  `$m->alias` is read before the receiver, hiding PossiblyNullPropertyFetch\n- `refresh()` overwrites proven count/exists facts with their unproven\n  type so a conditional refresh widens on branch merge, and it sees through\n  `$m->loadCount('x')->refresh()`\n- the last aggregate call wins when two chained calls share an alias\n\nRefs #1623\n\n* fix(eloquent): admit int in float-column min/max/sum aggregates\n\nSQLite gives DECIMAL NUMERIC affinity, so integral values come back as\nint from MIN/MAX/SUM while the schema maps DECIMAL to float. avg stays\n`float|numeric-string|null` (always real or DECIMAL).\n\nRefs #1623\n\n* fix(eloquent): scope refresh widening and decline alias collisions\n\n- refresh() widens only count/exists facts this handler wrote, found by\n  identity of the shared proven types; Model's own `$exists` (also bool)\n  is no longer rewritten to bool|null\n- one alias produced by different aggregate functions records no fact:\n  withExists() casts the alias to bool for good\n\nRefs #1623\n\n* refactor(eloquent): simplify aggregate refresh and in-place collisions\n\n- refresh() unsets every `$m->…` fact again: Union identity does not\n  survive Psalm's property-fetch copies, so widening by identity was\n  unreliable; a refresh() in only one branch is a documented limitation\n- in-place loads: the latest write wins, so a cached unproven read no\n  longer wipes a fresh proof; the chain form still declines an alias\n  produced by different aggregate functions\n\nRefs #1623\n\n* fix(eloquent): limit aggregate refresh invalidation to Models\n\n- refresh() drops `$m->…` facts only when the receiver is exactly one\n  Model; other objects with a refresh() keep their property facts\n- selectRaw()/selectSub() append columns, so they no longer end the\n  proof chain; select()/setQuery() still do\n\nRefs #1623\n\n* fix(eloquent): let real model attributes shadow aggregate accessor names\n\nThe aggregate property provider ran before the accessor and column\nproviders, so a real `votes_count` migration column next to a `votes()`\nrelation was typed `int|null` and tripped PossiblyNullOperand once the\naggregate type became nullable.\n\nThe aggregate handler now declines when the name is a schema column, a\ncast key or an accessor, each only from a complete registry section.\nProof facts from loadCount()/withCount() are unchanged.\n\nRefs #1623",
+          "timestamp": "2026-10-04T18:18:14+02:00",
+          "tree_id": "e48fda169c22c8d0f8bc0391348e1b7edff86b7e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a33a43dbebff8df92afc11193fdcefd42f473417"
+        },
+        "date": 1791130836785,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.68,
+            "range": "± 0.08",
             "unit": "s"
           },
           {
