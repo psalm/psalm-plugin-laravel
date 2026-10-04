@@ -10,8 +10,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * `@psalm-mutation-free`. The real implementation goes through
  * `getInputSource()` -> `json()`, which lazily writes `$this->json`, so a
  * FormRequest that overrides `input()` (e.g. to sanitize) would otherwise
- * trip a false-positive ImmutableDependency (Psalm 7 enforces the parent's
- * mutation-free contract on overrides).
+ * trip a false-positive MissingImmutableAnnotation (Psalm 6 enforces the
+ * parent's mutation-free contract on overrides; Psalm 7 reports the same
+ * mismatch as ImmutableDependency).
  */
 final class Sanitizer
 {
