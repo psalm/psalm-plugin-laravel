@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791130838002,
+  "lastUpdate": 1791134800078,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11995,6 +11995,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 22.68,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1e00c778a883587d736faec82908d6dbcb682b4",
+          "message": "Keep non-aggregate property narrowings across `Model::refresh()` (#1642)\n\n* fix(eloquent): keep non-aggregate property narrowings across refresh()\n\nrefresh() dropped every $m->… entry from vars_in_scope. Track the\naliases ModelAggregateLoadHandler recorded (per analyzed file) and\nunset only those, restoring pre-#1628 behavior for user narrowings.\n\nFixes #1641\n\n* fix(eloquent): key refresh() alias state by file, drop descendants\n\n- keep recorded aliases per file until reset(): an included file is\n  analyzed mid-includer, so reset-on-file-change lost the includer's\n  state\n- refresh() also drops aliases recorded on $m->… relations\n- replace vacuous load-chain test with one that records a fact\n\nRefs #1641\n\n* fix(eloquent): drop per-file alias buckets so refresh() sees facts from includes\n\nAn included file is analyzed with the includer's Context, so facts\nrecorded inside it were bucketed under the include's path and missed\nby the includer's refresh().\n\nRefs #1641\n\n* docs: describe ModelAggregateLoadHandler recorded-alias state\n\nRefs #1641",
+          "timestamp": "2026-10-04T19:24:10+02:00",
+          "tree_id": "87cd6ab14a6ab3bda6580ab47be7d5d21d2fe57b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c1e00c778a883587d736faec82908d6dbcb682b4"
+        },
+        "date": 1791134798862,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 20.92,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
