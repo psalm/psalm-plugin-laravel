@@ -7,14 +7,17 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
 use Psalm\StatementsSource;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TIntRange;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TNumericString;
@@ -31,16 +34,20 @@ use Psalm\Type\Union;
  * For withCount/withExists, the column is '*' which is stripped, yielding `{relation}_{function}`.
  * For withMin/withMax/withSum/withAvg, the column is included: `{relation}_{function}_{column}`.
  *
- * | Method       | Example alias              | Suffix match              | Type                |
- * |--------------|----------------------------|---------------------------|---------------------|
- * | withCount    | contacts_count             | ends with _count          | int|null            |
- * | withExists   | contacts_exists            | ends with _exists         | bool|null           |
- * | withMin      | contacts_min_amount        | contains _min_            | string|null         |
- * | withMax      | contacts_max_amount        | contains _max_            | string|null         |
- * | withSum      | contacts_sum_amount        | contains _sum_            | numeric-string|null |
- * | withAvg      | contacts_avg_amount        | contains _avg_            | numeric-string|null |
+ * | Method       | Example alias              | Suffix match     | Unproven (default)  | Proven loaded |
+ * |--------------|----------------------------|------------------|---------------------|---------------|
+ * | withCount    | contacts_count             | ends with _count | int|null            | int<0, max>   |
+ * | withExists   | contacts_exists            | ends with _exists| bool|null           | bool          |
+ * | withMin      | contacts_min_amount        | contains _min_   | string|null         | same          |
+ * | withMax      | contacts_max_amount        | contains _max_   | string|null         | same          |
+ * | withSum      | contacts_sum_amount        | contains _sum_   | numeric-string|null | same          |
+ * | withAvg      | contacts_avg_amount        | contains _avg_   | numeric-string|null | same          |
  *
- * All types are nullable: the attribute is absent (read as null) until the aggregate is loaded.
+ * Unproven means nothing shows the aggregate was loaded: the attribute is absent (read as null)
+ * until withXxx()/loadXxx() runs, so `$model->x_count ?? ...` is a legitimate guard. Proof comes from
+ * a model `$withCount` default (this class) or from a literal withXxx()/loadXxx() call that
+ * {@see ModelAggregateLoadHandler} tracks. min/max/sum/avg stay nullable even when proven (SQL NULL
+ * for an empty relation).
  *
  * @see https://laravel.com/docs/eloquent-relationships#other-aggregate-functions
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/503
@@ -69,10 +76,14 @@ final class ModelAggregatePropertyHandler
     private static array $pseudoPropertyCache = [];
 
     /**
-     * @var array<string, string|null> Cache for parseAggregateProperty(),
-     *                                  keyed by "class::property" → suffix string or null
+     * @var array<string, array{'count'|'exists'|'sum'|'min'|'max'|'avg', string, string, bool}|null>
+     *     Cache for parseAggregateProperty(), keyed by "class::property" → [function, relation method,
+     *     column ('' for count/exists), proven by a `$withCount` default] or null
      */
-    private static array $suffixCache = [];
+    private static array $matchCache = [];
+
+    /** @var array<string, array<string, string>> `$withCount` default alias → relation name */
+    private static array $defaultAliasCache = [];
 
     /**
      * @var array<string, bool> Cache for isRelationMethod(), keyed by "class::method".
@@ -82,15 +93,16 @@ final class ModelAggregatePropertyHandler
     private static array $relationMethodCache = [];
 
     /**
-     * @var array<string, Union> Cached Union instances for each aggregate suffix,
-     *                            to avoid repeated allocation across analysis runs.
+     * @var array<string, Union> Cached count/exists Union instances, keyed by "function" or
+     *                            "function+" when proven loaded, to avoid repeated allocation.
      */
     private static array $typeCache = [];
 
     public static function reset(): void
     {
         self::$pseudoPropertyCache = [];
-        self::$suffixCache = [];
+        self::$matchCache = [];
+        self::$defaultAliasCache = [];
         self::$relationMethodCache = [];
     }
 
@@ -102,9 +114,11 @@ final class ModelAggregatePropertyHandler
 
         $propertyName = $event->getPropertyName();
 
+        $fqClasslikeName = $event->getFqClasslikeName();
+
         // Fast pre-check: bail before any codebase calls for the vast majority of
         // property accesses that can't possibly match an aggregate pattern.
-        if (!self::couldBeAggregate($propertyName)) {
+        if (!self::couldBeAggregate($propertyName) && !isset(self::defaultAliases($fqClasslikeName)[$propertyName])) {
             return null;
         }
 
@@ -114,7 +128,6 @@ final class ModelAggregatePropertyHandler
         }
 
         $codebase = $source->getCodebase();
-        $fqClasslikeName = $event->getFqClasslikeName();
 
         if (self::hasUserPseudoProperty($codebase, $fqClasslikeName, $propertyName)) {
             return null;
@@ -137,13 +150,13 @@ final class ModelAggregatePropertyHandler
         $propertyName = $event->getPropertyName();
         $fqClasslikeName = $event->getFqClasslikeName();
 
-        // Fast path: use cached suffix from doesPropertyExist() if available.
+        // Fast path: use cached match from doesPropertyExist() if available.
         $cacheKey = $fqClasslikeName . '::' . $propertyName;
-        if (\array_key_exists($cacheKey, self::$suffixCache)) {
-            return self::$suffixCache[$cacheKey] !== null ? true : null;
+        if (\array_key_exists($cacheKey, self::$matchCache)) {
+            return self::$matchCache[$cacheKey] !== null ? true : null;
         }
 
-        if (!self::couldBeAggregate($propertyName)) {
+        if (!self::couldBeAggregate($propertyName) && !isset(self::defaultAliases($fqClasslikeName)[$propertyName])) {
             return null;
         }
 
@@ -166,37 +179,35 @@ final class ModelAggregatePropertyHandler
             return null;
         }
 
-        $propertyName = $event->getPropertyName();
-        $fqClasslikeName = $event->getFqClasslikeName();
-
-        // Fast path: use cached suffix from doesPropertyExist()/isPropertyVisible() if available.
-        $cacheKey = $fqClasslikeName . '::' . $propertyName;
-        if (\array_key_exists($cacheKey, self::$suffixCache)) {
-            $suffix = self::$suffixCache[$cacheKey];
-            return $suffix !== null ? self::buildTypeForSuffix($suffix) : null;
-        }
-
-        if (!self::couldBeAggregate($propertyName)) {
-            return null;
-        }
-
         $source = $event->getSource();
         if (!$source instanceof StatementsSource) {
             return null;
         }
 
+        $propertyName = $event->getPropertyName();
+        $fqClasslikeName = $event->getFqClasslikeName();
+
+        // A cached match means doesPropertyExist()/isPropertyVisible() already ruled out a user @property.
+        $cacheKey = $fqClasslikeName . '::' . $propertyName;
+        if (!\array_key_exists($cacheKey, self::$matchCache)) {
+            if (!self::couldBeAggregate($propertyName) && !isset(self::defaultAliases($fqClasslikeName)[$propertyName])) {
+                return null;
+            }
+
+            if (self::hasUserPseudoProperty($source->getCodebase(), $fqClasslikeName, $propertyName)) {
+                return null;
+            }
+        }
+
         $codebase = $source->getCodebase();
-
-        if (self::hasUserPseudoProperty($codebase, $fqClasslikeName, $propertyName)) {
+        $match = self::parseAggregateProperty($codebase, $fqClasslikeName, $propertyName);
+        if ($match === null) {
             return null;
         }
 
-        $suffix = self::parseAggregateProperty($codebase, $fqClasslikeName, $propertyName);
-        if ($suffix === null) {
-            return null;
-        }
+        [$function, $relation, $column, $proven] = $match;
 
-        return self::buildTypeForSuffix($suffix);
+        return self::aggregateType($codebase, $function, $fqClasslikeName, $relation, $column, $proven);
     }
 
     /**
@@ -224,24 +235,24 @@ final class ModelAggregatePropertyHandler
     }
 
     /**
-     * Parse an aggregate property name and return its aggregate suffix if valid.
+     * Parse an aggregate property name into [function, relation method, column, proven], or null
+     * when it does not correspond to an aggregate accessor on this model.
      *
-     * Returns the matched suffix (e.g. 'count', 'sum'), or null if the property
-     * does not correspond to an aggregate accessor on this model.
+     * @return array{'count'|'exists'|'sum'|'min'|'max'|'avg', string, string, bool}|null
      */
     private static function parseAggregateProperty(
         Codebase $codebase,
         string $fqClasslikeName,
         string $propertyName,
-    ): ?string {
+    ): ?array {
         $cacheKey = $fqClasslikeName . '::' . $propertyName;
 
-        if (\array_key_exists($cacheKey, self::$suffixCache)) {
-            return self::$suffixCache[$cacheKey];
+        if (\array_key_exists($cacheKey, self::$matchCache)) {
+            return self::$matchCache[$cacheKey];
         }
 
         $result = self::doParseAggregateProperty($codebase, $fqClasslikeName, $propertyName);
-        self::$suffixCache[$cacheKey] = $result;
+        self::$matchCache[$cacheKey] = $result;
 
         return $result;
     }
@@ -249,7 +260,10 @@ final class ModelAggregatePropertyHandler
     /**
      * Core matching logic for parseAggregateProperty().
      *
-     * Two matching strategies based on whether the alias includes the column name:
+     * Three matching strategies:
+     *
+     * 0. A `$withCount` default (`rel` or `rel as alias`) whose alias is this property: the count is
+     *    loaded by every query on the model, so the match is `proven`. Alias names need no suffix.
      *
      * 1. Exact suffix (count, exists): property ends with `_{suffix}`.
      *    The relation prefix is everything before `_{suffix}`.
@@ -259,12 +273,19 @@ final class ModelAggregatePropertyHandler
      *    Multiple `_{suffix}_` occurrences are tried left-to-right until a relation match
      *    is found (handles relation names that themselves contain the suffix word, and
      *    column names containing underscores, e.g. `contacts_min_unit_price`).
+     *
+     * @return array{'count'|'exists'|'sum'|'min'|'max'|'avg', string, string, bool}|null
      */
     private static function doParseAggregateProperty(
         Codebase $codebase,
         string $fqClasslikeName,
         string $propertyName,
-    ): ?string {
+    ): ?array {
+        $defaultRelation = self::defaultAliases($fqClasslikeName)[$propertyName] ?? null;
+        if ($defaultRelation !== null && self::isRelationMethod($codebase, $fqClasslikeName, $defaultRelation)) {
+            return ['count', $defaultRelation, '', true];
+        }
+
         // Strategy 1: withCount/withExists — alias is {relation}_{suffix}, no column in name.
         foreach (self::EXACT_SUFFIXES as $suffix) {
             if (!\str_ends_with($propertyName, '_' . $suffix)) {
@@ -272,8 +293,9 @@ final class ModelAggregatePropertyHandler
             }
 
             $prefix = \substr($propertyName, 0, -\strlen($suffix) - 1);
-            if ($prefix !== '' && self::isRelationPrefix($codebase, $fqClasslikeName, $prefix)) {
-                return $suffix;
+            $relation = $prefix === '' ? null : self::resolveRelationPrefix($codebase, $fqClasslikeName, $prefix);
+            if ($relation !== null) {
+                return [$suffix, $relation, '', false];
             }
         }
 
@@ -290,9 +312,9 @@ final class ModelAggregatePropertyHandler
                     continue;
                 }
 
-                $prefix = \substr($propertyName, 0, $pos - 1);
-                if (self::isRelationPrefix($codebase, $fqClasslikeName, $prefix)) {
-                    return $suffix;
+                $relation = self::resolveRelationPrefix($codebase, $fqClasslikeName, \substr($propertyName, 0, $pos - 1));
+                if ($relation !== null) {
+                    return [$suffix, $relation, \substr($propertyName, $pos - 1 + \strlen($needle)), false];
                 }
             }
         }
@@ -301,19 +323,54 @@ final class ModelAggregatePropertyHandler
     }
 
     /**
-     * Check whether the given snake_case prefix maps to a relation method on this model.
+     * `$withCount` defaults of the model as alias → relation name. Optimistic like column
+     * inference: a default that runtime code bypasses (`new Model`, `withoutGlobalScopes`-style
+     * raw queries) still reads as loaded. Not cached before the registry entry exists, since
+     * property providers may fire before warm-up.
+     *
+     * @return array<string, string>
+     */
+    private static function defaultAliases(string $fqClasslikeName): array
+    {
+        if (isset(self::$defaultAliasCache[$fqClasslikeName])) {
+            return self::$defaultAliasCache[$fqClasslikeName];
+        }
+
+        /** @var class-string<Model> $fqClasslikeName registered per Model subclass */
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
+            return [];
+        }
+
+        $aliases = [];
+
+        if ($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION)) {
+            foreach ($metadata->withCount as $entry) {
+                [$relation, $alias] = AggregateCallParser::splitAlias($entry);
+                $aliases[$alias ?? AggregateCallParser::defaultAlias($relation, 'count', '*')] = $relation;
+            }
+        }
+
+        return self::$defaultAliasCache[$fqClasslikeName] = $aliases;
+    }
+
+    /**
+     * Resolve the given snake_case prefix to the relation method it names, or null.
      *
      * Tries the prefix directly (for snake_case method names) and then its camelCase
      * equivalent (for typical camelCase methods like `workOrders`).
      */
-    private static function isRelationPrefix(Codebase $codebase, string $fqClasslikeName, string $prefix): bool
+    private static function resolveRelationPrefix(Codebase $codebase, string $fqClasslikeName, string $prefix): ?string
     {
         if (self::isRelationMethod($codebase, $fqClasslikeName, $prefix)) {
-            return true;
+            return $prefix;
         }
 
         $camelPrefix = self::snakeToCamelCase($prefix);
-        return $camelPrefix !== $prefix && self::isRelationMethod($codebase, $fqClasslikeName, $camelPrefix);
+
+        return $camelPrefix !== $prefix && self::isRelationMethod($codebase, $fqClasslikeName, $camelPrefix)
+            ? $camelPrefix
+            : null;
     }
 
     /**
@@ -324,7 +381,7 @@ final class ModelAggregatePropertyHandler
      * Results are cached to avoid redundant codebase lookups across multiple aggregate
      * properties sharing the same relation (e.g. contacts_count and contacts_sum_amount).
      */
-    private static function isRelationMethod(Codebase $codebase, string $fqClasslikeName, string $methodName): bool
+    public static function isRelationMethod(Codebase $codebase, string $fqClasslikeName, string $methodName): bool
     {
         $key = $fqClasslikeName . '::' . $methodName;
 
@@ -365,30 +422,41 @@ final class ModelAggregatePropertyHandler
     }
 
     /**
-     * Build the Psalm Union type for the given aggregate suffix.
+     * The attribute type of an aggregate on `$model`'s relation. `$proven` means the code shows the
+     * aggregate was loaded; it only tightens count/exists, because min/max/sum/avg are NULL on an
+     * empty relation either way.
      *
-     * All six are nullable because the attribute is absent (Model::getAttribute() returns null)
-     * until withXxx()/loadXxx() runs, so `$model->x_count ?? ...` is a legitimate guard.
-     * min/max/sum/avg are additionally null for an empty relation.
+     * Types match Laravel's raw database output before any model casts are applied (only `exists`
+     * is cast, to bool). Count/exists results are cached to avoid repeated allocation.
      *
-     * Types match Laravel's raw database output before any model casts are applied.
-     * Results are cached to avoid repeated allocation across analysis runs.
+     * @param 'count'|'exists'|'sum'|'min'|'max'|'avg' $function
      */
-    private static function buildTypeForSuffix(string $suffix): Union
-    {
-        if (isset(self::$typeCache[$suffix])) {
-            return self::$typeCache[$suffix];
+    public static function aggregateType(
+        Codebase $codebase,
+        string $function,
+        string $model,
+        string $relation,
+        string $column,
+        bool $proven,
+    ): Union {
+        if ($function === 'count' || $function === 'exists') {
+            $key = $function . ($proven ? '+' : '');
+            if (isset(self::$typeCache[$key])) {
+                return self::$typeCache[$key];
+            }
+
+            $loaded = $function === 'exists' ? new TBool() : ($proven ? new TIntRange(0, null) : new TInt());
+
+            return self::$typeCache[$key] = new Union($proven ? [$loaded] : [$loaded, new TNull()]);
         }
 
-        $loaded = match ($suffix) {
-            'count' => new TInt(),
-            'exists' => new TBool(),
-            'min', 'max' => new TString(),
-            'sum', 'avg' => new TNumericString(),
-            default => throw new \LogicException("Unexpected aggregate suffix: {$suffix}"),
-        };
+        $key = $function;
+        if (!isset(self::$typeCache[$key])) {
+            $loaded = $function === 'min' || $function === 'max' ? new TString() : new TNumericString();
+            self::$typeCache[$key] = new Union([$loaded, new TNull()]);
+        }
 
-        return self::$typeCache[$suffix] = new Union([$loaded, new TNull()]);
+        return self::$typeCache[$key];
     }
 
     /**
@@ -407,7 +475,7 @@ final class ModelAggregatePropertyHandler
      * Check whether the user has declared a @property PHPDoc for this property.
      * If so, we defer to their declaration instead of providing an aggregate type.
      */
-    private static function hasUserPseudoProperty(
+    public static function hasUserPseudoProperty(
         Codebase $codebase,
         string $fqClasslikeName,
         string $propertyName,

@@ -68,6 +68,21 @@ The plugin should respect that consistently across all handlers rather than over
 **Why:** The relationship and accessor handlers use Psalm's own type inference with no external data source.
 They produce no false positives, and there's no real-world scenario where a user would want one but not the other. Exposing per-handler toggles adds config complexity without value. The `@property` precedence rule (above) is the escape hatch for users who want to override specific properties.
 
+### Aggregate accessor proof (`{relation}_count`, `{relation}_exists`)
+
+**Decision:** An aggregate accessor is `int|null` / `bool|null` unless the code proves it was loaded; then it is `int<0, max>` / `bool`. min/max/sum/avg stay nullable even when proven (SQL NULL on an empty relation). Proof sources, all literal-only and validated against the FINAL model class with `ModelAggregatePropertyHandler::isRelationMethod()`:
+
+1. Model `$withCount` defaults (optimistic, like migration columns; gated on `SECTION_RUNTIME_CONFIGURATION`). `rel as alias` entries make the alias exist.
+2. `$m->loadCount(...)` & co. on a variable: `ModelAggregateLoadHandler` sets `vars_in_scope['$m->x_count']`, which Psalm reads before any property provider (so aliases work).
+3. `$m = M::withCount('x')->...->firstOrFail()`: same facts for the assigned variable.
+4. `M::withCount('x')->firstOrFail()->x_count` / `$m->loadCount('x')->x_count`: the PropertyFetch node type is overridden (conventional names only; an alias name fails the existence check first).
+
+Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`selectRaw()`/`selectSub()`/`setQuery()` end the walk because they replace the aggregate columns. `$m->refresh()` drops every `$m->…` fact. A user `@property` always wins.
+
+**Dead end:** carrying the fact in the type (`Shop&object{x_count: int}`). The intersection flows through `Builder` (its `TModel` is covariant), but `Collection<int, Shop&object{…}>` is not assignable to `Collection<int, Shop>`, so `->get()` results then fail every `Collection<int, Shop>` parameter. Flow facts avoid changing any model type.
+
+**Known limitations (reads stay nullable):** `->get()->first()` Collection hops, variable-held builders, closures, `foreach` over models, `getAttribute('x_count')`.
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally

@@ -25,6 +25,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
  * @property Vehicle|null $primary_vehicle Nullable HasOne relationship to the Vehicle Model
  * @property non-empty-string $first_name_using_legacy_accessor
  * @property int<0, max> $vehicles_count Declared to verify @property takes precedence over aggregate type inference
+ * @property int<0, 10> $work_orders_count Declared to verify @property also wins over a proven loadCount()
  */
 class Customer extends Authenticatable
 {

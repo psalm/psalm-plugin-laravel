@@ -172,7 +172,8 @@ function test_count_null_check_is_not_redundant(Shop $shop): int
         $shop->loadCount('workOrders');
     }
 
-    return (int) $shop->work_orders_count;
+    // Both branches now hold a loaded count: the else branch by the null check, the if branch by loadCount().
+    return $shop->work_orders_count;
 }
 ?>
 --EXPECTF--
