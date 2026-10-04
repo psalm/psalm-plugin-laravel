@@ -14,7 +14,8 @@ declare(strict_types=1);
  *   /psalm-delta <tok>...   `default` plus each token: a group tag or an app name
  *                           (a group wins over an app of the same name)
  *   /psalm-delta all        every app
- *   /psalm-delta help       reply with groups and syntax, start no run
+ *   /psalm-delta help       reply with groups and syntax, start no run (`help`
+ *                           with other tokens is an error)
  *
  * Prints one JSON object: {status: run|help|error|ignore, apps_csv, label,
  * matrix: {include: [...]}, reply}. The comment body is untrusted input from a
@@ -91,7 +92,9 @@ if (array_shift($tokens) !== '/psalm-delta') {
     $emit('ignore');
 }
 
-if (in_array('help', $tokens, true)) {
+// Only a lone `help` counts: the workflow keeps only `/psalm-delta help` off the
+// run concurrency key, so `help` mixed into a run comment is an error instead.
+if ($tokens === ['help']) {
     $lines = [
         '**`/psalm-delta` usage**',
         '',
@@ -110,11 +113,16 @@ if (in_array('help', $tokens, true)) {
     $emit('help', reply: implode("\n", $lines) . "\n");
 }
 
-$valid = [...array_keys($groups), ...array_keys($apps), ...$reserved];
+$valid = [...array_keys($groups), ...array_keys($apps), 'all'];
 $unknown = array_values(array_unique(array_diff($tokens, $valid)));
 if ($unknown !== []) {
     $lines = [];
-    foreach ($unknown as $token) {
+    // Capped so a huge comment can't push the reply past GitHub's 65,536-char limit.
+    foreach (array_slice($unknown, 0, 10) as $token) {
+        if ($token === 'help') {
+            $lines[] = '- `help` works only on its own: `/psalm-delta help`';
+            continue;
+        }
         if (preg_match($safe, $token) !== 1) {
             $lines[] = '- a token with characters outside `[a-z0-9_-]` (not echoed)';
             continue;
@@ -123,6 +131,9 @@ if ($unknown !== []) {
         $best = (int) array_search(min($distances), $distances, true);
         $hint = $distances[$best] <= max(2, intdiv(strlen($token), 3)) ? " Did you mean `{$valid[$best]}`?" : '';
         $lines[] = "- `{$token}`{$hint}";
+    }
+    if (count($unknown) > 10) {
+        $lines[] = sprintf('- and %d more', count($unknown) - 10);
     }
     $emit('error', reply: implode("\n", [
         '**`/psalm-delta`: unknown token, nothing was run.**',

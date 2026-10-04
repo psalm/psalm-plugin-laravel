@@ -43,8 +43,11 @@ on:
 # re-trigger supersedes the old run); any other comment, `/psalm-delta help`
 # included, gets a unique key, so it cancels nothing. A comment with an unknown
 # token can't be told apart here, so a typo still cancels an in-flight run
-# (accepted: just re-trigger). Expression string compares ignore case, matching
-# the resolver; the trigger is `/psalm-delta` followed by space/newline or nothing.
+# (accepted: just re-trigger). The same goes for `help` spelled any other way
+# (`/psalm-delta  help`, `/psalm-delta octane help`): the resolver answers with
+# help or an error and starts no run, but the old run is already cancelled.
+# Expression string compares ignore case, matching the resolver; the trigger is
+# `/psalm-delta` followed by space/newline or nothing.
 concurrency:
   group: >-
     psalm-delta-${{ github.event.issue.number }}-${{ (
