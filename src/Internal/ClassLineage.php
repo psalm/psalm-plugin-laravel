@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 
 /**
  * Lineage checks on analysis-time class names, answered from Psalm's class storage.
@@ -21,7 +20,9 @@ final class ClassLineage
 {
     /**
      * $class is $ancestor, extends it, implements it, or (as an interface) extends it.
-     * Reflexive like `is_a()`; unknown or unpopulated classes yield false.
+     * Reflexive like `is_a()`; `class_alias()` aliases of $class resolve to their target first.
+     * Classes without storage yield false. Meant for analysis-time callers (post-population):
+     * on an unpopulated class only the scanner-recorded direct parents would be visible.
      *
      * @template T of object
      * @param class-string<T> $ancestor
@@ -30,16 +31,20 @@ final class ClassLineage
      */
     public static function isA(Codebase $codebase, string $class, string $ancestor): bool
     {
-        if (\strtolower($class) === \strtolower($ancestor)) {
+        // Non-autoloading alias map lookup; interfaceExtends() does not unalias its subject itself.
+        $subject = $codebase->classlikes->getUnAliasedName($class);
+
+        if (\strtolower($subject) === \strtolower($ancestor)) {
             return true;
         }
 
         try {
             // classExtendsOrImplements() returns false (no throw) for interface subjects, which
             // have storage; interfaceExtends() then covers interface-to-interface lineage.
-            return $codebase->classExtendsOrImplements($class, $ancestor)
-                || $codebase->interfaceExtends($class, $ancestor);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return $codebase->classExtendsOrImplements($subject, $ancestor)
+                || $codebase->interfaceExtends($subject, $ancestor);
+        } catch (\InvalidArgumentException) {
+            // No storage for $class.
             return false;
         }
     }
