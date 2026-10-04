@@ -173,7 +173,7 @@ final class ModelRelationReturnTypeHandler
         $codebase = $source->getCodebase();
 
         try {
-            $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName);
+            $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName, $bindingClass);
 
             if ($parsed === null) {
                 $result = null;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Magic;
 
 use Psalm\Codebase;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -178,11 +179,28 @@ final class ReturnTypeResolver
     }
 
     /**
+     * Whether $targetClass declares the method with a return of ONLY self (`$this` / `static` /
+     * a selfReturnIndicators class); null when it does not declare the method. Unlike
+     * targetClassMethodReturnsSelf(), a union such as Conditionable::when()'s
+     * `$this|TWhenReturnType` does not count, since the call may return something else.
+     */
+    public static function declaredMethodReturnsOnlySelf(
+        Codebase $codebase,
+        string $targetClass,
+        string $methodNameLowercase,
+    ): ?bool {
+        $methodStorage = self::getDeclaredMethodStorage($codebase, $targetClass, $methodNameLowercase);
+        if (!$methodStorage instanceof MethodStorage) {
+            return null;
+        }
+
+        $returnType = $methodStorage->return_type;
+
+        return $returnType instanceof Union && $returnType->isSingle() && self::returnTypeIndicatesSelf($returnType);
+    }
+
+    /**
      * Get the declared return type for a method from ClassLikeStorage.
-     *
-     * All lookups go through classlike_storage_provider->get() and declaring_method_ids
-     * to get the real MethodStorage, NOT through methodExists() which could resolve
-     * through __call and return mixed.
      *
      * @psalm-mutation-free
      */
@@ -191,6 +209,21 @@ final class ReturnTypeResolver
         string $class,
         string $methodNameLowercase,
     ): ?Union {
+        return self::getDeclaredMethodStorage($codebase, $class, $methodNameLowercase)?->return_type;
+    }
+
+    /**
+     * All lookups go through classlike_storage_provider->get() and declaring_method_ids
+     * to get the real MethodStorage, NOT through methodExists() which could resolve
+     * through __call and return mixed.
+     *
+     * @psalm-mutation-free
+     */
+    private static function getDeclaredMethodStorage(
+        Codebase $codebase,
+        string $class,
+        string $methodNameLowercase,
+    ): ?MethodStorage {
         try {
             $classStorage = $codebase->classlike_storage_provider->get(\strtolower($class));
         } catch (\InvalidArgumentException) {
@@ -204,11 +237,9 @@ final class ReturnTypeResolver
         }
 
         try {
-            $methodStorage = $codebase->methods->getStorage($declaringId);
+            return $codebase->methods->getStorage($declaringId);
         } catch (\UnexpectedValueException) {
             return null;
         }
-
-        return $methodStorage->return_type;
     }
 }
