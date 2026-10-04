@@ -616,11 +616,18 @@ if ($timeLines === []) {
 // --- Per-app type-coverage table (apps whose coverage moved) ----------------
 //
 // Psalm's inferred-type coverage %, base vs head (Δ = head − base). A PR can
-// move coverage without moving any issue (e.g. adding annotations). Only apps
-// whose coverage actually moved are listed, judged on the raw values (Psalm
-// reports 4 decimals; rounding to 2 would hide a real regression). A side with
+// move coverage without moving any issue (e.g. adding annotations).
+//
+// Psalm's parallel analysis is nondeterministic: which files share a worker
+// changes how many non-mixed expressions get counted, so identical code and
+// vendor measured pixelfed at 84.9672-84.9693% across 4-thread runs (serial
+// runs repeat exactly, but cost ~2x wall time). Moves under $covNoiseFloor
+// are that jitter, so they are dropped on the RAW Δ and the rest is shown at
+// 2 decimals. Gating on the raw Δ, not on rounded values, keeps jitter that
+// straddles a rounding boundary from surfacing as a phantom ±0.01. A side with
 // no perf.json (crash / not run) is skipped here since it already appears in
 // the Crashed / Not-run buckets.
+$covNoiseFloor = 0.005; // percentage points; also the smallest move visible at 2 decimals
 
 $covLines = [];
 foreach ($perfRows as $p) {
@@ -629,18 +636,18 @@ foreach ($perfRows as $p) {
     }
 
     $delta = $p['headCov'] - $p['baseCov'];
-    if (abs($delta) < 1e-6) {
-        continue; // coverage unchanged
+    if (abs($delta) < $covNoiseFloor) {
+        continue;
     }
 
-    $covLines[] = sprintf('| %s | %.4f | %.4f | %+.4f |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
+    $covLines[] = sprintf('| %s | %.2f | %.2f | %+.2f |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
 }
 
 $out[] = '';
 $out[] = '### Per-app delta — Type coverage (%)';
 $out[] = '';
 if ($covLines === []) {
-    $out[] = 'No type-coverage changes.';
+    $out[] = 'No significant type-coverage change (all deltas within parallel-analysis jitter).';
 } else {
     $out[] = '| App | base | PR | Δ |';
     $out[] = '|-----|-----:|----:|-----:|';
@@ -669,9 +676,12 @@ foreach ($perfRows as $p) {
 // Only as a footer row of the coverage table, and only when something moved —
 // otherwise it would dangle as a header-less table row under "No changes".
 if ($covLines !== [] && $weightDen > 0.0) {
-    $out[] = sprintf('| **Weighted Δ** | — | — | **%+.4f** |', $weightNum / $weightDen);
+    $out[] = sprintf('| **Weighted Δ** | — | — | **%+.2f** |', $weightNum / $weightDen);
     $out[] = '';
-    $out[] = '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size)._';
+    $out[] = sprintf(
+        '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size). Moves under ±%.3f are hidden as parallel-analysis jitter._',
+        $covNoiseFloor,
+    );
 }
 
 // Split "no issues.json" apps into genuine crashes (a crash log exists on at
