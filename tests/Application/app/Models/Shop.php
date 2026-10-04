@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasArchivedRevisions;
 use App\Models\Concerns\HasRevisions;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -262,6 +263,51 @@ final class Shop extends Model
     public function mirroredWorkOrders(): HasMany
     {
         return $this->cyclicWorkOrders()->latest();
+    }
+
+    // --- Direct factory chains that change the relation class (#1647) ---
+
+    public function lastWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function lastSupplier(): MorphOne
+    {
+        return $this->morphMany(Supplier::class, 'suppliable')->one();
+    }
+
+    public function lastMechanic(): HasOneThrough
+    {
+        return $this->hasManyThrough(Mechanic::class, Vehicle::class)->one();
+    }
+
+    public function latestOfManyWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one()->latestOfMany();
+    }
+
+    /** getQuery() leaves the relation: the result is the Eloquent builder, not a HasMany. */
+    public function workOrderQuery(): EloquentBuilder
+    {
+        return $this->hasMany(WorkOrder::class)->getQuery();
+    }
+
+    /** Undeclared on purpose: only the chain walk can tell that getQuery() leaves the relation. */
+    public function untypedWorkOrderQuery()
+    {
+        return $this->hasMany(WorkOrder::class)->getQuery();
+    }
+
+    /**
+     * Deliberately wrong declaration (the body is a HasMany): the parsed class must not override
+     * the declared one.
+     *
+     * @psalm-suppress InvalidReturnStatement
+     */
+    public function mismatchedWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->where('status', 'open');
     }
 
     // --- `$this` receiver (#1623 shape) ---
