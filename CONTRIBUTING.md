@@ -4,7 +4,9 @@ Thanks for contributing. Full guides live in [`docs/contributing/`](docs/contrib
 
 * [Getting started, architecture, stubs, handlers](docs/contributing/README.md)
 * [Taint analysis](docs/contributing/taint-analysis.md)
-* [Psalm type annotations](docs/contributing/types.md)
+* [Psalm type syntax](docs/contributing/types.md)
+* [Psalm docblock annotations](docs/contributing/annotations.md)
+* [Purity and capabilities](docs/contributing/purity.md)
 * [Laravel magic call patterns](docs/contributing/laravel-magic-call-patterns.md)
 * [Architecture decisions](docs/contributing/decisions.md)
 * [Debugging with Xdebug](docs/contributing/xdebug.md)

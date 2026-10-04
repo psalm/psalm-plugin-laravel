@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -29,6 +31,8 @@ use Psalm\Type\Union;
  * 1. The `class-string<TRelatedModel>` argument's TRelatedModel binding is not propagated
  *    to the stub's `@return HasOne<TRelatedModel, $this>` return.
  * 2. `$this` in template position is not substituted with the late-static-bound class.
+ *    The handler binds the receiver class itself, keeping the `&static` marker when the
+ *    call is made on `$this` inside a non-final model (#1614).
  *
  * Both collapses happen before any handler registered on the Relation hierarchy can
  * observe a useful generic — the called-on type already arrives at `getRelated()` etc.
@@ -86,11 +90,13 @@ final class ModelRelationReturnTypeHandler
     ];
 
     /**
-     * Memoized return-type Unions keyed by "declaringClass|bindingClass::method".
+     * Memoized return-type Unions keyed by "declaringClass|bindingClass|static-flag::method".
      *
      * The (declaring, binding) pair distinguishes inherited dispatches: `BaseUser::posts`
      * called on `User` and on `AdminUser` produce different Unions because TDeclaringModel
-     * binds to the receiver, not to the class where the method body lives.
+     * binds to the receiver, not to the class where the method body lives. The static flag
+     * keeps `User` (external caller) apart from `User&static` (`$this->posts()` inside a
+     * non-final User).
      *
      * The closure is dispatched for every method call on every Model subclass during
      * analysis. RelationMethodParser caches the parsed metadata, but without this
@@ -151,10 +157,14 @@ final class ModelRelationReturnTypeHandler
         $bindingClass = $event->getCalledFqClasslikeName() ?? $declaringClass;
         $methodName = $event->getMethodNameLowercase();
 
-        // Cache keyed by the (declaring, binding) tuple — the Union returned for
+        // `$this->posts()` in a non-final model has receiver `User&static`; binding plain `User`
+        // is less specific than a declared `HasMany<Post, $this>` (LessSpecificReturnStatement).
+        $bindingIsStatic = self::isStaticReceiver($source, $event->getStmt(), $bindingClass);
+
+        // Cache keyed by the (declaring, binding, static) tuple — the Union returned for
         // BaseUser::posts dispatched on User differs from BaseUser::posts dispatched
         // on AdminUser, since each binds a different TDeclaringModel.
-        $cacheKey = $declaringClass . '|' . $bindingClass . '::' . $methodName;
+        $cacheKey = $declaringClass . '|' . $bindingClass . '|' . ($bindingIsStatic ? 'static' : 'plain') . '::' . $methodName;
 
         if (\array_key_exists($cacheKey, self::$unionCache)) {
             return self::$unionCache[$cacheKey];
@@ -178,6 +188,7 @@ final class ModelRelationReturnTypeHandler
                         $parsed['pivotModel'],
                         $parsed['accessor'],
                         $bindingClass,
+                        $bindingIsStatic,
                     )
                     : null;
             }
@@ -196,6 +207,34 @@ final class ModelRelationReturnTypeHandler
         self::$unionCache[$cacheKey] = $result;
 
         return $result;
+    }
+
+    /**
+     * Whether the call receiver is exactly the late-static-bound `$bindingClass` (`Class&static`).
+     *
+     * Psalm dispatches this provider once per receiver atomic but the receiver Union is shared,
+     * so a mixed receiver (`T|Class&static`) can't tell which alternative is being resolved.
+     * Only a single-atomic receiver is narrowed; anything else keeps the plain class.
+     */
+    private static function isStaticReceiver(
+        StatementsAnalyzer $source,
+        MethodCall|StaticCall $stmt,
+        string $bindingClass,
+    ): bool {
+        if (!$stmt instanceof MethodCall) {
+            return false;
+        }
+
+        $receiverType = $source->getNodeTypeProvider()->getType($stmt->var);
+        if (!$receiverType instanceof Union || !$receiverType->isSingle()) {
+            return false;
+        }
+
+        $atomic = $receiverType->getSingleAtomic();
+
+        return $atomic instanceof TNamedObject
+            && $atomic->is_static
+            && \strtolower($atomic->value) === \strtolower($bindingClass);
     }
 
     /**
@@ -255,6 +294,7 @@ final class ModelRelationReturnTypeHandler
         ?string $pivotModel,
         ?string $accessor,
         string $bindingClass,
+        bool $bindingIsStatic,
     ): ?Union {
         $isThrough = $relationClass === HasOneThrough::class || $relationClass === HasManyThrough::class;
 
@@ -272,8 +312,9 @@ final class ModelRelationReturnTypeHandler
 
         // $bindingClass is the late-static-bound receiver class — what TDeclaringModel
         // should resolve to at the call site (User for `(new User())->posts()`), even if
-        // the method body lives on a parent class.
-        $typeParams[] = new Union([new TNamedObject($bindingClass)]);
+        // the method body lives on a parent class. The `&static` marker is kept when the
+        // receiver itself is `static` (`$this->posts()` in a non-final model).
+        $typeParams[] = new Union([new TNamedObject($bindingClass, $bindingIsStatic)]);
 
         // Always emit TPivotModel / TAccessor (slots 3 and 4) for pivot-aware relations,
         // filling declared defaults when the parser didn't capture a chain mutation.

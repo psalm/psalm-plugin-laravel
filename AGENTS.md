@@ -14,6 +14,7 @@ Psalm 6 and Psalm 7 diverge in API, so a `4.x` change backported to `3.x` must t
 - `DataFlowNode::make()` and `TKeyedArray::make()` are Psalm 7 only; Psalm 6 uses `new TaintSink()`, `new TaintSource()`, and the atomic constructors.
 - `TaintKind` is an int bitmask on Psalm 7 (`TaintKind::ALL_INPUT`, `1 << n`) and a set of strings (`'sql'`, `'html'`) on Psalm 6.
 - Psalm 6 rejects `@psalm-mutation-free`, `@psalm-external-mutation-free`, and `@psalm-pure` when a callee lacks the annotation; Psalm 7 accepts more.
+- `@psalm-capabilities`, `@psalm-purity-template`, `@psalm-purity-from-template`, and `Closure[...]` purity syntax are Psalm 7 only (`docs/contributing/purity.md`).
 - Issue message wording differs; a phpt `--EXPECT--` copied across majors needs re-checking.
 
 ## Read before re-deriving
@@ -26,7 +27,9 @@ These documents are maintained and source-verified. Consult them before explorin
 | Design rationale: handler loading, producer narrowing, suppression, version policy, taint philosophy, performance budget | `docs/contributing/decisions.md` |
 | How Laravel `__call` / `__callStatic` / macros / forwarding resolve, and the handlers modeling them | `docs/contributing/laravel-magic-call-patterns.md` |
 | Taint annotation authoring | `docs/contributing/taint-analysis.md` |
-| Psalm annotation syntax reference | `docs/contributing/types.md` |
+| Psalm type syntax (every type expression, accepted-but-misleading forms) | `docs/contributing/types.md` |
+| Psalm docblock tags and their accepted spellings | `docs/contributing/annotations.md` |
+| Psalm 7 purity capabilities, legacy tag mapping, purity policy | `docs/contributing/purity.md` |
 | Keeping self-analysis at 100% type coverage | `docs/contributing/type-coverage.md` |
 | Handler, stub, and test authoring patterns (mined from this codebase, with evidence) | `docs/contributing/code-patterns.md` |
 | Type test (.phpt) format and assertions | `tests/Type/README.md` |
