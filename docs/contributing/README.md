@@ -249,7 +249,7 @@ cache. The hook fires for every issue in the run, so bail on the issue class fir
 and only then do anything expensive. Every uncertain path returns `null` and keeps
 the finding.
 
-See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Annotations](types.md) for a quick reference of all supported types and annotations, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
+See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Syntax](types.md), [Docblock Annotations](annotations.md) and [Purity and Capabilities](purity.md) for Psalm references, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 
 ## External resources
 
