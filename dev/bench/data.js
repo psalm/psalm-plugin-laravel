@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791112252964,
+  "lastUpdate": 1791130038719,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11930,6 +11930,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1368,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8309b8832ef8b747a2cadfa6f3b253c464aabd9c",
+          "message": "Merge pull request #1638 from psalm/alies-dev/scopes-and-softdeletes-methods-on-an-inherited-g\n\nResolve scopes and SoftDeletes methods per receiver model on inherited custom builders",
+          "timestamp": "2026-10-04T18:03:49+02:00",
+          "tree_id": "3f54bc01ce20c65c74c41d8475b0777ae46131cc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8309b8832ef8b747a2cadfa6f3b253c464aabd9c"
+        },
+        "date": 1791130037880,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.13,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
