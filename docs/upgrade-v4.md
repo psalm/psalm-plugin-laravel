@@ -36,7 +36,7 @@ Psalm 7 is still in beta. You may need to add this to your project's `composer.j
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 
-- `MissingPureAnnotation` -- a method has no side effects but lacks `@psalm-pure`.
+- `MissingPureAnnotation` -- a method has no side effects but lacks a purity annotation (`@psalm-pure` or a `@psalm-capabilities` set).
 - `MissingAbstractPureAnnotation` -- an abstract method should be declared `@psalm-pure` so all implementations are guaranteed pure.
 - `MissingInterfaceImmutableAnnotation` -- an interface should be `@psalm-immutable` so all implementations are guaranteed immutable.
 
