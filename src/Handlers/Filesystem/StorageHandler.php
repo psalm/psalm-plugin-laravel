@@ -5,18 +5,13 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Filesystem;
 
 use PhpParser\Node\Arg;
-use PhpParser\Node\Expr;
-use PhpParser\Node\Expr\ClassConstFetch;
-use PhpParser\Node\Identifier;
-use PhpParser\Node\Name;
-use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
+use Psalm\LaravelPlugin\Internal\Ast\StaticStringResolver;
 use Psalm\LaravelPlugin\Internal\ClosestName;
 use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
@@ -253,7 +248,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static function checkDiskExists(array $disks, array $callArgs, StatementsSource $source, CodeLocation $codeLocation): void
     {
-        $diskName = self::knownDiskName($callArgs[0]->value ?? null, $source);
+        $diskName = StaticStringResolver::resolve($callArgs[0]->value ?? null, $source);
 
         if ($diskName === null) {
             return;
@@ -276,57 +271,6 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
             ),
             $source->getSuppressedIssues(),
         );
-    }
-
-    /**
-     * A literal, a string-backed enum case (`disk()` unwraps it with `enum_value()`), or a class
-     * constant typed as one string literal. Reads the AST, not the inferred type: on the facade's
-     * `@method` path Psalm runs return-type providers before analysing the arguments.
-     */
-    private static function knownDiskName(?Expr $name, StatementsSource $source): ?string
-    {
-        if ($name instanceof String_) {
-            return $name->value;
-        }
-
-        if (!$name instanceof ClassConstFetch || !$name->class instanceof Name || !$name->name instanceof Identifier) {
-            return null;
-        }
-
-        // `static::` / `parent::` decline: late static binding and rare in a disk argument.
-        /** @psalm-var string|null $resolved */
-        $resolved = $name->class->getAttribute('resolvedName');
-        $fqcn = $name->class->toLowerString() === 'self'
-            ? $source->getFQCLN()
-            : ($name->class->isSpecialClassName() ? null : $resolved ?? $name->class->toString());
-
-        if ($fqcn === null) {
-            return null;
-        }
-
-        $const = $name->name->name;
-        $codebase = $source->getCodebase();
-
-        try {
-            $storage = $codebase->classlike_storage_provider->get(\strtolower($fqcn));
-            // `self::` in a trait binds to the using class, which the trait's storage cannot see.
-            if ($storage->is_trait) {
-                return null;
-            }
-
-            if (isset($storage->enum_cases[$const])) {
-                $value = $storage->enum_cases[$const]->getValue($codebase->classlikes);
-
-                // Int-backed and pure cases decline: disk keys are strings.
-                return $value instanceof Type\Atomic\TLiteralString ? $value->value : null;
-            }
-
-            $type = $codebase->classlikes->getClassConstantType($storage->name, $const, \ReflectionProperty::IS_PRIVATE);
-        } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
-            return null;
-        }
-
-        return $type?->isSingleStringLiteral() === true ? $type->getSingleStringLiteral()->value : null;
     }
 
     /**
