@@ -43,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findUnregisteredRouteNames);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -272,6 +273,41 @@ final class PluginConfigTest extends TestCase
         $this->expectExceptionMessage("Invalid findPromptInjection value 'yes'");
 
         PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnregisteredRouteNames value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnregisteredRouteNames value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnregisteredRouteNames);
     }
 
     #[Test]
