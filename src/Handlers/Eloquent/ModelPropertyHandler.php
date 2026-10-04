@@ -151,6 +151,20 @@ final class ModelPropertyHandler
     }
 
     /**
+     * Schema-only column type, ignoring `@property` and casts: aggregate accessors
+     * (`withMin()`, `withSum()`, ...) hold the raw driver value, so a datetime column is a
+     * string here even when the model casts it to Carbon.
+     *
+     * @param class-string<Model> $fqClasslikeName
+     */
+    public static function resolveRawColumnType(string $fqClasslikeName, string $columnName): ?Union
+    {
+        $column = ModelMetadataRegistry::for($fqClasslikeName)?->schema()->column($columnName);
+
+        return $column instanceof ColumnInfo ? ColumnTypeMapper::mapBaseType($column) : null;
+    }
+
+    /**
      * Registry-backed column type: cast override wins over the schema mapping. Shared by
      * {@see getPropertyType} and {@see resolveColumnType} so the two read paths cannot drift
      * (pre-registry they shared `resolveColumn()` + `resolveCasts()`). Returns null when the

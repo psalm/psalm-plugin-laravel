@@ -232,6 +232,8 @@ There are two ways to register:
 Every class registration keeps the matching `require_once` beside
 `registerHooksFromClass()`.
 
+`ModelAggregateLoadHandler` (`AfterExpressionAnalysisInterface`) is the reference for flow facts: after a literal `$m->loadCount('x')` or `$m = M::withCount('x')->firstOrFail()` it writes `$context->vars_in_scope['$m->x_count']`, which Psalm's property fetch reads before any property provider, and it overrides the node type of a directly fetched chain (`M::withCount('x')->firstOrFail()->x_count`). It is stateless; it gates on the node class and method name before touching the codebase and declines (`null`) on anything not proven. See [Architecture Decisions](decisions.md), "Aggregate accessor proof".
+
 #### Exempting one call site from a stub's taint sink
 
 Narrow the finding at emission time, not in the taint graph.

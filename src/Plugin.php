@@ -447,6 +447,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderPluckHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/BuilderAggregateHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderAggregateHandler::class);
+        require_once __DIR__ . '/Handlers/Eloquent/ModelAggregateLoadHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelAggregateLoadHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\CustomCollectionHandler::class);
 
         require_once __DIR__ . '/Handlers/Collections/CollectHandler.php';

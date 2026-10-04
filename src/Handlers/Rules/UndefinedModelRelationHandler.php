@@ -18,6 +18,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
@@ -501,10 +502,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             // relation maps to a PHP method, which never contains a space, so this can
             // only ever remove alias syntax, never mask a typo.
             if ($allowsAlias) {
-                $aliasParts = \explode(' ', $name);
-                if (\count($aliasParts) === 3 && \strtolower($aliasParts[1]) === 'as') {
-                    $name = $aliasParts[0];
-                }
+                [$name] = AggregateCallParser::splitAlias($name);
             }
 
             if ($name === '') {

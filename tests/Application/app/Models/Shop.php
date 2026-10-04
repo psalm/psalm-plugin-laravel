@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -26,6 +27,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 final class Shop extends Model
 {
     protected $table = 'shops';
+
+    /** Default aggregates: proof source for `artists_count` and the `supplier_total` alias. */
+    protected $withCount = ['artists', 'suppliers as supplier_total'];
 
     // --- Single relations (should resolve to ?RelatedModel) ---
 
@@ -105,7 +109,7 @@ final class Shop extends Model
 
     // --- Edge cases ---
 
-    /** snake_case method name — exercises the direct (non-camelCase) path in isRelationPrefix() */
+    /** snake_case method name — exercises the direct (non-camelCase) path in resolveRelationPrefix() */
     public function damage_reports(): MorphMany
     {
         return $this->morphMany(DamageReport::class, 'reportable');
@@ -167,5 +171,26 @@ final class Shop extends Model
     public function recentWorkOrders(): HasMany
     {
         return $this->workOrders()->where('created_at', '>=', '2025-01-01');
+    }
+
+    // --- `$this` receiver (#1623 shape) ---
+
+    /** The `??` fallback is meaningful (left side unproven); the loadCount() proof makes the right side `int`. */
+    public function workOrderCount(): int
+    {
+        return $this->work_orders_count ?? $this->loadCount('workOrders')->work_orders_count;
+    }
+
+    // --- Accessors named like aggregate accessors (#1623): the real attribute wins ---
+
+    /** @return Attribute<string, never> */
+    protected function mechanicsCount(): Attribute
+    {
+        return Attribute::get(static fn(mixed $value): string => 'many');
+    }
+
+    public function getVehicleOwnerExistsAttribute(): string
+    {
+        return 'yes';
     }
 }
