@@ -132,10 +132,7 @@ jobs:
     name: Delta (${{ matrix.name }})
     needs: prepare
     runs-on: ubuntu-latest
-    # --threads=1 (delta-app.sh) costs ~3x per side over the old 4 threads. Sized
-    # from the slowest app: 12 min (old cold-install budget) + 2 sides x ~75 s
-    # extra analysis = ~15 min, x1.5 margin for runner variance.
-    timeout-minutes: 25
+    timeout-minutes: 12
     permissions:
       contents: read  # checkout source + read public app repos; no write scope
     strategy:

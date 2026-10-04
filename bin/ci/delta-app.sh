@@ -27,7 +27,6 @@
 #
 # perf.json: app, version, date, wall_seconds, type_coverage_pct, total_issues,
 #   exit_code, plus the fields delta-report.php uses to qualify a comparison:
-#   threads         Psalm --threads/--scan-threads used (always 1, see run_side)
 #   plugin_status   "ok" | "degraded" | "disabled", from the plugin's stderr warnings
 #   versions        {php, vimeo/psalm, laravel/framework} from the app's vendor
 #   deps_diverged   HEAD only: true when app vendor, minus the plugin itself,
@@ -125,11 +124,10 @@ plugin_dep_sig() {
     ' "$1"
 }
 
-# Psalm merges parallel worker results in completion order, so with >1 thread the
-# issue set of an identical run flaps (e.g. which of two same-named functions
-# wins a mutation-info slot). One thread for both scan and analysis makes a run
-# a pure function of its inputs; CI wall time is the price.
-THREADS=1
+# Psalm runs with its default parallelism (--threads/--scan-threads = CPU count).
+# It merges worker results in completion order, so the few issue types derived
+# from first-merge-wins state (MissingPureAnnotation) can flap between identical
+# runs; delta-report.php counts those separately instead of serialising Psalm.
 
 # All scratch (logs, per-side plugin caches) lives under one dir, removed on any
 # exit; the per-side app copy sits inside $OUT and is excluded from the artifact.
@@ -493,7 +491,6 @@ run_side_body() {
         TMPDIR="$side_tmp" \
         php -d memory_limit="$MEM" \
             vendor/bin/psalm -c psalm.xml \
-            --threads="$THREADS" --scan-threads="$THREADS" \
             --no-cache --no-diff --long-progress --no-suggestions --monochrome \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="$raw_report" >"$out_txt" 2>"$err_txt"
@@ -568,13 +565,13 @@ run_side_body() {
             "wall_seconds" => (float) $argv[5],
             "type_coverage_pct" => $cov === "" ? null : (float) $cov,
             "total_issues" => (int) $argv[7], "exit_code" => (int) $argv[8],
-            "threads" => (int) $argv[9], "plugin_status" => $argv[10],
-            "versions" => json_decode($argv[11], true),
+            "plugin_status" => $argv[9],
+            "versions" => json_decode($argv[10], true),
         ];
-        if ($argv[12] !== "") { $perf["deps_diverged"] = $argv[12] === "true"; }
+        if ($argv[11] !== "") { $perf["deps_diverged"] = $argv[11] === "true"; }
         file_put_contents($argv[1], json_encode($perf, JSON_PRETTY_PRINT));
     ' "$perf_file" "$APP" "$label" "$DATE_MARKER" "$wall" "${coverage:-}" "${count:-0}" "$exit_code" \
-        "$THREADS" "$plugin_status" "$versions" "$deps_diverged"
+        "$plugin_status" "$versions" "$deps_diverged"
 
     echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s, plugin $plugin_status${deps_diverged:+, deps_diverged=$deps_diverged}" >&2
     rm -rf "$app_dir"

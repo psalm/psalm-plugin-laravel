@@ -53,10 +53,51 @@ final class DeltaReportTest extends TestCase
     #[Test]
     public function a_relocated_issue_is_moved_and_does_not_count_toward_added_or_removed(): void
     {
-        $this->issues('app', self::BASE, [$this->issue('old.php', 4, 'MissingPureAnnotation', 'env must be pure')]);
-        $this->issues('app', self::HEAD, [$this->issue('new.php', 4, 'MissingPureAnnotation', 'env must be pure')]);
+        $this->issues('app', self::BASE, [$this->issue('old.php', 4, 'MissingReturnType', 'f has no return type')]);
+        $this->issues('app', self::HEAD, [$this->issue('new.php', 4, 'MissingReturnType', 'f has no return type')]);
 
         $this->assertSame([0, 0, 0, 1, 0], $this->row($this->report(['app']), 'app'));
+    }
+
+    #[Test]
+    public function an_order_dependent_issue_appearing_is_excluded_from_the_delta_and_listed_beside_it(): void
+    {
+        $stable = $this->issue('a.php', 1, 'TypeA', 'x');
+        $this->issues('perm', self::BASE, [$stable]);
+        $this->issues('perm', self::HEAD, [$stable, $this->issue('src/Roles.php', 9, 'MissingPureAnnotation', 'hasPermissionViaRole must be marked @psalm-capabilities read-props')]);
+
+        $report = $this->report(['perm'], ['--details']);
+
+        $this->assertNull($this->row($report, 'perm'), 'a pure order-dependent flip leaves no delta row');
+        $this->assertStringContainsString('No issue changes across the benchmarked apps.', $report);
+        $this->assertStringContainsString('- **perm**: _order-dependent (excluded): MissingPureAnnotation +1/−0_', $report);
+        $this->assertStringContainsString('added MissingPureAnnotation `src/Roles.php:9:1`', $report, '--details lists the entry');
+        $this->assertStringContainsString('> No change (ran on both sides, zero delta): perm.', $report);
+    }
+
+    #[Test]
+    public function an_order_dependent_relocation_is_neither_moved_nor_counted_and_stays_off_without_details(): void
+    {
+        $this->issues('coolify', self::BASE, [$this->issue('getRealtimeVersion.php', 4, 'MissingPureAnnotation', 'env must be marked @psalm-pure')]);
+        $this->issues('coolify', self::HEAD, [$this->issue('getVersion.php', 4, 'MissingPureAnnotation', 'env must be marked @psalm-pure')]);
+
+        $report = $this->report(['coolify']);
+
+        $this->assertNull($this->row($report, 'coolify'));
+        $this->assertStringContainsString('- **coolify**: _order-dependent (excluded): MissingPureAnnotation +1/−1_', $report);
+        $this->assertStringNotContainsString('getVersion.php', $report, 'entries need --details');
+    }
+
+    #[Test]
+    public function a_real_change_still_counts_beside_an_order_dependent_flip_in_the_same_app(): void
+    {
+        $this->issues('app', self::BASE, [$this->issue('a.php', 1, 'MissingPureAnnotation', 'f must be pure')]);
+        $this->issues('app', self::HEAD, [$this->issue('b.php', 2, 'MixedMethodCall', 'on mixed')]);
+
+        $report = $this->report(['app']);
+
+        $this->assertSame([1, 0, 0, 0, 1], $this->row($report, 'app'), 'only the non-listed type feeds + and Δ');
+        $this->assertStringContainsString('_order-dependent (excluded): MissingPureAnnotation +0/−1_', $report);
     }
 
     #[Test]
@@ -446,29 +487,26 @@ final class DeltaReportTest extends TestCase
     }
 
     #[Test]
-    public function differing_versions_threads_or_diverged_deps_warn_but_equal_inputs_do_not(): void
+    public function differing_versions_or_diverged_deps_warn_but_equal_inputs_do_not(): void
     {
         $versions = ['php' => '8.3.1', 'vimeo/psalm' => '7.0.0-beta24', 'laravel/framework' => '12.1.0'];
-        foreach (['versions', 'threads', 'deps'] as $app) {
+        foreach (['versions', 'deps'] as $app) {
             $this->issues($app, self::BASE, []);
             $this->issues($app, self::HEAD, []);
         }
 
         $this->perf('versions', self::BASE, ['versions' => $versions]);
         $this->perf('versions', self::HEAD, ['versions' => ['vimeo/psalm' => '7.0.0-beta25'] + $versions]);
-        $this->perf('threads', self::BASE, ['threads' => 1]);
-        $this->perf('threads', self::HEAD, ['threads' => 4]);
         $this->perf('deps', self::BASE, ['versions' => $versions]);
         $this->perf('deps', self::HEAD, ['versions' => $versions, 'deps_diverged' => true]);
         $this->issues('same', self::BASE, []);
         $this->issues('same', self::HEAD, []);
-        $this->perf('same', self::BASE, ['versions' => $versions, 'threads' => 1]);
-        $this->perf('same', self::HEAD, ['versions' => $versions, 'threads' => 1]);
+        $this->perf('same', self::BASE, ['versions' => $versions]);
+        $this->perf('same', self::HEAD, ['versions' => $versions]);
 
-        $report = $this->report(['versions', 'threads', 'deps', 'same']);
+        $report = $this->report(['versions', 'deps', 'same']);
 
         $this->assertMatchesRegularExpression('/^> \*\*versions\*\*:.*7\.0\.0-beta24.*7\.0\.0-beta25/m', $report);
-        $this->assertMatchesRegularExpression('/^> \*\*threads\*\*:.*1.*4/m', $report);
         $this->assertMatchesRegularExpression('/^> \*\*deps\*\*:/m', $report);
         $this->assertDoesNotMatchRegularExpression('/^> \*\*same\*\*/m', $report);
     }

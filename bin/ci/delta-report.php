@@ -10,7 +10,7 @@ declare(strict_types=1);
  * delta-only report:
  *
  *   * a warnings block when a side is not comparable (plugin degraded/disabled,
- *     different dependency/Psalm/PHP versions or thread counts)
+ *     different dependency/Psalm/PHP versions)
  *   * a per-app table of changed apps (+added, -removed, message changed,
  *     moved, net Δ)
  *   * per changed app, the issue-type breakdown (counts only); with --details,
@@ -24,7 +24,7 @@ declare(strict_types=1);
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--crash.log   (no usable report)
  *
  * perf.json fields beyond wall/coverage are all optional (older artifacts
- * lack them): threads (int), plugin_status ("ok"|"degraded"|"disabled"),
+ * lack them): plugin_status ("ok"|"degraded"|"disabled"),
  * versions ({php, vimeo/psalm, laravel/framework}), deps_diverged (bool).
  *
  * Issue identity is the multiset of (file, line_from, line_to, column_from,
@@ -35,6 +35,9 @@ declare(strict_types=1);
  *   2. same file/line_from + type, different message -> "message changed"
  *   3. same type + message, different location       -> "moved"
  * Pairs are neutral churn, so they leave the +/- totals; Δ stays head - base.
+ *
+ * Issue types in ORDER_DEPENDENT_TYPES are tallied apart (see the constant): they
+ * are shown as a per-app note and never enter +, −, Changed, Moved or Δ.
  *
  * The body is capped below GitHub's 65536-BYTE comment limit.
  *
@@ -130,6 +133,22 @@ const MAX_BODY_BYTES = 60000;
 // shown as a window around the first difference, not as a head slice.
 const MESSAGE_LIMIT = 300;
 const DIFF_CONTEXT = 60;
+// Issue types whose presence or location depends on the order in which Psalm
+// merges its parallel workers' results, not on the code, so identical runs of
+// one SHA can differ and a +/− on them says nothing about the PR.
+//
+// Mechanism (vimeo/psalm 7.0.0-beta24): every worker records a MutationInfo per
+// function-like in CodeUseGraph::$mutation_info, keyed by the lowercased
+// function/method name alone (CodeUseGraph::functionLikeNodeForStorage). The
+// parent merges workers in completion order (Codebase\Analyzer::doAnalysis,
+// Future::iterate) with `$other->mutation_info + $this->mutation_info`
+// (CodeUseGraph::addGraph), so the first worker to finish wins a name shared by
+// several declarations (a function declared under `if (!function_exists())` in
+// two files, a trait method analysed in several using classes). Only afterwards
+// does MutationLevelResolver::resolve() emit MissingPureAnnotation from the
+// winners. Other state merged after the join (mutable_classes, mixed counts,
+// timings) is combined with `|` or `+=`, which is order-independent.
+const ORDER_DEPENDENT_TYPES = ['MissingPureAnnotation'];
 
 /**
  * Newest file matching <app>-<label>-<date-marker>--<suffix>, or null.
@@ -248,6 +267,26 @@ $issueKey = static function (array $i): string {
         (string) ($i['column_from'] ?? 0),
         (string) ($i['column_to'] ?? 0),
     ]);
+};
+
+/**
+ * Split one side's issues into [stable, order-dependent] (ORDER_DEPENDENT_TYPES).
+ *
+ * @param list<mixed> $issues
+ * @return array{0: list<mixed>, 1: list<mixed>}
+ */
+$splitOrderDependent = static function (array $issues): array {
+    $stable = [];
+    $volatile = [];
+    foreach ($issues as $i) {
+        if (is_array($i) && in_array($i['type'] ?? null, ORDER_DEPENDENT_TYPES, true)) {
+            $volatile[] = $i;
+        } else {
+            $stable[] = $i;
+        }
+    }
+
+    return [$stable, $volatile];
 };
 
 /**
@@ -377,6 +416,8 @@ $messagePair = static function (string $old, string $new) use ($clip): array {
  *     moved: list<array{type: string, from: string, to: string, message: string}>,
  *     net: int,
  *     movements: list<array{type: string, level: int|null, base: int, head: int, added: int, removed: int, changed: int, moved: int, delta: int}>,
+ *     orderDependent: array<string, array{added: int, removed: int}>,
+ *     orderEntries: list<array{side: string, type: string, loc: string, message: string}>,
  * }> $rows
  */
 $rows = [];
@@ -397,9 +438,15 @@ foreach ($apps as $app) {
         continue;
     }
 
+    [$baseIssues, $baseOrder] = $splitOrderDependent($baseIssues);
+    [$headIssues, $headOrder] = $splitOrderDependent($headIssues);
+
     [$baseCounts, $baseTypes, $baseLevels] = $tally($baseIssues);
     [$headCounts, $headTypes, $headLevels] = $tally($headIssues);
     unset($baseIssues, $headIssues);
+    [$baseOrderCounts] = $tally($baseOrder);
+    [$headOrderCounts] = $tally($headOrder);
+    unset($baseOrder, $headOrder);
 
     // head is read after base so the post-PR level wins on cross-side disagreement.
     $typeLevel = $headLevels + $baseLevels;
@@ -518,6 +565,30 @@ foreach ($apps as $app) {
             <=> [$y['delta'], -($y['added'] + $y['removed'] + $y['changed'] + $y['moved']), $y['type']],
     );
 
+    // Order-dependent issues: plain multiset diff per type, no pairing. A removal
+    // and an addition of the same message elsewhere is the typical flip, and it
+    // stays visible as +1/−1 rather than being folded into "moved".
+    $orderDependent = [];
+    $orderEntries = [];
+    foreach ([['removed', $baseOrderCounts, $headOrderCounts], ['added', $headOrderCounts, $baseOrderCounts]] as [$side, $from, $against]) {
+        foreach ($from as $key => $n) {
+            $diff = $n - ($against[$key] ?? 0);
+            if ($diff <= 0) {
+                continue;
+            }
+
+            $k = explode("\x00", $key);
+            $orderDependent[$k[3]] ??= ['added' => 0, 'removed' => 0];
+            $orderDependent[$k[3]][$side] += $diff;
+            for ($n2 = 0; $n2 < $diff; $n2++) {
+                $orderEntries[] = ['side' => $side, 'type' => $k[3], 'loc' => $place($k), 'message' => $k[4]];
+            }
+        }
+    }
+
+    ksort($orderDependent);
+    usort($orderEntries, static fn(array $x, array $y): int => [$x['type'], $x['loc'], $x['side']] <=> [$y['type'], $y['loc'], $y['side']]);
+
     $rows[] = [
         'app' => $app,
         'added' => array_sum($added),
@@ -526,6 +597,8 @@ foreach ($apps as $app) {
         'moved' => $movedList,
         'net' => $net,
         'movements' => $movements,
+        'orderDependent' => $orderDependent,
+        'orderEntries' => $orderEntries,
     ];
 }
 
@@ -566,11 +639,6 @@ foreach ($apps as $app) {
 
     if (($basePerf['deps_diverged'] ?? false) === true || ($headPerf['deps_diverged'] ?? false) === true) {
         $warnings[] = "**{$app}**: app dependencies (other than the plugin) differ between base and head — the delta may come from dependencies, not this PR.";
-    }
-
-    if (is_array($basePerf) && is_array($headPerf)
-        && isset($basePerf['threads'], $headPerf['threads']) && $basePerf['threads'] !== $headPerf['threads']) {
-        $warnings[] = sprintf('**%s**: ran with different thread counts (base %s, head %s); Psalm output can depend on it.', $app, json_encode($basePerf['threads']), json_encode($headPerf['threads']));
     }
 
     $baseVersions = is_array($basePerf) ? ($basePerf['versions'] ?? null) : null;
@@ -742,6 +810,33 @@ if ($changed === []) {
     $detailsTo = count($out);
     $out[] = '';
     $out[] = '</details>';
+}
+
+// Order-dependent issues (ORDER_DEPENDENT_TYPES): one line per affected app,
+// outside the table and its Δ, and outside the collapsible block the size cap
+// sheds. Per-issue entries (file paths, messages) only with --details.
+$orderRows = array_values(array_filter($rows, static fn(array $r): bool => $r['orderDependent'] !== []));
+if ($orderRows !== []) {
+    $out[] = '';
+    $out[] = '_Order-dependent issues come from state Psalm merges across parallel workers in completion order, so identical runs can differ. They are excluded from +, −, Changed, Moved and Δ._';
+    $out[] = '';
+    foreach ($orderRows as $r) {
+        $parts = [];
+        foreach ($r['orderDependent'] as $type => $c) {
+            $parts[] = sprintf('%s +%d/−%d', $type, $c['added'], $c['removed']);
+        }
+
+        $out[] = sprintf('- **%s**: _order-dependent (excluded): %s_', $r['app'], implode(', ', $parts));
+        if ($showDetails) {
+            foreach (array_slice($r['orderEntries'], 0, $top) as $e) {
+                $out[] = sprintf('  - %s %s `%s`: %s', $e['side'], $e['type'], $e['loc'], $code($clip($e['message'], MESSAGE_LIMIT)));
+            }
+
+            if (count($r['orderEntries']) > $top) {
+                $out[] = sprintf('  - … %d more', count($r['orderEntries']) - $top);
+            }
+        }
+    }
 }
 
 // Apps that ran on both sides but produced no delta — listed here under Issues
