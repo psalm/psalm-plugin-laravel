@@ -253,18 +253,20 @@ final class RelationMethodParser
     }
 
     /**
-     * Whether $declared names a Relation type that $relationClass satisfies (any Relation when null).
+     * Whether $declared names a Relation type, or exactly $relationClass when given. A supertype
+     * (`Relation`, `HasOneOrMany`) does not count: `HasMany::one()` returns a `HasOne`, so only the
+     * exact class proves a delegated chain kept the relation class.
      *
      * @psalm-capabilities read-props
      */
     private static function declaresRelation(Union $declared, ?string $relationClass = null): bool
     {
         foreach ($declared->getAtomicTypes() as $atomic) {
-            if (
-                $atomic instanceof TNamedObject
-                && \is_a($atomic->value, Relation::class, true)
-                && ($relationClass === null || \is_a($relationClass, $atomic->value, true))
-            ) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            if ($relationClass === null ? \is_a($atomic->value, Relation::class, true) : \strcasecmp($atomic->value, $relationClass) === 0) {
                 return true;
             }
         }
@@ -412,8 +414,8 @@ final class RelationMethodParser
 
     /**
      * Resolve `$this->$methodName()` like a top-level call. Chains such as `->count()` or `->one()`
-     * turn a relation into something else, and only a declared relation return type that the
-     * delegated relation satisfies proves they did not, so anything else declines.
+     * turn a relation into something else, and only a declared return type naming exactly the
+     * delegated relation class proves they did not, so anything else declines.
      *
      * An outer `->using()` / `->as()` runs after the delegated method's own chain, so it wins.
      *

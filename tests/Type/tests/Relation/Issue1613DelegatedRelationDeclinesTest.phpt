@@ -5,13 +5,15 @@ use App\Models\Shop;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * Negative coverage for https://github.com/psalm/psalm-plugin-laravel/issues/1613.
  *
  * Delegated relation bodies the parser cannot prove decline (the return-type handler yields null),
  * so Psalm's own inference stays: a declared non-relation type, a chain that changes the relation
- * class (`->one()`), a helper with no parseable relation body, and a delegation cycle.
+ * class (`->one()`, declared as the new class or as a `Relation` supertype), a helper with no
+ * parseable relation body, and a delegation cycle.
  */
 
 function issue1613_non_relation_return_stays(Shop $shop): int
@@ -25,6 +27,13 @@ function issue1613_relation_class_change_declines(Shop $shop): HasOne
 {
     $relation = $shop->firstWorkOrder();
     /** @psalm-check-type-exact $relation = HasOne<Model, Model> */
+    return $relation;
+}
+
+function issue1613_declared_supertype_declines(Shop $shop): Relation
+{
+    $relation = $shop->onlyWorkOrder();
+    /** @psalm-check-type-exact $relation = Relation<Model, Model, mixed> */
     return $relation;
 }
 

@@ -66,7 +66,7 @@ final readonly class ModelMetadata
      * @param array<non-empty-lowercase-string, AccessorInfo> $accessorsData Pre-computed accessor map, keyed by snake_case property name; full-callable (self + traits + inherited user ancestors).
      * @param array<non-empty-lowercase-string, MutatorInfo>  $mutatorsData  Pre-computed mutator map, keyed by snake_case property name; the write side of accessors (legacy `setXxxAttribute` may exist write-only).
      * @param array<non-empty-lowercase-string, ScopeInfo>    $scopesData    Pre-computed scope map, keyed by the normalized scope name (`scopePublished`/`#[Scope] published` → `published`); full-callable. Identity only — call-site `self`/`static` pinning stays in {@see \Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler}.
-     * @param array<non-empty-lowercase-string, RelationInfo> $relationsData Pre-computed relation map, keyed by the lowercased relation method name. OWN-CLASS only (the AST parser resolves a relation factory call only in the receiver's own body), mirroring how the relation handlers call the parser; inherited/trait relations are served by those handlers' `getMethodReturnType` tiers.
+     * @param array<non-empty-lowercase-string, RelationInfo> $relationsData Pre-computed relation map, keyed by the lowercased relation method name. OWN-CLASS only (only methods declared in the model's own body are parsed), mirroring how the relation property handlers call the parser; inherited/trait relations are served by those handlers' `getMethodReturnType` tiers.
      * @param array<non-empty-lowercase-string, PropertyOrigins> $knownPropertiesData Pre-computed union of known property names tagged by origin; see {@see knownProperties()}.
      */
     public function __construct(

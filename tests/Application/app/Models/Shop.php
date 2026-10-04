@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * Test model for non-generic relationship accessor resolution (#497).
@@ -193,6 +194,12 @@ final class Shop extends Model
 
     /** `one()` turns the delegated HasMany into a HasOne, so the parsed HasMany must not be used. */
     public function firstWorkOrder(): HasOne
+    {
+        return $this->workOrders()->one();
+    }
+
+    /** A declared supertype does not prove the class survived the chain: runtime is a HasOne. */
+    public function onlyWorkOrder(): Relation
     {
         return $this->workOrders()->one();
     }

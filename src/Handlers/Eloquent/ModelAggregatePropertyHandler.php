@@ -457,8 +457,8 @@ final class ModelAggregatePropertyHandler
         }
 
         // No return type declared — check the registry's pre-parsed OWN-CLASS relations for a factory
-        // call (the precomputed equivalent of RelationMethodParser::parse() with the same own-class
-        // resolution, mirroring ModelRelationshipPropertyHandler::registryRelation()).
+        // call (RelationMethodParser::parse() over the model's own methods only; trait-hosted methods
+        // are not enumerated, mirroring ModelRelationshipPropertyHandler::registryRelation()).
         /** @var class-string<Model> $fqClasslikeName registered per Model subclass */
         $relation = ModelMetadataRegistry::for($fqClasslikeName)?->relations()[\strtolower($methodName)] ?? null;
         return self::$relationMethodCache[$key] = $relation instanceof RelationInfo;

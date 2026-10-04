@@ -176,8 +176,8 @@ final class ModelRelationshipPropertyHandler
             }
         }
 
-        // Tier 2: the registry's pre-parsed OWN-CLASS relation (the precomputed equivalent of
-        // RelationMethodParser::parse() — identical own-class resolution). Handles non-generic return
+        // Tier 2: the registry's pre-parsed OWN-CLASS relation (RelationMethodParser::parse() over the
+        // model's own methods; see registryRelation()). Handles non-generic return
         // types (plain BelongsTo) and untyped methods (public function image() { return $this->morphOne(...); }).
         $relation = self::registryRelation($fq_classlike_name, $property_name);
         if ($relation instanceof RelationInfo) {
@@ -413,11 +413,12 @@ final class ModelRelationshipPropertyHandler
     }
 
     /**
-     * The registry's OWN-CLASS relation entry for $property_name on $fq_classlike_name — the
-     * pre-computed equivalent of RelationMethodParser::parse($codebase, $fq_classlike_name,
-     * $property_name). The parser is itself own-class (it resolves a factory call only in the
-     * receiver's own body), so the map matches it name-for-name; an inherited / trait-hosted relation
-     * is absent from both, and this handler's getMethodReturnType tiers cover those.
+     * The registry's OWN-CLASS relation entry for $property_name on $fq_classlike_name: the
+     * pre-computed RelationMethodParser::parse($codebase, $fq_classlike_name, $property_name) for
+     * methods declared in the model's own body. RelationMethodParser also resolves trait-hosted and
+     * delegated bodies for the method-call path, but the registry enumerates own methods only, so an
+     * inherited or trait-hosted relation is absent here and this handler's getMethodReturnType tiers
+     * cover it.
      */
     private static function registryRelation(string $fq_classlike_name, string $property_name): ?RelationInfo
     {
