@@ -93,7 +93,11 @@ final class FirstClassCallableServiceProvider extends ServiceProvider
         $this->app->singleton('fcc.make', static fn(Application $app): \Closure => $app->make(...));
         $this->app->singleton('fcc.helper', static fn(): \Closure => app(...));
         $this->app->singleton('fcc.facade', static fn(): \Closure => App::make(...));
+        // The container check on a `make()` receiver also reads `app(...)` args. The chain is
+        // ill-typed (Closure has no make()), but the rule walks the closure AST regardless.
+        $this->app->singleton('fcc.chain', static fn(): mixed => app(...)->make('fcc.chain'));
     }
 }
 ?>
 --EXPECTF--
+UndefinedMethod on line %d: Method Closure::make does not exist
