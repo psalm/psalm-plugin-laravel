@@ -57,11 +57,11 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      *
      * Populated by the return type provider when it resolves an instance scope call
      * (Customer::query()->active()); consumed by {@see getMethodParams} when Psalm
-     * follows up with checkMethodArgs. For stub-declared methods (count, sum),
+     * follows up with checkMethodArgs. For public stub-declared methods (count, sum),
      * ExistingAtomicMethodCallAnalyzer calls checkMethodArgs BEFORE the return-type
-     * provider (lines 274→285 in vendor), so the producer runs after the consumer for
-     * that call — a written entry would never be consumed and would shadow a later
-     * unrelated call. The producer skips the write for those names.
+     * provider, so the producer runs after the consumer for that call — a written
+     * entry would never be consumed and would shadow a later unrelated call. The
+     * producer skips the write for those names.
      *
      * Keyed by method name only: the producer always runs right before the consumer
      * within one analysis thread for non-storage-declared methods. See
@@ -282,13 +282,12 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     }
 
     /**
-     * Whether Psalm's method storage declares $methodName on Eloquent\Builder itself.
+     * Whether Psalm's method storage declares $methodName as PUBLIC on Eloquent\Builder.
      *
-     * For stub-declared methods (count, sum), ExistingAtomicMethodCallAnalyzer runs
-     * checkMethodArgs BEFORE the return-type provider, so the producer's write lands
-     * after that call's only consume point. Mixin-forwarded methods (orderBy from
-     * Query\Builder) return null here — MissingMethodCallHandler routes those, where
-     * producer and consumer are correctly ordered.
+     * ExistingAtomicMethodCallAnalyzer only handles visible methods; protected/private
+     * methods route to MissingMethodCallHandler (via __call), where the return-type
+     * provider runs BEFORE checkMethodArgs — same as mixin-forwarded methods. The
+     * hand-off write should only be skipped for PUBLIC declared methods.
      *
      * @param lowercase-string $methodName
      * @psalm-capabilities read-props
@@ -297,8 +296,19 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
     {
         try {
             $methodId = new MethodIdentifier(Builder::class, $methodName);
+            $declaringId = $codebase->methods->getDeclaringMethodId($methodId);
 
-            return $codebase->methods->getDeclaringMethodId($methodId) instanceof MethodIdentifier;
+            // Non-declared methods (mixin-forwarded) route via MissingMethodCallHandler,
+            // where the return-type provider runs before checkMethodArgs.
+            if (!$declaringId instanceof MethodIdentifier) {
+                return false;
+            }
+
+            // Protected/private methods are inaccessible from outside, so Psalm routes
+            // them to __call (MissingMethodCallHandler) — same ordering as mixin methods.
+            $storage = $codebase->methods->getStorage($declaringId);
+
+            return $storage->visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
         } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
         }
