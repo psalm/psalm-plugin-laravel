@@ -66,7 +66,9 @@ final class ViewCallChain
     ) {}
 
     /**
-     * Every key the rendered template actually receives, whatever supplied it.
+     * Every key the rendered template actually receives, whatever supplied it. Framework data wins
+     * a shared key: `ManagesComponents::renderComponent()` ends in `$view->with($componentData)`,
+     * which merges after whatever the call site passed.
      *
      * @return array<string, Union>
      *
@@ -74,7 +76,7 @@ final class ViewCallChain
      */
     public function supplied(): array
     {
-        return $this->data + $this->frameworkData;
+        return $this->frameworkData + $this->data;
     }
 
     public static function from(Expr $expr, StatementsSource $source): ?self

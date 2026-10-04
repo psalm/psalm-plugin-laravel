@@ -192,6 +192,18 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'ComponentDataOverride.php'), \var_export($issues, true));
     }
 
+    /**
+     * `renderComponent()` ends in `$view->with($componentData)`, which merges last, so a public
+     * property overrides the same key passed explicitly from `render()`.
+     */
+    #[Test]
+    public function a_class_components_data_overrides_the_same_key_passed_from_render(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'ComponentOverlappingKey.php'), \var_export($issues, true));
+    }
+
     #[Test]
     public function a_response_view_call_is_checked_like_the_helper(): void
     {
