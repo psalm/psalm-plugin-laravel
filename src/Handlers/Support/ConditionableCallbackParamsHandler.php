@@ -37,6 +37,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TObject;
 use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\Atomic\TVoid;
 use Psalm\Type\Reconciler;
 use Psalm\Type\TypeNode;
 use Psalm\Type\TypeVisitor;
@@ -66,19 +67,22 @@ use Psalm\Type\Union;
  *    variadic is skipped too: Psalm fills every element from the receiver slot alone.
  *  - A closure literal's declared param type wins when it already contains the computed slot
  *    type (Psalm would otherwise narrow a defensive `?int $x` to `int` and report its null check),
- *    or, for the receiver slot, when it names a subclass of the receiver class: at runtime `$this`
- *    may be a custom builder Psalm cannot see. Declared types are memoized per literal node on
- *    first sight because Psalm overwrites closure storage param types with inferred ones, and
- *    loops re-analyze the same node.
+ *    or, for the receiver slot, when it names a subclass of the receiver class (`?Child` and
+ *    `Child|Other` included): at runtime `$this` may be a custom builder Psalm cannot see.
+ *    Declared types are memoized per literal node on first sight because Psalm overwrites
+ *    closure storage param types with inferred ones, and loops re-analyze the same node.
+ *  - A `void` Closure value is `null` at runtime, so it reconciles as `null`.
  *
- * Declines (Psalm's stub signature stands) on: unpacked args, a value that is mixed or may be an
- * opaque Closure (callable, object, template, bare Closure: Laravel would invoke it), a receiver
- * that is not exactly the dispatched class (unions re-analyze the closure per atomic, last one
- * wins; relation `@mixin` forwarding passes the underlying Builder at runtime). A slot keeps its
- * stub callable when the literal declares a late-bound `self`/`static`/`parent` type at any depth
- * (`list<self>` too): closure storage keeps it unexpanded and Psalm never matches it against the
- * host type. A dead branch (truthy of `null`, falsy of `true`) keeps its stub slot instead of
- * `never`, which would report NoValue.
+ * Declines (Psalm's stub signature stands) on: unpacked args, a value arg that is not the first
+ * arg (reordered named args: earlier args' side effects would not be seen by the pre-analysis),
+ * a value that is mixed or may be an opaque Closure (callable, object, template, bare Closure:
+ * Laravel would invoke it), a receiver that is not exactly the dispatched class (unions
+ * re-analyze the closure per atomic, last one wins; relation `@mixin` forwarding passes the
+ * underlying Builder at runtime). A slot keeps its stub callable when the literal declares a
+ * late-bound `self`/`static`/`parent` type at any depth (`list<self>` too): closure storage keeps
+ * it unexpanded and Psalm never matches it against the host type. It also keeps it when an
+ * untyped literal param has a default, and on a dead branch (truthy of `null`, falsy of `true`)
+ * instead of `never`, which would report NoValue.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1624
  */
@@ -141,7 +145,8 @@ final class ConditionableCallbackParamsHandler implements
     /** @psalm-pure */
     private static function declaredByConditionable(?MethodIdentifier $declaring): bool
     {
-        return $declaring instanceof \Psalm\Internal\MethodIdentifier && \strtolower($declaring->fq_class_name) === \strtolower(Conditionable::class);
+        return $declaring instanceof MethodIdentifier
+            && \strtolower($declaring->fq_class_name) === \strtolower(Conditionable::class);
     }
 
     #[\Override]
@@ -193,6 +198,13 @@ final class ConditionableCallbackParamsHandler implements
             return null;
         }
 
+        // A value arg preceded by another arg (reordered named args) would be pre-analyzed before
+        // that arg's side effects; only a leading value arg reads the state it is evaluated in.
+        $valueArg = self::findArg($args, 'value', 0);
+        if ($valueArg instanceof \PhpParser\Node\Arg && $valueArg !== $args[0]) {
+            return null;
+        }
+
         $source = $event->getStatementsSource();
         $context = $event->getContext();
         // A stash miss (static or forwarded call) leaves no receiver node to read.
@@ -206,7 +218,7 @@ final class ConditionableCallbackParamsHandler implements
             return null;
         }
 
-        $value = self::valueType($source, $context, self::findArg($args, 'value', 0));
+        $value = self::valueType($source, $context, $valueArg);
         if (!$value instanceof Union) {
             return null;
         }
@@ -300,8 +312,9 @@ final class ConditionableCallbackParamsHandler implements
 
     /**
      * The value Laravel tests for truthiness: a Closure `$value` is invoked first, so its return
-     * type stands in. Absent arg means the `null` default; a mixed part or a possibly-Closure
-     * atomic with no known return type declines.
+     * type stands in (`void` returns null; `never` leaves both branches dead). Absent arg means
+     * the `null` default; a mixed part or a possibly-Closure atomic with no known return type
+     * declines.
      */
     private static function valueType(StatementsAnalyzer $source, Context $context, ?Arg $arg): ?Union
     {
@@ -339,7 +352,7 @@ final class ConditionableCallbackParamsHandler implements
                     return null;
                 }
 
-                $resolved[] = $part;
+                $resolved[] = $part instanceof TVoid ? new TNull() : $part;
             }
         }
 
@@ -372,7 +385,9 @@ final class ConditionableCallbackParamsHandler implements
 
     /**
      * `callable(<receiver>, <value>): mixed|null`, each param preferring the literal's declared
-     * type; null when the literal's slot must keep the stub callable.
+     * type; null when the literal's slot must keep the stub callable. An untyped param with a
+     * default declines: Psalm would infer it from the computed type alone and flag a defensive
+     * check of the default (`$v = null` then `if ($v === null)`).
      */
     private static function callbackType(
         StatementsAnalyzer $source,
@@ -388,7 +403,13 @@ final class ConditionableCallbackParamsHandler implements
 
         $params = [];
         foreach (['instance' => new Union([$receiver]), 'value' => $value] as $name => $computed) {
-            $declaredType = $declared[\count($params)] ?? null;
+            $offset = \count($params);
+            $literalParam = $literal->params[$offset] ?? null;
+            if ($literalParam !== null && $literalParam->default !== null && !isset($declared[$offset])) {
+                return null;
+            }
+
+            $declaredType = $declared[$offset] ?? null;
             $keep = $declaredType instanceof Union
                 && (UnionTypeComparator::isContainedBy($codebase, $computed, $declaredType)
                     || ($name === 'instance' && self::namesSubclasses($codebase, $declaredType, $receiver->value)));
@@ -401,7 +422,8 @@ final class ConditionableCallbackParamsHandler implements
     }
 
     /**
-     * Every atomic of `$declared` is a class extending or implementing `$parent`.
+     * Some object atomic of `$declared` is a class extending or implementing `$parent`; null and
+     * other atomics (`?Child`, `Child|Other`) do not void the escape.
      *
      * @psalm-capabilities read-props
      */
@@ -409,15 +431,15 @@ final class ConditionableCallbackParamsHandler implements
     {
         foreach ($declared->getAtomicTypes() as $atomic) {
             try {
-                if (!$atomic instanceof TNamedObject || !$codebase->classExtendsOrImplements($atomic->value, $parent)) {
-                    return false;
+                if ($atomic instanceof TNamedObject && $codebase->classExtendsOrImplements($atomic->value, $parent)) {
+                    return true;
                 }
             } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-                return false;
+                continue;
             }
         }
 
-        return true;
+        return false;
     }
 
     /**

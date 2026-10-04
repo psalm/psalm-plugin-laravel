@@ -114,6 +114,15 @@ final class ConditionableHost
     }
 }
 
+class ConditionableParent
+{
+    use Conditionable;
+}
+
+final class ConditionableChild extends ConditionableParent {}
+
+final class UnrelatedToConditionable {}
+
 function takes_mixed(mixed $_value): void {}
 
 // --- Positive ---
@@ -196,18 +205,13 @@ function test_when_on_user_conditionable_class(ConditionableHost $host, ?int $n)
     });
 }
 
-/** Named arguments, in order and reordered, are matched by name. */
+/** Named arguments are matched by name; the value must be the first arg (see the reordered decline below). */
 function test_when_named_arguments(?int $n): void
 {
     Customer::query()->when(value: $n, callback: function ($_q, $v): void {
         /** @psalm-check-type-exact $v = int */
         takes_mixed($v);
     });
-
-    Customer::query()->when(callback: function ($_q, $v): void {
-        /** @psalm-check-type-exact $v = int */
-        takes_mixed($v);
-    }, value: $n);
 }
 
 /**
@@ -458,6 +462,76 @@ function test_variadic_tail_keeps_receiver(?string $s): void
         $q->active();
     });
 }
+
+/** A nullable or union declaration naming a subclass of the receiver keeps the declared type. */
+function test_nullable_declared_receiver_subclass_is_kept(): void
+{
+    /** @var ConditionableParent $host */
+    $host = new ConditionableChild();
+    $host->when(true, function (?ConditionableChild $_host): void {});
+    $host->when(true, function (ConditionableChild|UnrelatedToConditionable $_host): void {});
+}
+
+/** A nullable declaration with no class related to the receiver is still reported. */
+function test_nullable_declared_unrelated_receiver_is_reported(ConditionableParent $host): void
+{
+    $host->when(true, function (?UnrelatedToConditionable $_host): void {});
+}
+
+/** A `void` Closure value resolves to null at runtime (Laravel passes `$value($this)`). */
+function test_void_closure_value_is_null(): void
+{
+    (new ConditionableParent())->unless(function (): void {}, function (ConditionableParent $_host, ?int $_value): void {});
+    (new ConditionableParent())->unless(function (): void {}, function ($_host, $v): void {
+        /** @psalm-check-type-exact $v = null */
+        takes_mixed($v);
+    });
+}
+
+/** A value arg preceded by other args (named reordering) is not pre-analyzed: their effects come first. */
+function test_value_after_reordered_named_args_declines(string $value): void
+{
+    takes_mixed($value);
+    (new ConditionableParent())->unless(
+        default: ($value = null),
+        value: $value,
+        callback: function (ConditionableParent $_host, ?int $_value): void {},
+    );
+}
+
+/** An untyped param with a default can receive the default: the slot keeps the stub callable. */
+function test_untyped_param_with_default_declines(?int $value): void
+{
+    (new ConditionableParent())->when($value, function (ConditionableParent $_host, $value = null): void {
+        if ($value === null) {
+            return;
+        }
+        takes_mixed($value);
+    });
+}
+
+/** A TYPED param with a default keeps the typed callable: the receiver is still pushed into `$q`. */
+function test_typed_param_with_default_keeps_receiver(?int $n): void
+{
+    Customer::query()->when($n, function ($q, ?int $v = null): void {
+        /** @psalm-check-type-exact $q = Builder<Customer> */
+        $q->active();
+        if ($v === null) {
+            return;
+        }
+    });
+}
+
+/** A `never` Closure value leaves both branches dead: both slots keep the stub callable. */
+function test_never_closure_value_leaves_slots_untyped(): void
+{
+    (new ConditionableParent())->when(
+        function (): never {
+            throw new \LogicException();
+        },
+        function (ConditionableParent $_host, string $_v): void {},
+    );
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, int):mixed|null, but Closure[pure](Illuminate\Database\Eloquent\Builder, string):void provided
@@ -476,3 +550,5 @@ InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::
 ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>):mixed|null, but parent type Closure[pure](Illuminate\Database\Eloquent\Builder, App\Builders\VehicleBuilder):void provided
 MissingClosureParamType on line %d: Parameter $args has no provided type
 MixedAssignment on line %d: Unable to determine the type that $a is being assigned to
+InvalidArgument on line %d: Argument 2 of ConditionableParent::when expects callable[impure](ConditionableParent, true):mixed|null, but Closure[pure](UnrelatedToConditionable|null):void provided
+MissingClosureParamType on line %d: Parameter $value has no provided type
