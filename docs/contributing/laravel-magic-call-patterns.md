@@ -1,3 +1,9 @@
+---
+title: Laravel Magic Call Patterns
+parent: Contributing
+nav_order: 9
+---
+
 # Laravel Magic Method Patterns (`__call` / `__callStatic`)
 
 How Laravel uses PHP's magic methods to proxy calls across layers, and the exact resolution order PHP follows.
