@@ -315,4 +315,38 @@ class BelongsToMany extends Relation
      * @return TContainer
      */
     public function saveManyQuietly($models, array $pivotAttributes = []) {}
+
+    /*
+     * The sync family: Laravel types $ids as a bare `\Illuminate\Support\Collection|Model|array|int|string`,
+     * which Psalm expands to Collection<array-key, mixed>. Collection's templates are invariant, so a
+     * Collection<int, int> (e.g. from ->pluck('id')) matched no arm. Method-level templates accept any
+     * Collection<K, V>.
+     */
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function sync($ids, $detaching = true) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function syncWithoutDetaching($ids) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  array  $values
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function syncWithPivotValues($ids, array $values, bool $detaching = true) {}
 }

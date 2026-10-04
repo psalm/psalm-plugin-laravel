@@ -29,6 +29,8 @@ final readonly class PluginConfig
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findUnconfiguredFilesystemDisks,
+        public bool $findUnregisteredRouteNames,
         public bool $findSerializedQueuedModels,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
@@ -74,7 +76,9 @@ final readonly class PluginConfig
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
         // experimental = early access to rules not yet promoted to default; an explicit
         // value always overrides it, in either direction.
+        $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks') ?? $experimental;
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
+        $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames') ?? $experimental;
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $findPromptInjection = self::xmlPromptInjectionAttr($config);
@@ -90,6 +94,8 @@ final readonly class PluginConfig
             reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $findMissingTranslations,
             findMissingViews: $findMissingViews,
+            findUnconfiguredFilesystemDisks: $findUnconfiguredFilesystemDisks,
+            findUnregisteredRouteNames: $findUnregisteredRouteNames,
             findSerializedQueuedModels: $findSerializedQueuedModels,
             findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
             findPromptInjection: $findPromptInjection,

@@ -143,6 +143,20 @@ function test_disk_rejects_non_string_non_enum_argument(): void
     Storage::disk(42);
 }
 
+// --- Root `\Storage` alias (registered by Testbench's AliasLoader) ---------
+
+/** The alias is a separate stub class, so the handler registers for it via FacadeMapProvider. */
+function test_root_alias_drive_returns_adapter(): string
+{
+    return \Storage::drive('s3')->temporaryUrl('file.txt', now()->addMinutes(5));
+}
+
+/** Pins the alias's pseudo-method params: a null params answer here fatals Psalm 7. */
+function test_root_alias_disk_rejects_non_string_non_enum_argument(): void
+{
+    \Storage::disk(42);
+}
+
 /**
  * `put($path, fopen(...))` stays a (correct) `PossiblyFalseArgument`: `fopen()`
  * returns `resource|false` and `put()`'s `$contents` does not accept `false`.
@@ -167,4 +181,5 @@ function test_put_with_checked_resource_is_accepted(): void
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Facades\Storage::disk expects UnitEnum|null|string, but 42 provided
+InvalidArgument on line %d: Argument 1 of Storage::disk expects UnitEnum|null|string, but 42 provided
 PossiblyFalseArgument on line %d: Argument 2 of Illuminate\Filesystem\FilesystemAdapter::put cannot be false, possibly %s value expected
