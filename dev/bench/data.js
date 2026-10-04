@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791145197559,
+  "lastUpdate": 1791145570950,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12140,6 +12140,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1372,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0caad22616586cbecac02e2e805ed1fee9e3a588",
+          "message": "Add opt-in `UnconfiguredFilesystemDisk` rule for `Storage::disk()` names absent from `filesystems.disks` (#1571)\n\n* feat(rules): add opt-in UnknownFilesystemDisk rule #1391\n\nStorage::disk()/drive() (and the same call on an injected FilesystemManager\nor Factory contract) with a literal disk name absent from filesystems.disks\nthrows InvalidArgumentException at runtime -- an availability bug, not a\nsilent fallback to the local disk.\n\nRestricted to a real bootstrap/app.php boot (ApplicationProvider::getBootMode()\n=== 'bootstrap'): the Testbench package-mode fallback boots Testbench's own\nbundled config, not the analyzed project's, so checking against it would be\nnoise rather than project truth. A degraded boot can still leave the mode at\n'bootstrap' with an incomplete config load, so the disk list is also required\nto be non-empty before the diagnostic is armed.\n\n* test(rules): cover UnknownFilesystemDisk #1391\n\nphpt harness boots the Testbench package-mode fallback, so every case in\nUnknownFilesystemDiskTest.phpt asserts silence -- that is the boot-mode gate\ndoing its job, not a dead rule. Positive emission was verified separately\nagainst a fixture with a real bootstrap/app.php (see PR description).\n\n* docs(issues): document UnknownFilesystemDisk #1391\n\nAdds the issue page, config.md entry, index.md listing, and the\nadoption.md opt-in-checks bullet -- same doc set every opt-in rule ships.\n\n* docs(issues): note runtime-registered disks and literal-only matching #1391\n\n* feat(config): enable findUnknownFilesystemDisks under experimental unless set #1391\n\nMirrors PR #1400's findSerializedQueuedModels shape: xmlOptionalBoolAttr()\nresolved against $experimental via ??, so an explicit value (including a\nbare tag with no value attribute, treated as not set) always wins in either\ndirection. The public property stays a resolved non-nullable bool, so\nPlugin.php and IssueUrlGenerator.php need no change.\n\n* docs(config): list findUnknownFilesystemDisks under experimental #1391\n\nThe `## experimental` enumeration only listed findSerializedQueuedModels\nafter the #1400 merge; add findUnknownFilesystemDisks in the same style.\n\nAlso adds the one interaction case missing from the matrix: an explicit\noverride on one experimental-gated flag must not leak into the other.\n\n* test(rules): add a real-boot subprocess fixture for UnknownFilesystemDisk #1391\n\nThe ported phpt only guards the silent defer under the psalm-tester harness\n(Testbench package-mode boot), so the rule never fires there. Point a real\npsalm subprocess at a fixture with its own bootstrap/app.php and\nconfig/filesystems.php so the boot-mode gate arms the diagnostic and the\nemission is observed for real, same idiom as UnknownModelAttributeEmissionTest.\n\n* fix(rules): warn instead of debug-log when reading filesystems.disks throws\n\nAn enabled findUnknownFilesystemDisks rule silently produced no findings\nwhen the config lookup threw, since debug output is hidden in normal runs.\nSurface the degradation as a warning, matching the empty-config path and\nthe findMissingViews precedent.\n\n* fix(rules): harden UnknownFilesystemDisk against review-found false positives\n\nFour gaps found in external review of the initial implementation:\n\n- Arm the diagnostic only when no bootstrap error was recorded: a provider\n  that throws after config loads may have skipped merging additional disks,\n  so a non-empty disk list does not prove the boot completed.\n- Check facade calls only: a DI-injected FilesystemManager may be a userland\n  subclass with its own disk resolution (an overridden getConfig()), and the\n  base-class provider also fires for subclass receivers.\n- Skip '0' alongside '': enum_value($name) ?: getDefaultDriver() treats both\n  as falsy and resolves the default disk, not a lookup failure.\n- Skip dotted names: Laravel resolves disk('tenant.assets') through its\n  dotted config lookup into nested disks groups, which the armed top-level\n  key list cannot represent.\n\nThe emission fixture now covers each case (plus a bootstrap/cache dir so the\nfixture boot completes cleanly), and the docs pages record the narrowed scope.\n\n* feat(storage): resolve enum/const disk names, cover \\Storage #1391\n\n- UnknownFilesystemDisk resolves enum cases (enum_value() semantics:\n  backing value or pure-enum case name) and class constants with a\n  single string literal type, incl. self::\n- \\Storage root alias gets FilesystemAdapter narrowing and the check;\n  params provider gates on real-vs-pseudo method, since a null params\n  answer for the alias fatals Psalm 7\n- extract ClassConstStringResolver from the guard trait\n- subprocess emission test: the phpt harness boots Testbench, which\n  leaves the rule disarmed\n\n* test(storage): rename fixture disk to pass typos check #1391\n\n* style: apply rector to UnknownFilesystemDisk name guard\n\n* refactor(rules): rename UnknownFilesystemDisk to UnconfiguredFilesystemDisk #1391\n\nThe flag becomes findUnconfiguredFilesystemDisks. Renamed before the\nfirst release, so no suppression, baseline, or psalm.xml breaks.\n\n* feat(rules): suggest a close disk name instead of listing every configured disk #1391\n\nThe configured-disks list repeated on every finding and grew with the\napp. A Levenshtein match within one edit per three characters is offered\nas \"did you mean\" instead. filesystems.disks keys without a driver (nested\ngroups) no longer count as disks: disk('tenant') throws at runtime, and a\ngroup must not be suggested.\n\n* chore(rector): skip every handler fixture project with one glob\n\nFixture projects are analysis input; a Rector rewrite changes what the\ntest checks. tests/Unit/Fixtures (shared helpers) stays covered.\n\n* chore: allowlist deliberate 'public' typos in typos config\n\nThe ClosestNameTest and UnconfiguredFilesystemDisk fixtures deliberately\nmisspell 'public' (one deletion, one transposition) to exercise the\nclosest-name suggestion algorithm. Follows the existing extend-ignore-re\nconvention for intentional test typos.\n\n* feat: check enum-case and class-constant disk names in UnconfiguredFilesystemDisk\n\n* refactor: share static disk-name resolution as Internal\\Ast\\StaticStringResolver",
+          "timestamp": "2026-10-04T22:22:43+02:00",
+          "tree_id": "c2069cb8742abca26f8f6f43779e148b91363400",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0caad22616586cbecac02e2e805ed1fee9e3a588"
+        },
+        "date": 1791145570021,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.86,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1375,
             "unit": "MB"
           }
         ]
