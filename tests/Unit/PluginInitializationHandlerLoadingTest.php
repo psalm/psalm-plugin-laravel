@@ -43,6 +43,7 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             'FacadeMapProvider::reset()',
             'Handlers\\Translations\\TranslationKeyHandler::reset()',
             'Handlers\\Views\\MissingViewHandler::reset()',
+            'Handlers\\Rules\\UnregisteredRouteNameHandler::reset()',
             'Handlers\\Eloquent\\Metadata\\ModelMetadataRegistryBuilder::reset()',
         ] as $reset) {
             $this->assertStringContainsString($reset, $resetMethod);
