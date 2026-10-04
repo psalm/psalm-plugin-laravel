@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AccessorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
@@ -51,6 +52,9 @@ use Psalm\Type\Union;
  * a model `$withCount` default (this class) or from a literal withXxx()/loadXxx() call that
  * {@see ModelAggregateLoadHandler} tracks. min/max/sum/avg stay nullable even when proven (SQL NULL
  * for an empty relation).
+ *
+ * A real model attribute named like an aggregate (schema column, cast key, accessor) shadows it; precedence is
+ * `@property`, column, cast, accessor, then aggregate. Proven loads still win through their own facts.
  *
  * min/max/sum/avg are column-aware: the aggregated column of the RELATED model is resolved from the
  * migration schema ONLY, never casts or `@property` (Laravel does not cast aggregate aliases except
@@ -296,6 +300,12 @@ final class ModelAggregatePropertyHandler
         string $fqClasslikeName,
         string $propertyName,
     ): ?array {
+        // A real attribute (column, cast key, accessor) is what the model returns for this name, and
+        // it is not shadowed by an aggregate: after a load the alias wins only via the proof facts.
+        if (self::isRealAttribute($fqClasslikeName, $propertyName)) {
+            return null;
+        }
+
         $defaultRelation = self::defaultAliases($fqClasslikeName)[$propertyName] ?? null;
         if ($defaultRelation !== null && self::isRelationMethod($codebase, $fqClasslikeName, $defaultRelation)) {
             return ['count', $defaultRelation, '', true];
@@ -335,6 +345,24 @@ final class ModelAggregatePropertyHandler
         }
 
         return null;
+    }
+
+    /**
+     * Whether `$propertyName` is a schema column, cast key or accessor of the model. Each source counts
+     * only from a complete registry section: an unproven answer must not decline, so the aggregate
+     * type stays. Accessors are keyed by the separator-collapsed name, like ModelPropertyAccessorHandler.
+     */
+    private static function isRealAttribute(string $fqClasslikeName, string $propertyName): bool
+    {
+        /** @var class-string<Model> $fqClasslikeName registered per Model subclass */
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
+            return false;
+        }
+
+        return ($metadata->isComplete(ModelMetadata::SECTION_SCHEMA) && $metadata->schema()->has($propertyName))
+            || ($metadata->isComplete(ModelMetadata::SECTION_CASTS) && isset($metadata->casts()[$propertyName]))
+            || ($metadata->isComplete(ModelMetadata::SECTION_METHODS) && $metadata->accessor($propertyName) instanceof AccessorInfo);
     }
 
     /**

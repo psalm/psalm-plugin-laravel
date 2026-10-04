@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -178,5 +179,18 @@ final class Shop extends Model
     public function workOrderCount(): int
     {
         return $this->work_orders_count ?? $this->loadCount('workOrders')->work_orders_count;
+    }
+
+    // --- Accessors named like aggregate accessors (#1623): the real attribute wins ---
+
+    /** @return Attribute<string, never> */
+    protected function mechanicsCount(): Attribute
+    {
+        return Attribute::get(static fn(mixed $value): string => 'many');
+    }
+
+    public function getVehicleOwnerExistsAttribute(): string
+    {
+        return 'yes';
     }
 }

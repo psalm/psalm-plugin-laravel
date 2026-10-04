@@ -22,6 +22,7 @@ use Psalm\Progress\VoidProgress;
 use Psalm\Type;
 use Psalm\Type\Atomic\TIntRange;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
 
 #[CoversClass(ModelAggregatePropertyHandler::class)]
 final class ModelAggregatePropertyHandlerTest extends TestCase
@@ -146,6 +147,46 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
             ModelMetadataRegistryBuilder::reset();
             SchemaStateProvider::setSchema(new SchemaAggregator());
             $classLikeStorageProvider->remove(WorkOrder::class);
+        }
+    }
+
+    #[Test]
+    public function real_schema_columns_and_cast_keys_are_real_attributes_but_other_names_are_not(): void
+    {
+        $classLikeStorageProvider = new ClassLikeStorageProvider();
+        $classLikeStorageProvider->create(WorkOrder::class);
+        $classLikeStorageProvider->create(ArrayFormCastsModel::class);
+
+        $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
+        $codebase->classlike_storage_provider = $classLikeStorageProvider;
+        (new \ReflectionProperty(Codebase::class, 'progress'))->setValue($codebase, new VoidProgress());
+
+        $table = new SchemaTable();
+        $table->setColumn(new SchemaColumn('parts_count', SchemaColumn::TYPE_INT));
+
+        $schema = new SchemaAggregator();
+        $schema->tables['work_orders'] = $table;
+        SchemaStateProvider::setSchema($schema);
+
+        ModelMetadataRegistryBuilder::reset();
+        ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
+        ModelMetadataRegistryBuilder::warmUp($codebase, ArrayFormCastsModel::class);
+
+        $isRealAttribute = new \ReflectionMethod(ModelAggregatePropertyHandler::class, 'isRealAttribute');
+
+        try {
+            // Pixelfed shape: `votes_count` is a migration column next to a `votes()` relation.
+            $this->assertTrue($isRealAttribute->invoke(null, WorkOrder::class, 'parts_count'));
+            $this->assertFalse($isRealAttribute->invoke(null, WorkOrder::class, 'vehicle_count'));
+            $this->assertTrue($isRealAttribute->invoke(null, ArrayFormCastsModel::class, 'plain_tags'));
+            $this->assertFalse($isRealAttribute->invoke(null, ArrayFormCastsModel::class, 'options_count'));
+            // Not warmed up: nothing is proven, so nothing is declined.
+            $this->assertFalse($isRealAttribute->invoke(null, 'App\\Models\\Unwarmed', 'parts_count'));
+        } finally {
+            ModelMetadataRegistryBuilder::reset();
+            SchemaStateProvider::setSchema(new SchemaAggregator());
+            $classLikeStorageProvider->remove(WorkOrder::class);
+            $classLikeStorageProvider->remove(ArrayFormCastsModel::class);
         }
     }
 }

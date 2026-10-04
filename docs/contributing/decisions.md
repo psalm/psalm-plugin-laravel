@@ -79,6 +79,8 @@ They produce no false positives, and there's no real-world scenario where a user
 
 Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` end the walk because they replace the aggregate columns (`selectRaw()`/`selectSub()`/`addSelect()` append and keep the proof). `$m->refresh()` drops every `$m->…` fact. A user `@property` always wins.
 
+**Precedence:** a real model attribute named like an aggregate shadows it: `@property`, then schema column, cast key, accessor, then aggregate (each source counts only from a complete registry section). `votes_count` as a migration column next to a `votes()` relation stays the column's type; after `loadCount('votes')` the proof fact still applies, as the alias column wins in the SELECT result.
+
 **Dead end:** carrying the fact in the type (`Shop&object{x_count: int}`). The intersection flows through `Builder` (its `TModel` is covariant), but `Collection<int, Shop&object{…}>` is not assignable to `Collection<int, Shop>`, so `->get()` results then fail every `Collection<int, Shop>` parameter. Flow facts avoid changing any model type.
 
 **Known limitations (reads stay nullable):** `->get()->first()` Collection hops, variable-held builders, closures, `foreach` over models, `getAttribute('x_count')`.
