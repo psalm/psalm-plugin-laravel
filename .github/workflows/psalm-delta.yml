@@ -201,7 +201,7 @@ jobs:
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/app-cache/${{ matrix.name }}
+          path: app-cache/${{ matrix.name }}
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
 
       - name: Run delta for ${{ matrix.name }}
@@ -227,7 +227,7 @@ jobs:
             --out "$GITHUB_WORKSPACE/out"
             --base-label "$BASE_LABEL"
             --head-label "$HEAD_LABEL"
-            --app-src "$HOME/app-cache/$NAME"
+            --app-src "$GITHUB_WORKSPACE/app-cache/$NAME"
             --date-marker cache
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
@@ -237,7 +237,7 @@ jobs:
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
 
       # Save ONLY on a same-repo head. A fork's composer install could write into
-      # ~/app-cache pre-save, and since issue_comment runs on the default ref that
+      # the app cache pre-save, and since issue_comment runs on the default ref that
       # entry lands in the scope TRUSTED runs restore — a backdoored-vendor vector
       # the plugin_dep_sig self-heal does NOT catch (it only detects a dep-sig
       # mismatch). So forks read the cache, never write it. cache-hit skips a
@@ -247,21 +247,22 @@ jobs:
       # installed vendor, or the next run is cold again and times out the same way.
       # delta-app.sh stamps .plugin-dep-sig only after a successful install, so the
       # stamp gates the save (a half-installed vendor must not be cached).
-      - name: Check install completed
-        id: installed
-        if: always() && needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true'
-        env:
-          NAME: ${{ matrix.name }}
-        run: |
-          if [ -f "$HOME/app-cache/$NAME/.plugin-dep-sig" ]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          fi
-
+      #
+      # The stamp is tested with hashFiles() rather than a step that writes
+      # $GITHUB_OUTPUT: this job executes PR code, so it must hold no write to
+      # $GITHUB_OUTPUT/$GITHUB_ENV at all (octoscan flags it). hashFiles() only
+      # sees files under the workspace, hence app-cache/ lives there instead of
+      # $HOME. Safe from the path:-checkouts above (they only clean their own dir)
+      # and from the artifact (upload covers out/ only).
       - name: Save app source cache
-        if: always() && needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true' && steps.installed.outputs.ok == 'true'
+        if: >-
+          always()
+          && needs.prepare.outputs.is_fork != 'true'
+          && steps.cache.outputs.cache-hit != 'true'
+          && hashFiles(format('app-cache/{0}/.plugin-dep-sig', matrix.name)) != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/app-cache/${{ matrix.name }}
+          path: app-cache/${{ matrix.name }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
       # always(): hard failures and timeouts leave crash.log files that the report

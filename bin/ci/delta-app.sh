@@ -32,13 +32,14 @@
 #   versions        {php, vimeo/psalm, laravel/framework} from the app's vendor
 #   deps_diverged   HEAD only: true when app vendor, minus the plugin itself,
 #                   differs from the base vendor (head's relink changed a dependency)
-# crash.log is written whenever a side yields no usable report, including clone,
-# install and composer-relink failures; its first line is
-# "=== <app>/<label> exit N after Ms ===".
+# crash.log is written whenever a side yields no usable report (missing, or not a
+# JSON list), and for ANY failure inside a side (copy, config, relink, parse); the
+# other side still runs. It is also written for clone/install failures. Its first
+# line is "=== <app>/<label> exit N after Ms ===".
 #
-# A per-app Psalm failure exits 0 so delta-report.php renders the app as
-# crashed instead of blocking the whole report. Hard setup errors (bad args,
-# clone/install failure) record the crash log for both sides, then exit non-zero.
+# A per-side failure exits 0 so delta-report.php renders the app as crashed
+# instead of blocking the whole report. Hard setup errors (bad args, clone/install
+# failure) record the crash log for both sides, then exit non-zero.
 
 set -euo pipefail
 
@@ -133,7 +134,7 @@ THREADS=1
 # All scratch (logs, per-side plugin caches) lives under one dir, removed on any
 # exit; the per-side app copy sits inside $OUT and is excluded from the artifact.
 TMP_ROOT=$(mktemp -d)
-trap 'rm -rf "$TMP_ROOT" "$OUT/$APP/work"' EXIT
+: > "$TMP_ROOT/setup.log"
 
 side_file() { echo "${OUT}/${APP}/${APP}-$1-${DATE_MARKER}--$2"; }
 
@@ -146,16 +147,36 @@ write_crash() {
     } > "$(side_file "$1" crash.log)"
 }
 
-# Hard setup failure: neither side can run, so both get a crash log (unless a
-# complete cached result exists for that side), then abort.
+# A side is "settled" once it has a complete cached result or run_side recorded
+# its outcome (report or crash.log). The EXIT trap treats every unsettled side as
+# crashed, so ANY abort — set -e anywhere in setup, a signal — still leaves a
+# crash.log instead of a silent hole the report cannot explain. setup.log carries
+# the failing step's output.
+side_settled() {
+    [[ -f "$TMP_ROOT/settled-$1" ]] \
+        || [[ -f "$(side_file "$1" issues.json)" && -f "$(side_file "$1" perf.json)" ]]
+}
+
+on_exit() {
+    local rc=$? label
+    if [[ "$rc" != 0 ]]; then
+        for label in "$BASE_LABEL" "$HEAD_LABEL"; do
+            side_settled "$label" && continue
+            rm -f "$(side_file "$label" issues.json)" "$(side_file "$label" perf.json)"
+            write_crash "$label" "${SETUP_RC:-$rc}" "$SECONDS" "$TMP_ROOT/setup.log" || true
+        done
+    fi
+    rm -rf "$TMP_ROOT" "$OUT/$APP/work"
+}
+trap on_exit EXIT
+
+# Hard setup failure: neither side can run; on_exit records both as crashed,
+# keeping the failing step's own exit code as the crash.log headline.
+SETUP_RC=""
 setup_failed() {
-    local step="$1" code="$2" label
-    echo "[$APP] $step failed (exit $code)" >&2
+    SETUP_RC="$2"
+    echo "[$APP] $1 failed (exit $2)" >&2
     cat "$TMP_ROOT/setup.log" >&2
-    for label in "$BASE_LABEL" "$HEAD_LABEL"; do
-        [[ -f "$(side_file "$label" issues.json)" && -f "$(side_file "$label" perf.json)" ]] \
-            || write_crash "$label" "$code" "$SECONDS" "$TMP_ROOT/setup.log"
-    done
     exit 1
 }
 
@@ -365,7 +386,7 @@ if [[ "$need_install" == 1 ]]; then
     install_app >"$TMP_ROOT/setup.log" 2>&1 || setup_failed install "$?"
 else
     echo "[$APP] reusing installed vendor" >&2
-    write_psalm_xml
+    write_psalm_xml >"$TMP_ROOT/setup.log" 2>&1 || setup_failed config "$?"
 fi
 
 # Base vendor fingerprint (minus the plugin) for the head deps-divergence check.
@@ -375,7 +396,7 @@ BASE_DEPS_SIG=$(deps_sig "$APP_SRC")
 
 # relink: base | symlink | composer (head). Head's composer relink is the only
 # step that can change app dependencies, hence the divergence check below.
-run_side() {
+run_side_body() {
     local label="$1" plugin_dir="$2" relink="$3"
     # Both sides use the SAME absolute work-dir path (not work-<label>). Psalm
     # bakes the analysis path into the report in ways that survive any post-hoc
@@ -403,6 +424,7 @@ run_side() {
 
     local t_side=$SECONDS
     local out_txt="$TMP_ROOT/$label.out" err_txt="$TMP_ROOT/$label.err"
+    local raw_report="$TMP_ROOT/$label.report.json"
 
     # Fresh working copy off the source (the shared work dir is rebuilt per side).
     rm -rf "$app_dir"
@@ -464,26 +486,67 @@ run_side() {
     mkdir -p "$side_tmp"
     (
         cd "$app_dir"
+        # --long-progress (not --no-progress): VoidProgress::write() is a no-op, so
+        # it would swallow the plugin's InternalErrorReporter warnings that
+        # plugin_status below is read from. Piped stderr selects the quiet,
+        # carriage-return-free variant.
         TMPDIR="$side_tmp" \
         php -d memory_limit="$MEM" \
             vendor/bin/psalm -c psalm.xml \
             --threads="$THREADS" --scan-threads="$THREADS" \
-            --no-cache --no-diff --no-progress --no-suggestions --monochrome \
+            --no-cache --no-diff --long-progress --no-suggestions --monochrome \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
-            --report="${issues_file}" >"$out_txt" 2>"$err_txt"
+            --report="$raw_report" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
     wall=$(php -r 'printf("%.3f", microtime(true) - (float) $argv[1]);' "$t0")
     rm -rf "$side_tmp"
 
-    # Psalm exits non-zero whenever issues are found, so a non-empty report is
-    # the real success signal; treat a missing/empty report as a crash.
-    if [[ ! -s "$issues_file" ]]; then
-        echo "[$APP/$label] no report (exit $exit_code) — recording (missing)" >&2
+    # Psalm exits non-zero whenever issues are found, so its exit code says nothing
+    # about the report. The report itself is the signal: it must exist and decode
+    # as a JSON list (a crash mid-write leaves truncated JSON), and only then is
+    # it published to issues.json — a bad one becomes a crash, never a partial file.
+    #
+    # The same pass makes file_path relative to the (now side-independent) work
+    # dir, so stored identities are readable. Because both sides share the
+    # work-dir path, every other place Psalm embeds it (messages, anon-class
+    # names, literal types) is already byte-identical across sides and needs no
+    # normalisation. Use the canonical (symlink-resolved) dir — Psalm reports
+    # realpath'd paths, so on macOS the report says /private/tmp/... while
+    # $app_dir is /tmp/... memory_limit=-1: the decoded report of a big app
+    # exceeds PHP's 128M default locally (CI sets it via setup-php).
+    local app_dir_real
+    app_dir_real=$(cd "$app_dir" && pwd -P)
+    if ! count=$(php -d memory_limit=-1 -r '
+        $file = $argv[1]; $prefix = rtrim($argv[2], "/") . "/";
+        try {
+            if (!is_file($file) || filesize($file) === 0) {
+                throw new RuntimeException("Psalm wrote no report");
+            }
+            $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($d) || !array_is_list($d)) {
+                throw new RuntimeException("report is not a JSON list");
+            }
+            foreach ($d as &$i) {
+                if (!is_array($i)) {
+                    throw new RuntimeException("report entry is not an object");
+                }
+                if (isset($i["file_path"]) && str_starts_with($i["file_path"], $prefix)) {
+                    $i["file_path"] = substr($i["file_path"], strlen($prefix));
+                }
+            }
+            file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        } catch (Throwable $e) {
+            fwrite(STDERR, "delta-app: unusable Psalm report: " . $e->getMessage() . "\n");
+            exit(1);
+        }
+        echo count($d);
+    ' "$raw_report" "$app_dir_real" 2>>"$err_txt"); then
+        echo "[$APP/$label] no usable report (exit $exit_code) — recording crash" >&2
         write_crash "$label" "$exit_code" "$wall" "$err_txt" "$out_txt"
-        rm -f "$issues_file"
         rm -rf "$app_dir"
         return 0
     fi
+    mv "$raw_report" "$issues_file"
 
     # InternalErrorReporter only warns (failOnInternalError=false in psalm.xml), so
     # a side that lost its plugin analyses fine but with hundreds of bogus Mixed*
@@ -496,29 +559,7 @@ run_side() {
         plugin_status=disabled
     fi
 
-    # Make file_path relative to the (now side-independent) work dir, so stored
-    # identities are readable. Because both sides share the work-dir path, every
-    # other place Psalm embeds it (messages, anon-class names, literal types) is
-    # already byte-identical across sides and needs no normalisation.
-    # Use the canonical (symlink-resolved) dir — Psalm reports realpath'd paths,
-    # so on macOS the report says /private/tmp/... while $app_dir is /tmp/...
-    # memory_limit=-1: the decoded report of a big app exceeds PHP's 128M default
-    # locally (CI sets it via setup-php).
-    local app_dir_real
-    app_dir_real=$(cd "$app_dir" && pwd -P)
-    php -d memory_limit=-1 -r '
-        $file = $argv[1]; $prefix = rtrim($argv[2], "/") . "/";
-        $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
-        foreach ($d as &$i) {
-            if (isset($i["file_path"]) && str_starts_with($i["file_path"], $prefix)) {
-                $i["file_path"] = substr($i["file_path"], strlen($prefix));
-            }
-        }
-        file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    ' "$issues_file" "$app_dir_real"
-
     coverage=$(sed -n 's/.*infer types for \([0-9.]*\)%.*/\1/p' "$out_txt" | tail -1)
-    count=$(php -d memory_limit=-1 -r '$d=json_decode(file_get_contents($argv[1]),true); echo is_array($d)?count($d):0;' "$issues_file")
 
     php -r '
         $cov = $argv[6];
@@ -537,6 +578,30 @@ run_side() {
 
     echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s, plugin $plugin_status${deps_diverged:+, deps_diverged=$deps_diverged}" >&2
     rm -rf "$app_dir"
+}
+
+# Run one side so ANY failure inside it (copy, config, relink, psalm, report
+# parse) is recorded as that side's crash.log and the other side still runs.
+run_side() {
+    local label="$1" rc=0 t_side=$SECONDS
+    local side_log="$TMP_ROOT/$label.side.log"
+    # errexit is suspended for any command whose status is tested (`||`, `if`),
+    # even after `set -e` inside a subshell, so the body must run as a plain
+    # pipeline stage with its status read back from PIPESTATUS. tee keeps the
+    # output live on stderr and keeps a copy as crash.log material.
+    set +e
+    ( set -e; run_side_body "$@" ) 2>&1 | tee "$side_log" >&2
+    rc=${PIPESTATUS[0]}
+    set -e
+    if [[ "$rc" != 0 ]]; then
+        echo "[$APP/$label] side aborted (exit $rc) — recording crash" >&2
+        # Never leave a half-written side behind: no report may sit next to a crash.
+        rm -f "$(side_file "$label" issues.json)" "$(side_file "$label" perf.json)"
+        [[ -f "$(side_file "$label" crash.log)" ]] \
+            || write_crash "$label" "$rc" "$((SECONDS - t_side))" "$side_log"
+        rm -rf "${OUT}/${APP}/work"
+    fi
+    : > "$TMP_ROOT/settled-$label"
 }
 
 # Base reuses the source install; head re-points a symlink when the plugin's
