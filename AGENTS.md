@@ -29,7 +29,7 @@ These documents are maintained and source-verified. Consult them before explorin
 | Taint annotation authoring | `docs/contributing/taint-analysis.md` |
 | Psalm type syntax (every type expression, accepted-but-misleading forms) | `docs/contributing/types.md` |
 | Psalm docblock tags and their accepted spellings | `docs/contributing/annotations.md` |
-| Psalm 7 purity capabilities, legacy tag mapping, purity policy | `docs/contributing/purity.md` |
+| Psalm 6 purity levels, override contracts, porting 4.x capabilities | `docs/contributing/purity.md` |
 | Keeping self-analysis at 100% type coverage | `docs/contributing/type-coverage.md` |
 | Handler, stub, and test authoring patterns (mined from this codebase, with evidence) | `docs/contributing/code-patterns.md` |
 | Type test (.phpt) format and assertions | `tests/Type/README.md` |

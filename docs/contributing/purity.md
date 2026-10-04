@@ -1,112 +1,63 @@
 ---
-title: Purity and Capabilities
+title: Purity and Mutability
 parent: Contributing
 nav_order: 5
 ---
 
-# Purity and Capabilities
+# Purity and Mutability
 
-Psalm `7.0.0-beta23` replaced the four purity levels (pure, mutation-free, external-mutation-free, impure) with **capabilities**: a set of side effects a function, method, or closure may perform. The old tags still parse and map onto fixed sets. Psalm 6 (the `3.x` line) has none of this; see [Backporting](#backporting-to-3x).
+Psalm 6 (the `3.x` line) tracks side effects with four fixed levels. Psalm 7 (`4.x`) replaced them with capability sets (`@psalm-capabilities`); see [Porting from 4.x](#porting-from-4x) when backporting. Verified against Psalm `6.19.1`.
 
-Upstream reference: [Purity and capabilities](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/supported_annotations.md#purity-and-capabilities). Source: `vendor/vimeo/psalm/src/Psalm/Storage/Capabilities.php`.
+Upstream reference: [supported annotations (6.x)](https://github.com/vimeo/psalm/blob/6.x/docs/annotating_code/supported_annotations.md#psalm-mutation-free).
 
-## The capabilities
+## The levels
 
-| Capability | Allows |
-|---|---|
-| `read-props` | Reading properties of mutable objects, `$this` included |
-| `write-this-props` | Writing or unsetting properties of `$this` |
-| `write-props` | Writing or unsetting properties of any other object |
-| `read-globals` | Reading static properties, superglobals, `global` variables |
-| `write-globals` | Writing them; using `static` variables; process-wide builtins (`mt_rand`, `ini_set`) |
-| `write-refs` | Writing through by-reference parameters |
-| `io` | `echo`, `print`, `exit` with a message, builtins with side effects (`time`, `random_int`, `file_put_contents`) |
+| Tag | Target | Allows | Forbids |
+|---|---|---|---|
+| `@psalm-pure` (functions also bare `@pure`, `@phpstan-pure`) | function, method | Nothing beyond its arguments | Property reads, statics, I/O, impure calls |
+| `@psalm-mutation-free` | method; class (same as `@psalm-immutable`) | Reading `$this` | Writing any property, statics, I/O |
+| `@psalm-external-mutation-free` | method, class | Reading and writing `$this`; reading and writing static properties | Writing other objects, I/O |
+| (none) | | Everything | |
 
-`pure` is the empty set, `impure` is all seven. Unannotated code is `impure`.
+`@psalm-immutable` on a class makes every property readonly to consumers and every method `@psalm-mutation-free`.
 
-Rules that are easy to get wrong:
+Probed on `6.19.1`: a `@psalm-mutation-free` or `@psalm-pure` method touching a static reports `ImpureStaticProperty`; a `@psalm-external-mutation-free` one does not. Psalm 7 forbids statics at every level.
 
-- Each name is exactly one capability. Writing does not imply reading: `$this->n++` needs `read-props|write-this-props`; `$this->n = 0` needs only `write-this-props`.
-- A caller needs every capability of what it calls, implicit calls included (`__toString` on interpolation, `__get`, `ArrayAccess`, `Iterator` methods in `foreach`, constructors on `new`, destructors).
-- Calling a `write-this-props` method costs `write-this-props` on `$this`, `write-props` on another object, and nothing on an object the caller created itself.
-- Objects reached through global state (statics, superglobals, a function that reads globals) need `write-globals` to mutate, even with `write-props`.
-- An override may need fewer capabilities than its parent, never more. Abstract and interface methods must be annotated explicitly.
-
-## Annotations
-
-| Tag | Target | Capability set |
-|---|---|---|
-| `@psalm-capabilities a\|b` (or `a, b`) | function, method, closure, class | Exactly the listed set. Accepts a `@psalm-type` alias of a set |
-| `@psalm-pure` (`@pure`, `@phpstan-pure` on functions) | function, method | `pure`. On a class: every method pure and no property use |
-| `@psalm-impure` | function, method | `impure` (the default, stated) |
-| `@psalm-mutation-free` | function, method, class | `read-props` |
-| `@psalm-external-mutation-free` | function, method, class | `read-props\|write-this-props\|write-refs` |
-| `@psalm-immutable` | class | Properties readonly to consumers, methods `read-props` |
-| `@psalm-mutable` | class | `impure` (the default, stated) |
-| `@psalm-purity-template` | function, method, class | Declares a purity template, see [below](#purity-templates) |
-| `@psalm-purity-from-template P` | function, method | Each call also needs the capabilities `P` is bound to |
-
-When a docblock carries several, the first match wins in this order: `pure`, `mutation-free` (or `immutable` on a class), `external-mutation-free`, `impure` (or `mutable`), `capabilities`. A `@psalm-capabilities` line next to `@psalm-pure` is silently ignored.
-
-None of the legacy tags grant `read-globals`, `write-globals`, or `io`. A method that reads or fills a static cache cannot be `@psalm-mutation-free` or `@psalm-external-mutation-free` any more; leave it unannotated or spell the set out.
+Not available on Psalm 6 (each is `InvalidDocblock: Unrecognised annotation`): `@psalm-impure`, `@psalm-mutable`, `@psalm-capabilities`, `@psalm-purity-template`, `@psalm-purity-from-template`.
 
 ## Callable types
 
-The capability set goes in square brackets after `callable`, `Closure`, or `iterable`:
-
-```php
-Closure[pure](int): int           // also pure-Closure(int): int
-callable[read-props|io](): void
-Closure[Storage](): void          // a @psalm-type alias of a set
-Closure[P](int): int              // a purity template
-Closure[pure]                     // any pure closure, parameters unspecified
-Closure(): void                   // impure (default); impure-Closure is the same
-```
-
-A closure needing fewer capabilities fits where more are allowed: a `pure-Closure` passes for `Closure[io]`, not the reverse. A closure literal's set is inferred from its body. Building a closure is never an effect; calling or passing it costs its set.
-
-`Closure[_]` (or `callable[_]`, `Traversable[_]<K, V>`) in a **parameter** type declares an anonymous purity template: the function inherits the purity of whatever closure is passed for that parameter. It works at any depth (`list<Closure[_](int): int>`) and on `@method` parameters. Outside `@param` it is an `InvalidDocblock`.
+`pure-callable(...)` and `pure-Closure(...)` are the only purity forms. A plain `callable` / `Closure` is impure: a `@psalm-pure` function that calls one reports `ImpureFunctionCall`.
 
 ```php
 /**
  * @psalm-pure
- * @param Closure[_](int): int $callback
+ * @param pure-callable(int): int $f
  */
-function apply(Closure $callback): int { return $callback(1); }
+function apply(callable $f): int { return $f(1); }
 ```
 
-## Purity templates
+`impure-callable`, `self-accessing-callable`, `self-mutating-callable`, `Closure[...]` and `iterable[...]` do not exist on Psalm 6 (`InvalidDocblock`, the type becomes `mixed`).
 
-`@psalm-purity-template P` declares a template whose values are capability sets. Use it as `Closure[P](...)`, as a class purity argument (`Box[pure]<int>`, purity arguments before type arguments), and pair it with `@psalm-purity-from-template P` so each call pays for what `P` is bound to. Purity templates are covariant.
+## Overrides
 
-Bounds and default: `lower <= Name(default) <= upper`, every part but the name optional, several templates comma separated. With one bound, the side that is a capability is the bound (`io <= C` lower, `C <= io` upper).
-
-```php
-/** @psalm-purity-template write-this-props <= C(write-this-props) <= write-this-props|write-props|io */
-abstract class Doer {}
-
-/** @extends Doer[write-this-props|io] */
-final class Printer extends Doer {}   // ok
-
-/** @extends Doer[io] */
-final class Broken extends Doer {}    // InvalidTemplateParam: must include write-this-props
-
-final class Plain extends Doer {}     // C = write-this-props, the default
-```
-
-The upper bound must contain the lower bound bit for bit: `write-this-props <= C <= write-props|io` is an `InvalidDocblock`, because `write-props` does not include `write-this-props`.
-
-## Iterables and generators
-
-`Traversable`, `Iterator`, `IteratorAggregate`, `Generator`, and `iterable` carry a purity (`TPurity`, default `impure`): `Iterator[pure]<int, string>` can be consumed by pure code, `iterable[pure]<K, V>` accepts arrays and pure traversables. A generator function with a purity annotation binds its returned generator's purity to its own. A class implementing `Iterator` may bind it in `@implements Iterator[pure]<K, V>`.
+A purity tag on a parent method is a contract for every override: an override that does more reports `MissingImmutableAnnotation` on Psalm 6 (`ImmutableDependency` on Psalm 7). For a stub method that apps commonly override, such as `Request::input()` (#1622), prefer no tag.
 
 ## Plugin policy
 
-- Self-analysis reports `MissingPureAnnotation` (and `MissingImmutableAnnotation` on classes). Annotate with what the issue suggests (`psalm --alter --issues=MissingPureAnnotation`); since beta23 the suggestion may be a `@psalm-capabilities` set instead of a legacy tag.
-- Methods touching a static (memo caches, registries with `reset()`) stay unannotated: no legacy tag grants `read-globals`.
-- Prefer `@psalm-pure` / `@psalm-mutation-free` / `@psalm-external-mutation-free` where they fit exactly: they also parse on Psalm 6, so the `3.x` backport keeps them.
-- In stubs, a Laravel method that takes and invokes a callback is a candidate for `Closure[_]`, so pure user code can call it with a pure callback. Only where the Laravel body itself has no other effect.
+- Self-analysis reports `MissingPureAnnotation` (and `MissingImmutableAnnotation` on classes). Annotate with what the issue suggests.
+- Psalm 6 rejects `@psalm-pure` / `@psalm-mutation-free` / `@psalm-external-mutation-free` when a callee lacks the matching annotation; Psalm 7 accepts more. Leave a method unannotated rather than suppressing.
 
-## Backporting to 3.x
+## Porting from 4.x
 
-Psalm 6 rejects `@psalm-capabilities`, `@psalm-purity-template`, and `@psalm-purity-from-template` as `Unrecognised annotation`, and does not know the `[...]` purity syntax; only `pure-callable` / `pure-Closure` exist there. A `4.x` change using them must translate to a legacy tag (or drop the annotation) on `3.x`.
+| Psalm 7 (`4.x`) | Psalm 6 (`3.x`) |
+|---|---|
+| `@psalm-capabilities` (none of the sets below) | Drop the tag |
+| `@psalm-capabilities read-props` | `@psalm-mutation-free` |
+| `@psalm-capabilities read-props\|write-this-props\|write-refs` | `@psalm-external-mutation-free` |
+| `@psalm-impure`, `@psalm-mutable` | Drop the tag |
+| `Closure[pure](...)`, `callable[pure](...)` | `pure-Closure(...)`, `pure-callable(...)` |
+| `Closure[_]`, other `Closure[...]` / `iterable[...]` | Plain `Closure` / `iterable` |
+| `@psalm-purity-template`, `@psalm-purity-from-template` | Drop the tags |
+
+The 4.x [Purity and Capabilities](https://github.com/psalm/psalm-plugin-laravel/blob/4.x/docs/contributing/purity.md) page describes the Psalm 7 model.

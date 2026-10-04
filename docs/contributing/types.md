@@ -6,16 +6,16 @@ nav_order: 3
 
 # Psalm Type Syntax
 
-Every type expression Psalm 7 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers. Verified against Psalm `7.0.0-beta24` (the plugin requires `^7.0.0-beta23`; the type grammar did not change between them).
+Every type expression Psalm 6 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers. Verified against Psalm `6.19.1`; the `3.x` line requires `^6.16.1`, so forms marked with a later version need that Psalm release. The `4.x` page covers Psalm 7.
 
-Companion pages: [Docblock Annotations](annotations.md) (the tags that carry these types), [Purity and Capabilities](purity.md) (the `[pure]` part of callable and iterable types), [Taint Analysis Stubs](taint-analysis.md).
+Companion pages: [Docblock Annotations](annotations.md) (the tags that carry these types), [Purity and Mutability](purity.md) (`pure-callable`), [Taint Analysis Stubs](taint-analysis.md).
 
 Ground truth when this page and Psalm disagree:
 
 - `vendor/vimeo/psalm/src/Psalm/Internal/Type/TypeTokenizer.php`: `PSALM_RESERVED_WORDS`, the words never resolved as class names
 - `vendor/vimeo/psalm/src/Psalm/Type/Atomic.php`: `createInner()`, keyword to `Atomic` map
 - `vendor/vimeo/psalm/src/Psalm/Internal/Type/TypeParser.php` and `ParseTreeCreator.php`: generics, shapes, callables, conditionals
-- Upstream prose: [type syntax docs](https://github.com/vimeo/psalm/tree/master/docs/annotating_code/type_syntax)
+- Upstream prose: [type syntax docs](https://github.com/vimeo/psalm/tree/6.x/docs/annotating_code/type_syntax)
 
 To check what Psalm makes of an expression, put `/** @psalm-trace $x */` on a statement and run `vendor/bin/psalm --no-cache --threads=1` on a scratch file. The `Atomic` column names the class a handler gets back or constructs.
 
@@ -34,7 +34,7 @@ To check what Psalm makes of an expression, put `/** @psalm-trace $x */` on a st
 | `object` | `TObject` | Any object |
 | `resource` | `TResource` | |
 | `closed-resource` | `TClosedResource` | |
-| `iterable`, `iterable<V>`, `iterable<K, V>` | `TIterable` | `array\|Traversable`. Takes a purity: `iterable[pure]<K, V>` ([purity](purity.md#iterables-and-generators)) |
+| `iterable`, `iterable<V>`, `iterable<K, V>` | `TIterable` | `array\|Traversable` |
 
 ## Integer subtypes
 
@@ -65,7 +65,7 @@ To check what Psalm makes of an expression, put `/** @psalm-trace $x */` on a st
 | `trait-string` | `TTraitString` | |
 | `Foo::class` | `TLiteralClassString` | |
 
-Intersections of string refinements collapse: `non-empty-string&lowercase-string` is `non-empty-lowercase-string`.
+Intersections of string refinements collapse (Psalm 6.19+): `non-empty-string&lowercase-string` is `non-empty-lowercase-string`.
 
 ## Literals and constants
 
@@ -87,7 +87,7 @@ Intersections of string refinements collapse: `non-empty-string&lowercase-string
 | `non-empty-array<K, V>` | `TNonEmptyArray` | |
 | `list<V>`, `non-empty-list<V>` | `TKeyedArray` | Keys `0..n-1` in order |
 | `associative-array<K, V>` | `TArray` | Plain alias of `array` |
-| `callable-array`, `callable-list` | `TKeyedArray` | `[class-string\|object, non-empty-string]` pair |
+| `callable-array` | `TKeyedArray` | `[class-string\|object, non-empty-string]` pair. `callable-list` is Psalm 7 only |
 
 ### Shapes
 
@@ -112,11 +112,10 @@ Keys may be quoted (`'quoted key': T`) or `Foo::class`; other `Foo::CONST` keys 
 |---|---|---|
 | `Foo` | `TNamedObject` | |
 | `Foo<A, B>` | `TGenericObject` | Class must declare matching `@template`s |
-| `Foo[pure]<A>` | `TGenericObject` | Purity argument for a class with `@psalm-purity-template` ([purity](purity.md#purity-templates)) |
 | `self`, `static`, `parent` | `TNamedObject` | `self` and `parent` resolve to the FQCN; `static` stays late-bound |
-| `$this` | `TNamedObject` | Same as `static` |
+| `$this` | `TNamedObject` | Same as `static`. Inside generic parameters (`Foo<$this>`) since Psalm 6.17 |
 | `Generator<K, V, TSend, TReturn>` | `TGenericObject` | Fewer parameters: missing ones become `mixed`; `Generator<V>` sets the value |
-| `Traversable<K, V>`, `Iterator<K, V>`, `IteratorAggregate<K, V>` | `TGenericObject` | One parameter is the value type. All take a purity: `Iterator[pure]<K, V>` |
+| `Traversable<K, V>`, `Iterator<K, V>`, `IteratorAggregate<K, V>` | `TGenericObject` | One parameter is the value type |
 | `callable-object` | `TCallableObject` | Has `__invoke()` |
 | `stringable-object` | `TObjectWithProperties` | Has `__toString()` |
 | `arraylike-object<K, V>` | intersection | `Traversable<K, V>&ArrayAccess<K, V>&Countable` |
@@ -130,13 +129,11 @@ callable(int, string): bool             // typed
 Closure(int, string=): void             // `=` optional parameter
 callable(int, string...): void          // `...` variadic parameter
 callable(int $id, string ...$rest): void // named parameters
-pure-callable(int): int                 // same as callable[pure](int): int
-Closure[read-props|io](): void          // explicit capability set
-Closure[P](): void                      // purity template
-Closure[pure]                           // any pure closure, no parameter list
+pure-callable(int): int                 // may be called from pure code
+pure-Closure(int): int
 ```
 
-By-reference parameters are not expressible: `callable(int &$x): void` is an `InvalidDocblock`. A named parameter cannot carry `=` (`string $name=`) or a `...` before its name (`string... $rest`): Psalm `7.0.0-beta24` crashes the whole scan on both; write the name only on required or `...$rest` parameters. The bracket part is a capability set; see [Purity and Capabilities](purity.md#callable-types) for the names, templates, and the `Closure[_]` parameter form.
+By-reference parameters are not expressible: `callable(int &$x): void` is an `InvalidDocblock`. A named parameter cannot carry `=` (`string $name=`) or a `...` before its name (`string... $rest`): Psalm crashes the whole scan on both (vimeo/psalm#11588); write the name only on required or `...$rest` parameters. Psalm 7's bracket purity (`Closure[pure]`, `Closure[_]`) does not exist here; see [Purity and Mutability](purity.md#callable-types).
 
 ## Utility types
 
@@ -151,7 +148,7 @@ By-reference parameters are not expressible: `callable(int &$x): void` is an `In
 
 ## Conditional types
 
-`(Subject is Type ? IfTrue : IfFalse)`, where `Subject` is a template, a `$param`, or `func_num_args()`. Parameter subjects work in `@return`, `@psalm-self-out` and `@psalm-this-out`.
+`(Subject is Type ? IfTrue : IfFalse)`, where `Subject` is a template, a `$param`, or `func_num_args()`. Parameter subjects work in `@return`, and in `@psalm-self-out` / `@psalm-this-out` since Psalm 6.18.1.
 
 ```php
 /** @return ($key is null ? array<string, mixed> : mixed) */
@@ -185,8 +182,8 @@ Syntax that parses without the meaning its name suggests. Do not use it in stubs
 | `open-resource` | Reserved word but no type: `InvalidDocblock` |
 | `non-empty-countable` | Reserved word Psalm uses internally (from `count()` checks); not writable, `InvalidDocblock` even in `@psalm-assert` |
 | `empty` | `never`, not "empty value" |
-| `self-accessing-callable`, `self-mutating-callable` (and `-Closure`) | Removed in `7.0.0-beta23`; now parse as impure `callable`. Use `callable[read-props]` / `callable[read-props\|write-this-props\|write-refs]` |
-| `impure-callable`, `impure-Closure` | Same as bare `callable` / `Closure` |
+| `impure-callable`, `self-accessing-callable`, `self-mutating-callable` (and `-Closure`), `callable-list` | Not Psalm 6 syntax: `InvalidDocblock`, the type becomes `mixed` |
+| `Closure[pure](...)`, `iterable[pure]<K, V>` | Psalm 7 only: `InvalidDocblock`, the type becomes `mixed` |
 | `object{a: int, ...}` | Unsealed marker silently dropped |
 | `callable(int &$x): void` | `InvalidDocblock`, the whole type is lost |
 | `callable(string $name=): void`, `callable(string... $rest): void` | Uncaught exception, Psalm aborts the run |

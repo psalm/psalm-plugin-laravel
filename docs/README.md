@@ -27,7 +27,7 @@ There are 2 main ways how it does it:
     - [Taint Analysis](contributing/taint-analysis.md): authoring taint stubs
     - [Type Syntax](contributing/types.md): every Psalm type expression
     - [Docblock Annotations](contributing/annotations.md): every Psalm docblock tag and its spellings
-    - [Purity and Capabilities](contributing/purity.md): Psalm 7 capability model and purity policy
+    - [Purity and Mutability](contributing/purity.md): Psalm 6 purity levels and porting from 4.x
 
 ## Troubleshooting
 

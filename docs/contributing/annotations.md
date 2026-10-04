@@ -6,23 +6,23 @@ nav_order: 4
 
 # Docblock Annotations
 
-Every docblock tag Psalm 7 reads, with the spellings it accepts. Verified against Psalm `7.0.0-beta24`; the tag list did not change since `7.0.0-beta23`, the plugin's floor.
+Every docblock tag Psalm 6 reads, with the spellings it accepts. Verified against Psalm `6.19.1`; the `3.x` line requires `^6.16.1`, so tags marked with a later version need that Psalm release. The `4.x` page covers Psalm 7.
 
-The types these tags carry: [Psalm Type Syntax](types.md). Purity tags: [Purity and Capabilities](purity.md). Taint tags: [Taint Analysis Stubs](taint-analysis.md#annotations-quick-reference).
+The types these tags carry: [Psalm Type Syntax](types.md). Purity tags: [Purity and Mutability](purity.md). Taint tags: [Taint Analysis Stubs](taint-analysis.md#annotations-quick-reference).
 
 Ground truth:
 
 - `vendor/vimeo/psalm/src/Psalm/DocComment.php`: `PSALM_ANNOTATIONS`, the only suffixes allowed after `@psalm-`. Anything else is `InvalidDocblock: Unrecognised annotation @psalm-...`
 - `vendor/vimeo/psalm/src/Psalm/Internal/Scanner/DocblockParser.php`: how bare, `@phpstan-` and `@psalm-` spellings merge
 - `.../Internal/PhpVisitor/Reflector/FunctionLikeDocblockParser.php`, `ClassLikeDocblockParser.php`, `.../Internal/Analyzer/CommentAnalyzer.php`, `StatementsAnalyzer.php`: per-target readers
-- Upstream prose: [Supported annotations](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/supported_annotations.md)
+- Upstream prose: [Supported annotations (6.x)](https://github.com/vimeo/psalm/blob/6.x/docs/annotating_code/supported_annotations.md)
 
 ## Prefixes
 
 - Unprefixed and `@phpstan-` tags are not validated: an unknown one is ignored. An unknown `@psalm-` tag is an error.
 - `@param`, `@var`, `@param-out`, `@template`, `@extends` and friends merge all three spellings. `@return` does not: `@psalm-return` beats `@phpstan-return` beats `@return`. Templates resolve per name with the same order.
 - Use the `@psalm-` form when the type is beyond plain PHPDoc and the file is also read by IDEs or PHPStan. PHPStan ignores `@psalm-*` entirely (a plain `@return` is needed where both engines must agree). Rector strips narrower plain `@var` / `@return` but leaves `@psalm-` tags alone.
-- Not accepted: `@psalm-mixin`, `@psalm-throws`, `@psalm-deprecated`, `@phpstan-method`, `@phpstan-property`, bare `@assert`, bare `@self-out`, bare `@immutable` / `@mutation-free` / `@impure`.
+- Not accepted: `@psalm-mixin`, `@psalm-throws`, `@psalm-deprecated`, `@phpstan-method`, `@phpstan-property`, bare `@assert`, bare `@self-out`, bare `@immutable` / `@mutation-free`. Psalm 7 only: `@psalm-impure`, `@psalm-mutable`, `@psalm-capabilities`, `@psalm-purity-template`, `@psalm-purity-from-template`.
 
 ## Types on declarations
 
@@ -33,11 +33,11 @@ Ground truth:
 | `@var Type [$name]` | bare, `psalm-`, `phpstan-` | property, constant, statement | Inline `@var` narrows a variable |
 | `@psalm-ignore-var` | also bare `@ignore-var` | statement | Drops the `@var` of the same docblock (for IDE-only hints) |
 | `@param-out Type $name` | bare, `psalm-`, `phpstan-` | by-ref parameter | Type after the call returns |
-| `@param-closure-this Type $name` | bare, `psalm-`, `phpstan-` | closure parameter | Type of `$this` inside the passed closure (beta23) |
+| `@param-closure-this Type $name` | bare, `psalm-`, `phpstan-` | closure parameter | Type of `$this` inside the passed closure (Psalm 6.19+) |
 | `@property Type $name` | bare, `psalm-` | class | Magic property. Also `@property-read`, `@property-write`. Needs a real `__get` / `__set` (or `usePhpDocPropertiesWithoutMagicCall`) |
-| `@method [static] Ret name(Type $p = default)` | bare, `psalm-` | class | Magic method. Purity in parameter types allowed (`Closure[_]`). Needs a real `__call` / `__callStatic` in the hierarchy (or `usePhpDocMethodsWithoutMagicCall`), else `UndefinedMethod` |
+| `@method [static] Ret name(Type $p = default)` | bare, `psalm-` | class | Magic method. Needs a real `__call` / `__callStatic` in the hierarchy (or `usePhpDocMethodsWithoutMagicCall`), else `UndefinedMethod` |
 | `@mixin Foo` | bare only | class, trait | Forward unknown members to `Foo`. A child `@mixin` replaces the parent's |
-| `@psalm-type Name = Type` | `psalm-`, `phpstan-` | class, file | Local type alias, also a capability set alias |
+| `@psalm-type Name = Type` | `psalm-`, `phpstan-` | class, file | Local type alias |
 | `@psalm-import-type Name from Foo [as Local]` | `psalm-`, `phpstan-` | class | |
 
 ## Generics and templates
@@ -50,7 +50,6 @@ Ground truth:
 | `@implements Iface<A>` | bare, `psalm-`, `phpstan-`, `@template-implements` | class | |
 | `@use Trait<A>` | bare, `psalm-`, `phpstan-`, `@template-use` | docblock above `use Trait;` | |
 | `@psalm-consistent-templates` | | class | Children keep the template list, so `new static` is safe (`UnsafeGenericInstantiation`) |
-| `@psalm-purity-template P` | | function-like, class | Template over capability sets ([purity](purity.md#purity-templates)) |
 
 No `@template-contravariant` exists.
 
@@ -61,23 +60,21 @@ No `@template-contravariant` exists.
 | `@psalm-assert [!]Type $x` | `psalm-`, `phpstan-` | function-like | After a normal return. Target may be `$x->prop` or `$x->method()` |
 | `@psalm-assert-if-true [!]Type $x` | `psalm-`, `phpstan-` | function-like | When the call returns `true` |
 | `@psalm-assert-if-false [!]Type $x` | `psalm-`, `phpstan-` | function-like | When the call returns `false` |
-| `@psalm-this-out Type` | `psalm-`, `phpstan-`, `@psalm-self-out`, `@phpstan-self-out` | method | Type of `$this` after the call (fluent builders). `self-out` is the legacy spelling |
+| `@psalm-this-out Type` | `psalm-`, `phpstan-`, `@psalm-self-out`, `@phpstan-self-out` | method | Type of `$this` after the call (fluent builders). Parameter-conditional types here need Psalm 6.18.1+ |
 | `@psalm-if-this-is Type` | | method | Callable only when `$this` matches |
 
 Negations (`!null`, `!false`) assert the opposite.
 
 ## Purity and mutability
 
-Full model: [Purity and Capabilities](purity.md).
+Full model: [Purity and Mutability](purity.md).
 
 | Tag | Target |
 |---|---|
-| `@psalm-capabilities a\|b` | function-like, class |
-| `@psalm-pure` (functions also bare `@pure`, `@phpstan-pure`) | function-like, class |
-| `@psalm-impure` | function-like |
-| `@psalm-mutation-free`, `@psalm-external-mutation-free` | function-like, class. Legacy, undocumented upstream, still parsed |
-| `@psalm-immutable`, `@psalm-mutable` | class |
-| `@psalm-purity-template`, `@psalm-purity-from-template` | function-like, class |
+| `@psalm-pure` (functions also bare `@pure`, `@phpstan-pure`) | function-like (ignored on a class in Psalm 6) |
+| `@psalm-mutation-free` | method; class (same as `@psalm-immutable`) |
+| `@psalm-external-mutation-free` | method, class |
+| `@psalm-immutable` | class |
 
 ## Properties
 
@@ -91,8 +88,8 @@ Full model: [Purity and Capabilities](purity.md).
 
 | Tag | Spellings | Target | Notes |
 |---|---|---|---|
-| `@psalm-seal-properties`, `@psalm-no-seal-properties` | also bare `@seal-properties` | class | Only declared `@property` names pass `__get`/`__set` |
-| `@psalm-seal-methods`, `@psalm-no-seal-methods` | also bare `@seal-methods` | class | Only declared `@method` names pass `__call` |
+| `@psalm-seal-properties`, `@psalm-no-seal-properties` | also bare `@seal-properties`, `@no-seal-properties` | class | Only declared `@property` names pass `__get`/`__set` |
+| `@psalm-seal-methods`, `@psalm-no-seal-methods` | also bare `@seal-methods`, `@no-seal-methods` | class | Only declared `@method` names pass `__call` |
 | `@psalm-override-property-visibility` | | class | Let `@property` override real property visibility |
 | `@psalm-override-method-visibility` | | class | Let `@method` override real method visibility |
 
@@ -155,7 +152,6 @@ Defaults depend on `sealAllProperties` / `sealAllMethods` in `psalm.xml`.
 | `#[Psalm\Pure]`, `#[JetBrains\PhpStorm\Pure]` | `@psalm-pure` |
 | `#[Psalm\Immutable]`, `#[JetBrains\PhpStorm\Immutable]` | `@psalm-immutable` |
 | `#[Psalm\ExternalMutationFree]` | `@psalm-external-mutation-free` |
-| `#[Psalm\Readonly]` | `@psalm-readonly` |
 | `#[Psalm\Internal]` | `@psalm-internal` (namespace of the declaring class) |
 | `#[JetBrains\PhpStorm\NoReturn]` | return type `never` |
 
