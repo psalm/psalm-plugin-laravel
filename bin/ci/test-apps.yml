@@ -118,6 +118,9 @@ apps:
     ref: 5b83de2
     php: "8.4"
     groups: [octane, large]
+    # app/ is only the skeleton (Http, Providers); the code lives in
+    # packages/Webkul/*/src, which auto-detection skips once app/ exists.
+    project_dir: packages
 
   - name: filament
     repo: https://github.com/filamentphp/filament.git
@@ -174,6 +177,9 @@ apps:
     ref: 6a35666
     php: "8.4"
     groups: [ai, octane]
+    # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
+    # packages/Webkul/*/src, not the app/ skeleton auto-detection would pick.
+    project_dir: packages
 
   - name: m3u-editor
     repo: https://github.com/m3ue/m3u-editor.git
