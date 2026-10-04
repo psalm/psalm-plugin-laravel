@@ -24,6 +24,8 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
  * so the bodies below live in inline subclasses of the registered, non-final fixtures
  * {@see Customer} (HasMany to Vehicle, which has #[Scope] and legacy scope methods) and
  * {@see Admin} (MorphToMany, the 4-template relation shape).
+ *
+ * The #[Scope] attribute case is Laravel 12+ and lives in Issue1614AttributeScopeTest.phpt.
  */
 class SubCustomer extends Customer
 {
@@ -37,12 +39,6 @@ class SubCustomer extends Customer
     public function viaWhere(): HasMany
     {
         return $this->vehicles()->where('active', true);
-    }
-
-    /** @return HasMany<Vehicle, $this> */
-    public function viaAttributeScope(): HasMany
-    {
-        return $this->vehicles()->electric();
     }
 
     /** @return HasMany<Vehicle, $this> */
