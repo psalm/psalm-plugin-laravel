@@ -6,26 +6,28 @@ use App\Models\Customer;
 /**
  * `old()`'s `$default` accepts anything: the runtime chain ends in `Arr::get($input, $key, $default)`,
  * which neither constrains nor inspects it, and hands the fallback back when the key is absent, so
- * its type joins the return. A `Model` default is the one exception: the runtime reads the model's
- * attribute instead of returning the model.
+ * its type joins the return. `null` stays in every branch: a flashed key can hold `null` (Laravel's
+ * `ConvertEmptyStringsToNull` middleware), and `Arr::get()` returns a present `null` without consulting
+ * the fallback. A `Model` default is the one exception: the runtime reads the model's attribute
+ * instead of returning the model.
  */
 
 function test_old_default_int(): void
 {
     $_ = old('qty', 1);
-    /** @psalm-check-type-exact $_ = string|array<array-key, mixed>|1 */
+    /** @psalm-check-type-exact $_ = string|array<array-key, mixed>|null|1 */
 }
 
 function test_old_default_bool(): void
 {
     $_ = old('active', false);
-    /** @psalm-check-type-exact $_ = string|array<array-key, mixed>|false */
+    /** @psalm-check-type-exact $_ = string|array<array-key, mixed>|null|false */
 }
 
 function test_old_default_object(): void
 {
     $_ = old('at', new \DateTimeImmutable());
-    /** @psalm-check-type-exact $_ = string|array<array-key, mixed>|\DateTimeImmutable */
+    /** @psalm-check-type-exact $_ = string|array<array-key, mixed>|null|\DateTimeImmutable */
 }
 
 function test_old_default_model(): void

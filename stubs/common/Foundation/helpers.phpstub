@@ -419,13 +419,14 @@ function view($view = null, $data = [], $mergeData = []) {}
  * int/bool/enum fallback for an optional field is honest code.
  *
  * The fallback's own type joins the return, since `Arr::get()` hands it back when the key is absent.
- * A `Model` default keeps Laravel's `string|array|null`: the runtime returns the model's attribute,
- * never the model.
+ * `null` stays in every branch: a flashed key can hold `null` (`ConvertEmptyStringsToNull`), and
+ * `Arr::get()` returns a present `null` without consulting the fallback. A `Model` default keeps
+ * Laravel's `string|array|null`: the runtime returns the model's attribute, never the model.
  *
  * @template TDefault
  * @param  string|null  $key
  * @param  TDefault  $default
- * @return ($default is \Illuminate\Database\Eloquent\Model ? string|array|null : string|array|TDefault)
+ * @return ($default is \Illuminate\Database\Eloquent\Model ? string|array|null : string|array|null|TDefault)
  *
  * @psalm-taint-source input
  */
