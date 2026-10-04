@@ -80,18 +80,16 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     ];
 
     /**
-     * Aliases this handler wrote into `vars_in_scope`, by variable id; only for {@see self::$recordedFile}.
+     * Aliases this handler wrote into `vars_in_scope`: file path => variable id => alias. Keyed by file
+     * because Psalm analyzes an included file in the middle of its includer.
      *
-     * @var array<string, array<array-key, true>>
+     * @var array<string, array<string, array<array-key, true>>>
      */
     private static array $recordedAliases = [];
-
-    private static ?string $recordedFile = null;
 
     public static function reset(): void
     {
         self::$recordedAliases = [];
-        self::$recordedFile = null;
     }
 
     /** @inheritDoc */
@@ -119,25 +117,30 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     }
 
     /**
-     * `$m->refresh()` reloads the attributes, so the aggregate facts recorded for `$m` in this file are
-     * dropped; user narrowings (`assert($m->owner instanceof X)`) stay, like after any other impure call.
-     * An alias recorded elsewhere in the file for the same variable name is dropped too: over-approximate, sound.
+     * `$m->refresh()` reloads the attributes and the loaded relations, so the aggregate facts recorded for
+     * `$m` and its `$m->…` descendants are dropped; user narrowings (`assert($m->owner instanceof X)`) stay,
+     * like after any other impure call. An alias recorded elsewhere in the file for the same variable name
+     * is dropped too: over-approximate, sound.
      * Only for a receiver that is exactly one Model: other objects with a `refresh()` keep their property facts.
      */
     private static function forgetLoadedAggregates(MethodCall $call, AfterExpressionAnalysisEvent $event): void
     {
         $context = $event->getContext();
         $varId = self::varId(self::identityRoot($call->var));
-        if (
-            $varId === null
-            || self::$recordedFile !== $event->getStatementsSource()->getFilePath()
-            || self::singleModel($context->vars_in_scope[$varId] ?? null) === null
-        ) {
+        if ($varId === null || self::singleModel($context->vars_in_scope[$varId] ?? null) === null) {
             return;
         }
 
-        foreach (\array_keys(self::$recordedAliases[$varId] ?? []) as $alias) {
-            unset($context->vars_in_scope[$varId . '->' . $alias]);
+        $prefix = $varId . '->';
+
+        foreach (self::$recordedAliases[$event->getStatementsSource()->getFilePath()] ?? [] as $recordedVarId => $aliases) {
+            if ($recordedVarId !== $varId && !\str_starts_with($recordedVarId, $prefix)) {
+                continue;
+            }
+
+            foreach (\array_keys($aliases) as $alias) {
+                unset($context->vars_in_scope[$recordedVarId . '->' . $alias]);
+            }
         }
     }
 
@@ -240,10 +243,6 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         }
 
         $filePath = $event->getStatementsSource()->getFilePath();
-        if ($filePath !== self::$recordedFile) {
-            self::$recordedFile = $filePath;
-            self::$recordedAliases = [];
-        }
 
         foreach ($entries as $entry) {
             $type = self::provenType($event->getCodebase(), $model, $entry);
@@ -252,7 +251,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             }
 
             $context->vars_in_scope[$varId . '->' . $entry->alias] = $type;
-            self::$recordedAliases[$varId][$entry->alias] = true;
+            self::$recordedAliases[$filePath][$varId][$entry->alias] = true;
         }
     }
 

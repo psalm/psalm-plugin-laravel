@@ -188,6 +188,15 @@ function test_user_property_wins_over_a_proven_load(Customer $customer): void
     $count = $customer->work_orders_count;
     echo $count;
 }
+
+function test_refresh_drops_an_aggregate_fact_recorded_on_a_loaded_relation(Customer $customer): mixed
+{
+    \assert($customer->primary_vehicle !== null);
+    $customer->primary_vehicle->loadCount('workOrders as order_total');
+    $customer->refresh();
+
+    return $customer->primary_vehicle->order_total;
+}
 ?>
 --EXPECTF--
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$vehicles_count is not defined
@@ -197,3 +206,4 @@ PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null varia
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$total is not defined
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Shop::$order_total is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Vehicle::$order_total is not defined
