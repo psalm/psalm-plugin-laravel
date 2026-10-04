@@ -54,7 +54,6 @@ final class PluginInitializationHandlerLoadingTest extends TestCase
             '/Handlers/Rules/NoEnvOutsideConfigHandler.php',
             '/Handlers/Translations/TranslationKeyHandler.php',
             '/Handlers/Views/MissingViewHandler.php',
-            '/Handlers/Rules/UnregisteredRouteNameHandler.php',
         ] as $handlerFile) {
             $this->assertStringContainsString($handlerFile, $loadMethod);
             $this->assertSame(2, \substr_count($source, $handlerFile), "{$handlerFile} must remain explicitly loaded for both initialization and registration.");

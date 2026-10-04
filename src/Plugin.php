@@ -98,10 +98,6 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
-            if ($pluginConfig->findUnregisteredRouteNames) {
-                Handlers\Rules\UnregisteredRouteNameHandler::init(ApplicationProvider::getApp());
-            }
-
             $this->registerHandlers($registration, $pluginConfig);
             $this->registerStubs($registration, $pluginConfig, $output);
         } catch (\Throwable $throwable) {
@@ -125,7 +121,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/NoEnvOutsideConfigHandler.php';
         require_once __DIR__ . '/Handlers/Translations/TranslationKeyHandler.php';
         require_once __DIR__ . '/Handlers/Views/MissingViewHandler.php';
-        require_once __DIR__ . '/Handlers/Rules/UnregisteredRouteNameHandler.php';
         require_once __DIR__ . '/Handlers/Application/ContainerResolver.php';
         require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
         require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
@@ -663,9 +658,9 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         // Flag route() / to_route() / URL::route() / Redirect::route() calls naming an unregistered route.
-        // init() already decided whether the rule is armed, so registering here is always safe.
         if ($pluginConfig->findUnregisteredRouteNames) {
             require_once __DIR__ . '/Handlers/Rules/UnregisteredRouteNameHandler.php';
+            Handlers\Rules\UnregisteredRouteNameHandler::init(ApplicationProvider::getApp());
             $registration->registerHooksFromClass(Handlers\Rules\UnregisteredRouteNameHandler::class);
         }
 
