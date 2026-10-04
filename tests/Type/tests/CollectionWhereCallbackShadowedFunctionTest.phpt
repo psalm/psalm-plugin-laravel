@@ -15,6 +15,14 @@ namespace CollectionWhereCallbackShadowedFunctionTest\Helpers {
     }
 }
 
+namespace {
+    /** PHP 8 removed is_real(), so userland may declare a global function with that name. */
+    function is_real(mixed $value): bool
+    {
+        return $value !== null;
+    }
+}
+
 namespace CollectionWhereCallbackShadowedFunctionTest {
     use Illuminate\Support\Collection;
 
@@ -53,6 +61,13 @@ namespace CollectionWhereCallbackShadowedFunctionTest {
         {
             $_result = $items->where(fn (?string $value) => !is_null($value));
             /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        }
+
+        /** @param Collection<int, float|string|null> $items */
+        public function userlandGlobalIsRealDoesNotNarrow(Collection $items): void
+        {
+            $_result = $items->filter(fn (mixed $value): bool => is_real($value));
+            /** @psalm-check-type-exact $_result = Collection<int, float|null|string>&static */
         }
     }
 }

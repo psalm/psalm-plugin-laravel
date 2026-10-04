@@ -430,6 +430,16 @@ final class CollectionWhereCallbackTest
     }
 
     /**
+     * class-string is not a lowercase-string; mapping would discard the refinement.
+     * @param Collection<int, lowercase-string> $items
+     */
+    public function whereWithClassCheckOnRefinedStringDoesNotNarrow(Collection $items): void
+    {
+        $_result = $items->where(fn (string $value) => is_a($value, Countable::class, true));
+        /** @psalm-check-type-exact $_result = Collection<int, lowercase-string>&static */
+    }
+
+    /**
      * @template T
      * @param Collection<int, T> $items
      */

@@ -30,7 +30,6 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
-use Psalm\Type\Atomic\DependentType;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TCallable;
@@ -42,10 +41,10 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TIterable;
 use Psalm\Type\Atomic\TKeyedArray;
-use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNonEmptyArray;
+use Psalm\Type\Atomic\TNonEmptyString;
 use Psalm\Type\Atomic\TNonFalsyString;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TObject;
@@ -443,7 +442,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             'is_array' => new Union([new TArray([Type::getArrayKey(), Type::getMixed()])]),
             'is_object' => new Union([new TObject()]),
             'is_bool' => new Union([new TBool()]),
-            'is_float', 'is_double', 'is_real' => new Union([new TFloat()]),
+            // No is_real: removed in PHP 8, so a userland global function may own the name.
+            'is_float', 'is_double' => new Union([new TFloat()]),
             'is_null' => new Union([new TNull()]),
             'is_callable' => new Union([new TCallable()]),
             'is_scalar' => new Union([new TScalar()]),
@@ -567,7 +567,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     /**
      * Objects intersect with Foo; strings become `class-string<…&Foo>` when allowed; other
      * scalars, null, and arrays drop out ([]). Null for atomics these rules don't cover
-     * (templates, mixed variants, literal or dependent strings, callable, ...).
+     * (templates, mixed variants, refined strings, callable, ...).
      *
      * @return list<Atomic>|null
      */
@@ -586,10 +586,10 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($atomic instanceof TString && $allowString) {
-            if ($atomic instanceof TLiteralString
-                || $atomic instanceof DependentType
-                || ($atomic instanceof TClassString && $atomic::class !== TClassString::class)
-            ) {
+            // class-string<Foo> is a subtype only of these; other refinements (literal, lowercase,
+            // numeric, template/dependent class strings) would be lost or widened.
+            $mappable = [TString::class, TNonEmptyString::class, TNonFalsyString::class, TClassString::class];
+            if (!\in_array($atomic::class, $mappable, true)) {
                 return null;
             }
 
