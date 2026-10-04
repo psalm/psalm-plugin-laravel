@@ -111,22 +111,28 @@ jobs:
           persist-credentials: false
 
       # The comment body is untrusted: it reaches the resolver only via env, and
-      # every output written below is a fixed status or a registry value the
-      # resolver allowlisted. The reply text goes to a file, never GITHUB_OUTPUT.
+      # every output set below is a fixed status or a registry value the resolver
+      # allowlisted. The reply text goes to a file, never a step output. Outputs
+      # are set from github-script so no shell step writes $GITHUB_OUTPUT in this
+      # privileged issue_comment job.
       - name: Resolve app selection
-        id: select
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           yq -o=json bin/ci/test-apps.yml | php bin/ci/select-apps.php > selection.json
           jq -r '.reply' selection.json > reply.md
-          {
-            printf 'status=%s\n' "$(jq -r '.status' selection.json)"
-            printf 'run=%s\n' "$(jq -r '.status == "run"' selection.json)"
-            printf 'matrix=%s\n' "$(jq -c '.matrix' selection.json)"
-            printf 'apps_csv=%s\n' "$(jq -r '.apps_csv' selection.json)"
-            printf 'label=%s\n' "$(jq -r '.label' selection.json)"
-          } >> "$GITHUB_OUTPUT"
+
+      - name: Expose selection outputs
+        id: select
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const selection = JSON.parse(require('fs').readFileSync('selection.json', 'utf8'));
+            core.setOutput('status', selection.status);
+            core.setOutput('run', selection.status === 'run' ? 'true' : 'false');
+            core.setOutput('matrix', JSON.stringify(selection.matrix));
+            core.setOutput('apps_csv', selection.apps_csv);
+            core.setOutput('label', selection.label);
 
       - name: Reply with help or the selector error
         if: steps.select.outputs.status == 'help' || steps.select.outputs.status == 'error'
