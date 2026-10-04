@@ -30,8 +30,13 @@ on:
   issue_comment:
     types: [created]
 
+# Workflow-level concurrency is evaluated before any job `if`, so a key shared by
+# every PR comment would let a bot/review/"thanks" comment cancel an in-flight
+# run (:eyes: sticks, no report). Only an authorised trigger comment shares the
+# per-PR 'run' key (a re-trigger supersedes the old run); anything else gets a
+# unique key, and its skipped run cancels nothing.
 concurrency:
-  group: psalm-delta-${{ github.event.issue.number }}
+  group: psalm-delta-${{ github.event.issue.number }}-${{ (startsWith(github.event.comment.body, '/psalm-delta') && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)) && 'run' || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -127,7 +132,10 @@ jobs:
     name: Delta (${{ matrix.name }})
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # --threads=1 (delta-app.sh) costs ~3x per side over the old 4 threads. Sized
+    # from the slowest app: 12 min (old cold-install budget) + 2 sides x ~75 s
+    # extra analysis = ~15 min, x1.5 margin for runner variance.
+    timeout-minutes: 25
     permissions:
       contents: read  # checkout source + read public app repos; no write scope
     strategy:
@@ -234,19 +242,39 @@ jobs:
       # the plugin_dep_sig self-heal does NOT catch (it only detects a dep-sig
       # mismatch). So forks read the cache, never write it. cache-hit skips a
       # redundant same-key save.
+      #
+      # always(): a failed or timed-out analysis must still save a freshly
+      # installed vendor, or the next run is cold again and times out the same way.
+      # delta-app.sh stamps .plugin-dep-sig only after a successful install, so the
+      # stamp gates the save (a half-installed vendor must not be cached).
+      - name: Check install completed
+        id: installed
+        if: always() && needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true'
+        env:
+          NAME: ${{ matrix.name }}
+        run: |
+          if [ -f "$HOME/app-cache/$NAME/.plugin-dep-sig" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Save app source cache
-        if: needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true'
+        if: always() && needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true' && steps.installed.outputs.ok == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/app-cache/${{ matrix.name }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+      # always(): hard failures and timeouts leave crash.log files that the report
+      # needs to say what happened. The per-side app copy (a full vendor tree)
+      # stays out of the artifact.
       - name: Upload per-app JSON
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: delta-${{ matrix.name }}
-          # out/ holds only <app>/<app>-<label>-cache--{issues,perf}.json.
-          path: out/
+          path: |
+            out/
+            !out/*/work/**
           if-no-files-found: warn
           retention-days: 14
 
@@ -306,7 +334,7 @@ jobs:
             printf '%s\n' "$MARKER"
             php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
               --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
-              --date-marker=cache \
+              --date-marker=cache --details \
               || echo "Delta failed to produce a report. Check the workflow logs."
           } > comment.md
           # Quoted heredoc: literal backticks for the inline code span, no expansion.
@@ -316,8 +344,12 @@ jobs:
           FOOTER
 
           # Sticky: edit existing delta comment if present, else create.
+          # Bot-authored, one id: --jq runs per page and a spoofed comment starting
+          # with the marker must not become the PATCH target. sed (not head) so the
+          # pipe is read to the end and pipefail cannot trip on SIGPIPE.
           EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
-            --jq "map(select(.body | startswith(\"$MARKER\"))) | .[0].id // empty")
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" \
+            | sed -n 1p)
           if [ -n "$EXISTING" ]; then
             gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -F body=@comment.md --silent
           else
