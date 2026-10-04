@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791099354169,
+  "lastUpdate": 1791105914922,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -11860,6 +11860,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1369,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b578bca1df8b7e2be21d0992b5cc62a93320f75",
+          "message": "Merge pull request #1629 from psalm/alies-dev/scope-called-through-a-relation-loses-this-in-th\n\nPreserve `$this` declaring model on relation calls inside non-final models",
+          "timestamp": "2026-10-04T11:21:42+02:00",
+          "tree_id": "535c365706b399733074f18c453aaa1b168426a7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/4b578bca1df8b7e2be21d0992b5cc62a93320f75"
+        },
+        "date": 1791105913888,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.81,
+            "range": "± 0.7",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
