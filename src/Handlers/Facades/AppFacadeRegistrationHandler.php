@@ -55,7 +55,6 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      */
     private static array $failedFacades = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$failedFacades = [];

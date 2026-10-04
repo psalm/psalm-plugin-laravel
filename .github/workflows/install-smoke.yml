@@ -41,27 +41,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ref: master
+          - ref: "4.x"
             name: Ubuntu
             runner: blacksmith-2vcpu-ubuntu-2404
             kind: app
-          - ref: master
+          - ref: "4.x"
             name: Ubuntu
             runner: blacksmith-2vcpu-ubuntu-2404
             kind: package
-          - ref: master
+          - ref: "4.x"
             name: Windows
             runner: blacksmith-2vcpu-windows-2025
             kind: app
-          - ref: master
+          - ref: "4.x"
             name: Windows
             runner: blacksmith-2vcpu-windows-2025
             kind: package
-          - ref: master
+          - ref: "4.x"
             name: macOS
             runner: blacksmith-6vcpu-macos-15
             kind: app
-          - ref: master
+          - ref: "4.x"
             name: macOS
             runner: blacksmith-6vcpu-macos-15
             kind: package

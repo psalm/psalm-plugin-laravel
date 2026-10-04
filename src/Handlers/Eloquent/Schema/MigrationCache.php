@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Composer\InstalledVersions;
+use Psalm\LaravelPlugin\Internal\AtomicFileWriter;
 
 /**
  * Fingerprint-based disk cache for parsed migration schema.
@@ -198,38 +199,18 @@ final class MigrationCache
     }
 
     /**
-     * Write cache data atomically using a temp file + rename.
-     *
-     * rename() is atomic on POSIX systems, so concurrent Psalm runs
-     * cannot observe a partially written cache file.
+     * Write cache data atomically so concurrent Psalm runs cannot observe a partially written cache file.
      *
      * @param array<string, SchemaTable> $tables
      */
     private function writeToCache(string $cachePath, array $tables): void
     {
-        $pid = \getmypid();
-        $tmpPath = $cachePath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
+        $failure = AtomicFileWriter::write($cachePath, \serialize($tables));
 
-        $written = @\file_put_contents($tmpPath, \serialize($tables));
-
-        if ($written === false) {
-            $error = \error_get_last();
-            $this->writeFailureReason = $error !== null
-                ? "cannot write temp cache file '{$tmpPath}': {$error['message']}"
-                : "cannot write temp cache file '{$tmpPath}'";
-
-            return;
-        }
-
-        // Atomic replace — if rename fails, clean up the temp file
-        if (@\rename($tmpPath, $cachePath)) {
+        if ($failure === null) {
             $this->cacheWritten = true;
         } else {
-            $error = \error_get_last();
-            $this->writeFailureReason = $error !== null
-                ? "cannot rename cache file to '{$cachePath}': {$error['message']}"
-                : "cannot rename cache file to '{$cachePath}'";
-            @\unlink($tmpPath);
+            $this->writeFailureReason = "cannot write cache file '{$cachePath}': {$failure}";
         }
     }
 

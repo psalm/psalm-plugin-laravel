@@ -94,4 +94,18 @@ final class CollidingScopeModel extends Model
     {
         return $query->orderByRaw('priority = ?', [$priority]);
     }
+
+    /**
+     * Collides with Eloquent\Builder::enforceOrderBy(), a PROTECTED method.
+     *
+     * Protected methods are inaccessible from outside, so __call fires and the scope wins.
+     * The params provider must NOT skip the hand-off write for non-public collisions.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeEnforceOrderBy($query, int $priority)
+    {
+        return $query->orderByRaw('priority = ?', [$priority]);
+    }
 }

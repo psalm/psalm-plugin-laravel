@@ -30,8 +30,11 @@ on:
   issue_comment:
     types: [created]
 
+# Only an authorised trigger comment shares the per-PR 'run' key (a re-trigger
+# supersedes the old run); any other comment gets a unique key, so its skipped
+# run cancels nothing.
 concurrency:
-  group: psalm-delta-${{ github.event.issue.number }}
+  group: psalm-delta-${{ github.event.issue.number }}-${{ (startsWith(github.event.comment.body, '/psalm-delta') && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)) && 'run' || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -64,7 +67,7 @@ jobs:
       is_fork: ${{ steps.refs.outputs.is_fork }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -108,7 +111,7 @@ jobs:
       # HARNESS = default branch (trusted), NOT base/head_sha (only the versions
       # MEASURED). Sourcing tooling from them would freeze it at the PR's branch
       # point, so harness fixes never reach in-flight PRs. issue_comment runs from
-      # the default branch, so a ref-less checkout is master HEAD.
+      # the default branch, so a ref-less checkout is 4.x HEAD.
       - name: Checkout harness (default branch, for the registry)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,7 +138,7 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -193,7 +196,7 @@ jobs:
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/app-cache/${{ matrix.name }}
+          path: app-cache/${{ matrix.name }}
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
 
       - name: Run delta for ${{ matrix.name }}
@@ -219,7 +222,7 @@ jobs:
             --out "$GITHUB_WORKSPACE/out"
             --base-label "$BASE_LABEL"
             --head-label "$HEAD_LABEL"
-            --app-src "$HOME/app-cache/$NAME"
+            --app-src "$GITHUB_WORKSPACE/app-cache/$NAME"
             --date-marker cache
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
@@ -229,24 +232,38 @@ jobs:
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
 
       # Save ONLY on a same-repo head. A fork's composer install could write into
-      # ~/app-cache pre-save, and since issue_comment runs on the default ref that
+      # the app cache pre-save, and since issue_comment runs on the default ref that
       # entry lands in the scope TRUSTED runs restore — a backdoored-vendor vector
       # the plugin_dep_sig self-heal does NOT catch (it only detects a dep-sig
       # mismatch). So forks read the cache, never write it. cache-hit skips a
       # redundant same-key save.
+      #
+      # always(): a failed or timed-out analysis must still save the installed
+      # vendor, or the next run is cold again. delta-app.sh stamps .plugin-dep-sig
+      # only after a successful install, so the stamp gates the save. It is tested
+      # with hashFiles() (workspace files only, hence app-cache/ lives there)
+      # because this job runs PR code and must not write $GITHUB_OUTPUT/$GITHUB_ENV.
       - name: Save app source cache
-        if: needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true'
+        if: >-
+          always()
+          && needs.prepare.outputs.is_fork != 'true'
+          && steps.cache.outputs.cache-hit != 'true'
+          && hashFiles(format('app-cache/{0}/.plugin-dep-sig', matrix.name)) != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/app-cache/${{ matrix.name }}
+          path: app-cache/${{ matrix.name }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+      # always(): crash.log files from a failed or timed-out run must reach the
+      # report. The per-side app copy (a full vendor tree) stays out.
       - name: Upload per-app JSON
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: delta-${{ matrix.name }}
-          # out/ holds only <app>/<app>-<label>-cache--{issues,perf}.json.
-          path: out/
+          path: |
+            out/
+            !out/*/work/**
           if-no-files-found: warn
           retention-days: 14
 
@@ -262,7 +279,7 @@ jobs:
       pull-requests: write   # post / update the sticky delta comment
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -306,7 +323,7 @@ jobs:
             printf '%s\n' "$MARKER"
             php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
               --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
-              --date-marker=cache \
+              --date-marker=cache --details \
               || echo "Delta failed to produce a report. Check the workflow logs."
           } > comment.md
           # Quoted heredoc: literal backticks for the inline code span, no expansion.
@@ -317,7 +334,8 @@ jobs:
 
           # Sticky: edit existing delta comment if present, else create.
           EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
-            --jq "map(select(.body | startswith(\"$MARKER\"))) | .[0].id // empty")
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" \
+            | sed -n 1p)
           if [ -n "$EXISTING" ]; then
             gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -F body=@comment.md --silent
           else

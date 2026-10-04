@@ -57,7 +57,6 @@ final class RelatedBuilderMethodResolver
      */
     private static array $specializationContextCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$declaredMethodCache = [];
@@ -233,7 +232,6 @@ final class RelatedBuilderMethodResolver
      *
      * @param class-string<Model> $modelClass
      * @param lowercase-string $methodName
-     * @psalm-external-mutation-free
      */
     public static function resolveTraitMethod(
         Codebase $codebase,
@@ -263,7 +261,6 @@ final class RelatedBuilderMethodResolver
      * @param class-string<Builder> $builderClass
      * @param lowercase-string $methodName
      * @return array{MethodIdentifier, MethodStorage}|null
-     * @psalm-external-mutation-free
      */
     private static function declaredMethodStorage(
         Codebase $codebase,

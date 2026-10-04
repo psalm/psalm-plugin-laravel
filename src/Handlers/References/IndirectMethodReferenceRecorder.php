@@ -49,8 +49,6 @@ final class IndirectMethodReferenceRecorder
      * non-analyzed source for this synthetic edge, so it is not removed when an application file
      * is re-analyzed during an incremental run. With no context, the graph falls back to this
      * file as the reference's source node.
-     *
-     * @psalm-external-mutation-free
      */
     public static function recordFileReference(Codebase $codebase, MethodIdentifier $methodId): void
     {

@@ -96,8 +96,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * The DynamicWhereResolver enable flag is also cleared by the reset; Plugin
      * re-applies it from XML config after init() returns, so a true→false config flip
      * across re-bootstraps takes effect instead of inheriting the previous state.
-     *
-     * @psalm-external-mutation-free
      */
     public static function init(ForwardingRule $rule): void
     {
@@ -122,7 +120,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
 
     /**
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
@@ -539,7 +536,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * Resolve a model-trait fluent builder pseudo-method on a relation.
      *
      * @param lowercase-string $methodName
-     * @psalm-external-mutation-free
      */
     private static function resolveTraitBuilderMethodOnRelation(
         Codebase $codebase,
@@ -569,8 +565,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * builder instance. Static analysis cannot express object identity, so a Builder
      * subtype is the established fluent approximation; every non-builder union branch
      * remains untouched.
-     *
-     * @psalm-external-mutation-free
      */
     private static function decorateBuilderReturn(
         Codebase $codebase,
@@ -609,7 +603,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
 
     /**
      * @param list<FunctionLikeParameter> $parameters
-     * @psalm-external-mutation-free
      */
     private static function storePendingBuilderMethodParams(
         string $relationClass,

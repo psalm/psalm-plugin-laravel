@@ -21,43 +21,43 @@ use App\Models\Shop;
  * and App\Models\Customer for body-parsed and @property override cases.
  */
 
-// --- withCount / loadCount: int ---
+// --- withCount / loadCount: int|null (attribute is absent until the aggregate is loaded) ---
 // alias: Str::snake("work_orders count *") = "work_orders_count"
 
-function test_count_camelCase_relation(Shop $shop): int
+function test_count_camelCase_relation(Shop $shop): ?int
 {
-    /** @psalm-check-type-exact $count = int */
+    /** @psalm-check-type-exact $count = int|null */
     $count = $shop->work_orders_count;
     return $count;
 }
 
-function test_count_direct_relation(Shop $shop): int
+function test_count_direct_relation(Shop $shop): ?int
 {
-    /** @psalm-check-type-exact $count = int */
+    /** @psalm-check-type-exact $count = int|null */
     $count = $shop->parts_count;
     return $count;
 }
 
-function test_count_single_relation(Shop $shop): int
+function test_count_single_relation(Shop $shop): ?int
 {
-    /** @psalm-check-type-exact $count = int */
+    /** @psalm-check-type-exact $count = int|null */
     $count = $shop->owner_count;
     return $count;
 }
 
-// --- withExists / loadExists: bool ---
+// --- withExists / loadExists: bool|null (attribute is absent until the aggregate is loaded) ---
 // alias: Str::snake("work_orders exists *") = "work_orders_exists"
 
-function test_exists_camelCase_relation(Shop $shop): bool
+function test_exists_camelCase_relation(Shop $shop): ?bool
 {
-    /** @psalm-check-type-exact $exists = bool */
+    /** @psalm-check-type-exact $exists = bool|null */
     $exists = $shop->work_orders_exists;
     return $exists;
 }
 
-function test_exists_single_relation(Shop $shop): bool
+function test_exists_single_relation(Shop $shop): ?bool
 {
-    /** @psalm-check-type-exact $exists = bool */
+    /** @psalm-check-type-exact $exists = bool|null */
     $exists = $shop->owner_exists;
     return $exists;
 }
@@ -79,19 +79,19 @@ function test_max_camelCase_relation(Shop $shop): string|null
     return $max;
 }
 
-// --- withSum / withAvg / loadSum / loadAvg: numeric-string|null ---
+// --- withSum / withAvg / loadSum / loadAvg: column unknown (no schema) → widest driver-dependent type ---
 // alias: Str::snake("work_orders sum amount") = "work_orders_sum_amount"
 
-function test_sum_camelCase_relation(Shop $shop): string|null
+function test_sum_camelCase_relation(Shop $shop): float|int|string|null
 {
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->work_orders_sum_amount;
     return $sum;
 }
 
-function test_avg_camelCase_relation(Shop $shop): string|null
+function test_avg_camelCase_relation(Shop $shop): float|string|null
 {
-    /** @psalm-check-type-exact $avg = numeric-string|null */
+    /** @psalm-check-type-exact $avg = float|numeric-string|null */
     $avg = $shop->work_orders_avg_rating;
     return $avg;
 }
@@ -100,16 +100,16 @@ function test_avg_camelCase_relation(Shop $shop): string|null
 // Shop::damage_reports() is named in snake_case, so `damage_reports_count` matches directly
 // without going through snakeToCamelCase(). Exercises the first branch of isRelationPrefix().
 
-function test_count_snake_named_relation(Shop $shop): int
+function test_count_snake_named_relation(Shop $shop): ?int
 {
-    /** @psalm-check-type-exact $count = int */
+    /** @psalm-check-type-exact $count = int|null */
     $count = $shop->damage_reports_count;
     return $count;
 }
 
-function test_sum_snake_named_relation(Shop $shop): string|null
+function test_sum_snake_named_relation(Shop $shop): float|int|string|null
 {
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->damage_reports_sum_amount;
     return $sum;
 }
@@ -128,28 +128,52 @@ function test_min_multi_word_column(Shop $shop): string|null
 // --- Body-parsed relation method (no declared return type) ---
 // Shop::supplierList() has no return type; the handler must parse the body AST.
 
-function test_count_body_parsed_relation(Shop $shop): int
+function test_count_body_parsed_relation(Shop $shop): ?int
 {
-    /** @psalm-check-type-exact $count = int */
+    /** @psalm-check-type-exact $count = int|null */
     $count = $shop->supplier_list_count;
     return $count;
 }
 
-function test_sum_body_parsed_relation(Shop $shop): string|null
+function test_sum_body_parsed_relation(Shop $shop): float|int|string|null
 {
-    /** @psalm-check-type-exact $sum = numeric-string|null */
+    /** @psalm-check-type-exact $sum = float|int|numeric-string|null */
     $sum = $shop->supplier_list_sum_amount;
     return $sum;
 }
 
 // --- @property annotation overrides aggregate type ---
-// Customer declares @property int<0, max> $vehicles_count which wins over the handler's int.
+// Customer declares @property int<0, max> $vehicles_count which wins over the handler's int|null.
 
 function test_property_annotation_overrides_aggregate_type(Customer $customer): int
 {
     /** @psalm-check-type-exact $count = int<0, max> */
     $count = $customer->vehicles_count;
     return $count;
+}
+
+// --- `??` fallback on a not-yet-loaded aggregate (#1623) ---
+// getAttribute() returns null when the aggregate has not been loaded, so the left side of `??`
+// must stay nullable: no RedundantCondition / TypeDoesNotContainType.
+
+function test_count_null_coalesce_fallback(Shop $shop): mixed
+{
+    return $shop->work_orders_count ?? $shop->loadCount('workOrders')->getAttribute('work_orders_count');
+}
+
+function test_exists_null_coalesce_fallback(Shop $shop): mixed
+{
+    return $shop->work_orders_exists ?? $shop->loadExists('workOrders')->getAttribute('work_orders_exists');
+}
+
+function test_count_null_check_is_not_redundant(Shop $shop): int
+{
+    if ($shop->work_orders_count === null) {
+        $shop->loadCount('workOrders');
+    }
+
+    // Both branches now hold a loaded count: the else branch by the null check, the if branch by loadCount().
+    return $shop->work_orders_count;
 }
 ?>
 --EXPECTF--

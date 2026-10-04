@@ -80,7 +80,6 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         return null;
     }
 
-    /** @psalm-external-mutation-free */
     private static function isModelSubclass(string $className, AfterExpressionAnalysisEvent $event): bool
     {
         if ($className === Model::class) {

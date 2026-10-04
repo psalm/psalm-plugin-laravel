@@ -36,15 +36,16 @@
         "illuminate/view": "^12.14 || ^13.3",
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
-        "psalm/psalm-plugin-api": "^0.2.0",
+        "psalm/psalm-plugin-api": "^0.3.0",
         "symfony/console": "^7.2 || ^8.0",
-        "vimeo/psalm": "^7.0.0-beta22 || dev-master"
+        "vimeo/psalm": "^7.0.0-beta23 || dev-master"
     },
     "bin": [
         "bin/psalm-laravel"
     ],
     "require-dev": {
         "alies-dev/psalm-tester": "^0.4",
+        "brianium/paratest": "^7.7",
         "friendsofphp/php-cs-fixer": "^3.94",
         "laravel/framework": "^12.14 || ^13.3",
         "phpunit/phpunit": "^11.5 || ^12.5 || ^13.0",
@@ -108,6 +109,7 @@
             "./bin/ci/check-phpt-conventions.sh",
             "phpunit --testsuite=type"
         ],
-        "test:unit": "phpunit --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices"
+        "test:unit": "paratest --processes=auto --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices",
+        "test:unit:fast": "phpunit --testsuite=unit --exclude-group=subprocess --display-deprecations --display-notices --display-phpunit-notices"
     }
 }

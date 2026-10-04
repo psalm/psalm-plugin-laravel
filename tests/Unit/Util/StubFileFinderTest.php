@@ -84,4 +84,77 @@ final class StubFileFinderTest extends TestCase
             ['11', '12', '12.20.0', '12.42.0', '13'],
         ];
     }
+
+    /** @param list<string> $expected */
+    #[Test]
+    #[DataProvider('declaredClassLikesProvider')]
+    public function it_lists_the_class_likes_a_stub_declares(string $contents, array $expected): void
+    {
+        $file = \tempnam(\sys_get_temp_dir(), 'stub-finder-');
+        $this->assertIsString($file);
+
+        try {
+            \file_put_contents($file, $contents);
+            $this->assertSame($expected, StubFileFinder::declaredClassLikes($file));
+        } finally {
+            \unlink($file);
+        }
+    }
+
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function declaredClassLikesProvider(): iterable
+    {
+        yield 'every declaration kind, in file order, with modifiers' => [
+            <<<'PHP'
+                <?php
+                namespace Illuminate\Support;
+
+                interface Arrayable {}
+                trait Macroable {}
+                enum Status: string { case On = 'on'; }
+                final class Js {}
+                abstract readonly class Base {}
+                PHP,
+            [
+                'Illuminate\Support\Arrayable',
+                'Illuminate\Support\Macroable',
+                'Illuminate\Support\Status',
+                'Illuminate\Support\Js',
+                'Illuminate\Support\Base',
+            ],
+        ];
+
+        yield 'single-segment namespace' => [
+            "<?php\nnamespace Carbon;\n\nclass CarbonPeriod {}\n",
+            ['Carbon\CarbonPeriod'],
+        ];
+
+        yield 'global namespace' => [
+            "<?php\n\nclass NullObject {}\n",
+            ['NullObject'],
+        ];
+
+        yield 'class constants, anonymous classes and comments are not declarations' => [
+            <<<'PHP'
+                <?php
+                namespace App;
+
+                /** Mentions class Fake and interface Ghost in prose. */
+                // class AlsoFake {}
+                class Real
+                {
+                    /** @return class-string */
+                    public function a(): string { return self::class; }
+                    public function b(): object { return new class {}; }
+                    public function c(): object { return new class () extends Real {}; }
+                }
+                PHP,
+            ['App\Real'],
+        ];
+
+        yield 'function-only stub declares nothing' => [
+            "<?php\n\n/** @return string */\nfunction e(mixed \$value) {}\n",
+            [],
+        ];
+    }
 }
