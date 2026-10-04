@@ -152,8 +152,9 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         self::$remapping = true;
 
         try {
-            // TaintFlowGraph.php:438 emits with an EMPTY suppression list; matching it exactly is
-            // what keeps reportability identical to the un-remapped issue Psalm would have emitted.
+            // `TaintFlowGraph::reportTaintedFlowOnce()` emits through `IssueBuffer::maybeAdd()` with an
+            // EMPTY suppression list; matching it exactly is what keeps reportability identical to
+            // the un-remapped issue Psalm would have emitted.
             IssueBuffer::accepts($rebuilt);
         } finally {
             self::$remapping = false;
