@@ -17,6 +17,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Codebase\ClassLikes;
+use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\Type;
 use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverBackedEnum;
@@ -40,8 +42,10 @@ final class CastResolverTest extends TestCase
     #[\Override]
     protected function setUp(): void
     {
-        // Partial Codebase — never reached for the branches under test.
+        // Partial Codebase: empty storage, so class lookups fall back to the runtime.
         $this->codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
+        $this->codebase->classlike_storage_provider = new ClassLikeStorageProvider();
+        $this->codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
     }
 
     /** @return iterable<string, array{0: string, 1: string}> */
