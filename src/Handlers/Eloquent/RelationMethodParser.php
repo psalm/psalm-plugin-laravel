@@ -51,7 +51,8 @@ use Psalm\Type\Union;
  * - Docblock generics for morphTo: @return MorphTo<User|Post, $this>
  * - Trait-hosted methods: the body is read from the trait, `self::class` / `static::class` bind to
  *   the composing class; declines when composed traits (nested ones included) declare the name twice (#1613)
- * - Several returns (early returns in `if` / loops): only when every one resolves to the same relation
+ * - Several returns (early returns in `if` / loops): only when every one resolves to the same relation;
+ *   null exits (`return;` / `return null;`) are skipped and mark the result `nullable`
  * - Delegation to another relation method, dispatched as PHP does (receiver override; private
  *   methods bind to the calling scope):
  *   public function openPosts(): HasMany { return $this->posts()->where('open', true); }
@@ -79,7 +80,7 @@ final class RelationMethodParser
      * detected on a BelongsToMany or MorphToMany chain with a statically resolvable argument.
      * Other relations leave them null.
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}>
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}>
      */
     private static array $cache = [];
 
@@ -159,13 +160,14 @@ final class RelationMethodParser
      * through relations only) the intermediate model, and (for BelongsToMany / MorphToMany
      * only) any `->using()` / `->as()` mutations detected on the chain.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      *         null if the method cannot be parsed as a relationship method.
      *         relatedModel is null when polymorphic (morphTo) or when the first argument
      *         could not be statically resolved. intermediateModel is non-null only for
      *         hasOneThrough / hasManyThrough. pivotModel / accessor are non-null only when
      *         an explicit `->using(Pivot::class)` / `->as('alias')` chain mutation was
-     *         detected with a statically resolvable argument.
+     *         detected with a statically resolvable argument. nullable is true when the body
+     *         also has a null exit, so a call can return null.
      */
     public static function parse(Codebase $codebase, string $className, string $methodName, ?string $receiverClass = null): ?array
     {
@@ -194,7 +196,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName, string $receiverClass): ?array
     {
@@ -235,45 +237,78 @@ final class RelationMethodParser
         // the trade-off.
         $parentClass = self::resolveParentClass($codebase, $scopeClass);
 
-        $topLevel = null;
+        $topLevelReturn = null;
         foreach ($stmts as $stmt) {
-            if ($stmt instanceof PhpParser\Node\Stmt\Return_ && $stmt->expr instanceof PhpParser\Node\Expr) {
-                $topLevel = $stmt->expr;
+            if ($stmt instanceof PhpParser\Node\Stmt\Return_) {
+                $topLevelReturn = $stmt;
                 break;
             }
         }
 
-        if (!$topLevel instanceof PhpParser\Node\Expr) {
+        // Without a top-level return the body may fall through to an implicit null.
+        if (!$topLevelReturn instanceof PhpParser\Node\Stmt\Return_) {
             return null;
         }
 
+        $topLevel = $topLevelReturn->expr;
+
         $methodStorage = $context['methodStorage'];
-        $result = self::parseReturn($codebase, $topLevel, $methodStorage, $scopeClass, $parentClass, $receiverClass);
+        $result = null;
+        if ($topLevel instanceof \PhpParser\Node\Expr && !self::isNullExit($topLevel)) {
+            // Fail fast for the common non-relation method before walking the whole body.
+            $result = self::parseReturn($codebase, $topLevel, $methodStorage, $scopeClass, $parentClass, $receiverClass);
+            if ($result === null) {
+                return null;
+            }
+        }
+
+        // An early return (in an `if`, a loop, ...) may build another relation, so every return
+        // must resolve to the same one. Null exits (`return;` / `return null;`) only make the call
+        // nullable: Laravel's property access throws on them rather than yielding another type.
+        $collector = new BodyReturnCollectorVisitor(bailOnBareReturn: false);
+        $traverser = new PhpParser\NodeTraverser();
+        $traverser->addVisitor($collector);
+        $traverser->traverse($stmts);
+
+        $nullable = $collector->hasBareReturn();
+
+        foreach ($collector->getReturnExpressions() as $expr) {
+            if (self::isNullExit($expr)) {
+                $nullable = true;
+                continue;
+            }
+
+            if ($expr === $topLevel) {
+                continue;
+            }
+
+            $parsed = self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass);
+            if ($parsed === null || ($result !== null && $parsed !== $result)) {
+                return null;
+            }
+
+            $result = $parsed;
+        }
+
         if ($result === null) {
             return null;
         }
 
-        // An early return (in an `if`, a loop, ...) may build another relation, so every return
-        // must resolve to the same one.
-        $collector = new BodyReturnCollectorVisitor();
-        $traverser = new PhpParser\NodeTraverser();
-        $traverser->addVisitor($collector);
-        $traverser->traverse($stmts);
-        if ($collector->hasBailed()) {
-            return null;
-        }
-
-        foreach ($collector->getReturnExpressions() as $expr) {
-            if ($expr !== $topLevel && self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass) !== $result) {
-                return null;
-            }
-        }
+        $result['nullable'] = $nullable;
 
         return $result;
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @psalm-mutation-free
+     */
+    private static function isNullExit(PhpParser\Node\Expr $expr): bool
+    {
+        return $expr instanceof PhpParser\Node\Expr\ConstFetch && \strtolower($expr->name->name) === 'null';
+    }
+
+    /**
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function parseReturn(
         Codebase $codebase,
@@ -308,7 +343,7 @@ final class RelationMethodParser
      * - every chain call keeps the relation (`->when()` / `->getRelated()` may replace it);
      * - an outer `->using()` / `->as()` is statically resolvable; it runs after other()'s own, so it wins.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function parseDelegation(
         Codebase $codebase,
@@ -343,9 +378,9 @@ final class RelationMethodParser
     }
 
     /**
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
      * @param list<array{lowercase-string, PhpParser\Node\Expr\MethodCall}> $chain
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function applyChain(
         Codebase $codebase,
@@ -387,7 +422,7 @@ final class RelationMethodParser
      * (the class declaring or composing the body) binds lexically; anything else dispatches on the
      * receiver, so a child override wins.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function parseDelegatedTarget(
         Codebase $codebase,
@@ -411,7 +446,10 @@ final class RelationMethodParser
         // A trait body parses through its composing class so `self` binds there.
         $bodyClass = $target['isTrait'] ? $target['appearingClass'] : $target['declaring']->fq_class_name;
 
-        return self::parse($codebase, $bodyClass, $methodName, $receiverClass);
+        // A nullable target would leave the delegating chain calling into null.
+        $parsed = self::parse($codebase, $bodyClass, $methodName, $receiverClass);
+
+        return $parsed !== null && !$parsed['nullable'] ? $parsed : null;
     }
 
     /**
@@ -467,9 +505,9 @@ final class RelationMethodParser
      * resolve (scope / macro via `__call`) is accepted as keeping the relation. A declaration none
      * of whose alternatives admits the result also declines.
      *
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
      * @param list<lowercase-string> $chain outermost call first
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $docblockType, ?Union $nativeType): ?array
     {
@@ -687,7 +725,7 @@ final class RelationMethodParser
      * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
      * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
      * @param list<lowercase-string> $chain out-parameter: names of the calls above the factory, outermost first
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function findRelationCallInExpr(
         PhpParser\Node\Expr $expr,
@@ -722,6 +760,7 @@ final class RelationMethodParser
                     : null,
                 'pivotModel' => $pivotModel,
                 'accessor' => $accessor,
+                'nullable' => false,
             ];
         }
 

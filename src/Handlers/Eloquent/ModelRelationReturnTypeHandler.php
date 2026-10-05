@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
@@ -191,6 +192,11 @@ final class ModelRelationReturnTypeHandler
                         $bindingIsStatic,
                     )
                     : null;
+
+                // A body with a null exit (`if (...) { return; }`) returns null from the call itself.
+                if ($result instanceof Union && $parsed['nullable']) {
+                    $result = Type::combineUnionTypes($result, Type::getNull());
+                }
             }
         } catch (\Throwable $throwable) {
             // Plugin closures are invoked by Psalm without a safety net. Surface the
@@ -244,7 +250,7 @@ final class ModelRelationReturnTypeHandler
      * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
      * docblock. Returns null when neither path produces a usable type.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
      */
     private static function resolveRelatedModelType(
         array $parsed,
