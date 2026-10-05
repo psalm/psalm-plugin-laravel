@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\HasArchivedRevisions;
+use App\Models\Concerns\HasRevisions;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * Test model for non-generic relationship accessor resolution (#497).
@@ -26,6 +30,11 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  */
 final class Shop extends Model
 {
+    use HasRevisions;
+    use HasArchivedRevisions {
+        HasArchivedRevisions::revisions insteadof HasRevisions;
+    }
+
     protected $table = 'shops';
 
     /** Default aggregates: proof source for `artists_count` and the `supplier_total` alias. */
@@ -171,6 +180,275 @@ final class Shop extends Model
     public function recentWorkOrders(): HasMany
     {
         return $this->workOrders()->where('created_at', '>=', '2025-01-01');
+    }
+
+    // --- Delegated relation bodies without docblock generics (#1613) ---
+
+    public function openWorkOrders(): HasMany
+    {
+        return $this->workOrders()->where('status', 'open');
+    }
+
+    public function seniorMechanics(): HasManyThrough
+    {
+        return $this->mechanics()->where('years_experience', '>', 10);
+    }
+
+    /** Declares a non-relation type: the delegated relation must not leak into the result. */
+    public function workOrderTotal(): int
+    {
+        return $this->workOrders()->count();
+    }
+
+    /** `one()` turns the delegated HasMany into a HasOne, so the parsed HasMany must not be used. */
+    public function firstWorkOrder(): HasOne
+    {
+        return $this->workOrders()->one();
+    }
+
+    /** A declared supertype does not prove the class survived the chain: runtime is a HasOne. */
+    public function onlyWorkOrder(): Relation
+    {
+        return $this->workOrders()->one();
+    }
+
+    /** A union declaration does not pin the class either: runtime is the HasOne alternative. */
+    public function workOrderOrFirst(): HasMany|HasOne
+    {
+        return $this->workOrders()->one();
+    }
+
+    /** An earlier conditional return can yield another relation, so the final delegation proves nothing. */
+    public function workOrdersOrInvoices(): HasMany
+    {
+        if ($this->exists) {
+            return $this->hasMany(Invoice::class);
+        }
+
+        return $this->workOrders();
+    }
+
+    /** `when()` may return its callback's relation instead of the receiver. */
+    public function conditionalWorkOrders(): HasMany
+    {
+        return $this->workOrders()->when($this->exists, fn(): HasMany => $this->hasMany(Invoice::class));
+    }
+
+    /** getRelated() leaves the relation: the result is the related model's own relation. */
+    public function workOrderRevisions(): HasMany
+    {
+        return $this->workOrders()->getRelated()->revisions();
+    }
+
+    /** Delegates to a helper whose relation is built dynamically: not statically resolvable. */
+    public function namedWorkOrders(): HasMany
+    {
+        return $this->relationNamed('workOrders');
+    }
+
+    private function relationNamed(string $name): HasMany
+    {
+        $relation = $this->{$name}();
+        \assert($relation instanceof HasMany);
+
+        return $relation;
+    }
+
+    /** Delegation cycle (never called at runtime): resolution must terminate and decline. */
+    public function cyclicWorkOrders(): HasMany
+    {
+        return $this->mirroredWorkOrders();
+    }
+
+    public function mirroredWorkOrders(): HasMany
+    {
+        return $this->cyclicWorkOrders()->latest();
+    }
+
+    // --- Bodies with several returns (#1613): every return must resolve to the same relation ---
+
+    /** Untyped with a guard exit (pixelfed shape): the call may return null, the property cannot. */
+    public function guardedInvoice()
+    {
+        if (!$this->exists) {
+            return;
+        }
+
+        return $this->hasOne(Invoice::class);
+    }
+
+    public function guardedOwner()
+    {
+        if (!$this->exists) {
+            return null;
+        }
+
+        return $this->belongsTo(Customer::class);
+    }
+
+    /** Delegates to a target with a null exit: the chain would run on null, so it declines. */
+    public function latestGuardedInvoice(): HasOne
+    {
+        return $this->guardedInvoice()->latest();
+    }
+
+    /** The helper's early return yields Invoice for this argument, so the delegation proves nothing. */
+    public function invoicesViaHelper(): HasMany
+    {
+        return $this->relationFor('invoices')->latest();
+    }
+
+    private function relationFor(string $kind): HasMany
+    {
+        if ($kind === 'invoices') {
+            return $this->hasMany(Invoice::class);
+        }
+
+        return $this->hasMany(WorkOrder::class);
+    }
+
+    public function invoicesOrWorkOrders(): HasMany
+    {
+        if ($this->exists) {
+            return $this->hasMany(Invoice::class);
+        }
+
+        return $this->hasMany(WorkOrder::class);
+    }
+
+    public function sortedWorkOrders(): HasMany
+    {
+        if ($this->exists) {
+            return $this->hasMany(WorkOrder::class)->latest();
+        }
+
+        return $this->hasMany(WorkOrder::class);
+    }
+
+    // --- Direct factory chains that change the relation class (#1647) ---
+
+    public function lastWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function lastSupplier(): MorphOne
+    {
+        return $this->morphMany(Supplier::class, 'suppliable')->one();
+    }
+
+    public function lastMechanic(): HasOneThrough
+    {
+        return $this->hasManyThrough(Mechanic::class, Vehicle::class)->one();
+    }
+
+    public function latestOfManyWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one()->latestOfMany();
+    }
+
+    /** getQuery() leaves the relation: the result is the Eloquent builder, not a HasMany. */
+    public function workOrderQuery(): EloquentBuilder
+    {
+        return $this->hasMany(WorkOrder::class)->getQuery();
+    }
+
+    /** Undeclared on purpose: only the chain walk can tell that getQuery() leaves the relation. */
+    public function untypedWorkOrderQuery()
+    {
+        return $this->hasMany(WorkOrder::class)->getQuery();
+    }
+
+    /**
+     * Deliberately wrong declaration (the body is a HasMany): the parsed class must not override
+     * the declared one.
+     *
+     * @psalm-suppress InvalidReturnStatement
+     */
+    public function mismatchedWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->where('status', 'open');
+    }
+
+    /** A query-builder-only method: Eloquent\Builder::__call() discards its result, so the relation survives. */
+    public function beforeCallbackWorkOrders(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->applyBeforeQueryCallbacks();
+    }
+
+    /** A passthru method returns the base query's result (a bool), not the relation. */
+    public function untypedWorkOrdersExist()
+    {
+        return $this->hasMany(WorkOrder::class)->exists();
+    }
+
+    /** clone() returns a new Eloquent builder, which Relation::forwardDecoratedCallTo() does not map back. */
+    public function untypedClonedLastWorkOrder()
+    {
+        return $this->hasMany(WorkOrder::class)->one()->clone();
+    }
+
+    /** applyScopes() is declared `static` but returns a clone when global scopes exist. */
+    public function untypedScopedWorkOrders()
+    {
+        return $this->hasMany(WorkOrder::class)->applyScopes();
+    }
+
+    /** A dynamic method name could be `one`, so the chain cannot be followed. */
+    public function untypedDynamicChainWorkOrders()
+    {
+        return $this->hasMany(WorkOrder::class)->{'one'}();
+    }
+
+    /**
+     * Deliberately wrong union (the body is a HasOne): no alternative admits the parsed class.
+     *
+     * @psalm-suppress InvalidReturnStatement
+     */
+    public function unionMismatchedWorkOrder(): HasMany|EloquentBuilder
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function unionLastWorkOrder(): HasOne|HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function nullableLastWorkOrder(): ?HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** A scalar alternative is no room for a relation: the parsed HasOne is not admitted. */
+    public function scalarUnionWorkOrder(): HasMany|false
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /**
+     * A template admits only through its bound: HasOne is not a HasMany.
+     *
+     * @template TRelation of HasMany
+     *
+     * @param class-string<TRelation> $class
+     * @return TRelation
+     */
+    public function templatedBoundWorkOrder(string $class): Relation
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** @return HasOne<WorkOrder, self>&\Countable */
+    public function intersectionWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** @return Relation */
+    public function widerDocblockWorkOrder(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->one();
     }
 
     // --- `$this` receiver (#1623 shape) ---

@@ -1102,14 +1102,13 @@ final class ModelMetadataRegistryBuilder
      * Compute the OWN-CLASS relation map: for each method declared in the model's own body, run the
      * AST relation parser and record the relation factory it returns.
      *
-     * OWN-CLASS only because {@see RelationMethodParser::parse()} resolves a factory call only inside
-     * a class literally named $modelFqcn (it searches the declaring file for that class name) — which
-     * is exactly how the relation handlers call it, with the receiver FQCN. So `relations()[$name]`
-     * equals `parse($receiver, $name)` for every name; inherited / trait-hosted relations are null in
-     * both, and the handlers keep serving those through their `getMethodReturnType` tiers (this map
-     * replaces only their AST-parse tier). NOT the full-callable ancestor walk used for
-     * scopes/accessors — those are dispatched by name across the hierarchy, relations are body-parsed
-     * per declaring class.
+     * OWN-CLASS only: it enumerates the methods declared in the model's own body, and for those
+     * `relations()[$name]` equals `parse($receiver, $name)`. Inherited relations are null in both (the
+     * parser reads an inherited body only through the declaring class); trait-hosted relations parse
+     * (#1613) but are not enumerated here, so the property handlers keep serving those two through
+     * their `getMethodReturnType` tiers (this map replaces only their AST-parse tier). NOT the
+     * full-callable ancestor walk used for scopes/accessors — those are dispatched by name across the
+     * hierarchy, relations are body-parsed per declaring class.
      *
      * Gated to relation CANDIDATES — own-body methods with no declared return type, or a
      * Relation-subclass return type. This reproduces the handlers' OWN gate exactly: both

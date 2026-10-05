@@ -1,0 +1,188 @@
+--FILE--
+<?php declare(strict_types=1);
+
+use App\Models\Customer;
+use App\Models\DamageReport;
+use App\Models\Mechanic;
+use App\Models\Shop;
+use App\Models\Supplier;
+use App\Models\Vehicle;
+use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+
+/**
+ * Regression for https://github.com/psalm/psalm-plugin-laravel/issues/1647.
+ *
+ * A direct factory chain used to report the factory's class even when a chained call changes it:
+ * `hasMany()->one()` is a HasOne at runtime. `one()` now maps HasMany / MorphMany / HasManyThrough
+ * to their single-result siblings (later calls resolve against the mapped class), a resolvable
+ * chain call that leaves the relation (`getQuery()`) declines, and so does a parsed class that is
+ * not the declared one.
+ */
+
+function issue1647_has_many_one(Shop $shop): HasOne
+{
+    $relation = $shop->lastWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_morph_many_one(Shop $shop): MorphOne
+{
+    $relation = $shop->lastSupplier();
+    /** @psalm-check-type-exact $relation = MorphOne<Supplier, Shop> */
+    return $relation;
+}
+
+function issue1647_has_many_through_one(Shop $shop): HasOneThrough
+{
+    $relation = $shop->lastMechanic();
+    /** @psalm-check-type-exact $relation = HasOneThrough<Mechanic, Vehicle, Shop> */
+    return $relation;
+}
+
+function issue1647_one_then_latest_of_many(Shop $shop): HasOne
+{
+    $relation = $shop->latestOfManyWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_has_many_one_property(Shop $shop): ?WorkOrder
+{
+    /** @psalm-check-type-exact $workOrder = WorkOrder|null */
+    $workOrder = $shop->lastWorkOrder;
+    return $workOrder;
+}
+
+function issue1647_morph_many_one_property(Shop $shop): ?Supplier
+{
+    /** @psalm-check-type-exact $supplier = Supplier|null */
+    $supplier = $shop->lastSupplier;
+    return $supplier;
+}
+
+function issue1647_has_many_through_one_property(Shop $shop): ?Mechanic
+{
+    /** @psalm-check-type-exact $mechanic = Mechanic|null */
+    $mechanic = $shop->lastMechanic;
+    return $mechanic;
+}
+
+function issue1647_non_self_chain_call_declines(Shop $shop): Builder
+{
+    $query = $shop->workOrderQuery();
+    /** @psalm-check-type-exact $query = Builder<Model> */
+    return $query;
+}
+
+function issue1647_non_self_chain_call_declines_without_declared_type(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $query = $shop->untypedWorkOrderQuery();
+    /** @psalm-check-type-exact $query = mixed */
+    return $query;
+}
+
+function issue1647_declared_class_mismatch_declines(Shop $shop): HasOne
+{
+    $relation = $shop->mismatchedWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<Model, Model> */
+    return $relation;
+}
+
+function issue1647_query_builder_only_method_keeps_relation(Shop $shop): HasMany
+{
+    $relation = $shop->beforeCallbackWorkOrders();
+    /** @psalm-check-type-exact $relation = HasMany<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_passthru_method_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedWorkOrdersExist();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_new_instance_clone_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedClonedLastWorkOrder();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_new_instance_apply_scopes_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedScopedWorkOrders();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_dynamic_method_name_declines(Shop $shop): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $result = $shop->untypedDynamicChainWorkOrders();
+    /** @psalm-check-type-exact $result = mixed */
+    return $result;
+}
+
+function issue1647_union_mismatch_declines(Shop $shop): HasMany|Builder
+{
+    $relation = $shop->unionMismatchedWorkOrder();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model>|Builder<Model> */
+    return $relation;
+}
+
+function issue1647_union_containing_parsed_class_maps(Shop $shop): HasOne|HasMany
+{
+    $relation = $shop->unionLastWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_nullable_declaration_maps(Shop $shop): HasOne
+{
+    $relation = $shop->nullableLastWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop> */
+    return $relation;
+}
+
+function issue1647_scalar_union_declines(Shop $shop): HasMany|false
+{
+    $relation = $shop->scalarUnionWorkOrder();
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model>|false */
+    return $relation;
+}
+
+function issue1647_template_bound_declines(Shop $shop): Relation
+{
+    $relation = $shop->templatedBoundWorkOrder(HasMany::class);
+    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
+    return $relation;
+}
+
+function issue1647_intersection_declines(Shop $shop): HasOne
+{
+    $relation = $shop->intersectionWorkOrder();
+    /** @psalm-check-type-exact $relation = HasOne<WorkOrder, Shop>&Countable */
+    return $relation;
+}
+
+function issue1647_wider_docblock_declines(Shop $shop): Relation
+{
+    $relation = $shop->widerDocblockWorkOrder();
+    /** @psalm-check-type-exact $relation = Relation<Model, Model, mixed> */
+    return $relation;
+}
+?>
+--EXPECTF--
