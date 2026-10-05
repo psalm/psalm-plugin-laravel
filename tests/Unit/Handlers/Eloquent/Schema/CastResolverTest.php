@@ -21,6 +21,9 @@ use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\Type;
+use Psalm\Type\Atomic\TIntRange;
+use Psalm\Type\Atomic\TString;
+use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverBackedEnum;
 use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverUnitEnum;
 
@@ -286,6 +289,46 @@ final class CastResolverTest extends TestCase
         $union = CastResolver::resolve($this->codebase, 'int', nullable: false, originalType: $originalType);
 
         $this->assertSame('int', (string) $union);
+    }
+
+    /** @return iterable<string, array{0: string}> */
+    public static function integerCastProvider(): iterable
+    {
+        yield 'int' => ['int'];
+        yield 'integer' => ['integer'];
+        yield 'timestamp' => ['timestamp'];
+    }
+
+    /** An int-valued cast keeps the column's own int type (#1672), with null added for a nullable column. */
+    #[Test]
+    #[DataProvider('integerCastProvider')]
+    public function it_keeps_an_int_original_type_for_integer_casts(string $cast): void
+    {
+        $unsigned = new Union([new TIntRange(0, null)]);
+
+        $this->assertSame(
+            'int<0, max>',
+            (string) CastResolver::resolve($this->codebase, $cast, nullable: false, originalType: $unsigned),
+        );
+        $this->assertSame(
+            'int<0, max>|null',
+            (string) CastResolver::resolve($this->codebase, $cast, nullable: true, originalType: $unsigned),
+        );
+    }
+
+    /** Anything that is not purely int atomics falls back to the plain `int` the cast produces. */
+    #[Test]
+    #[DataProvider('integerCastProvider')]
+    public function it_falls_back_to_plain_int_for_non_int_original_types(string $cast): void
+    {
+        $mixedInts = new Union([new TIntRange(0, null), new TString()]);
+
+        foreach ([Type::getString(), Type::getMixed(), $mixedInts] as $originalType) {
+            $this->assertSame(
+                'int',
+                (string) CastResolver::resolve($this->codebase, $cast, nullable: false, originalType: $originalType),
+            );
+        }
     }
 
     /**

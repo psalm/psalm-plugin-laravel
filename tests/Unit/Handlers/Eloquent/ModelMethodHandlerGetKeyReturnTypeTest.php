@@ -4,16 +4,24 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent;
 
+use App\Models\ConflictingKeyCastModel;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
+use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\CollectingProgress;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\IntegerCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 
 /**
@@ -30,6 +38,7 @@ final class ModelMethodHandlerGetKeyReturnTypeTest extends TestCase
     protected function setUp(): void
     {
         ModelMetadataRegistryBuilder::reset();
+        SchemaStateProvider::setSchema(new SchemaAggregator());
         SectionFailureModel::$failures = [];
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
     }
@@ -59,16 +68,73 @@ final class ModelMethodHandlerGetKeyReturnTypeTest extends TestCase
         $this->assertNotNull($metadata);
         $this->assertFalse($metadata->isComplete(ModelMetadata::SECTION_PRIMARY_KEY));
 
-        $method = new \ReflectionMethod(ModelMethodHandler::class, 'getKeyReturnType');
-        $result = $method->invoke(null, SectionFailureModel::class, $codebase);
+        $this->assertNull($this->getKeyReturnType(SectionFailureModel::class));
+    }
 
-        $this->assertNull($result);
+    /**
+     * An unsigned `$table->id()` key reads as `int<0, max>` through the implicit key cast (#1672);
+     * getKey() must still narrow to `int` instead of falling back to the stub's `int|string`.
+     */
+    #[Test]
+    public function unsigned_integer_key_narrows_to_int(): void
+    {
+        $this->seedKeyColumn('integer_cast_models', unsigned: true);
+        $codebase = $this->makeCodebase();
+        $this->classLikeStorageProvider->create(IntegerCastModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, IntegerCastModel::class);
+
+        $this->assertSame('int', (string) $this->getKeyReturnType(IntegerCastModel::class));
+    }
+
+    #[Test]
+    public function signed_integer_key_narrows_to_int(): void
+    {
+        $this->seedKeyColumn('integer_cast_models', unsigned: false);
+        $codebase = $this->makeCodebase();
+        $this->classLikeStorageProvider->create(IntegerCastModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, IntegerCastModel::class);
+
+        $this->assertSame('int', (string) $this->getKeyReturnType(IntegerCastModel::class));
+    }
+
+    /** A key cast that contradicts the int key (`'id' => 'string'`) still declines to the stub fallback. */
+    #[Test]
+    public function conflicting_key_cast_still_bails_for_unsigned_key(): void
+    {
+        $this->seedKeyColumn('conflicting_key_cast_models', unsigned: true);
+        $codebase = $this->makeCodebase();
+        $this->classLikeStorageProvider->create(ConflictingKeyCastModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, ConflictingKeyCastModel::class);
+
+        $this->assertNull($this->getKeyReturnType(ConflictingKeyCastModel::class));
+    }
+
+    private function seedKeyColumn(string $tableName, bool $unsigned): void
+    {
+        $schema = new SchemaAggregator();
+        $table = new SchemaTable();
+        $table->setColumn(new SchemaColumn('id', SchemaColumn::TYPE_INT, unsigned: $unsigned));
+        $schema->tables[$tableName] = $table;
+
+        SchemaStateProvider::setSchema($schema);
+    }
+
+    private function getKeyReturnType(string $modelFqcn): ?Union
+    {
+        $result = (new \ReflectionMethod(ModelMethodHandler::class, 'getKeyReturnType'))->invoke(null, $modelFqcn);
+        $this->assertTrue($result === null || $result instanceof Union);
+
+        return $result;
     }
 
     private function makeCodebase(): Codebase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
+        $codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');
