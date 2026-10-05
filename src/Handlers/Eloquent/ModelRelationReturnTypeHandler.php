@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
+use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
@@ -173,7 +174,7 @@ final class ModelRelationReturnTypeHandler
         $codebase = $source->getCodebase();
 
         try {
-            $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName);
+            $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName, $bindingClass);
 
             if ($parsed === null) {
                 $result = null;
@@ -191,6 +192,11 @@ final class ModelRelationReturnTypeHandler
                         $bindingIsStatic,
                     )
                     : null;
+
+                // A body with a null exit (`if (...) { return; }`) returns null from the call itself.
+                if ($result instanceof Union && $parsed['nullable']) {
+                    $result = Type::combineUnionTypes($result, Type::getNull());
+                }
             }
         } catch (\Throwable $throwable) {
             // Plugin closures are invoked by Psalm without a safety net. Surface the
@@ -244,7 +250,7 @@ final class ModelRelationReturnTypeHandler
      * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
      * docblock. Returns null when neither path produces a usable type.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
      */
     private static function resolveRelatedModelType(
         array $parsed,
@@ -314,7 +320,16 @@ final class ModelRelationReturnTypeHandler
         // should resolve to at the call site (User for `(new User())->posts()`), even if
         // the method body lives on a parent class. The `&static` marker is kept when the
         // receiver itself is `static` (`$this->posts()` in a non-final model).
-        $typeParams[] = new Union([new TNamedObject($bindingClass, $bindingIsStatic)]);
+        //
+        // The nested `&static` is flagged as already resolved on purpose. Psalm expands the
+        // `@return $this` of real methods such as `take()` / `limit()` with the receiver as the
+        // static class type, and TypeExpander::expandNamedObject re-binds any unresolved `static`
+        // it meets, including the one nested in the generic params. That intersects it with the
+        // outer receiver and yields the malformed `Model&Relation<…>` as TDeclaringModel.
+        $bindingType = $bindingIsStatic
+            ? (new TNamedObject($bindingClass, true))->setIsStatic(true, true)
+            : new TNamedObject($bindingClass);
+        $typeParams[] = new Union([$bindingType]);
 
         // Always emit TPivotModel / TAccessor (slots 3 and 4) for pivot-aware relations,
         // filling declared defaults when the parser didn't capture a chain mutation.

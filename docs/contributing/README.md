@@ -73,6 +73,16 @@ LARAVEL_INSTALLER_VERSION=12.12.2 composer test:app # run over a specific Larave
 ./vendor/bin/phpunit --filter=AuthTest tests/Type/
 ```
 
+### Measuring a PR on real-world apps (`/psalm-delta`)
+
+Maintainers can comment `/psalm-delta` on a PR to run the plugin's base and head on the apps in [`bin/ci/test-apps.yml`](../../bin/ci/test-apps.yml) and get a sticky comment with the per-app issue delta. It is informational and never fails the PR.
+
+- `/psalm-delta` runs the `default` group.
+- `/psalm-delta octane vito` adds group tags and app names to `default` (spaces or commas). Pick the groups that exercise your change, e.g. `ai` for `laravel/ai` stubs, `blade` for view resolution or view taint, or `filament` for Filament-heavy code.
+- `/psalm-delta all` runs every app; `/psalm-delta help` replies with the groups and their apps.
+
+To reproduce locally (needs `yq`), run `bash bin/ci/delta.sh --apps "octane vito" <pr-branch>`.
+
 ## Code style
 
 - PER Coding Style 3.0 (powered by php-cs-fixer: run `composer cs` to apply fixes)
@@ -158,6 +168,7 @@ require getcwd() . '/vendor/autoload.php';
 Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
+`ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
 
 ### Experimental issue lifecycle
@@ -231,6 +242,8 @@ There are two ways to register:
 
 Every class registration keeps the matching `require_once` beside
 `registerHooksFromClass()`.
+
+`ModelAggregateLoadHandler` (`AfterExpressionAnalysisInterface`) is the reference for flow facts: after a literal `$m->loadCount('x')` or `$m = M::withCount('x')->firstOrFail()` it writes `$context->vars_in_scope['$m->x_count']`, which Psalm's property fetch reads before any property provider, and it overrides the node type of a directly fetched chain (`M::withCount('x')->firstOrFail()->x_count`). Its only state is the set of aliases it recorded per variable id, so `$m->refresh()` can drop those facts without touching user narrowings; `reset()` clears it from `Plugin::resetInvocationState()`. It gates on the node class and method name before touching the codebase and declines (`null`) on anything not proven. See [Architecture Decisions](decisions.md), "Aggregate accessor proof".
 
 #### Exempting one call site from a stub's taint sink
 

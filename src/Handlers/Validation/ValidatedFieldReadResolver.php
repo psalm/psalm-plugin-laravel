@@ -83,7 +83,8 @@ final class ValidatedFieldReadResolver
      */
     private static function fromMethodCall(AddRemoveTaintsEvent $event, MethodCall $expr, string $method): ?ValidatedFieldRead
     {
-        if (!\in_array($method, self::ACCESSOR_METHODS, true)) {
+        // getArgs() throws on a first-class callable (`$request->input(...)`), which reads no field.
+        if (!\in_array($method, self::ACCESSOR_METHODS, true) || $expr->isFirstClassCallable()) {
             return null;
         }
 

@@ -47,6 +47,22 @@ class SubCustomer extends Customer
         return $this->vehicles()->byMake('Volvo');
     }
 
+    public function probeTake(): void
+    {
+        $_take = $this->vehicles()->take(3);
+        /** @psalm-check-type-exact $_take = HasMany<Vehicle, SubCustomer&static>&static */
+
+        $_limit = $this->vehicles()->limit(3);
+        /** @psalm-check-type-exact $_limit = HasMany<Vehicle, SubCustomer&static>&static */
+
+        $r = $this->vehicles();
+        $_stored = $r->take(3);
+        /** @psalm-check-type-exact $_stored = HasMany<Vehicle, SubCustomer&static>&static */
+
+        $_ordered = $this->vehicles()->orderBy('x')->take(3);
+        /** @psalm-check-type-exact $_ordered = HasMany<Vehicle, SubCustomer&static>&static */
+    }
+
     public function probeThis(): void
     {
         $_rel = $this->vehicles();
@@ -74,6 +90,15 @@ class SubAdmin extends Admin
     public function plainMorphToMany(): MorphToMany
     {
         return $this->customers();
+    }
+
+    public function probeTake(): void
+    {
+        $_take = $this->customers()->take(3);
+        /** @psalm-check-type-exact $_take = MorphToMany<Customer, SubAdmin&static, MorphPivot, 'pivot'>&static */
+
+        $_limit = $this->customers()->limit(3);
+        /** @psalm-check-type-exact $_limit = MorphToMany<Customer, SubAdmin&static, MorphPivot, 'pivot'>&static */
     }
 
     public function probeThis(): void

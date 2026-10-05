@@ -7,9 +7,9 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -47,7 +47,6 @@ final class RelationResolver
     /** @var array<string, ?string> Cache for relatedModel() keyed by "class::lowername" */
     private static array $relatedModelCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$methodExistsCache = [];
@@ -144,6 +143,8 @@ final class RelationResolver
     /**
      * Extract the related model FQCN from the first generic parameter of a
      * `Relation<TRelated, ...>` return type.
+     *
+     * @psalm-mutation-free
      */
     private static function extractRelatedFromReturnType(Codebase $codebase, ?Union $returnType): ?string
     {
@@ -152,7 +153,7 @@ final class RelationResolver
         }
 
         foreach ($returnType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TGenericObject || !self::isClassOrSubclassOf($codebase, $atomic->value, Relation::class)) {
+            if (!$atomic instanceof TGenericObject || !ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
                 continue;
             }
 
@@ -169,6 +170,8 @@ final class RelationResolver
      * dot-notation walking, so it defers rather than guessing one arm. In practice
      * Psalm collapses morphTo's `<..., $this>` generic before this is reached; this
      * keeps the deferral correct even when it does not.
+     *
+     * @psalm-mutation-free
      */
     private static function singleModel(Codebase $codebase, ?Union $type): ?string
     {
@@ -179,7 +182,7 @@ final class RelationResolver
         $model = null;
 
         foreach ($type->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject || !self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 continue;
             }
 
@@ -191,34 +194,5 @@ final class RelationResolver
         }
 
         return $model;
-    }
-
-    /**
-     * $class is $ancestor or a subclass, without autoloading. Unlike `\is_a($class, ..., true)`, which
-     * loads the class file: a related model FQCN taken from a relation's generic return type could emit
-     * a load-time deprecation that Psalm's error handler turns into a thrown exception, crashing the
-     * whole run (the #1253 bug class, which the sibling {@see \Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler}
-     * fixed for its own sites but not for this resolver it delegates to). Mirrors that handler's own
-     * non-autoloading check. classExtends() is non-reflexive → identity is checked first; every ancestor
-     * passed here (Relation, Model) is a class, so classExtends() alone suffices.
-     *
-     * Not marked mutation-free: Psalm 6's Codebase::classExists()/classExtends()
-     * are not annotated mutation-free, unlike Psalm 7.
-     */
-    private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
-    {
-        if (\strtolower($class) === \strtolower($ancestor)) {
-            return true;
-        }
-
-        if (!$codebase->classExists($class)) {
-            return false;
-        }
-
-        try {
-            return $codebase->classExtends($class, $ancestor);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return false;
-        }
     }
 }

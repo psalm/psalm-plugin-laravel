@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Builders\WorkOrderBuilder;
 use App\Collections\WorkOrderCollection;
 use App\Models\Concerns\ComparesRank;
+use App\Models\Concerns\HasRevisions;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -33,6 +35,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 final class WorkOrder extends Model
 {
     use ComparesRank;
+    use HasRevisions;
     use SoftDeletes;
 
     protected $table = 'work_orders';
@@ -66,6 +69,18 @@ final class WorkOrder extends Model
     public function damageReports(): MorphMany
     {
         return $this->morphMany(DamageReport::class, 'reportable');
+    }
+
+    /** Delegates to an own relation (#1613): resolves to the same generics as damageReports(). */
+    public function latestDamageReports(): MorphMany
+    {
+        return $this->damageReports()->latest();
+    }
+
+    /** Delegates to the trait-hosted revisions() relation (#1613). */
+    public function recentRevisions(): HasMany
+    {
+        return $this->revisions()->where('created_at', '>=', '2025-01-01');
     }
 
     /**

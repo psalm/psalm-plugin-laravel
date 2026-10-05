@@ -1007,14 +1007,24 @@ final class SchemaAggregator
 
         $class_name = $first_arg->class->getAttribute('resolvedName');
 
-        if (!\is_string($class_name) || !\is_a($class_name, Model::class, true)) {
+        if (!\is_string($class_name)) {
             return null;
         }
 
+        // The schema is built at plugin init, before Psalm populates its storage, so only the
+        // autoloader can answer here. A class whose load raises (a deprecation, under Psalm's error
+        // handler) must drop this one column, not escape to Plugin::__invoke() and disable the whole
+        // plugin (#1652).
         try {
+            // A misspelled or missing class throws ReflectionException, caught below.
+            /** @psalm-suppress ArgumentTypeCoercion */
             $reflection = new \ReflectionClass($class_name);
+            if (!$reflection->isSubclassOf(Model::class)) {
+                return null;
+            }
+
             $instance = $reflection->newInstanceWithoutConstructor();
-        } catch (\ReflectionException) {
+        } catch (\Throwable) {
             return null;
         }
 
