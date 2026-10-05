@@ -3,6 +3,10 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
+ * The sync*OrFail() methods (Laravel 13.0+) restated from BelongsToMany for the same reason as the
+ * sync family in stubs/common/. The class header is copied verbatim from common because
+ * re-declaring the class resets Psalm's interface/template metadata.
+ *
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
  * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
  * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
@@ -13,28 +17,26 @@ namespace Illuminate\Database\Eloquent\Relations;
  */
 class MorphToMany extends BelongsToMany
 {
-    /*
-     * The sync family is restated from BelongsToMany: Laravel declares it in the InteractsWithPivotTable
-     * trait, and Psalm resolves a subclass's trait-provided method from the trait, not from the
-     * parent's stub override.
-     */
-
     /**
      * @template TSyncKey of array-key
      * @template TSyncValue
-     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array  $ids
      * @param  bool  $detaching
      * @return array{attached: array, detached: array, updated: array}
+     *
+     * @throws \Throwable
      */
-    public function sync($ids, $detaching = true) {}
+    public function syncOrFail($ids, $detaching = true) {}
 
     /**
      * @template TSyncKey of array-key
      * @template TSyncValue
-     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array  $ids
      * @return array{attached: array, detached: array, updated: array}
+     *
+     * @throws \Throwable
      */
-    public function syncWithoutDetaching($ids) {}
+    public function syncWithoutDetachingOrFail($ids) {}
 
     /**
      * @template TSyncKey of array-key
@@ -43,6 +45,8 @@ class MorphToMany extends BelongsToMany
      * @param  array  $values
      * @param  bool  $detaching
      * @return array{attached: array, detached: array, updated: array}
+     *
+     * @throws \Throwable
      */
-    public function syncWithPivotValues($ids, array $values, bool $detaching = true) {}
+    public function syncWithPivotValuesOrFail($ids, array $values, bool $detaching = true) {}
 }
