@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers;
 
+use Fidry\CpuCoreCounter\CpuCoreCounter;
 use Illuminate\Filesystem\Filesystem;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -41,8 +42,8 @@ use Symfony\Component\Process\Process;
  * registered: an init-time failure disables the plugin silently, which would otherwise pass as "no
  * crash".
  *
- * All projects start in parallel in {@see setUpBeforeClass()}; each test waits on its own run, so a
- * failure still names its case.
+ * Projects run in parallel, at most {@see MAX_RUNNING} at once, queued from {@see setUpBeforeClass()};
+ * each test waits on its own run, so a failure still names its case.
  */
 #[CoversClass(UndefinedModelRelationHandler::class)]
 #[CoversClass(ClassLineage::class)]
@@ -64,8 +65,16 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
 {
     private const FIXTURE_DIR = __DIR__ . '/Fixtures/UndefinedRelationAutoloadCrash';
 
-    /** @var array<string, array{Process, string}> Running Psalm and its cache dir, keyed by fixture dir. */
+    /** Upper bound on simultaneous Psalm runs: ParaTest workers already occupy the other CPUs. */
+    private const MAX_RUNNING = 4;
+
+    /** @var array<string, array{Process, string}> Psalm run and its cache dir, keyed by fixture dir. */
     private static array $runs = [];
+
+    /** @var list<string> Fixture dirs whose run has not started, in test order. */
+    private static array $pending = [];
+
+    private static int $maxRunning = 1;
 
     #[\Override]
     public static function setUpBeforeClass(): void
@@ -82,16 +91,20 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
             // The plugin caches the parsed migration schema keyed by migration contents, outside
             // --no-cache: a cached schema would skip the init-time schema build this test must exercise.
             $cacheDir = \sys_get_temp_dir() . '/psalm-laravel-autoload-crash-' . \bin2hex(\random_bytes(6));
+            // --scan-threads too: --threads=1 bounds analysis only, scanning defaults to one worker per CPU.
             $process = new Process(
-                [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+                [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--no-progress', '--output-format=json'],
                 $fixtureDir,
                 ['XDG_CACHE_HOME' => $cacheDir, 'TMPDIR' => $cacheDir . '/'],
             );
             $process->setTimeout(300);
-            $process->start();
 
             self::$runs[$fixtureDir] = [$process, $cacheDir];
         }
+
+        self::$pending = $fixtureDirs;
+        self::$maxRunning = \min(self::MAX_RUNNING, (new CpuCoreCounter())->getCountWithFallback(1));
+        self::startPending();
     }
 
     #[\Override]
@@ -104,6 +117,7 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
         }
 
         self::$runs = [];
+        self::$pending = [];
     }
 
     #[Test]
@@ -149,8 +163,20 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
      */
     private function assertAnalysisClean(string $fixtureDir): void
     {
-        $this->assertArrayHasKey($fixtureDir, self::$runs, 'No Psalm run was started for this fixture.');
+        $this->assertArrayHasKey($fixtureDir, self::$runs, 'No Psalm run exists for this fixture.');
         [$process] = self::$runs[$fixtureDir];
+
+        // A queued run goes next: a filter may have skipped the runs ahead of it.
+        if (!$process->isStarted()) {
+            self::$pending = [$fixtureDir, ...\array_values(\array_diff(self::$pending, [$fixtureDir]))];
+        }
+
+        // Polling, not wait(), so slots freed by other runs are refilled while this one finishes.
+        while (!$process->isStarted() || $process->isRunning()) {
+            self::startPending();
+            $process->checkTimeout();
+            \usleep(50_000);
+        }
 
         // Non-zero exit on findings is fine here; do not mustRun().
         $process->wait();
@@ -175,5 +201,16 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
                 && (($issue['type'] ?? null) === 'CheckType' || \str_ends_with((string) ($issue['file_name'] ?? ''), 'plugin_active.php')),
         ));
         $this->assertSame([], $failed, 'A type check failed (a handler declined) or the plugin disabled itself.' . $context);
+    }
+
+    /** Starts queued runs while fewer than {@see $maxRunning} are running. */
+    private static function startPending(): void
+    {
+        $running = \count(\array_filter(self::$runs, static fn(array $run): bool => $run[0]->isRunning()));
+
+        while ($running < self::$maxRunning && self::$pending !== []) {
+            self::$runs[\array_shift(self::$pending)][0]->start();
+            ++$running;
+        }
     }
 }
