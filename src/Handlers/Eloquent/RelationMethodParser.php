@@ -589,19 +589,9 @@ final class RelationMethodParser
 
             // Psalm records the declaring trait method ignoring `insteadof` (vimeo/psalm#12113:
             // ClassLikeNodeScanner::handleTraitUse() applies only `as` adaptations), so it may name the
-            // losing body. Decline when the composed traits, nested ones included, declare it twice.
-            if ($isTrait) {
-                $declarations = [];
-                foreach ($appearingStorage->used_traits as $traitName) {
-                    $traitDeclaring = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($traitName, $declaring->method_name));
-                    if ($traitDeclaring instanceof MethodIdentifier) {
-                        $declarations[\strtolower((string) $traitDeclaring)] = true;
-                    }
-                }
-
-                if (\count($declarations) > 1) {
-                    return null;
-                }
+            // losing body. Decline when two composed traits, at any nesting depth, declare it.
+            if ($isTrait && self::countTraitOwners($codebase, $appearingStorage->used_traits, $declaring->method_name) > 1) {
+                return null;
             }
 
             $returnType = $storage->return_type ?? $storage->signature_return_type;
@@ -617,6 +607,38 @@ final class RelationMethodParser
         } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
             return null;
         }
+    }
+
+    /**
+     * How many traits reached from $usedTraits declare $methodName in their own body. A trait's
+     * own method overrides the ones it composes, so the walk stops there; a trait reached twice
+     * counts once.
+     *
+     * @param array<array-key, string> $usedTraits
+     * @param lowercase-string $methodName
+     * @psalm-capabilities read-props
+     */
+    private static function countTraitOwners(Codebase $codebase, array $usedTraits, string $methodName): int
+    {
+        $owners = 0;
+        $visited = [];
+        $queue = \array_values($usedTraits);
+        while (($traitName = \array_pop($queue)) !== null) {
+            $key = \strtolower($traitName);
+            if (isset($visited[$key])) {
+                continue;
+            }
+
+            $visited[$key] = true;
+            $storage = $codebase->classlike_storage_provider->get($traitName);
+            if (isset($storage->methods[$methodName])) {
+                ++$owners;
+            } else {
+                \array_push($queue, ...\array_values($storage->used_traits));
+            }
+        }
+
+        return $owners;
     }
 
     /**
