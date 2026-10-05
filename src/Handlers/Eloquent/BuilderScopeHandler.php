@@ -158,7 +158,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
         }
 
         // Builder<TModel> — TModel is the first template param
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateTypeParameters[0] ?? null, $codebase);
         if ($modelClass === null) {
             return null;
         }

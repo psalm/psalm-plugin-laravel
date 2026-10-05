@@ -19,6 +19,7 @@ use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateEntry;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Type;
@@ -129,7 +130,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     {
         $context = $event->getContext();
         $varId = self::varId(self::identityRoot($call->var));
-        if ($varId === null || self::singleModel($context->vars_in_scope[$varId] ?? null) === null) {
+        if ($varId === null || self::singleModel($event->getCodebase(), $context->vars_in_scope[$varId] ?? null) === null) {
             return;
         }
 
@@ -213,7 +214,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         $source = $event->getStatementsSource();
         $codebase = $event->getCodebase();
         $receiverType = $source->getNodeTypeProvider()->getType($receiver);
-        $model = self::singleModel($receiverType);
+        $model = self::singleModel($codebase, $receiverType);
         if ($model === null) {
             return;
         }
@@ -236,7 +237,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     {
         $context = $event->getContext();
         $varType = $context->vars_in_scope[$varId] ?? null;
-        $model = self::singleModel($varType);
+        $model = self::singleModel($event->getCodebase(), $varType);
 
         // A cached `$m->alias` is read before the receiver is checked, so a nullable `$m` would lose
         // its PossiblyNullPropertyFetch.
@@ -304,7 +305,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
                 $buildingQuery = true;
             } else {
                 $types ??= $event->getStatementsSource()->getNodeTypeProvider();
-                if (isset(self::COLUMN_REPLACING_METHODS[$name]) || !self::isQueryType($types->getType($expr))) {
+                if (isset(self::COLUMN_REPLACING_METHODS[$name]) || !self::isQueryType($event->getCodebase(), $types->getType($expr))) {
                     break;
                 }
             }
@@ -340,7 +341,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
     }
 
     /** @psalm-mutation-free */
-    private static function isQueryType(?Union $type): bool
+    private static function isQueryType(Codebase $codebase, ?Union $type): bool
     {
         if (!$type instanceof Union) {
             return false;
@@ -349,7 +350,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
         foreach ($type->getAtomicTypes() as $atomic) {
             if (
                 !$atomic instanceof TNamedObject
-                || (!\is_a($atomic->value, Builder::class, true) && !\is_a($atomic->value, Relation::class, true))
+                || (!ClassLineage::isA($codebase, $atomic->value, Builder::class) && !ClassLineage::isA($codebase, $atomic->value, Relation::class))
             ) {
                 return false;
             }
@@ -365,7 +366,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    private static function singleModel(?Union $type): ?string
+    private static function singleModel(Codebase $codebase, ?Union $type): ?string
     {
         $model = null;
 
@@ -377,7 +378,7 @@ final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterfac
             if (
                 !$atomic instanceof TNamedObject
                 || ($model !== null && $model !== $atomic->value)
-                || !\is_a($atomic->value, Model::class, true)
+                || !ClassLineage::isA($codebase, $atomic->value, Model::class)
             ) {
                 return null;
             }
