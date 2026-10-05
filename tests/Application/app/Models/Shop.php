@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasArchivedRevisions;
 use App\Models\Concerns\HasRevisions;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -262,6 +263,132 @@ final class Shop extends Model
     public function mirroredWorkOrders(): HasMany
     {
         return $this->cyclicWorkOrders()->latest();
+    }
+
+    // --- Direct factory chains that change the relation class (#1647) ---
+
+    public function lastWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function lastSupplier(): MorphOne
+    {
+        return $this->morphMany(Supplier::class, 'suppliable')->one();
+    }
+
+    public function lastMechanic(): HasOneThrough
+    {
+        return $this->hasManyThrough(Mechanic::class, Vehicle::class)->one();
+    }
+
+    public function latestOfManyWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one()->latestOfMany();
+    }
+
+    /** getQuery() leaves the relation: the result is the Eloquent builder, not a HasMany. */
+    public function workOrderQuery(): EloquentBuilder
+    {
+        return $this->hasMany(WorkOrder::class)->getQuery();
+    }
+
+    /** Undeclared on purpose: only the chain walk can tell that getQuery() leaves the relation. */
+    public function untypedWorkOrderQuery()
+    {
+        return $this->hasMany(WorkOrder::class)->getQuery();
+    }
+
+    /**
+     * Deliberately wrong declaration (the body is a HasMany): the parsed class must not override
+     * the declared one.
+     *
+     * @psalm-suppress InvalidReturnStatement
+     */
+    public function mismatchedWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->where('status', 'open');
+    }
+
+    /** A query-builder-only method: Eloquent\Builder::__call() discards its result, so the relation survives. */
+    public function beforeCallbackWorkOrders(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->applyBeforeQueryCallbacks();
+    }
+
+    /** A passthru method returns the base query's result (a bool), not the relation. */
+    public function untypedWorkOrdersExist()
+    {
+        return $this->hasMany(WorkOrder::class)->exists();
+    }
+
+    /** clone() returns a new Eloquent builder, which Relation::forwardDecoratedCallTo() does not map back. */
+    public function untypedClonedLastWorkOrder()
+    {
+        return $this->hasMany(WorkOrder::class)->one()->clone();
+    }
+
+    /** applyScopes() is declared `static` but returns a clone when global scopes exist. */
+    public function untypedScopedWorkOrders()
+    {
+        return $this->hasMany(WorkOrder::class)->applyScopes();
+    }
+
+    /** A dynamic method name could be `one`, so the chain cannot be followed. */
+    public function untypedDynamicChainWorkOrders()
+    {
+        return $this->hasMany(WorkOrder::class)->{'one'}();
+    }
+
+    /**
+     * Deliberately wrong union (the body is a HasOne): no alternative admits the parsed class.
+     *
+     * @psalm-suppress InvalidReturnStatement
+     */
+    public function unionMismatchedWorkOrder(): HasMany|EloquentBuilder
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function unionLastWorkOrder(): HasOne|HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    public function nullableLastWorkOrder(): ?HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** A scalar alternative is no room for a relation: the parsed HasOne is not admitted. */
+    public function scalarUnionWorkOrder(): HasMany|false
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /**
+     * A template admits only through its bound: HasOne is not a HasMany.
+     *
+     * @template TRelation of HasMany
+     *
+     * @param class-string<TRelation> $class
+     * @return TRelation
+     */
+    public function templatedBoundWorkOrder(string $class): Relation
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** @return HasOne<WorkOrder, self>&\Countable */
+    public function intersectionWorkOrder(): HasOne
+    {
+        return $this->hasMany(WorkOrder::class)->one();
+    }
+
+    /** @return Relation */
+    public function widerDocblockWorkOrder(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class)->one();
     }
 
     // --- `$this` receiver (#1623 shape) ---

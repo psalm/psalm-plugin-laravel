@@ -25,8 +25,11 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
+use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TObject;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -86,10 +89,19 @@ final class RelationMethodParser
      */
     private static array $resolving = [];
 
+    /**
+     * Eloquent\Builder methods declared `static` / `$this` that return a different instance.
+     */
+    private const NEW_INSTANCE_METHODS = ['clone', 'applyscopes'];
+
+    /** @var ?list<mixed> Eloquent\Builder::$passthru of the running Laravel; null until first read */
+    private static ?array $passthru = null;
+
     public static function reset(): void
     {
         self::$cache = [];
         self::$resolving = [];
+        self::$passthru = null;
     }
 
     /** @var list<string> Types that should not be resolved as class names in generic params */
@@ -221,18 +233,19 @@ final class RelationMethodParser
 
             $pivotModel = null;
             $accessor = null;
-            $parsed = self::findRelationCallInExpr($stmt->expr, $scopeClass, $parentClass, $pivotModel, $accessor);
-            if ($parsed !== null) {
-                return $parsed;
-            }
-
+            $chain = [];
+            $parsed = self::findRelationCallInExpr($stmt->expr, $scopeClass, $parentClass, $pivotModel, $accessor, $chain);
             $methodStorage = $context['methodStorage'];
+            $declaredReturnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
+            if ($parsed !== null) {
+                return self::applyDirectChain($codebase, $parsed, $chain, $methodStorage->return_type, $methodStorage->signature_return_type);
+            }
 
             return self::parseDelegation(
                 $codebase,
                 $stmt->expr,
                 $stmts,
-                $methodStorage->return_type ?? $methodStorage->signature_return_type,
+                $declaredReturnType,
                 $scopeClass,
                 $parentClass,
                 $receiverClass,
@@ -315,7 +328,7 @@ final class RelationMethodParser
                 if ($accessor === null) {
                     return null;
                 }
-            } elseif (!self::keepsRelation($codebase, $parsed['relationClass'], $name)) {
+            } elseif (self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) !== true) {
                 return null;
             }
         }
@@ -359,14 +372,14 @@ final class RelationMethodParser
     }
 
     /**
-     * A chain call keeps the relation only when the method Laravel dispatches returns just
-     * `$this` / `static`: a real method on the relation, else what Relation::__call forwards to
-     * (Eloquent builder, then query builder). Scopes, macros and custom builder methods are not
-     * resolved here, so they decline.
+     * Whether a chain call returns the relation itself: true when the method Laravel dispatches
+     * returns just `$this` / `static` (a real method on the relation, else what Relation::__call
+     * forwards to: Eloquent builder, then query builder), false when it returns something else.
+     * null when no such method resolves (scopes, macros, custom builder methods).
      *
      * @param class-string<Relation> $relationClass
      */
-    private static function keepsRelation(Codebase $codebase, string $relationClass, string $methodName): bool
+    private static function chainCallKeepsRelation(Codebase $codebase, string $relationClass, string $methodName): ?bool
     {
         // The Conditionable stub types these `$this` to keep chains, but they return the
         // callback's result whenever it is not null.
@@ -374,14 +387,113 @@ final class RelationMethodParser
             return false;
         }
 
-        foreach ([$relationClass, EloquentBuilder::class, QueryBuilder::class] as $class) {
-            $fluent = ReturnTypeResolver::declaredMethodReturnsOnlySelf($codebase, $class, $methodName);
-            if ($fluent !== null) {
-                return $fluent;
+        $onRelation = ReturnTypeResolver::declaredMethodReturnsOnlySelf($codebase, $relationClass, $methodName, false);
+        if ($onRelation !== null) {
+            return $onRelation;
+        }
+
+        $onEloquent = ReturnTypeResolver::declaredMethodReturnsOnlySelf($codebase, EloquentBuilder::class, $methodName, true);
+        if ($onEloquent === null && ReturnTypeResolver::declaredMethodReturnsOnlySelf($codebase, QueryBuilder::class, $methodName, true) === null) {
+            return null;
+        }
+
+        // Relation::forwardDecoratedCallTo() maps only the query itself back to the relation, so a
+        // method returning a clone escapes it. Eloquent\Builder::__call() returns the base query's
+        // result for its passthru methods and discards it (returning itself) for the rest, so a
+        // method only the base query declares keeps the relation whatever it declares to return.
+        if (\in_array($methodName, self::NEW_INSTANCE_METHODS, true) || self::isPassthru($methodName)) {
+            return false;
+        }
+
+        return $onEloquent ?? true;
+    }
+
+    /**
+     * Read from the running Laravel rather than copied: the list grows between releases.
+     */
+    private static function isPassthru(string $lowerMethodName): bool
+    {
+        self::$passthru ??= \array_values((array) (new \ReflectionProperty(EloquentBuilder::class, 'passthru'))->getDefaultValue());
+
+        return \in_array($lowerMethodName, self::$passthru, true);
+    }
+
+    /**
+     * Follow a direct factory chain (innermost call first) to the relation class it produces: `one()`
+     * converts it, a call that provably returns something else declines, and a call that does not
+     * resolve (scope / macro via `__call`) is accepted as keeping the relation. A declaration none
+     * of whose alternatives admits the result also declines.
+     *
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string} $parsed
+     * @param list<lowercase-string> $chain outermost call first
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     */
+    private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $docblockType, ?Union $nativeType): ?array
+    {
+        foreach (\array_reverse($chain) as $name) {
+            $sibling = $name === 'one' ? self::singleResultSibling($parsed['relationClass']) : null;
+            if ($sibling !== null) {
+                $parsed['relationClass'] = $sibling;
+            } elseif (self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) === false) {
+                return null;
+            }
+        }
+
+        return self::declarationAdmits($docblockType, $parsed['relationClass']) && self::declarationAdmits($nativeType, $parsed['relationClass']) ? $parsed : null;
+    }
+
+    /**
+     * Whether the declared return type leaves room for $relationClass: no declaration, `mixed` /
+     * `object`, a template whose bound leaves room, or a plain class it is / extends (`null` aside).
+     * Scalars and intersections never admit it.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function declarationAdmits(?Union $declared, string $relationClass): bool
+    {
+        if (!$declared instanceof Union) {
+            return true;
+        }
+
+        foreach ($declared->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if ($atomic instanceof TMixed || $atomic::class === TObject::class) {
+                return true;
+            }
+
+            if ($atomic instanceof TTemplateParam && !$atomic->extra_types && self::declarationAdmits($atomic->as, $relationClass)) {
+                return true;
+            }
+
+            if ($atomic instanceof TNamedObject && !$atomic->extra_types) {
+                /** @psalm-var class-string $declaredClass */
+                $declaredClass = $atomic->value;
+                if (\is_a($relationClass, $declaredClass, true)) {
+                    return true;
+                }
             }
         }
 
         return false;
+    }
+
+    /**
+     * What `->one()` converts a *-many relation to; related / intermediate / declaring models carry over.
+     *
+     * @psalm-pure
+     * @return ?class-string<Relation>
+     */
+    private static function singleResultSibling(string $relationClass): ?string
+    {
+        return match ($relationClass) {
+            HasMany::class => HasOne::class,
+            MorphMany::class => MorphOne::class,
+            HasManyThrough::class => HasOneThrough::class,
+            default => null,
+        };
     }
 
     /**
@@ -515,11 +627,12 @@ final class RelationMethodParser
      * Handles both direct calls and method chains. While unwrapping the chain on the way
      * to the inner factory call, also collect any `->using(Pivot::class)` and
      * `->as('accessor')` mutations — these rebind TPivotModel / TAccessor on
-     * BelongsToMany and MorphToMany. Other chain calls (`->withDefault()`, `->wherePivot()`,
-     * etc.) are transparent: the recursion descends past them without recording anything.
+     * BelongsToMany and MorphToMany — and record every call's name in $chain for
+     * applyDirectChain(). A call with a dynamic method name makes the chain unprovable.
      *
      * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
      * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
+     * @param list<lowercase-string> $chain out-parameter: names of the calls above the factory, outermost first
      * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
     private static function findRelationCallInExpr(
@@ -528,44 +641,50 @@ final class RelationMethodParser
         ?string $parentClass,
         ?string &$pivotModel,
         ?string &$accessor,
+        array &$chain,
     ): ?array {
         if (!$expr instanceof PhpParser\Node\Expr\MethodCall) {
             return null;
         }
 
-        // Check if this is a relationship factory call (e.g. $this->belongsTo(...))
-        if ($expr->name instanceof PhpParser\Node\Identifier) {
-            $lowerName = \strtolower($expr->name->name);
-            $relationClass = self::FACTORY_TO_RELATION[$lowerName] ?? null;
-
-            if ($relationClass !== null) {
-                return [
-                    'relationClass' => $relationClass,
-                    'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
-                    // Through relations carry the intermediate model as the second class-string
-                    // argument: hasOneThrough(Related, Intermediate) / hasManyThrough(Related, Intermediate).
-                    // Every other factory leaves this null.
-                    'intermediateModel' => \in_array($lowerName, ['hasonethrough', 'hasmanythrough'], true)
-                        ? self::extractClassStringArg($expr, $lowerName, 1, 'through', $declaringClass, $parentClass)
-                        : null,
-                    'pivotModel' => $pivotModel,
-                    'accessor' => $accessor,
-                ];
-            }
-
-            // Pivot / accessor mutators: capture the first statically resolvable argument.
-            // Outside-in recursion visits the outermost call first, so the outermost
-            // `using()` / `as()` wins via `??=` — inner ones cannot overwrite once set.
-            if ($lowerName === 'using') {
-                $pivotModel ??= self::firstClassStringArg($expr, $declaringClass, $parentClass);
-            } elseif ($lowerName === 'as') {
-                $accessor ??= self::firstStringLiteralArg($expr);
-            }
+        // A dynamic name (`->{'one'}()`) could be any method, including a class-changing one.
+        if (!$expr->name instanceof PhpParser\Node\Identifier) {
+            return null;
         }
+
+        // Check if this is a relationship factory call (e.g. $this->belongsTo(...))
+        $lowerName = \strtolower($expr->name->name);
+        $relationClass = self::FACTORY_TO_RELATION[$lowerName] ?? null;
+
+        if ($relationClass !== null) {
+            return [
+                'relationClass' => $relationClass,
+                'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
+                // Through relations carry the intermediate model as the second class-string
+                // argument: hasOneThrough(Related, Intermediate) / hasManyThrough(Related, Intermediate).
+                // Every other factory leaves this null.
+                'intermediateModel' => \in_array($lowerName, ['hasonethrough', 'hasmanythrough'], true)
+                    ? self::extractClassStringArg($expr, $lowerName, 1, 'through', $declaringClass, $parentClass)
+                    : null,
+                'pivotModel' => $pivotModel,
+                'accessor' => $accessor,
+            ];
+        }
+
+        // Pivot / accessor mutators: capture the first statically resolvable argument.
+        // Outside-in recursion visits the outermost call first, so the outermost
+        // `using()` / `as()` wins via `??=` — inner ones cannot overwrite once set.
+        if ($lowerName === 'using') {
+            $pivotModel ??= self::firstClassStringArg($expr, $declaringClass, $parentClass);
+        } elseif ($lowerName === 'as') {
+            $accessor ??= self::firstStringLiteralArg($expr);
+        }
+
+        $chain[] = $lowerName;
 
         // Not a relationship call — try the inner expression (unwrap chain).
         // e.g. for $this->belongsTo(X::class)->withDefault(), $expr->var is $this->belongsTo(X::class)
-        return self::findRelationCallInExpr($expr->var, $declaringClass, $parentClass, $pivotModel, $accessor);
+        return self::findRelationCallInExpr($expr->var, $declaringClass, $parentClass, $pivotModel, $accessor, $chain);
     }
 
     /**

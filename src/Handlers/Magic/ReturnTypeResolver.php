@@ -121,7 +121,7 @@ final class ReturnTypeResolver
         foreach ($rule->searchClasses as $searchClass) {
             $returnType = self::getDeclaredReturnType($codebase, $searchClass, $methodNameLowercase);
 
-            if ($returnType instanceof Union && self::returnTypeIndicatesSelf($returnType)) {
+            if ($returnType instanceof Union && self::returnTypeIndicatesSelf($returnType, true)) {
                 $result = true;
                 break;
             }
@@ -152,10 +152,10 @@ final class ReturnTypeResolver
             return self::$targetSelfReturnCache[$key] = false;
         }
 
-        return self::$targetSelfReturnCache[$key] = self::returnTypeIndicatesSelf($returnType);
+        return self::$targetSelfReturnCache[$key] = self::returnTypeIndicatesSelf($returnType, true);
     }
 
-    private static function returnTypeIndicatesSelf(Union $returnType): bool
+    private static function returnTypeIndicatesSelf(Union $returnType, bool $viaIndicators): bool
     {
         foreach ($returnType->getAtomicTypes() as $atomicType) {
             if (!$atomicType instanceof TNamedObject) {
@@ -170,7 +170,7 @@ final class ReturnTypeResolver
             }
 
             // Check 2: class name matches selfReturnIndicators (e.g., Builder)
-            if (isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
+            if ($viaIndicators && isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
                 return true;
             }
         }
@@ -179,15 +179,19 @@ final class ReturnTypeResolver
     }
 
     /**
-     * Whether $targetClass declares the method with a return of ONLY self (`$this` / `static` /
-     * a selfReturnIndicators class); null when it does not declare the method. Unlike
+     * Whether $targetClass declares the method with a return of ONLY self (`$this` / `static`, or a
+     * selfReturnIndicators class when $forwarded); null when it does not declare the method. Unlike
      * targetClassMethodReturnsSelf(), a union such as Conditionable::when()'s
      * `$this|TWhenReturnType` does not count, since the call may return something else.
+     *
+     * $forwarded is for classes whose methods Relation::__call forwards: it swaps a returned builder
+     * for the relation. A method declared on the relation itself (`getQuery()`) returns that builder.
      */
     public static function declaredMethodReturnsOnlySelf(
         Codebase $codebase,
         string $targetClass,
         string $methodNameLowercase,
+        bool $forwarded,
     ): ?bool {
         $methodStorage = self::getDeclaredMethodStorage($codebase, $targetClass, $methodNameLowercase);
         if (!$methodStorage instanceof MethodStorage) {
@@ -196,7 +200,7 @@ final class ReturnTypeResolver
 
         $returnType = $methodStorage->return_type;
 
-        return $returnType instanceof Union && $returnType->isSingle() && self::returnTypeIndicatesSelf($returnType);
+        return $returnType instanceof Union && $returnType->isSingle() && self::returnTypeIndicatesSelf($returnType, $forwarded);
     }
 
     /**
