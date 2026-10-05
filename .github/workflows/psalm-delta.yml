@@ -5,20 +5,16 @@ name: Psalm delta
 # comment with per-app issue deltas. Informational only, never fails the PR (a
 # delta is often intended: fixing FPs REMOVES issues, new narrowing ADDS some).
 #
-# Command (first comment line): `/psalm-delta` runs the `default` group;
-# `/psalm-delta octane vito` adds group tags / app names from test-apps.yml;
-# `all` runs every app; `help` replies with the groups. An unknown token gets a
-# reply + :confused: and starts no run. bin/ci/select-apps.php owns the grammar.
+# `/psalm-delta [group|app ...]` (grammar: bin/ci/select-apps.php, groups:
+# bin/ci/test-apps.yml); `help`/unknown tokens get a reply and start no run.
 #
 # Architecture:
-#   prepare — resolve the app selection, reply on help/error, resolve refs,
-#             flag fork heads, emit the filtered app matrix
+#   prepare — resolve the app selection + refs, emit the filtered app matrix
 #   delta   — one job per app (parallel): install, run base + head, upload JSON.
 #             Wall time = slowest app, not sum.
 #   report  — download artifacts, run bin/ci/delta-report.php, sticky comment
 # The runner (delta-app.sh) + comparator (delta-report.php) are the SAME scripts
-# `bash bin/ci/delta.sh [--apps "<tokens>"] <pr-branch>` runs locally, so any
-# row reproduces.
+# `bash bin/ci/delta.sh <pr-branch>` runs locally, so any row reproduces.
 #
 # Security posture: `delta` runs the PR's plugin code (Testbench boots, stubs
 # generate), fork PRs INCLUDED. Safe because the job is unprivileged like a
@@ -31,23 +27,16 @@ name: Psalm delta
 # cache restore-only on forks (prepare emits is_fork; delta saves only when
 # is_fork != 'true'). The privileged `report` job never runs PR code, and the
 # fork-controlled JSON reaches the comment only as a file body (-F body=@file),
-# never a `run:` expansion — no injection sink. The trigger comment body reaches
-# code only via env into select-apps.php, which allowlists every token against
-# test-apps.yml; prepare's outputs carry only registry-derived values.
+# never a `run:` expansion — no injection sink. The trigger comment reaches code
+# only via env; its tokens are allowlisted and outputs set via github-script.
 
 on:
   issue_comment:
     types: [created]
 
-# Only an authorised `/psalm-delta` run comment shares the per-PR 'run' key (a
-# re-trigger supersedes the old run); any other comment, `/psalm-delta help`
-# included, gets a unique key, so it cancels nothing. A comment with an unknown
-# token can't be told apart here, so a typo still cancels an in-flight run
-# (accepted: just re-trigger). The same goes for `help` spelled any other way
-# (`/psalm-delta  help`, `/psalm-delta octane help`): the resolver answers with
-# help or an error and starts no run, but the old run is already cancelled.
-# Expression string compares ignore case, matching the resolver; the trigger is
-# `/psalm-delta` followed by space/newline or nothing.
+# Only an authorised run comment shares the per-PR 'run' key (a re-trigger
+# supersedes the old run); others, `/psalm-delta help` included, get a unique key.
+# Accepted: a typo or oddly spaced `help` still cancels an in-flight run.
 concurrency:
   group: >-
     psalm-delta-${{ github.event.issue.number }}-${{ (
@@ -80,8 +69,7 @@ jobs:
     permissions:
       contents: read         # checkout the default branch to read the app registry
       # Trigger comment lives on a PR, so the reactions API authorises against
-      # pull-requests; write adds the :eyes: and the help/error reply. This job
-      # never runs PR code.
+      # pull-requests; write adds the :eyes: + help/error reply. This job never runs PR code.
       pull-requests: write   # react to comment + reply + read PR base/head SHAs
       issues: write          # reactions/comments API also consults issues scope
     outputs:
@@ -110,11 +98,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # The comment body is untrusted: it reaches the resolver only via env, and
-      # every output set below is a fixed status or a registry value the resolver
-      # allowlisted. The reply text goes to a file, never a step output. Outputs
-      # are set from github-script so no shell step writes $GITHUB_OUTPUT in this
-      # privileged issue_comment job.
       - name: Resolve app selection
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
@@ -192,8 +175,7 @@ jobs:
   delta:
     name: Delta (${{ matrix.name }})
     needs: prepare
-    # Job-level `if` is evaluated before the matrix, so help/error never hits
-    # fromJSON on an empty include.
+    # Job `if` is evaluated before the matrix, so help/error never fromJSONs an empty include.
     if: needs.prepare.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout || 12 }}
