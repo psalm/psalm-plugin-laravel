@@ -221,6 +221,11 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             return null;
         }
 
+        // getArgs() throws on a first-class callable (`->has(...)`), which names no relation.
+        if ($expr->isFirstClassCallable()) {
+            return null;
+        }
+
         $args = $expr->getArgs();
         if ($args === []) {
             return null;

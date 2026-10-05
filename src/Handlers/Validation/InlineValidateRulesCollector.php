@@ -513,6 +513,11 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
+        // getArgs() throws on a first-class callable (`$request->validate(...)`), which carries no rules.
+        if ($expr->isFirstClassCallable()) {
+            return null;
+        }
+
         if (!self::callerIsRequest($expr, $event->getStatementsSource(), $event->getCodebase())) {
             return null;
         }
@@ -706,6 +711,11 @@ final class InlineValidateRulesCollector implements
         }
 
         if (!\in_array($rhs->name->toLowerString(), self::KEYED_ACCESSOR_METHODS, true)) {
+            return null;
+        }
+
+        // getArgs() throws on a first-class callable (`$request->input(...)`), which reads no key.
+        if ($rhs->isFirstClassCallable()) {
             return null;
         }
 

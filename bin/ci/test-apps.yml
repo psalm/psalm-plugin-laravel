@@ -5,23 +5,30 @@
 #   * the vendor install is reproducible, and
 #   * CI can cache vendor keyed on (name, ref, php) safely.
 #
-# This is the curated v1 set: apps that composer-install cleanly from a frozen
-# commit against Packagist Psalm (no local fork). Add an entry to grow; delete
-# one to drop a flaky app. The private codebase used by the local /psalm-delta
-# skill is intentionally absent — this file is committed (public).
+# Every app installs cleanly from its frozen commit against Packagist Psalm (no
+# local fork). Add an entry to grow; delete one to drop a flaky app. The private
+# codebase used by the local /psalm-delta skill is intentionally absent — this
+# file is committed (public).
+#
+# Selection: `/psalm-delta` (and `bin/ci/delta.sh`) runs the `default` group;
+# `/psalm-delta octane vito` adds a group and an app, `all` runs everything,
+# `help` lists the groups. bin/ci/delta-select-apps.php resolves it from
+# `yq -o=json bin/ci/test-apps.yml`, so tags and names must be [a-z0-9_-] and
+# neither may be `all` or `help`.
 #
 # Read with mikefarah yq v4 (preinstalled on ubuntu-latest, `brew install yq`
-# locally). The CI matrix is `yq -o=json '{"include": .apps}'`.
+# locally), e.g. `yq '.apps[] | select(.groups[] == "octane") | .name'`.
 #
 # Fields:
 #   name         display + on-disk key (filename-safe)
 #   repo         public https clone URL
-#   ref          immutable commit SHA (the cache key; never a moving branch)
+#   ref          immutable commit SHA (the cache key; never a moving branch).
+#                Short SHAs work because delta-app.sh does a full clone.
 #   php          PHP version the runner sets up for install/analysis. Use 8.4:
 #                modern app deps (e.g. recent symfony/console) ship PHP 8.4
 #                syntax, and --ignore-platform-reqs would otherwise install them
 #                under an older runtime that cannot parse the files.
-#   kind         app | lib  (informational; project layout is auto-detected)
+#   groups       tags from `groups:` below; [] = reachable only by name or `all`
 #   project_dir  optional explicit Psalm projectFiles root (else auto-detected:
 #                app/ for Laravel apps, packages/*/src for monorepos, src/ for libs)
 #   prime        optional shell run in the app dir before `composer update`
@@ -30,13 +37,30 @@
 #                on whitespace (e.g. "--php-version=8.0" to pin the ANALYSIS php
 #                version when the app's composer.json declares a wrong/too-low
 #                minimum). Analysis-time only; does not affect install or caching.
+#   timeout      optional CI job timeout in minutes (default 12) for apps whose
+#                cold install + two analyses take longer
+
+groups:
+  default: Baseline set run by a bare /psalm-delta
+  laravel-13: Resolves laravel/framework 13.x (CI resolves versions at install time)
+  pest: Primary test suite is Pest (tests/ itself is not analysed)
+  phpunit: Primary test suite is PHPUnit classes (tests/ itself is not analysed)
+  octane: Apps that require laravel/octane
+  sanctum: Requires laravel/sanctum
+  livewire: Livewire components in the analysed code
+  inertia: Requires inertiajs/inertia-laravel
+  filament: Filament itself and apps built on it
+  ai: Apps whose locked laravel/ai is inside the plugin's LaravelAiIntegration::CONSTRAINT gate
+  blade: Apps and packages with more than 100 Blade templates
+  lib: Packages and monorepos rather than full apps
+  large: Slow to install or analyse; may need a raised timeout
 
 apps:
   - name: monica
     repo: https://github.com/monicahq/monica.git
     ref: e08e917
     php: "8.4"
-    kind: app
+    groups: [default, phpunit, sanctum, inertia]
     # Monica's lock pins laravel-lang/http-statuses at a version Packagist flags
     # as malware; bump that one package (constraint ^3.8) before install.
     prime: composer update laravel-lang/http-statuses --no-interaction --no-progress --ignore-platform-reqs
@@ -45,45 +69,45 @@ apps:
     repo: https://github.com/pixelfed/pixelfed.git
     ref: 67606eb
     php: "8.4"
-    kind: app
+    groups: [default, blade, phpunit]
 
   - name: coolify
     repo: https://github.com/coollabsio/coolify.git
     ref: ffd69c1
     php: "8.4"
-    kind: app
+    groups: [default, blade, pest, sanctum, livewire]
 
   - name: bookstack
     repo: https://source.bookstackapp.com/bookstack.git
     ref: 82ef735
     php: "8.4"
-    kind: app
+    groups: [default, blade, phpunit]
 
   - name: solidtime
     repo: https://github.com/solidtime-io/solidtime.git
     ref: 797fddf
     php: "8.4"
-    kind: app
+    groups: [default, octane, filament, phpunit, inertia]
 
   - name: laravel-socialite
     repo: https://github.com/laravel/socialite.git
     ref: 40e0757
     php: "8.4"
-    kind: lib
+    groups: [default, lib, phpunit, laravel-13]
     project_dir: src
 
   - name: laravel-permission
     repo: https://github.com/spatie/laravel-permission.git
     ref: ef42ecb
     php: "8.4"
-    kind: lib
+    groups: [default, lib, pest, laravel-13]
     project_dir: src
 
   - name: laravel-excel
     repo: https://github.com/SpartnerNL/Laravel-Excel.git
     ref: 1854739
     php: "8.4"
-    kind: lib
+    groups: [default, lib, phpunit, laravel-13]
     project_dir: src
     # composer.json declares a too-low PHP minimum, so Psalm would otherwise
     # analyse against that floor; pin the analysis target explicitly.
@@ -95,3 +119,87 @@ apps:
     # committed for this repo (it's a library), so nothing pins the solve away
     # from ^3.0 on its own; cap the constraint before the real install.
     prime: composer require psr/simple-cache:"^1.0||^2.0" --no-update --no-interaction
+
+  - name: bagisto
+    repo: https://github.com/bagisto/bagisto.git
+    ref: 5b83de2
+    php: "8.4"
+    groups: [octane, large, blade, pest, sanctum]
+    # app/ is only the skeleton (Http, Providers); the code lives in
+    # packages/Webkul/*/src, which auto-detection skips once app/ exists.
+    project_dir: packages
+
+  - name: filament
+    repo: https://github.com/filamentphp/filament.git
+    ref: 7e4b8a5
+    php: "8.4"
+    groups: [filament, lib, large, blade, pest, laravel-13, livewire]
+    # 16 packages/*/src (~14.6k issues): a cold run took 4.4 min locally on 16
+    # cores; a 4-vCPU runner analyses both sides several times slower.
+    timeout: 20
+
+  - name: unit3d
+    repo: https://github.com/HDInnovations/UNIT3D.git
+    ref: 8b88f4c
+    php: "8.4"
+    groups: [octane, blade, pest, livewire]
+    # config/secure-headers.php parse_url()s env('VITE_ECHO_ADDRESS') at boot, so
+    # composer's artisan scripts fatal without the example .env.
+    prime: cp .env.example .env
+
+  - name: vito
+    repo: https://github.com/vitodeploy/vito.git
+    ref: 07d265e
+    php: "8.4"
+    groups: [blade, phpunit, sanctum, inertia]
+
+  - name: laravel-backup
+    repo: https://github.com/spatie/laravel-backup.git
+    ref: 23701cf
+    php: "8.4"
+    groups: [lib, pest, laravel-13]
+    project_dir: src
+
+  - name: corcel
+    repo: https://github.com/corcel/corcel.git
+    ref: 83506aa
+    php: "8.4"
+    groups: [lib, phpunit]
+    project_dir: src
+
+  - name: spatie-dashboard
+    repo: https://github.com/spatie/dashboard.spatie.be.git
+    ref: 2318999
+    php: "8.4"
+    groups: [phpunit]
+
+  - name: tastyigniter
+    repo: https://github.com/tastyigniter/TastyIgniter.git
+    ref: bb57c86
+    php: "8.4"
+    groups: [phpunit]
+
+  - name: unopim
+    repo: https://github.com/unopim/unopim.git
+    ref: 6a35666
+    php: "8.4"
+    groups: [ai, octane, blade, pest, laravel-13, sanctum]
+    # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
+    # packages/Webkul/*/src, not the app/ skeleton auto-detection would pick.
+    project_dir: packages
+
+  - name: m3u-editor
+    repo: https://github.com/m3ue/m3u-editor.git
+    ref: 3fa58e1
+    php: "8.4"
+    groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire]
+    # The laravel/vet composer plugin refuses every unreviewed package; the
+    # dev-main filament-spatie-laravel-backup tip breaks panel boot in the
+    # artisan scripts; and config/broadcasting.php builds a Pusher client that
+    # fatals on a null REVERB_APP_SECRET. Disable the plugin, pin the locked
+    # commit, and give the scripts an .env with a secret.
+    prime: >-
+      composer config --no-interaction allow-plugins.laravel/vet false
+      && composer require --no-update --no-interaction
+      "shuvroroy/filament-spatie-laravel-backup:dev-main#b0508d906e4b5b3b38da17440fa93e5a0ad996c4"
+      && cp .env.example .env && echo REVERB_APP_SECRET=psalm-delta >> .env

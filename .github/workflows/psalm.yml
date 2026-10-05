@@ -26,12 +26,11 @@ concurrency:
 
 env:
   PHP_VERSION: '8.4'
-  # Psalm forces a single thread whenever it detects CI, and decides the two phases
-  # separately: --threads covers analysis, --scan-threads covers scanning
-  # (Cli\Psalm::getThreads()). Setting only --threads leaves the whole scan phase serial,
-  # and scanning is the bulk of this job: 187 analysed files against ~13k scanned in vendor.
-  # psalm.xml's threads/scanThreads attributes cannot do this, getThreads() tests for CI
-  # before it reads either. 4 matches ubuntu-latest's core count.
+  # Psalm sizes the two phases separately: --threads covers analysis, --scan-threads covers
+  # scanning (Cli\Psalm::getThreads()), and scanning is the bulk of this job: 187 analysed
+  # files against ~13k scanned in vendor. Both default to the detected core count (CI
+  # included since Psalm 7.0.0-beta23); the explicit 4, ubuntu-latest's core count, keeps
+  # the run independent of core detection.
   PSALM_THREADS: 4
   PSALM_SCAN_THREADS: 4
 

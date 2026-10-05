@@ -19,10 +19,12 @@ env:
   # serialised by another runtime.
   PSALM_PHP_VERSION: '8.4'
 
-  # Psalm forces a single thread whenever it detects CI, and it decides the scan phase and
-  # the analysis phase separately: --threads covers analysis only, --scan-threads covers
-  # scanning (Cli\Psalm::getThreads()). Both must be set or half the run stays serial.
-  # On a 7,600-file Laravel codebase a fully single-threaded run measured 177s against 47s.
+  # Psalm sizes the scan phase (--scan-threads) and the analysis phase (--threads)
+  # separately (Cli\Psalm::getThreads()). Both default to the detected core count, CI
+  # included since Psalm 7.0.0-beta23; earlier versions forced a single thread on CI, and
+  # on a 7,600-file Laravel codebase a fully single-threaded run measured 177s against 47s.
+  # Explicit numbers keep the run independent of core detection and let the two phases be
+  # tuned apart.
   #
   # Plain numbers rather than $(nproc): nproc does not exist on macOS runners, Windows
   # runners default to PowerShell, and inside a container coreutils older than 9.8 reports
