@@ -47,6 +47,7 @@ groups:
   filament: Filament itself and apps built on it
   lib: Packages and monorepos rather than full apps
   large: Slow to install or analyse; may need a raised timeout
+  blade: Apps and packages with more than 100 Blade templates
 
 apps:
   - name: monica
@@ -62,19 +63,19 @@ apps:
     repo: https://github.com/pixelfed/pixelfed.git
     ref: 67606eb
     php: "8.4"
-    groups: [default]
+    groups: [default, blade]
 
   - name: coolify
     repo: https://github.com/coollabsio/coolify.git
     ref: ffd69c1
     php: "8.4"
-    groups: [default]
+    groups: [default, blade]
 
   - name: bookstack
     repo: https://source.bookstackapp.com/bookstack.git
     ref: 82ef735
     php: "8.4"
-    groups: [default]
+    groups: [default, blade]
 
   - name: solidtime
     repo: https://github.com/solidtime-io/solidtime.git
@@ -117,7 +118,7 @@ apps:
     repo: https://github.com/bagisto/bagisto.git
     ref: 5b83de2
     php: "8.4"
-    groups: [octane, large]
+    groups: [octane, large, blade]
     # app/ is only the skeleton (Http, Providers); the code lives in
     # packages/Webkul/*/src, which auto-detection skips once app/ exists.
     project_dir: packages
@@ -126,7 +127,7 @@ apps:
     repo: https://github.com/filamentphp/filament.git
     ref: 7e4b8a5
     php: "8.4"
-    groups: [filament, lib, large]
+    groups: [filament, lib, large, blade]
     # 16 packages/*/src (~14.6k issues): a cold run took 4.4 min locally on 16
     # cores; a 4-vCPU runner analyses both sides several times slower.
     timeout: 20
@@ -135,7 +136,7 @@ apps:
     repo: https://github.com/HDInnovations/UNIT3D.git
     ref: 8b88f4c
     php: "8.4"
-    groups: [octane]
+    groups: [octane, blade]
     # config/secure-headers.php parse_url()s env('VITE_ECHO_ADDRESS') at boot, so
     # composer's artisan scripts fatal without the example .env.
     prime: cp .env.example .env
@@ -144,7 +145,7 @@ apps:
     repo: https://github.com/vitodeploy/vito.git
     ref: 07d265e
     php: "8.4"
-    groups: []
+    groups: [blade]
 
   - name: laravel-backup
     repo: https://github.com/spatie/laravel-backup.git
@@ -176,7 +177,7 @@ apps:
     repo: https://github.com/unopim/unopim.git
     ref: 6a35666
     php: "8.4"
-    groups: [ai, octane]
+    groups: [ai, octane, blade]
     # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
     # packages/Webkul/*/src, not the app/ skeleton auto-detection would pick.
     project_dir: packages
@@ -185,7 +186,7 @@ apps:
     repo: https://github.com/m3ue/m3u-editor.git
     ref: 3fa58e1
     php: "8.4"
-    groups: [ai, filament]
+    groups: [ai, filament, blade]
     # The laravel/vet composer plugin refuses every unreviewed package; the
     # dev-main filament-spatie-laravel-backup tip breaks panel boot in the
     # artisan scripts; and config/broadcasting.php builds a Pusher client that

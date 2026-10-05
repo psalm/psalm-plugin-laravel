@@ -78,7 +78,7 @@ LARAVEL_INSTALLER_VERSION=12.12.2 composer test:app # run over a specific Larave
 Maintainers can comment `/psalm-delta` on a PR to run the plugin's base and head on the apps in [`bin/ci/test-apps.yml`](../../bin/ci/test-apps.yml) and get a sticky comment with the per-app issue delta. It is informational and never fails the PR.
 
 - `/psalm-delta` runs the `default` group.
-- `/psalm-delta octane vito` adds group tags and app names to `default` (spaces or commas). Pick the groups that exercise your change, e.g. `ai` for `laravel/ai` stubs or `filament` for Filament-heavy code.
+- `/psalm-delta octane vito` adds group tags and app names to `default` (spaces or commas). Pick the groups that exercise your change, e.g. `ai` for `laravel/ai` stubs, `blade` for view resolution or view taint, or `filament` for Filament-heavy code.
 - `/psalm-delta all` runs every app; `/psalm-delta help` replies with the groups and their apps.
 
 To reproduce locally (needs `yq`), run `bash bin/ci/delta.sh --apps "octane vito" <pr-branch>`.
