@@ -4,8 +4,10 @@
 use App\Models\AbstractDocument;
 use App\Models\Contract;
 use App\Models\Mechanic;
-use App\Models\WorkOrder;
+use App\Models\MechanicSpecialization;
+use App\Models\Part;
 use App\Models\Supplier;
+use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -66,6 +68,20 @@ function issue1613_nested_trait_delegation(Supplier $supplier): HasMany
 {
     $relation = $supplier->priorRevisions();
     /** @psalm-check-type-exact $relation = HasMany<Supplier, Supplier> */
+    return $relation;
+}
+
+function issue1613_middle_trait_single_owner(MechanicSpecialization $specialization): BelongsTo
+{
+    $relation = $specialization->revisedFrom();
+    /** @psalm-check-type-exact $relation = BelongsTo<MechanicSpecialization, MechanicSpecialization> */
+    return $relation;
+}
+
+function issue1613_same_trait_two_paths(Part $part): HasMany
+{
+    $relation = $part->revisions();
+    /** @psalm-check-type-exact $relation = HasMany<Part, Part> */
     return $relation;
 }
 ?>
