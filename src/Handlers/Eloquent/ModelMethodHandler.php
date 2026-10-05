@@ -819,18 +819,46 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // applies too. Eloquent's own getCasts() self-merges [$keyName => $keyType] for
         // incrementing models, wrapped nullable by the registry's schema-driven resolver —
         // that nullability isn't a real signal (getKey() itself is never null here per the
-        // stub), so only the non-null shape is compared against the mapped type.
+        // stub), so only the non-null shape is compared against the mapped type. An int key cast
+        // reads as the column's own int type (`int<0, max>` for an unsigned `$table->id()`), so any
+        // all-int cast type agrees with `int`; the result stays plain `int`, the documented contract.
         $castInfo = $metadata->casts()[$keyName] ?? null;
         if ($castInfo !== null) {
             $castTypeBuilder = $castInfo->psalmType->getBuilder();
             $castTypeBuilder->removeType('null');
+            $castType = $castTypeBuilder->freeze();
 
-            if ($castTypeBuilder->freeze()->getId() !== $mapped->getId()) {
+            $agrees = $metadata->primaryKey->type === PrimaryKeyType::Integer
+                ? self::isIntOnly($castType)
+                : $castType->getId() === $mapped->getId();
+
+            if (!$agrees) {
                 return null;
             }
         }
 
         return $mapped;
+    }
+
+    /**
+     * True when every atomic is in the int family (`int`, `int<0, max>`, int literals).
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isIntOnly(Union $type): bool
+    {
+        $atomics = $type->getAtomicTypes();
+        if ($atomics === []) {
+            return false;
+        }
+
+        foreach ($atomics as $atomic) {
+            if (!$atomic instanceof Type\Atomic\TInt) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

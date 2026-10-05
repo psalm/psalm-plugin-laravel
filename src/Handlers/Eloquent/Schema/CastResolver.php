@@ -106,7 +106,7 @@ final class CastResolver
         $baseCast = self::stripParameters($baseCast);
         $castClass = ClassLineage::canonicalName($codebase, self::stripParameters($cast));
 
-        $type = self::resolveBaseCast($baseCast, $nullable);
+        $type = self::resolveBaseCast($baseCast, $nullable, $originalType);
         if ($type instanceof Union) {
             return $type;
         }
@@ -204,10 +204,10 @@ final class CastResolver
         }
     }
 
-    private static function resolveBaseCast(string $baseCast, bool $nullable): ?Union
+    private static function resolveBaseCast(string $baseCast, bool $nullable, ?Union $originalType): ?Union
     {
         return match ($baseCast) {
-            'int', 'integer' => self::makeNullable(Type::getInt(), $nullable),
+            'int', 'integer' => self::makeNullable(self::integerReadType($originalType), $nullable),
             'real', 'float', 'double' => self::makeNullable(Type::getFloat(), $nullable),
             'decimal' => self::makeNullable(Type::getString(), $nullable),
             'string' => self::makeNullable(Type::getString(), $nullable),
@@ -226,11 +226,33 @@ final class CastResolver
                 new Union([new TNamedObject(\Carbon\CarbonImmutable::class)]),
                 $nullable,
             ),
-            'timestamp' => self::makeNullable(Type::getInt(), $nullable),
+            'timestamp' => self::makeNullable(self::integerReadType($originalType), $nullable),
             'encrypted' => self::makeNullable(Type::getMixed(), $nullable),
             'hashed' => self::makeNullable(Type::getString(), $nullable),
             default => null,
         };
+    }
+
+    /**
+     * Read type of an int-valued cast: the column's own type when it is already all-int (keeps the
+     * unsigned `int<0, max>` of migration-derived columns, including the implicit incrementing-key
+     * cast), plain `int` when the column type is unknown or not an int (e.g. a string column).
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function integerReadType(?Union $originalType): Union
+    {
+        if (!$originalType instanceof Union) {
+            return Type::getInt();
+        }
+
+        foreach ($originalType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof Type\Atomic\TInt) {
+                return Type::getInt();
+            }
+        }
+
+        return $originalType;
     }
 
     /**

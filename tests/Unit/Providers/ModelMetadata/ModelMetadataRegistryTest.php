@@ -87,6 +87,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\IntegerCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NonStringDeclaredCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\PlainEnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\RawCastInitializerModel;
@@ -1484,6 +1485,34 @@ final class ModelMetadataRegistryTest extends TestCase
             'Inbound (write-only) cast must read back as the column base type, not mixed',
         );
         $this->assertTrue($casts['code']->psalmType->hasString());
+    }
+
+    #[Test]
+    public function integer_casts_keep_the_unsigned_range_of_the_column(): void
+    {
+        // The implicit incrementing-key cast (`id`) and explicit int/integer/timestamp casts read back as
+        // the migration-derived int type, not plain `int`. Null is preserved for a nullable column, and a
+        // non-int column (`label` is a string) keeps the plain `int` the cast produces.
+        $this->seedSchema('integer_cast_models', [
+            new SchemaColumn('id', SchemaColumn::TYPE_INT, unsigned: true),
+            new SchemaColumn('views', SchemaColumn::TYPE_INT, unsigned: true),
+            new SchemaColumn('rank', SchemaColumn::TYPE_INT, nullable: true, unsigned: true),
+            new SchemaColumn('seen_at', SchemaColumn::TYPE_INT, unsigned: true),
+            new SchemaColumn('label', SchemaColumn::TYPE_STRING),
+        ]);
+
+        $codebase = $this->makeCodebase();
+        $this->registerStorage(IntegerCastModel::class);
+
+        ModelMetadataRegistryBuilder::warmUp($codebase, IntegerCastModel::class);
+
+        $casts = $this->metadataFor(IntegerCastModel::class)->casts();
+
+        $this->assertSame('int<0, max>', (string) $casts['id']->psalmType);
+        $this->assertSame('int<0, max>', (string) $casts['views']->psalmType);
+        $this->assertSame('int<0, max>|null', (string) $casts['rank']->psalmType);
+        $this->assertSame('int<0, max>', (string) $casts['seen_at']->psalmType);
+        $this->assertSame('int', (string) $casts['label']->psalmType);
     }
 
     #[Test]
