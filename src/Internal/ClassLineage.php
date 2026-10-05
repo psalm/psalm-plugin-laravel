@@ -24,7 +24,8 @@ final class ClassLineage
      * $class is $ancestor, extends it, or implements it (an interface: extends it).
      *
      * Reads the populated storage maps directly rather than `Codebase::classExtendsOrImplements()`:
-     * - it never throws (that API throws on missing or unpopulated storage, so every caller needs a catch);
+     * - it never throws (that API throws InvalidArgumentException on a class Psalm never scanned, so every
+     *   caller needs a catch);
      * - it records no code_use_graph reference, unlike `Codebase::classExists()`;
      * - it answers `I2 extends I1` and `Model is Model`, where `classExtendsOrImplements()` returns false
      *   (`classExtends()` is non-reflexive and `classImplements()` ignores interface parents).
@@ -89,20 +90,12 @@ final class ClassLineage
     /**
      * The name storage is keyed by: no leading backslash (a valid spelling in cast strings and container
      * abstracts), and `class_alias()` aliases resolved. Psalm keeps an alias in method storage return
-     * types, so an alias reaches handlers. The alias map lives in Psalm's class registry, which a
-     * storage-only Codebase (unit harnesses) leaves unset; names then stay as written.
+     * types, so an alias reaches handlers.
      *
      * @psalm-mutation-free
      */
     public static function canonicalName(Codebase $codebase, string $class): string
     {
-        $class = \ltrim($class, '\\');
-
-        try {
-            return $codebase->classlikes->getUnAliasedName($class);
-        } catch (\Error) {
-            // Typed property read before initialization.
-            return $class;
-        }
+        return $codebase->classlikes->getUnAliasedName(\ltrim($class, '\\'));
     }
 }

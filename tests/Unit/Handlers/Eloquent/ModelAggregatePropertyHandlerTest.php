@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelAggregatePropertyHandler;
@@ -125,6 +126,7 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
 
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $classLikeStorageProvider;
+        $codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
         (new \ReflectionProperty(Codebase::class, 'progress'))->setValue($codebase, new VoidProgress());
 
         $table = new SchemaTable();
@@ -159,6 +161,7 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
 
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $classLikeStorageProvider;
+        $codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
         (new \ReflectionProperty(Codebase::class, 'progress'))->setValue($codebase, new VoidProgress());
 
         $table = new SchemaTable();

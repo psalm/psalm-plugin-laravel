@@ -122,17 +122,6 @@ final class ClassLineageTest extends TestCase
         $this->assertSame($expected, ClassLineage::isA($this->codebase, $this->qualify($class), $this->qualify($ancestor)));
     }
 
-    /** Unit harnesses build a Codebase with storage only; lineage must not need Psalm's class registry. */
-    #[Test]
-    public function it_works_without_a_class_registry(): void
-    {
-        $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
-        $codebase->classlike_storage_provider = $this->codebase->classlike_storage_provider;
-
-        $this->assertTrue(ClassLineage::isA($codebase, '\\' . self::NS . 'UserModel', self::NS . 'BaseModel'));
-        $this->assertFalse(ClassLineage::isA($codebase, 'AliasUserModel', self::NS . 'BaseModel'));
-    }
-
     #[Test]
     public function it_returns_storage_under_the_canonical_name(): void
     {

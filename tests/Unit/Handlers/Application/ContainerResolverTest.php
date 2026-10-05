@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Handlers\Application\ContainerResolver;
@@ -53,6 +54,7 @@ final class ContainerResolverTest extends TestCase
 
         $this->codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $this->codebase->classlike_storage_provider = $storageProvider;
+        $this->codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
 
         $app = ApplicationProvider::getApp();
         foreach ([self::GATEWAY, self::GATEWAY_CONTRACT, self::UNSCANNED] as $abstract) {
