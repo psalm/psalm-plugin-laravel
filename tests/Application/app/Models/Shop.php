@@ -265,6 +265,41 @@ final class Shop extends Model
         return $this->cyclicWorkOrders()->latest();
     }
 
+    // --- Bodies with several returns (#1613): every return must resolve to the same relation ---
+
+    /** The helper's early return yields Invoice for this argument, so the delegation proves nothing. */
+    public function invoicesViaHelper(): HasMany
+    {
+        return $this->relationFor('invoices')->latest();
+    }
+
+    private function relationFor(string $kind): HasMany
+    {
+        if ($kind === 'invoices') {
+            return $this->hasMany(Invoice::class);
+        }
+
+        return $this->hasMany(WorkOrder::class);
+    }
+
+    public function invoicesOrWorkOrders(): HasMany
+    {
+        if ($this->exists) {
+            return $this->hasMany(Invoice::class);
+        }
+
+        return $this->hasMany(WorkOrder::class);
+    }
+
+    public function sortedWorkOrders(): HasMany
+    {
+        if ($this->exists) {
+            return $this->hasMany(WorkOrder::class)->latest();
+        }
+
+        return $this->hasMany(WorkOrder::class);
+    }
+
     // --- Direct factory chains that change the relation class (#1647) ---
 
     public function lastWorkOrder(): HasOne

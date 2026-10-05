@@ -5,6 +5,7 @@ use App\Models\AbstractDocument;
 use App\Models\Contract;
 use App\Models\Mechanic;
 use App\Models\WorkOrder;
+use App\Models\Supplier;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -51,6 +52,20 @@ function issue1613_trait_on_abstract_receiver(AbstractDocument $document): Belon
 {
     $relation = $document->revisedFrom();
     /** @psalm-check-type-exact $relation = BelongsTo<AbstractDocument, AbstractDocument> */
+    return $relation;
+}
+
+function issue1613_nested_trait_single_path(Supplier $supplier): BelongsTo
+{
+    $relation = $supplier->revisedFrom();
+    /** @psalm-check-type-exact $relation = BelongsTo<Supplier, Supplier> */
+    return $relation;
+}
+
+function issue1613_nested_trait_delegation(Supplier $supplier): HasMany
+{
+    $relation = $supplier->priorRevisions();
+    /** @psalm-check-type-exact $relation = HasMany<Supplier, Supplier> */
     return $relation;
 }
 ?>

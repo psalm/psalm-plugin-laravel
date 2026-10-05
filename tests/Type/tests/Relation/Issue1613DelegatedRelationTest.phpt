@@ -94,6 +94,13 @@ function issue1613_delegated_hasmany(Shop $shop): HasMany
     return $relation;
 }
 
+function issue1613_several_returns_of_one_relation(Shop $shop): HasMany
+{
+    $relation = $shop->sortedWorkOrders();
+    /** @psalm-check-type-exact $relation = HasMany<WorkOrder, Shop> */
+    return $relation;
+}
+
 function issue1613_delegated_through(Shop $shop): HasManyThrough
 {
     $relation = $shop->seniorMechanics();
