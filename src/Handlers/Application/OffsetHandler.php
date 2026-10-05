@@ -43,6 +43,7 @@ final class OffsetHandler implements
             return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs(
                 $source->getNodeTypeProvider(),
                 $event->getCallArgs(),
+                $source->getCodebase(),
             );
         }
 

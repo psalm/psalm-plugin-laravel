@@ -9,6 +9,9 @@ namespace Illuminate\Support\Traits;
  * but Psalm 7 resolves the callable return type to `mixed`, breaking fluent chains.
  * We stub as `@return $this` to keep the chain. A callback returning a different type
  * is narrowed by {@see \Psalm\LaravelPlugin\Handlers\Support\ConditionableWhenHandler}.
+ * Callback params stay `callable|null` here; per call site,
+ * {@see \Psalm\LaravelPlugin\Handlers\Support\ConditionableCallbackParamsHandler} types them as
+ * `callable(<receiver>, <truthy|falsy $value>)`.
  */
 trait Conditionable
 {
@@ -16,8 +19,8 @@ trait Conditionable
      * Apply the callback if the given "value" is (or resolves to) truthy.
      *
      * @param  mixed  $value
-     * @param  callable|null  $callback
-     * @param  callable|null  $default
+     * @param  callable|null  $callback  params typed per call site by ConditionableCallbackParamsHandler
+     * @param  callable|null  $default  params typed per call site by ConditionableCallbackParamsHandler
      * @return $this
      */
     public function when($value = null, ?callable $callback = null, ?callable $default = null) {}
@@ -26,8 +29,8 @@ trait Conditionable
      * Apply the callback if the given "value" is (or resolves to) falsy.
      *
      * @param  mixed  $value
-     * @param  callable|null  $callback
-     * @param  callable|null  $default
+     * @param  callable|null  $callback  params typed per call site by ConditionableCallbackParamsHandler
+     * @param  callable|null  $default  params typed per call site by ConditionableCallbackParamsHandler
      * @return $this
      */
     public function unless($value = null, ?callable $callback = null, ?callable $default = null) {}

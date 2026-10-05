@@ -1,0 +1,411 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Handlers\Eloquent;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\NullsafeMethodCall;
+use PhpParser\Node\Expr\PropertyFetch;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Identifier;
+use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateEntry;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
+use Psalm\Type;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Union;
+
+/**
+ * Types `{relation}_count` / `{relation}_exists` (and `as alias` names) precisely when the code
+ * PROVES the aggregate was loaded; {@see ModelAggregatePropertyHandler} keeps them nullable otherwise.
+ *
+ * Three proof shapes, all literal-only (a dynamic argument is no proof) and validated against the
+ * FINAL model class through the property handler's relation check:
+ *
+ * 1. `$m->loadCount('x')` on a variable: `vars_in_scope['$m->x_count']` is set. Psalm reads that
+ *    entry before any property provider, so alias names (which fail the provider's existence
+ *    check) work too. `$m->refresh()` drops only the facts this handler recorded (user narrowings stay);
+ *    reassigning `$m` is dropped by Psalm.
+ * 2. `$m = M::withCount('x')->where(…)->firstOrFail();`: same facts for the assigned variable.
+ * 3. `M::withCount('x')->firstOrFail()->x_count`, `$m->loadCount('x')->x_count`: the PropertyFetch
+ *    node type is overridden (conventional names only; alias names fail existence earlier).
+ *
+ * Chains are walked from the terminal call inward. Past the first retrieval method (first, find, …)
+ * only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` drop the aggregate columns,
+ * so the walk stops there. Collection hops, variable-held builders and foreach are not tracked: those
+ * reads stay nullable. A closure that captures `$m` sees the fact like any other property narrowing.
+ *
+ * Known limitations (accepted imprecision, same class as Psalm keeping property facts after impure calls):
+ * - A `refresh()` inside only one branch leaves the pre-branch proof in place after the merge, because a
+ *   merge ignores a key missing from one side (AggregateAccessorRefreshInBranchKnownLimitationTest).
+ * - One alias produced by different aggregate functions in ONE chain records no fact (`withExists` casts
+ *   the alias to bool for good). Across in-place loads, separate or chained, the latest write wins, so
+ *   `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>` although the bool cast persists.
+ *
+ * Carrying the fact in an intersection type (`M&object{x_count: int}`) was probed and rejected:
+ * decisions.md, "Aggregate accessor proof".
+ *
+ * @internal
+ */
+final class ModelAggregateLoadHandler implements AfterExpressionAnalysisInterface
+{
+    /** Methods that return the model matching the query; firstOrNew & co. build instances without the attribute. */
+    private const RETRIEVAL_METHODS = [
+        'first' => true,
+        'firstorfail' => true,
+        'sole' => true,
+        'find' => true,
+        'findorfail' => true,
+        'firstwhere' => true,
+    ];
+
+    /**
+     * Replace the select list, discarding the aggregate sub-selects added earlier in the chain.
+     * selectRaw()/selectSub()/addSelect() append, so they keep the proof.
+     */
+    private const COLUMN_REPLACING_METHODS = [
+        'select' => true,
+        'setquery' => true,
+    ];
+
+    /**
+     * Aliases this handler wrote into `vars_in_scope`: variable id => alias. Per invocation, not per file:
+     * an included file is analyzed with the includer's Context, so its facts must reach the includer's
+     * `refresh()`.
+     *
+     * @var array<string, array<array-key, true>>
+     */
+    private static array $recordedAliases = [];
+
+    public static function reset(): void
+    {
+        self::$recordedAliases = [];
+    }
+
+    /** @inheritDoc */
+    #[\Override]
+    public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
+    {
+        $expr = $event->getExpr();
+
+        if ($expr instanceof MethodCall) {
+            $name = $expr->name instanceof Identifier ? \strtolower($expr->name->name) : null;
+            $described = $name === null ? null : AggregateCallParser::describe($name);
+
+            if ($name === 'refresh') {
+                self::forgetLoadedAggregates($expr, $event);
+            } elseif ($described !== null && $described[1]) {
+                self::trackLoad($expr, $described[0], $event);
+            }
+        } elseif ($expr instanceof Assign) {
+            self::trackAssignment($expr, $event);
+        } elseif ($expr instanceof PropertyFetch) {
+            self::overrideChainFetch($expr, $event);
+        }
+
+        return null;
+    }
+
+    /**
+     * `$m->refresh()` reloads the attributes and the loaded relations, so the aggregate facts recorded for
+     * `$m` and its `$m->…` descendants are dropped; user narrowings (`assert($m->owner instanceof X)`) stay,
+     * like after any other impure call. The state is per invocation, not per file (an included file shares
+     * the includer's Context), so an alias recorded for the same variable name anywhere in the run is
+     * dropped too: over-approximate, sound.
+     * Only for a receiver that is exactly one Model: other objects with a `refresh()` keep their property facts.
+     */
+    private static function forgetLoadedAggregates(MethodCall $call, AfterExpressionAnalysisEvent $event): void
+    {
+        $context = $event->getContext();
+        $varId = self::varId(self::identityRoot($call->var));
+        if ($varId === null || self::singleModel($event->getCodebase(), $context->vars_in_scope[$varId] ?? null) === null) {
+            return;
+        }
+
+        $prefix = $varId . '->';
+
+        foreach (self::$recordedAliases as $recordedVarId => $aliases) {
+            if ($recordedVarId !== $varId && !\str_starts_with($recordedVarId, $prefix)) {
+                continue;
+            }
+
+            foreach (\array_keys($aliases) as $alias) {
+                unset($context->vars_in_scope[$recordedVarId . '->' . $alias]);
+            }
+        }
+    }
+
+    /**
+     * `$m->loadCount('x')->refresh()` evaluates to `$m` itself: load*() and refresh() return `$this`.
+     *
+     * @psalm-mutation-free
+     */
+    private static function identityRoot(Expr $expr): Expr
+    {
+        while ($expr instanceof MethodCall && $expr->name instanceof Identifier) {
+            $name = \strtolower($expr->name->name);
+            if ($name !== 'refresh' && !(AggregateCallParser::describe($name)[1] ?? false)) {
+                break;
+            }
+
+            $expr = $expr->var;
+        }
+
+        return $expr;
+    }
+
+    /** @param 'count'|'exists'|'sum'|'min'|'max'|'avg' $function */
+    private static function trackLoad(MethodCall $call, string $function, AfterExpressionAnalysisEvent $event): void
+    {
+        // `$m->loadCount('a')->loadExists('b')`: the inner call already recorded `a`; both mutate `$m`.
+        $receiver = self::identityRoot($call->var);
+
+        $varId = self::varId($receiver);
+        if ($varId === null) {
+            return;
+        }
+
+        self::recordFacts($event, $varId, AggregateCallParser::entries($function, $call->isFirstClassCallable() ? [] : $call->getArgs()));
+    }
+
+    private static function trackAssignment(Assign $assign, AfterExpressionAnalysisEvent $event): void
+    {
+        $value = $assign->expr;
+        if (!$value instanceof MethodCall && !$value instanceof NullsafeMethodCall && !$value instanceof StaticCall) {
+            return;
+        }
+
+        $varId = self::varId($assign->var);
+        if ($varId === null) {
+            return;
+        }
+
+        self::recordFacts($event, $varId, self::chainEntries($value, $event));
+    }
+
+    private static function overrideChainFetch(PropertyFetch $fetch, AfterExpressionAnalysisEvent $event): void
+    {
+        $name = $fetch->name;
+        if (!$name instanceof Identifier) {
+            return;
+        }
+
+        $property = $name->name;
+        $receiver = $fetch->var;
+        if (
+            (!$receiver instanceof MethodCall && !$receiver instanceof NullsafeMethodCall && !$receiver instanceof StaticCall)
+            || (!\str_ends_with($property, '_count') && !\str_ends_with($property, '_exists'))
+        ) {
+            return;
+        }
+
+        $source = $event->getStatementsSource();
+        $codebase = $event->getCodebase();
+        $receiverType = $source->getNodeTypeProvider()->getType($receiver);
+        $model = self::singleModel($codebase, $receiverType);
+        if ($model === null) {
+            return;
+        }
+
+        $entry = self::chainEntries($receiver, $event)[$property] ?? null;
+        $type = $entry instanceof AggregateEntry ? self::provenType($codebase, $model, $entry) : null;
+        if ($type instanceof Union) {
+            // A nullable receiver (`?->`, first()) short-circuits the read to null.
+            $source->getNodeTypeProvider()->setType(
+                $fetch,
+                $receiverType?->isNullable() === true ? Type::combineUnionTypes($type, Type::getNull()) : $type,
+            );
+        }
+    }
+
+    /**
+     * @param iterable<AggregateEntry> $entries in execution order: a later entry with the same alias wins
+     */
+    private static function recordFacts(AfterExpressionAnalysisEvent $event, string $varId, iterable $entries): void
+    {
+        $context = $event->getContext();
+        $varType = $context->vars_in_scope[$varId] ?? null;
+        $model = self::singleModel($event->getCodebase(), $varType);
+
+        // A cached `$m->alias` is read before the receiver is checked, so a nullable `$m` would lose
+        // its PossiblyNullPropertyFetch.
+        if ($model === null || $varType?->isNullable() === true) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
+            $type = self::provenType($event->getCodebase(), $model, $entry);
+            if (!$type instanceof Union) {
+                continue;
+            }
+
+            $context->vars_in_scope[$varId . '->' . $entry->alias] = $type;
+            self::$recordedAliases[$varId][$entry->alias] = true;
+        }
+    }
+
+    /**
+     * Aggregates the chain provably loaded on the model it returns. Walks from the outermost call to
+     * the root; collection hops and non-Builder calls end the walk, keeping what was collected.
+     * Keyed by alias: calls execute innermost-first, so the outermost entry for an alias wins.
+     *
+     * @return array<string, AggregateEntry>
+     */
+    private static function chainEntries(Expr $expr, AfterExpressionAnalysisEvent $event): array
+    {
+        $entries = [];
+        $clashing = [];
+        $buildingQuery = false;
+        $types = null;
+
+        while ($expr instanceof MethodCall || $expr instanceof NullsafeMethodCall || $expr instanceof StaticCall) {
+            if (!$expr->name instanceof Identifier) {
+                break;
+            }
+
+            $name = \strtolower($expr->name->name);
+            $described = AggregateCallParser::describe($name);
+
+            if ($described !== null) {
+                // loadXxx() composes on a model; withXxx() only counts once the query is being built.
+                if ($described[1] === $buildingQuery) {
+                    break;
+                }
+
+                $call = [];
+                foreach (AggregateCallParser::entries($described[0], $expr->isFirstClassCallable() ? [] : $expr->getArgs()) as $entry) {
+                    $call[$entry->alias] = $entry;
+                }
+
+                foreach ($call as $alias => $entry) {
+                    if (!isset($entries[$alias])) {
+                        $entries[$alias] = $entry;
+                    } elseif ($entries[$alias]->function !== $entry->function) {
+                        // A withExists() cast sticks to the alias whichever call comes last: decline.
+                        $clashing[$alias] = true;
+                    }
+                }
+            } elseif (!$buildingQuery) {
+                if (!isset(self::RETRIEVAL_METHODS[$name])) {
+                    break;
+                }
+
+                $buildingQuery = true;
+            } else {
+                $types ??= $event->getStatementsSource()->getNodeTypeProvider();
+                if (isset(self::COLUMN_REPLACING_METHODS[$name]) || !self::isQueryType($event->getCodebase(), $types->getType($expr))) {
+                    break;
+                }
+            }
+
+            $expr = $expr instanceof StaticCall ? null : $expr->var;
+        }
+
+        return \array_diff_key($entries, $clashing);
+    }
+
+    /** Relation check against the final model + user `@property` precedence; null declines. */
+    private static function provenType(Codebase $codebase, string $model, AggregateEntry $entry): ?Union
+    {
+        try {
+            if (
+                !ModelAggregatePropertyHandler::isRelationMethod($codebase, $model, $entry->relation)
+                || ModelAggregatePropertyHandler::hasUserPseudoProperty($codebase, $model, $entry->alias)
+            ) {
+                return null;
+            }
+
+            return ModelAggregatePropertyHandler::aggregateType(
+                $codebase,
+                $entry->function,
+                $model,
+                $entry->relation,
+                $entry->column,
+                true,
+            );
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
+    }
+
+    /** @psalm-mutation-free */
+    private static function isQueryType(Codebase $codebase, ?Union $type): bool
+    {
+        if (!$type instanceof Union) {
+            return false;
+        }
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (
+                !$atomic instanceof TNamedObject
+                || (!ClassLineage::isA($codebase, $atomic->value, Builder::class) && !ClassLineage::isA($codebase, $atomic->value, Relation::class))
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The one Model class the (possibly nullable) type names. Anything else — unions of models, the
+     * bare base Model, mixed — declines, since a relation proven on one class says nothing about another.
+     *
+     * @return class-string<Model>|null
+     * @psalm-mutation-free
+     */
+    private static function singleModel(Codebase $codebase, ?Union $type): ?string
+    {
+        $model = null;
+
+        foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if (
+                !$atomic instanceof TNamedObject
+                || ($model !== null && $model !== $atomic->value)
+                || !ClassLineage::isA($codebase, $atomic->value, Model::class)
+            ) {
+                return null;
+            }
+
+            $model = $atomic->value;
+        }
+
+        return $model;
+    }
+
+    /**
+     * Psalm's extended var id for `$var` / `$var->prop->…`; null for anything else.
+     *
+     * @psalm-mutation-free
+     */
+    private static function varId(Expr $expr): ?string
+    {
+        if ($expr instanceof Variable) {
+            return \is_string($expr->name) ? '$' . $expr->name : null;
+        }
+
+        if ($expr instanceof PropertyFetch && $expr->name instanceof Identifier) {
+            $base = self::varId($expr->var);
+
+            return $base === null ? null : $base . '->' . $expr->name->name;
+        }
+
+        return null;
+    }
+}

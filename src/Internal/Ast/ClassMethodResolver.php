@@ -9,6 +9,7 @@ use PhpParser\Node\Stmt;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Storage\MethodStorage;
 
 /**
  * Resolves a method's source AST from Psalm's method storage without invoking it.
@@ -22,7 +23,7 @@ use Psalm\Internal\MethodIdentifier;
 final class ClassMethodResolver
 {
     /**
-     * @return ?array{classMethod: Stmt\ClassMethod, fileStmts: list<Stmt>}
+     * @return ?array{classMethod: Stmt\ClassMethod, fileStmts: list<Stmt>, methodStorage: MethodStorage}
      */
     public static function resolve(Codebase $codebase, MethodIdentifier $methodId): ?array
     {
@@ -61,7 +62,7 @@ final class ClassMethodResolver
             return null;
         }
 
-        return ['classMethod' => $classMethod, 'fileStmts' => $fileStmts];
+        return ['classMethod' => $classMethod, 'fileStmts' => $fileStmts, 'methodStorage' => $methodStorage];
     }
 
     /**

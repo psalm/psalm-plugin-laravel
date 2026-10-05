@@ -96,6 +96,15 @@ final class Mechanic extends Model
     }
 
     /**
+     * Delegated pivot relation (#1613): the inner `->using()` carries over, while this outer
+     * `->as()` overrides the inner `'details'` accessor, matching runtime order.
+     */
+    public function specializationProfiles(): BelongsToMany
+    {
+        return $this->specializationsWithCustomAccessor()->as('profile');
+    }
+
+    /**
      * Tagging WorkOrders polymorphically with a custom pivot — used to test that the
      * chain-capture also fires for MorphToMany (not just BelongsToMany).
      *

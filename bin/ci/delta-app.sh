@@ -327,29 +327,33 @@ run_side() {
             ;;
         composer)
             configure_plugin_repo "$app_dir" "$plugin_dir"
-            (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --with-all-dependencies --quiet) \
+            (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --quiet) \
                 || { echo "[$APP/$label] composer relink failed" >&2; rm -rf "$app_dir"; return 0; }
             rm -rf "$link"
             ln -s "$plugin_dir" "$link"
             ;;
     esac
 
-    local out_txt err_txt t0 exit_code wall coverage count
-    out_txt=$(mktemp); err_txt=$(mktemp)
+    local out_txt err_txt side_tmp t0 exit_code wall coverage count
+    out_txt=$(mktemp); err_txt=$(mktemp); side_tmp=$(mktemp -d)
     # Sub-second wall time via PHP microtime — portable (macOS `date` lacks %N)
     # and finer than whole-second `date +%s`. Still threshold-filtered downstream
     # because CI runner jitter dominates small deltas.
     t0=$(php -r 'echo microtime(true);')
     exit_code=0
+    # Own TMPDIR per side: both sides share the work-dir cwd, so the plugin's
+    # psalm-laravel-<md5(cwd)> temp cache would otherwise carry base's migration
+    # schema into head.
     (
         cd "$app_dir"
-        php -d memory_limit="$MEM" \
+        TMPDIR="$side_tmp" php -d memory_limit="$MEM" \
             vendor/bin/psalm -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
     wall=$(php -r 'printf("%.3f", microtime(true) - (float) $argv[1]);' "$t0")
+    rm -rf "$side_tmp"
 
     # Psalm exits non-zero whenever issues are found, so a non-empty report is
     # the real success signal; treat a missing/empty report as a crash.
@@ -369,7 +373,7 @@ run_side() {
     # so on macOS the report says /private/tmp/... while $app_dir is /tmp/...
     local app_dir_real
     app_dir_real=$(cd "$app_dir" && pwd -P)
-    php -r '
+    php -d memory_limit=-1 -r '
         $file = $argv[1]; $prefix = rtrim($argv[2], "/") . "/";
         $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
         foreach ($d as &$i) {
@@ -381,7 +385,7 @@ run_side() {
     ' "$issues_file" "$app_dir_real"
 
     coverage=$(sed -n 's/.*infer types for \([0-9.]*\)%.*/\1/p' "$out_txt" | tail -1)
-    count=$(php -r '$d=json_decode(file_get_contents($argv[1]),true); echo is_array($d)?count($d):0;' "$issues_file")
+    count=$(php -d memory_limit=-1 -r '$d=json_decode(file_get_contents($argv[1]),true); echo is_array($d)?count($d):0;' "$issues_file")
 
     php -r '
         $cov = $argv[6];
