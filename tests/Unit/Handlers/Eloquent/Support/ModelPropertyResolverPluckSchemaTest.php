@@ -42,9 +42,9 @@ use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingl
  * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\ModelSerializationShapeBuilderTest},
  * #1167). Driven instead from a hand-built {@see ModelMetadata} via `overrideForTesting()`
  * against a real {@see Codebase}, exactly like that test — {@see WorkOrder} is reused purely
- * as a Model target (its storage lineage set by hand); its real `@property` docblock never
- * enters play because {@see ClassLikeStorageProvider::create()} allocates a fresh, empty
- * storage rather than scanning the file.
+ * as a Model target (lineage set in its storage); its real `@property` docblock never enters
+ * play because {@see ClassLikeStorageProvider::create()} allocates a fresh, empty storage
+ * rather than scanning the file.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1293
  */
@@ -65,11 +65,8 @@ final class ModelPropertyResolverPluckSchemaTest extends TestCase
         $this->classLikeStorageProvider = new ClassLikeStorageProvider();
         // Fresh empty storage: resolveColumnType() checks pseudo_property_get_types first,
         // so an empty storage keeps the test driven purely by the overridden schema/casts —
-        // WorkOrder's real @property docblock is never scanned into this provider. Only the
-        // Model lineage is set: the resolver reads ancestry from storage, never the autoloader.
-        $this->classLikeStorageProvider->create(WorkOrder::class)->parent_classes = [
-            \strtolower(Model::class) => Model::class,
-        ];
+        // WorkOrder's real @property docblock is never scanned into this provider.
+        $this->classLikeStorageProvider->create(WorkOrder::class)->parent_classes = ['illuminate\database\eloquent\model' => Model::class];
         $this->classLikeStorageProvider->create(SerializedIntStatus::class)->is_enum = true;
 
         $this->codebase = $this->makeCodebase();

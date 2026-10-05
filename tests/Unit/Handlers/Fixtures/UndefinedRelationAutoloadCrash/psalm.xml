@@ -7,7 +7,6 @@
 >
     <projectFiles>
         <directory name="app" />
-        <directory name="probe" />
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin" />

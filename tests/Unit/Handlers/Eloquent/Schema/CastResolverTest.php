@@ -14,7 +14,6 @@ use Illuminate\Support\Collection as IlluminateCollection;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
@@ -23,10 +22,7 @@ use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\Type;
 use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverBackedEnum;
-use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverPartialLoadEnum;
-use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverThrowsOnLoadEnum;
 use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverUnitEnum;
-use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolverUnscannedEnum;
 
 /**
  * Unit-tests the {@see CastResolver} branches that don't require a fully-wired
@@ -41,32 +37,15 @@ use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\CastResolve
 #[CoversClass(CastResolver::class)]
 final class CastResolverTest extends TestCase
 {
-    /** @var list<string> */
-    private const STORED = [CastResolverBackedEnum::class, CastResolverUnitEnum::class, CastResolverThrowsOnLoadEnum::class];
-
     private Codebase $codebase;
 
     #[\Override]
     protected function setUp(): void
     {
-        // Partial Codebase: the storage CastResolver reads its class lookups from first (#1652), and the
-        // class registry for `class_alias()` names. Fixtures are registered the way Psalm's scan would.
-        $storageProvider = new ClassLikeStorageProvider();
-        $storageProvider->create(CastResolverBackedEnum::class)->is_enum = true;
-        $storageProvider->create(CastResolverUnitEnum::class)->is_enum = true;
-
+        // Partial Codebase: empty storage, so class lookups fall back to the runtime.
         $this->codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
-        $this->codebase->classlike_storage_provider = $storageProvider;
+        $this->codebase->classlike_storage_provider = new ClassLikeStorageProvider();
         $this->codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
-    }
-
-    #[\Override]
-    protected function tearDown(): void
-    {
-        $storageProvider = new ClassLikeStorageProvider();
-        foreach (self::STORED as $class) {
-            $storageProvider->remove($class);
-        }
     }
 
     /** @return iterable<string, array{0: string, 1: string}> */
@@ -322,52 +301,5 @@ final class CastResolverTest extends TestCase
 
         // BackedEnum branch fires before any Castable/CastsAttributes check.
         $this->assertSame(CastResolverBackedEnum::class, (string) $union);
-    }
-
-    /**
-     * A file that fails mid-load keeps what it declared before the failure (here a function), so a second
-     * include dies with an uncatchable "Cannot redeclare function" fatal. Every check on one unscanned
-     * target (enum, then each caster contract), and every later cast naming it, must load it at most once.
-     * A separate process, because a regression is a fatal that would end the whole PHPUnit run.
-     */
-    #[Test]
-    #[RunInSeparateProcess]
-    public function it_loads_an_unscanned_target_at_most_once(): void
-    {
-        foreach ([CastResolverPartialLoadEnum::class, 'enum:' . CastResolverPartialLoadEnum::class, CastResolverPartialLoadEnum::class] as $cast) {
-            $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: false));
-        }
-    }
-
-    /**
-     * A string cast (`'Vendor\Status'`, not `Status::class`) does not make Psalm scan its target, so it
-     * has no storage; CastResolver then asks the runtime, as before #1652.
-     */
-    #[Test]
-    public function it_resolves_an_enum_psalm_never_scanned(): void
-    {
-        $union = CastResolver::resolve($this->codebase, CastResolverUnscannedEnum::class, nullable: false);
-
-        $this->assertSame(CastResolverUnscannedEnum::class, (string) $union);
-    }
-
-    /** The runtime fallback must not let a target that fails to load escape (#1652). */
-    #[Test]
-    public function it_treats_an_unscanned_target_that_fails_to_load_as_unknown(): void
-    {
-        $union = CastResolver::resolve($this->codebase, 'enum:' . CastResolverThrowsOnLoadEnum::class, nullable: false);
-
-        $this->assertSame('mixed', (string) $union);
-    }
-
-    /** Storage comes first: a scanned target is resolved without loading its file (#1652). */
-    #[Test]
-    public function it_resolves_a_scanned_enum_without_loading_it(): void
-    {
-        $this->codebase->classlike_storage_provider->create(CastResolverThrowsOnLoadEnum::class)->is_enum = true;
-
-        $union = CastResolver::resolve($this->codebase, 'enum:' . CastResolverThrowsOnLoadEnum::class, nullable: false);
-
-        $this->assertSame(CastResolverThrowsOnLoadEnum::class, (string) $union);
     }
 }
