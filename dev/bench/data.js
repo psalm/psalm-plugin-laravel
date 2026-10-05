@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791145570950,
+  "lastUpdate": 1791192206850,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12175,6 +12175,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1375,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "398a60675a8a2ebe53b5b1611ea8ee053ed019e4",
+          "message": "Fix crash on first-class callables in handlers that read call arguments (#1659)\n\n* fix(handlers): decline first-class callables before reading call args\n\nFixes #1657\n\n* ci(tests): enable zend.assertions in type tests\n\nsetup-php defaults to the production ini (zend.assertions=-1), so php-parser assert() crashes such as #1657 never surface in the type suite.\n\n* fix(handlers): decline first-class callables in validated-read taint resolver\n\nRefs #1657\n\n* ci(tests): enable zend.assertions in unit tests",
+          "timestamp": "2026-10-05T11:18:52+02:00",
+          "tree_id": "0385273cb597954f4fce5af3ec98287dee8977b4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/398a60675a8a2ebe53b5b1611ea8ee053ed019e4"
+        },
+        "date": 1791192205622,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.3,
+            "range": "± 0.5",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
