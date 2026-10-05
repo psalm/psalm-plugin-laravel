@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 
+use Illuminate\Contracts\Database\Eloquent\Castable;
+use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -1544,13 +1546,16 @@ final class ModelMetadataRegistryBuilder
         bool $nullable,
         ?Union $originalType,
     ): CastInfo {
-        [$shape, $targetClass, $parameter] = self::classifyCast($castString);
+        // resolve() first: it autoloads a cast target Psalm never scanned, which classifyCast()'s
+        // loaded-class fallback then sees.
+        $psalmType = CastResolver::resolve($codebase, $castString, $nullable, $originalType);
+        [$shape, $targetClass, $parameter] = self::classifyCast($codebase, $castString);
 
         return new CastInfo(
             column: $columnName,
             shape: $shape,
             targetClass: $targetClass,
-            psalmType: CastResolver::resolve($codebase, $castString, $nullable, $originalType),
+            psalmType: $psalmType,
             parameter: $parameter,
         );
     }
@@ -1561,13 +1566,17 @@ final class ModelMetadataRegistryBuilder
      * Best-effort for Phase 1 — Phase 2/3 consumers that need more precise shape information
      * may extend the classifier. `psalmType` is the authoritative resolved type.
      *
+     * Class checks read Psalm's storage like {@see CastResolver} (#1652): a scanned cast target is never
+     * loaded, so a loaded-classes-only check would classify every such enum or caster as Primitive.
+     * The target class is stored under its canonical name, the key its storage is read back by.
+     *
      * @return array{0: CastShape, 1: class-string|null, 2: string|null}
      */
-    private static function classifyCast(string $castString): array
+    private static function classifyCast(Codebase $codebase, string $castString): array
     {
         // `encrypted:X` wraps another cast — recurse after stripping the prefix.
         if (\str_starts_with(\strtolower($castString), 'encrypted:')) {
-            [$innerShape, $innerTarget, $innerParam] = self::classifyCast(\substr($castString, 10));
+            [$innerShape, $innerTarget, $innerParam] = self::classifyCast($codebase, \substr($castString, 10));
             // Preserve the inner shape's precision; the outer wrapper just marks Primitive as encrypted.
             $shape = $innerShape === CastShape::Primitive ? CastShape::AsEncrypted : $innerShape;
 
@@ -1593,31 +1602,17 @@ final class ModelMetadataRegistryBuilder
             \in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
         ) {
             $shape = CastShape::DateTime;
-        } elseif (self::looksLikeClassName($base) && self::isEnumClass($base)) {
-            /** @var class-string $base */
-            $shape = CastShape::BackedEnum;
-            $targetClass = $base;
-        } elseif (
-            self::looksLikeClassName($base)
-            // autoload: false — classifyCast is best-effort shape metadata. Skipping
-            // autoload here avoids eager file includes during warm-up for casts whose
-            // target class isn't loaded yet. CastResolver::resolve (separate call) is
-            // the authoritative path for $psalmType and reads Psalm's storage instead.
-            && \class_exists($base, false)
-            // Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
-            // CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable
-            // itself implements neither CastsAttributes nor CastsInboundAttributes directly — only the
-            // instance its castUsing() returns does — so checking CastsAttributes alone missed every
-            // framework Castable wrapper (and any user Castable-only class), wrongly classifying them
-            // Primitive and letting an accessor on the same column win over the class cast.
-            && (
-                \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
-                || \is_a($base, \Illuminate\Contracts\Database\Eloquent\Castable::class, true)
-            )
-        ) {
-            /** @var class-string $base */
-            $shape = CastShape::CustomCastsAttributes;
-            $targetClass = $base;
+        } elseif (self::looksLikeClassName($base)) {
+            $class = ClassLineage::canonicalName($codebase, $base);
+
+            if (self::isEnumClass($codebase, $class)) {
+                /** @var class-string $class */
+                $shape = CastShape::BackedEnum;
+                $targetClass = $class;
+            } elseif (self::isClassCastable($codebase, $class)) {
+                $shape = CastShape::CustomCastsAttributes;
+                $targetClass = $class;
+            }
         }
 
         return [$shape, $targetClass, $parameter];
@@ -1633,13 +1628,39 @@ final class ModelMetadataRegistryBuilder
         return \str_contains($value, '\\') || \preg_match('/^[A-Z]/', $value) === 1;
     }
 
-    private static function isEnumClass(string $class): bool
+    /**
+     * Psalm's storage first; the runtime only for a class Psalm never scanned, and only if already
+     * loaded (never autoloads: an unscanned target was loaded, if at all, by {@see CastResolver::resolve}).
+     */
+    private static function isEnumClass(Codebase $codebase, string $class): bool
     {
-        // autoload: false — best-effort shape detection only. If the enum hasn't
-        // already been loaded by the time we warm up, classifyCast falls back to
-        // Primitive, and `CastResolver::resolve` (called separately by buildCastInfo)
-        // still produces the authoritative `$psalmType`.
-        return \enum_exists($class, false);
+        return ClassLineage::storage($codebase, $class)?->is_enum ?? \enum_exists($class, false);
+    }
+
+    /**
+     * Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
+     * CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable itself
+     * implements neither CastsAttributes nor CastsInboundAttributes directly — only the instance its
+     * castUsing() returns does — so checking CastsAttributes alone missed every framework Castable
+     * wrapper (and any user Castable-only class), wrongly classifying them Primitive and letting an
+     * accessor on the same column win over the class cast.
+     *
+     * Storage and runtime tiers as in {@see isEnumClass()}.
+     *
+     * @psalm-assert-if-true class-string $class
+     */
+    private static function isClassCastable(Codebase $codebase, string $class): bool
+    {
+        if (
+            ClassLineage::isA($codebase, $class, CastsAttributes::class)
+            || ClassLineage::isA($codebase, $class, Castable::class)
+        ) {
+            return true;
+        }
+
+        // The guard keeps is_a() from autoloading $class itself.
+        return \class_exists($class, false)
+            && (\is_a($class, CastsAttributes::class, true) || \is_a($class, Castable::class, true));
     }
 
     /**

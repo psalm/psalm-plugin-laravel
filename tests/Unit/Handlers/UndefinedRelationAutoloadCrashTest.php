@@ -86,6 +86,9 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
         yield 'ContainerResolver: binding resolves to a class-name string' => ['ContainerStringBinding'];
         // Not an autoload site: lineage must resolve a `class_alias()` name, as is_a() did.
         yield 'ClassLineage: relation return type is a class alias' => ['AliasRelation'];
+        // Not an autoload site: an enum or caster Psalm scanned but nothing loaded must still classify
+        // its cast, or toArray() serializes the enum case object and lets an accessor beat the caster.
+        yield 'ModelMetadataRegistryBuilder: cast shape of a never-loaded enum and caster' => ['ToArrayCasts'];
     }
 
     #[Test]
