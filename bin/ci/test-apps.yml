@@ -42,19 +42,25 @@
 
 groups:
   default: Baseline set run by a bare /psalm-delta
+  laravel-13: Resolves laravel/framework 13.x (CI resolves versions at install time)
+  pest: Primary test suite is Pest (tests/ itself is not analysed)
+  phpunit: Primary test suite is PHPUnit classes (tests/ itself is not analysed)
   octane: Apps that require laravel/octane
-  ai: Apps whose locked laravel/ai is inside the plugin's LaravelAiIntegration::CONSTRAINT gate
+  sanctum: Requires laravel/sanctum
+  livewire: Livewire components in the analysed code
+  inertia: Requires inertiajs/inertia-laravel
   filament: Filament itself and apps built on it
+  ai: Apps whose locked laravel/ai is inside the plugin's LaravelAiIntegration::CONSTRAINT gate
+  blade: Apps and packages with more than 100 Blade templates
   lib: Packages and monorepos rather than full apps
   large: Slow to install or analyse; may need a raised timeout
-  blade: Apps and packages with more than 100 Blade templates
 
 apps:
   - name: monica
     repo: https://github.com/monicahq/monica.git
     ref: e08e917
     php: "8.4"
-    groups: [default]
+    groups: [default, phpunit, sanctum, inertia]
     # Monica's lock pins laravel-lang/http-statuses at a version Packagist flags
     # as malware; bump that one package (constraint ^3.8) before install.
     prime: composer update laravel-lang/http-statuses --no-interaction --no-progress --ignore-platform-reqs
@@ -63,45 +69,45 @@ apps:
     repo: https://github.com/pixelfed/pixelfed.git
     ref: 67606eb
     php: "8.4"
-    groups: [default, blade]
+    groups: [default, blade, phpunit]
 
   - name: coolify
     repo: https://github.com/coollabsio/coolify.git
     ref: ffd69c1
     php: "8.4"
-    groups: [default, blade]
+    groups: [default, blade, pest, sanctum, livewire]
 
   - name: bookstack
     repo: https://source.bookstackapp.com/bookstack.git
     ref: 82ef735
     php: "8.4"
-    groups: [default, blade]
+    groups: [default, blade, phpunit]
 
   - name: solidtime
     repo: https://github.com/solidtime-io/solidtime.git
     ref: 797fddf
     php: "8.4"
-    groups: [default, octane, filament]
+    groups: [default, octane, filament, phpunit, inertia]
 
   - name: laravel-socialite
     repo: https://github.com/laravel/socialite.git
     ref: 40e0757
     php: "8.4"
-    groups: [default, lib]
+    groups: [default, lib, phpunit, laravel-13]
     project_dir: src
 
   - name: laravel-permission
     repo: https://github.com/spatie/laravel-permission.git
     ref: ef42ecb
     php: "8.4"
-    groups: [default, lib]
+    groups: [default, lib, pest, laravel-13]
     project_dir: src
 
   - name: laravel-excel
     repo: https://github.com/SpartnerNL/Laravel-Excel.git
     ref: 1854739
     php: "8.4"
-    groups: [default, lib]
+    groups: [default, lib, phpunit, laravel-13]
     project_dir: src
     # composer.json declares a too-low PHP minimum, so Psalm would otherwise
     # analyse against that floor; pin the analysis target explicitly.
@@ -118,7 +124,7 @@ apps:
     repo: https://github.com/bagisto/bagisto.git
     ref: 5b83de2
     php: "8.4"
-    groups: [octane, large, blade]
+    groups: [octane, large, blade, pest, sanctum]
     # app/ is only the skeleton (Http, Providers); the code lives in
     # packages/Webkul/*/src, which auto-detection skips once app/ exists.
     project_dir: packages
@@ -127,7 +133,7 @@ apps:
     repo: https://github.com/filamentphp/filament.git
     ref: 7e4b8a5
     php: "8.4"
-    groups: [filament, lib, large, blade]
+    groups: [filament, lib, large, blade, pest, laravel-13, livewire]
     # 16 packages/*/src (~14.6k issues): a cold run took 4.4 min locally on 16
     # cores; a 4-vCPU runner analyses both sides several times slower.
     timeout: 20
@@ -136,7 +142,7 @@ apps:
     repo: https://github.com/HDInnovations/UNIT3D.git
     ref: 8b88f4c
     php: "8.4"
-    groups: [octane, blade]
+    groups: [octane, blade, pest, livewire]
     # config/secure-headers.php parse_url()s env('VITE_ECHO_ADDRESS') at boot, so
     # composer's artisan scripts fatal without the example .env.
     prime: cp .env.example .env
@@ -145,39 +151,39 @@ apps:
     repo: https://github.com/vitodeploy/vito.git
     ref: 07d265e
     php: "8.4"
-    groups: [blade]
+    groups: [blade, phpunit, sanctum, inertia]
 
   - name: laravel-backup
     repo: https://github.com/spatie/laravel-backup.git
     ref: 23701cf
     php: "8.4"
-    groups: [lib]
+    groups: [lib, pest, laravel-13]
     project_dir: src
 
   - name: corcel
     repo: https://github.com/corcel/corcel.git
     ref: 83506aa
     php: "8.4"
-    groups: [lib]
+    groups: [lib, phpunit]
     project_dir: src
 
   - name: spatie-dashboard
     repo: https://github.com/spatie/dashboard.spatie.be.git
     ref: 2318999
     php: "8.4"
-    groups: []
+    groups: [phpunit]
 
   - name: tastyigniter
     repo: https://github.com/tastyigniter/TastyIgniter.git
     ref: bb57c86
     php: "8.4"
-    groups: []
+    groups: [phpunit]
 
   - name: unopim
     repo: https://github.com/unopim/unopim.git
     ref: 6a35666
     php: "8.4"
-    groups: [ai, octane, blade]
+    groups: [ai, octane, blade, pest, laravel-13, sanctum]
     # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
     # packages/Webkul/*/src, not the app/ skeleton auto-detection would pick.
     project_dir: packages
@@ -186,7 +192,7 @@ apps:
     repo: https://github.com/m3ue/m3u-editor.git
     ref: 3fa58e1
     php: "8.4"
-    groups: [ai, filament, blade]
+    groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire]
     # The laravel/vet composer plugin refuses every unreviewed package; the
     # dev-main filament-spatie-laravel-backup tip breaks panel boot in the
     # artisan scripts; and config/broadcasting.php builds a Pusher client that
