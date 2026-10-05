@@ -40,6 +40,9 @@ use Symfony\Component\Process\Process;
  * Every project also analyzes `probe/plugin_active.php`, which is issue-free only while the plugin is
  * registered: an init-time failure disables the plugin silently, which would otherwise pass as "no
  * crash".
+ *
+ * All projects start in parallel in {@see setUpBeforeClass()}; each test waits on its own run, so a
+ * failure still names its case.
  */
 #[CoversClass(UndefinedModelRelationHandler::class)]
 #[CoversClass(ClassLineage::class)]
@@ -61,10 +64,52 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
 {
     private const FIXTURE_DIR = __DIR__ . '/Fixtures/UndefinedRelationAutoloadCrash';
 
+    /** @var array<string, array{Process, string}> Running Psalm and its cache dir, keyed by fixture dir. */
+    private static array $runs = [];
+
+    #[\Override]
+    public static function setUpBeforeClass(): void
+    {
+        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
+        self::assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
+
+        $fixtureDirs = [self::FIXTURE_DIR];
+        foreach (self::autoloadSites() as [$case]) {
+            $fixtureDirs[] = self::FIXTURE_DIR . '/cases/' . $case;
+        }
+
+        foreach ($fixtureDirs as $fixtureDir) {
+            // The plugin caches the parsed migration schema keyed by migration contents, outside
+            // --no-cache: a cached schema would skip the init-time schema build this test must exercise.
+            $cacheDir = \sys_get_temp_dir() . '/psalm-laravel-autoload-crash-' . \bin2hex(\random_bytes(6));
+            $process = new Process(
+                [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+                $fixtureDir,
+                ['XDG_CACHE_HOME' => $cacheDir, 'TMPDIR' => $cacheDir . '/'],
+            );
+            $process->setTimeout(300);
+            $process->start();
+
+            self::$runs[$fixtureDir] = [$process, $cacheDir];
+        }
+    }
+
+    #[\Override]
+    public static function tearDownAfterClass(): void
+    {
+        foreach (self::$runs as [$process, $cacheDir]) {
+            // Still running only when a filter skipped its test.
+            $process->stop();
+            (new Filesystem())->deleteDirectory($cacheDir);
+        }
+
+        self::$runs = [];
+    }
+
     #[Test]
     public function it_does_not_crash_when_the_relation_receiver_class_deprecates_on_load(): void
     {
-        $this->analyze(self::FIXTURE_DIR);
+        $this->assertAnalysisClean(self::FIXTURE_DIR);
     }
 
     /** @return iterable<string, array{string}> */
@@ -95,35 +140,20 @@ final class UndefinedRelationAutoloadCrashTest extends TestCase
     #[DataProvider('autoloadSites')]
     public function it_does_not_autoload_a_class_named_by_an_analyzed_type(string $case): void
     {
-        $this->analyze(self::FIXTURE_DIR . '/cases/' . $case);
+        $this->assertAnalysisClean(self::FIXTURE_DIR . '/cases/' . $case);
     }
 
     /**
-     * Runs Psalm over the fixture project and fails on a crash, a dropped model, or a failed type check
-     * (a handler that declined, or the plugin-active probe).
+     * Waits for the fixture project's Psalm run and fails on a crash, a dropped model, or a failed type
+     * check (a handler that declined, or the plugin-active probe).
      */
-    private function analyze(string $fixtureDir): void
+    private function assertAnalysisClean(string $fixtureDir): void
     {
-        $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
+        $this->assertArrayHasKey($fixtureDir, self::$runs, 'No Psalm run was started for this fixture.');
+        [$process] = self::$runs[$fixtureDir];
 
-        $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
-
-        // The plugin caches the parsed migration schema keyed by migration contents, outside --no-cache:
-        // a cached schema would skip the init-time schema build this test must exercise.
-        $cacheDir = \sys_get_temp_dir() . '/psalm-laravel-autoload-crash-' . \bin2hex(\random_bytes(6));
-        $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            $fixtureDir,
-            ['XDG_CACHE_HOME' => $cacheDir, 'TMPDIR' => $cacheDir . '/'],
-        );
-        $process->setTimeout(300);
-
-        try {
-            // Non-zero exit on findings is fine here; do not mustRun().
-            $process->run();
-        } finally {
-            (new Filesystem())->deleteDirectory($cacheDir);
-        }
+        // Non-zero exit on findings is fine here; do not mustRun().
+        $process->wait();
 
         $stdout = $process->getOutput();
         $stderr = $process->getErrorOutput();
