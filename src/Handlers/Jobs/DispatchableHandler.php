@@ -84,7 +84,8 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
         $methodIdentifierName = $expr->name->name;
         $methodName = \strtolower($methodIdentifierName);
 
-        if (!isset(self::DISPATCH_METHODS[$methodName])) {
+        // getArgs() throws on a first-class callable (`Job::dispatch(...)`), which passes no args to check.
+        if (!isset(self::DISPATCH_METHODS[$methodName]) || $expr->isFirstClassCallable()) {
             return null;
         }
 

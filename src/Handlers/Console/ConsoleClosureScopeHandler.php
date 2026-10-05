@@ -303,6 +303,11 @@ final class ConsoleClosureScopeHandler implements
      */
     private static function bindableCallbackArg(StaticCall $expr): Closure|ArrowFunction|null
     {
+        // getArgs() throws on a first-class callable (`Artisan::command(...)`), which has no callback.
+        if ($expr->isFirstClassCallable()) {
+            return null;
+        }
+
         $positional = 0;
 
         foreach ($expr->getArgs() as $arg) {
