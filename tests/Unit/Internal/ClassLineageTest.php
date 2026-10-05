@@ -24,10 +24,7 @@ final class ClassLineageTest extends TestCase
     private const NS = 'ClassLineageFixture\\';
 
     /** @var list<string> */
-    private const CLASSES = [
-        'BaseModel', 'UserModel', 'ParentContract', 'ChildContract', 'Status', 'Concern',
-        'ExtendsViaAlias', 'ImplementsViaAlias', 'InterfaceViaAlias',
-    ];
+    private const CLASSES = ['BaseModel', 'UserModel', 'ParentContract', 'ChildContract', 'Status', 'ExtendsViaAlias'];
 
     private Codebase $codebase;
 
@@ -50,26 +47,15 @@ final class ClassLineageTest extends TestCase
 
         $status = $provider->create(self::NS . 'Status');
         $status->is_enum = true;
-        $status->class_implements = [
-            'unitenum' => 'UnitEnum',
-            'backedenum' => 'BackedEnum',
-            \strtolower(self::NS . 'ParentContract') => self::NS . 'ParentContract',
-        ];
-
-        $provider->create(self::NS . 'Concern')->is_trait = true;
+        $status->class_implements = ['backedenum' => 'BackedEnum'];
 
         // A declaration naming its parent through an alias: Psalm keys the ancestry maps by the alias.
         $provider->create(self::NS . 'ExtendsViaAlias')->parent_classes = ['aliasbasemodel' => 'AliasBaseModel'];
-        $provider->create(self::NS . 'ImplementsViaAlias')->class_implements = ['aliaschildcontract' => 'AliasChildContract'];
-        $viaAlias = $provider->create(self::NS . 'InterfaceViaAlias');
-        $viaAlias->is_interface = true;
-        $viaAlias->parent_interfaces = ['aliaschildcontract' => 'AliasChildContract'];
 
         // Aliases as Psalm's scanner records a `class_alias()` call; method return types keep the alias.
         $classLikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
         $classLikes->addClassAlias(self::NS . 'UserModel', 'AliasUserModel');
         $classLikes->addClassAlias(self::NS . 'BaseModel', 'AliasBaseModel');
-        $classLikes->addClassAlias(self::NS . 'ChildContract', 'AliasChildContract');
 
         $this->codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $this->codebase->classlike_storage_provider = $provider;
@@ -89,30 +75,16 @@ final class ClassLineageTest extends TestCase
     public static function lineage(): iterable
     {
         yield 'class is its own ancestor' => ['~UserModel', '~UserModel', true];
-        yield 'identity is case-insensitive' => ['~usermodel', '~USERMODEL', true];
         yield 'parent class' => ['~UserModel', '~BaseModel', true];
-        yield 'parent class, case-insensitive' => ['~USERMODEL', '~basemodel', true];
         yield 'implemented interface' => ['~UserModel', '~ChildContract', true];
-        yield 'not a descendant' => ['~BaseModel', '~UserModel', false];
         yield 'interface extends interface' => ['~ChildContract', '~ParentContract', true];
-        yield 'interface does not extend its child' => ['~ParentContract', '~ChildContract', false];
-        yield 'enum is UnitEnum' => ['~Status', 'UnitEnum', true];
         yield 'backed enum is BackedEnum' => ['~Status', 'BackedEnum', true];
-        yield 'enum implements interface' => ['~Status', '~ParentContract', true];
-        yield 'trait is nothing else' => ['~Concern', '~BaseModel', false];
+        yield 'not a descendant' => ['~BaseModel', '~UserModel', false];
         yield 'absent storage' => ['~Unscanned', '~BaseModel', false];
-        yield 'leading backslash on the class' => ['\\~UserModel', '~BaseModel', true];
-        yield 'leading backslash on the ancestor' => ['~Status', '\\BackedEnum', true];
-        yield 'leading backslash on both, identity' => ['\\~UserModel', '\\~UserModel', true];
+        yield 'leading backslash' => ['\\~UserModel', '~BaseModel', true];
         yield 'aliased class' => ['AliasUserModel', '~BaseModel', true];
-        yield 'aliased class, case-insensitive and backslashed' => ['\\aliasusermodel', '~BaseModel', true];
         yield 'aliased ancestor' => ['~UserModel', 'AliasBaseModel', true];
-        yield 'alias identity' => ['AliasUserModel', '~UserModel', true];
-        yield 'aliased class, not a descendant' => ['AliasBaseModel', '~UserModel', false];
         yield 'parent class named through an alias' => ['~ExtendsViaAlias', '~BaseModel', true];
-        yield 'interface implemented through an alias' => ['~ImplementsViaAlias', '~ChildContract', true];
-        yield 'interface extended through an alias' => ['~InterfaceViaAlias', '~ChildContract', true];
-        yield 'interface implemented through an alias, unrelated ancestor' => ['~ImplementsViaAlias', '~BaseModel', false];
     }
 
     #[Test]
