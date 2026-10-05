@@ -53,9 +53,11 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
         }
 
         $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
+        $codebase = $event->getSource()->getCodebase();
 
         $modelClass = ModelPropertyResolver::extractModelFromIterableValueType(
             $nodeTypeProvider->getType($args[0]->value),
+            $codebase,
         );
         if ($modelClass === null) {
             return null;
@@ -66,7 +68,7 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
             keyArg: $args[2] ?? null,
             modelClass: $modelClass,
             nodeTypeProvider: $nodeTypeProvider,
-            codebase: $event->getSource()->getCodebase(),
+            codebase: $codebase,
         );
         if ($resolved === null) {
             return null;

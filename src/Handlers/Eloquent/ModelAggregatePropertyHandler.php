@@ -13,6 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -448,7 +449,7 @@ final class ModelAggregatePropertyHandler
 
         if ($returnType instanceof Union) {
             foreach ($returnType->getAtomicTypes() as $type) {
-                if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
+                if ($type instanceof TNamedObject && ClassLineage::isA($codebase, $type->value, Relation::class)) {
                     return self::$relationMethodCache[$key] = true;
                 }
             }
@@ -457,8 +458,8 @@ final class ModelAggregatePropertyHandler
         }
 
         // No return type declared — check the registry's pre-parsed OWN-CLASS relations for a factory
-        // call (the precomputed equivalent of RelationMethodParser::parse() with the same own-class
-        // resolution, mirroring ModelRelationshipPropertyHandler::registryRelation()).
+        // call (RelationMethodParser::parse() over the model's own methods only; trait-hosted methods
+        // are not enumerated, mirroring ModelRelationshipPropertyHandler::registryRelation()).
         /** @var class-string<Model> $fqClasslikeName registered per Model subclass */
         $relation = ModelMetadataRegistry::for($fqClasslikeName)?->relations()[\strtolower($methodName)] ?? null;
         return self::$relationMethodCache[$key] = $relation instanceof RelationInfo;

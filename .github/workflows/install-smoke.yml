@@ -31,10 +31,9 @@ permissions:
 jobs:
   install-smoke:
     # Explicit include rows (rather than a ref x os x kind cross-product) keep
-    # `runs-on: ${{ matrix.runner }}` statically resolvable to a concrete Blacksmith
-    # label — lint-workflows.yml's octoscan step ignores the runner-label warning by
-    # label, which a nested `matrix.os.runner` would turn into an unresolvable
-    # expression and trip as a self-hosted-runner alert.
+    # `runs-on: ${{ matrix.runner }}` statically resolvable for octoscan's
+    # runner-label rule; a nested `matrix.os.runner` would be unresolvable and
+    # trip a self-hosted-runner alert.
     name: Install smoke (${{ matrix.ref }} / ${{ matrix.name }}${{ matrix.kind == 'package' && ' / package' || '' }})
     timeout-minutes: 15
     strategy:
@@ -43,51 +42,51 @@ jobs:
         include:
           - ref: "4.x"
             name: Ubuntu
-            runner: blacksmith-2vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             kind: app
           - ref: "4.x"
             name: Ubuntu
-            runner: blacksmith-2vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             kind: package
           - ref: "4.x"
             name: Windows
-            runner: blacksmith-2vcpu-windows-2025
+            runner: windows-2025
             kind: app
           - ref: "4.x"
             name: Windows
-            runner: blacksmith-2vcpu-windows-2025
+            runner: windows-2025
             kind: package
           - ref: "4.x"
             name: macOS
-            runner: blacksmith-6vcpu-macos-15
+            runner: macos-15
             kind: app
           - ref: "4.x"
             name: macOS
-            runner: blacksmith-6vcpu-macos-15
+            runner: macos-15
             kind: package
           - ref: '3.x'
             name: Ubuntu
-            runner: blacksmith-2vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             kind: app
           - ref: '3.x'
             name: Ubuntu
-            runner: blacksmith-2vcpu-ubuntu-2404
+            runner: ubuntu-24.04
             kind: package
           - ref: '3.x'
             name: Windows
-            runner: blacksmith-2vcpu-windows-2025
+            runner: windows-2025
             kind: app
           - ref: '3.x'
             name: Windows
-            runner: blacksmith-2vcpu-windows-2025
+            runner: windows-2025
             kind: package
           - ref: '3.x'
             name: macOS
-            runner: blacksmith-6vcpu-macos-15
+            runner: macos-15
             kind: app
           - ref: '3.x'
             name: macOS
-            runner: blacksmith-6vcpu-macos-15
+            runner: macos-15
             kind: package
     runs-on: ${{ matrix.runner }}
     steps:

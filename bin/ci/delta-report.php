@@ -11,7 +11,8 @@ declare(strict_types=1);
  *   * a per-app table of changed apps (total touched, +added, -removed,
  *     message changed, net Δ)
  *   * per changed app, the issue-type breakdown (base -> head, +added/-removed);
- *     with --details, also the changed entries (file paths + issue messages)
+ *     with --details, also the changed, added and removed entries (file paths
+ *     + issue messages)
  *   * apps that ran clean with zero delta, and apps that crashed (tagged with
  *     the crashing side) — kept in separate buckets
  *
@@ -31,8 +32,9 @@ declare(strict_types=1);
  *       [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] \
  *       [--date-marker=cache] [--details] [--selection='default + octane']
  *
- * --details prints the changed entries and crash text. They carry file paths
- * and issue messages, so they are OFF by default (safe for a private app).
+ * --details prints the changed, added and removed entries and crash text. They
+ * carry file paths and issue messages, so they are OFF by default (safe for a
+ * private app).
  *
  * --selection is the resolved /psalm-delta selector label (bin/ci/delta-select-apps.php),
  * printed under the header with the app count.
@@ -114,6 +116,12 @@ $selection = $options['selection'] ?? '';
 // (first-merge-wins CodeUseGraph::$mutation_info after the thread pool join),
 // not on the code: excluded from +/−/Changed/Δ.
 const ORDER_DEPENDENT_TYPES = ['MissingPureAnnotation'];
+
+// --details entry lists: at most DETAILS_CAP entries per list per app, and no
+// further app's entries once the report passes DETAILS_BUDGET bytes, so a
+// churny all-apps run stays under GitHub's 65,536-char comment limit.
+const DETAILS_CAP = 10;
+const DETAILS_BUDGET = 40_000;
 
 /**
  * Newest file matching <app>-<label>-<date-marker>--<suffix>, or null.
@@ -295,6 +303,26 @@ $byType = static function (array $counts): array {
     return $sums;
 };
 
+/**
+ * One entry per key occurrence, sorted by file, numeric line, type, message.
+ *
+ * @param array<string, int> $counts
+ * @return list<array{type: string, loc: string, message: string}>
+ */
+$entries = static function (array $counts): array {
+    $list = [];
+    foreach ($counts as $key => $n) {
+        $p = explode("\x00", $key);
+        for ($k = 0; $k < $n; $k++) {
+            $list[] = [$p[0], (int) $p[1], $p[3], $p[4]];
+        }
+    }
+
+    sort($list);
+
+    return array_map(static fn(array $e): array => ['type' => $e[2], 'loc' => "{$e[0]}:{$e[1]}", 'message' => $e[3]], $list);
+};
+
 /** Markdown inline-code span of a message: one line, clipped. */
 $code = static fn(string $s): string => '`' . str_replace('`', "'", mb_strimwidth((string) preg_replace('/\s+/u', ' ', $s), 0, 300, '…')) . '`';
 
@@ -305,6 +333,8 @@ $code = static fn(string $s): string => '`' . str_replace('`', "'", mb_strimwidt
  *     added: int,
  *     removed: int,
  *     changed: list<array{type: string, loc: string, old: string, new: string}>,
+ *     addedList: list<array{type: string, loc: string, message: string}>,
+ *     removedList: list<array{type: string, loc: string, message: string}>,
  *     net: int,
  *     movements: list<array{type: string, level: int|null, base: int, head: int, added: int, removed: int, changed: int, delta: int}>,
  *     volatile: list<string>,
@@ -419,6 +449,8 @@ foreach ($apps as $app) {
         'added' => array_sum($added),
         'removed' => array_sum($removed),
         'changed' => $changed,
+        'addedList' => $details ? $entries($added) : [],
+        'removedList' => $details ? $entries($removed) : [],
         'net' => array_sum($headTypes) - array_sum($baseTypes),
         'movements' => $movements,
         'volatile' => $volatile,
@@ -545,15 +577,39 @@ if ($changed === []) {
             );
         }
 
-        if ($details && $r['changed'] !== []) {
+        if (!$details) {
+            continue;
+        }
+
+        if (strlen(implode("\n", $out)) > DETAILS_BUDGET) {
             $out[] = '';
-            foreach (array_slice($r['changed'], 0, 10) as $c) {
-                $out[] = sprintf('- %s `%s`: %s → %s', $c['type'], $c['loc'], $code($c['old']), $code($c['new']));
+            $out[] = '- … entries omitted (comment size limit)';
+            continue;
+        }
+
+        $lines = [];
+        foreach (array_slice($r['changed'], 0, DETAILS_CAP) as $c) {
+            $lines[] = sprintf('- %s `%s`: %s → %s', $c['type'], $c['loc'], $code($c['old']), $code($c['new']));
+        }
+
+        if (count($r['changed']) > DETAILS_CAP) {
+            $lines[] = sprintf('- … and %d more changed', count($r['changed']) - DETAILS_CAP);
+        }
+
+        // `- + X` renders as a nested bullet in GFM, swallowing the `+`.
+        foreach (['\+' => $r['addedList'], '−' => $r['removedList']] as $sign => $list) {
+            foreach (array_slice($list, 0, DETAILS_CAP) as $e) {
+                $lines[] = sprintf('- %s %s `%s`: %s', $sign, $e['type'], $e['loc'], $code($e['message']));
             }
 
-            if (count($r['changed']) > 10) {
-                $out[] = sprintf('- … %d more', count($r['changed']) - 10);
+            if (count($list) > DETAILS_CAP) {
+                $lines[] = sprintf('- %s … and %d more', $sign, count($list) - DETAILS_CAP);
             }
+        }
+
+        if ($lines !== []) {
+            $out[] = '';
+            array_push($out, ...$lines);
         }
     }
 

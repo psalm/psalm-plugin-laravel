@@ -29,8 +29,8 @@
 #                syntax, and --ignore-platform-reqs would otherwise install them
 #                under an older runtime that cannot parse the files.
 #   groups       tags from `groups:` below; [] = reachable only by name or `all`
-#   project_dir  optional explicit Psalm projectFiles root (else auto-detected:
-#                app/ for Laravel apps, packages/*/src for monorepos, src/ for libs)
+#   project_dir  optional explicit Psalm projectFiles root, `*` globs allowed (else
+#                auto-detected: app/ Laravel apps, packages/*/src monorepos, src/ libs)
 #   prime        optional shell run in the app dir before `composer update`
 #                (one-off install quirks, e.g. bumping a flagged dependency)
 #   psalm_args   optional extra CLI args appended to the Psalm invocation, split
@@ -127,7 +127,8 @@ apps:
     groups: [octane, large, blade, pest, sanctum]
     # app/ is only the skeleton (Http, Providers); the code lives in
     # packages/Webkul/*/src, which auto-detection skips once app/ exists.
-    project_dir: packages
+    # Tests (packages/Webkul/*/tests) excluded, like every other app.
+    project_dir: packages/Webkul/*/src
 
   - name: filament
     repo: https://github.com/filamentphp/filament.git
@@ -186,7 +187,8 @@ apps:
     groups: [ai, octane, blade, pest, laravel-13, sanctum]
     # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
     # packages/Webkul/*/src, not the app/ skeleton auto-detection would pick.
-    project_dir: packages
+    # Tests (packages/Webkul/*/tests) excluded, like every other app.
+    project_dir: packages/Webkul/*/src
 
   - name: m3u-editor
     repo: https://github.com/m3ue/m3u-editor.git

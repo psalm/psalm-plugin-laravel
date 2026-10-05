@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 
+use Illuminate\Contracts\Database\Eloquent\Castable;
+use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -16,6 +18,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
@@ -188,7 +191,7 @@ final class ModelMetadataRegistryBuilder
             'methods',
             $completeSections,
             $failures,
-            static fn(): array => self::computeMethodMetadata($storage, $storageProvider),
+            static fn(): array => self::computeMethodMetadata($codebase, $storage, $storageProvider),
             [[], [], []],
         );
         [$accessors, $mutators, $scopes] = $methodMetadata;
@@ -792,6 +795,7 @@ final class ModelMetadataRegistryBuilder
      * @psalm-external-mutation-free
      */
     private static function computeMethodMetadata(
+        Codebase $codebase,
         ClassLikeStorage $storage,
         ClassLikeStorageProvider $provider,
     ): array {
@@ -800,7 +804,7 @@ final class ModelMetadataRegistryBuilder
         $scopes = [];
 
         foreach (self::callableMethodStorages($storage, $provider) as $methodStorage) {
-            self::classifyAccessorMethod($methodStorage, $accessors, $mutators);
+            self::classifyAccessorMethod($codebase, $methodStorage, $accessors, $mutators);
             self::classifyScopeMethod($methodStorage, $scopes);
         }
 
@@ -857,6 +861,7 @@ final class ModelMetadataRegistryBuilder
      * @psalm-external-mutation-free
      */
     private static function classifyAccessorMethod(
+        Codebase $codebase,
         MethodStorage $methodStorage,
         array &$accessors,
         array &$mutators,
@@ -897,7 +902,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         // Attribute-style: a method returning Illuminate\…\Casts\Attribute.
-        $attribute = self::resolveAttributeReturn($methodStorage);
+        $attribute = self::resolveAttributeReturn($codebase, $methodStorage);
         if ($attribute === null) {
             return;
         }
@@ -934,7 +939,7 @@ final class ModelMetadataRegistryBuilder
      * @return array{0: Union, 1: bool, 2: Union}|null
      * @psalm-mutation-free
      */
-    private static function resolveAttributeReturn(MethodStorage $methodStorage): ?array
+    private static function resolveAttributeReturn(Codebase $codebase, MethodStorage $methodStorage): ?array
     {
         $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
         if (!$returnType instanceof Union) {
@@ -942,7 +947,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         foreach ($returnType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject || !\is_a($atomic->value, Attribute::class, true)) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Attribute::class)) {
                 continue;
             }
 
@@ -1097,14 +1102,13 @@ final class ModelMetadataRegistryBuilder
      * Compute the OWN-CLASS relation map: for each method declared in the model's own body, run the
      * AST relation parser and record the relation factory it returns.
      *
-     * OWN-CLASS only because {@see RelationMethodParser::parse()} resolves a factory call only inside
-     * a class literally named $modelFqcn (it searches the declaring file for that class name) — which
-     * is exactly how the relation handlers call it, with the receiver FQCN. So `relations()[$name]`
-     * equals `parse($receiver, $name)` for every name; inherited / trait-hosted relations are null in
-     * both, and the handlers keep serving those through their `getMethodReturnType` tiers (this map
-     * replaces only their AST-parse tier). NOT the full-callable ancestor walk used for
-     * scopes/accessors — those are dispatched by name across the hierarchy, relations are body-parsed
-     * per declaring class.
+     * OWN-CLASS only: it enumerates the methods declared in the model's own body, and for those
+     * `relations()[$name]` equals `parse($receiver, $name)`. Inherited relations are null in both (the
+     * parser reads an inherited body only through the declaring class); trait-hosted relations parse
+     * (#1613) but are not enumerated here, so the property handlers keep serving those two through
+     * their `getMethodReturnType` tiers (this map replaces only their AST-parse tier). NOT the
+     * full-callable ancestor walk used for scopes/accessors — those are dispatched by name across the
+     * hierarchy, relations are body-parsed per declaring class.
      *
      * Gated to relation CANDIDATES — own-body methods with no declared return type, or a
      * Relation-subclass return type. This reproduces the handlers' OWN gate exactly: both
@@ -1139,7 +1143,7 @@ final class ModelMetadataRegistryBuilder
             // and never reach their parse tier — so skip it here too (keeps the set identical, and
             // avoids parsing every ordinary method body at warm-up).
             $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
-            if ($returnType instanceof Union && !self::hasRelationAtomic($returnType)) {
+            if ($returnType instanceof Union && !self::hasRelationAtomic($codebase, $returnType)) {
                 continue;
             }
 
@@ -1176,10 +1180,10 @@ final class ModelMetadataRegistryBuilder
      *
      * @psalm-mutation-free
      */
-    private static function hasRelationAtomic(Union $type): bool
+    private static function hasRelationAtomic(Codebase $codebase, Union $type): bool
     {
         foreach ($type->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Relation::class, true)) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
                 return true;
             }
         }
@@ -1541,13 +1545,16 @@ final class ModelMetadataRegistryBuilder
         bool $nullable,
         ?Union $originalType,
     ): CastInfo {
-        [$shape, $targetClass, $parameter] = self::classifyCast($castString);
+        // resolve() first: it autoloads a cast target Psalm never scanned, which classifyCast()'s
+        // loaded-class fallback then sees.
+        $psalmType = CastResolver::resolve($codebase, $castString, $nullable, $originalType);
+        [$shape, $targetClass, $parameter] = self::classifyCast($codebase, $castString);
 
         return new CastInfo(
             column: $columnName,
             shape: $shape,
             targetClass: $targetClass,
-            psalmType: CastResolver::resolve($codebase, $castString, $nullable, $originalType),
+            psalmType: $psalmType,
             parameter: $parameter,
         );
     }
@@ -1558,13 +1565,17 @@ final class ModelMetadataRegistryBuilder
      * Best-effort for Phase 1 — Phase 2/3 consumers that need more precise shape information
      * may extend the classifier. `psalmType` is the authoritative resolved type.
      *
+     * Class checks read Psalm's storage like {@see CastResolver} (#1652): a scanned cast target is never
+     * loaded, so a loaded-classes-only check would classify every such enum or caster as Primitive.
+     * The target class is stored under its canonical name, the key its storage is read back by.
+     *
      * @return array{0: CastShape, 1: class-string|null, 2: string|null}
      */
-    private static function classifyCast(string $castString): array
+    private static function classifyCast(Codebase $codebase, string $castString): array
     {
         // `encrypted:X` wraps another cast — recurse after stripping the prefix.
         if (\str_starts_with(\strtolower($castString), 'encrypted:')) {
-            [$innerShape, $innerTarget, $innerParam] = self::classifyCast(\substr($castString, 10));
+            [$innerShape, $innerTarget, $innerParam] = self::classifyCast($codebase, \substr($castString, 10));
             // Preserve the inner shape's precision; the outer wrapper just marks Primitive as encrypted.
             $shape = $innerShape === CastShape::Primitive ? CastShape::AsEncrypted : $innerShape;
 
@@ -1590,32 +1601,17 @@ final class ModelMetadataRegistryBuilder
             \in_array($baseLower, ['date', 'datetime', 'custom_datetime', 'immutable_date', 'immutable_datetime', 'immutable_custom_datetime'], true)
         ) {
             $shape = CastShape::DateTime;
-        } elseif (self::looksLikeClassName($base) && self::isEnumClass($base)) {
-            /** @var class-string $base */
-            $shape = CastShape::BackedEnum;
-            $targetClass = $base;
-        } elseif (
-            self::looksLikeClassName($base)
-            // autoload: false — classifyCast is best-effort shape metadata. Skipping
-            // autoload here avoids eager file includes during warm-up for casts whose
-            // target class isn't loaded yet. CastResolver::resolve (separate call) is
-            // the authoritative path for $psalmType and keeps its existing autoload
-            // behavior for backwards compatibility with pre-registry resolution.
-            && \class_exists($base, false)
-            // Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
-            // CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable
-            // itself implements neither CastsAttributes nor CastsInboundAttributes directly — only the
-            // instance its castUsing() returns does — so checking CastsAttributes alone missed every
-            // framework Castable wrapper (and any user Castable-only class), wrongly classifying them
-            // Primitive and letting an accessor on the same column win over the class cast.
-            && (
-                \is_a($base, \Illuminate\Contracts\Database\Eloquent\CastsAttributes::class, true)
-                || \is_a($base, \Illuminate\Contracts\Database\Eloquent\Castable::class, true)
-            )
-        ) {
-            /** @var class-string $base */
-            $shape = CastShape::CustomCastsAttributes;
-            $targetClass = $base;
+        } elseif (self::looksLikeClassName($base)) {
+            $class = ClassLineage::canonicalName($codebase, $base);
+
+            if (self::isEnumClass($codebase, $class)) {
+                /** @var class-string $class */
+                $shape = CastShape::BackedEnum;
+                $targetClass = $class;
+            } elseif (self::isClassCastable($codebase, $class)) {
+                $shape = CastShape::CustomCastsAttributes;
+                $targetClass = $class;
+            }
         }
 
         return [$shape, $targetClass, $parameter];
@@ -1631,13 +1627,39 @@ final class ModelMetadataRegistryBuilder
         return \str_contains($value, '\\') || \preg_match('/^[A-Z]/', $value) === 1;
     }
 
-    private static function isEnumClass(string $class): bool
+    /**
+     * Psalm's storage first; the runtime only for a class Psalm never scanned, and only if already
+     * loaded (never autoloads: an unscanned target was loaded, if at all, by {@see CastResolver::resolve}).
+     */
+    private static function isEnumClass(Codebase $codebase, string $class): bool
     {
-        // autoload: false — best-effort shape detection only. If the enum hasn't
-        // already been loaded by the time we warm up, classifyCast falls back to
-        // Primitive, and `CastResolver::resolve` (called separately by buildCastInfo)
-        // still produces the authoritative `$psalmType`.
-        return \enum_exists($class, false);
+        return ClassLineage::storage($codebase, $class)?->is_enum ?? \enum_exists($class, false);
+    }
+
+    /**
+     * Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
+     * CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable itself
+     * implements neither CastsAttributes nor CastsInboundAttributes directly — only the instance its
+     * castUsing() returns does — so checking CastsAttributes alone missed every framework Castable
+     * wrapper (and any user Castable-only class), wrongly classifying them Primitive and letting an
+     * accessor on the same column win over the class cast.
+     *
+     * Storage and runtime tiers as in {@see isEnumClass()}.
+     *
+     * @psalm-assert-if-true class-string $class
+     */
+    private static function isClassCastable(Codebase $codebase, string $class): bool
+    {
+        if (
+            ClassLineage::isA($codebase, $class, CastsAttributes::class)
+            || ClassLineage::isA($codebase, $class, Castable::class)
+        ) {
+            return true;
+        }
+
+        // The guard keeps is_a() from autoloading $class itself.
+        return \class_exists($class, false)
+            && (\is_a($class, CastsAttributes::class, true) || \is_a($class, Castable::class, true));
     }
 
     /**
