@@ -508,7 +508,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         TGenericObject $relationAtomic,
         bool $storeParameters,
     ): ?Union {
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($relationAtomic->type_params[0] ?? null);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($relationAtomic->type_params[0] ?? null, $codebase);
         if ($modelClass === null) {
             return null;
         }
@@ -543,7 +543,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         TGenericObject $relationAtomic,
         bool $storeParameters,
     ): ?Union {
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($relationAtomic->type_params[0] ?? null);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($relationAtomic->type_params[0] ?? null, $codebase);
         if ($modelClass === null) {
             return null;
         }
@@ -709,7 +709,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         }
 
         // TRelatedModel is always the first template parameter on Relation subclasses.
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0]);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0], $codebase);
 
         if ($modelClass === null) {
             return null;
@@ -780,7 +780,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         }
 
         // TRelatedModel is always the first template parameter on Relation subclasses.
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0]);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0], $codebase);
 
         if ($modelClass === null) {
             return null;

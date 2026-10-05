@@ -13,6 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -448,7 +449,7 @@ final class ModelAggregatePropertyHandler
 
         if ($returnType instanceof Union) {
             foreach ($returnType->getAtomicTypes() as $type) {
-                if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
+                if ($type instanceof TNamedObject && ClassLineage::isA($codebase, $type->value, Relation::class)) {
                     return self::$relationMethodCache[$key] = true;
                 }
             }

@@ -16,6 +16,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Progress\VoidProgress;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
@@ -188,7 +189,7 @@ final class ModelMetadataRegistryBuilder
             'methods',
             $completeSections,
             $failures,
-            static fn(): array => self::computeMethodMetadata($storage, $storageProvider),
+            static fn(): array => self::computeMethodMetadata($codebase, $storage, $storageProvider),
             [[], [], []],
         );
         [$accessors, $mutators, $scopes] = $methodMetadata;
@@ -792,6 +793,7 @@ final class ModelMetadataRegistryBuilder
      * @psalm-external-mutation-free
      */
     private static function computeMethodMetadata(
+        Codebase $codebase,
         ClassLikeStorage $storage,
         ClassLikeStorageProvider $provider,
     ): array {
@@ -800,7 +802,7 @@ final class ModelMetadataRegistryBuilder
         $scopes = [];
 
         foreach (self::callableMethodStorages($storage, $provider) as $methodStorage) {
-            self::classifyAccessorMethod($methodStorage, $accessors, $mutators);
+            self::classifyAccessorMethod($codebase, $methodStorage, $accessors, $mutators);
             self::classifyScopeMethod($methodStorage, $scopes);
         }
 
@@ -857,6 +859,7 @@ final class ModelMetadataRegistryBuilder
      * @psalm-external-mutation-free
      */
     private static function classifyAccessorMethod(
+        Codebase $codebase,
         MethodStorage $methodStorage,
         array &$accessors,
         array &$mutators,
@@ -897,7 +900,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         // Attribute-style: a method returning Illuminate\…\Casts\Attribute.
-        $attribute = self::resolveAttributeReturn($methodStorage);
+        $attribute = self::resolveAttributeReturn($codebase, $methodStorage);
         if ($attribute === null) {
             return;
         }
@@ -934,7 +937,7 @@ final class ModelMetadataRegistryBuilder
      * @return array{0: Union, 1: bool, 2: Union}|null
      * @psalm-mutation-free
      */
-    private static function resolveAttributeReturn(MethodStorage $methodStorage): ?array
+    private static function resolveAttributeReturn(Codebase $codebase, MethodStorage $methodStorage): ?array
     {
         $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
         if (!$returnType instanceof Union) {
@@ -942,7 +945,7 @@ final class ModelMetadataRegistryBuilder
         }
 
         foreach ($returnType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject || !\is_a($atomic->value, Attribute::class, true)) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Attribute::class)) {
                 continue;
             }
 
@@ -1139,7 +1142,7 @@ final class ModelMetadataRegistryBuilder
             // and never reach their parse tier — so skip it here too (keeps the set identical, and
             // avoids parsing every ordinary method body at warm-up).
             $returnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
-            if ($returnType instanceof Union && !self::hasRelationAtomic($returnType)) {
+            if ($returnType instanceof Union && !self::hasRelationAtomic($codebase, $returnType)) {
                 continue;
             }
 
@@ -1176,10 +1179,10 @@ final class ModelMetadataRegistryBuilder
      *
      * @psalm-mutation-free
      */
-    private static function hasRelationAtomic(Union $type): bool
+    private static function hasRelationAtomic(Codebase $codebase, Union $type): bool
     {
         foreach ($type->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Relation::class, true)) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
                 return true;
             }
         }
@@ -1599,8 +1602,7 @@ final class ModelMetadataRegistryBuilder
             // autoload: false — classifyCast is best-effort shape metadata. Skipping
             // autoload here avoids eager file includes during warm-up for casts whose
             // target class isn't loaded yet. CastResolver::resolve (separate call) is
-            // the authoritative path for $psalmType and keeps its existing autoload
-            // behavior for backwards compatibility with pre-registry resolution.
+            // the authoritative path for $psalmType and reads Psalm's storage instead.
             && \class_exists($base, false)
             // Castable (AsCollection, AsArrayObject, AsStringable, AsEnumCollection, ...) alongside
             // CastsAttributes: both are class-castable per Model::isClassCastable(), but a Castable

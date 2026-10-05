@@ -16,6 +16,7 @@ use App\Models\UlidModel;
 use App\Models\UnguardedModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
+use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
 use Illuminate\Database\Eloquent\Attributes\Connection;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -75,6 +76,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Casts\InboundOnlyCast;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\CollectingProgress;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AbstractKeylessModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
@@ -681,6 +683,7 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         $codebase = $this->makeCodebase();
         $storage = $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
+        $this->registerInboundOnlyCastStorage();
         $this->defineAppearingMethod($storage, 'getLabelAttribute', Type::getString());
 
         $expectations = [
@@ -1470,6 +1473,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $codebase = $this->makeCodebase();
         $this->registerStorage(InboundCastModel::class);
+        $this->registerInboundOnlyCastStorage();
 
         ModelMetadataRegistryBuilder::warmUp($codebase, InboundCastModel::class);
 
@@ -1825,6 +1829,17 @@ final class ModelMetadataRegistryTest extends TestCase
         }
 
         return $storage;
+    }
+
+    /**
+     * CastResolver reads cast-class lineage from storage, never the autoloader (#1652), so the cast
+     * class needs the storage Psalm's scan would give it.
+     */
+    private function registerInboundOnlyCastStorage(): void
+    {
+        $this->classLikeStorageProvider->create(InboundOnlyCast::class)->class_implements = [
+            \strtolower(CastsInboundAttributes::class) => CastsInboundAttributes::class,
+        ];
     }
 
     /**
