@@ -16,7 +16,7 @@ class MorphToMany extends BelongsToMany
     /*
      * The sync family is restated from BelongsToMany: Laravel declares it in the InteractsWithPivotTable
      * trait, and Psalm resolves a subclass's trait-provided method from the trait, not from the
-     * parent's stub override.
+     * parent's stub override (vimeo/psalm#12158).
      */
 
     /**
