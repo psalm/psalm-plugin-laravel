@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791206491471,
+  "lastUpdate": 1791216877885,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12245,6 +12245,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1368,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "720be0cdecfc07f2db3cb8e5bb9823f85aa97142",
+          "message": "Infer relation generics for trait-hosted and delegated relation methods (#1646)\n\n* test(relations): pin trait-hosted and delegated relation generics\n\nFails on 4.x: both shapes collapse to the stub default\nRelation<Model, Model>. Negatives (cycle, non-relation type,\nclass-changing chain, unparseable helper) guard the fix.\n\nRefs #1613\n\n* feat(relations): infer generics for trait-hosted and delegated relations\n\n- Trait methods have no storage on the composing model: read the body\n  from the trait, bind self/static::class to the composing class.\n- `$this->other()->chain()` resolves other() like a top-level call\n  (own, trait, inherited), guarded against cycles. Accepted only when\n  the delegating method declares a relation type the result satisfies,\n  so `->count()` / `->one()` chains decline. Outer using()/as() win.\n\nRefs #1613\n\n* fix(relations): require exact declared class for delegated relations\n\nA declared supertype (`Relation`, `HasOneOrMany`) does not prove a\ndelegated chain kept its class: `$this->xs()->one()` is a HasOne at\nruntime but was typed as the delegated HasMany. Also corrects\ndocblocks that still called the parser own-class only.\n\nRefs #1613\n\n* test(relations): pin unsound delegated and trait relation shapes\n\nEach assertion is wrong at 07a12ac0: union declarations, earlier\nconditional returns, `when()` / `getRelated()` chains, child\noverrides, private helpers shadowed in a child, and `insteadof`.\n\nRefs #1613\n\n* fix(relations): decline delegated relations the parser cannot prove\n\n- Declared type must be exactly one relation class (null aside).\n- The delegating return must be the body's only return.\n- Chain calls must return only `$this`/`static` on the relation or\n  the builders it forwards to; when()/unless(), scopes and macros\n  decline. Outer using()/as() with dynamic args decline.\n- `$this->m()` dispatches on the receiver (child override wins) unless\n  m is private in the calling scope; results are cached per receiver.\n- Trait bodies decline when another composed trait declares the name:\n  Psalm 7 ignores `insteadof` and may record the losing body.\n\nRefs #1613\n\n* Map or decline relation factory chains that change the relation class (`hasMany()->one()`) (#1649)\n\n* fix(relations): map or decline class-changing direct relation chains\n\nA direct factory chain reported the factory's class even when a chained call\nchanges it. Walk the chain innermost-first: one() on HasMany, MorphMany and\nHasManyThrough maps to the single-result sibling, a call that provably returns\nsomething else declines, unresolved scope/macro calls stay accepted, and a\nparsed class that is not the single declared class declines.\n\nMethods declared on the relation itself no longer count a returned Eloquent\nbuilder as self (getQuery()); only forwarded builder methods do.\n\n* fix(relations): tighten class-changing chain resolution\n\n- A method only the base query declares keeps the relation: Eloquent\\Builder::__call()\n  discards its result unless the method is in $passthru (read from the running Laravel).\n- clone() and applyScopes() return a new builder, which Relation::forwardDecoratedCallTo()\n  does not map back to the relation, so they decline.\n- A chain call with a dynamic method name declines.\n- A union declaration must contain the parsed class or a supertype of it.\n\n* fix(relations): reject non-class and intersection return declarations for chain results\n\n- Only mixed, object and a template whose bound admits the parsed relation\n  class stay open; scalars such as false no longer do.\n- An atomic with extra types (an intersection) declines.\n- The docblock and native return types must each admit the result.\n\n* test(relations): pin nested insteadof and early-return relation bodies\n\nWrong at 9e9b29c1: an `insteadof` between nested traits keeps the\nlosing body, and returns nested in if-blocks are ignored, both in a\ndirect factory body and in a delegated helper.\n\nRefs #1613\n\n* test(relations): split Supplier trait use so Rector keeps insteadof\n\nRector's SeparateMultiUseImportsRector (2.6.7) rewrites\n`use A, B { B::m insteadof A; }` into `use A; use B;` and drops the\nadaptation block. The split `use A; use B { ... }` form survives.\n\nRefs #1613\n\n* fix(relations): require every return to agree and catch nested insteadof\n\n- A body resolves only when every return (early ones in if/loops\n  included, closures excluded) resolves to the same relation. Applies\n  to direct factory bodies too.\n- The insteadof guard compares each used trait's transitive\n  declaration, so a conflict between nested traits declines\n  (vimeo/psalm#12113).\n- Factory names skip the trait-body lookup: `$this->hasMany()` in model\n  bodies re-parsed vendor HasRelationships.php (59 -> 6 trait body\n  loads on the fixture models).\n\nRefs #1613\n\n* test(relations): pin insteadof resolved inside a composed trait\n\nWrong at 9b426d7b: a model using only a trait that picks a method\nwith `insteadof` gets the losing body. Also guards the same trait\nreached through two paths.\n\nRefs #1613\n\n* fix(relations): walk nested traits for competing trait declarations\n\nAn `insteadof` inside a composed trait was invisible to the guard,\nwhich only compared the model's direct traits. Count every trait\nreached at any depth that declares the method in its own body; a\ntrait reached twice counts once.\n\nRefs #1613\n\n* test(relations): pin relation bodies with a null guard exit\n\nWrong at 1883ce8c: `if (...) { return; } return $this->hasOne(...)`\nno longer parses, so the relation property is unknown\n(UndefinedMagicPropertyFetch; pixelfed AccountInterstitial::status).\n\nRefs #1613\n\n* fix(relations): treat null exits as nullable, not disagreeing returns\n\n`return;` / `return null;` beside a relation return no longer decline\nthe body. The relation comes from the other returns (which must still\nagree) and the method call gains `|null`; property access keeps the\nrelation type, since Laravel throws there. Delegation to a target with\na null exit declines.\n\nFixes the pixelfed AccountInterstitial::status() false positive\n(UndefinedMagicPropertyFetch).\n\nRefs #1613",
+          "timestamp": "2026-10-05T17:53:11+02:00",
+          "tree_id": "2f582b88bec0e86e5f68012ed37f4d17be74c034",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/720be0cdecfc07f2db3cb8e5bb9823f85aa97142"
+        },
+        "date": 1791216876875,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.69,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1369,
             "unit": "MB"
           }
         ]
