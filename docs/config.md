@@ -26,6 +26,7 @@ Full config example:
         <reportImplicitQueryBuilderCalls value="true" />
         <findMissingTranslations value="true" />
         <findMissingViews value="true" />
+        <findUnregisteredRouteNames value="true" />
         <findOctaneIncompatibleBinding value="true" />
         <findPromptInjection value="true" />
         <experimental value="true" />
@@ -170,6 +171,38 @@ See [MissingView](issues/MissingView.md) for details.
 <findMissingViews value="true" />
 ```
 
+## `findUnconfiguredFilesystemDisks`
+
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnconfiguredFilesystemDisks />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
+
+When enabled, the plugin checks that disk names passed to `Storage::disk()` / `Storage::drive()` are present in `filesystems.disks`. A name counts when it is a string literal, a string-backed enum case, or a class constant typed as one string literal (`self::` included). An unconfigured disk is a hard `InvalidArgumentException` at runtime, not a silent fallback to `local`, so the failure mode is availability, not a wrong write target.
+
+Only calls through the `Storage` facade (and its root `\Storage` alias) are checked (an injected `FilesystemManager` may be a userland subclass with its own disk resolution). Dynamic, `null`, falsy (`''`, `'0'`), and dotted (nested-group) names are skipped. The check reads `filesystems.disks` once from the booted application, so it requires the project's own `bootstrap/app.php` to resolve cleanly; it stays off under the Testbench package-mode fallback and after a degraded boot.
+
+See [UnconfiguredFilesystemDisk](issues/UnconfiguredFilesystemDisk.md) for details.
+
+### Example
+
+```xml
+<findUnconfiguredFilesystemDisks value="true" />
+```
+
+## `findUnregisteredRouteNames`
+
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findUnregisteredRouteNames />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
+
+When enabled, the plugin flags a route name passed to `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` that is not registered in the booted application. A name counts when it is a string literal, a string-backed enum case, or a class constant typed as one string literal (`self::` included); dynamic names are skipped, and named arguments are resolved by parameter name.
+
+The check stays off, silently, when the route table cannot be trusted: the Testbench package fallback boot or a swallowed bootstrap error, an application with no named routes, or an application that registers a missing-named-route resolver. Once enabled it reports at Psalm's normal `error` level.
+
+See [UnregisteredRouteName](issues/UnregisteredRouteName.md) for details and known false-positive sources.
+
+### Example
+
+```xml
+<findUnregisteredRouteNames value="true" />
+```
+
 ## `findSerializedQueuedModels`
 
 **default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findSerializedQueuedModels />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
@@ -264,7 +297,7 @@ PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 Early access to plugin features that are still on their way to becoming the default in a later minor or major release. Enabling it pulls in two directions at once, tightening some checks while turning others on:
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
-- [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turns on unless the project sets it explicitly.
+- [`findUnregisteredRouteNames`](#findunregisteredroutenames), [`findUnconfiguredFilesystemDisks`](#findunconfiguredfilesystemdisks), and [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turn on unless the project sets them explicitly.
 
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 
