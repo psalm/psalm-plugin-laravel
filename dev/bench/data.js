@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791192206850,
+  "lastUpdate": 1791206491471,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12210,6 +12210,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b037f71bba2ecbd4faf251b599a724a6fe474a86",
+          "message": "Type `when()`/`unless()` callback parameters from the condition value (#1645)\n\n* feat(support): type when()/unless() callback params #1624\n\nThe Conditionable stub declares `?callable` callbacks to keep fluent\nchains (#704, #993), so Psalm checked nothing about them: untyped\nparams were mixed and wrong param types passed silently.\n\n- params provider per Conditionable host (params providers dispatch on\n  the called class; trait registration never fires)\n- callback gets truthy(value), default falsy(value), swapped for\n  unless(); Closure value resolves to its return type\n- typed only for closure literals; declines on unions, forwarded\n  receivers, mixed/closure-like values, dead branches, late-bound\n  declared types, variadic-first literals\n\n* fix(support): close when()/unless() param FPs from external review #1624\n\n- keep a declared receiver type when any atomic is a receiver subclass\n  (?Child, Child|Other)\n- void Closure value resolves to null, as Laravel passes it\n- decline unless the value arg comes first (reordered named args see\n  unapplied side effects)\n- untyped closure param with a default keeps the stub slot\n\n* fix(support): trust declared when()/unless() receiver types #1624\n\nRuntime $this may be any subclass or implementer of the receiver, and\neach special case (subclass, nullable, union, intersection, interface)\nsurfaced another false positive. A declared receiver param type now\nalways wins; only an untyped receiver param gets the computed type.\n\n* fix(support): keep type coverage counts across $value pre-analysis #1624",
+          "timestamp": "2026-10-05T15:18:19+02:00",
+          "tree_id": "4e83627f403b3fc00fe8e8149f76f76ccafa25eb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b037f71bba2ecbd4faf251b599a724a6fe474a86"
+        },
+        "date": 1791206489698,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.39,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1368,
             "unit": "MB"
           }
         ]
