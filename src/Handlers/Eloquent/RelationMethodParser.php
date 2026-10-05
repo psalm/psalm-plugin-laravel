@@ -25,6 +25,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
@@ -49,7 +50,8 @@ use Psalm\Type\Union;
  * - No declared return type: public function image() { return $this->morphOne(Image::class, 'imageable'); }
  * - Docblock generics for morphTo: @return MorphTo<User|Post, $this>
  * - Trait-hosted methods: the body is read from the trait, `self::class` / `static::class` bind to
- *   the composing class; declines when another composed trait declares the same name (#1613)
+ *   the composing class; declines when composed traits (nested ones included) declare the name twice (#1613)
+ * - Several returns (early returns in `if` / loops): only when every one resolves to the same relation
  * - Delegation to another relation method, dispatched as PHP does (receiver override; private
  *   methods bind to the calling scope):
  *   public function openPosts(): HasMany { return $this->posts()->where('open', true); }
@@ -201,6 +203,13 @@ final class RelationMethodParser
         $scopeClass = $className;
 
         if ($context === null) {
+            // `$this->hasMany()` in a model body dispatches here too. The factories never build a
+            // fixed relation, and reading them re-parses vendor HasRelationships.php (Psalm does not
+            // cache vendor statements), so skip them before the trait lookup.
+            if (isset(self::FACTORY_TO_RELATION[\strtolower($methodName)])) {
+                return null;
+            }
+
             // A trait method has no storage on the composing class: read the body from the trait,
             // but bind `self` to the class that composes it.
             $located = self::locateMethod($codebase, $methodId);
@@ -226,57 +235,91 @@ final class RelationMethodParser
         // the trade-off.
         $parentClass = self::resolveParentClass($codebase, $scopeClass);
 
+        $topLevel = null;
         foreach ($stmts as $stmt) {
-            if (!$stmt instanceof PhpParser\Node\Stmt\Return_ || !$stmt->expr instanceof PhpParser\Node\Expr) {
-                continue;
+            if ($stmt instanceof PhpParser\Node\Stmt\Return_ && $stmt->expr instanceof PhpParser\Node\Expr) {
+                $topLevel = $stmt->expr;
+                break;
             }
-
-            $pivotModel = null;
-            $accessor = null;
-            $chain = [];
-            $parsed = self::findRelationCallInExpr($stmt->expr, $scopeClass, $parentClass, $pivotModel, $accessor, $chain);
-            $methodStorage = $context['methodStorage'];
-            $declaredReturnType = $methodStorage->return_type ?? $methodStorage->signature_return_type;
-            if ($parsed !== null) {
-                return self::applyDirectChain($codebase, $parsed, $chain, $methodStorage->return_type, $methodStorage->signature_return_type);
-            }
-
-            return self::parseDelegation(
-                $codebase,
-                $stmt->expr,
-                $stmts,
-                $declaredReturnType,
-                $scopeClass,
-                $parentClass,
-                $receiverClass,
-            );
         }
 
-        return null;
+        if (!$topLevel instanceof PhpParser\Node\Expr) {
+            return null;
+        }
+
+        $methodStorage = $context['methodStorage'];
+        $result = self::parseReturn($codebase, $topLevel, $methodStorage, $scopeClass, $parentClass, $receiverClass);
+        if ($result === null) {
+            return null;
+        }
+
+        // An early return (in an `if`, a loop, ...) may build another relation, so every return
+        // must resolve to the same one.
+        $collector = new BodyReturnCollectorVisitor();
+        $traverser = new PhpParser\NodeTraverser();
+        $traverser->addVisitor($collector);
+        $traverser->traverse($stmts);
+        if ($collector->hasBailed()) {
+            return null;
+        }
+
+        foreach ($collector->getReturnExpressions() as $expr) {
+            if ($expr !== $topLevel && self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass) !== $result) {
+                return null;
+            }
+        }
+
+        return $result;
     }
 
     /**
-     * Resolve a body returning `$this->other()->chain()` to other()'s relation. Each condition
-     * proves the runtime result is that relation with the same generics:
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
+     */
+    private static function parseReturn(
+        Codebase $codebase,
+        PhpParser\Node\Expr $expr,
+        MethodStorage $methodStorage,
+        string $scopeClass,
+        ?string $parentClass,
+        string $receiverClass,
+    ): ?array {
+        $pivotModel = null;
+        $accessor = null;
+        $chain = [];
+        $parsed = self::findRelationCallInExpr($expr, $scopeClass, $parentClass, $pivotModel, $accessor, $chain);
+        if ($parsed !== null) {
+            return self::applyDirectChain($codebase, $parsed, $chain, $methodStorage->return_type, $methodStorage->signature_return_type);
+        }
+
+        return self::parseDelegation(
+            $codebase,
+            $expr,
+            $methodStorage->return_type ?? $methodStorage->signature_return_type,
+            $scopeClass,
+            $parentClass,
+            $receiverClass,
+        );
+    }
+
+    /**
+     * Resolve a returned `$this->other()->chain()` to other()'s relation. Each condition proves
+     * the runtime result is that relation with the same generics:
      * - the method declares exactly that relation class (`->one()` would change it);
-     * - the return is the body's only one (an earlier branch may return another relation);
      * - every chain call keeps the relation (`->when()` / `->getRelated()` may replace it);
      * - an outer `->using()` / `->as()` is statically resolvable; it runs after other()'s own, so it wins.
      *
-     * @param array<array-key, PhpParser\Node\Stmt> $stmts
      * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string}
      */
     private static function parseDelegation(
         Codebase $codebase,
         PhpParser\Node\Expr $expr,
-        array $stmts,
         ?Union $declaredReturnType,
         string $scopeClass,
         ?string $parentClass,
         string $receiverClass,
     ): ?array {
         $declaredClass = self::singleDeclaredClass($declaredReturnType);
-        if ($declaredClass === null || !self::hasSingleReturn($stmts)) {
+        if ($declaredClass === null) {
             return null;
         }
 
@@ -497,21 +540,6 @@ final class RelationMethodParser
     }
 
     /**
-     * Whether $stmts hold exactly one `return <expr>;`, not counting nested closures/functions.
-     *
-     * @param array<array-key, PhpParser\Node\Stmt> $stmts
-     */
-    private static function hasSingleReturn(array $stmts): bool
-    {
-        $collector = new BodyReturnCollectorVisitor();
-        $traverser = new PhpParser\NodeTraverser();
-        $traverser->addVisitor($collector);
-        $traverser->traverse($stmts);
-
-        return !$collector->hasBailed() && \count($collector->getReturnExpressions()) === 1;
-    }
-
-    /**
      * The class named by the declared return type when it is a single class (`null` aside).
      *
      * @psalm-mutation-free
@@ -559,16 +587,20 @@ final class RelationMethodParser
             $appearingStorage = $codebase->classlike_storage_provider->get($appearing->fq_class_name);
             $isTrait = $codebase->classlike_storage_provider->get($declaring->fq_class_name)->is_trait;
 
-            // Psalm 7 records the declaring trait method ignoring `insteadof` (ClassLikeNodeScanner::
-            // handleTraitUse() applies only `as` adaptations), so it may name the losing trait's body.
+            // Psalm records the declaring trait method ignoring `insteadof` (vimeo/psalm#12113:
+            // ClassLikeNodeScanner::handleTraitUse() applies only `as` adaptations), so it may name the
+            // losing body. Decline when the composed traits, nested ones included, declare it twice.
             if ($isTrait) {
+                $declarations = [];
                 foreach ($appearingStorage->used_traits as $traitName) {
-                    if (
-                        \strcasecmp($traitName, $declaring->fq_class_name) !== 0
-                        && isset($codebase->classlike_storage_provider->get($traitName)->methods[$declaring->method_name])
-                    ) {
-                        return null;
+                    $traitDeclaring = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($traitName, $declaring->method_name));
+                    if ($traitDeclaring instanceof MethodIdentifier) {
+                        $declarations[\strtolower((string) $traitDeclaring)] = true;
                     }
+                }
+
+                if (\count($declarations) > 1) {
+                    return null;
                 }
             }
 
