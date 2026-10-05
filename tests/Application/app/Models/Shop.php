@@ -267,6 +267,31 @@ final class Shop extends Model
 
     // --- Bodies with several returns (#1613): every return must resolve to the same relation ---
 
+    /** Untyped with a guard exit (pixelfed shape): the call may return null, the property cannot. */
+    public function guardedInvoice()
+    {
+        if (!$this->exists) {
+            return;
+        }
+
+        return $this->hasOne(Invoice::class);
+    }
+
+    public function guardedOwner()
+    {
+        if (!$this->exists) {
+            return null;
+        }
+
+        return $this->belongsTo(Customer::class);
+    }
+
+    /** Delegates to a target with a null exit: the chain would run on null, so it declines. */
+    public function latestGuardedInvoice(): HasOne
+    {
+        return $this->guardedInvoice()->latest();
+    }
+
     /** The helper's early return yields Invoice for this argument, so the delegation proves nothing. */
     public function invoicesViaHelper(): HasMany
     {
