@@ -1017,11 +1017,14 @@ final class SchemaAggregator
         // handler) must drop this one column, not escape to Plugin::__invoke() and disable the whole
         // plugin (#1652).
         try {
-            if (!\is_a($class_name, Model::class, true)) {
+            // A misspelled or missing class throws ReflectionException, caught below.
+            /** @psalm-suppress ArgumentTypeCoercion */
+            $reflection = new \ReflectionClass($class_name);
+            if (!$reflection->isSubclassOf(Model::class)) {
                 return null;
             }
 
-            $instance = (new \ReflectionClass($class_name))->newInstanceWithoutConstructor();
+            $instance = $reflection->newInstanceWithoutConstructor();
         } catch (\Throwable) {
             return null;
         }
