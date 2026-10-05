@@ -10,7 +10,7 @@ name: Psalm delta
 # `all` runs every app; `help` replies with the groups. An unknown token gets a
 # reply + :confused: and starts no run. bin/ci/select-apps.php owns the grammar.
 #
-# Architecture (.alies/docs/design-ci-psalm-delta.md for full rationale):
+# Architecture:
 #   prepare — resolve the app selection, reply on help/error, resolve refs,
 #             flag fork heads, emit the filtered app matrix
 #   delta   — one job per app (parallel): install, run base + head, upload JSON.
