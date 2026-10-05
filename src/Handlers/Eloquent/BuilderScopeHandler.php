@@ -290,7 +290,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * hand-off write should only be skipped for PUBLIC declared methods.
      *
      * @param lowercase-string $methodName
-     * @psalm-capabilities read-props
+     * @psalm-mutation-free
      */
     private static function isStorageDeclaredBuilderMethod(Codebase $codebase, string $methodName): bool
     {

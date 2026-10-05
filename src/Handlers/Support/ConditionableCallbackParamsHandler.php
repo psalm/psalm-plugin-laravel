@@ -430,7 +430,7 @@ final class ConditionableCallbackParamsHandler implements
             $params[] = new FunctionLikeParameter($name, false, $type, $type, is_optional: false);
         }
 
-        return new Union([new TCallable($params, Type::getMixed()), new TNull()]);
+        return new Union([new TCallable('callable', $params, Type::getMixed()), new TNull()]);
     }
 
     /**

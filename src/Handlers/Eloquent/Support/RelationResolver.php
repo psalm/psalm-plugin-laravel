@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Type\Atomic\TGenericObject;
@@ -73,7 +74,14 @@ final class RelationResolver
         // a single call answers the existence question for both forms.
         // is_used: false keeps this an existence probe — it must not mark the
         // relation method as used and skew unused-code analysis.
-        $exists = $codebase->methodExists($methodId, is_used: false, with_pseudo: true);
+        // Psalm 6's public Codebase::methodExists() has no with_pseudo param and
+        // always calls through with it false, unlike Psalm 7 — bypass to the
+        // internal Methods::methodExists() to reach the pseudo-inclusive form.
+        $exists = $codebase->methods->methodExists(
+            new MethodIdentifier($modelFqcn, \strtolower($relationName)),
+            is_used: false,
+            with_pseudo: true,
+        );
         self::$methodExistsCache[$methodId] = $exists;
 
         return $exists;

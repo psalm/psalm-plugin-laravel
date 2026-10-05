@@ -32,7 +32,7 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
     /**
      * @param bool $bailOnBareReturn false keeps walking past `return;` and only records it,
      *                               for callers that treat it as a null exit.
-     * @psalm-capabilities read-props
+     * @psalm-mutation-free
      */
     public function __construct(private readonly bool $bailOnBareReturn = true) {}
 

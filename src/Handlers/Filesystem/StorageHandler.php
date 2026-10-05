@@ -315,7 +315,7 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      */
     private static function isRealMethod(Codebase $codebase, string $fqClassName, string $methodNameLower): bool
     {
-        return $codebase->methods->methodExists($codebase, new MethodIdentifier($fqClassName, $methodNameLower));
+        return $codebase->methods->methodExists(new MethodIdentifier($fqClassName, $methodNameLower));
     }
 
     /**

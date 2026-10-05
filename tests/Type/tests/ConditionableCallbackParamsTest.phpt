@@ -558,7 +558,7 @@ function test_never_closure_value_leaves_slots_untyped(): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, int):mixed|null, but Closure[pure](Illuminate\Database\Eloquent\Builder, string):void provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable(Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, int):mixed|null, but pure-Closure(Illuminate\Database\Eloquent\Builder, string):void provided
 MissingClosureParamType on line %d: Parameter $v has no provided type
 MissingClosureParamType on line %d: Parameter $v has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
@@ -571,7 +571,7 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $_v has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method count
-ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>):mixed|null, but parent type Closure[pure](Illuminate\Database\Eloquent\Builder, App\Builders\VehicleBuilder):void provided
+ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable(Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>):mixed|null, but parent type pure-Closure(Illuminate\Database\Eloquent\Builder, App\Builders\VehicleBuilder):void provided
 MissingClosureParamType on line %d: Parameter $args has no provided type
 MixedAssignment on line %d: Unable to determine the type that $a is being assigned to
 MissingClosureParamType on line %d: Parameter $value has no provided type

@@ -528,7 +528,7 @@ final class RelationMethodParser
      * `object`, a template whose bound leaves room, or a plain class it is / extends (`null` aside).
      * Scalars and intersections never admit it.
      *
-     * @psalm-capabilities read-props
+     * @psalm-mutation-free
      */
     private static function declarationAdmits(?Union $declared, string $relationClass): bool
     {
@@ -610,7 +610,9 @@ final class RelationMethodParser
      * decline before loading the AST: Psalm re-parses vendor files on every statements lookup.
      *
      * @return ?array{declaring: MethodIdentifier, appearingClass: string, isTrait: bool, private: bool, relationTyped: bool}
-     * @psalm-capabilities read-props
+     *
+     * Not marked mutation-free: Psalm 6's Methods::getAppearingMethodId() is not annotated
+     * mutation-free, unlike Psalm 7.
      */
     private static function locateMethod(Codebase $codebase, MethodIdentifier $methodId): ?array
     {
@@ -654,7 +656,7 @@ final class RelationMethodParser
      *
      * @param array<array-key, string> $usedTraits
      * @param lowercase-string $methodName
-     * @psalm-capabilities read-props
+     * @psalm-mutation-free
      */
     private static function countTraitOwners(Codebase $codebase, array $usedTraits, string $methodName): int
     {
@@ -680,7 +682,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @psalm-capabilities read-props
+     * @psalm-mutation-free
      */
     private static function declaresRelation(Union $declared): bool
     {
