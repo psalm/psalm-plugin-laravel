@@ -32,7 +32,7 @@ Full config example:
         <experimental value="true" />
         <failOnInternalError value="true" />
         <configDirectory name="app/Config" />
-        <blade enabled="true" />
+        <blade />
     </pluginClass>
 </plugins>
 ```
@@ -265,10 +265,10 @@ This governs the prompt sink direction only. Model output as a taint source (an 
 
 See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, [tuning template findings](blade.md#tuning-template-findings), ambient variables, taint reporting, and known limits).
 
-**default**: off. Omit the element, or write `<blade enabled="false" />`.
+**default**: off. The element's presence turns analysis on; the settings below are attributes of the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
 
 ```xml
-<blade enabled="true" />
+<blade />
 ```
 
 Opt in to analyzing Blade templates. The plugin compiles every `*.blade.php` file under the view paths of the booted application (`config('view.paths')` plus whatever service providers added) into a PHP "shadow" file, and adds those shadows to the Psalm run. The templates themselves are never handed to Psalm as PHP; only the compiled shadows are analyzed.
@@ -286,7 +286,7 @@ Notes on this release:
 **default**: `blade/` inside the [plugin cache directory](#cache-directory)
 
 ```xml
-<blade enabled="true" cacheDir="build/blade-shadows" />
+<blade cacheDir="build/blade-shadows" />
 ```
 
 Where the compiled shadows and their manifest are written. Absolute, or relative to the directory Psalm runs in. The plugin creates the directory, reuses a shadow whose template has not changed, and deletes shadows whose template is gone.
@@ -298,7 +298,7 @@ The default deliberately sits outside your project tree. A shadow file that one 
 **default**: off
 
 ```xml
-<blade enabled="true" validateViewData="true" />
+<blade validateViewData="true" />
 ```
 
 Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
@@ -315,7 +315,7 @@ Both checks decline rather than guess. The per-issue pages list every gate; the 
 **default**: off
 
 ```xml
-<blade enabled="true" reportUnusedViewData="true" />
+<blade reportUnusedViewData="true" />
 ```
 
 Report a data key ([UnusedViewData](issues/UnusedViewData.md)) that the rendered template neither reads nor declares. Independent of `validateViewData`: same call shapes, opposite direction (that rule checks what the template asks for, this one checks what the call site hands over).
@@ -324,14 +324,14 @@ A key that a template reached through `@include` or `@extends` reads or declares
 
 Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
 
-Needs `enabled="true"`: the read sets only exist once the compile pass has read the templates.
+Has no effect under `<blade value="false" />`: the read sets only exist once the compile pass has read the templates.
 
 ### `reportMixedIssues`
 
 **default**: off (the `Mixed*` family is suppressed)
 
 ```xml
-<blade enabled="true" reportMixedIssues="true" />
+<blade reportMixedIssues="true" />
 ```
 
 Every template variable the plugin cannot prove a type for is `mixed` (see the notes above), so `MixedArgument`, `MixedAssignment`, and the rest of Psalm's `MixedIssue` family are overwhelmingly noise about the prelude's own fallback rather than a real template bug. They are dropped at the point issues are relocated onto the template, before Psalm's own suppression accounting sees them.

@@ -50,7 +50,7 @@ final readonly class PluginConfig
          */
         public ?bool $findPromptInjection,
         public string $cachePath,
-        /** Opt-in Blade template analysis (`<blade enabled="true" />`). */
+        /** Opt-in Blade template analysis: on when `<blade />` is present, off for `<blade value="false" />`. */
         public bool $bladeEnabled,
         /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
         public string $bladeCacheDir,
@@ -95,7 +95,7 @@ final readonly class PluginConfig
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
-        $bladeEnabled = self::xmlBoolAttr($config?->blade, 'blade enabled', false, 'enabled');
+        $bladeEnabled = self::xmlBladeEnabled($config);
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
@@ -271,6 +271,22 @@ final readonly class PluginConfig
      * and makes Psalm skip taint flows whose source sits in a reportable file. A `cacheDir`
      * pointing inside the project must therefore be excluded from `<projectFiles>` by the user.
      */
+    /**
+     * `<blade />` opts in by its presence, so its settings live on the same element without a
+     * separate switch; `value="false"` turns a present element off without deleting it.
+     */
+    private static function xmlBladeEnabled(?\SimpleXMLElement $config): bool
+    {
+        $blade = $config?->blade;
+
+        // A missing child still reads as an empty SimpleXMLElement proxy; isset() is what tells them apart.
+        if (!$blade instanceof \SimpleXMLElement || !isset($config->blade)) {
+            return false;
+        }
+
+        return self::xmlBoolAttr($blade, 'blade', true);
+    }
+
     private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
     {
         $configured = \rtrim(self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);

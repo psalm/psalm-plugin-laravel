@@ -22,7 +22,7 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <blade enabled="true" />
+            <blade />
         </pluginClass>
     </plugins>
 </psalm>

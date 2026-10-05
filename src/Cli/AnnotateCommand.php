@@ -198,7 +198,7 @@ final class AnnotateCommand extends Command
 
         if ($changed === null) {
             $io->error('The analysis never reached the annotate pass.');
-            $io->writeln('  Blade analysis has to be enabled and bootable: check `<blade enabled="true" />` in your Psalm config, and run `vendor/bin/psalm` without `--no-progress` to see why it degraded.');
+            $io->writeln('  Blade analysis has to be enabled and bootable: check `<blade />` in your Psalm config, and run `vendor/bin/psalm` without `--no-progress` to see why it degraded.');
 
             return $exitCode === 0 ? Command::FAILURE : $exitCode;
         }

@@ -47,7 +47,7 @@ This check is disabled by default, and needs Blade analysis enabled. Enable it i
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <blade enabled="true" validateViewData="true" />
+        <blade validateViewData="true" />
     </pluginClass>
 </plugins>
 ```

@@ -23,7 +23,7 @@ flowchart TD
     C --> D["Build migration schema\n(only if columnFallback=migrations)"]
     D --> E["Init facade→service map\n(FacadeMapProvider)"]
     E --> F["Init translation / view / env handlers\n(from booted app state)"]
-    F --> BL["Compile Blade templates into shadow files\n(only if &lt;blade enabled='true'&gt;)"]
+    F --> BL["Compile Blade templates into shadow files\n(only if &lt;blade /&gt;)"]
     BL --> G["Register handlers\n(Plugin::registerHandlers)"]
     G --> H["Register stubs\n(Plugin::registerStubs)"]
 
@@ -52,7 +52,7 @@ Bootstrap failures are a special case: `ApplicationProvider` swallows a `bootstr
 
 ### Blade shadow files
 
-Behind [`<blade enabled="true" />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
+Behind [`<blade />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
 
 The registrations, deliberately asymmetric (`Blade\PsalmShadowRegistrar`):
 

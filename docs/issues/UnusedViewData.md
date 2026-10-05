@@ -56,7 +56,7 @@ This check is disabled by default. Enable it alongside Blade analysis in your `p
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <blade enabled="true" reportUnusedViewData="true" />
+        <blade reportUnusedViewData="true" />
     </pluginClass>
 </plugins>
 ```

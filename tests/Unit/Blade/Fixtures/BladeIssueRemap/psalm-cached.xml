@@ -10,7 +10,7 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <blade enabled="true" cacheDir=".cache/blade-shadows-canary" />
+            <blade cacheDir=".cache/blade-shadows-canary" />
         </pluginClass>
     </plugins>
 </psalm>

@@ -9,7 +9,7 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <blade enabled="true" cacheDir=".cache/blade-shadows" reportMixedIssues="true" />
+            <blade cacheDir=".cache/blade-shadows" reportMixedIssues="true" />
         </pluginClass>
     </plugins>
 </psalm>

@@ -22,19 +22,19 @@ Add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <blade enabled="true" />
+        <blade />
     </pluginClass>
 </plugins>
 ```
 
-**default**: disabled. Omit the element, or write `<blade enabled="false" />`.
+**default**: disabled. The element's presence turns analysis on, and every setting below goes on the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
 
 ### `cacheDir`
 
 Compiled shadows and their manifest are written to a cache directory:
 
 ```xml
-<blade enabled="true" cacheDir="build/blade-shadows" />
+<blade cacheDir="build/blade-shadows" />
 ```
 
 **default**: a subdirectory inside the [plugin's cache directory](config.md#cache-directory), which itself lives inside Psalm's own cache directory, outside your project tree. Nothing needs to be gitignored with the default.
