@@ -18,7 +18,8 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
  */
 final class Supplier extends Model
 {
-    use ComposesRevisions, ComposesArchivedRevisions {
+    use ComposesRevisions;
+    use ComposesArchivedRevisions {
         ComposesArchivedRevisions::revisions insteadof ComposesRevisions;
     }
 
