@@ -15,12 +15,17 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\MissingView;
+use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
+use Psalm\Type\Atomic\Scalar;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -29,7 +34,7 @@ use Psalm\Type\Union;
  * across every Laravel API that accepts one — the view() helper, Factory
  * (make/first/renderWhen/renderUnless/renderEach/composer/creator) and its View facade,
  * ResponseFactory::view() (concrete, contract, and Response facade),
- * Router::view(), MailMessage::view()/markdown(), Mailable::view()/markdown()/text(),
+ * Router::view(), MailMessage::view()/markdown()/text(), Mailable::view()/markdown()/text(),
  * Mailables\Content's constructor, TestResponse::assertViewIs(), and
  * InteractsWithViews::view() (a test-case trait method) — and narrows the view()
  * helper's return type past the stub's contract fallback to a concrete class.
@@ -265,7 +270,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             ViewNameSignatures::ROLE_VIEW_FACTORY => self::checkViewFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_RESPONSE_FACTORY => self::checkResponseFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_ROUTER => self::checkRouterCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
-            ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $event->getSource(), $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_MAILABLE => self::checkMailableCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_TEST_RESPONSE => self::checkTestResponseCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_INTERACTS_WITH_VIEWS => self::checkInteractsWithViewsCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
@@ -472,20 +477,132 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
     }
 
     /**
-     * MailMessage::view()/markdown() — both take a single view name at $view
-     * (position 0); markdown() renders through Illuminate\Mail\Markdown, which
-     * resolves non-namespaced names against the same registered view paths.
+     * MailMessage::view()/markdown() take a single view name at $view (position 0);
+     * view() also accepts an array. markdown() renders through Illuminate\Mail\Markdown,
+     * which resolves non-namespaced names against the same registered view paths.
+     * text() stores its $textView argument (position 0) as the 'text' entry of the
+     * view array, so it is rendered as a view name too.
      *
      * @param list<Arg> $callArgs
      * @param array<array-key, string> $suppressedIssues
      */
-    private static function checkMailMessageCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    private static function checkMailMessageCall(string $methodNameLower, array $callArgs, StatementsSource $source, CodeLocation $codeLocation, array $suppressedIssues): void
     {
-        if ($methodNameLower !== 'view' && $methodNameLower !== 'markdown') {
+        if ($methodNameLower === 'text') {
+            self::checkArgViewName($callArgs, 0, 'textview', $codeLocation, $suppressedIssues);
+
+            return;
+        }
+
+        if ($methodNameLower === 'view') {
+            $arg = self::argByNameOrPosition($callArgs, 0, 'view');
+
+            if ($arg instanceof Arg && $arg->value instanceof Array_) {
+                self::checkMailViewArray($arg->value, $source->getNodeTypeProvider(), $codeLocation, $suppressedIssues);
+
+                return;
+            }
+        } elseif ($methodNameLower !== 'markdown') {
             return;
         }
 
         self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * Array form of MailMessage::view(), mirroring Illuminate\Mail\Mailer::parseView():
+     * when key 0 is set only keys 0 and 1 are views (a "pretty" and a plain one);
+     * otherwise only 'html' and 'text' are — 'raw' is raw text, not a view name, and
+     * any other key is ignored. Each present entry is rendered independently, so
+     * (unlike first()) every missing literal is reported.
+     *
+     * The whole array is skipped when its keys cannot be resolved statically
+     * (spread, a non-literal key, or a negative integer key whose implicit-index
+     * continuation differs across PHP versions), or when key 0 may be null
+     * (precedence unknown).
+     *
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkMailViewArray(Array_ $array, NodeTypeProvider $nodeTypeProvider, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        /** @var array<array-key, \PhpParser\Node\Expr> $entries */
+        $entries = [];
+        $nextIndex = 0;
+
+        foreach ($array->items as $item) {
+            if ($item === null || $item->unpack) {
+                return;
+            }
+
+            if ($item->key === null) {
+                $key = $nextIndex;
+            } elseif ($item->key instanceof \PhpParser\Node\Scalar\Int_) {
+                $key = $item->key->value;
+            } elseif ($item->key instanceof String_) {
+                // PHP normalizes decimal-integer string keys ('0') to ints
+                $key = (string) (int) $item->key->value === $item->key->value ? (int) $item->key->value : $item->key->value;
+            } else {
+                return;
+            }
+
+            if (\is_int($key)) {
+                // PHP < 8.3 continues implicit indexes from 0 after a negative key, >= 8.3 from key + 1
+                if ($key < 0) {
+                    return;
+                }
+
+                if ($key >= $nextIndex) {
+                    $nextIndex = $key + 1;
+                }
+            }
+
+            $entries[$key] = $item->value;
+        }
+
+        // parseView() branches on isset($view[0]), i.e. key 0 present AND non-null.
+        // Decide the branch only when that is proven; a possibly-null or untyped key 0
+        // would make either branch a guess, so decline rather than risk a false positive.
+        if (!isset($entries[0])) {
+            $viewKeys = ['html', 'text'];
+        } elseif ($entries[0] instanceof String_) {
+            $viewKeys = [0, 1];
+        } elseif ($entries[0] instanceof \PhpParser\Node\Expr\ConstFetch && $entries[0]->name->toLowerString() === 'null') {
+            $viewKeys = ['html', 'text'];
+        } else {
+            $type = $nodeTypeProvider->getType($entries[0]);
+
+            if (!$type instanceof Union || $type->possibly_undefined || !self::isProvenNonNull($type)) {
+                return;
+            }
+
+            $viewKeys = [0, 1];
+        }
+
+        foreach ($viewKeys as $viewKey) {
+            $value = $entries[$viewKey] ?? null;
+
+            if ($value instanceof String_) {
+                self::checkViewExists($value->value, $codeLocation, $suppressedIssues);
+            }
+        }
+    }
+
+    /**
+     * Accept only concrete scalar/array atomics. Mixed, null and template params
+     * (whose bound may admit null, e.g. an unbounded `T`) fail the proof, as does
+     * anything else not understood here.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isProvenNonNull(Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof Scalar && !$atomic instanceof TArray && !$atomic instanceof TKeyedArray) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
