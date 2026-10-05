@@ -21,6 +21,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -73,7 +74,7 @@ use Psalm\Type\Union;
  * The `withCount()` / `withSum()` family (relation + ` as alias` aggregate
  * sub-selects) is intentionally out of scope for this first pass.
  *
- * **No autoloading class checks.** Ancestry is resolved via {@see isClassOrSubclassOf()} /
+ * **No autoloading class checks.** Ancestry is resolved via {@see ClassLineage::isA()} /
  * {@see concreteModel()} off Psalm's reflection, never `\is_a($class, X::class, true)` — that
  * autoloads $class, and a deprecation raised while loading crashes the whole run (Psalm's error
  * handler turns it into an exception).
@@ -349,48 +350,26 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
     {
         if ($atomic instanceof TGenericObject) {
             if (
-                self::isClassOrSubclassOf($codebase, $atomic->value, EloquentBuilder::class)
-                || self::isClassOrSubclassOf($codebase, $atomic->value, Relation::class)
+                ClassLineage::isA($codebase, $atomic->value, EloquentBuilder::class)
+                || ClassLineage::isA($codebase, $atomic->value, Relation::class)
             ) {
-                $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null);
+                $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $codebase);
 
                 return $model !== null ? self::concreteModel($codebase, $model) : null;
             }
 
-            if (self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
+            if (ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return self::concreteModel($codebase, $atomic->value);
             }
 
             return null;
         }
 
-        if ($atomic instanceof TNamedObject && self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
+        if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Model::class)) {
             return self::concreteModel($codebase, $atomic->value);
         }
 
         return null;
-    }
-
-    /**
-     * $class is $ancestor or a subclass, without autoloading (unlike `\is_a(..., true)` — see class
-     * docblock). classExtends() is non-reflexive → identity checked first. All ancestors here
-     * (Builder, Relation, Model) are classes, so classExtends() alone suffices, no classImplements().
-     */
-    private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
-    {
-        if (\strtolower($class) === \strtolower($ancestor)) {
-            return true;
-        }
-
-        if (!$codebase->classExists($class)) {
-            return false;
-        }
-
-        try {
-            return $codebase->classExtends($class, $ancestor);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return false;
-        }
     }
 
     /**

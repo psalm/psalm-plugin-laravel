@@ -372,8 +372,9 @@ final class CustomBuilderMethodHandler
                 && \strtolower($atomic->value) === \strtolower($builderClass),
         );
         $arm = \count($arms) === 1 ? \reset($arms) : null;
-        $receiver = ModelPropertyResolver::extractExactlyOneModelFromUnion($event->getTemplateTypeParameters()[0] ?? null)
-            ?? ModelPropertyResolver::extractExactlyOneModelFromUnion($arm instanceof TGenericObject ? $arm->type_params[0] ?? null : null);
+        $codebase = $event->getSource()->getCodebase();
+        $receiver = ModelPropertyResolver::extractExactlyOneModelFromUnion($event->getTemplateTypeParameters()[0] ?? null, $codebase)
+            ?? ModelPropertyResolver::extractExactlyOneModelFromUnion($arm instanceof TGenericObject ? $arm->type_params[0] ?? null : null, $codebase);
 
         if ($receiver !== null) {
             return $declares($receiver) ? $receiver : null;

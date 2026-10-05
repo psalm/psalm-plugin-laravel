@@ -206,6 +206,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Producers\ProducerReturnTypeHandler::reset();
         Handlers\Rules\UnregisteredRouteNameHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
+        Handlers\Support\ConditionableCallbackParamsHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
         Handlers\Validation\FormRequestPropertyHandler::reset();
@@ -479,6 +480,9 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Support/ConditionableWhenHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableWhenHandler::class);
+
+        require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
 
         require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);

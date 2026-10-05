@@ -16,6 +16,7 @@ use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
@@ -170,7 +171,7 @@ final class ModelRelationshipPropertyHandler
         // Tier 1: Try to extract from generic type parameters (existing behavior).
         // Only possible when the return type is a Union with a TGenericObject.
         if ($methodReturnType instanceof Union) {
-            $genericResult = self::resolveFromGenericParams($methodReturnType);
+            $genericResult = self::resolveFromGenericParams($codebase, $methodReturnType);
             if ($genericResult instanceof Union) {
                 return $genericResult;
             }
@@ -197,15 +198,15 @@ final class ModelRelationshipPropertyHandler
                 }
             }
 
-            return self::buildPropertyType($relation->relationClass, self::relatedModelType($relation->relatedModel));
+            return self::buildPropertyType($codebase, $relation->relationClass, self::relatedModelType($relation->relatedModel));
         }
 
         // Tier 3: Fall back using the declared relation class with bounded type (?Model / Collection<int, Model>).
         // This covers cases where the body couldn't be parsed but the return type is a known Relation.
         if ($methodReturnType instanceof Union) {
-            $relationClassName = self::findRelationClassName($methodReturnType);
+            $relationClassName = self::findRelationClassName($codebase, $methodReturnType);
             if ($relationClassName !== null) {
-                return self::buildPropertyType($relationClassName, self::relatedModelType(null));
+                return self::buildPropertyType($codebase, $relationClassName, self::relatedModelType(null));
             }
         }
 
@@ -232,14 +233,14 @@ final class ModelRelationshipPropertyHandler
      *
      * e.g. HasOne<Phone, User> → extracts Phone as the model type
      */
-    private static function resolveFromGenericParams(Union $methodReturnType): ?Union
+    private static function resolveFromGenericParams(Codebase $codebase, Union $methodReturnType): ?Union
     {
         foreach ($methodReturnType->getAtomicTypes() as $atomicType) {
             if (!$atomicType instanceof TGenericObject) {
                 continue;
             }
 
-            if (!\is_a($atomicType->value, Relation::class, true)) {
+            if (!ClassLineage::isA($codebase, $atomicType->value, Relation::class)) {
                 continue;
             }
 
@@ -247,7 +248,7 @@ final class ModelRelationshipPropertyHandler
             // Use it directly — it's a Union that may contain a named model type.
             $modelType = $atomicType->type_params[0] ?? null;
             if ($modelType instanceof Union && $modelType->hasObjectType()) {
-                return self::buildPropertyType($atomicType->value, $modelType);
+                return self::buildPropertyType($codebase, $atomicType->value, $modelType);
             }
 
             break;
@@ -279,7 +280,7 @@ final class ModelRelationshipPropertyHandler
             return null;
         }
 
-        return self::buildPropertyType($relationClassName, $modelType);
+        return self::buildPropertyType($codebase, $relationClassName, $modelType);
     }
 
     /**
@@ -288,10 +289,10 @@ final class ModelRelationshipPropertyHandler
      *
      * @psalm-mutation-free
      */
-    private static function findRelationClassName(Union $returnType): ?string
+    private static function findRelationClassName(Codebase $codebase, Union $returnType): ?string
     {
         foreach ($returnType->getAtomicTypes() as $type) {
-            if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
+            if ($type instanceof TNamedObject && ClassLineage::isA($codebase, $type->value, Relation::class)) {
                 return $type->value;
             }
         }
@@ -306,13 +307,13 @@ final class ModelRelationshipPropertyHandler
      * Collection relations (HasMany, BelongsToMany, etc.) → Collection<int, RelatedModel>
      *   — uses the model's custom collection class when registered (e.g. #[CollectedBy])
      */
-    private static function buildPropertyType(string $relationClassName, Union $modelType): Union
+    private static function buildPropertyType(Codebase $codebase, string $relationClassName, Union $modelType): Union
     {
         if (\in_array($relationClassName, self::COLLECTION_RELATIONS, true)) {
             // Use the model's custom collection when one is registered.
             // Falls back to Eloquent\Collection when no custom collection exists
             // or when the Union has no concrete Model subclass (e.g. mixed).
-            $modelClass = ModelPropertyResolver::extractModelFromUnion($modelType);
+            $modelClass = ModelPropertyResolver::extractModelFromUnion($modelType, $codebase);
             $collectionClass = $modelClass !== null
                 ? CustomCollectionHandler::getCollectionClassForModel($modelClass) ?? Collection::class
                 : Collection::class;
@@ -390,7 +391,7 @@ final class ModelRelationshipPropertyHandler
                     // Accept both TGenericObject (e.g. BelongsTo<Vault, Contact>) and
                     // TNamedObject (e.g. plain BelongsTo without generics) — both indicate
                     // a relationship method whose name maps to a magic property accessor.
-                    if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
+                    if ($type instanceof TNamedObject && ClassLineage::isA($codebase, $type->value, Relation::class)) {
                         self::$relationExistsCache[$key] = true;
                         return true;
                     }
