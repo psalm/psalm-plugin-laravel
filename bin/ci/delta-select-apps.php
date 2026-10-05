@@ -6,8 +6,8 @@ declare(strict_types=1);
  * Resolve a `/psalm-delta` selector to the apps to benchmark.
  *
  * Usage:
- *   yq -o=json bin/ci/test-apps.yml | COMMENT_BODY='/psalm-delta octane' php select-apps.php
- *   yq -o=json bin/ci/test-apps.yml | php select-apps.php 'octane,vito'   # no /psalm-delta prefix
+ *   yq -o=json bin/ci/test-apps.yml | COMMENT_BODY='/psalm-delta octane' php delta-select-apps.php
+ *   yq -o=json bin/ci/test-apps.yml | php delta-select-apps.php 'octane,vito'   # no /psalm-delta prefix
  *
  * Grammar (first line only, case-insensitive, tokens split on whitespace/commas):
  *   /psalm-delta            the `default` group
@@ -25,7 +25,7 @@ declare(strict_types=1);
  */
 
 $fail = static function (string $message): never {
-    fwrite(STDERR, "select-apps: {$message}\n");
+    fwrite(STDERR, "delta-select-apps: {$message}\n");
     exit(2);
 };
 

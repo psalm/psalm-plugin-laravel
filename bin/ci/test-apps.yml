@@ -12,7 +12,7 @@
 #
 # Selection: `/psalm-delta` (and `bin/ci/delta.sh`) runs the `default` group;
 # `/psalm-delta octane vito` adds a group and an app, `all` runs everything,
-# `help` lists the groups. bin/ci/select-apps.php resolves it from
+# `help` lists the groups. bin/ci/delta-select-apps.php resolves it from
 # `yq -o=json bin/ci/test-apps.yml`, so tags and names must be [a-z0-9_-] and
 # neither may be `all` or `help`.
 #

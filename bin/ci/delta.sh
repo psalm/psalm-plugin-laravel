@@ -14,7 +14,7 @@
 #   bash bin/ci/delta.sh --apps "octane,vito" <head-ref>   # default group + octane + vito
 #
 # --apps takes the `/psalm-delta` comment grammar without the prefix (resolved by
-# bin/ci/select-apps.php): group tags and app names add to the `default` group,
+# bin/ci/delta-select-apps.php): group tags and app names add to the `default` group,
 # `all` selects every app, `help` lists groups. Omitted = `default`.
 #
 # Output: markdown delta report on stdout; raw JSON cached under
@@ -45,7 +45,7 @@ done
 # ${arr[@]+...}: bash 3.2 (macOS default) treats an empty array as unbound under set -u.
 set -- ${POSITIONAL[@]+"${POSITIONAL[@]}"}
 
-SELECTION=$(yq -o=json "$REGISTRY" | php "${PLUGIN_DIR}/bin/ci/select-apps.php" "$SELECTOR") || exit 2
+SELECTION=$(yq -o=json "$REGISTRY" | php "${PLUGIN_DIR}/bin/ci/delta-select-apps.php" "$SELECTOR") || exit 2
 case "$(yq -p=json '.status' <<< "$SELECTION")" in
     run) ;;
     help) yq -p=json '.reply' <<< "$SELECTION"; exit 0 ;;

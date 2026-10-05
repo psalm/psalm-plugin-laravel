@@ -5,7 +5,7 @@ name: Psalm delta
 # comment with per-app issue deltas. Informational only, never fails the PR (a
 # delta is often intended: fixing FPs REMOVES issues, new narrowing ADDS some).
 #
-# `/psalm-delta [group|app ...]` (grammar: bin/ci/select-apps.php, groups:
+# `/psalm-delta [group|app ...]` (grammar: bin/ci/delta-select-apps.php, groups:
 # bin/ci/test-apps.yml); `help`/unknown tokens get a reply and start no run.
 #
 # Architecture:
@@ -102,7 +102,7 @@ jobs:
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          yq -o=json bin/ci/test-apps.yml | php bin/ci/select-apps.php > selection.json
+          yq -o=json bin/ci/test-apps.yml | php bin/ci/delta-select-apps.php > selection.json
           jq -r '.reply' selection.json > reply.md
 
       - name: Expose selection outputs

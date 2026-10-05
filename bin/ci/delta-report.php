@@ -34,7 +34,7 @@ declare(strict_types=1);
  * --details prints the changed entries and crash text. They carry file paths
  * and issue messages, so they are OFF by default (safe for a private app).
  *
- * --selection is the resolved /psalm-delta selector label (bin/ci/select-apps.php),
+ * --selection is the resolved /psalm-delta selector label (bin/ci/delta-select-apps.php),
  * printed under the header with the app count.
  *
  * Exit codes: 0 = report produced, 2 = usage error.
