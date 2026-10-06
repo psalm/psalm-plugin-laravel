@@ -7,4 +7,9 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures;
 abstract class BaseClosureProvider
 {
     public const PREFIX = 'parent';
+
+    public function boundType(): string
+    {
+        return \get_debug_type($this);
+    }
 }

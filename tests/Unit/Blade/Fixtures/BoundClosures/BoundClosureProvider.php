@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures;
 
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\BoundClosureProvider as AliasedProvider;
+
 /**
  * Closures shaped like directives a service provider registers in `boot()`: plain non-static
  * closures, so PHP binds every one of them to this instance (#1693). Each returns a closure
@@ -34,6 +36,13 @@ final class BoundClosureProvider extends BaseClosureProvider
     public function arrowFnIgnoresThis(): \Closure
     {
         return fn(string $expression): string => '<?php ?>';
+    }
+
+    public function callsUnrelatedStatic(): \Closure
+    {
+        return function (string $expression): string {
+            return \Illuminate\Support\Str::upper($expression);
+        };
     }
 
     public function interpolatesThis(): \Closure
@@ -141,6 +150,50 @@ final class BoundClosureProvider extends BaseClosureProvider
 
             return '<?php ?>';
         };
+    }
+
+    // PHP runs a non-static method called as `Class::method()` on the caller's `$this` whenever
+    // `$this` is an instance of that class, so each of these reads the bound object.
+    public function callsOwnClassMethod(): \Closure
+    {
+        return function (string $expression): string {
+            return BoundClosureProvider::readMark();
+        };
+    }
+
+    public function callsOwnClassMethodAsCallable(): \Closure
+    {
+        return function (string $expression): string {
+            return (BoundClosureProvider::readMark(...))();
+        };
+    }
+
+    public function callsParentClassMethod(): \Closure
+    {
+        return function (string $expression): string {
+            return BaseClosureProvider::boundType();
+        };
+    }
+
+    public function callsAliasedClassMethod(): \Closure
+    {
+        return function (string $expression): string {
+            return AliasedProvider::readMark();
+        };
+    }
+
+    public function callsVariableClassMethod(): \Closure
+    {
+        return function (string $expression): string {
+            $class = 'Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\BoundClosureProvider';
+
+            return $class::readMark();
+        };
+    }
+
+    public function readMark(): string
+    {
+        return $this->mark;
     }
 
     public function __invoke(string $expression): string

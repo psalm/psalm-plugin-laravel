@@ -57,6 +57,9 @@ use Illuminate\View\Compilers\BladeCompiler;
  */
 final class CompilerEnvironment
 {
+    /** Functions that hand out the calling scope's `$this` (or its class). */
+    private const LEAKING_FUNCTIONS = ['compact', 'debug_backtrace', 'debug_print_backtrace', 'get_called_class'];
+
     /**
      * @return array{0: string, 1: bool} the environment hash, and whether every input that fed it
      *         could be resolved deterministically
@@ -237,7 +240,7 @@ final class CompilerEnvironment
         if (
             $boundThis !== null
             && $boundThis !== $compiler
-            && !self::closureNeverReachesThis($reflection, $file, $fileTokens)
+            && !self::closureNeverReachesThis($reflection, $boundThis, $file, $fileTokens)
         ) {
             $trustworthy = false;
 
@@ -269,19 +272,25 @@ final class CompilerEnvironment
      * `$this` (also inside interpolation), `self`/`static`/`parent`, variable variables and `${}`
      * (`$$name` with `$name = 'this'` IS `$this`), `eval`/`include` (the evaluated code inherits
      * `$this`), the functions that hand it out (`compact('this')`, `debug_backtrace()`, also
-     * spelled `namespace\compact` in the global namespace), and any nested closure, which inherits
-     * `$this` without naming it (`print_r(fn () => 0)` dumps it). `get_defined_vars()` omits
-     * `$this`, so it is not listed. Lines, not byte offsets, bound the scan, so code sharing the
-     * closure's first or last line is scanned too: that only ever errs toward distrust.
+     * spelled `namespace\compact`, or imported under another name with `use function`), any
+     * nested closure, which inherits `$this` without naming it (`print_r(fn () => 0)` dumps it),
+     * and a `Name::method()` call where `Name` is the bound object's class, a parent, an import
+     * alias, or not a plain name at all (`$class::method()`): PHP runs a non-static method called
+     * that way on the caller's `$this`. Calls on unrelated classes (`Feature::active()`) stay
+     * trusted. `get_defined_vars()` omits `$this`, so it is not listed. Lines, not byte offsets,
+     * bound the scan, so code sharing the closure's first or last line is scanned too: that only
+     * ever errs toward distrust. Imports are read from the tokens above the closure, which is
+     * where PHP requires them to sit for its own body to see them.
      *
      * Accepted residuals, since this guards against stale output, not deliberately obfuscated
-     * source: a function name hidden in a string (`$f = 'debug_backtrace'; $f()`), and a lookup
+     * source: a function or class name hidden in a string (`$f = 'debug_backtrace'; $f()`,
+     * `call_user_func('App\Provider::read')`), `class_alias()`, and a lookup
      * through global state (`app()->getProvider(...)`, `$GLOBALS`), the same runtime-state gap
      * `config()` already has.
      *
      * @param array<string, list<\PhpToken>> $fileTokens
      */
-    private static function closureNeverReachesThis(\ReflectionFunction $reflection, string $file, array &$fileTokens): bool
+    private static function closureNeverReachesThis(\ReflectionFunction $reflection, object $boundThis, string $file, array &$fileTokens): bool
     {
         $start = $reflection->getStartLine();
         $end = $reflection->getEndLine();
@@ -301,27 +310,60 @@ final class CompilerEnvironment
             $fileTokens[$file] = \PhpToken::tokenize($source);
         }
 
+        /** @var list<string> $boundClassNames short names that can call a method on `$this` */
+        $boundClassNames = [];
+
+        for ($class = $boundThis::class; $class !== false; $class = \get_parent_class($class)) {
+            $boundClassNames[] = self::lastSegment($class);
+        }
+
         $ownKeywordSeen = false;
+        $inImport = false;
+        $functionImport = false;
+        $previous = null;
 
         foreach ($fileTokens[$file] as $token) {
             if ($token->line > $end) {
                 break;
             }
 
-            if ($token->line < $start) {
+            if ($token->isIgnorable()) {
                 continue;
             }
 
-            // The first `function`/`fn` is the closure's own; a nested `static` one already hit T_STATIC.
-            if ($token->is([\T_FUNCTION, \T_FN])) {
+            if ($token->line < $start) {
+                if ($token->id === \T_USE) {
+                    // Also a closure's or a trait's `use`: misreading one only ever errs toward distrust.
+                    $inImport = true;
+                } elseif ($token->text === ';') {
+                    $inImport = false;
+                    $functionImport = false;
+                } elseif ($inImport && $token->id === \T_FUNCTION) {
+                    $functionImport = true;
+                } elseif ($inImport && $previous?->id === \T_AS) {
+                    $boundClassNames[] = self::lastSegment($token->text);
+                } elseif ($functionImport && \in_array(self::lastSegment($token->text), self::LEAKING_FUNCTIONS, true)) {
+                    return false;
+                }
+            } elseif ($token->is([\T_FUNCTION, \T_FN])) {
+                // The first `function`/`fn` is the closure's own; a nested `static` one already hit T_STATIC.
                 if ($ownKeywordSeen) {
                     return false;
                 }
 
                 $ownKeywordSeen = true;
-            } elseif (self::tokenMayReachThis($token)) {
+            } elseif (
+                self::tokenMayReachThis($token)
+                || ($token->id === \T_DOUBLE_COLON && (
+                    $previous === null
+                    || !$previous->is([\T_STRING, \T_NAME_QUALIFIED, \T_NAME_FULLY_QUALIFIED, \T_NAME_RELATIVE])
+                    || \in_array(self::lastSegment($previous->text), $boundClassNames, true)
+                ))
+            ) {
                 return false;
             }
+
+            $previous = $token;
         }
 
         return true;
@@ -331,14 +373,20 @@ final class CompilerEnvironment
     private static function tokenMayReachThis(\PhpToken $token): bool
     {
         // `\compact` and, in the global namespace, `namespace\compact` both call the built-in.
-        $name = \strtolower(\preg_replace('/^(?:namespace)?\\\\/i', '', $token->text) ?? $token->text);
+        $name = self::lastSegment($token->text);
 
         return match ($token->id) {
             \T_VARIABLE => $name === '$this',
-            \T_STRING, \T_NAME_FULLY_QUALIFIED, \T_NAME_RELATIVE => \in_array($name, ['self', 'parent', 'compact', 'debug_backtrace', 'debug_print_backtrace', 'get_called_class'], true),
+            \T_STRING, \T_NAME_FULLY_QUALIFIED, \T_NAME_RELATIVE => \in_array($name, ['self', 'parent', ...self::LEAKING_FUNCTIONS], true),
             \T_STATIC, \T_DOLLAR_OPEN_CURLY_BRACES, \T_EVAL, \T_INCLUDE, \T_INCLUDE_ONCE, \T_REQUIRE, \T_REQUIRE_ONCE => true,
             default => $token->text === '$',
         };
+    }
+
+    /** @psalm-pure */
+    private static function lastSegment(string $name): string
+    {
+        return \strtolower(\preg_replace('/^.*\\\\/', '', $name) ?? $name);
     }
 
     /**

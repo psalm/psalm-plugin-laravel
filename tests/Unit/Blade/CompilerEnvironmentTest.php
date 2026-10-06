@@ -13,6 +13,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\CompilerEnvironment;
 use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\BoundClosureProvider;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\CompactAliasProvider;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\DebugBacktraceAliasProvider;
 use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\DollarBraceProvider;
 
 #[CoversClass(CompilerEnvironment::class)]
@@ -196,6 +198,7 @@ final class CompilerEnvironmentTest extends TestCase
     {
         yield 'closure' => [(new BoundClosureProvider())->ignoresThis()];
         yield 'arrow fn' => [(new BoundClosureProvider())->arrowFnIgnoresThis()];
+        yield 'unrelated class static call' => [(new BoundClosureProvider())->callsUnrelatedStatic()];
     }
 
     /** @return iterable<string, array{\Closure}> */
@@ -225,6 +228,13 @@ final class CompilerEnvironmentTest extends TestCase
         yield 'namespace\\debug_backtrace' => [$globalProvider->usesRelativeDebugBacktrace()];
         yield 'nested arrow fn inheriting $this' => [$provider->nestedClosureCarriesThis()];
         yield 'nested function inheriting $this' => [$provider->nestedFunctionCarriesThis()];
+        yield 'own class name call' => [$provider->callsOwnClassMethod()];
+        yield 'own class name first-class callable' => [$provider->callsOwnClassMethodAsCallable()];
+        yield 'parent class name call' => [$provider->callsParentClassMethod()];
+        yield 'aliased class name call' => [$provider->callsAliasedClassMethod()];
+        yield 'variable class name call' => [$provider->callsVariableClassMethod()];
+        yield 'use function compact as alias' => [(new CompactAliasProvider())->usesAliasedCompact()];
+        yield 'use function debug_backtrace as alias' => [(new DebugBacktraceAliasProvider())->usesAliasedDebugBacktrace()];
         // Not closure literals: the method body lives elsewhere, so it stays untrusted by design.
         yield 'invokable object' => [\Closure::fromCallable($provider)];
         yield 'array callable' => [\Closure::fromCallable([$provider, 'compileWithoutThis'])];
