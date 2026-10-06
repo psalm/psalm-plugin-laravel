@@ -157,6 +157,55 @@ final class LoopParentReassertTest extends TestCase
         $this->assertSame($compiled, LoopParentReassert::apply($compiled));
     }
 
+    /** A heredoc BEFORE a nested pair must not leave the string tracker stuck on (the real loops would go unasserted). */
+    #[Test]
+    public function a_preceding_heredoc_does_not_hide_the_real_nested_loops(): void
+    {
+        $compiled = "<?php \$h = <<<EOT\nplain \$text\nEOT;\n?>\n"
+            . '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
+            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n";
+
+        $this->assertSame(1, \substr_count(LoopParentReassert::apply($compiled), '@var'));
+    }
+
+    #[Test]
+    public function a_heredoc_or_backtick_string_containing_the_pattern_is_ignored(): void
+    {
+        $pair = self::PUSH . ' ' . self::POP;
+        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
+            . "<?php \$h = <<<EOT\n{$pair}\nEOT;\n\$s = `{$pair}`; ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n";
+
+        $this->assertSame($compiled, LoopParentReassert::apply($compiled));
+    }
+
+    /** A backtick string BEFORE a nested pair must not leave the tracker stuck on either. */
+    #[Test]
+    public function a_preceding_backtick_string_does_not_hide_the_real_nested_loops(): void
+    {
+        $compiled = "<?php \$s = `ls`; ?>\n"
+            . '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
+            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n";
+
+        $this->assertSame(1, \substr_count(LoopParentReassert::apply($compiled), '@var'));
+    }
+
+    /** Sync lock: the stub cannot reference the PHP constant, so pin that the two spellings agree. */
+    #[Test]
+    public function the_stub_return_type_spells_the_same_loop_fields(): void
+    {
+        $stub = (string) \file_get_contents(__DIR__ . '/../../../stubs/common/View/Concerns/ManagesLoops.phpstub');
+
+        $this->assertStringContainsString(
+            '@return ' . self::frame('object|null'),
+            $stub,
+        );
+    }
+
     #[Test]
     public function a_comment_embedded_match_does_not_skew_the_depth_of_real_ones(): void
     {

@@ -202,4 +202,29 @@ final class ManagesLoopsTest extends TestCase
         $this->assertPipelineReachedAnalyzer($issues);
         $this->assertContains($expectedType, \array_column($reported, 'type'), \var_export($issues, true));
     }
+
+    /**
+     * Accepted soundness gap (#1696): the nested `$loop` frame is asserted by a compiler-emitted
+     * docblock, so a defensive guard on `$loop->parent` inside a nested loop is now provably
+     * redundant to Psalm. Pinned so a future drop gate shows up as a diff here.
+     */
+    #[Test]
+    public function defensive_parent_guards_in_a_nested_loop_report_as_redundant_known_limitation(): void
+    {
+        $issues = $this->analyze();
+        $reported = $this->forFile($issues, 'nested-guard-known-limitation.blade.php');
+
+        $this->assertTemplateCompiled('nested-guard-known-limitation.blade.php');
+        $this->assertPipelineReachedAnalyzer($issues);
+        $types = \array_column($reported, 'type');
+        \sort($types);
+        $this->assertSame(
+            \array_merge(
+                \array_fill(0, 2, 'DocblockTypeContradiction'),
+                \array_fill(0, 5, 'RedundantConditionGivenDocblockType'),
+            ),
+            $types,
+            \var_export($reported, true),
+        );
+    }
 }
