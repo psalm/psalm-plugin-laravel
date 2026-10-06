@@ -230,8 +230,7 @@ jobs:
           tools: composer:v2
 
       # Cache installed app source (clone + vendor) keyed on the immutable ref, so
-      # steady-state runs skip the cold composer install (dominant cost). Workspace
-      # path is stable, so the plugin path-repo symlink in vendor stays valid.
+      # steady-state runs skip the cold composer install (dominant cost).
       #
       # hashFiles(plugin-base/composer.json) namespaces the key by the measured
       # plugin's deps (superset of delta-app.sh's plugin_dep_sig, which determines
@@ -258,7 +257,6 @@ jobs:
           NAME: ${{ matrix.name }}
           REPO: ${{ matrix.repo }}
           REF: ${{ matrix.ref }}
-          PHP: ${{ matrix.php }}
           PROJECT_DIR: ${{ matrix.project_dir }}
           BEFORE_INSTALL: ${{ matrix.before_install }}
           PSALM_ARGS: ${{ matrix.psalm_args }}
@@ -268,14 +266,13 @@ jobs:
         run: |
           mkdir -p out
           args=(
-            --app "$NAME" --repo "$REPO" --ref "$REF" --php "$PHP"
+            --app "$NAME" --repo "$REPO" --ref "$REF"
             --plugin-base "$GITHUB_WORKSPACE/plugin-base"
             --plugin-head "$GITHUB_WORKSPACE/plugin-pr"
             --out "$GITHUB_WORKSPACE/out"
             --base-label "$BASE_LABEL"
             --head-label "$HEAD_LABEL"
             --app-src "$GITHUB_WORKSPACE/app-cache/$NAME"
-            --date-marker cache
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
           [ -n "$BEFORE_INSTALL" ] && args+=(--before-install "$BEFORE_INSTALL")
@@ -378,7 +375,7 @@ jobs:
             printf '%s\n' "$MARKER"
             php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
               --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
-              --date-marker=cache --details --selection="$SELECTION" --flags="$FLAGS" \
+              --details --selection="$SELECTION" --flags="$FLAGS" \
               || echo "Delta failed to produce a report. Check the workflow logs."
           } > comment.md
           # Quoted heredoc: literal backticks for the inline code span, no expansion.

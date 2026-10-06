@@ -16,11 +16,12 @@ declare(strict_types=1);
  *   * apps that ran clean with zero delta, and apps that crashed (tagged with
  *     the crashing side) — kept in separate buckets
  *
- * File layout (written by delta-app.sh, identical to bench.sh):
- *   <output_dir>/<app>/<app>-<label>-<date-marker>--issues.json
- *   <output_dir>/<app>/<app>-<label>-<date-marker>--perf.json
+ * File layout (written by delta-app.sh):
+ *   <output_dir>/<app>/<app>-<label>--issues.json
+ *   <output_dir>/<app>/<app>-<label>--perf.json
+ *   <output_dir>/<app>/<app>-<label>--crash.log   (only when the side crashed)
  *
- * Issue identity is the multiset of (file_path, line_from, line_to,
+ * Issue identity is the multiset of (file_name, line_from, line_to,
  * column_from, column_to, type, message), so a PR fixing 50 issues and
  * introducing 50 new ones reports +50/-50 instead of ΔNet=0. Leftover
  * removed/added entries on the same file, line_from and type with a different
@@ -30,8 +31,7 @@ declare(strict_types=1);
  *   php delta-report.php <output_dir> <base_label> <head_label> \
  *       --apps=monica,pixelfed,coolify \
  *       [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] \
- *       [--date-marker=cache] [--details] [--selection='default + octane'] \
- *       [--flags='--blade']
+ *       [--details] [--selection='default + octane'] [--flags='--blade']
  *
  * --details prints the changed, added and removed entries and crash text. They
  * carry file paths and issue messages, so they are OFF by default (safe for a
@@ -89,7 +89,7 @@ foreach (array_slice($argv, 1) as $arg) {
 
 $fail = static function (string $message): never {
     fwrite(STDERR, "Error: {$message}\n");
-    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache] [--details] [--selection=label] [--flags='--blade']\n");
+    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--details] [--selection=label] [--flags='--blade']\n");
     exit(2);
 };
 
@@ -110,7 +110,6 @@ $baseRef = $options['base-ref'] ?? '';
 $headRef = $options['head-ref'] ?? '';
 $baseSha = $options['base-sha'] ?? '';
 $headSha = $options['head-sha'] ?? '';
-$dateMarker = $options['date-marker'] ?? 'cache';
 $details = isset($options['details']);
 $selection = $options['selection'] ?? '';
 $flags = $options['flags'] ?? '';
@@ -126,37 +125,13 @@ const ORDER_DEPENDENT_TYPES = ['MissingPureAnnotation'];
 const DETAILS_CAP = 10;
 const DETAILS_BUDGET = 40_000;
 
-/**
- * Newest file matching <app>-<label>-<date-marker>--<suffix>, or null.
- *
- * Mirrors compare.py's _latest: the date component anchors the match so label
- * "v4.10.0" does not also match "v4.10.0-pr905--...". With a literal marker
- * (e.g. "cache") there is a single deterministic name; the glob still sorts so
- * a yyyy-mm-dd marker would pick the most recent.
- */
-$latest = static function (string $outputDir, string $app, string $label, string $suffix, string $dateMarker): ?string {
-    if ($dateMarker === 'yyyy-mm-dd') {
-        $dateGlob = '\d\d\d\d-\d\d-\d\d';
-    } else {
-        $dateGlob = $dateMarker;
-    }
-
-    $pattern = "{$outputDir}/{$app}/{$app}-{$label}-{$dateGlob}--{$suffix}";
-    $matches = glob($pattern);
-    if ($matches === false || $matches === []) {
-        return null;
-    }
-
-    sort($matches);
-
-    return $matches[array_key_last($matches)];
-};
+$sideFile = static fn(string $app, string $label, string $suffix): string => "{$outputDir}/{$app}/{$app}-{$label}--{$suffix}";
 
 /**
  * @return array<array-key, mixed>|null  decoded JSON array, or null on any failure
  */
-$loadJson = static function (?string $path): ?array {
-    if ($path === null || !is_file($path)) {
+$loadJson = static function (string $path): ?array {
+    if (!is_file($path)) {
         return null;
     }
 
@@ -181,11 +156,11 @@ $loadJson = static function (?string $path): ?array {
  *   --- stdout ---
  * The trailing " in /path:line" is dropped so the message stays readable.
  */
-$crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLabel, $headLabel, $dateMarker): array {
+$crashExcerpt = static function (string $app) use ($sideFile, $baseLabel, $headLabel): array {
     $sides = [];
     foreach (['base' => $baseLabel, 'head' => $headLabel] as $side => $label) {
-        $path = $latest($outputDir, $app, $label, 'crash.log', $dateMarker);
-        if ($path === null || !is_file($path)) {
+        $path = $sideFile($app, $label, 'crash.log');
+        if (!is_file($path)) {
             continue;
         }
 
@@ -228,7 +203,8 @@ $crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLab
  */
 $issueKey = static function (array $i): string {
     return implode("\x00", [
-        (string) ($i['file_path'] ?? ''),
+        // Psalm's file_name is relative to the psalm.xml dir, so it reads well in --details.
+        (string) ($i['file_name'] ?? ''),
         (string) ($i['line_from'] ?? 0),
         (string) ($i['line_to'] ?? 0),
         (string) ($i['type'] ?? '?'),
@@ -348,8 +324,8 @@ $rows = [];
 $missing = [];
 
 foreach ($apps as $app) {
-    $baseIssues = $loadJson($latest($outputDir, $app, $baseLabel, 'issues.json', $dateMarker));
-    $headIssues = $loadJson($latest($outputDir, $app, $headLabel, 'issues.json', $dateMarker));
+    $baseIssues = $loadJson($sideFile($app, $baseLabel, 'issues.json'));
+    $headIssues = $loadJson($sideFile($app, $headLabel, 'issues.json'));
 
     if (!is_array($baseIssues) || !array_is_list($baseIssues)
         || !is_array($headIssues) || !array_is_list($headIssues)) {
@@ -472,8 +448,8 @@ $perfNum = static function (?array $perf, string $key): ?float {
 /** @var list<array{app: string, baseWall: float|null, headWall: float|null, baseCov: float|null, headCov: float|null}> $perfRows */
 $perfRows = [];
 foreach ($apps as $app) {
-    $basePerf = $loadJson($latest($outputDir, $app, $baseLabel, 'perf.json', $dateMarker));
-    $headPerf = $loadJson($latest($outputDir, $app, $headLabel, 'perf.json', $dateMarker));
+    $basePerf = $loadJson($sideFile($app, $baseLabel, 'perf.json'));
+    $headPerf = $loadJson($sideFile($app, $headLabel, 'perf.json'));
     $perfRows[] = [
         'app' => $app,
         'baseWall' => $perfNum($basePerf, 'wall_seconds'),
@@ -725,34 +701,6 @@ if ($covLines === []) {
     foreach ($covLines as $covLine) {
         $out[] = $covLine;
     }
-}
-
-// Weighted ΔCov: one headline coverage move across all apps. A plain mean of
-// the per-app Δ would weight a one-file lib equal to a 5k-file app, so each
-// app's Δ is weighted by its base wall_seconds (analysis time — a cheap proxy
-// for codebase size; perf.json carries no file count). Only apps with coverage
-// on both sides and a positive base wall contribute; the total can therefore
-// differ from a naive sum of the Δ column.
-$weightNum = 0.0;
-$weightDen = 0.0;
-foreach ($perfRows as $p) {
-    if ($p['baseCov'] === null || $p['headCov'] === null || $p['baseWall'] === null || $p['baseWall'] <= 0) {
-        continue;
-    }
-
-    $weightNum += ($p['headCov'] - $p['baseCov']) * (float) $p['baseWall'];
-    $weightDen += (float) $p['baseWall'];
-}
-
-// Only as a footer row of the coverage table, and only when something moved —
-// otherwise it would dangle as a header-less table row under "No changes".
-if ($covLines !== [] && $weightDen > 0.0) {
-    $out[] = sprintf('| **Weighted Δ** | — | — | **%+.2f** |', $weightNum / $weightDen);
-    $out[] = '';
-    $out[] = sprintf(
-        '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size). Moves under ±%.3f are hidden as parallel-analysis jitter._',
-        $covNoiseFloor,
-    );
 }
 
 // Split "no issues.json" apps into genuine crashes (a crash log exists on at
