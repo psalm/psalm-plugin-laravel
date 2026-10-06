@@ -52,7 +52,7 @@ Bootstrap failures are a special case: `ApplicationProvider` swallows a `bootstr
 
 ### Blade shadow files
 
-Behind [`<blade />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. `stillat/blade-parser` (read only by `Blade\ContractParser`) is an optional `suggest` dependency, because it requires `laravel/framework`; `BladeBootstrapper::run()` degrades the feature with one warning when it is absent, never runs with contracts silently empty. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
+Behind [`<blade />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. `Blade\ContractParser` reads `@var`/`@props` declarations from the template source using `MarkerPrePass` masking and nikic/php-parser. `BladeBootstrapper::run()` degrades the feature with one warning when the compiler or view finder cannot be resolved, never runs with contracts silently empty. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
 
 The registrations, deliberately asymmetric (`Blade\PsalmShadowRegistrar`):
 

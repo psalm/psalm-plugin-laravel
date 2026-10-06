@@ -17,7 +17,7 @@ namespace Psalm\LaravelPlugin\Blade;
 final class MarkerPrePass
 {
     // Comments and strings are indivisible: their parentheses never affect argument depth.
-    private const ARGUMENT_PATTERN = <<<'REGEX'
+    public const ARGUMENT_PATTERN = <<<'REGEX'
     (?<args>\((?>\/\*.*?\*\/|\/\/[^\r\n]*|#(?!\[)[^\r\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^()'"\/#]|\/(?![\/*])|#(?=\[)|(?&args))*\))
     REGEX;
 
@@ -54,14 +54,22 @@ final class MarkerPrePass
      * tags. Shared by computeSkipLines() (these bodies get no per-line marker) and
      * extendsLine() (an `@extends` found inside one of these is not a live directive).
      *
+     * Public because {@see ContractParser} reads Blade-comment and @props spans off the same
+     * construct boundaries — a caller that derived them differently would disagree with the
+     * compiler about which text is live.
+     *
      * @return list<array{0: string, 1: int}>
      *
      * @psalm-pure
      */
-    private static function maskedRanges(string $source): array
+    public static function maskedRanges(string $source): array
     {
         // Consume the earliest construct first: PHP-like text inside a Blade comment is inert.
-        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)/s';
+        // `<\?` alone (not `<\?(?:php\b|=)`): a bare `<?` only opens PHP when short_open_tag is
+        // on, and the token_get_all() check right below already tells live code from literal
+        // text under whichever setting is active — matching broader here and narrowing there
+        // keeps this in sync with the SAME tokenizer Blade itself compiles through.
+        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?/s';
         $ranges = [];
         $cursor = 0;
         while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {
@@ -317,11 +325,14 @@ final class MarkerPrePass
      * Replaces each given range with spaces, keeping newlines intact so line numbers and byte
      * offsets stay identical to $source.
      *
+     * Public because {@see ContractParser} blanks the same masked ranges to scan for `@props`
+     * without the directive name appearing a second time inside a comment or verbatim body.
+     *
      * @param list<array{0: string, 1: int}> $ranges
      *
      * @psalm-pure
      */
-    private static function blankRanges(string $source, array $ranges): string
+    public static function blankRanges(string $source, array $ranges): string
     {
         $out = '';
         $cursor = 0;

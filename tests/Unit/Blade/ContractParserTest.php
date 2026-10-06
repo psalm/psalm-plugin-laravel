@@ -106,27 +106,175 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function suppression_attaches_to_the_next_real_statement_line(): void
+    public function a_var_comment_after_a_props_entry_wins_the_name(): void
     {
-        $contract = $this->parse("{{-- @psalm-suppress UndefinedVariable --}}\n{{ \$foo }}\n");
+        // Document order, not kind: whichever declaration comes LATER in the template wins a
+        // name collision, matching the `@props`/`@var` combo the "type a component prop" pattern
+        // writes.
+        $contract = $this->parse("@props(['user'])\n{{-- @var \\App\\Models\\User \$user --}}\n{{ \$user->name }}\n");
 
-        $this->assertSame(['UndefinedVariable'], $contract->suppressions[2] ?? null);
+        $this->assertSame('\App\Models\User', $contract->vars['user']->typeString);
+        $this->assertSame(2, $contract->vars['user']->declarationLine);
+        $this->assertFalse($contract->vars['user']->optional);
     }
 
     #[Test]
-    public function comma_separated_suppression_yields_every_rule(): void
+    public function a_props_entry_after_a_var_comment_wins_the_name(): void
     {
-        $contract = $this->parse("{{-- @psalm-suppress UndefinedVariable, MixedArgument --}}\n{{ \$foo }}\n");
+        $contract = $this->parse("{{-- @var \\App\\Models\\User \$user --}}\n@props(['user'])\n{{ \$user->name }}\n");
 
-        $this->assertSame(['UndefinedVariable', 'MixedArgument'], $contract->suppressions[2] ?? null);
+        $this->assertSame('mixed', $contract->vars['user']->typeString);
+        $this->assertSame(2, $contract->vars['user']->declarationLine);
+        $this->assertFalse($contract->vars['user']->optional);
     }
 
     #[Test]
-    public function suppression_is_dropped_when_nothing_follows(): void
+    public function a_props_call_inside_a_blade_comment_is_not_live(): void
     {
-        $contract = $this->parse("content\n{{-- @psalm-suppress Foo --}}\n");
+        $contract = $this->parse("{{-- @props(['a']) --}}\n<div></div>\n");
 
-        $this->assertSame([], $contract->suppressions);
+        $this->assertArrayNotHasKey('a', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_props_call_inside_verbatim_is_not_live(): void
+    {
+        $contract = $this->parse("@verbatim @props(['a']) @endverbatim\n<div></div>\n");
+
+        $this->assertArrayNotHasKey('a', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function an_escaped_props_directive_is_not_live(): void
+    {
+        $contract = $this->parse("@@props(['a'])\n<div></div>\n");
+
+        $this->assertArrayNotHasKey('a', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_closing_paren_inside_a_props_string_does_not_close_the_argument_list_early(): void
+    {
+        $contract = $this->parse("@props(['a' => ')'])\n<div>{{ \$a }}</div>\n");
+
+        $this->assertArrayHasKey('a', $contract->vars);
+        $this->assertTrue($contract->vars['a']->optional);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function props_text_inside_another_directives_string_argument_is_not_a_declaration(): void
+    {
+        // The `@props(...)` text here sits inside `@php`'s own argument (a quoted string), never as
+        // a live directive of its own; a scan that re-enters an already-consumed argument span
+        // would misread it as a second, phantom `@props` declaring `$phantom`.
+        $contract = $this->parse("@php(\$example = \"@props(['phantom'])\")\n<div></div>\n");
+
+        $this->assertArrayNotHasKey('phantom', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function the_literal_text_props_inside_a_props_strings_default_value_does_not_confuse_the_scan(): void
+    {
+        $contract = $this->parse("@props(['hint' => 'Use @props for inputs'])\n<div>{{ \$hint }}</div>\n");
+
+        $this->assertArrayHasKey('hint', $contract->vars);
+        $this->assertTrue($contract->vars['hint']->optional);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_php_comment_inside_a_props_argument_does_not_declare_a_nested_props_name(): void
+    {
+        $contract = $this->parse("@props(['a' /* @props(['b']) */])\n<div>{{ \$a }}</div>\n");
+
+        $this->assertArrayHasKey('a', $contract->vars);
+        $this->assertFalse($contract->vars['a']->optional);
+        $this->assertArrayNotHasKey('b', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_blank_line_before_unrelated_parens_does_not_extend_the_previous_directive(): void
+    {
+        // Blade only skips SAME-LINE whitespace (`[ \t]*`) between a directive name and its `(`:
+        // a scan that also skips newlines would let `@endif` (which never takes an argument)
+        // swallow this unrelated, later parenthesised `@props` as its own "argument".
+        $contract = $this->parse("@if(true)\nhello\n@endif\n(\n@props(['real'])\n)");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_props_call_after_email_like_text_is_still_found(): void
+    {
+        // Blade's own directive regex is anchored `\B@`: a `@` preceded by a word character
+        // (`a@example`) is never a directive at all, so the LATER, genuine `@props(...)` must
+        // still be found independently, not swallowed as "@example"'s argument.
+        $contract = $this->parse("a@example(@props(['real']))");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_directive_argument_cannot_span_a_raw_php_tag(): void
+    {
+        // Blade tokenizes the WHOLE template first and compiles each T_INLINE_HTML segment
+        // independently: a `(` before a raw PHP open tag and the real `@props(...)` after it are
+        // never in the same segment, so `@unknown`'s "argument" can never reach past the tag to
+        // swallow the genuine declaration.
+        $contract = $this->parse("@unknown(<?php echo 'hello'; ?>\n@props(['real']))");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_later_live_props_is_still_declared_alongside_a_phantom_free_scan(): void
+    {
+        $contract = $this->parse("@php(\$x = \"@props(['phantom'])\")\n@props(['real'])\n<div>{{ \$real }}</div>\n");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertArrayNotHasKey('phantom', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_short_open_tag_is_a_boundary_when_enabled(): void
+    {
+        if (!\filter_var(\ini_get('short_open_tag'), \FILTER_VALIDATE_BOOL)) {
+            $this->markTestSkipped('short_open_tag is off for this run (PHP_INI_PERDIR, no runtime toggle).');
+        }
+
+        // Same shape as a_directive_argument_cannot_span_a_raw_php_tag(), with the bare `<?`
+        // spelling Blade's own tokenizer also opens PHP mode for when short tags are on.
+        $contract = $this->parse("@unknown(<? echo 'hello'; ?>\n@props(['real']))");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_short_open_tag_is_not_a_boundary_when_disabled(): void
+    {
+        if (\filter_var(\ini_get('short_open_tag'), \FILTER_VALIDATE_BOOL)) {
+            $this->markTestSkipped('short_open_tag is on for this run (PHP_INI_PERDIR, no runtime toggle).');
+        }
+
+        // Same shape as a_short_open_tag_is_a_boundary_when_enabled(): with short tags off, a
+        // bare `<?` is inline HTML text, not a PHP opener, so it creates no segment boundary —
+        // `@unknown`'s argument still spans straight through to the final `)`, exactly as any
+        // other plain text would, same as before this directive-boundary work existed.
+        $contract = $this->parse("@unknown(<? echo 'hello'; ?>\n@props(['real']))");
+
+        $this->assertArrayNotHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
     }
 
     #[Test]
@@ -220,15 +368,39 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function multi_byte_lines_before_a_suppression_do_not_throw_off_its_target_line(): void
+    public function a_var_comment_inside_verbatim_is_not_a_declaration(): void
     {
-        $source = "Héllo wörld with émoji 😀 and more unicode chars here\n"
-            . "{{-- @psalm-suppress UndefinedVariable --}}\n"
-            . "{{ \$foo }}\n";
+        // Blade emits a @verbatim body as literal text: a `{{-- @var --}}` spelling inside it
+        // never reaches the compiler as a comment and must not be read as a declaration either.
+        $source = "@verbatim\n{{-- @var \\App\\Models\\User \$user --}}\n@endverbatim\n{{ \$user }}\n";
 
         $contract = $this->parse($source);
 
-        $this->assertSame(['UndefinedVariable'], $contract->suppressions[3] ?? null);
+        $this->assertArrayNotHasKey('user', $contract->vars);
+    }
+
+    #[Test]
+    public function a_var_comment_inside_a_php_block_is_not_a_declaration(): void
+    {
+        // The `{{-- --}}` text here is a PHP comment inside live code, not a Blade comment: Blade
+        // never strips it, so it must not be read as a `@var` declaration.
+        $source = "@php\n// {{-- @var \\App\\Models\\User \$user --}}\n@endphp\n{{ \$user }}\n";
+
+        $contract = $this->parse($source);
+
+        $this->assertArrayNotHasKey('user', $contract->vars);
+    }
+
+    #[Test]
+    public function a_bare_cr_line_before_a_var_comment_does_not_throw_off_its_declaration_line(): void
+    {
+        // A bare `\r` ends a line for Blade and PHP alike; counting `\n` alone would misplace the
+        // declaration by a line.
+        $source = "first line\r{{-- @var \\App\\Models\\User \$user --}}\r{{ \$user->name }}\r";
+
+        $contract = $this->parse($source);
+
+        $this->assertSame(2, $contract->vars['user']->declarationLine);
     }
 
     #[Test]
