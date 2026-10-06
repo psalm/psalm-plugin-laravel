@@ -117,13 +117,13 @@ final class AnalyzeCommand extends Command
         }
 
         $forwarded = $scan['forwarded'];
-        $boundary = \array_search('--', $forwarded, true);
-        $psalmFlags = $boundary === false ? $forwarded : \array_slice($forwarded, 0, $boundary);
 
         // Toggling `blade` changes which files are analysed under an identical config hash, and psalm's
         // persisted file-reference cache keeps the shadows' references (stale dead-code findings) on an
         // on->off flip. Only `--no-reference-cache` fixes that; every other setting is report-only.
-        if ($effective->has('blade') && \array_intersect(['--no-cache', '--no-reference-cache'], $psalmFlags) === []) {
+        // Prepended, never appended or skipped on a user's `--no-cache`: psalm's getopt stops at the first
+        // positional, so the wrapper cannot tell which later flags psalm parses. Duplicates are harmless.
+        if ($effective->has('blade')) {
             \array_unshift($forwarded, '--no-reference-cache');
         }
 

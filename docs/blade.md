@@ -64,7 +64,7 @@ PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm --no-reference-cache   # sam
 * Precedence: `--blade`/`--no-blade`/`--plugin-option blade=…` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default (off). Of repeated flags the last one wins.
 * Only the on/off decision is overridden by `blade=…`. The other `<blade>` settings ([`cacheDir`](#cachedir), `validateViewData`, …) come from the XML, or from their own keys such as `--plugin-option 'blade.cacheDir=/tmp/blade shadows'`; those never switch Blade on by themselves.
 * `PSALM_LARAVEL_OPTIONS` is a process environment variable read by the plugin before the app boots, not a Laravel `.env` entry. See [Per-run overrides](config.md#per-run-overrides) for the full grammar and the other keys.
-* Psalm's persisted file-reference cache outlives the toggle: after Blade analysis ran, the shadows' references stay in it, so a run with Blade off can lose dead-code findings such as `UnusedClass` for classes only templates used. `analyze` adds `--no-reference-cache` whenever it sees a `blade` override (it is skipped if you pass `--no-cache` or `--no-reference-cache` yourself); a bare `vendor/bin/psalm` needs the flag typed by hand, as above. Other settings do not need it, see [Result cache](config.md#result-cache).
+* Psalm's persisted file-reference cache outlives the toggle: after Blade analysis ran, the shadows' references stay in it, so a run with Blade off can lose dead-code findings such as `UnusedClass` for classes only templates used. `analyze` always adds `--no-reference-cache` (as the first argument) when it sees a `blade` override; a bare `vendor/bin/psalm` needs the flag typed by hand, as above. Other settings do not need it, see [Result cache](config.md#result-cache).
 
 ## Suppressing issues
 

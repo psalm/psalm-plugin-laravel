@@ -380,8 +380,13 @@ final class AnalyzeCommandTest extends TestCase
         yield 'blade sub-settings only' => [['--plugin-option', 'blade.cacheDir=/tmp/x'], 'blade.validateViewData=true', []];
         yield 'other keys only' => [['--plugin-option', 'experimental=true'], 'configDirectory=a', []];
         yield 'no overrides' => [['--threads=1'], null, ['--threads=1']];
-        yield 'user passed --no-cache' => [['--blade', '--no-cache'], null, ['--no-cache']];
-        yield 'user passed --no-reference-cache' => [['--no-reference-cache', '--blade'], null, [$flag]];
+        // psalm tolerates the duplicates; the wrapper cannot know which flags psalm's getopt will parse.
+        yield 'user passed --no-cache' => [['--blade', '--no-cache'], null, [$flag, '--no-cache']];
+        yield 'user passed --no-reference-cache' => [['--no-reference-cache', '--blade'], null, [$flag, $flag]];
+        yield 'flag lands before a positional path' => [['--blade', 'src'], null, [$flag, 'src']];
+        yield 'getopt stops at the first positional, so a later --no-cache is not parsed' => [
+            ['--no-blade', '--find-dead-code=always', 'src', '--no-cache'], null, [$flag, '--find-dead-code=always', 'src', '--no-cache'],
+        ];
         yield 'a boundary hides psalm flags after it' => [['--blade', '--', '--no-cache'], null, [$flag, '--', '--no-cache']];
     }
 
@@ -391,7 +396,7 @@ final class AnalyzeCommandTest extends TestCase
      */
     #[Test]
     #[DataProvider('referenceCacheGate')]
-    public function blade_overrides_add_no_reference_cache_unless_the_cache_is_already_off(array $args, ?string $env, array $expected): void
+    public function blade_overrides_prepend_no_reference_cache_before_every_forwarded_token(array $args, ?string $env, array $expected): void
     {
         if ($env !== null) {
             \putenv('PSALM_LARAVEL_OPTIONS=' . $env);
