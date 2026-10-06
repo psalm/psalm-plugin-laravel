@@ -1,8 +1,0 @@
-<?php
-
-namespace Laravel\Ai\Contracts;
-
-interface Question
-{
-    public function toArray(): array;
-}

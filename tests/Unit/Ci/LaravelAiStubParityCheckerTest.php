@@ -161,9 +161,9 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         ];
 
         yield 'vendor-only public method' => [
-            self::mutate('Promptable', 'public static function assertNeverQueued(): void {}', ''),
+            self::mutate('Promptable', 'public static function make(...$arguments): static {}', ''),
             1,
-            ['assertNeverQueued(): public method exists'],
+            ['make(): public method exists'],
             [],
         ];
         yield 'vendor-only protected method' => [
@@ -232,11 +232,11 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         }
 
         // `@stub-waive`: an omitted member the class docblock waives is still printed (with its reason) but is not fatal.
-        $dropped = self::mutate('Promptable', 'public static function assertNeverQueued(): void {}', '');
-        $listed = ['Waived by @stub-waive', 'assertNeverQueued(): public method exists', '(@stub-waive: assertions need no taint review)'];
+        $dropped = self::mutate('Promptable', 'public static function make(...$arguments): static {}', '');
+        $listed = ['Waived by @stub-waive', 'make(): public method exists', '(@stub-waive: a factory with no text)'];
 
         yield 'waived omitted public method' => [
-            self::tagClass($dropped, 'trait Promptable', '@stub-waive assertNeverQueued() assertions need no taint review'),
+            self::tagClass($dropped, 'trait Promptable', '@stub-waive make() a factory with no text'),
             0,
             $listed,
             ['Signature drift detected', 'no longer matches'],
@@ -274,26 +274,120 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         yield 'a waiver naming a different member does not waive' => [
             self::tagClass($dropped, 'trait Promptable', '@stub-waive getTimeout() no text'),
             1,
-            ['assertNeverQueued(): public method exists', '::warning::Waiver `@stub-waive getTimeout()`'],
-            ['Waived by @stub-waive'],
+            ['make(): public method exists', '::warning::Waiver `@stub-waive getTimeout()`'],
+            ['make(): public method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
         ];
         yield 'a waiver without a reason is an error' => [
-            self::tagClass($dropped, 'trait Promptable', '@stub-waive assertNeverQueued()'),
+            self::tagClass($dropped, 'trait Promptable', '@stub-waive make()'),
             1,
-            ['`@stub-waive assertNeverQueued()` has no reason', 'assertNeverQueued(): public method exists'],
-            ['Waived by @stub-waive'],
+            ['`@stub-waive make()` has no reason', 'make(): public method exists'],
+            ['make(): public method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
         ];
         yield 'a waiver that lost its member is stale' => [
-            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive assertNeverQueued() assertions need no taint review'),
+            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive make() a factory with no text'),
             0,
-            ['::warning::Waiver `@stub-waive assertNeverQueued()` on Laravel\Ai\Promptable no longer matches any finding'],
-            ['Waived by @stub-waive'],
+            ['::warning::Waiver `@stub-waive make()` on Laravel\Ai\Promptable no longer matches any finding'],
+            ['Promptable::make()'],
         ];
         yield 'a waiver for a member the vendor dropped is stale' => [
             self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive removedUpstream() was removed in a later release'),
             0,
             ['::warning::Waiver `@stub-waive removedUpstream()`'],
             [],
+        ];
+
+        // A trailing `*` waives a PREFIX family, one tag for many members; each member is still listed with the reason.
+        $withoutGetters = self::replaceIn(
+            self::replaceIn(
+                self::mutate('Promptable', 'protected function getTimeout(?int $timeout): int {}', ''),
+                'protected function getDefaultModelFor(TextProvider $provider): string {}',
+                '',
+            ),
+            'protected function getProvidersAndModels(Lab|array|string|null $provider, ?string $model): array {}',
+            '',
+        );
+        yield 'a wildcard waives every member with the prefix and lists each' => [
+            self::tagClass($withoutGetters, 'trait Promptable', '@stub-waive get*() provider, model and timeout resolution; no text'),
+            0,
+            [
+                'Waived by @stub-waive',
+                'Promptable::getTimeout(): protected method exists',
+                'Promptable::getDefaultModelFor(): protected method exists',
+                'Promptable::getProvidersAndModels(): protected method exists',
+                '(@stub-waive: provider, model and timeout resolution; no text)',
+            ],
+            ['Signature drift detected', 'no longer matches'],
+        ];
+        yield 'a wildcard waives only members it matches' => [
+            self::tagClass($withoutGetters, 'trait Promptable', '@stub-waive getT*() the timeout clamp; no text'),
+            1,
+            [
+                'Promptable::getTimeout(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive: the timeout clamp; no text)',
+                'Promptable::getDefaultModelFor(): protected method exists in installed laravel/ai but is missing from the stub',
+            ],
+            ['Promptable::getDefaultModelFor(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
+        ];
+        yield 'a property wildcard waives properties, not methods' => [
+            self::tagClass(
+                self::mutate('Promptable', 'protected ?array $adHocMessages = null;', ''),
+                'trait Promptable',
+                '@stub-waive $adHoc* only holds already-sunk messages',
+            ),
+            0,
+            ['adHocMessages: public/protected property exists', '(@stub-waive: only holds already-sunk messages)'],
+            ['Signature drift detected'],
+        ];
+        yield 'a wildcard matching nothing is stale' => [
+            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive zzz*() nothing starts with this'),
+            0,
+            ['::warning::Waiver `@stub-waive zzz*()` on Laravel\Ai\Promptable no longer matches any finding'],
+            ['Waived by @stub-waive: zzz'],
+        ];
+        yield 'a wildcard without a reason is an error' => [
+            self::tagClass($withoutGetters, 'trait Promptable', '@stub-waive get*()'),
+            1,
+            ['`@stub-waive get*()` has no reason', 'getTimeout(): protected method exists'],
+            ['getTimeout(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
+        ];
+        foreach (['*', '*()', '$*'] as $bare) {
+            yield "a bare {$bare} target is an error" => [
+                self::tagClass($withoutGetters, 'trait Promptable', "@stub-waive {$bare} everything is fine"),
+                1,
+                ["`@stub-waive {$bare}` would waive every omitted member", 'getTimeout(): protected method exists'],
+                ['Waived by @stub-waive: everything'],
+            ];
+        }
+
+        // The `*` is a prefix marker only at the very end of a name; any other position is not a target at all.
+        foreach (['*Timeout()', 'get*Timeout()', 'get**()', 'get*'] as $misplaced) {
+            yield "a wildcard at {$misplaced} is not a target" => [
+                self::tagClass($withoutGetters, 'trait Promptable', "@stub-waive {$misplaced} no text"),
+                1,
+                ['needs a target', 'getTimeout(): protected method exists'],
+                ['getTimeout(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
+            ];
+        }
+
+        // Two classes in one file: the wildcard on `Audio` must not waive the same-named members of `Image`.
+        $imageWithoutAssertWaiver = self::mutate(
+            'Image',
+            " * @stub-waive assert*()  test-double assertions; recorded calls, never model-facing text\n",
+            '',
+        );
+        $imageClass = \substr($imageWithoutAssertWaiver, (int) \strpos($imageWithoutAssertWaiver, "/**\n * Only the test-double"));
+        yield 'a wildcard does not leak across classes' => [
+            self::replaceIn(
+                self::stub('Audio'),
+                "use Laravel\\Ai\\PendingResponses\\PendingAudioGeneration;\n",
+                "use Laravel\\Ai\\PendingResponses\\PendingAudioGeneration;\nuse Laravel\\Ai\\PendingResponses\\PendingImageGeneration;\n",
+            ) . "\n" . $imageClass,
+            1,
+            [
+                'Laravel\Ai\Audio::assertGenerated(): public method exists in installed laravel/ai but is missing from the stub (@stub-waive: test-double assertions',
+                'Laravel\Ai\Image::assertGenerated(): public method exists in installed laravel/ai but is missing from the stub',
+                'Laravel\Ai\Image::fake(): public method exists in installed laravel/ai but is missing from the stub (@stub-waive: test double',
+            ],
+            ['Laravel\Ai\Image::assertGenerated(): public method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
         ];
         // Class-level and member-level waivers must not cross: the former is for omissions only.
         yield 'a class-level waiver does not mute drift on a declared member' => [
@@ -304,7 +398,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ),
             1,
             ['withTools($tools): stub says "Closure|array"', '::warning::Waiver `@stub-waive withTools()`'],
-            ['Waived by @stub-waive'],
+            ['says "Closure|Traversable|array" (@stub-waive'],
         ];
 
         $drifting = self::replaceIn(
@@ -322,18 +416,24 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             \str_replace('@@REASON@@', '', $drifting),
             1,
             ['`@stub-waive` has no reason', 'withTools($tools): stub says "Closure|array"'],
-            ['Waived by @stub-waive'],
+            ['says "Closure|Traversable|array" (@stub-waive'],
         ];
         yield 'member-level waiver that no longer reproduces is stale' => [
             \str_replace(['@@REASON@@', 'Closure|array $tools'], ['narrowed on purpose', 'Closure|iterable $tools'], $drifting),
             0,
             ['::warning::Waiver `@stub-waive` on Laravel\Ai\Promptable::withTools no longer matches any finding'],
-            ['Waived by @stub-waive'],
+            ['(@stub-waive: narrowed on purpose'],
         ];
         yield 'member-level waiver with a target is an error' => [
             \str_replace('@@REASON@@', 'withTools() narrowed on purpose', $drifting),
             1,
             ['`@stub-waive withTools()` names a target'],
+            [],
+        ];
+        yield 'a wildcard in a member docblock is an error' => [
+            \str_replace('@@REASON@@', 'with*() narrowed on purpose', $drifting),
+            1,
+            ['`@stub-waive with*()` names a target'],
             [],
         ];
         yield 'class-level waiver without a target is an error' => [

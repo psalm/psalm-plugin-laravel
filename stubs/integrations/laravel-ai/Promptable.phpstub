@@ -9,7 +9,6 @@ use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Contracts\AgentInput;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Enums\Lab;
-use Laravel\Ai\Gateway\FakeTextGateway;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
@@ -33,6 +32,13 @@ use Laravel\SerializableClosure\SerializableClosure;
  * `iterateProvidersWithFailover`, …) are intentionally left to reflected
  * source — they take no taint annotations, and inflating the stub would only
  * add maintenance drift.
+ *
+ * The test-double surface is the one waived family; every other member must stay restated so a new sink or
+ * source fails CI (policy: "Stub merging" in `docs/contributing/README.md`).
+ *
+ * @stub-waive assert*()  test-double assertions; recorded calls, never model-facing text
+ * @stub-waive fake()     test double; swaps the gateway, carries no prompt text
+ * @stub-waive isFaked()  no parameters; a boolean over whether the gateway is swapped
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  */
@@ -137,22 +143,4 @@ trait Promptable
     protected function getDefaultModelFor(TextProvider $provider): string {}
 
     protected function getTimeout(?int $timeout): int {}
-
-    public static function fake(Closure|array $responses = []): FakeTextGateway {}
-
-    public static function assertPrompted(Closure|string $callback): void {}
-
-    public static function assertPromptedTimes(int $times = 1): void {}
-
-    public static function assertNotPrompted(Closure|string $callback): void {}
-
-    public static function assertNeverPrompted(): void {}
-
-    public static function assertQueued(Closure|string $callback): void {}
-
-    public static function assertNotQueued(Closure|string $callback): void {}
-
-    public static function assertNeverQueued(): void {}
-
-    public static function isFaked(): bool {}
 }

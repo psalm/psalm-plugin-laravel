@@ -2,8 +2,6 @@
 
 namespace Laravel\Ai;
 
-use Closure;
-use Laravel\Ai\Gateway\FakeClassificationGateway;
 use Laravel\Ai\PendingResponses\PendingClassification;
 
 /**
@@ -17,6 +15,13 @@ use Laravel\Ai\PendingResponses\PendingClassification;
  * per-method docblock on which to declare a sink. Closing that coverage gap
  * requires a call-analysis handler for the macro forms, or Psalm support for
  * taint annotations on registered macro signatures.
+ *
+ * Only the test-double surface is waived; every other member must stay restated so a new sink fails CI
+ * (policy: "Stub merging" in docs/contributing/README.md).
+ *
+ * @stub-waive assert*()  test-double assertions; recorded calls, never model-facing text
+ * @stub-waive fake()     test double; swaps the gateway, carries no prompt text
+ * @stub-waive isFaked()  no parameters; a boolean over whether the gateway is swapped
  */
 class Classification
 {
@@ -27,14 +32,4 @@ class Classification
      * @psalm-taint-sink llm_prompt $state
      */
     public static function of(string|array $state): PendingClassification {}
-
-    public static function fake(Closure|array $responses = []): FakeClassificationGateway {}
-
-    public static function assertClassified(Closure $callback): void {}
-
-    public static function assertNotClassified(Closure $callback): void {}
-
-    public static function assertNothingClassified(): void {}
-
-    public static function isFaked(): bool {}
 }

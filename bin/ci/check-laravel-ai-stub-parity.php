@@ -106,6 +106,15 @@ final class Findings
     /** @var array<string, array{reason: string, tag: string, used: bool}> */
     private array $waivers = [];
 
+    /**
+     * Prefix waivers (`assert*()`), kept apart from exact ones so an exact tag always wins and a wildcard is
+     * judged stale on its own: the key prefix is `omit {$fqcn}::{$prefix}`, which no other class, interface
+     * clause or method-versus-property key can share.
+     *
+     * @var list<array{prefix: string, reason: string, tag: string, used: bool}>
+     */
+    private array $wildcardWaivers = [];
+
     public function __construct(public readonly ?string $installedVersion) {}
 
     /** A finding on a member the stub DECLARES (or on a class/function): waived only by that element's own docblock. */
@@ -122,19 +131,28 @@ final class Findings
 
     private function settle(string $waiverKey, string $message): void
     {
-        if (!isset($this->waivers[$waiverKey])) {
-            $this->drift[] = $message;
+        if (isset($this->waivers[$waiverKey])) {
+            $this->waivers[$waiverKey]['used'] = true;
+            $this->waived[] = "{$message} (@stub-waive: {$this->waivers[$waiverKey]['reason']})";
 
             return;
         }
 
-        $this->waivers[$waiverKey]['used'] = true;
-        $this->waived[] = "{$message} (@stub-waive: {$this->waivers[$waiverKey]['reason']})";
+        foreach (\array_keys($this->wildcardWaivers) as $index) {
+            if (\str_starts_with($waiverKey, $this->wildcardWaivers[$index]['prefix'])) {
+                $this->wildcardWaivers[$index]['used'] = true;
+                $this->waived[] = "{$message} (@stub-waive: {$this->wildcardWaivers[$index]['reason']})";
+
+                return;
+            }
+        }
+
+        $this->drift[] = $message;
     }
 
     /**
      * Records the `@stub-waive` tags of one docblock. In a class docblock every tag names an omitted member
-     * (`name()`, `$name`, `implements \Fqcn`); in a member (or function) docblock a bare tag waives drift of that
+     * (`name()`, `prefix*()`, `$name`, `$prefix*`, `implements \Fqcn`); in a member (or function) docblock a bare tag waives drift of that
      * declaration's own signature, `$memberKey` being its finding key. The two never cross: a class-level `foo()`
      * must not also mute drift on a `foo()` the stub does declare, and a tag that does not fit its position, or has
      * no reason, is itself drift rather than a silent mute.
@@ -151,6 +169,16 @@ final class Findings
                 continue;
             }
 
+            // A wildcard is a PREFIX followed by `*` at the very end of the name: `assert*()` or `$run*`. A bare
+            // `*` (or `*()`, `$*`) would waive every omitted member and delete the tripwire this tag exists
+            // to keep, so it is an error wherever it appears; in a member docblock the generic "names a
+            // target" error below already covers the rest.
+            $isWildcard = \str_contains($target, '*');
+            if ($isWildcard && \in_array($target, ['*', '*()', '$*'], true)) {
+                $this->drift[] = "{$at}: `{$tag}` would waive every omitted member; a wildcard needs a name prefix (`assert*()`)";
+                continue;
+            }
+
             $waiverKey = match (true) {
                 $memberKey !== null && $target === '' => "drift {$memberKey}",
                 $memberKey !== null || $target === '' => null,
@@ -162,7 +190,17 @@ final class Findings
             if ($waiverKey === null) {
                 $this->drift[] = $memberKey !== null
                     ? "{$at}: `{$tag}` names a target, but a member docblock waives only its own signature (write `@stub-waive <reason>`; omitted members are waived in the class docblock)"
-                    : "{$at}: `{$tag}` needs a target (`name()`, `\$name` or `implements \\Fqcn`) in a class docblock";
+                    : "{$at}: `{$tag}` needs a target (`name()`, `prefix*()`, `\$name`, `\$prefix*` or `implements \\Fqcn`) in a class docblock";
+                continue;
+            }
+
+            if ($isWildcard) {
+                $this->wildcardWaivers[] = [
+                    'prefix' => \substr($waiverKey, 0, -1),
+                    'reason' => $reason,
+                    'tag' => "`{$tag}` on {$at}",
+                    'used' => false,
+                ];
                 continue;
             }
 
@@ -174,7 +212,7 @@ final class Findings
     public function staleWaivers(): array
     {
         $stale = [];
-        foreach ($this->waivers as $waiver) {
+        foreach ([...$this->waivers, ...$this->wildcardWaivers] as $waiver) {
             if (!$waiver['used']) {
                 $stale[] = "Waiver {$waiver['tag']}";
             }
@@ -261,17 +299,18 @@ function sinceTags(?\PhpParser\Comment\Doc $doc): array
 
 /**
  * Parses every `@stub-waive [target] reason` line of a docblock, the `@since` sibling for a member the stub
- * deliberately leaves out (or, on a declared member, deliberately lets drift). The target is `name()`, `$name` or
- * `implements \Fqcn` (`extends` accepted and normalized, no leading backslash), or absent for the documented
- * element itself (key ''). The reason is the rest of the line; an empty one is returned as '' so the caller can
- * reject it.
+ * deliberately leaves out (or, on a declared member, deliberately lets drift). The target is `name()`, `$name`,
+ * a prefix wildcard `prefix*()` / `$prefix*` (the `*` only at the very end of the name; a bare `*` is captured
+ * so the caller can reject it) or `implements \Fqcn` (`extends` accepted and normalized, no leading backslash),
+ * or absent for the documented element itself (key ''). The reason is the rest of the line; an empty one is
+ * returned as '' so the caller can reject it.
  *
  * @return array<string, string> target => reason, first tag wins
  */
 function waiverTags(?\PhpParser\Comment\Doc $doc): array
 {
     if ($doc === null
-        || \preg_match_all('~@stub-waive(?![\w-])(?:[ \t]+(\w+\(\)|\$\w+|(?:implements|extends)[ \t]+\\\\?[A-Za-z_][\w\\\\]*)(?=[ \t\r\n]|\*/|$))?[ \t]*([^\r\n]*)~m', $doc->getText(), $matches, \PREG_SET_ORDER) < 1) {
+        || \preg_match_all('~@stub-waive(?![\w-])(?:[ \t]+(\w*\*\(\)|\*|\$\w*\*|\w+\(\)|\$\w+|(?:implements|extends)[ \t]+\\\\?[A-Za-z_][\w\\\\]*)(?=[ \t\r\n]|\*/|$))?[ \t]*([^\r\n]*)~m', $doc->getText(), $matches, \PREG_SET_ORDER) < 1) {
         return [];
     }
 
