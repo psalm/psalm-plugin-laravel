@@ -6,6 +6,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
@@ -236,6 +237,67 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertNotSame([], $report->pluginSettings);
         $this->assertSame(['default'], \array_values(\array_unique(\array_column($report->pluginSettings, 'source'))));
         $this->assertSame('runtime', $report->phpAnalysisSource);
+    }
+
+    #[Test]
+    #[Group('subprocess')]
+    public function psalm_laravel_options_in_the_dot_env_file_are_not_seen_because_the_plugin_resolves_before_boot(): void
+    {
+        $out = $this->diagnoseInFixtureProject('<blade />', "PSALM_LARAVEL_OPTIONS=blade=maybe\n");
+
+        $this->assertMatchesRegularExpression('/\n\s+blade\s+true\s+\(xml\)\n/', $out);
+        $this->assertStringNotContainsString('Hard failures', $out);
+    }
+
+    #[Test]
+    #[Group('subprocess')]
+    public function a_leading_backslash_in_the_plugin_class_and_an_xinclude_fallback_are_read_like_psalm_does(): void
+    {
+        $out = $this->diagnoseInFixtureProject(
+            '<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="absent.xml"><xi:fallback><experimental value="true" /></xi:fallback></xi:include>',
+            null,
+            '\\Psalm\\LaravelPlugin\\Plugin',
+        );
+
+        $this->assertMatchesRegularExpression('/\n\s+experimental\s+true\s+\(xml\)\n/', $out);
+    }
+
+    /**
+     * Runs the real `bin/psalm-laravel diagnose` in a throwaway project, so the app boot (and the
+     * `.env` it loads) happens in a fresh process rather than the one PHPUnit already booted.
+     */
+    private function diagnoseInFixtureProject(string $pluginXml, ?string $dotEnv, string $pluginClass = 'Psalm\\LaravelPlugin\\Plugin'): string
+    {
+        $root = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-diagnose-' . \uniqid('', true);
+        \mkdir($root . '/bootstrap/cache', 0o777, true);
+        \file_put_contents($root . '/bootstrap/app.php', "<?php\nreturn Illuminate\\Foundation\\Application::configure(basePath: dirname(__DIR__))->create();\n");
+        \file_put_contents($root . '/psalm.xml', '<psalm xmlns="https://getpsalm.org/schema/config"><plugins><pluginClass class="' . $pluginClass . '">' . $pluginXml . '</pluginClass></plugins></psalm>');
+
+        if ($dotEnv !== null) {
+            \file_put_contents($root . '/.env', $dotEnv);
+        }
+
+        try {
+            $process = \proc_open(
+                [\PHP_BINARY, \dirname(__DIR__, 3) . '/bin/psalm-laravel', 'diagnose'],
+                [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+                $pipes,
+                $root,
+                ['PATH' => (string) \getenv('PATH')],
+            );
+            $this->assertIsResource($process);
+            $out = \stream_get_contents($pipes[1]) . \stream_get_contents($pipes[2]);
+            \proc_close($process);
+
+            return $out;
+        } finally {
+            foreach (['.env', 'psalm.xml', 'bootstrap/app.php'] as $file) {
+                @\unlink($root . '/' . $file);
+            }
+
+            // Laravel may create storage/ on boot.
+            \exec('rm -rf ' . \escapeshellarg($root));
+        }
     }
 
     #[Test]

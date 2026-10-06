@@ -28,6 +28,10 @@ class Diagnostics
     {
         $bootstrapErrors = [];
 
+        // Read before the boot: Laravel's Dotenv loader can putenv() the project's `.env` entries, but the
+        // plugin resolves its settings before the app boots and never sees them.
+        $envOptions = \getenv(PluginOverrides::ENV_VAR);
+
         try {
             ApplicationProvider::bootApp();
         } catch (\Throwable $throwable) {
@@ -59,7 +63,6 @@ class Diagnostics
 
         try {
             $psalmXml = $projectRoot === null ? null : $this->readPsalmXml($projectRoot);
-            $envOptions = \getenv(PluginOverrides::ENV_VAR);
             $pluginSettings = PluginSettings::resolve($psalmXml, \is_string($envOptions) ? $envOptions : null, $cliOptions);
         } catch (\InvalidArgumentException $invalidArgumentException) {
             $hardFailures[] = 'Plugin settings: ' . $invalidArgumentException->getMessage();
@@ -142,7 +145,16 @@ class Diagnostics
         // Toggle libxml's internal error buffer so a malformed psalm.xml never
         // bubbles a warning to STDOUT and breaks the diagnose report layout.
         $previous = \libxml_use_internal_errors(true);
-        $xml = \simplexml_load_string($contents);
+        // Psalm expands XIncludes (an include's fallback can hold plugin settings); relative hrefs resolve
+        // against the working directory, which is `$projectRoot` here as it is for Psalm's own load.
+        $dom = new \DOMDocument();
+        $xml = null;
+
+        if ($contents !== '' && $dom->loadXML($contents, \LIBXML_NONET)) {
+            $dom->xinclude(\LIBXML_NOWARNING | \LIBXML_NONET);
+            $xml = \simplexml_import_dom($dom);
+        }
+
         \libxml_clear_errors();
         \libxml_use_internal_errors($previous);
 

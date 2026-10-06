@@ -69,7 +69,8 @@ final class PluginSettings
         $plugins = $psalmXml->plugins?->pluginClass;
 
         foreach ($plugins ?? [] as $plugin) {
-            if ((string) $plugin['class'] === self::PLUGIN_CLASS) {
+            // Psalm accepts a leading backslash on the class name.
+            if (\ltrim((string) $plugin['class'], '\\') === self::PLUGIN_CLASS) {
                 return $plugin;
             }
         }
