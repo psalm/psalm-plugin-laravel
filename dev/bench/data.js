@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791298287571,
+  "lastUpdate": 1791302360446,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12455,6 +12455,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1372,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d05c737c7fcb42a2a38e8a9c54ef8174180a2e08",
+          "message": "Fix Blade false positives: markers inside component tags, @session stack, @aware defaults; raise Laravel 12 floor to 12.20 (#1708)\n\n* fix(blade): keep markers out of component tags with `->` or `=>` in an attribute\n\nThe component-tag skip pattern stopped at the first `>`, so the `->` of\n`{{ $attributes->merge(...) }}` or the `=>` of `@class([...])` ended the\nskip range early. A marker then landed before the tag's real closing `>`,\nComponentTagCompiler left the whole tag uncompiled, and the shadow failed\nto parse on the orphaned `@endif` of the component body.\n\nThe pattern now consumes `{{ ... }}` and `@class(...)`/`@style(...)` as\nunits, mirroring the compiler's own attribute alternatives. The repeat is\npossessive because these alternatives overlap the generic character class.\n`{!! !!}` is left out: the compiler does not accept it as a tag attribute.\n\nFixes #1700\n\n* fix(blade): drop the @session/@context previous-value stack as undefined global\n\n`@session` and `@context` compile a conditional `$__sessionPrevious[] =\n$value` (resp. `$__contextPrevious`) save and read the stack back behind\n`isset()`, so every block reported PossiblyUndefinedGlobalVariable on\ncompiler bookkeeping the author never wrote.\n\nGated by exact name in ShadowIssueRelocator rather than declared in the\nprelude. PreludeBuilder skips declaring written `__` names on purpose\n(declaring them `mixed` turned the `!empty()` epilogue into\nRiskyTruthyFalsyComparison), and a declared list would make the\ncompiler's own `isset()` guards redundant, moving the noise onto another\nissue family instead of removing it. The exact-name match keeps an\nauthor's own conditionally assigned `$__` local reporting.\n\nFixes #1694\n\n* fix(blade): drop null @aware defaults reported against the generated list-form call\n\n`@aware` compiles to a foreach over its literal array that picks\n`getConsumableComponentData($__key, $__value)` or the list-form\n`getConsumableComponentData($__value)` by `is_string($__key)`. Psalm does\nnot correlate that ternary with the key it narrowed, so a keyed `null` or\nnullable default reached the list-form arm and reported NullArgument or\nPossiblyNullArgument on argument 1.\n\nThe drop is pinned to argument 1 being the generated `$__value` in\n`$__env->getConsumableComponentData($__value`, with that call text absent\nfrom the template, so an author's own call keeps reporting. The stub\nroute (`string|null $key`) was not taken: it would hide a real `null`\nin hand-written calls.\n\nFixes #1695\n\n* fix(blade): drop every non-string @aware default and skip wrapped component tag ends\n\n- Widen the #1695 gate from null to any argument issue on the generated\n  list-form `getConsumableComponentData($__value)`, plus the InvalidCast and\n  ImplicitToStringCast Psalm reports with it: keyed false/0/true/[] defaults\n  reached the same uncorrelated ternary arm.\n- Skip lines inside wrapped closing component tags and multi-line\n  `<livewire:...>` tags, which Laravel and Livewire also match strictly.\n- Split the @session/@context test so each directive has its own fixture,\n  vacuity guard, and an author-written list-form call stays reported.\n\n* chore(deps): raise the Laravel 12 floor to 12.20\n\n@context (CompilesContexts) first ships in v12.20.0, so on the 12.14 CI cell\nthe Blade @context tests compiled the directive as literal text and passed\nwithout exercising it. Moves the floor CI cell, composer constraints, and the\ncomments that cite the floor; behavior notes for ranges inside the old floor\nnow start at 12.20.",
+          "timestamp": "2026-10-06T17:56:00+02:00",
+          "tree_id": "a76050eb322546185f7d9d88b3b977544e20e581",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d05c737c7fcb42a2a38e8a9c54ef8174180a2e08"
+        },
+        "date": 1791302358715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.14,
+            "range": "± 0.86",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
