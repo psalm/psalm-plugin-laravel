@@ -314,7 +314,7 @@ final class AnnotateCommand extends Command
 
     /**
      * Tokens to forward to psalm, sliced from the raw `$_SERVER['argv']` for the same reason as
-     * {@see AnalyzeCommand::forwardedArguments()}: Symfony binds `--flags` as options, never into a
+     * {@see AnalyzeCommand::scanArguments()}: Symfony binds `--flags` as options, never into a
      * declared argument.
      *
      * `--dry-run` is this command's own and is dropped. Any `--threads` the caller passed is

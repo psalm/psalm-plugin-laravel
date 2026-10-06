@@ -346,6 +346,21 @@ Blade analysis never fails a run. If the analyzed application binds no Blade com
 
 Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
+## Per-run overrides
+
+The `PSALM_LARAVEL_OPTIONS` environment variable overrides plugin settings for one run, without touching `psalm.xml`. `vendor/bin/psalm` rejects flags it does not know, so a per-run switch has to travel through the environment.
+
+```bash
+PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm
+```
+
+* Grammar: whitespace-separated `KEY=VALUE` tokens, keys named as in the XML. No quoting. A repeated key is last-wins.
+* Supported keys: `blade` (`true` or `false`), which switches [Blade analysis](blade.md#per-run-toggle) on or off. Other `<blade>` settings keep coming from the XML.
+* Precedence per key: command-line flag > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. `psalm-laravel analyze --blade` / `--no-blade` is that command-line flag: it appends `blade=true|false` to the variable for the Psalm process it launches.
+* An unknown key, a token without `=` or with an empty value, or a value other than `true`/`false` aborts the run with a non-zero exit and a message naming the problem.
+* It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
+* Psalm's result cache is keyed on the config file, so after changing an override between runs use `--no-cache` if results look stale.
+
 ## Cache directory
 
 **default**: `<psalm-cache-dir>/plugin-laravel` (inside Psalm's project-specific cache directory)

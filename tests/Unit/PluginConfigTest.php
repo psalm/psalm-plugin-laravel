@@ -19,10 +19,17 @@ final class PluginConfigTest extends TestCase
 {
     private ?string $originalEnv = null;
 
+    private ?string $originalOptionsEnv = null;
+
     protected function setUp(): void
     {
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
         $this->originalEnv = $env !== false ? $env : null;
+
+        $optionsEnv = \getenv(PluginConfig::OPTIONS_ENV_VAR);
+        $this->originalOptionsEnv = $optionsEnv !== false ? $optionsEnv : null;
+        // A developer's shell value must not leak into the unrelated config assertions.
+        \putenv(PluginConfig::OPTIONS_ENV_VAR);
     }
 
     protected function tearDown(): void
@@ -31,6 +38,12 @@ final class PluginConfigTest extends TestCase
             \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=' . $this->originalEnv);
         } else {
             \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        }
+
+        if ($this->originalOptionsEnv !== null) {
+            \putenv(PluginConfig::OPTIONS_ENV_VAR . '=' . $this->originalOptionsEnv);
+        } else {
+            \putenv(PluginConfig::OPTIONS_ENV_VAR);
         }
     }
 
@@ -673,5 +686,117 @@ final class PluginConfigTest extends TestCase
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
         $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);
+    }
+
+    #[Test]
+    public function options_env_enables_blade_without_the_xml_element(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=blade=true');
+
+        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass />'));
+
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertTrue(PluginConfig::fromXml(null)->bladeEnabled);
+    }
+
+    #[Test]
+    public function options_env_enabling_blade_keeps_the_sub_settings_from_xml(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=blade=true');
+
+        $config = PluginConfig::fromXml(
+            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" /></pluginClass>'),
+        );
+
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertTrue($config->bladeValidateViewData);
+    }
+
+    #[Test]
+    public function options_env_disables_an_xml_enabled_blade(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=blade=false');
+
+        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'));
+
+        $this->assertFalse($config->bladeEnabled);
+    }
+
+    #[Test]
+    public function options_env_last_repeated_key_wins(): void
+    {
+        \putenv("PSALM_LARAVEL_OPTIONS=blade=true  blade=false\tblade=true");
+
+        $this->assertTrue(PluginConfig::fromXml(null)->bladeEnabled);
+
+        \putenv('PSALM_LARAVEL_OPTIONS=blade=true blade=false');
+
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'))->bladeEnabled);
+    }
+
+    #[Test]
+    public function empty_or_blank_options_env_leaves_the_xml_decision_alone(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=');
+        $this->assertTrue(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'))->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(null)->bladeEnabled);
+
+        \putenv('PSALM_LARAVEL_OPTIONS=   ');
+        $this->assertTrue(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'))->bladeEnabled);
+    }
+
+    #[Test]
+    public function options_env_rejects_an_unknown_key_and_lists_the_supported_ones(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=bladee=true');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*unknown key 'bladee'.*Supported keys: 'blade'/");
+
+        PluginConfig::fromXml(null);
+    }
+
+    #[Test]
+    public function options_env_rejects_a_non_boolean_blade_value(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=blade=maybe');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/Invalid PSALM_LARAVEL_OPTIONS blade value 'maybe'\. Valid values: 'true', 'false'\./");
+
+        PluginConfig::fromXml(null);
+    }
+
+    #[Test]
+    public function options_env_rejects_a_token_without_an_equals_sign(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=blade');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'blade'.*KEY=VALUE/");
+
+        PluginConfig::fromXml(null);
+    }
+
+    #[Test]
+    public function options_env_rejects_an_empty_key_with_the_format_message(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS==true');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'=true'.*KEY=VALUE/");
+
+        PluginConfig::fromXml(null);
+    }
+
+    #[Test]
+    public function options_env_rejects_an_empty_value(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=blade=');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'blade='.*KEY=VALUE/");
+
+        PluginConfig::fromXml(null);
     }
 }

@@ -17,6 +17,12 @@ use Psalm\Config;
 final readonly class PluginConfig
 {
     /**
+     * Process environment variable carrying per-run setting overrides (`blade=true`), which win over
+     * the XML. A real process variable, not a Laravel `.env` entry: it is read before the app boots.
+     */
+    public const OPTIONS_ENV_VAR = 'PSALM_LARAVEL_OPTIONS';
+
+    /**
      * @param list<string> $configDirectories
      *
      * @psalm-mutation-free
@@ -95,7 +101,9 @@ final readonly class PluginConfig
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
-        $bladeEnabled = self::xmlBladeEnabled($config);
+        // Computed first so a malformed <blade> element still fails when the env override would win.
+        $xmlBladeEnabled = self::xmlBladeEnabled($config);
+        $bladeEnabled = self::envBladeOverride() ?? $xmlBladeEnabled;
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
@@ -285,6 +293,53 @@ final readonly class PluginConfig
         }
 
         return self::xmlBoolAttr($blade, 'blade', true);
+    }
+
+    /**
+     * Per-run override of plugin settings from the process environment: whitespace-separated
+     * `KEY=VALUE` tokens, keys mirroring the XML names, a repeated key last-wins. It exists because
+     * `vendor/bin/psalm` rejects unknown flags and plugins only ever see the XML; `psalm-laravel
+     * analyze --blade` hands its toggle to the child psalm through this variable.
+     *
+     * Every token is validated, including ones a later repeat shadows, so a typo never hides.
+     * Returns null (no override) for an unset, empty or blank variable and when `blade` is absent.
+     */
+    private static function envBladeOverride(): ?bool
+    {
+        $raw = \getenv(self::OPTIONS_ENV_VAR);
+
+        if (!\is_string($raw)) {
+            return null;
+        }
+
+        $blade = null;
+        $tokens = \preg_split('/\s+/', $raw, -1, \PREG_SPLIT_NO_EMPTY);
+
+        foreach ($tokens === false ? [] : $tokens as $token) {
+            [$key, $value] = \explode('=', $token, 2) + [1 => ''];
+
+            if ($key === '' || $value === '') {
+                throw new \InvalidArgumentException(
+                    self::OPTIONS_ENV_VAR . " token '{$token}' is invalid: expected KEY=VALUE with a non-empty value.",
+                );
+            }
+
+            if ($key !== 'blade') {
+                throw new \InvalidArgumentException(
+                    self::OPTIONS_ENV_VAR . " contains unknown key '{$key}'. Supported keys: 'blade'.",
+                );
+            }
+
+            if (!\in_array($value, ['true', 'false'], true)) {
+                throw new \InvalidArgumentException(
+                    "Invalid " . self::OPTIONS_ENV_VAR . " blade value '{$value}'. Valid values: 'true', 'false'.",
+                );
+            }
+
+            $blade = $value === 'true';
+        }
+
+        return $blade;
     }
 
     private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
