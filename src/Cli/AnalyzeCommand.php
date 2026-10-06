@@ -47,7 +47,7 @@ final class AnalyzeCommand extends Command
 
         // Declared so `analyze --help` documents the passthrough. Symfony binds
         // `--flags` as options (never into this argument), so it is not the
-        // source the command reads — forwardedArguments() reads the raw argv.
+        // source the command reads — scanArguments() reads the raw argv.
         $this->addArgument(
             'psalm-args',
             InputArgument::IS_ARRAY | InputArgument::OPTIONAL,
@@ -78,7 +78,8 @@ final class AnalyzeCommand extends Command
         }
 
         $env = \getenv();
-        $env[PluginConfig::OPTIONS_ENV_VAR] = \trim(($env[PluginConfig::OPTIONS_ENV_VAR] ?? '') . ' blade=' . ($blade ? 'true' : 'false'));
+        $inherited = $env[PluginConfig::OPTIONS_ENV_VAR] ?? '';
+        $env[PluginConfig::OPTIONS_ENV_VAR] = \trim($inherited . ' blade=' . ($blade ? 'true' : 'false'));
 
         return $env;
     }
@@ -105,12 +106,14 @@ final class AnalyzeCommand extends Command
             return Command::FAILURE;
         }
 
+        $scan = $this->scanArguments();
+
         // proc_open with an array argv runs the binary directly (no shell), so
         // forwarded tokens are passed literally and never re-interpreted.
-        $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
+        $command = [\PHP_BINARY, $psalmBin, ...$scan['forwarded']];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
-        $process = \proc_open($command, $descriptors, $pipes, $cwd, $this->childEnvironment($this->bladeOverride()));
+        $process = \proc_open($command, $descriptors, $pipes, $cwd, $this->childEnvironment($scan['blade']));
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
@@ -138,13 +141,16 @@ final class AnalyzeCommand extends Command
     }
 
     /**
-     * Tokens to forward to psalm, sliced from the raw `$_SERVER['argv']`.
+     * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run Blade toggle
+     * (`--blade` true, `--no-blade` false, the last one wins, null when neither was given). One scan
+     * yields both, so the stripped tokens and the toggle cannot drift apart.
      *
      * Raw argv, not parsed input: Symfony binds `--flags` as options (not into a
      * declared argument), and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
      * Drops argv[0] and the explicit command-name/alias token (the default-command
-     * form has none, so nothing is stripped), and the `--blade`/`--no-blade` toggles
-     * this command consumes itself (see {@see self::bladeOverride()}).
+     * form has none, so nothing is stripped). The toggles are consumed here because psalm
+     * rejects flags it does not know; scanning stops at a standalone `--`, past which every
+     * token is positional, as in Symfony's own option parsing.
      *
      * Limits: `-h`/`-V` short-circuit to the wrapper's own help/version (use
      * `vendor/bin/psalm` for those); global options before the subcommand aren't
@@ -153,30 +159,9 @@ final class AnalyzeCommand extends Command
      * Public (not private) so it is unit-testable: CommandTester can't set argv.
      *
      * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
-     * @return list<string>
+     * @return array{forwarded: list<string>, blade: ?bool}
      */
-    public function forwardedArguments(?array $argv = null): array
-    {
-        return $this->scanArguments($argv)[0];
-    }
-
-    /**
-     * The per-run Blade toggle: true for `--blade`, false for `--no-blade`, null when neither was given
-     * (the last one wins). Read from the same raw-argv scan as {@see self::forwardedArguments()} so the
-     * stripped tokens and the decision cannot drift apart. Public for the same reason.
-     *
-     * @param list<string>|null $argv
-     */
-    public function bladeOverride(?array $argv = null): ?bool
-    {
-        return $this->scanArguments($argv)[1];
-    }
-
-    /**
-     * @param list<string>|null $argv
-     * @return array{list<string>, ?bool} the tokens to forward to psalm, and the Blade toggle
-     */
-    private function scanArguments(?array $argv): array
+    public function scanArguments(?array $argv = null): array
     {
         // `argv` is absent only when `register_argc_argv` is disabled; Symfony's
         // own ArgvInput falls back the same way, so default to an empty list.
@@ -194,8 +179,7 @@ final class AnalyzeCommand extends Command
 
         foreach ($tokens as $index => $token) {
             if ($token === '--') {
-                // Everything from the boundary on is positional, as in Symfony's own parsing.
-                return [[...$forwarded, ...\array_slice($tokens, $index)], $blade];
+                return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'blade' => $blade];
             }
 
             if ($token === '--blade' || $token === '--no-blade') {
@@ -206,6 +190,6 @@ final class AnalyzeCommand extends Command
             $forwarded[] = $token;
         }
 
-        return [$forwarded, $blade];
+        return ['forwarded' => $forwarded, 'blade' => $blade];
     }
 }

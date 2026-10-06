@@ -779,6 +779,17 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function options_env_rejects_an_empty_key_with_the_format_message(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS==true');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'=true'.*KEY=VALUE/");
+
+        PluginConfig::fromXml(null);
+    }
+
+    #[Test]
     public function options_env_rejects_an_empty_value(): void
     {
         \putenv('PSALM_LARAVEL_OPTIONS=blade=');

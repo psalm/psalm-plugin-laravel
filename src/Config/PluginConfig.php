@@ -318,7 +318,7 @@ final readonly class PluginConfig
         foreach ($tokens === false ? [] : $tokens as $token) {
             [$key, $value] = \explode('=', $token, 2) + [1 => ''];
 
-            if ($value === '') {
+            if ($key === '' || $value === '') {
                 throw new \InvalidArgumentException(
                     self::OPTIONS_ENV_VAR . " token '{$token}' is invalid: expected KEY=VALUE with a non-empty value.",
                 );
