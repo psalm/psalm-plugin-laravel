@@ -18,8 +18,10 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -72,7 +74,7 @@ use Psalm\Type\Union;
  * The `withCount()` / `withSum()` family (relation + ` as alias` aggregate
  * sub-selects) is intentionally out of scope for this first pass.
  *
- * **No autoloading class checks.** Ancestry is resolved via {@see isClassOrSubclassOf()} /
+ * **No autoloading class checks.** Ancestry is resolved via {@see ClassLineage::isA()} /
  * {@see concreteModel()} off Psalm's reflection, never `\is_a($class, X::class, true)` — that
  * autoloads $class, and a deprecation raised while loading crashes the whole run (Psalm's error
  * handler turns it into an exception).
@@ -219,6 +221,11 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             return null;
         }
 
+        // getArgs() throws on a first-class callable (`->has(...)`), which names no relation.
+        if ($expr->isFirstClassCallable()) {
+            return null;
+        }
+
         $args = $expr->getArgs();
         if ($args === []) {
             return null;
@@ -307,7 +314,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * skipped.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function resolveModelFromType(Codebase $codebase, Union $type): ?string
     {
@@ -339,56 +345,31 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * model as their first generic parameter; a `Model` atomic is the model itself.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function modelFromAtomic(Codebase $codebase, Atomic $atomic): ?string
     {
         if ($atomic instanceof TGenericObject) {
             if (
-                self::isClassOrSubclassOf($codebase, $atomic->value, EloquentBuilder::class)
-                || self::isClassOrSubclassOf($codebase, $atomic->value, Relation::class)
+                ClassLineage::isA($codebase, $atomic->value, EloquentBuilder::class)
+                || ClassLineage::isA($codebase, $atomic->value, Relation::class)
             ) {
-                $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null);
+                $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $codebase);
 
                 return $model !== null ? self::concreteModel($codebase, $model) : null;
             }
 
-            if (self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
+            if (ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return self::concreteModel($codebase, $atomic->value);
             }
 
             return null;
         }
 
-        if ($atomic instanceof TNamedObject && self::isClassOrSubclassOf($codebase, $atomic->value, Model::class)) {
+        if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Model::class)) {
             return self::concreteModel($codebase, $atomic->value);
         }
 
         return null;
-    }
-
-    /**
-     * $class is $ancestor or a subclass, without autoloading (unlike `\is_a(..., true)` — see class
-     * docblock). classExtends() is non-reflexive → identity checked first. All ancestors here
-     * (Builder, Relation, Model) are classes, so classExtends() alone suffices, no classImplements().
-     *
-     * @psalm-external-mutation-free
-     */
-    private static function isClassOrSubclassOf(Codebase $codebase, string $class, string $ancestor): bool
-    {
-        if (\strtolower($class) === \strtolower($ancestor)) {
-            return true;
-        }
-
-        if (!$codebase->classExists($class)) {
-            return false;
-        }
-
-        try {
-            return $codebase->classExtends($class, $ancestor);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return false;
-        }
     }
 
     /**
@@ -398,7 +379,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * them would be a false positive.
      *
      * @return ?class-string<Model>
-     * @psalm-external-mutation-free
      */
     private static function concreteModel(Codebase $codebase, string $fqcn): ?string
     {
@@ -506,10 +486,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             // relation maps to a PHP method, which never contains a space, so this can
             // only ever remove alias syntax, never mask a typo.
             if ($allowsAlias) {
-                $aliasParts = \explode(' ', $name);
-                if (\count($aliasParts) === 3 && \strtolower($aliasParts[1]) === 'as') {
-                    $name = $aliasParts[0];
-                }
+                [$name] = AggregateCallParser::splitAlias($name);
             }
 
             if ($name === '') {

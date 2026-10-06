@@ -19,7 +19,7 @@ User::query()->orderBy($sortBy)->get(); // tainted sink: reaches a column name
 ```
 
 <p align="center">
-    <img src="https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/master/docs/assets/screenshot-taint.png" alt="Psalm reporting a tainted SQL finding, tracing $sortBy from Request::input() into orderBy()" width="100%">
+    <img src="https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/4.x/docs/assets/screenshot-taint.png" alt="Psalm reporting a tainted SQL finding, tracing $sortBy from Request::input() into orderBy()" width="100%">
 </p>
 
 Real output on a fresh Laravel app, tracing the two lines above from source to sink.
@@ -30,8 +30,7 @@ Real output on a fresh Laravel app, tracing the two lines above from source to s
 ## Install
 
 ```bash
-composer config minimum-stability dev && composer config prefer-stable true
-composer require --dev psalm/plugin-laravel:^4.15
+composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 ./vendor/bin/psalm-laravel init
 ./vendor/bin/psalm-laravel analyze
 ```
@@ -39,8 +38,8 @@ composer require --dev psalm/plugin-laravel:^4.15
 Requires PHP 8.2+ and Laravel 12 or 13.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
-* [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, which is the only reason dev stability is needed. `prefer-stable true` keeps every other package in your project on stable releases, so Psalm itself is the single beta you pull in.
-* Want zero beta packages? The 3.x line runs on stable Psalm 6 and needs no stability flags at all: `composer require --dev psalm/plugin-laravel:^3`. It carries the same security checks, and additionally supports Laravel 11.
+* [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
+* Want zero pre-release packages? The 3.x line runs on stable Psalm 6 and needs no stability flags at all: `composer require --dev psalm/plugin-laravel:^3`. It carries the same security checks, and additionally supports Laravel 11.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.
 
@@ -68,10 +67,15 @@ Unlike pattern-matching tools, Psalm follows dataflow across function boundaries
 | SSRF                    | A10:2021 | `Http::withOptions()->get()` and the rest of `PendingRequest`                              |
 | Crypto misuse           | A02:2021 | encryption and hashing taint escape or unescape                                            |
 | Timing attack (CWE-208) | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                         |
+| XSS in Blade templates, opt-in | A03:2021 | `{!! $userInput !!}`                                                                |
 
 You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 
 Writing `laravel/ai` prompt middleware that blocks injection? Annotate it so the plugin stops reporting a mitigation you already ship: [Marking prompt-guard middleware as trusted](docs/security.md#marking-prompt-guard-middleware-as-trusted).
+
+## Blade template analysis
+
+Opt-in static analysis of `.blade.php` templates: type issues and `TaintedHtml` findings on unescaped output, reported directly at the template's own file and line. Enable it with `composer require --dev stillat/blade-parser` and `<blade />`. See [docs/blade.md](docs/blade.md) for setup, suppression, and known limits.
 
 ## Custom checks
 

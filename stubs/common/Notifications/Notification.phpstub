@@ -1,0 +1,20 @@
+<?php
+
+namespace Illuminate\Notifications;
+
+use Illuminate\Queue\SerializesModels;
+
+class Notification
+{
+    use SerializesModels;
+
+    /**
+     * The unique identifier for the notification.
+     *
+     * Laravel declares `string`, but the property stays null until NotificationSender
+     * assigns a UUID at send time (or the application sets one explicitly).
+     *
+     * @var string|null
+     */
+    public $id;
+}

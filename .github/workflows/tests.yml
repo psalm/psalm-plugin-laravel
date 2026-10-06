@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     # Both maintained release lines: a 3.x backport must run the same matrix as
-    # master before it can be tagged. GitHub reads this file from the branch
+    # 4.x before it can be tagged. GitHub reads this file from the branch
     # being pushed, so the entry only takes effect once it exists on that branch.
-    branches: [master, 3.x]
+    branches: [4.x, 3.x]
     paths:
       - '**.php'
       - '**.phpstub'
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -74,7 +74,7 @@ jobs:
             laravel: '^12.14'
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -87,6 +87,8 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ matrix.php }}
+          # The production ini default (zend.assertions=-1) would skip assert() checks.
+          ini-values: zend.assertions=1
           coverage: none
           tools: composer:v2
 
@@ -132,9 +134,10 @@ jobs:
         run: composer test:unit
 
       - name: Run Unit tests
-        # Constraint installs may resolve PHPUnit 11 (Testbench 10), which lacks --display-phpunit-notices.
+        # paratest declares its own CLI options rather than proxying PHPUnit's, and only 7.19.0+ declares
+        # --display-phpunit-notices. Constraint installs may resolve PHPUnit 11 (Testbench 10), which pins paratest 7.8.x.
         if: matrix.laravel
-        run: vendor/bin/phpunit --testsuite=unit --display-deprecations --display-notices
+        run: vendor/bin/paratest --processes=auto --testsuite=unit --display-deprecations --display-notices
 
 
   type_tests:
@@ -154,7 +157,7 @@ jobs:
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -167,7 +170,8 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ matrix.php }}
-          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
+          # zend.assertions=1: the production ini default (-1) hides php-parser assert() crashes (#1657).
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
           coverage: none
           tools: composer
 
@@ -205,12 +209,12 @@ jobs:
           - laravel_ai_version: '>=1.0.0 <2.0.0'
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -218,7 +222,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: 8.4
-          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
           coverage: none
           tools: composer
 
@@ -288,9 +292,7 @@ jobs:
         # composer test:type still exits 0. A canary that goes silently green is worse
         # than no canary, so assert real execution instead of trusting the exit code
         # alone. Reads the JUnit log the previous step already produced rather than
-        # running phpunit a second time: this repo's phpt runner batches every
-        # discovered phpt through Psalm in setUpBeforeClass() regardless of PHPUnit's
-        # --filter, so a filtered re-run pays the same ~1 minute for no benefit.
+        # running phpunit a second time.
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-junit.xml PromptInjection
 
   # This intentionally separate job is visible only on the scheduled/manual
@@ -304,12 +306,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -317,7 +319,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: 8.4
-          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M
+          ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
           coverage: none
           tools: composer
 

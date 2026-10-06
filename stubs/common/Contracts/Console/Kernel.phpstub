@@ -29,4 +29,11 @@ interface Kernel
      * @psalm-taint-sink shell $command
      */
     public function queue($command, array $parameters = []);
+
+    /**
+     * Get all of the commands registered with the console.
+     *
+     * @return array<array-key, \Symfony\Component\Console\Command\Command>
+     */
+    public function all();
 }

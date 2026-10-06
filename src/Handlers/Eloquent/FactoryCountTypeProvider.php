@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -139,9 +140,8 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
     }
 
     /**
-     * Lineage check via Psalm's class storage. `is_a()` was previously used here
-     * but breaks for classes Psalm scans yet PHP's autoloader cannot resolve
-     * at handler runtime (e.g. PHPT fixture models declared inline).
+     * Every atomic is Model or a Model subclass. Lineage from Psalm's storage ({@see ClassLineage}):
+     * PHPT fixture models declared inline are scanned but not autoloadable.
      *
      * @psalm-mutation-free
      */
@@ -152,21 +152,7 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
         }
 
         foreach ($type->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                return false;
-            }
-
-            if ($atomic->value === Model::class) {
-                continue;
-            }
-
-            try {
-                $storage = $codebase->classlike_storage_provider->get($atomic->value);
-            } catch (\InvalidArgumentException) {
-                return false;
-            }
-
-            if (!isset($storage->parent_classes[\strtolower(Model::class)])) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return false;
             }
         }
@@ -259,19 +245,16 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
         };
     }
 
-    /** @psalm-external-mutation-free */
     private static function singleCountUnion(): Union
     {
         return self::$singleCountUnion ??= new Union([new TNull()]);
     }
 
-    /** @psalm-external-mutation-free */
     private static function pluralCountUnion(): Union
     {
         return self::$pluralCountUnion ??= new Union([new TLiteralInt(2)]);
     }
 
-    /** @psalm-external-mutation-free */
     private static function unknownCountUnion(): Union
     {
         return self::$unknownCountUnion ??= new Union([new TNull(), new TLiteralInt(2)]);

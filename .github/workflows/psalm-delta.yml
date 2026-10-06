@@ -5,8 +5,11 @@ name: Psalm delta
 # comment with per-app issue deltas. Informational only, never fails the PR (a
 # delta is often intended: fixing FPs REMOVES issues, new narrowing ADDS some).
 #
-# Architecture (.alies/docs/ci-psalm-delta-design.md for full rationale):
-#   prepare — resolve refs, flag fork heads, emit the app matrix
+# `/psalm-delta [group|app ...]` (grammar: bin/ci/delta-select-apps.php, groups:
+# bin/ci/test-apps.yml); `help`/unknown tokens get a reply and start no run.
+#
+# Architecture:
+#   prepare — resolve the app selection + refs, emit the filtered app matrix
 #   delta   — one job per app (parallel): install, run base + head, upload JSON.
 #             Wall time = slowest app, not sum.
 #   report  — download artifacts, run bin/ci/delta-report.php, sticky comment
@@ -24,14 +27,26 @@ name: Psalm delta
 # cache restore-only on forks (prepare emits is_fork; delta saves only when
 # is_fork != 'true'). The privileged `report` job never runs PR code, and the
 # fork-controlled JSON reaches the comment only as a file body (-F body=@file),
-# never a `run:` expansion — no injection sink.
+# never a `run:` expansion — no injection sink. The trigger comment reaches code
+# only via env; its tokens are allowlisted and outputs set via github-script.
 
 on:
   issue_comment:
     types: [created]
 
+# Only an authorised run comment shares the per-PR 'run' key (a re-trigger
+# supersedes the old run); others, `/psalm-delta help` included, get a unique key.
+# Accepted: a typo or oddly spaced `help` still cancels an in-flight run.
 concurrency:
-  group: psalm-delta-${{ github.event.issue.number }}
+  group: >-
+    psalm-delta-${{ github.event.issue.number }}-${{ (
+    (github.event.comment.body == '/psalm-delta'
+    || startsWith(github.event.comment.body, '/psalm-delta ')
+    || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\n"')))
+    || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\r"'))))
+    && !startsWith(github.event.comment.body, '/psalm-delta help')
+    && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
+    ) && 'run' || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -39,23 +54,29 @@ permissions:
 
 jobs:
 
-  # ── Resolve refs + emit the app matrix ───────────────────────────────
+  # ── Resolve the selection, refs + emit the app matrix ────────────────
   prepare:
-    name: Prepare (refs + matrix)
+    name: Prepare (selection + refs + matrix)
     if: >-
       github.event.issue.pull_request
-      && startsWith(github.event.comment.body, '/psalm-delta')
+      && (github.event.comment.body == '/psalm-delta'
+      || startsWith(github.event.comment.body, '/psalm-delta ')
+      || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\n"')))
+      || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\r"'))))
       && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read         # checkout the default branch to read the app registry
       # Trigger comment lives on a PR, so the reactions API authorises against
-      # pull-requests; write adds the :eyes:. This job never runs PR code.
-      pull-requests: write   # react to comment + read PR base/head SHAs
-      issues: write          # reactions API also consults issues scope
+      # pull-requests; write adds the :eyes: + help/error reply. This job never runs PR code.
+      pull-requests: write   # react to comment + reply + read PR base/head SHAs
+      issues: write          # reactions/comments API also consults issues scope
     outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
+      run: ${{ steps.select.outputs.run }}
+      matrix: ${{ steps.select.outputs.matrix }}
+      apps_csv: ${{ steps.select.outputs.apps_csv }}
+      label: ${{ steps.select.outputs.label }}
       base_sha: ${{ steps.refs.outputs.base_sha }}
       head_sha: ${{ steps.refs.outputs.head_sha }}
       base_label: ${{ steps.refs.outputs.base_label }}
@@ -64,11 +85,55 @@ jobs:
       is_fork: ${{ steps.refs.outputs.is_fork }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
+      # HARNESS = default branch (trusted), NOT base/head_sha (only the versions
+      # MEASURED). Sourcing tooling from them would freeze it at the PR's branch
+      # point, so harness fixes never reach in-flight PRs. issue_comment runs from
+      # the default branch, so a ref-less checkout is 4.x HEAD.
+      - name: Checkout harness (default branch, for the registry)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve app selection
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          yq -o=json bin/ci/test-apps.yml | php bin/ci/delta-select-apps.php > selection.json
+          jq -r '.reply' selection.json > reply.md
+
+      - name: Expose selection outputs
+        id: select
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const selection = JSON.parse(require('fs').readFileSync('selection.json', 'utf8'));
+            core.setOutput('status', selection.status);
+            core.setOutput('run', selection.status === 'run' ? 'true' : 'false');
+            core.setOutput('matrix', JSON.stringify(selection.matrix));
+            core.setOutput('apps_csv', selection.apps_csv);
+            core.setOutput('label', selection.label);
+
+      - name: Reply with help or the selector error
+        if: steps.select.outputs.status == 'help' || steps.select.outputs.status == 'error'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          STATUS: ${{ steps.select.outputs.status }}
+        run: |
+          gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@reply.md --silent
+          if [ "$STATUS" = error ]; then
+            gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
+              -f content=confused --silent || echo "reaction failed (non-fatal)"
+          fi
+
       - name: React to comment (processing)
+        if: steps.select.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -79,6 +144,7 @@ jobs:
             -f content=eyes --silent || echo "reaction failed (non-fatal)"
 
       - name: Resolve PR refs (+ flag fork head)
+        if: steps.select.outputs.run == 'true'
         id: refs
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
@@ -105,29 +171,14 @@ jobs:
             core.setOutput('head_label', `pr-${headSha.substring(0, 8)}`);
             core.setOutput('pr_number', String(pr.number));
 
-      # HARNESS = default branch (trusted), NOT base/head_sha (only the versions
-      # MEASURED). Sourcing tooling from them would freeze it at the PR's branch
-      # point, so harness fixes never reach in-flight PRs. issue_comment runs from
-      # the default branch, so a ref-less checkout is master HEAD.
-      - name: Checkout harness (default branch, for the registry)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build app matrix from registry
-        id: matrix
-        run: |
-          # yq (preinstalled) emits the apps as a matrix `include` array from the
-          # committed registry. Repo-tracked only, no PR-author input: not a sink.
-          matrix=$(yq -o=json -I=0 '{"include": .apps}' bin/ci/test-apps.yml)
-          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
-
   # ── One job per app: install, run base + head, upload JSON ───────────
   delta:
     name: Delta (${{ matrix.name }})
     needs: prepare
+    # Job `if` is evaluated before the matrix, so help/error never fromJSONs an empty include.
+    if: needs.prepare.outputs.run == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: ${{ matrix.timeout || 12 }}
     permissions:
       contents: read  # checkout source + read public app repos; no write scope
     strategy:
@@ -135,7 +186,7 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -193,7 +244,7 @@ jobs:
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/app-cache/${{ matrix.name }}
+          path: app-cache/${{ matrix.name }}
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
 
       - name: Run delta for ${{ matrix.name }}
@@ -219,7 +270,7 @@ jobs:
             --out "$GITHUB_WORKSPACE/out"
             --base-label "$BASE_LABEL"
             --head-label "$HEAD_LABEL"
-            --app-src "$HOME/app-cache/$NAME"
+            --app-src "$GITHUB_WORKSPACE/app-cache/$NAME"
             --date-marker cache
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
@@ -229,24 +280,38 @@ jobs:
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
 
       # Save ONLY on a same-repo head. A fork's composer install could write into
-      # ~/app-cache pre-save, and since issue_comment runs on the default ref that
+      # the app cache pre-save, and since issue_comment runs on the default ref that
       # entry lands in the scope TRUSTED runs restore — a backdoored-vendor vector
       # the plugin_dep_sig self-heal does NOT catch (it only detects a dep-sig
       # mismatch). So forks read the cache, never write it. cache-hit skips a
       # redundant same-key save.
+      #
+      # always(): a failed or timed-out analysis must still save the installed
+      # vendor, or the next run is cold again. delta-app.sh stamps .plugin-dep-sig
+      # only after a successful install, so the stamp gates the save. It is tested
+      # with hashFiles() (workspace files only, hence app-cache/ lives there)
+      # because this job runs PR code and must not write $GITHUB_OUTPUT/$GITHUB_ENV.
       - name: Save app source cache
-        if: needs.prepare.outputs.is_fork != 'true' && steps.cache.outputs.cache-hit != 'true'
+        if: >-
+          always()
+          && needs.prepare.outputs.is_fork != 'true'
+          && steps.cache.outputs.cache-hit != 'true'
+          && hashFiles(format('app-cache/{0}/.plugin-dep-sig', matrix.name)) != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/app-cache/${{ matrix.name }}
+          path: app-cache/${{ matrix.name }}
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+      # always(): crash.log files from a failed or timed-out run must reach the
+      # report. The per-side app copy (a full vendor tree) stays out.
       - name: Upload per-app JSON
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: delta-${{ matrix.name }}
-          # out/ holds only <app>/<app>-<label>-cache--{issues,perf}.json.
-          path: out/
+          path: |
+            out/
+            !out/*/work/**
           if-no-files-found: warn
           retention-days: 14
 
@@ -254,7 +319,7 @@ jobs:
   report:
     name: Report (aggregate + comment)
     needs: [prepare, delta]
-    if: always() && needs.prepare.result == 'success'
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -262,7 +327,7 @@ jobs:
       pull-requests: write   # post / update the sticky delta comment
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -298,26 +363,28 @@ jobs:
           HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
           BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
           HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+          APPS: ${{ needs.prepare.outputs.apps_csv }}
+          SELECTION: ${{ needs.prepare.outputs.label }}
         run: |
           MARKER='<!-- psalm-delta-report -->'
-          APPS=$(yq '.apps[].name' bin/ci/test-apps.yml | paste -sd, -)
 
           {
             printf '%s\n' "$MARKER"
             php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
               --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
-              --date-marker=cache \
+              --date-marker=cache --details --selection="$SELECTION" \
               || echo "Delta failed to produce a report. Check the workflow logs."
           } > comment.md
           # Quoted heredoc: literal backticks for the inline code span, no expansion.
           cat >> comment.md <<'FOOTER'
 
-          <sub>Informational only — never fails the PR. Reproduce locally: `bash bin/ci/delta.sh <pr-branch>`.</sub>
+          <sub>Informational only — never fails the PR. Pick apps with `/psalm-delta <group|app> ...` (`/psalm-delta help` lists them). Reproduce locally: `bash bin/ci/delta.sh --apps "<group|app> ..." <pr-branch>`.</sub>
           FOOTER
 
           # Sticky: edit existing delta comment if present, else create.
           EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
-            --jq "map(select(.body | startswith(\"$MARKER\"))) | .[0].id // empty")
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" \
+            | sed -n 1p)
           if [ -n "$EXISTING" ]; then
             gh api "repos/$REPO/issues/comments/$EXISTING" -X PATCH -F body=@comment.md --silent
           else

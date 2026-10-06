@@ -285,4 +285,68 @@ class BelongsToMany extends Relation
      * @return \Illuminate\Support\LazyCollection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null) {}
+
+    /**
+     * Save an array of new models and attach them to the parent model.
+     *
+     * Laravel bounds TContainer by Collection<array-key, TRelatedModel>, but Collection's TKey
+     * is invariant, so an Eloquent Collection<int, TRelatedModel> fails the bound. The extra
+     * TKey template lets the container's own key type through.
+     *
+     * @template TKey of array-key
+     * @template TContainer of \Illuminate\Support\Collection<TKey, TRelatedModel>|array<TKey, TRelatedModel>
+     *
+     * @param  TContainer  $models
+     * @param  array  $pivotAttributes
+     * @return TContainer
+     */
+    public function saveMany($models, array $pivotAttributes = []) {}
+
+    /**
+     * Save an array of new models without raising any events and attach them to the parent model.
+     *
+     * Same TKey widening as saveMany().
+     *
+     * @template TKey of array-key
+     * @template TContainer of \Illuminate\Support\Collection<TKey, TRelatedModel>|array<TKey, TRelatedModel>
+     *
+     * @param  TContainer  $models
+     * @param  array  $pivotAttributes
+     * @return TContainer
+     */
+    public function saveManyQuietly($models, array $pivotAttributes = []) {}
+
+    /*
+     * The sync family: Laravel types $ids as a bare `\Illuminate\Support\Collection|Model|array|int|string`,
+     * which Psalm expands to Collection<array-key, mixed>. Collection's templates are invariant, so a
+     * Collection<int, int> (e.g. from ->pluck('id')) matched no arm. Method-level templates accept any
+     * Collection<K, V>.
+     */
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function sync($ids, $detaching = true) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function syncWithoutDetaching($ids) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  array  $values
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function syncWithPivotValues($ids, array $values, bool $detaching = true) {}
 }

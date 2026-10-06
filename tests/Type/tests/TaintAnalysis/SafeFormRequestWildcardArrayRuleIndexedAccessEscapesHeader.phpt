@@ -1,13 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-// Psalm 7.0.0-beta21/beta22 drop one of two taint flows that reach the same sink method from two
-// different files in a co-analyzed batch, so this fixture's finding disappears when the suite
-// runs as a whole while it is still reported on its own.
-// @todo-by 2026-10-10 drop this gate once vimeo/psalm#11959 ships a fix; if the issue is still
-// open then, re-check whether the batch still hides the finding and move the date.
-// @see https://github.com/vimeo/psalm/issues/11959
-\Tests\Psalm\LaravelPlugin\Type\PsalmVersion::skipOnRange('7.0.0-beta21', '7.0.0-beta23');
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
 --FILE--
@@ -30,9 +20,8 @@ use Illuminate\Validation\Rule;
  * `$request->validate([...])` tests in `SafeInlineValidateWildcardArrayRule*`.
  *
  * TaintedSSRF still fires: a valid email's domain may still resolve to an
- * internal host. It fires TWICE for this single sink call — same type, line,
- * and message — a suspected duplicate-report bug distinct from this test's
- * subject, pinned as observed rather than silently absorbed. #1359.
+ * internal host. The sink call is reported once, as expected since Psalm
+ * 7.0.0-beta21 (earlier betas duplicated it via #1359).
  */
 final class WildcardEmailRequest extends FormRequest
 {
@@ -49,5 +38,4 @@ function storeWildcardFormRequest(WildcardEmailRequest $request): \Illuminate\Ht
 }
 ?>
 --EXPECTF--
-TaintedSSRF on line %d: Detected tainted network request
 TaintedSSRF on line %d: Detected tainted network request

@@ -256,9 +256,11 @@ info "Installing psalm/plugin-laravel from local source"
 composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} repositories.0 '{"type": "path", "url": "../../"}'
 composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} minimum-stability 'dev'
 export COMPOSER_MEMORY_LIMIT=-1
+# stillat/blade-parser is the optional (`suggest`) Blade dependency; installed the way docs/blade.md
+# tells users to, so the blade:annotate step below runs with Blade analysis bootable.
 quiet_run "composer require psalm/plugin-laravel" \
     composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n --dev \
-        "psalm/plugin-laravel:*" --update-with-all-dependencies
+        "psalm/plugin-laravel:*" "stillat/blade-parser:^2.1" --update-with-all-dependencies
 
 # Install laravel/ai so the integration stubs are loaded under real reflection.
 # The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=1.0.0 <2.0.0')`:
@@ -290,6 +292,42 @@ else
     # below only runs on success.
     info "Running: ./vendor/bin/psalm --config=\"$PSALM_CONFIG\""
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
+
+    # `psalm-laravel blade:annotate` (#1524), end to end from a real project root: it is the only
+    # caller of the forced --threads=1 / control-file child process, and the only step that proves
+    # the shipped binary reaches it. Deliberately AFTER the baselined run and against its own
+    # Blade-enabled config, so neither the fixture below nor the compiled shadows touch the baseline.
+    info "Running: ./vendor/bin/psalm-laravel blade:annotate"
+    cat > resources/views/annotate-target.blade.php <<'BLADE'
+<h1>{{ $heading }}</h1>
+BLADE
+    mkdir -p app/Blade
+    cat > app/Blade/AnnotateTarget.php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App\Blade;
+
+use Illuminate\Contracts\View\View;
+
+final class AnnotateTarget
+{
+    public function render(): View
+    {
+        return view('annotate-target', ['heading' => 'Hello']);
+    }
+}
+PHP
+    # No --no-progress on purpose: that flag installs a progress implementation that discards the
+    # plugin's warnings, and a Blade boot that degraded is exactly what this step needs to see.
+    ./vendor/bin/psalm-laravel blade:annotate --config="../../tests/Application/laravel-test-psalm-blade.xml"
+
+    if ! grep -qF '{{-- @var string $heading --}}' resources/views/annotate-target.blade.php; then
+        cat resources/views/annotate-target.blade.php
+        error "blade:annotate did not declare \$heading in resources/views/annotate-target.blade.php"
+    fi
+    info "blade:annotate declared \$heading from its view() call site"
 fi
 
 info "Fresh Laravel app test is completed"

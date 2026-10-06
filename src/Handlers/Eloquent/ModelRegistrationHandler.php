@@ -16,6 +16,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -53,13 +54,11 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
 {
     private static bool $useMigrations = false;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$useMigrations = false;
     }
 
-    /** @psalm-external-mutation-free */
     public static function enableMigrations(): void
     {
         self::$useMigrations = true;
@@ -596,7 +595,7 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             foreach ($returnType->getAtomicTypes() as $type) {
-                if ($type instanceof TNamedObject && \is_a($type->value, Relation::class, true)) {
+                if ($type instanceof TNamedObject && ClassLineage::isA($codebase, $type->value, Relation::class)) {
                     $pseudoKey = '$' . $casedName;
                     if (!self::hasUserDefinedPseudoProperty($storage, $pseudoKey)) {
                         $storage->pseudo_property_set_types[$pseudoKey] = $mixedType;

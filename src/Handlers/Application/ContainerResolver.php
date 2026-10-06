@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
 use PhpParser\Node\Arg;
+use Psalm\Codebase;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TNamedObject;
@@ -21,7 +24,6 @@ final class ContainerResolver
      */
     private static array $cache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$cache = [];
@@ -73,6 +75,7 @@ final class ContainerResolver
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(
         NodeTypeProvider $nodeTypeProvider,
         array $call_args,
+        Codebase $codebase,
     ): ?Union {
         if ($call_args === []) {
             return null;
@@ -84,7 +87,7 @@ final class ContainerResolver
         }
 
         if ($firstArgType->isSingleStringLiteral()) {
-            return self::resolveFromLiteralString($firstArgType->getSingleStringLiteral()->value);
+            return self::resolveFromLiteralString($codebase, $firstArgType->getSingleStringLiteral()->value);
         }
 
         if (!$firstArgType->isSingle()) {
@@ -99,7 +102,7 @@ final class ContainerResolver
         return null;
     }
 
-    private static function resolveFromLiteralString(string $abstract): ?Union
+    private static function resolveFromLiteralString(Codebase $codebase, string $abstract): ?Union
     {
         $concrete = self::resolveFromApplicationContainer($abstract);
 
@@ -117,15 +120,11 @@ final class ContainerResolver
             // symmetrical with resolveFromClassString() (#750), which already returns
             // a TNamedObject for `class-string<Foo>` without touching the container.
             //
-            // `class_exists()` is both safe and sufficient as the guard: the typical
-            // failure (Container::build throwing "not instantiable" / "unresolvable
-            // dependency") only happens AFTER `new ReflectionClass($abstract)` has
-            // already succeeded, so the class is loaded and `class_exists()` is true.
-            // It also correctly excludes interfaces (returns false → mixed) — we never
-            // claim an unresolvable contract resolves to itself. We only ever return
-            // the abstract itself, a supertype of whatever the runtime would build, so
-            // this cannot introduce a false-positive on a member that genuinely exists.
-            if (\class_exists($abstract)) {
+            // isKnownClass() never autoloads (see there). Interfaces and traits stay mixed — we
+            // never claim an unresolvable contract resolves to itself. We only ever return the
+            // abstract itself, a supertype of whatever the runtime would build, so this cannot
+            // introduce a false-positive on a member that genuinely exists.
+            if (self::isKnownClass($codebase, $abstract)) {
                 return new Union([
                     new TNamedObject($abstract),
                 ]);
@@ -134,8 +133,8 @@ final class ContainerResolver
             return null;
         }
 
-        // todo: is there a better way to check if this is a literal class string?
-        if (\class_exists($concrete)) {
+        // A binding can resolve to a class-name string (`fn () => Foo::class`) as well as to a path.
+        if (self::isKnownClass($codebase, $concrete)) {
             return new Union([
                 new TNamedObject($concrete),
             ]);
@@ -150,6 +149,23 @@ final class ContainerResolver
         return new Union([
             Type::getAtomicStringFromLiteral($concrete),
         ]);
+    }
+
+    /**
+     * A class (not an interface or trait) that is loaded or that Psalm scanned. Never autoloads: a
+     * class whose load raises a deprecation would crash the run under Psalm's error handler, here
+     * where nothing catches it (#1652). A class Container::build() reflected is already loaded; one
+     * whose binding threw first, or that a binding only names as a string, is known from storage.
+     */
+    private static function isKnownClass(Codebase $codebase, string $class): bool
+    {
+        if (\class_exists($class, false)) {
+            return true;
+        }
+
+        $storage = ClassLineage::storage($codebase, $class);
+
+        return $storage instanceof ClassLikeStorage && !$storage->is_interface && !$storage->is_trait;
     }
 
     /**

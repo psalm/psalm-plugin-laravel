@@ -12,6 +12,7 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterFileAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -53,7 +54,6 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
 
     private static bool $recorded = false;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$methodReferences = [];
@@ -293,7 +293,6 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         }
     }
 
-    /** @psalm-external-mutation-free */
     private static function queueMethodReference(MethodIdentifier $calling, MethodIdentifier $target): void
     {
         self::$methodReferences[strtolower((string) $calling) . '>' . strtolower((string) $target)] = [
@@ -389,7 +388,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         $returnType = $method->return_type ?? $method->signature_return_type;
         if ($returnType instanceof Union) {
             foreach ($returnType->getAtomicTypes() as $atomic) {
-                if ($atomic instanceof TNamedObject && \is_a($atomic->value, Relation::class, true)) {
+                if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
                     return true;
                 }
             }

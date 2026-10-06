@@ -35,16 +35,21 @@ use Psalm\Progress\Progress;
  */
 final class CarbonStubProvider
 {
-    public static function register(RegistrationInterface $registration, Progress $output): void
+    /**
+     * @return list<string> the plugin-shipped Carbon stubs registered, for the stubbed-class scan
+     *         queue. Carbon's own lazy files are left out: they are its real source, and queueing
+     *         their runtime-declared classes would make Psalm scan them as plain code first (#922).
+     */
+    public static function register(RegistrationInterface $registration, Progress $output): array
     {
         if (!InstalledVersions::isInstalled('nesbot/carbon')) {
-            return;
+            return [];
         }
 
         $carbonRoot = InstalledVersions::getInstallPath('nesbot/carbon');
 
         if ($carbonRoot === null) {
-            return;
+            return [];
         }
 
         $translatorVariant = self::symfonyTranslatorHasReturnType() ? 'Strong' : 'Weak';
@@ -97,9 +102,7 @@ final class CarbonStubProvider
         //                 (see the version gate below).
         $integrationStubsDir = \dirname(__DIR__, 2) . '/stubs/integrations/carbon';
 
-        foreach (StubFileFinder::findIn($integrationStubsDir . '/shared', $output) as $stub) {
-            $registration->addStubFile($stub);
-        }
+        $integrationStubs = StubFileFinder::findIn($integrationStubsDir . '/shared', $output);
 
         // Carbon 3.12.0 gave four dual-purpose getter/setter methods an inline *param*
         // conditional `@return ($value is null ? <scalar> : static)`: isoWeekday(), weekday(),
@@ -134,10 +137,14 @@ final class CarbonStubProvider
         //     tail param). That is an upstream Carbon/Psalm interaction the plugin cannot fix by
         //     gating.
         if (InstalledVersions::satisfies(new VersionParser(), 'nesbot/carbon', '<3.12')) {
-            foreach (StubFileFinder::findIn($integrationStubsDir . '/pre-3.12', $output) as $stub) {
-                $registration->addStubFile($stub);
-            }
+            \array_push($integrationStubs, ...StubFileFinder::findIn($integrationStubsDir . '/pre-3.12', $output));
         }
+
+        foreach ($integrationStubs as $stub) {
+            $registration->addStubFile($stub);
+        }
+
+        return $integrationStubs;
     }
 
     /**

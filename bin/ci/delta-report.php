@@ -8,24 +8,36 @@ declare(strict_types=1);
  * Reads issues.json + perf.json files produced by delta-app.sh out of an
  * OUTPUT_DIR, matches base/head pairs per app, and prints a delta-only report:
  *
- *   * a per-app table of changed apps (total touched, +added, -removed, net Δ)
- *   * per changed app, the issue-type breakdown (base -> head, +added/-removed)
- *   * apps that ran clean with zero delta, and apps that crashed (with the
- *     crash's first error line) — kept in separate buckets
+ *   * a per-app table of changed apps (total touched, +added, -removed,
+ *     message changed, net Δ)
+ *   * per changed app, the issue-type breakdown (base -> head, +added/-removed);
+ *     with --details, also the changed, added and removed entries (file paths
+ *     + issue messages)
+ *   * apps that ran clean with zero delta, and apps that crashed (tagged with
+ *     the crashing side) — kept in separate buckets
  *
  * File layout (written by delta-app.sh, identical to bench.sh):
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--issues.json
  *   <output_dir>/<app>/<app>-<label>-<date-marker>--perf.json
  *
- * Issue identity uses (file_path, line_from, line_to, type, message) so churn
- * is visible: a PR fixing 50 issues and introducing 50 new ones reports
- * +50/-50 instead of ΔNet=0.
+ * Issue identity is the multiset of (file_path, line_from, line_to,
+ * column_from, column_to, type, message), so a PR fixing 50 issues and
+ * introducing 50 new ones reports +50/-50 instead of ΔNet=0. Leftover
+ * removed/added entries on the same file, line_from and type with a different
+ * message are paired as "changed" and leave the +/- totals.
  *
  * Usage:
  *   php delta-report.php <output_dir> <base_label> <head_label> \
  *       --apps=monica,pixelfed,coolify \
  *       [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] \
- *       [--date-marker=cache] [--top=30]
+ *       [--date-marker=cache] [--details] [--selection='default + octane']
+ *
+ * --details prints the changed, added and removed entries and crash text. They
+ * carry file paths and issue messages, so they are OFF by default (safe for a
+ * private app).
+ *
+ * --selection is the resolved /psalm-delta selector label (bin/ci/delta-select-apps.php),
+ * printed under the header with the app count.
  *
  * Exit codes: 0 = report produced, 2 = usage error.
  */
@@ -75,7 +87,7 @@ foreach (array_slice($argv, 1) as $arg) {
 
 $fail = static function (string $message): never {
     fwrite(STDERR, "Error: {$message}\n");
-    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache]\n");
+    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache] [--details] [--selection=label]\n");
     exit(2);
 };
 
@@ -97,6 +109,19 @@ $headRef = $options['head-ref'] ?? '';
 $baseSha = $options['base-sha'] ?? '';
 $headSha = $options['head-sha'] ?? '';
 $dateMarker = $options['date-marker'] ?? 'cache';
+$details = isset($options['details']);
+$selection = $options['selection'] ?? '';
+
+// Issue types whose presence depends on the order Psalm merges parallel workers
+// (first-merge-wins CodeUseGraph::$mutation_info after the thread pool join),
+// not on the code: excluded from +/−/Changed/Δ.
+const ORDER_DEPENDENT_TYPES = ['MissingPureAnnotation'];
+
+// --details entry lists: at most DETAILS_CAP entries per list per app, and no
+// further app's entries once the report passes DETAILS_BUDGET bytes, so a
+// churny all-apps run stays under GitHub's 65,536-char comment limit.
+const DETAILS_CAP = 10;
+const DETAILS_BUDGET = 40_000;
 
 /**
  * Newest file matching <app>-<label>-<date-marker>--<suffix>, or null.
@@ -143,9 +168,8 @@ $loadJson = static function (?string $path): ?array {
 };
 
 /**
- * First meaningful error line from an app's crash log (either side), or null
- * when the app left no crash log (it never reached the analysis step — e.g. a
- * Composer install failure — or simply did not run).
+ * First stderr line of each side's crash log (side => excerpt); a side without
+ * a crash log is absent (never reached analysis, or did not run).
  *
  * delta-app.sh writes "<app>-<label>-<marker>--crash.log" as:
  *   === <app>/<label> exit N after Ms ===
@@ -154,8 +178,9 @@ $loadJson = static function (?string $path): ?array {
  *   --- stdout ---
  * The trailing " in /path:line" is dropped so the message stays readable.
  */
-$crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLabel, $headLabel, $dateMarker): ?string {
-    foreach ([$baseLabel, $headLabel] as $label) {
+$crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLabel, $headLabel, $dateMarker): array {
+    $sides = [];
+    foreach (['base' => $baseLabel, 'head' => $headLabel] as $side => $label) {
         $path = $latest($outputDir, $app, $label, 'crash.log', $dateMarker);
         if ($path === null || !is_file($path)) {
             continue;
@@ -184,12 +209,13 @@ $crashExcerpt = static function (string $app) use ($latest, $outputDir, $baseLab
                     $text = substr($text, 0, $cut);
                 }
 
-                return mb_strimwidth(str_replace('`', "'", $text), 0, 300, '…');
+                $sides[$side] = mb_strimwidth(str_replace('`', "'", $text), 0, 300, '…');
+                break;
             }
         }
     }
 
-    return null;
+    return $sides;
 };
 
 /**
@@ -204,8 +230,101 @@ $issueKey = static function (array $i): string {
         (string) ($i['line_to'] ?? 0),
         (string) ($i['type'] ?? '?'),
         (string) ($i['message'] ?? ''),
+        (string) ($i['column_from'] ?? 0),
+        (string) ($i['column_to'] ?? 0),
     ]);
 };
+
+/**
+ * One side's issues as [stable key => count, stable type => count,
+ * type => error_level, order-dependent key => count]. Only keys and counts are
+ * kept: the full issue, with its code snippet, would hold ~100 MB on a
+ * 20k-issue app.
+ *
+ * @param list<mixed> $issues
+ * @return array{0: array<string, int>, 1: array<string, int>, 2: array<string, int>, 3: array<string, int>}
+ */
+$tally = static function (array $issues) use ($issueKey): array {
+    $keys = [];
+    $types = [];
+    $levels = [];
+    $order = [];
+    /** @var array<string, mixed> $i */
+    foreach ($issues as $i) {
+        $type = (string) ($i['type'] ?? '?');
+        $key = $issueKey($i);
+        if (in_array($type, ORDER_DEPENDENT_TYPES, true)) {
+            $order[$key] = ($order[$key] ?? 0) + 1;
+            continue;
+        }
+
+        $keys[$key] = ($keys[$key] ?? 0) + 1;
+        $types[$type] = ($types[$type] ?? 0) + 1;
+        // Psalm error level at which the type surfaces; stable per type.
+        if (isset($i['error_level']) && is_numeric($i['error_level'])) {
+            $levels[$type] = (int) $i['error_level'];
+        }
+    }
+
+    return [$keys, $types, $levels, $order];
+};
+
+/**
+ * Keys whose count is higher in $from than in $against, with the surplus.
+ *
+ * @param array<string, int> $from
+ * @param array<string, int> $against
+ * @return array<string, int>
+ */
+$surplus = static function (array $from, array $against): array {
+    $diff = [];
+    foreach ($from as $key => $n) {
+        if ($n > ($against[$key] ?? 0)) {
+            $diff[$key] = $n - ($against[$key] ?? 0);
+        }
+    }
+
+    return $diff;
+};
+
+/**
+ * Sum key counts per issue type (key part 3).
+ *
+ * @param array<string, int> $counts
+ * @return array<string, int>
+ */
+$byType = static function (array $counts): array {
+    $sums = [];
+    foreach ($counts as $key => $n) {
+        $type = explode("\x00", $key)[3];
+        $sums[$type] = ($sums[$type] ?? 0) + $n;
+    }
+
+    return $sums;
+};
+
+/**
+ * One entry per key occurrence, sorted by file, numeric line, type, message.
+ *
+ * @param array<string, int> $counts
+ * @return list<array{type: string, loc: string, message: string}>
+ */
+$entries = static function (array $counts): array {
+    $list = [];
+    foreach ($counts as $key => $n) {
+        $p = explode("\x00", $key);
+        for ($k = 0; $k < $n; $k++) {
+            $list[] = [$p[0], (int) $p[1], $p[3], $p[4]];
+        }
+    }
+
+    sort($list);
+
+    return array_map(static fn(array $e): array => ['type' => $e[2], 'loc' => "{$e[0]}:{$e[1]}", 'message' => $e[3]], $list);
+};
+
+/** Markdown inline-code span of a message: one line, clipped. */
+$code = static fn(string $s): string => '`' . str_replace('`', "'", mb_strimwidth((string) preg_replace('/\s+/u', ' ', $s), 0, 300, '…')) . '`';
 
 /**
  * @var list<array{
@@ -213,8 +332,12 @@ $issueKey = static function (array $i): string {
  *     total: int,
  *     added: int,
  *     removed: int,
+ *     changed: list<array{type: string, loc: string, old: string, new: string}>,
+ *     addedList: list<array{type: string, loc: string, message: string}>,
+ *     removedList: list<array{type: string, loc: string, message: string}>,
  *     net: int,
- *     movements: list<array{type: string, level: int|null, base: int, head: int, added: int, removed: int, delta: int}>,
+ *     movements: list<array{type: string, level: int|null, base: int, head: int, added: int, removed: int, changed: int, delta: int}>,
+ *     volatile: list<string>,
  * }> $rows
  */
 $rows = [];
@@ -231,76 +354,71 @@ foreach ($apps as $app) {
         continue;
     }
 
-    // Map issue identity -> type (type only: keeping the full issue, with its
-    // multi-line code snippet, would hold ~100 MB on a 20k-issue app). Keyed by
-    // identity so duplicates collapse and the per-type counts below reconcile
-    // with the +/- churn. The foreach @var types each decoded issue (mixed JSON).
-    // type -> Psalm error level (the config level at which the issue surfaces,
-    // carried verbatim in each issue's "error_level"). A type's level is stable
-    // across issues, so last-write-wins is fine; head is read after base so its
-    // value (the post-PR config) wins on the rare cross-side disagreement.
-    /** @var array<string, int> $typeLevel */
-    $typeLevel = [];
-    $baseByKey = [];
-    /** @var array<string, mixed> $i */
-    foreach ($baseIssues as $i) {
-        $type = (string) ($i['type'] ?? '?');
-        $baseByKey[$issueKey($i)] = $type;
-        if (isset($i['error_level']) && is_numeric($i['error_level'])) {
-            $typeLevel[$type] = (int) $i['error_level'];
-        }
-    }
-
-    $headByKey = [];
-    /** @var array<string, mixed> $i */
-    foreach ($headIssues as $i) {
-        $type = (string) ($i['type'] ?? '?');
-        $headByKey[$issueKey($i)] = $type;
-        if (isset($i['error_level']) && is_numeric($i['error_level'])) {
-            $typeLevel[$type] = (int) $i['error_level'];
-        }
-    }
-
+    [$baseKeys, $baseTypes, $baseLevels, $baseOrder] = $tally($baseIssues);
+    [$headKeys, $headTypes, $headLevels, $headOrder] = $tally($headIssues);
     unset($baseIssues, $headIssues);
 
-    $added = count(array_diff_key($headByKey, $baseByKey));
-    $removed = count(array_diff_key($baseByKey, $headByKey));
-    $net = count($headByKey) - count($baseByKey);
+    // head last: the post-PR level wins on cross-side disagreement.
+    $typeLevel = $headLevels + $baseLevels;
+    $removed = $surplus($baseKeys, $headKeys);
+    $added = $surplus($headKeys, $baseKeys);
+    unset($baseKeys, $headKeys);
 
-    // Per-type base/head totals (deduped) for the "base -> head" display.
-    $baseTypeCount = array_count_values(array_values($baseByKey));
-    $headTypeCount = array_count_values(array_values($headByKey));
-
-    // Per-type ADDED / REMOVED identity counts. Counting net totals alone hides
-    // churn: a type with the same count on both sides but different identities
-    // (a fixed issue replaced by a new one of the same type) nets to zero yet is
-    // a real movement. Diffing identities surfaces it as +x/-y.
-    $addedByType = [];
-    foreach (array_diff_key($headByKey, $baseByKey) as $type) {
-        $addedByType[$type] = ($addedByType[$type] ?? 0) + 1;
+    // Pair leftovers at the same file, line_from and type with a different
+    // message. Sorted, so the pairing is deterministic.
+    $group = static fn(array $p): string => "{$p[0]}\x00{$p[1]}\x00{$p[3]}";
+    ksort($removed);
+    ksort($added);
+    $addedByGroup = [];
+    foreach (array_keys($added) as $key) {
+        $addedByGroup[$group(explode("\x00", $key))][] = $key;
     }
 
-    $removedByType = [];
-    foreach (array_diff_key($baseByKey, $headByKey) as $type) {
-        $removedByType[$type] = ($removedByType[$type] ?? 0) + 1;
+    $changed = [];
+    foreach (array_keys($removed) as $oldKey) {
+        $o = explode("\x00", $oldKey);
+        foreach ($addedByGroup[$group($o)] ?? [] as $newKey) {
+            $n = explode("\x00", $newKey);
+            while ($removed[$oldKey] > 0 && $added[$newKey] > 0 && $n[4] !== $o[4]) {
+                $changed[] = [
+                    'type' => $o[3],
+                    'loc' => "{$o[0]}:{$o[1]}",
+                    'old' => $o[4],
+                    'new' => $n[4],
+                ];
+                $removed[$oldKey]--;
+                $added[$newKey]--;
+            }
+        }
     }
+
+    $removed = array_filter($removed);
+    $added = array_filter($added);
+
+    // Per-type identity counts: net totals alone hide churn (a fixed issue
+    // replaced by a new one of the same type nets to zero).
+    $addedByType = $byType($added);
+    $removedByType = $byType($removed);
+    $changedByType = array_count_values(array_column($changed, 'type'));
 
     $movements = [];
-    foreach (array_keys($baseTypeCount + $headTypeCount) as $type) {
+    foreach (array_keys($baseTypes + $headTypes) as $type) {
         $a = $addedByType[$type] ?? 0;
         $r = $removedByType[$type] ?? 0;
-        if ($a === 0 && $r === 0) {
+        $c = $changedByType[$type] ?? 0;
+        if ($a === 0 && $r === 0 && $c === 0) {
             continue; // identical identities on both sides — nothing moved
         }
 
         $movements[] = [
             'type' => $type,
             'level' => $typeLevel[$type] ?? null,
-            'base' => $baseTypeCount[$type] ?? 0,
-            'head' => $headTypeCount[$type] ?? 0,
+            'base' => $baseTypes[$type] ?? 0,
+            'head' => $headTypes[$type] ?? 0,
             'added' => $a,
             'removed' => $r,
-            'delta' => ($headTypeCount[$type] ?? 0) - ($baseTypeCount[$type] ?? 0),
+            'changed' => $c,
+            'delta' => ($headTypes[$type] ?? 0) - ($baseTypes[$type] ?? 0),
         ];
     }
 
@@ -309,20 +427,33 @@ foreach ($apps as $app) {
     usort(
         $movements,
         /**
-         * @param array{type: string, level: int|null, base: int, head: int, added: int, removed: int, delta: int} $x
-         * @param array{type: string, level: int|null, base: int, head: int, added: int, removed: int, delta: int} $y
+         * @param array{type: string, added: int, removed: int, changed: int, delta: int} $x
+         * @param array{type: string, added: int, removed: int, changed: int, delta: int} $y
          */
-        static fn(array $x, array $y): int => [$x['delta'], -($x['added'] + $x['removed']), $x['type']]
-            <=> [$y['delta'], -($y['added'] + $y['removed']), $y['type']],
+        static fn(array $x, array $y): int => [$x['delta'], -($x['added'] + $x['removed'] + $x['changed']), $x['type']]
+            <=> [$y['delta'], -($y['added'] + $y['removed'] + $y['changed']), $y['type']],
     );
+
+    $orderAdded = $byType($surplus($headOrder, $baseOrder));
+    $orderRemoved = $byType($surplus($baseOrder, $headOrder));
+    $volatile = [];
+    foreach (ORDER_DEPENDENT_TYPES as $type) {
+        if (isset($orderAdded[$type]) || isset($orderRemoved[$type])) {
+            $volatile[] = sprintf('%s +%d/−%d', $type, $orderAdded[$type] ?? 0, $orderRemoved[$type] ?? 0);
+        }
+    }
 
     $rows[] = [
         'app' => $app,
-        'total' => $added + $removed,
-        'added' => $added,
-        'removed' => $removed,
-        'net' => $net,
+        'total' => array_sum($added) + array_sum($removed) + count($changed),
+        'added' => array_sum($added),
+        'removed' => array_sum($removed),
+        'changed' => $changed,
+        'addedList' => $details ? $entries($added) : [],
+        'removedList' => $details ? $entries($removed) : [],
+        'net' => array_sum($headTypes) - array_sum($baseTypes),
         'movements' => $movements,
+        'volatile' => $volatile,
     ];
 }
 
@@ -383,11 +514,16 @@ $headDesc = $describe($headRef, $headLabel, $headSha);
 $out = [];
 $out[] = "## PR delta: {$baseDesc} -> {$headDesc}";
 $out[] = '';
+if ($selection !== '') {
+    $out[] = sprintf('Apps: %s → %d', $selection, count($apps));
+    $out[] = '';
+}
 
 // --- Per-app delta table (changed apps only) --------------------------------
 //
-// Columns: Total (issues touched = added + removed), + (added), − (removed),
-// Δ (net = head − base). Only apps with at least one changed issue appear.
+// Columns: Total (issues touched = added + removed + changed), + (added),
+// − (removed), Changed (same place and type, new message), Δ (net = head −
+// base, unaffected by changed). Only apps with at least one change appear.
 
 $changed = array_values(array_filter($rows, static fn(array $r): bool => $r['total'] > 0));
 
@@ -396,21 +532,23 @@ $out[] = '';
 if ($changed === []) {
     $out[] = 'No issue changes across the benchmarked apps.';
 } else {
-    $out[] = '| App | Total | + | − | Δ |';
-    $out[] = '|-----|------:|----:|----:|-----:|';
+    $out[] = '| App | Total | + | − | Changed | Δ |';
+    $out[] = '|-----|------:|----:|----:|----:|-----:|';
     $tTotal = 0;
     $tAdded = 0;
+    $tChanged = 0;
     $tRemoved = 0;
     $tNet = 0;
     foreach ($changed as $r) {
-        $out[] = sprintf('| %s | %d | %d | %d | %+d |', $r['app'], $r['total'], $r['added'], $r['removed'], $r['net']);
+        $out[] = sprintf('| %s | %d | %d | %d | %d | %+d |', $r['app'], $r['total'], $r['added'], $r['removed'], count($r['changed']), $r['net']);
         $tTotal += $r['total'];
         $tAdded += $r['added'];
         $tRemoved += $r['removed'];
+        $tChanged += count($r['changed']);
         $tNet += $r['net'];
     }
 
-    $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tNet);
+    $out[] = sprintf('| **Total** | **%d** | **%d** | **%d** | **%d** | **%+d** |', $tTotal, $tAdded, $tRemoved, $tChanged, $tNet);
 
     // Per-app issue-type movements, all under ONE collapsible block so the
     // comment stays compact regardless of how many apps changed: per app, the
@@ -420,7 +558,7 @@ if ($changed === []) {
     $out[] = '<details><summary>Per-app issue-type breakdown</summary>';
     foreach ($changed as $r) {
         $out[] = '';
-        $out[] = sprintf('#### %s (+%d/-%d)', $r['app'], $r['added'], $r['removed']);
+        $out[] = sprintf('#### %s (+%d/-%d, %d changed)', $r['app'], $r['added'], $r['removed'], count($r['changed']));
         $out[] = '';
         foreach ($r['movements'] as $m) {
             // Prefix the Psalm error level (e.g. "L3: ") so a reader can gauge
@@ -428,19 +566,62 @@ if ($changed === []) {
             // Omitted only if the JSON carried no error_level for the type.
             $levelPrefix = $m['level'] !== null ? sprintf('L%d: ', $m['level']) : '';
             $out[] = sprintf(
-                '- %s%s: %d -> %d (+%d/-%d)',
+                '- %s%s: %d -> %d (+%d/-%d, %d changed)',
                 $levelPrefix,
                 $m['type'],
                 $m['base'],
                 $m['head'],
                 $m['added'],
                 $m['removed'],
+                $m['changed'],
             );
+        }
+
+        if (!$details) {
+            continue;
+        }
+
+        if (strlen(implode("\n", $out)) > DETAILS_BUDGET) {
+            $out[] = '';
+            $out[] = '- … entries omitted (comment size limit)';
+            continue;
+        }
+
+        $lines = [];
+        foreach (array_slice($r['changed'], 0, DETAILS_CAP) as $c) {
+            $lines[] = sprintf('- %s `%s`: %s → %s', $c['type'], $c['loc'], $code($c['old']), $code($c['new']));
+        }
+
+        if (count($r['changed']) > DETAILS_CAP) {
+            $lines[] = sprintf('- … and %d more changed', count($r['changed']) - DETAILS_CAP);
+        }
+
+        // `- + X` renders as a nested bullet in GFM, swallowing the `+`.
+        foreach (['\+' => $r['addedList'], '−' => $r['removedList']] as $sign => $list) {
+            foreach (array_slice($list, 0, DETAILS_CAP) as $e) {
+                $lines[] = sprintf('- %s %s `%s`: %s', $sign, $e['type'], $e['loc'], $code($e['message']));
+            }
+
+            if (count($list) > DETAILS_CAP) {
+                $lines[] = sprintf('- %s … and %d more', $sign, count($list) - DETAILS_CAP);
+            }
+        }
+
+        if ($lines !== []) {
+            $out[] = '';
+            array_push($out, ...$lines);
         }
     }
 
     $out[] = '';
     $out[] = '</details>';
+}
+
+foreach ($rows as $r) {
+    if ($r['volatile'] !== []) {
+        $out[] = '';
+        $out[] = sprintf('> **%s**: order-dependent, excluded: %s', $r['app'], implode(', ', $r['volatile']));
+    }
 }
 
 // Apps that ran cleanly on both sides but produced no delta — listed here under
@@ -499,10 +680,18 @@ if ($timeLines === []) {
 // --- Per-app type-coverage table (apps whose coverage moved) ----------------
 //
 // Psalm's inferred-type coverage %, base vs head (Δ = head − base). A PR can
-// move coverage without moving any issue (e.g. adding annotations). Only apps
-// whose coverage actually moved are listed: unchanged rows (Δ rounds to 0.00)
-// are hidden, and a side with no perf.json (crash / not run) is skipped here
-// since it already appears in the Crashed / Not-run buckets.
+// move coverage without moving any issue (e.g. adding annotations).
+//
+// Psalm's parallel analysis is nondeterministic: which files share a worker
+// changes how many non-mixed expressions get counted, so identical code and
+// vendor measured pixelfed at 84.9672-84.9693% across 4-thread runs (serial
+// runs repeat exactly, but cost ~2x wall time). Moves under $covNoiseFloor
+// are that jitter, so they are dropped on the RAW Δ and the rest is shown at
+// 2 decimals. Gating on the raw Δ, not on rounded values, keeps jitter that
+// straddles a rounding boundary from surfacing as a phantom ±0.01. A side with
+// no perf.json (crash / not run) is skipped here since it already appears in
+// the Crashed / Not-run buckets.
+$covNoiseFloor = 0.005; // percentage points; also the smallest move visible at 2 decimals
 
 $covLines = [];
 foreach ($perfRows as $p) {
@@ -510,19 +699,19 @@ foreach ($perfRows as $p) {
         continue; // not comparable — surfaced in its own bucket, not here
     }
 
-    $delta = sprintf('%+.2f', $p['headCov'] - $p['baseCov']);
-    if ($delta === '+0.00' || $delta === '-0.00') {
-        continue; // coverage unchanged
+    $delta = $p['headCov'] - $p['baseCov'];
+    if (abs($delta) < $covNoiseFloor) {
+        continue;
     }
 
-    $covLines[] = sprintf('| %s | %.2f | %.2f | %s |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
+    $covLines[] = sprintf('| %s | %.2f | %.2f | %+.2f |', $p['app'], $p['baseCov'], $p['headCov'], $delta);
 }
 
 $out[] = '';
 $out[] = '### Per-app delta — Type coverage (%)';
 $out[] = '';
 if ($covLines === []) {
-    $out[] = 'No type-coverage changes.';
+    $out[] = 'No significant type-coverage change (all deltas within parallel-analysis jitter).';
 } else {
     $out[] = '| App | base | PR | Δ |';
     $out[] = '|-----|-----:|----:|-----:|';
@@ -553,20 +742,23 @@ foreach ($perfRows as $p) {
 if ($covLines !== [] && $weightDen > 0.0) {
     $out[] = sprintf('| **Weighted Δ** | — | — | **%+.2f** |', $weightNum / $weightDen);
     $out[] = '';
-    $out[] = '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size)._';
+    $out[] = sprintf(
+        '_Weighted Δ is weighted by base `wall_seconds` (proxy for codebase size). Moves under ±%.3f are hidden as parallel-analysis jitter._',
+        $covNoiseFloor,
+    );
 }
 
-// Split "no issues.json" apps into genuine crashes (a crash log exists, shown
-// with its error) vs apps that never ran / left no artifact.
+// Split "no issues.json" apps into genuine crashes (a crash log exists on at
+// least one side, tagged with the side) vs apps that never ran / left no artifact.
 if ($missing !== []) {
-    /** @var array<string, string> $crashed */
+    /** @var array<string, array<string, string>> $crashed */
     $crashed = [];
     /** @var list<string> $notRun */
     $notRun = [];
     foreach ($missing as $app) {
-        $excerpt = $crashExcerpt($app);
-        if ($excerpt !== null) {
-            $crashed[$app] = $excerpt;
+        $sides = $crashExcerpt($app);
+        if ($sides !== []) {
+            $crashed[$app] = $sides;
         } else {
             $notRun[] = $app;
         }
@@ -578,8 +770,14 @@ if ($missing !== []) {
         $out[] = '';
         $out[] = 'No usable report — Psalm crashed or analysis aborted. A crash on BOTH sides is not caused by this PR.';
         $out[] = '';
-        foreach ($crashed as $app => $excerpt) {
-            $out[] = "- **{$app}**: `{$excerpt}`";
+        foreach ($crashed as $app => $sides) {
+            $out[] = sprintf('- **%s** (%s)', $app, count($sides) === 2 ? 'both' : array_key_first($sides));
+            // Exception text can name private classes or hosts: opt-in only.
+            if ($details) {
+                foreach ($sides as $side => $excerpt) {
+                    $out[] = "  - {$side}: `{$excerpt}`";
+                }
+            }
         }
     }
 

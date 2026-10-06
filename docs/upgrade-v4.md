@@ -19,24 +19,17 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-beta22` or later. If your project still uses Psalm 6, upgrade Psalm first:
+v4 requires `vimeo/psalm ^7.0.0-beta23` or later. Upgrade Psalm and the plugin in one command (v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6):
 
 ```bash
-composer require --dev vimeo/psalm:^7.0.0-beta22
+composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
 ```
 
-Psalm 7 is still in beta. You may need to add this to your project's `composer.json`:
-
-```json
-{
-    "minimum-stability": "dev",
-    "prefer-stable": true
-}
-```
+Psalm 7 is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched.
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 
-- `MissingPureAnnotation` -- a method has no side effects but lacks `@psalm-pure`.
+- `MissingPureAnnotation` -- a method has no side effects but lacks a purity annotation (`@psalm-pure` or a `@psalm-capabilities` set).
 - `MissingAbstractPureAnnotation` -- an abstract method should be declared `@psalm-pure` so all implementations are guaranteed pure.
 - `MissingInterfaceImmutableAnnotation` -- an interface should be `@psalm-immutable` so all implementations are guaranteed immutable.
 
@@ -119,13 +112,10 @@ No flags needed — just run `./vendor/bin/psalm`.
 ```bash
 # 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
-# 2. Upgrade Psalm to v7
-composer require --dev vimeo/psalm:^7.0.0-beta22
+# 2. Upgrade Psalm to v7 and the plugin to v4 together
+composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
 
-# 3. Upgrade the plugin
-composer require --dev psalm/plugin-laravel:^4.0
-
-# 4. Update relation generic annotations (add declaring model parameter)
+# 3. Update relation generic annotations (add declaring model parameter)
 #
 #    Option A — Psalter plugin (handles @return and @psalm-return, AST-aware):
 ./vendor/bin/psalter --plugin=/vendor/psalm/plugin-laravel/tools/psalter/UpgradeRelationAnnotations.php --dry-run
@@ -156,10 +146,10 @@ composer require --dev psalm/plugin-laravel:^4.0
 #      Do not touch annotations that already have the correct number of type params.
 #      Do not touch @param or @var annotations.
 
-# 5. Run Psalm and update your baseline
+# 4. Run Psalm and update your baseline
 ./vendor/bin/psalm --set-baseline=psalm-baseline.xml
 
-# 6. Review new issues
+# 5. Review new issues
 #    - InvalidConsoleArgumentName / InvalidConsoleOptionName are real bugs — fix them
 #    - NoEnvOutsideConfig — move env() calls into config files
 #    - TaintedSql on Builder::where() — review for actual SQL injection risk

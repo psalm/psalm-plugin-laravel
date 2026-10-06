@@ -263,8 +263,6 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * Create one sink per operand side (avoids duplicate reports, keeps the graph compact) and
      * connect all the operand's data flow parents to it. The sink matches USER_SECRET|SYSTEM_SECRET,
      * so only secret-tainted data triggers an issue — ordinary input taint is unaffected.
-     *
-     * @psalm-external-mutation-free
      */
     private static function addSinkForType(
         TaintFlowGraph $graph,

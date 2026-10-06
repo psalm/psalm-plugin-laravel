@@ -131,7 +131,6 @@ final class ValidationRuleAnalyzer
      */
     private static array $classTaintCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$cache = [];

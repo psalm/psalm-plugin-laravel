@@ -365,6 +365,84 @@ function test_scope_on_new_eloquent_builder_via_query(): void
     /** @psalm-check-type-exact $_result = VehicleBuilder<Vehicle> */
 }
 
+/** Vehicle::with() is static::query()->with(), so it returns the custom builder (issue #1678). */
+function test_with_returns_custom_builder(): void
+{
+    $_result = Vehicle::with('customer');
+    /** @psalm-check-type-exact $_result = VehicleBuilder<Vehicle> */
+
+    $_chained = Vehicle::with(['customer'])->whereElectric();
+    /** @psalm-check-type-exact $_chained = VehicleBuilder<Vehicle> */
+}
+
+/** Models without a custom builder keep the stub's Builder<static> from with(). */
+function test_with_keeps_base_builder_without_custom_builder(): void
+{
+    $_result = \App\Models\Customer::with('vehicles');
+    /** @psalm-check-type-exact $_result = Builder<\App\Models\Customer> */
+}
+
+/**
+ * A template-typed receiver must keep its template: rebuilding the builder from the bound class
+ * would yield CovariantNonFinalCustomBuilder<Model&static> and reject `@return Builder<T>`.
+ *
+ * @template T of \App\Models\CovariantNonFinalCustomBuilderModel
+ * @param class-string<T> $class
+ * @return Builder<T>
+ */
+function test_with_keeps_template_via_class_string(string $class): Builder
+{
+    return $class::with('x');
+}
+
+/**
+ * @template T of \App\Models\CovariantNonFinalCustomBuilderModel
+ * @param T $model
+ * @return Builder<T>
+ */
+function test_with_keeps_template_via_static_call_on_instance(\App\Models\CovariantNonFinalCustomBuilderModel $model): Builder
+{
+    return $model::with('x');
+}
+
+/**
+ * @template T of \App\Models\CovariantNonFinalCustomBuilderModel
+ * @param T $model
+ * @return Builder<T>
+ */
+function test_with_keeps_template_via_instance_call(\App\Models\CovariantNonFinalCustomBuilderModel $model): Builder
+{
+    return $model->with('x');
+}
+
+/** A union of concrete models resolves each member to its own builder. */
+function test_with_on_union_of_concrete_models(
+    \App\Models\CovariantNonFinalCustomBuilderModel|\App\Models\NonFinalCustomBuilderModel $model,
+): void {
+    $_result = $model::with('x');
+    /** @psalm-check-type-exact $_result = \App\Builders\CovariantNonFinalCustomBuilder<\App\Models\CovariantNonFinalCustomBuilderModel&static>|\App\Builders\NonFinalCustomBuilder<\App\Models\NonFinalCustomBuilderModel> */
+}
+
+/** `static::with()` inside a model method keeps working (issue #799 shape). */
+function test_with_via_static_keyword_inside_model(): void
+{
+    $_model = new class extends \App\Models\CovariantNonFinalCustomBuilderModel {
+        public function viaWith(): static
+        {
+            return static::with('x')->firstOrCreate(['id' => '1']);
+        }
+    };
+
+    $_model->viaWith();
+}
+
+/** Template receivers on a model without a custom builder keep the stub's template-preserving return. */
+function test_with_keeps_template_without_custom_builder(\App\Models\Customer $customer): void
+{
+    $_result = $customer::with('vehicles')->where('id', 1);
+    /** @psalm-check-type-exact $_result = Builder<\App\Models\Customer>&static */
+}
+
 // -----------------------------------------------------------------------
 // static $builder property pattern (all Laravel versions)
 // Mechanic model sets protected static string $builder = MechanicBuilder::class.

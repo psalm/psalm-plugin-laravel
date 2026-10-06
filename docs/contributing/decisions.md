@@ -68,6 +68,30 @@ The plugin should respect that consistently across all handlers rather than over
 **Why:** The relationship and accessor handlers use Psalm's own type inference with no external data source.
 They produce no false positives, and there's no real-world scenario where a user would want one but not the other. Exposing per-handler toggles adds config complexity without value. The `@property` precedence rule (above) is the escape hatch for users who want to override specific properties.
 
+### Aggregate accessor proof (`{relation}_count`, `{relation}_exists`)
+
+**Decision:** An aggregate accessor is `int|null` / `bool|null` unless the code proves it was loaded; then it is `int<0, max>` / `bool`. min/max/sum/avg stay nullable even when proven (SQL NULL on an empty relation). Proof sources, all literal-only and validated against the FINAL model class with `ModelAggregatePropertyHandler::isRelationMethod()`:
+
+1. Model `$withCount` defaults (optimistic, like migration columns; gated on `SECTION_RUNTIME_CONFIGURATION`). `rel as alias` entries make the alias exist.
+2. `$m->loadCount(...)` & co. on a variable: `ModelAggregateLoadHandler` sets `vars_in_scope['$m->x_count']`, which Psalm reads before any property provider (so aliases work).
+3. `$m = M::withCount('x')->...->firstOrFail()`: same facts for the assigned variable.
+4. `M::withCount('x')->firstOrFail()->x_count` / `$m->loadCount('x')->x_count`: the PropertyFetch node type is overridden (conventional names only; an alias name fails the existence check first).
+
+Chains are walked from the terminal call inward: past a retrieval method (`first`, `firstOrFail`, `sole`, `find`, `findOrFail`, `firstWhere`; never `firstOrNew`/`firstOrCreate`, whose new instances lack the attribute) only Builder/Relation-typed calls keep the query, and `select()`/`setQuery()` end the walk because they replace the aggregate columns (`selectRaw()`/`selectSub()`/`addSelect()` append and keep the proof). `$m->refresh()` drops only the `$m->…` facts this handler recorded; user narrowings on other `$m->…` entries stay. A user `@property` always wins.
+
+**Precedence:** a real model attribute named like an aggregate shadows it: `@property`, then schema column, cast key, accessor, then aggregate (each source counts only from a complete registry section). `votes_count` as a migration column next to a `votes()` relation stays the column's type; after `loadCount('votes')` the proof fact still applies, as the alias column wins in the SELECT result.
+
+**Dead end:** carrying the fact in the type (`Shop&object{x_count: int}`). The intersection flows through `Builder` (its `TModel` is covariant), but `Collection<int, Shop&object{…}>` is not assignable to `Collection<int, Shop>`, so `->get()` results then fail every `Collection<int, Shop>` parameter. Flow facts avoid changing any model type.
+
+**Known limitations (reads stay nullable):** `->get()->first()` Collection hops, variable-held builders, closures, `foreach` over models, `getAttribute('x_count')`.
+
+**Known imprecision (same class as Psalm keeping property facts after impure calls):**
+- `refresh()` unsets the recorded `$m->…` facts, but a branch merge ignores a key missing from one side, so a `refresh()` inside only one branch leaves the pre-branch proof in place (`AggregateAccessorRefreshInBranchKnownLimitationTest`).
+- One alias produced by different aggregate functions in a single chain records no fact (`withExists` casts the alias to bool for good). Across in-place loads, separate or chained, the latest write wins, so `loadExists('a as t')` then `loadCount('b as t')` reads `int<0, max>`.
+- `refresh()` invalidates only receivers typed as exactly one Model; other objects keep their property facts.
+
+**Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally
@@ -168,6 +192,26 @@ Document every workaround with a comment linking to the upstream issue.
 `self<TModel>` is the only stub shape that satisfies the canonical Laravel-docs idiom on subclass instances. The base-`Builder` typing in user code is also semantically honest. `Builder::where` calls `$this->model->newQueryWithoutRelationships()`, which returns base `Builder` unless the model overrides `newEloquentBuilder()`.
 
 **See:** [#815](https://github.com/psalm/psalm-plugin-laravel/issues/815), [#776](https://github.com/psalm/psalm-plugin-laravel/issues/776), [PR #784](https://github.com/psalm/psalm-plugin-laravel/pull/784), `tests/Type/tests/Builder/WhereClosureSubclassCoercionTest.phpt`.
+
+### Conditionable `when()`/`unless()` callback params via a params provider
+
+**Decision:** `ConditionableCallbackParamsHandler` replaces the stub's `callback`/`default` params per call site with `callable(<receiver>, <truthy|falsy $value>): mixed|null` (swapped for `unless`). The stub keeps plain `callable|null`.
+
+**Why, mechanism by mechanism:**
+- **Params provider, not Laravel's `@template` docblock.** The template form brings back the `mixed` chain return (#704) and types `$value` as nullable inside the callback.
+- **Per-host `registerClosure` in `AfterCodebasePopulated`.** Params providers dispatch on the called class (`Methods::getMethodParams()`) with no declaring-class fallback, so registering on the trait never fires (return-type providers do fall back). Hosts are non-trait classes whose `when`/`unless` resolve to `Conditionable`; classes declaring their own `when()` (Container, Enumerable, ...) are excluded automatically.
+- **`BeforeExpressionAnalysis` stash.** The provider event carries no call node, and the class name alone loses generics (false `MixedArgumentTypeCoercion`). The hook stashes the `when`/`unless` `MethodCall` in a `WeakMap` keyed by its first `Arg`; the provider reads the receiver's node type from it.
+- **Pre-analysis of `$value`, on a cloned `Context`.** Params are fetched before args are analyzed (`CallAnalyzer::checkMethodArgs()` calls `Methods::getMethodParams()` before `ArgumentsAnalyzer::analyze()`), so the handler analyzes the arg itself. Psalm's own callmap path in `Methods::getMethodParams()` uses the live context, and that applies side effects twice (`++$i` leaves `$i === 2`, `$a[] = $x` yields `list{T, T}`), so the handler analyzes a clone. Closure values contribute their return type, with `void` read as `null` (what Laravel passes).
+- **Truthy/falsy via `AssertionReconciler`** with `Truthy`/`Falsy` assertions, so narrowing matches Psalm's own `if ($x)` semantics (`?int` → `int` minus `0`, etc.).
+- **Closure/arrow-fn literals only.** Only a slot whose argument is a `Closure`/`ArrowFunction` literal gets the typed callable. A passed-through callable that declares fewer params is rejected against a 2-param `callable` (param-count check in `UnionTypeComparator::isContainedBy()`, false `PossiblyInvalidArgument`/`MixedArgumentTypeCoercion`). A first-class callable has no declared-type escape for a subclass receiver. A literal whose first param is variadic (`function (...$args)`) is skipped too: Psalm fills a variadic param from the container's param 0 only, so every element would be typed as the receiver.
+- **Declared-type preference.** If a closure literal declares a param type that contains the computed type, the declared type wins. Otherwise defensive code (`?int $x` then `if ($x === null)`) gets new `TypeDoesNotContainNull`/`RedundantCondition` noise. That containment rule applies to the value slot. Declared receiver types are trusted as written: runtime `$this` may be any subclass or implementer of the host (a custom builder Psalm cannot see via `#[UseEloquentBuilder]` or a docblock-only `newEloquentBuilder`, or an intersection with an interface), so a declared receiver param (native or docblock) keeps its declared type and only an untyped one gets the computed receiver. Five rounds of subclass/nullable/union/intersection/interface special cases each left another false positive, so the rule is unconditional. Accepted loss: a receiver declared as an unrelated class (`Query\Builder` on an Eloquent Builder) is no longer reported; Psalm never reported it against the stub either. Declared types are memoized in a `WeakMap` keyed by the literal node on first sight: `ArgumentsAnalyzer::handleClosureArg()` overwrites the storage param type with the inferred one, and a loop's second pass re-analyzes the same node.
+- **Final hosts drop `&static`.** `$this` inside a trait is `Host&static`, and against a final host Psalm compares it with the plain host type (false `ArgumentTypeCoercion`).
+
+**Declines (returns null = stock stub behavior):** union receivers (per-atomic closure re-analysis, last wins → FPs); receiver class ≠ dispatched class (relation `@mixin` forwarding to `Builder`); any `mixed` in `$value`; a `value` arg that is not the first arg (reordered named args: the pre-analysis would miss earlier args' side effects); a `$value` atomic that may be a Closure with an unknown return type (`callable`, `object`, template params, bare `Closure`); unpacked args; fewer than 2 args; no closure-literal slot. A slot keeps the stub callable when its literal declares a late-bound `self`/`static`/`parent` type at any depth (`list<self>`, `Collection<int, static>`) (closure storage keeps it unexpanded and Psalm never matches it against the host, false `InvalidArgument`) or its closure storage cannot be read, when an untyped literal param has a default (Psalm would infer it from the computed type alone and flag `if ($v === null)`), and when a branch reconciles to `never` (dead branch, avoids `NoValue`).
+
+**Out of scope:** 0/1-arg `HigherOrderWhenProxy`, static `Model::when(...)`, `__call`-forwarded calls, narrowing `use`d variables, `Enumerable`-typed receivers.
+
+**See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
 ## Taint Analysis
 
@@ -330,3 +374,16 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Decision:** The plugin provides type support for `laravel/framework` (Illuminate namespace) and first-party packages that ship with a default Laravel install. Third-party packages (Sanctum, Cashier, Livewire, Filament, etc.) are out of scope unless their model subclasses are naturally discovered.
 
 **Why:** Third-party packages evolve independently, have their own type stubs, and may ship their own Psalm plugins. Supporting them would multiply the maintenance surface. The plugin's model discovery will pick up any `Model` subclass in the scanned codebase (including vendor), and the generic handlers work for those. But package-specific magic (e.g. Livewire's component properties) belongs in a package-specific plugin.
+
+## Blade Template Analysis
+
+### `$attributes`/`$slot` classify a component view from its own SOURCE, not its render path or view location
+
+**Decision:** `PreludeBuilder::componentTypesFor()` declares `$attributes`/`$slot` only when the template's own source writes `@props(...)`, `@aware(...)`, or mentions either name — never from where the view lives (`components/` or a registered anonymous namespace) or how it is reached (`<x-*>` vs `@component('view', [...])`). `$component` is never declared at all: Laravel does not pass it as view data on any path.
+
+**Why:** `AMBIENT_TYPES` unconditionally declared `$attributes`/`$component`/`$slot` non-nullable in EVERY shadow, so Laravel's own compiled guards on those names (`isset()`, `??=`, `instanceof`) collapsed into `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction` — 84% of all template findings on a measured real-world app (#1525). The source-based classifier is exact for the case that matters most (a `<x-*>` caller never writes any of the four markers itself) and is free: `ShadowManifest::fingerprint()` already hashes `$source`, so no manifest slot is needed and the classification cannot go stale independently of a recompile.
+
+**Rejected alternatives:**
+- **Blanket nullable typing** (`?ComponentAttributeBag` / `?ComponentSlot` everywhere, the issue's own first framing). Fixes the over-typing but adds a NEW false positive: `PossiblyNullReference` on an author's own `$attributes->merge()` in a class-component view that never writes `@props`, since `Component::data()` / `AnonymousComponent::data()` already guarantee the key there. Rejected in the issue itself before implementation started.
+- **Directory/view-name classifier** (a view name under `components.` or a registered anonymous-component namespace/path, `ComponentTagCompiler::guessAnonymousComponentUsingNamespaces()`/`guessAnonymousComponentUsingPaths()`). More "principled" — it reflects how `<x-*>` actually resolves — but strictly worse in practice: it needs the view name threaded from `BladeBootstrapper` into `ShadowCompiler::compile()`, it cannot see class-component views outside `components/` (Laravel's own published `vendor/mail/**` overrides are exactly that shape, reached via `@component('mail::message')` **and** `<x-mail::message>`), and the view roots it would depend on are not part of `CompilerEnvironment::describe()`'s cache fingerprint, so a view-path config change would not invalidate cached shadows.
+- **A `$slot` render-path union** (`ComponentSlot|HtmlString`, per the issue's "Render-path differentiation" addendum). Laravel has not produced `HtmlString` slots since before this plugin's floor (`illuminate/view: ^11.35`) — `ManagesComponents::componentData()` builds a `ComponentSlot` on both the `<x-*>` and `@component` paths, verified byte-identical across Laravel 11.50, 12.55, and 13.31. The union would be strictly weaker (losing `$slot->isEmpty()`/`$slot->attributes`) for no soundness gain; only `$attributes` is genuinely render-path-sensitive (absent on the `@component` path), and that distinction cannot be told apart statically from the template source alone — accepted as a documented gap rather than chased with cross-template tracking.

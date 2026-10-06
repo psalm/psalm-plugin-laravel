@@ -46,6 +46,7 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
             ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs(
                 $statements_source->getNodeTypeProvider(),
                 $call_args,
+                $statements_source->getCodebase(),
             ) ?? Type::getMixed()
         );
     }
@@ -98,7 +99,9 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
             return null;
         }
 
-        return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($event->getSource()->getNodeTypeProvider(), $event->getCallArgs());
+        $source = $event->getSource();
+
+        return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($source->getNodeTypeProvider(), $event->getCallArgs(), $source->getCodebase());
     }
 
     /**

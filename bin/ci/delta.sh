@@ -9,9 +9,13 @@
 # untouched. Apps come from bin/ci/test-apps.yml (requires `yq`).
 #
 # Usage:
-#   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(master, head)
+#   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(4.x, head)
 #   bash bin/ci/delta.sh <base-ref> vs <head-ref>   # explicit base + head
-#   APPS="monica,coolify" bash bin/ci/delta.sh <head-ref>   # subset
+#   bash bin/ci/delta.sh --apps "octane,vito" <head-ref>   # default group + octane + vito
+#
+# --apps takes the `/psalm-delta` comment grammar without the prefix (resolved by
+# bin/ci/delta-select-apps.php): group tags and app names add to the `default` group,
+# `all` selects every app, `help` lists groups. Omitted = `default`.
 #
 # Output: markdown delta report on stdout; raw JSON cached under
 #   .cache/psalm-delta-ci/<BASE_SHA>--<HEAD_SHA>/ (gitignored, reused on rerun).
@@ -26,39 +30,36 @@ command -v git >/dev/null || { echo "ERROR: git is required" >&2; exit 2; }
 command -v php >/dev/null || { echo "ERROR: php is required (for delta-report.php)" >&2; exit 2; }
 command -v yq  >/dev/null || { echo "ERROR: yq (mikefarah v4) is required to read $REGISTRY" >&2; exit 2; }
 
-# --- Read registry + validate optional APPS= subset (before any heavy work) ---
+# --- Resolve the app selection (before any heavy work) -----------------------
 
-# Optional APPS=a,b,c subset filter.
-SUBSET="${APPS:-}"
-# read loop (not mapfile) for bash 3.2 compatibility (macOS default shell).
-APP_NAMES=()
-while IFS= read -r line; do
-    [[ -n "$line" ]] && APP_NAMES+=("$line")
-done < <(yq '.apps[].name' "$REGISTRY")
+SELECTOR=""
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --apps)
+            [[ $# -ge 2 ]] || { echo "ERROR: --apps needs a selector (try --apps help)" >&2; exit 2; }
+            SELECTOR="$2"; shift 2 ;;
+        *) POSITIONAL+=("$1"); shift ;;
+    esac
+done
+# ${arr[@]+...}: bash 3.2 (macOS default) treats an empty array as unbound under set -u.
+set -- ${POSITIONAL[@]+"${POSITIONAL[@]}"}
 
-# Validate an APPS= subset up front: an unknown name otherwise silently yields
-# an empty RUN_APPS and surfaces only later as delta-report.php's "--apps is
-# required" — after the worktrees and clones are already built. List the valid
-# names instead so the typo is obvious.
-if [[ -n "$SUBSET" ]]; then
-    valid=",$(IFS=,; echo "${APP_NAMES[*]}"),"
-    IFS=',' read -ra REQUESTED <<< "$SUBSET"
-    for req in "${REQUESTED[@]}"; do
-        [[ -z "$req" ]] && continue
-        if [[ "$valid" != *",$req,"* ]]; then
-            echo "ERROR: unknown app '$req' in APPS=. Valid apps:" >&2
-            printf '  %s\n' "${APP_NAMES[@]}" >&2
-            exit 2
-        fi
-    done
-fi
+SELECTION=$(yq -o=json "$REGISTRY" | php "${PLUGIN_DIR}/bin/ci/delta-select-apps.php" "$SELECTOR") || exit 2
+case "$(yq -p=json '.status' <<< "$SELECTION")" in
+    run) ;;
+    help) yq -p=json '.reply' <<< "$SELECTION"; exit 0 ;;
+    *) yq -p=json '.reply' <<< "$SELECTION" >&2; exit 2 ;;
+esac
+SELECTION_LABEL=$(yq -p=json '.label' <<< "$SELECTION")
+IFS=',' read -ra RUN_APPS <<< "$(yq -p=json '.apps_csv' <<< "$SELECTION")"
 
 # --- Resolve base / head refs ------------------------------------------------
 
 if [[ $# -eq 1 ]]; then
     HEAD_REF="$1"
-    BASE_REF=$(git merge-base master "$HEAD_REF") \
-        || { echo "ERROR: cannot compute merge-base(master, $HEAD_REF)" >&2; exit 1; }
+    BASE_REF=$(git merge-base 4.x "$HEAD_REF") \
+        || { echo "ERROR: cannot compute merge-base(4.x, $HEAD_REF)" >&2; exit 1; }
 elif [[ $# -eq 3 && "$2" == "vs" ]]; then
     BASE_REF="$1"; HEAD_REF="$3"
 else
@@ -100,14 +101,6 @@ trap cleanup EXIT
 
 # --- Loop apps ---------------------------------------------------------------
 
-RUN_APPS=()
-for app in "${APP_NAMES[@]}"; do
-    if [[ -n "$SUBSET" && ",$SUBSET," != *",$app,"* ]]; then
-        continue
-    fi
-    RUN_APPS+=("$app")
-done
-
 # Local PHP major.minor, for the registry-mismatch warning below. --php is the
 # caller's concern locally (delta-app.sh ignores it), so a registry app pinned to
 # a different minor than the system php can fail Composer in confusing ways.
@@ -146,9 +139,10 @@ done
 
 echo "" >&2
 APPS_CSV=$(IFS=,; echo "${RUN_APPS[*]}")
-php "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
+php -d memory_limit=-1 "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
     --apps="$APPS_CSV" --base-ref="$BASE_REF" --head-ref="$HEAD_REF" \
-    --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" --date-marker=cache
+    --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" --date-marker=cache \
+    --selection="$SELECTION_LABEL"
 
 echo "" >&2
 echo "Raw data: $OUT (reused on rerun for this SHA pair; rm -rf to force clean)" >&2

@@ -50,7 +50,6 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
      */
     private static array $cache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$formRequestClasses = [];
@@ -59,13 +58,6 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
 
     /**
      * @inheritDoc
-     *
-     * `@psalm-external-mutation-free` is a slight overclaim (the registered
-     * closures mutate Psalm's provider tables) but Psalm 7's `MissingPureAnnotation`
-     * demands it for taint analysis, and project policy forbids baseline entries.
-     * Same disclaimer as {@see InlineValidateRulesCollector::afterStatementAnalysis}.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
@@ -106,8 +98,6 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
      * `false` short-circuits the per-expression PropertyFetch work in
      * {@see ValidatedFieldReadResolver::fromPropertyFetch} on projects with no
      * FormRequest subclasses.
-     *
-     * @psalm-external-mutation-free
      */
     public static function hasAnyFormRequests(): bool
     {
@@ -117,8 +107,6 @@ final class FormRequestPropertyHandler implements AfterCodebasePopulatedInterfac
     /**
      * Whether `$fqClasslikeName` is a known FormRequest subclass — lets the
      * taint resolver skip the `classExtends` walk for non-FormRequest callers.
-     *
-     * @psalm-external-mutation-free
      */
     public static function isFormRequest(string $fqClasslikeName): bool
     {
