@@ -641,6 +641,85 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $this->assertStringNotContainsString('Laravel\Ai\Responses\TextResponse: implements', $output);
     }
 
+    /**
+     * The `1.0.0`-floor shape of `CollectionChoice`: the stub declares a class
+     * the installed release does not have at all (it arrives in a later minor),
+     * tagged `@since` ahead of the installed version. Nothing can be compared,
+     * so the class is reported as version-gated rather than as drift.
+     */
+    #[Test]
+    public function an_at_since_tagged_class_ahead_of_the_installed_version_is_not_drift(): void
+    {
+        [$exitCode, $output] = $this->checkFiles(['NotYetShipped.phpstub' => $this->nonexistentClassStub('@since 999.0.0')]);
+
+        $this->assertSame(0, $exitCode, $output);
+        $this->assertStringContainsString('Version-gated', $output);
+        $this->assertStringContainsString('Laravel\Ai\NotYetShipped (@since 999.0.0)', $output);
+        $this->assertStringNotContainsString('declared in', $output);
+        // Skipped cleanly: no member comparison against a class that cannot be reflected,
+        // and the compared totals stay honest (nothing was compared).
+        $this->assertStringContainsString('Compared 0 method/function signatures across 0 classes', $output);
+    }
+
+    /**
+     * The tag only exempts a class while the installed release predates it.
+     */
+    #[Test]
+    public function an_at_since_tagged_class_already_due_still_fails(): void
+    {
+        [$exitCode, $output] = $this->checkFiles(['NotYetShipped.phpstub' => $this->nonexistentClassStub('@since 0.0.1')]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('Laravel\Ai\NotYetShipped: declared in', $output);
+        $this->assertStringNotContainsString('Version-gated', $output);
+    }
+
+    #[Test]
+    public function an_untagged_class_missing_from_the_installed_package_still_fails(): void
+    {
+        [$exitCode, $output] = $this->checkFiles(['NotYetShipped.phpstub' => $this->nonexistentClassStub(null)]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('Laravel\Ai\NotYetShipped: declared in', $output);
+        $this->assertStringNotContainsString('Version-gated', $output);
+    }
+
+    /**
+     * An interface-clause tag (`@since X implements \Fqcn`) is about that one
+     * interface, not about the class, so it must not exempt a missing class.
+     */
+    #[Test]
+    public function an_interface_clause_tag_does_not_exempt_a_missing_class(): void
+    {
+        [$exitCode, $output] = $this->checkFiles([
+            'NotYetShipped.phpstub' => $this->nonexistentClassStub('@since 999.0.0 implements \Countable'),
+        ]);
+
+        $this->assertSame(1, $exitCode, $output);
+        $this->assertStringContainsString('Laravel\Ai\NotYetShipped: declared in', $output);
+        $this->assertStringNotContainsString('Version-gated', $output);
+    }
+
+    private function nonexistentClassStub(?string $sinceLine): string
+    {
+        $tag = $sinceLine === null ? '' : "\n * {$sinceLine}";
+
+        return <<<PHP
+            <?php
+
+            namespace Laravel\\Ai;
+
+            /**
+             * A class a later laravel/ai minor introduces.
+             *{$tag}
+             */
+            final class NotYetShipped
+            {
+                public function decide(string \$question): mixed {}
+            }
+            PHP;
+    }
+
     private function promptParameter(string $parameter): string
     {
         return "AgentInput|UserMessage|Decisions|string {$parameter},";

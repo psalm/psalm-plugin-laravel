@@ -69,6 +69,14 @@ declare(strict_types=1);
  * reaches X.Y.Z the tag stops helping, so a real rename or removal upstream
  * is still caught.
  *
+ * The same tag on a stub CLASS docblock (a line of its own, no trailing
+ * `implements`/`extends`) exempts the whole classlike when the installed
+ * release predates it: a class a later minor introduced doesn't exist to
+ * reflect, so it is reported as version-gated and skipped (no member
+ * comparison, not counted in the compared totals) instead of being reported
+ * as removed upstream. A class absent from the CURRENT release, or one with
+ * no tag, still fails.
+ *
  * Properties get no such gate: the checker never flags a stub-declared
  * property the installed class lacks (only the reverse, a vendor property
  * missing from the stub), so a property added in a later minor needs no
@@ -162,6 +170,21 @@ foreach ($stubFiles as $file) {
         }
 
         if (!\class_exists($fqcn) && !\interface_exists($fqcn) && !\trait_exists($fqcn)) {
+            // A class (or interface/trait) a later minor introduced, tagged
+            // `@since X.Y.Z` in its own docblock, is exempt while the
+            // installed release predates it. There is nothing to reflect, so
+            // the whole class is skipped here: every per-member, property
+            // and interface comparison below needs a ReflectionClass, and
+            // running them against a missing class would only emit spurious
+            // findings for a class that genuinely does not exist yet. The
+            // class is deliberately NOT counted in $comparedClasses (nor its
+            // methods in $comparedMethods): nothing was compared, and the
+            // summary line must not claim coverage the run didn't give.
+            $classSince = classSinceTag($classLike->getDocComment());
+            if ($classSince !== null && sinceGateApplies($classSince, $installedVersion, $fqcn, $versionGated)) {
+                continue;
+            }
+
             report($fqcn, "{$fqcn}: declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
             continue;
         }
@@ -331,7 +354,7 @@ if ($knownGaps !== []) {
 }
 
 if ($versionGated !== []) {
-    echo "\nVersion-gated (installed laravel/ai {$installedVersion} predates the stub member's @since tag):\n";
+    echo "\nVersion-gated (installed laravel/ai {$installedVersion} predates the stub declaration's @since tag):\n";
     foreach ($versionGated as $gated) {
         echo " - {$gated}\n";
     }
@@ -469,6 +492,22 @@ function sinceGateApplies(string $since, ?string $installedVersion, string $labe
     }
 
     return false;
+}
+
+/**
+ * The version of a CLASS-level `@since X.Y.Z` line, i.e. one that stands
+ * alone on its line. A line carrying a trailing `implements|extends \Fqcn`
+ * is an interface-clause tag (see interfaceSinceTags()) and says nothing
+ * about the class itself, so it must not exempt a missing class.
+ */
+function classSinceTag(?\PhpParser\Comment\Doc $docComment): ?string
+{
+    if ($docComment === null
+        || \preg_match('/^[ \t]*(?:\/\*\*|\*)?[ \t]*@since[ \t]+(\S+)[ \t]*(?:\*\/)?[ \t]*\r?$/m', $docComment->getText(), $matches) !== 1) {
+        return null;
+    }
+
+    return $matches[1];
 }
 
 function sinceTag(?\PhpParser\Comment\Doc $docComment): ?string

@@ -1,7 +1,14 @@
 --SKIPIF--
 <?php
 require getcwd() . '/vendor/autoload.php';
-\Tests\Psalm\LaravelPlugin\Type\LaravelAiCapability::skipUnlessInstalled();
+if (\Tests\Psalm\LaravelPlugin\Type\LaravelAiCapability::skipUnlessInstalled()) {
+    return;
+}
+
+// `CollectionChoice` arrived in laravel/ai 1.1.0; the `1.0.0` floor has no such vendor class.
+if (!class_exists(\Laravel\Ai\Classification\CollectionChoice::class)) {
+    echo 'skip needs laravel/ai with Classification\CollectionChoice (1.1.0+)';
+}
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
 --FILE--

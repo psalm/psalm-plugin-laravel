@@ -11,6 +11,11 @@ use Laravel\Ai\Enums\Lab;
  * vendor code, which Psalm never analyses, so the sinks on those constructors cannot fire
  * for a caller. They are therefore re-declared on `decide()` itself. This class backs the
  * `Collection::decide` macro registered by `AiServiceProvider`.
+ *
+ * laravel/ai 1.1.0 introduced this class, so the parity checker exempts it on the `1.0.0`
+ * floor; see "Stub merging" in `docs/contributing/README.md` for the `@since` gating rule.
+ *
+ * @since 1.1.0
  */
 final class CollectionChoice
 {
