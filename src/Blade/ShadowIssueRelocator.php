@@ -568,18 +568,14 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        try {
-            $snippet = $issue->code_location->getSnippet();
-            [$selectionStart, $selectionEnd] = $issue->code_location->getSelectionBounds();
-            [$snippetStart] = $issue->code_location->getSnippetBounds();
-        } catch (\Throwable) {
-            return false;
-        }
-
+        $selection = ShadowSelection::of($issue->code_location);
         $call = '$__env->getConsumableComponentData($__value';
-        $callStart = $selectionEnd - $snippetStart - \strlen($call);
 
-        if ($selectionEnd - $selectionStart !== \strlen('$__value') || $callStart < 0 || \substr($snippet, $callStart, \strlen($call)) !== $call) {
+        if (
+            !$selection instanceof ShadowSelection
+            || $selection->end - $selection->start !== \strlen('$__value')
+            || !TemplateSnippetMatcher::endsAt($selection->snippet, $selection->end, $call)
+        ) {
             return false;
         }
 
@@ -597,21 +593,16 @@ final class ShadowIssueRelocator
      */
     private static function echoArgumentSlice(CodeLocation $location, string $callee): ?array
     {
-        try {
-            $snippet = $location->getSnippet();
-            [$selectionStart, $selectionEnd] = $location->getSelectionBounds();
-            [$snippetStart] = $location->getSnippetBounds();
-        } catch (\Throwable) {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection) {
             return null;
         }
 
-        $argumentStart = $selectionStart - $snippetStart;
-        $argumentEnd = $selectionEnd - $snippetStart;
+        $call = TemplateSnippetMatcher::enclosingCallAt($selection->snippet, $selection->start, $selection->end, $callee);
 
-        $call = TemplateSnippetMatcher::enclosingCallAt($snippet, $argumentStart, $argumentEnd, $callee);
-
-        // A non-null call means enclosingCallAt() already validated the bounds against $snippet.
-        return $call === null ? null : [$call, \substr($snippet, $argumentStart, $argumentEnd - $argumentStart)];
+        // A non-null call means enclosingCallAt() already validated the bounds against the snippet.
+        return $call === null ? null : [$call, \substr($selection->snippet, $selection->start, $selection->end - $selection->start)];
     }
 
     /**
@@ -654,15 +645,13 @@ final class ShadowIssueRelocator
      */
     private static function callExpression(CodeLocation $location): ?string
     {
-        try {
-            $snippet = $location->getSnippet();
-            [$selectionStart] = $location->getSelectionBounds();
-            [$snippetStart] = $location->getSnippetBounds();
-        } catch (\Throwable) {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection) {
             return null;
         }
 
-        // No marker stripping HERE, because every offset below indexes into $snippet: the snippet is
+        // No marker stripping HERE, because every offset below indexes into the snippet: it is
         // the WHOLE shadow line (`calculateRealLocation()` resets `preview_start` to the line start,
         // overwriting the node's own `startFilePos` the constructor put there), and cutting bytes
         // out of it would shift the selection offset off its own token.
@@ -675,7 +664,7 @@ final class ShadowIssueRelocator
         // ({@see MarkerComment::prefixFor()}), which a bare `blade:N` would not have been.
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
-        return TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
+        return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
     }
 
     /**
