@@ -401,4 +401,41 @@ final class TemplateSnippetMatcherTest extends TestCase
     {
         $this->assertFalse($this->occursInWithRawTextRewrites("mount('@foo', 'u', 'v', 'w', 'x')", "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n"));
     }
+
+    /** The `@aware` list-form gate: the compiled call text must end exactly where the selection does. */
+    #[Test]
+    public function ends_at_matches_text_ending_exactly_at_the_offset(): void
+    {
+        $call = '$__env->getConsumableComponentData($__value';
+        $line = "<?php foreach (\$x as \$__key => \$__value) { \$__consumable = {$call}, \$__key); } ?>";
+        $end = \strpos($line, $call) + \strlen($call);
+
+        $this->assertTrue(TemplateSnippetMatcher::endsAt($line, $end, $call));
+        $this->assertTrue(TemplateSnippetMatcher::endsAt($call, \strlen($call), $call));
+
+        // One byte either side, or the text not there at all.
+        $this->assertFalse(TemplateSnippetMatcher::endsAt($line, $end - 1, $call));
+        $this->assertFalse(TemplateSnippetMatcher::endsAt($line, $end + 1, $call));
+        $this->assertFalse(TemplateSnippetMatcher::endsAt('$other($__value, 1)', 15, $call));
+
+        // Offset before the text could fit: at snippet start, and one short of its length.
+        $this->assertFalse(TemplateSnippetMatcher::endsAt($call, 0, $call));
+        $this->assertFalse(TemplateSnippetMatcher::endsAt($call . 'x', \strlen($call) - 1, $call));
+
+        // Multibyte: offsets are bytes, as Psalm's are.
+        $this->assertTrue(TemplateSnippetMatcher::endsAt("é{$call}", \strlen("é{$call}"), $call));
+    }
+
+    /**
+     * An offset outside the snippet is no evidence. `substr()` alone would fake both: a negative
+     * length trims from the END, and a length past the end clamps to the whole snippet.
+     */
+    #[Test]
+    public function ends_at_rejects_an_offset_outside_the_snippet(): void
+    {
+        $call = '$__env->getConsumableComponentData($__value';
+
+        $this->assertFalse(TemplateSnippetMatcher::endsAt($call . 'xy', -2, $call));
+        $this->assertFalse(TemplateSnippetMatcher::endsAt($call, \strlen($call) + 1, $call));
+    }
 }
