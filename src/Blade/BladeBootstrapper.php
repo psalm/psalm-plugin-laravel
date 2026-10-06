@@ -93,16 +93,6 @@ final class BladeBootstrapper
 
     private function run(): bool
     {
-        // Optional dependency (composer `suggest`): it pulls in laravel/framework, which projects
-        // without Blade must not pay for. Checked up front because ContractParser treats any parse
-        // failure as "contract unknown", so a missing package would silently drop every
-        // `{{-- @var --}}`, `@props` and template suppression instead of failing visibly.
-        if (!\class_exists(\Stillat\BladeParser\Document\Document::class)) {
-            $this->degrade('the stillat/blade-parser package is not installed (composer require --dev stillat/blade-parser)');
-
-            return false;
-        }
-
         $compiler = $this->resolveCompiler();
 
         if (!$compiler instanceof BladeCompiler) {

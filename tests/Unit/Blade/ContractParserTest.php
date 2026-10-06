@@ -106,27 +106,63 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function suppression_attaches_to_the_next_real_statement_line(): void
+    public function a_var_comment_after_a_props_entry_wins_the_name(): void
     {
-        $contract = $this->parse("{{-- @psalm-suppress UndefinedVariable --}}\n{{ \$foo }}\n");
+        // Document order, not kind: whichever declaration comes LATER in the template wins a
+        // name collision, matching the `@props`/`@var` combo the "type a component prop" pattern
+        // writes.
+        $contract = $this->parse("@props(['user'])\n{{-- @var \\App\\Models\\User \$user --}}\n{{ \$user->name }}\n");
 
-        $this->assertSame(['UndefinedVariable'], $contract->suppressions[2] ?? null);
+        $this->assertSame('\App\Models\User', $contract->vars['user']->typeString);
+        $this->assertSame(2, $contract->vars['user']->declarationLine);
+        $this->assertFalse($contract->vars['user']->optional);
     }
 
     #[Test]
-    public function comma_separated_suppression_yields_every_rule(): void
+    public function a_props_entry_after_a_var_comment_wins_the_name(): void
     {
-        $contract = $this->parse("{{-- @psalm-suppress UndefinedVariable, MixedArgument --}}\n{{ \$foo }}\n");
+        $contract = $this->parse("{{-- @var \\App\\Models\\User \$user --}}\n@props(['user'])\n{{ \$user->name }}\n");
 
-        $this->assertSame(['UndefinedVariable', 'MixedArgument'], $contract->suppressions[2] ?? null);
+        $this->assertSame('mixed', $contract->vars['user']->typeString);
+        $this->assertSame(2, $contract->vars['user']->declarationLine);
+        $this->assertFalse($contract->vars['user']->optional);
     }
 
     #[Test]
-    public function suppression_is_dropped_when_nothing_follows(): void
+    public function a_props_call_inside_a_blade_comment_is_not_live(): void
     {
-        $contract = $this->parse("content\n{{-- @psalm-suppress Foo --}}\n");
+        $contract = $this->parse("{{-- @props(['a']) --}}\n<div></div>\n");
 
-        $this->assertSame([], $contract->suppressions);
+        $this->assertArrayNotHasKey('a', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_props_call_inside_verbatim_is_not_live(): void
+    {
+        $contract = $this->parse("@verbatim @props(['a']) @endverbatim\n<div></div>\n");
+
+        $this->assertArrayNotHasKey('a', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function an_escaped_props_directive_is_not_live(): void
+    {
+        $contract = $this->parse("@@props(['a'])\n<div></div>\n");
+
+        $this->assertArrayNotHasKey('a', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_closing_paren_inside_a_props_string_does_not_close_the_argument_list_early(): void
+    {
+        $contract = $this->parse("@props(['a' => ')'])\n<div>{{ \$a }}</div>\n");
+
+        $this->assertArrayHasKey('a', $contract->vars);
+        $this->assertTrue($contract->vars['a']->optional);
+        $this->assertFalse($contract->propsUnknown);
     }
 
     #[Test]
@@ -220,15 +256,39 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function multi_byte_lines_before_a_suppression_do_not_throw_off_its_target_line(): void
+    public function a_var_comment_inside_verbatim_is_not_a_declaration(): void
     {
-        $source = "Héllo wörld with émoji 😀 and more unicode chars here\n"
-            . "{{-- @psalm-suppress UndefinedVariable --}}\n"
-            . "{{ \$foo }}\n";
+        // Blade emits a @verbatim body as literal text: a `{{-- @var --}}` spelling inside it
+        // never reaches the compiler as a comment and must not be read as a declaration either.
+        $source = "@verbatim\n{{-- @var \\App\\Models\\User \$user --}}\n@endverbatim\n{{ \$user }}\n";
 
         $contract = $this->parse($source);
 
-        $this->assertSame(['UndefinedVariable'], $contract->suppressions[3] ?? null);
+        $this->assertArrayNotHasKey('user', $contract->vars);
+    }
+
+    #[Test]
+    public function a_var_comment_inside_a_php_block_is_not_a_declaration(): void
+    {
+        // The `{{-- --}}` text here is a PHP comment inside live code, not a Blade comment: Blade
+        // never strips it, so it must not be read as a `@var` declaration.
+        $source = "@php\n// {{-- @var \\App\\Models\\User \$user --}}\n@endphp\n{{ \$user }}\n";
+
+        $contract = $this->parse($source);
+
+        $this->assertArrayNotHasKey('user', $contract->vars);
+    }
+
+    #[Test]
+    public function a_bare_cr_line_before_a_var_comment_does_not_throw_off_its_declaration_line(): void
+    {
+        // A bare `\r` ends a line for Blade and PHP alike; counting `\n` alone would misplace the
+        // declaration by a line.
+        $source = "first line\r{{-- @var \\App\\Models\\User \$user --}}\r{{ \$user->name }}\r";
+
+        $contract = $this->parse($source);
+
+        $this->assertSame(2, $contract->vars['user']->declarationLine);
     }
 
     #[Test]
