@@ -793,6 +793,25 @@ final class BladeIssueRemapTest extends TestCase
         }
     }
 
+    /**
+     * #1694: `@session`/`@context` compile a conditional `$__sessionPrevious[] = $value` /
+     * `$__contextPrevious[] = $value` save and later reads behind `isset()`, so Psalm reports the
+     * bookkeeping array as a possibly undefined global on the directive line. The author's own
+     * conditionally assigned `$__authorLocal` on line 13 must keep reporting: the gate is exact-name.
+     */
+    #[Test]
+    public function session_and_context_previous_value_stacks_are_not_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-context-previous.blade.php';
+
+        $this->assertSame(
+            [13],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     #[Test]
     public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
     {

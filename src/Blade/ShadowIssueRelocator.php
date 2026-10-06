@@ -17,6 +17,7 @@ use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -174,6 +175,19 @@ final class ShadowIssueRelocator
         if (
             $issue instanceof InvalidArrayOffset
             && \str_starts_with($issue->message, "Cannot access value on variable \$__errorArgs using offset value of '1', expecting ")
+        ) {
+            return false;
+        }
+
+        // `@session`/`@context` save an outer `$value` with `if (isset($value)) {
+        // $__sessionPrevious[] = $value; }` and read the stack back behind `isset()`
+        // (CompilesSessions, CompilesContexts), so Psalm sees a conditionally created global.
+        // Gated rather than declared in the prelude: a declared list would only move the noise onto
+        // the compiler's own `isset()` guards (PreludeBuilder::undeclaredVariables(), #1558).
+        // Exact-name, so an author's own conditionally assigned `$__`-prefixed local still reports.
+        if (
+            $issue instanceof PossiblyUndefinedGlobalVariable
+            && \preg_match('/^Possibly undefined global variable \$__(?:session|context)Previous,/', $issue->message) === 1
         ) {
             return false;
         }
