@@ -209,3 +209,20 @@ apps:
       && composer require --no-update --no-interaction
       "shuvroroy/filament-spatie-laravel-backup:dev-main#b0508d906e4b5b3b38da17440fa93e5a0ad996c4"
       && cp .env.example .env && echo REVERB_APP_SECRET=psalm-delta >> .env
+
+  - name: agent-fleet
+    repo: https://github.com/escapeboy/agent-fleet-o.git
+    ref: 2493ec6
+    php: "8.4"
+    groups: [ai, livewire, phpunit, laravel-13, sanctum]
+    # Agent-fleet manager: ~70 files import Laravel\Ai, so it exercises agents,
+    # tools and streaming rather than a single prompt call. Its `^1.0` resolves
+    # inside the plugin's gate, unlike the 0.11-pinned apps above.
+
+  - name: relaticle
+    repo: https://github.com/relaticle/relaticle.git
+    ref: 723dce9
+    php: "8.5"
+    groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire, large]
+    # The densest laravel/ai usage found in public code (~115 files), on a
+    # Filament 5 CRM, so the AI surface is analysed beside a real admin panel.
