@@ -9,7 +9,9 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
+use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
@@ -17,6 +19,7 @@ use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -178,6 +181,19 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // `@session`/`@context` save an outer `$value` with `if (isset($value)) {
+        // $__sessionPrevious[] = $value; }` and read the stack back behind `isset()`
+        // (CompilesSessions, CompilesContexts), so Psalm sees a conditionally created global.
+        // Gated rather than declared in the prelude: a declared list would only move the noise onto
+        // the compiler's own `isset()` guards (PreludeBuilder::undeclaredVariables(), #1558).
+        // Exact-name, so an author's own conditionally assigned `$__`-prefixed local still reports.
+        if (
+            $issue instanceof PossiblyUndefinedGlobalVariable
+            && \preg_match('/^Possibly undefined global variable \$__(?:session|context)Previous,/', $issue->message) === 1
+        ) {
+            return false;
+        }
+
         // Laravel's own compiled guards on `$attributes`/`$component`/`$slot` (`isset()`, `??=`,
         // `instanceof`) exist to check what {@see PreludeBuilder::componentTypesFor()} now
         // declares as guaranteed inside a component view — most visibly when that view itself
@@ -327,6 +343,17 @@ final class ShadowIssueRelocator
             ($issue instanceof PossiblyInvalidArgument || $issue instanceof PossiblyFalseArgument)
             && self::isGeneratedEchoArgument($issue, $target)
         ) {
+            return false;
+        }
+
+        // `@aware` compiles to a `foreach` over its literal array whose body picks
+        // `getConsumableComponentData($__key, $__value)` or the list-form
+        // `getConsumableComponentData($__value)` by `is_string($__key)` (CompilesComponents::
+        // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
+        // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
+        // which only runs for an int key (#1695). Every argument issue on that selection is the
+        // same artifact, plus the string casts Psalm reports alongside it.
+        if (self::isGeneratedAwareListFormArgument($issue, $target)) {
             return false;
         }
 
@@ -514,6 +541,45 @@ final class ShadowIssueRelocator
         [$call, $argument] = $slice;
 
         if (!TemplateSnippetMatcher::occursIn($argument, $target->templateSource, $target->markerPrefix())) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether an argument or string-cast issue points at `$__value` in the list-form call
+     * `@aware`'s compiled loop makes. The call text cut out of the shadow must be absent from the template, the same
+     * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
+     * same arguments inside `@php` keeps reporting.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedAwareListFormArgument(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        if ($issue instanceof ArgumentIssue) {
+            if (
+                $issue->function_id !== 'illuminate\\view\\factory::getconsumablecomponentdata'
+                || !\str_starts_with($issue->message, 'Argument 1 ')
+            ) {
+                return false;
+            }
+        } elseif (!$issue instanceof InvalidCast && !$issue instanceof ImplicitToStringCast) {
+            return false;
+        }
+
+        try {
+            $snippet = $issue->code_location->getSnippet();
+            [$selectionStart, $selectionEnd] = $issue->code_location->getSelectionBounds();
+            [$snippetStart] = $issue->code_location->getSnippetBounds();
+        } catch (\Throwable) {
+            return false;
+        }
+
+        $call = '$__env->getConsumableComponentData($__value';
+        $callStart = $selectionEnd - $snippetStart - \strlen($call);
+
+        if ($selectionEnd - $selectionStart !== \strlen('$__value') || $callStart < 0 || \substr($snippet, $callStart, \strlen($call)) !== $call) {
             return false;
         }
 

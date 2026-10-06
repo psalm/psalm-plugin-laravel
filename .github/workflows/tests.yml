@@ -68,10 +68,10 @@ jobs:
           - php: '8.4'
             laravel: '13.3.0'
           - php: '8.2'
-            laravel: '12.14.0'
+            laravel: '12.20.0'
           # Highest 12.x: the enum $connection path is live since 12.28.
           - php: '8.2'
-            laravel: '^12.14'
+            laravel: '^12.20'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -149,7 +149,7 @@ jobs:
         # TEMPORARY upper bound on the 13.x cell: laravel/framework v13.32.0 crashes Psalm's
         # scan phase outright. Restore this to ^13.3 once Psalm parses the tag.
         # @see https://github.com/vimeo/psalm/issues/11958
-        laravel: [ '>=13.3 <13.32', ^12.14 ]
+        laravel: [ '>=13.3 <13.32', ^12.20 ]
         dependencies: [ highest ]
         exclude:
           - php: 8.2

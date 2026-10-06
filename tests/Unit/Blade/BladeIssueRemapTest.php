@@ -793,6 +793,83 @@ final class BladeIssueRemapTest extends TestCase
         }
     }
 
+    /**
+     * #1694: `@session` compiles a conditional `$__sessionPrevious[] = $value` save and later reads
+     * behind `isset()`, so Psalm reports the bookkeeping array as a possibly undefined global on
+     * the directive line. The author's own conditionally assigned `$__authorLocal` on line 9 must
+     * keep reporting: the gate is exact-name.
+     */
+    #[Test]
+    public function session_previous_value_stack_is_not_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-previous.blade.php';
+
+        $this->assertStringContainsString('$__sessionPrevious[] = $value', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [9],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** #1694: the `@context` twin of the `@session` stack above (`$__contextPrevious`). */
+    #[Test]
+    public function context_previous_value_stack_is_not_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'context-previous.blade.php';
+
+        $this->assertStringContainsString('$__contextPrevious[] = $value', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
+     * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
+     * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`
+     * (line 2) and a nullable one (line 7) here, `false`/`0`/`true`/`[]` and mixed lists in
+     * `aware-scalar-default`. The author's own calls with literal arguments keep reporting.
+     */
+    #[Test]
+    public function non_string_aware_defaults_do_not_report_against_the_generated_list_form_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        // Guard against a vacuous pass: the list-form arm must still be compiled.
+        $this->assertStringContainsString('$__env->getConsumableComponentData($__value', $this->shadowSourceFor('components/aware-scalar-default.blade.php'));
+
+        $template = 'components/aware-null-default.blade.php';
+        $this->assertSame([5], $this->linesFor($issues, 'NullArgument', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyNullArgument', $template), $json);
+
+        $template = 'components/aware-scalar-default.blade.php';
+        $this->assertSame([7, 8], $this->linesFor($issues, 'InvalidArgument', $template), $json);
+        $this->assertSame([8], $this->linesFor($issues, 'InvalidCast', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyFalseArgument', $template), $json);
+    }
+
+    /**
+     * #1695: the gate declines when the template itself contains the generated call text, so an
+     * author-written `getConsumableComponentData($__value)` with a null `$__value` keeps reporting.
+     */
+    #[Test]
+    public function an_author_written_list_form_call_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            2,
+            $this->linesFor($issues, 'NullArgument', 'components/aware-author-list-call.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     #[Test]
     public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
     {
