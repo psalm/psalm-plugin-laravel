@@ -22,6 +22,7 @@ final readonly class Report
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
      * @param list<string> $loadedProviders Service provider class names the booted kernel registered, sorted. Empty when boot failed.
+     * @param list<array{key: string, value: string, source: string}> $pluginSettings Effective plugin settings in schema order. Empty when an override or the plugin XML was invalid.
      */
     public function __construct(
         public ?string $pluginVersion,
@@ -35,5 +36,6 @@ final readonly class Report
         public array $bootstrapErrors,
         public array $hardFailures,
         public array $loadedProviders,
+        public array $pluginSettings,
     ) {}
 }

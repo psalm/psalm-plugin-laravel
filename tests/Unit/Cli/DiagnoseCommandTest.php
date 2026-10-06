@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
+use Psalm\LaravelPlugin\Cli\Diagnose\PluginSettings;
 use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TipsProvider;
 use Psalm\LaravelPlugin\Cli\DiagnoseCommand;
@@ -17,6 +19,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 
 #[CoversClass(DiagnoseCommand::class)]
 #[CoversClass(Diagnostics::class)]
+#[CoversClass(PluginSettings::class)]
 #[CoversClass(Report::class)]
 #[CoversClass(TipsProvider::class)]
 final class DiagnoseCommandTest extends TestCase
@@ -51,6 +54,7 @@ final class DiagnoseCommandTest extends TestCase
             bootstrapErrors: ['synthetic'],
             hardFailures: ['Application boot failed: synthetic'],
             loadedProviders: [],
+            pluginSettings: [],
         );
 
         $tester = $this->testerFor($this->fixtureProvider($failing));
@@ -79,6 +83,7 @@ final class DiagnoseCommandTest extends TestCase
             bootstrapErrors: ['Call to a member function bar() on null in config/app.php:42'],
             hardFailures: [],
             loadedProviders: $base->loadedProviders,
+            pluginSettings: [],
         );
 
         $tester = $this->testerFor($this->fixtureProvider($warned));
@@ -164,6 +169,58 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
+    public function plugin_settings_render_with_their_value_and_source(): void
+    {
+        $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::SUCCESS, $exit, $display);
+        $this->assertMatchesRegularExpression('/Plugin settings\n\s+blade\s+false\s+\(cli\)/', $display);
+        $this->assertMatchesRegularExpression('/findUnregisteredRouteNames\s+true\s+\(derived \(experimental\)\)/', $display);
+    }
+
+    /**
+     * @param list<string> $argv
+     */
+    #[Test]
+    #[DataProvider('bladeFlagOrders')]
+    public function the_last_of_a_blade_flag_and_plugin_option_wins(array $argv, string $expected): void
+    {
+        $tester = $this->realTester(['psalm-laravel', 'diagnose', ...$argv]);
+
+        $exit = $tester->execute([]);
+
+        $this->assertSame(Command::SUCCESS, $exit, $tester->getDisplay());
+        $this->assertMatchesRegularExpression('/\n\s+blade\s+' . $expected . '\s+\(cli\)\n/', $tester->getDisplay());
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, string}>
+     */
+    public static function bladeFlagOrders(): iterable
+    {
+        yield 'flag then option' => [['--blade', '--plugin-option', 'blade=false'], 'false'];
+        yield 'option then flag' => [['--plugin-option=blade=false', '--blade'], 'true'];
+        yield 'option then negated flag' => [['--plugin-option', 'blade=true', '--no-blade'], 'false'];
+    }
+
+    #[Test]
+    public function an_invalid_override_is_reported_as_a_failure_without_a_stack_trace(): void
+    {
+        $tester = $this->realTester(['psalm-laravel', 'diagnose', '--plugin-option', 'blade=maybe']);
+
+        $exit = $tester->execute([]);
+        $display = $tester->getDisplay();
+
+        $this->assertSame(Command::FAILURE, $exit);
+        $this->assertStringContainsString('Hard failures', $display);
+        $this->assertStringContainsString("invalid value 'maybe' for key 'blade'", $display);
+        $this->assertStringNotContainsString('Stack trace', $display);
+    }
+
+    #[Test]
     public function real_diagnostics_collect_returns_well_formed_report(): void
     {
         $report = (new Diagnostics())->collect();
@@ -181,6 +238,17 @@ final class DiagnoseCommandTest extends TestCase
     }
 
 
+    /**
+     * @param list<string> $argv
+     */
+    private function realTester(array $argv): CommandTester
+    {
+        $app = new Application();
+        $app->addCommand(new DiagnoseCommand(argvOverride: $argv));
+
+        return new CommandTester($app->find('diagnose'));
+    }
+
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {
         $command = new DiagnoseCommand($diagnostics, $tipsProvider);
@@ -196,7 +264,7 @@ final class DiagnoseCommandTest extends TestCase
             public function __construct(private readonly Report $report) {}
 
             #[\Override]
-            public function collect(): Report
+            public function collect(array $cliOptions = []): Report
             {
                 return $this->report;
             }
@@ -236,6 +304,10 @@ final class DiagnoseCommandTest extends TestCase
             loadedProviders: [
                 'Illuminate\\Auth\\AuthServiceProvider',
                 'Illuminate\\Database\\DatabaseServiceProvider',
+            ],
+            pluginSettings: [
+                ['key' => 'blade', 'value' => 'false', 'source' => 'cli'],
+                ['key' => 'findUnregisteredRouteNames', 'value' => 'true', 'source' => 'derived (experimental)'],
             ],
         );
     }
