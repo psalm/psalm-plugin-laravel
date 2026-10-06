@@ -812,6 +812,23 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
+     * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
+     * `is_string($__key)` ternaries, so a keyed `null` default (line 2) or a nullable one (line 7)
+     * reaches that arm. The author's own `getConsumableComponentData(null)` on line 5 must keep
+     * reporting.
+     */
+    #[Test]
+    public function null_aware_defaults_do_not_report_against_the_generated_list_form_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/aware-null-default.blade.php';
+
+        $this->assertSame([5], $this->linesFor($issues, 'NullArgument', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyNullArgument', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
     #[Test]
     public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
     {
