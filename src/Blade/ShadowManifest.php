@@ -27,7 +27,7 @@ final class ShadowManifest
      * docblock), so this is the only lever that self-invalidates plugin-side derived facts such as
      * the {@see ViewDataContract} cached in slot 5.
      */
-    private const MARKER_PASS_VERSION = 12;
+    private const MARKER_PASS_VERSION = 13;
 
     /** {@see self::isFresh()}: the data-includes slot must have been collected for the entry to count as fresh. */
     public const SLOT_DATA_INCLUDES = 1;

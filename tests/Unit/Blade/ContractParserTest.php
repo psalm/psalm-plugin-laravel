@@ -166,6 +166,39 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function props_text_inside_another_directives_string_argument_is_not_a_declaration(): void
+    {
+        // The `@props(...)` text here sits inside `@php`'s own argument (a quoted string), never as
+        // a live directive of its own; a scan that re-enters an already-consumed argument span
+        // would misread it as a second, phantom `@props` declaring `$phantom`.
+        $contract = $this->parse("@php(\$example = \"@props(['phantom'])\")\n<div></div>\n");
+
+        $this->assertArrayNotHasKey('phantom', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function the_literal_text_props_inside_a_props_strings_default_value_does_not_confuse_the_scan(): void
+    {
+        $contract = $this->parse("@props(['hint' => 'Use @props for inputs'])\n<div>{{ \$hint }}</div>\n");
+
+        $this->assertArrayHasKey('hint', $contract->vars);
+        $this->assertTrue($contract->vars['hint']->optional);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_php_comment_inside_a_props_argument_does_not_declare_a_nested_props_name(): void
+    {
+        $contract = $this->parse("@props(['a' /* @props(['b']) */])\n<div>{{ \$a }}</div>\n");
+
+        $this->assertArrayHasKey('a', $contract->vars);
+        $this->assertFalse($contract->vars['a']->optional);
+        $this->assertArrayNotHasKey('b', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
     public function foreach_subject_is_read_but_its_alias_is_local(): void
     {
         $contract = $this->parse("@foreach(\$items as \$item)\n{{ \$item }}\n@endforeach\n");
