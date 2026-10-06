@@ -113,7 +113,7 @@ for app in "${RUN_APPS[@]}"; do
     ref=$(yq ".apps[] | select(.name == \"$app\") | .ref" "$REGISTRY")
     php_ver=$(yq ".apps[] | select(.name == \"$app\") | .php // \"8.3\"" "$REGISTRY")
     pdir=$(yq ".apps[] | select(.name == \"$app\") | .project_dir // \"\"" "$REGISTRY")
-    prime=$(yq ".apps[] | select(.name == \"$app\") | .prime // \"\"" "$REGISTRY")
+    before_install=$(yq ".apps[] | select(.name == \"$app\") | .before_install // \"\"" "$REGISTRY")
     psalm_args=$(yq ".apps[] | select(.name == \"$app\") | .psalm_args // \"\"" "$REGISTRY")
 
     # Warn (don't block) when the system php differs from the app's pinned minor:
@@ -128,7 +128,7 @@ for app in "${RUN_APPS[@]}"; do
         --out "$OUT" --base-label "$BASE_LABEL" --head-label "$HEAD_LABEL"
     )
     [[ -n "$pdir"  ]] && args+=(--project-dir "$pdir")
-    [[ -n "$prime" ]] && args+=(--prime "$prime")
+    [[ -n "$before_install" ]] && args+=(--before-install "$before_install")
     [[ -n "$psalm_args" ]] && args+=(--psalm-args "$psalm_args")
 
     echo "=== $app ===" >&2

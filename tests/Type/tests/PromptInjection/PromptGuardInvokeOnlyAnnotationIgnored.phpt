@@ -7,7 +7,9 @@ require getcwd() . '/vendor/autoload.php';
 --FILE--
 <?php declare(strict_types=1);
 
-namespace GuardInvokable\Guards {
+namespace GuardInvokeOnly\Guards {
+    // laravel/ai 1.x never calls __invoke() on a middleware entry (only handle(), or the closure
+    // itself), so an escape declared only on __invoke() is never read and the finding stays.
     final class InvokablePromptGuard
     {
         /**
@@ -21,18 +23,18 @@ namespace GuardInvokable\Guards {
     }
 }
 
-namespace GuardInvokable\Agents {
+namespace GuardInvokeOnly\Agents {
     final class InvokableAgent implements \Laravel\Ai\Contracts\HasMiddleware
     {
         use \Laravel\Ai\Promptable;
 
         /**
-         * @return list<\GuardInvokable\Guards\InvokablePromptGuard>
+         * @return list<\GuardInvokeOnly\Guards\InvokablePromptGuard>
          */
         #[\Override]
         public function middleware(): array
         {
-            return [new \GuardInvokable\Guards\InvokablePromptGuard()];
+            return [new \GuardInvokeOnly\Guards\InvokablePromptGuard()];
         }
     }
 
@@ -46,3 +48,4 @@ namespace GuardInvokable\Agents {
 
 ?>
 --EXPECTF--
+TaintedLlmPrompt on line %d: Detected tainted LLM prompt

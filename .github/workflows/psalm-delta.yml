@@ -257,7 +257,7 @@ jobs:
           REF: ${{ matrix.ref }}
           PHP: ${{ matrix.php }}
           PROJECT_DIR: ${{ matrix.project_dir }}
-          PRIME: ${{ matrix.prime }}
+          BEFORE_INSTALL: ${{ matrix.before_install }}
           PSALM_ARGS: ${{ matrix.psalm_args }}
           BASE_LABEL: ${{ needs.prepare.outputs.base_label }}
           HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
@@ -274,7 +274,7 @@ jobs:
             --date-marker cache
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
-          [ -n "$PRIME" ] && args+=(--prime "$PRIME")
+          [ -n "$BEFORE_INSTALL" ] && args+=(--before-install "$BEFORE_INSTALL")
           [ -n "$PSALM_ARGS" ] && args+=(--psalm-args "$PSALM_ARGS")
           # Harness (default branch) owns measurement; the PR cannot alter it.
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"

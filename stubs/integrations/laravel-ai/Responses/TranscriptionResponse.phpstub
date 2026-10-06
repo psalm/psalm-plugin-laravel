@@ -5,7 +5,7 @@ namespace Laravel\Ai\Responses;
 use Illuminate\Support\Collection;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TranscriptionSegment;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TranscriptionUsage;
 
 /**
  * A transcript is model output like any other: the audio was supplied by a user,
@@ -30,14 +30,14 @@ class TranscriptionResponse implements \Stringable
     /** @var Collection<int, TranscriptionSegment> */
     public Collection $segments;
 
-    public Usage $usage;
+    public TranscriptionUsage $usage;
 
     public Meta $meta;
 
     /**
      * @param Collection<int, TranscriptionSegment> $segments
      */
-    public function __construct(string $text, Collection $segments, Usage $usage, Meta $meta) {}
+    public function __construct(string $text, Collection $segments, TranscriptionUsage $usage, Meta $meta) {}
 
     /**
      * @psalm-taint-source input

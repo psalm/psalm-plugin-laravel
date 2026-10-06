@@ -7,8 +7,10 @@ require getcwd() . '/vendor/autoload.php';
 --FILE--
 <?php declare(strict_types=1);
 
-namespace GuardShadowed\Guards {
-    final class ShadowedHandleGuard
+namespace GuardHandleWithInvoke\Guards {
+    // handle() is what laravel/ai 1.x dispatches, so its escape exempts the call site even though
+    // the class also declares an unannotated __invoke().
+    final class HandleWithInvokeGuard
     {
         /**
          * @psalm-taint-escape llm_prompt
@@ -25,29 +27,28 @@ namespace GuardShadowed\Guards {
     }
 }
 
-namespace GuardShadowed\Agents {
-    final class ShadowedHandleAgent implements \Laravel\Ai\Contracts\HasMiddleware
+namespace GuardHandleWithInvoke\Agents {
+    final class HandleWithInvokeAgent implements \Laravel\Ai\Contracts\HasMiddleware
     {
         use \Laravel\Ai\Promptable;
 
         /**
-         * @return list<\GuardShadowed\Guards\ShadowedHandleGuard>
+         * @return list<\GuardHandleWithInvoke\Guards\HandleWithInvokeGuard>
          */
         #[\Override]
         public function middleware(): array
         {
-            return [new \GuardShadowed\Guards\ShadowedHandleGuard()];
+            return [new \GuardHandleWithInvoke\Guards\HandleWithInvokeGuard()];
         }
     }
 
-    function askShadowed(\Illuminate\Http\Request $request): \Laravel\Ai\Responses\AgentResponse
+    function askHandleWithInvoke(\Illuminate\Http\Request $request): \Laravel\Ai\Responses\AgentResponse
     {
         $question = (string) $request->input('q');
 
-        return (new ShadowedHandleAgent())->prompt($question);
+        return (new HandleWithInvokeAgent())->prompt($question);
     }
 }
 
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt

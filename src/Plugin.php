@@ -296,9 +296,9 @@ final class Plugin implements PluginEntryPointInterface
      * Stubs for optional first/third-party AI packages. Each entry guards on
      * Composer's runtime metadata so absent packages contribute zero stubs and
      * we avoid triggering the project autoloader for a class lookup. The
-     * version constraint additionally protects against a future major bump
-     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
-     * renamed classes.
+     * version constraint additionally keeps the stubs off a laravel/ai release
+     * whose declarations they no longer match (see
+     * LaravelAiIntegration::CONSTRAINT).
      *
      * @return list<string>
      */
@@ -317,8 +317,8 @@ final class Plugin implements PluginEntryPointInterface
      * Single gate for every laravel/ai call site (stubs, LlmOutputTaintHandler,
      * PromptInjectionIssuePolicy). They must move in lockstep: a stub loaded
      * without its handler, or an issue policy applied without the stubs that
-     * feed it, is a silent half-integration. The version range has no ceiling
-     * below 1.0 because disabling coverage on every minor is worse than the
+     * feed it, is a silent half-integration. The range has no ceiling below the
+     * next major, because disabling coverage on every minor is worse than the
      * rare drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
      */
     private function laravelAiIntegrationEnabled(): bool
@@ -653,9 +653,8 @@ final class Plugin implements PluginEntryPointInterface
 
             // Exempts prompt()/stream() call sites whose receiver declares a middleware
             // stack containing a guard that annotates `@psalm-taint-escape llm_prompt` on
-            // whichever method Illuminate's Pipeline dispatches to it (__invoke for an
-            // object entry that has one, handle otherwise). Emission-time only, never a
-            // graph write.
+            // its handle() method (the only one laravel/ai 1.x dispatches). Emission-time
+            // only, never a graph write.
             require_once __DIR__ . '/Handlers/Ai/PromptGuardTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\PromptGuardTaintHandler::class);
         }

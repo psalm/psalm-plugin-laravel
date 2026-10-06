@@ -4,22 +4,38 @@ namespace Laravel\Ai\Tools;
 
 use Closure;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Approvals\Approval;
+use Laravel\Ai\Concerns\InteractsWithApprovals;
+use Laravel\Ai\Contracts\Approvable;
 use Laravel\Ai\Contracts\Tool;
 
 /**
  * Full member set copied from `vendor/laravel/ai/src/Tools/SimilaritySearch.php`
- * because re-declaring `class SimilaritySearch implements Tool` here wipes the
- * reflected method list — without these three Tool members, every user-defined
- * SimilaritySearch usage would fire `UnimplementedInterfaceMethod`.
+ * because re-declaring `class SimilaritySearch implements Approvable, Tool`
+ * here wipes the reflected method list — without these three Tool members,
+ * every user-defined SimilaritySearch usage would fire
+ * `UnimplementedInterfaceMethod`.
  * See "Stub merging" in `docs/contributing/README.md`.
  *
  * The only behavior we layer on top of the real signatures is the
  * `@psalm-taint-sink llm_prompt $description` annotation: a SimilaritySearch
  * with a user-controllable description string is the static signature of
  * MCP-style tool poisoning (CVE-2025-54136).
+ *
+ * Approval support arrived in laravel/ai 1.1.0: the class implements
+ * `Approvable`, mixes in `InteractsWithApprovals` (requireApproval(),
+ * withoutApproval(), shouldRequestApproval(), `$approvalRequirement`), and
+ * overrides the trait's `needsApproval()`. Both the interface and the trait
+ * already exist in 1.0.0, so only the `implements` entry and the override are
+ * tagged for the `1.0.0` floor; see "Stub merging" in
+ * `docs/contributing/README.md` for the `@since` gating rule.
+ *
+ * @since 1.1.0 implements \Laravel\Ai\Contracts\Approvable
  */
-class SimilaritySearch implements Tool
+class SimilaritySearch implements Approvable, Tool
 {
+    use InteractsWithApprovals;
+
     protected ?string $description = null;
 
     protected bool $rerank = false;
@@ -53,4 +69,9 @@ class SimilaritySearch implements Tool
     public function withDescription(string $description): self {}
 
     public function rerank(Closure|array|string $by, ?int $limit = null): self {}
+
+    /**
+     * @since 1.1.0
+     */
+    protected function needsApproval(Request $request): Approval|bool {}
 }

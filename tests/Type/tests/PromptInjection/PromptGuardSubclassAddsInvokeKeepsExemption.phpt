@@ -19,7 +19,8 @@ namespace GuardAddsInvoke\Guards {
         }
     }
 
-    // handle() is untouched, but the object is now callable, so Pipeline dispatches __invoke().
+    // handle() is inherited untouched and is still what laravel/ai 1.x dispatches; adding an
+    // unannotated __invoke() does not shift dispatch, so the base escape still holds.
     final class AddsInvokeGuard extends AddsInvokeTrustedGuard
     {
         public function __invoke(\Laravel\Ai\Prompts\AgentPrompt $prompt, \Closure $next): mixed
@@ -52,4 +53,3 @@ namespace GuardAddsInvoke\Agents {
 
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt
