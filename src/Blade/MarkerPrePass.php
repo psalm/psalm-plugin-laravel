@@ -133,8 +133,11 @@ final class MarkerPrePass
             // compiler's attribute alternatives: their bodies may hold a `>` (`->`, `=>`). The
             // possessive `*+` is load-bearing: those alternatives overlap `[^>"']`, so a
             // backtracking loop on a never-closed tag exhausts pcre.backtrack_limit. Livewire's
-            // `<livewire:...>` tag compiler is just as strict.
-            '/<\s*(?:x[-:]|livewire:)[\w\-:.]*(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
+            // `<livewire:...>` tag compiler is just as strict. The name lookahead mirrors the
+            // compiler too: without it `a < x-1)` in a `<script>` opens a "tag" that runs to a later
+            // `>`. The inner `*+` keeps unbalanced `@class(` parens from exhausting the JIT stack,
+            // which fails the whole preg_match_all and drops every component-tag skip.
+            '/<\s*(?:x[-:]|livewire:)[\w\-:.]*+(?=[\s\/>])(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*+\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
             // compileClosingTags() matches `<\/\s*x[-\:][\w\-\:\.]*\s*>`: a marker before the
             // `>` of a wrapped closing tag (Prettier's HTML output) leaves it uncompiled.
             '/<\/\s*(?:x[-:]|livewire:)[\w\-:.]*\s*>/',

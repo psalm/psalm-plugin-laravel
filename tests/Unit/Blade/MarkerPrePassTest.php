@@ -121,6 +121,44 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
+    public function a_less_than_x_dash_comparison_does_not_open_a_component_tag(): void
+    {
+        // ComponentTagCompiler wants whitespace, `/` or `>` after the tag name; `x-1)` is not one.
+        $source = "<script>\nif (a < x-1) {\n    b({{ \$c }});\n}\n</script>\ndone\n";
+
+        $this->assertSame([], MarkerPrePass::computeSkipLines($source));
+    }
+
+    #[Test]
+    public function a_never_closed_component_tag_does_not_disarm_later_component_tags(): void
+    {
+        // The unterminated quote makes every later `>` unreachable, so the match fails only after
+        // trying both ways to consume each `{{ }}`: exponential without the possessive outer loop,
+        // and a failed preg_match_all drops every component-tag skip in the template.
+        $source = "<x-alert\n" . \str_repeat("    {{ \$a }}\n", 40) . "    title=\"unterminated\n<x-foo\n    class='a'\n/>\n";
+        $tagLine = 43;
+
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey($tagLine + 1, $skip);
+        $this->assertArrayHasKey($tagLine + 2, $skip);
+    }
+
+    #[Test]
+    public function a_long_unbalanced_class_directive_does_not_disarm_later_component_tags(): void
+    {
+        // Each `@class(` iteration a non-possessive inner loop keeps for backtracking costs JIT
+        // stack; a few hundred lines of calls inside a never-closed `@class([` exhaust it.
+        $source = "<x-alert @class([\n" . \str_repeat("    'a' => \$f(\$b) && \$g(\$c),\n", 1000) . "\n<x-foo\n    class='a'\n/>\n";
+        $tagLine = 1003;
+
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey($tagLine + 1, $skip);
+        $this->assertArrayHasKey($tagLine + 2, $skip);
+    }
+
+    #[Test]
     public function whitespace_only_lines_get_no_marker(): void
     {
         $marked = MarkerPrePass::inject("line one\n   \nline three\n");
