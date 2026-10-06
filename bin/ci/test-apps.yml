@@ -246,3 +246,12 @@ apps:
     project_dir: packages/*/src
     # Same asset-publishing hook as agent-fleet; dropped for the same reason.
     before_install: composer config --no-interaction --unset scripts.post-update-cmd
+
+  - name: aureuserp
+    repo: https://github.com/aureuserp/aureuserp.git
+    ref: 070cacc
+    php: "8.4"
+    groups: [filament, blade, pest, laravel-13, sanctum, livewire]
+    # Filament 5 ERP: app/ holds 7 files, the ~2.9k-file code base is 28
+    # modules under plugins/webkul/*/src.
+    project_dir: plugins/webkul/*/src
