@@ -17,7 +17,8 @@ final class TranslationKeysTest extends TestCase
     public static function shortKeyProvider(): iterable
     {
         yield 'group.key' => ['auth.failed', true];
-        yield 'nested dotted key' => ['validation.attributes.nonexistent_field', true];
+        yield 'typo in group' => ['mesages.welcome', true];
+        yield 'nested dotted key' => ['validation.attributes.email', true];
         yield 'slashed group' => ['admin/users.title', true];
         yield 'domain-like, accepted' => ['example.com', true];
         yield 'sentence with whitespace' => ['Online courses - more coming up!', false];
