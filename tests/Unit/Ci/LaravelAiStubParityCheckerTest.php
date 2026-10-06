@@ -230,6 +230,118 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         ] as $name => $tag) {
             yield $name => [self::missingClassStub($tag), 1, ['Laravel\Ai\NotYetShipped: declared in'], ['Version-gated']];
         }
+
+        // `@stub-waive`: an omitted member the class docblock waives is still printed (with its reason) but is not fatal.
+        $dropped = self::mutate('Promptable', 'public static function assertNeverQueued(): void {}', '');
+        $listed = ['Waived by @stub-waive', 'assertNeverQueued(): public method exists', '(@stub-waive: assertions need no taint review)'];
+
+        yield 'waived omitted public method' => [
+            self::tagClass($dropped, 'trait Promptable', '@stub-waive assertNeverQueued() assertions need no taint review'),
+            0,
+            $listed,
+            ['Signature drift detected', 'no longer matches'],
+        ];
+        yield 'waived omitted protected method' => [
+            self::tagClass(
+                self::mutate('Promptable', 'protected function getTimeout(?int $timeout): int {}', ''),
+                'trait Promptable',
+                '@stub-waive getTimeout() an int clamp, no text',
+            ),
+            0,
+            ['getTimeout(): protected method exists', '(@stub-waive: an int clamp, no text)'],
+            ['Signature drift detected'],
+        ];
+        yield 'waived omitted property' => [
+            self::tagClass(
+                self::mutate('Promptable', 'protected ?array $adHocMessages = null;', ''),
+                'trait Promptable',
+                '@stub-waive $adHocMessages only holds already-sunk messages',
+            ),
+            0,
+            ['adHocMessages: public/protected property exists', '(@stub-waive: only holds already-sunk messages)'],
+            ['Signature drift detected'],
+        ];
+        yield 'waived omitted interface' => [
+            self::tagClass(
+                self::mutate('Tools/Request', 'implements Arrayable, ArrayAccess', 'implements ArrayAccess'),
+                'class Request',
+                '@stub-waive implements \Illuminate\Contracts\Support\Arrayable toArray() is never a taint boundary',
+            ),
+            0,
+            ['implements Illuminate\Contracts\Support\Arrayable in the installed laravel/ai', '(@stub-waive: toArray() is never a taint boundary)'],
+            ['Signature drift detected'],
+        ];
+        yield 'a waiver naming a different member does not waive' => [
+            self::tagClass($dropped, 'trait Promptable', '@stub-waive getTimeout() no text'),
+            1,
+            ['assertNeverQueued(): public method exists', '::warning::Waiver `@stub-waive getTimeout()`'],
+            ['Waived by @stub-waive'],
+        ];
+        yield 'a waiver without a reason is an error' => [
+            self::tagClass($dropped, 'trait Promptable', '@stub-waive assertNeverQueued()'),
+            1,
+            ['`@stub-waive assertNeverQueued()` has no reason', 'assertNeverQueued(): public method exists'],
+            ['Waived by @stub-waive'],
+        ];
+        yield 'a waiver that lost its member is stale' => [
+            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive assertNeverQueued() assertions need no taint review'),
+            0,
+            ['::warning::Waiver `@stub-waive assertNeverQueued()` on Laravel\Ai\Promptable no longer matches any finding'],
+            ['Waived by @stub-waive'],
+        ];
+        yield 'a waiver for a member the vendor dropped is stale' => [
+            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive removedUpstream() was removed in a later release'),
+            0,
+            ['::warning::Waiver `@stub-waive removedUpstream()`'],
+            [],
+        ];
+        // Class-level and member-level waivers must not cross: the former is for omissions only.
+        yield 'a class-level waiver does not mute drift on a declared member' => [
+            self::tagClass(
+                self::mutate('Promptable', 'Closure|iterable $tools', 'Closure|array $tools'),
+                'trait Promptable',
+                '@stub-waive withTools() no text',
+            ),
+            1,
+            ['withTools($tools): stub says "Closure|array"', '::warning::Waiver `@stub-waive withTools()`'],
+            ['Waived by @stub-waive'],
+        ];
+
+        $drifting = self::replaceIn(
+            self::mutate('Promptable', 'Closure|iterable $tools', 'Closure|array $tools'),
+            "     * No sink: `\$tools` transports Tool instances; model-visible descriptions are return values Psalm cannot target.\n",
+            "     * No sink: `\$tools` transports Tool instances; model-visible descriptions are return values Psalm cannot target.\n     *\n     * @stub-waive @@REASON@@\n",
+        );
+        yield 'member-level waiver of signature drift' => [
+            \str_replace('@@REASON@@', 'narrowed on purpose, tracked upstream', $drifting),
+            0,
+            ['Waived by @stub-waive', 'withTools($tools): stub says "Closure|array"', '(@stub-waive: narrowed on purpose, tracked upstream)'],
+            ['Signature drift detected'],
+        ];
+        yield 'member-level waiver without a reason' => [
+            \str_replace('@@REASON@@', '', $drifting),
+            1,
+            ['`@stub-waive` has no reason', 'withTools($tools): stub says "Closure|array"'],
+            ['Waived by @stub-waive'],
+        ];
+        yield 'member-level waiver that no longer reproduces is stale' => [
+            \str_replace(['@@REASON@@', 'Closure|array $tools'], ['narrowed on purpose', 'Closure|iterable $tools'], $drifting),
+            0,
+            ['::warning::Waiver `@stub-waive` on Laravel\Ai\Promptable::withTools no longer matches any finding'],
+            ['Waived by @stub-waive'],
+        ];
+        yield 'member-level waiver with a target is an error' => [
+            \str_replace('@@REASON@@', 'withTools() narrowed on purpose', $drifting),
+            1,
+            ['`@stub-waive withTools()` names a target'],
+            [],
+        ];
+        yield 'class-level waiver without a target is an error' => [
+            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive because I said so'),
+            1,
+            ['needs a target'],
+            [],
+        ];
     }
 
     private static function stub(string $relativePath): string
@@ -240,12 +352,26 @@ final class LaravelAiStubParityCheckerTest extends TestCase
     /** Fails loudly when the shipped stub no longer contains `$search`, instead of silently testing nothing. */
     private static function mutate(string $relativePath, string $search, string $replace): string
     {
-        $source = self::stub($relativePath);
+        return self::replaceIn(self::stub($relativePath), $search, $replace);
+    }
+
+    private static function replaceIn(string $source, string $search, string $replace): string
+    {
         if (!\str_contains($source, $search)) {
-            throw new \LogicException("{$relativePath}.phpstub no longer contains `{$search}`; update this test.");
+            throw new \LogicException("The stub no longer contains `{$search}`; update this test.");
         }
 
         return \str_replace($search, $replace, $source);
+    }
+
+    /** Appends one `@stub-waive` line per tag to the docblock that ends right above `$declaration`. */
+    private static function tagClass(string $stub, string $declaration, string ...$tags): string
+    {
+        return self::replaceIn(
+            $stub,
+            " */\n{$declaration}",
+            " *\n" . \implode('', \array_map(static fn(string $tag): string => " * {$tag}\n", $tags)) . " */\n{$declaration}",
+        );
     }
 
     private static function missingClassStub(?string $sinceLine): string

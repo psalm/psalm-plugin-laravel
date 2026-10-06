@@ -9,11 +9,11 @@ declare(strict_types=1);
  * a newer laravel/ai release, and every type test (which runs against the stub) stays green. Stubs are parsed with
  * php-parser, never loaded: redeclaring a class the vendor autoloader provides would fatal.
  *
- * What is compared and how `@since` gating works: "Stub merging" in docs/contributing/README.md.
+ * What is compared, how `@since` gating and `@stub-waive` waivers work: "Stub merging" in docs/contributing/README.md.
  *
  * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]   (default: stubs/integrations/laravel-ai)
- * Exit codes: 0 = no drift (beyond KNOWN_GAPS), 1 = drift or a stubbed class/method missing from the installed
- *             package, 2 = laravel/ai not installed (soft skip; the calling CI leg gates on that itself).
+ * Exit codes: 0 = no drift (beyond `@stub-waive`d findings), 1 = drift or a stubbed class/method missing from the
+ *             installed package, 2 = laravel/ai not installed (soft skip; the calling CI leg gates on that itself).
  */
 
 use PhpParser\Node;
@@ -24,15 +24,6 @@ use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter\Standard;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
-
-/**
- * Findings that are tracked elsewhere rather than fixed here, keyed by finding key (`Fqcn::method`, the function FQN,
- * `Fqcn implements Iface`, ...). They are still printed, just not fatal. A key that stops matching is reported as
- * stale so it cannot silently suppress a future finding. Empty is the steady state.
- *
- * @var array<string, string>
- */
-const KNOWN_GAPS = [];
 
 if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
     echo "laravel/ai is not installed; nothing to compare.\n";
@@ -65,6 +56,8 @@ foreach (findStubFiles($stubDir) as $file) {
             continue;
         }
 
+        $findings->registerWaivers($function->getDocComment(), $fqcn, $fqcn);
+
         if (!\function_exists($fqcn)) {
             $findings->report($fqcn, "{$fqcn}(): declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)");
             continue;
@@ -77,14 +70,14 @@ foreach (findStubFiles($stubDir) as $file) {
 
 echo "Compared {$findings->comparedSignatures} method/function signatures across {$findings->comparedClasses} classes against the installed laravel/ai package.\n";
 
-printSection('Known gaps (tracked separately, not new drift; see KNOWN_GAPS in this script)', $findings->allowed);
+printSection('Waived by @stub-waive in the stub (still reported, not fatal)', $findings->waived);
 printSection("Version-gated (installed laravel/ai {$findings->installedVersion} predates the stub declaration's @since tag)", $findings->gated);
 
-$staleGapKeys = $findings->staleGapKeys();
-if ($staleGapKeys !== []) {
+$staleWaivers = $findings->staleWaivers();
+if ($staleWaivers !== []) {
     echo "\n";
-    foreach ($staleGapKeys as $staleGapKey) {
-        echo "::warning::Allowlisted gap for \"{$staleGapKey}\" in KNOWN_GAPS (bin/ci/check-laravel-ai-stub-parity.php) no longer reproduces. Remove this entry.\n";
+    foreach ($staleWaivers as $staleWaiver) {
+        echo "::warning::{$staleWaiver} no longer matches any finding. Remove it.\n";
     }
 }
 
@@ -101,7 +94,7 @@ final class Findings
     public array $drift = [];
 
     /** @var list<string> */
-    public array $allowed = [];
+    public array $waived = [];
 
     /** @var list<string> */
     public array $gated = [];
@@ -110,27 +103,84 @@ final class Findings
 
     public int $comparedClasses = 0;
 
-    /** @var array<string, true> */
-    private array $matchedGapKeys = [];
+    /** @var array<string, array{reason: string, tag: string, used: bool}> */
+    private array $waivers = [];
 
     public function __construct(public readonly ?string $installedVersion) {}
 
+    /** A finding on a member the stub DECLARES (or on a class/function): waived only by that element's own docblock. */
     public function report(string $key, string $message): void
     {
-        if (isset(KNOWN_GAPS[$key])) {
-            $this->matchedGapKeys[$key] = true;
-            $this->allowed[] = "{$message} ({$key}: " . KNOWN_GAPS[$key] . ')';
+        $this->settle("drift {$key}", $message);
+    }
+
+    /** A real member or interface the stub OMITS: waived only by a class-docblock `@stub-waive` naming it. */
+    public function reportOmission(string $key, string $message): void
+    {
+        $this->settle("omit {$key}", $message);
+    }
+
+    private function settle(string $waiverKey, string $message): void
+    {
+        if (!isset($this->waivers[$waiverKey])) {
+            $this->drift[] = $message;
 
             return;
         }
 
-        $this->drift[] = $message;
+        $this->waivers[$waiverKey]['used'] = true;
+        $this->waived[] = "{$message} (@stub-waive: {$this->waivers[$waiverKey]['reason']})";
     }
 
-    /** @return list<string> */
-    public function staleGapKeys(): array
+    /**
+     * Records the `@stub-waive` tags of one docblock. In a class docblock every tag names an omitted member
+     * (`name()`, `$name`, `implements \Fqcn`); in a member (or function) docblock a bare tag waives drift of that
+     * declaration's own signature, `$memberKey` being its finding key. The two never cross: a class-level `foo()`
+     * must not also mute drift on a `foo()` the stub does declare, and a tag that does not fit its position, or has
+     * no reason, is itself drift rather than a silent mute.
+     */
+    public function registerWaivers(?\PhpParser\Comment\Doc $doc, string $fqcn, ?string $memberKey = null): void
     {
-        return \array_values(\array_diff(\array_keys(KNOWN_GAPS), \array_keys($this->matchedGapKeys)));
+        $at = $memberKey ?? $fqcn;
+
+        foreach (waiverTags($doc) as $target => $reason) {
+            $tag = \rtrim("@stub-waive {$target}");
+
+            if ($reason === '') {
+                $this->drift[] = "{$at}: `{$tag}` has no reason; a waiver must say why the member is safe to leave unrestated";
+                continue;
+            }
+
+            $waiverKey = match (true) {
+                $memberKey !== null && $target === '' => "drift {$memberKey}",
+                $memberKey !== null || $target === '' => null,
+                \str_starts_with($target, '$') => "omit {$fqcn}::{$target}",
+                \str_ends_with($target, '()') => "omit {$fqcn}::" . \substr($target, 0, -2),
+                default => "omit {$fqcn} {$target}",
+            };
+
+            if ($waiverKey === null) {
+                $this->drift[] = $memberKey !== null
+                    ? "{$at}: `{$tag}` names a target, but a member docblock waives only its own signature (write `@stub-waive <reason>`; omitted members are waived in the class docblock)"
+                    : "{$at}: `{$tag}` needs a target (`name()`, `\$name` or `implements \\Fqcn`) in a class docblock";
+                continue;
+            }
+
+            $this->waivers[$waiverKey] ??= ['reason' => $reason, 'tag' => "`{$tag}` on {$at}", 'used' => false];
+        }
+    }
+
+    /** @return list<string> waivers that waived nothing: the member reappeared in the stub or vanished upstream */
+    public function staleWaivers(): array
+    {
+        $stale = [];
+        foreach ($this->waivers as $waiver) {
+            if (!$waiver['used']) {
+                $stale[] = "Waiver {$waiver['tag']}";
+            }
+        }
+
+        return $stale;
     }
 
     /**
@@ -209,6 +259,31 @@ function sinceTags(?\PhpParser\Comment\Doc $doc): array
     return $tags;
 }
 
+/**
+ * Parses every `@stub-waive [target] reason` line of a docblock, the `@since` sibling for a member the stub
+ * deliberately leaves out (or, on a declared member, deliberately lets drift). The target is `name()`, `$name` or
+ * `implements \Fqcn` (`extends` accepted and normalized, no leading backslash), or absent for the documented
+ * element itself (key ''). The reason is the rest of the line; an empty one is returned as '' so the caller can
+ * reject it.
+ *
+ * @return array<string, string> target => reason, first tag wins
+ */
+function waiverTags(?\PhpParser\Comment\Doc $doc): array
+{
+    if ($doc === null
+        || \preg_match_all('~@stub-waive(?![\w-])(?:[ \t]+(\w+\(\)|\$\w+|(?:implements|extends)[ \t]+\\\\?[A-Za-z_][\w\\\\]*)(?=[ \t\r\n]|\*/|$))?[ \t]*([^\r\n]*)~m', $doc->getText(), $matches, \PREG_SET_ORDER) < 1) {
+        return [];
+    }
+
+    $tags = [];
+    foreach ($matches as $match) {
+        $target = \preg_replace('/^(?:implements|extends)[ \t]+\\\\?/', 'implements ', $match[1]) ?? $match[1];
+        $tags[$target] ??= \trim(\preg_replace('~\s*\*/\s*$~', '', $match[2]) ?? $match[2]);
+    }
+
+    return $tags;
+}
+
 function compareClassLike(Findings $findings, Node\Stmt\ClassLike $classLike, string $file): void
 {
     $fqcn = $classLike->namespacedName?->toString();
@@ -228,12 +303,14 @@ function compareClassLike(Findings $findings, Node\Stmt\ClassLike $classLike, st
 
     $findings->comparedClasses++;
     $reflectionClass = new \ReflectionClass($fqcn);
+    $findings->registerWaivers($classLike->getDocComment(), $fqcn);
 
     $declaredMethodNames = [];
     foreach ($classLike->getMethods() as $method) {
         $methodName = $method->name->toString();
         $declaredMethodNames[$methodName] = true;
         $key = "{$fqcn}::{$methodName}";
+        $findings->registerWaivers($method->getDocComment(), $fqcn, $key);
 
         if (!$reflectionClass->hasMethod($methodName)) {
             if (!$findings->gatedBySince($method->getDocComment(), "{$key}()")) {
@@ -286,7 +363,7 @@ function compareOmittedMembers(Findings $findings, Node\Stmt\ClassLike $classLik
         }
 
         $visibility = $method->isProtected() ? 'protected' : 'public';
-        $findings->report("{$fqcn}::{$name}", "{$fqcn}::{$name}(): {$visibility} method exists in installed laravel/ai but is missing from the stub");
+        $findings->reportOmission("{$fqcn}::{$name}", "{$fqcn}::{$name}(): {$visibility} method exists in installed laravel/ai but is missing from the stub");
     }
 
     $declaredPropertyNames = declaredPropertyNames($classLike);
@@ -305,7 +382,7 @@ function compareOmittedMembers(Findings $findings, Node\Stmt\ClassLike $classLik
             }
         }
 
-        $findings->report("{$fqcn}::\${$name}", "{$fqcn}::\${$name}: public/protected property exists in installed laravel/ai but is missing from the stub");
+        $findings->reportOmission("{$fqcn}::\${$name}", "{$fqcn}::\${$name}: public/protected property exists in installed laravel/ai but is missing from the stub");
     }
 }
 
@@ -342,7 +419,7 @@ function compareInterfaces(Findings $findings, Node\Stmt\ClassLike $classLike, \
 
     foreach ($real as $interfaceName) {
         if (!isset($implied[$interfaceName]) && !isset($inherited[$interfaceName])) {
-            $findings->report(
+            $findings->reportOmission(
                 "{$fqcn} implements {$interfaceName}",
                 "{$fqcn}: implements {$interfaceName} in the installed laravel/ai, but the stub's `{$clauseWord}` clause omits it (Psalm wipes the interface list on redeclaration)",
             );

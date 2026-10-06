@@ -233,16 +233,18 @@ Registration order (`Plugin::registerStubs()`): all `common` files, then version
 
 A stub that re-declares a class merges into the class's vendor file only when Psalm scans the vendor file first. Psalm records a scanned stub as the class's file and then never queues the vendor file. A class that nothing names before stubs load therefore ends up with only its stubbed members (#1616, upstream vimeo/psalm#12075). `Plugin::registerStubs()` queues every class a plugin stub declares (`StubFileFinder::declaredClassLikes()`) during plugin init, which runs before Psalm's main scan, so a partial stub can rely on its unstubbed vendor members resolving.
 
-#### `laravel/ai` parity checker and `@since`
+#### `laravel/ai` parity checker, `@since` and `@stub-waive`
 
 Psalm cannot see stub-versus-vendor drift ([why](taint-analysis.md#optional-third-party-integrations-stubsintegrationspackage)), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the stubs against the installed package (no argument scans all of `stubs/integrations/laravel-ai/`). `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins the script's own checks.
 
 - It compares native parameter/return types and each class's `implements` list (minus what the real parent supplies). Docblock narrowing beyond native types is expected, not drift.
 - A real member the stub omits is reported as a taint-review tripwire, not a correctness failure: Psalm merges it in from the vendor class, but with no taint annotations.
 - Properties need no gate: a stub property the installed class lacks is never reported, and a trait-provided property is covered by mirroring the class's `use` clause (see `Tools/SimilaritySearch.phpstub`).
-- `KNOWN_GAPS` allowlists a mismatch or deliberate omission that cannot be fixed; consumed entries are reported and stale ones warn. It is currently empty.
+- A real member the stub omits fails the run unless the class docblock waives it with `@stub-waive` (below); nothing is allow-listed in the script.
 
 **`@since X.Y.Z`** tags anything a 1.x minor added after the `1.0.0` floor, so the checker skips it while the installed release is older. Method: tag its docblock. `implements` / interface `extends` entry: one `@since X.Y.Z implements \Fully\Qualified\Interface` line per interface in the class docblock. Whole class: a standalone `@since X.Y.Z` line in its class docblock (reported as version-gated, not compared). A name or class the installed release lacks, or a class with no tag, is still reported.
+
+**`@stub-waive`** lets a stub leave out a member that carries no taint or type value (a fluent setter taking an int or an enum, say) instead of restating it. In the class docblock, one line per member: `@stub-waive withMessages() <reason>`, `@stub-waive $runtimeTools <reason>` or `@stub-waive implements \Fully\Qualified\Interface <reason>`. In a docblock of a member the stub does declare, a bare `@stub-waive <reason>` instead waives drift of that member's own signature. The reason is mandatory (a tag without one fails the run), a waived finding is still printed with its reason under "Waived by @stub-waive", and a waiver that matches nothing (the member reappeared in the stub or left the vendor class) is reported as a `::warning::` so it gets deleted. Never waive a member whose parameter carries caller text toward the model: that stays stubbed and annotated.
 
 ### Version-specific overrides (conditional stub loading)
 

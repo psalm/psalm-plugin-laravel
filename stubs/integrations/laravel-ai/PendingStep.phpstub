@@ -9,6 +9,11 @@ use Laravel\Ai\Responses\Data\TextUsage;
  * Agent middleware mutates this value immediately before a generation step.
  * The text-bearing overrides below reach the provider from
  * `vendor/laravel/ai/src/PendingStep.php` and are prompt-injection boundaries.
+ *
+ * @stub-waive isFirstStep() no parameters; a boolean over the step number
+ * @stub-waive onlyTools() names select among tools already on the step and add no text; the tool list itself is sunk by `withTools()`
+ * @stub-waive withoutTools() names remove tools already on the step and add no text
+ * @stub-waive withMaxTokens() an int cap; carries no text to the model
  */
 class PendingStep
 {
@@ -28,8 +33,6 @@ class PendingStep
         public readonly ?string $invocationId = null,
     ) {}
 
-    public function isFirstStep(): bool {}
-
     public function withModel(string $model): self {}
 
     /**
@@ -47,13 +50,7 @@ class PendingStep
      */
     public function withTools(iterable $tools): self {}
 
-    public function onlyTools(string ...$names): self {}
-
-    public function withoutTools(string ...$names): self {}
-
     public function withToolChoice(ToolChoice|string|array|null $toolChoice): self {}
-
-    public function withMaxTokens(?int $maxTokens): self {}
 
     /**
      * @psalm-taint-sink llm_prompt $providerOptions

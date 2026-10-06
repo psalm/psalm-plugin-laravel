@@ -11,6 +11,9 @@ use Laravel\Ai\Responses\RerankingResponse;
  * Pending reranking request. The query is supplied to the reranking model and
  * is therefore an LLM prompt boundary; retain the complete v1 public surface
  * while adding that one taint annotation.
+ *
+ * @stub-waive limit() an int cap on returned documents; carries no text to the model
+ * @stub-waive timeout() an int number of seconds; carries no text to the model
  */
 class PendingReranking
 {
@@ -23,10 +26,6 @@ class PendingReranking
 
     /** @param array<int, string> $documents */
     public function __construct(protected array $documents) {}
-
-    public function limit(?int $limit): self {}
-
-    public function timeout(int $seconds = 30): self {}
 
     /** @psalm-taint-sink llm_prompt $query */
     public function rerank(string $query, Lab|array|string|null $provider = null, ?string $model = null): RerankingResponse {}

@@ -14,6 +14,10 @@ use Laravel\Ai\Responses\QueuedAudioResponse;
  * style prompt handed to the speech model, the same boundary as the sinked
  * text passed to `Audio::of()`; the rest of the public surface is retained
  * unchanged.
+ *
+ * @stub-waive male() no parameters; selects a built-in voice id
+ * @stub-waive female() no parameters; selects a built-in voice id
+ * @stub-waive timeout() an int number of seconds; carries no text to the model
  */
 class PendingAudioGeneration
 {
@@ -32,16 +36,10 @@ class PendingAudioGeneration
 
     public function voice(BackedEnum|string $voice): self {}
 
-    public function male(): self {}
-
-    public function female(): self {}
-
     /**
      * @psalm-taint-sink llm_prompt $instructions
      */
     public function instructions(string $instructions): self {}
-
-    public function timeout(int $seconds = 30): self {}
 
     public function generate(Lab|array|string|null $provider = null, ?string $model = null): AudioResponse {}
 
