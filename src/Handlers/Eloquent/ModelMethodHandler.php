@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
@@ -36,7 +37,7 @@ use Psalm\Type\Union;
  * 2. Method visibility — confirms magic methods are public
  * 3. Method params — provides parameter definitions for argument checking
  * 4. Return types — proxies forwarded calls to Builder<TModel> for type inference, and
- *    substitutes custom builders for Model::query() plus the real instance methods that
+ *    substitutes custom builders for Model::query() and Model::with() plus the real instance methods that
  *    construct builders through newEloquentBuilder()
  *
  * Existence, visibility, params, and return type providers for concrete Model subclasses are
@@ -44,7 +45,7 @@ use Psalm\Type\Union;
  * provider lookup requires exact class name matching — a handler registered for Model::class
  * is not consulted for concrete subclasses like App\Models\User.
  *
- * The getClassLikeNames() registration for Model::class handles `Model::query()` and the
+ * The getClassLikeNames() registration for Model::class handles `Model::query()`, `Model::with()` and the
  * real instance builder-construction methods only when a custom Eloquent builder is registered
  * for the called model. For plain models (base `Builder`), these methods are intentionally
  * deferred to the stubs at
@@ -703,8 +704,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return self::getKeyReturnType($called_fq_classlike_name);
         }
 
-        // Model::query()
-        if ($methodName === 'query') {
+        // Model::query(), and Model::with() which is `static::query()->with(...)` (issue #1678)
+        if ($methodName === 'query' || ($methodName === 'with' && self::hasConcreteModelReceiver($event))) {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
             // For models without a custom builder, defer to the stub's
@@ -744,6 +745,37 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Whether the call's receiver is a literally named class (`Vehicle::with()`, `static::with()`)
+     * or an expression typed as plain object / literal class-string. Template-typed receivers
+     * (`T $model`, `class-string<T>`) and class-string<Model> values decline: rebuilding the
+     * builder from the bound class would replace the template (or a possible subclass) with the
+     * bound, so the stub's `Builder<static>` must keep resolving it.
+     */
+    private static function hasConcreteModelReceiver(MethodReturnTypeProviderEvent $event): bool
+    {
+        $stmt = $event->getStmt();
+        $receiver = $stmt instanceof MethodCall ? $stmt->var : $stmt->class;
+
+        if ($receiver instanceof Name) {
+            return true;
+        }
+
+        $receiverType = $event->getSource()->getNodeTypeProvider()->getType($receiver);
+
+        if (!$receiverType instanceof Union) {
+            return false;
+        }
+
+        foreach ($receiverType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof Type\Atomic\TNamedObject && !$atomic instanceof Type\Atomic\TLiteralClassString) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
