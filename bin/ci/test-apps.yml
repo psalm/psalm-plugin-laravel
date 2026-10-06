@@ -228,7 +228,10 @@ apps:
     ref: 723dce9
     php: "8.5"
     groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire, large]
-    # The densest laravel/ai usage found in public code (~115 files), on a
-    # Filament 5 CRM, so the AI surface is analysed beside a real admin panel.
+    # The densest laravel/ai usage found in public code, on a Filament 5 CRM,
+    # so the AI surface is analysed beside a real admin panel. The agents, tools
+    # and prompts live in packages/*/src (47 files, mostly packages/Chat), which
+    # the app/ skeleton auto-detection would miss entirely.
+    project_dir: packages/*/src
     # Same asset-publishing hook as agent-fleet; dropped for the same reason.
     before_install: composer config --no-interaction --unset scripts.post-update-cmd
