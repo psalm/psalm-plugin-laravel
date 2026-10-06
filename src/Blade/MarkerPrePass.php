@@ -121,7 +121,9 @@ final class MarkerPrePass
             // matches attributes as a strict alternation separated by \s+; a marker
             // between two attributes matches no alternative and the whole tag is
             // silently left uncompiled as literal text. MANDATORY: never drop this.
-            '/<\s*x[-:][\w\-:.]*(?:"[^"]*"|\'[^\']*\'|[^>"\'])*\/?>/s',
+            // `{{ ... }}` and `@class(...)`/`@style(...)` are consumed whole, mirroring that
+            // compiler's attribute alternatives: their bodies may hold a `>` (`->`, `=>`).
+            '/<\s*x[-:][\w\-:.]*(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
         ];
 
         $skip = [];

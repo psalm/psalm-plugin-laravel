@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\MarkerPrePass;
@@ -71,6 +72,29 @@ final class MarkerPrePassTest extends TestCase
         $this->assertArrayHasKey(3, $skip);
         $this->assertArrayHasKey(4, $skip);
         $this->assertArrayNotHasKey(5, $skip);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function componentTagAttributesContainingAGreaterThanSign(): iterable
+    {
+        // #1700: `->` inside an echo.
+        yield 'attributes echo with arrow call' => ["{{ \$attributes->merge(['class' => 'x']) }}"];
+        yield '@class with array arrow' => ["@class(['active' => \$on])"];
+        yield '@style with array arrow' => ["@style(['color: red' => \$on])"];
+    }
+
+    #[Test]
+    #[DataProvider('componentTagAttributesContainingAGreaterThanSign')]
+    public function skips_a_multiline_component_tag_through_an_attribute_containing_a_greater_than_sign(string $attribute): void
+    {
+        $source = "<x-foo\n    a=\"b\"\n    {$attribute}\n>\n    @if (\$a)\n        x\n    @endif\n</x-foo>\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayHasKey(4, $skip); // the tag's closing `>`
+        $this->assertArrayNotHasKey(5, $skip);
+        $this->assertStringNotContainsString('blade:4 */', MarkerPrePass::inject($source));
     }
 
     #[Test]
