@@ -7,6 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ContractParser;
@@ -275,6 +276,34 @@ final class ContractParserTest extends TestCase
 
         $this->assertArrayNotHasKey('real', $contract->vars);
         $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    #[DataProvider('adjacentConstructProvider')]
+    public function props_is_found_correctly_around_an_adjacent_blade_construct(string $source): void
+    {
+        $contract = $this->parse($source);
+
+        $this->assertSame(['real'], array_keys($contract->vars));
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function adjacentConstructProvider(): iterable
+    {
+        // `\B@` requires a NON-word character before the `@`: a directive-shaped token glued
+        // directly onto preceding text ("s1@props-two") is invisible to the scan, the same way
+        // it is to Blade's own tokenizer, so this must not set propsUnknown and must not stop the
+        // later, genuine `@props` from being found.
+        yield 'a props-prefixed directive name glued to preceding text is not a directive' => [
+            "s1@props-two(['fake'])\n@props(['real'])\n",
+        ];
+
+        // An escaped directive consumes its own balanced argument (however it spells its name)
+        // without opening a gap the later, genuine `@props` could fall into.
+        yield 'an escaped directive with a balanced argument does not hide a later @props' => [
+            "@@foreach(\$i as \$x)\n@props(['real'])\n",
+        ];
     }
 
     #[Test]
