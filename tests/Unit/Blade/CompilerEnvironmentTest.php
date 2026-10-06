@@ -8,9 +8,12 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\CompilerEnvironment;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\BoundClosureProvider;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\BoundClosures\DollarBraceProvider;
 
 #[CoversClass(CompilerEnvironment::class)]
 final class CompilerEnvironmentTest extends TestCase
@@ -160,12 +163,65 @@ final class CompilerEnvironmentTest extends TestCase
     {
         $compiler = $this->compiler();
         $compiler->bindDirective('mine', function (string $expression): string {
-            return '<?php ?>';
+            // Reads its bound `$this` (the compiler), so only the compiler-identity check trusts it.
+            return '<?php /* ' . $this::class . ' */ ?>';
         });
 
         [$hash, $trusted] = CompilerEnvironment::describe($compiler);
 
         $this->assertTrue($trusted);
+        $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * #1693: a plain closure registered in a service provider's `boot()` is bound to the provider.
+     * A body that never reaches the bound object cannot compile differently because of it.
+     */
+    #[Test]
+    public function a_provider_bound_closure_that_never_reaches_this_stays_trustworthy(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', (new BoundClosureProvider())->ignoresThis());
+        $compiler->if('feature', (new BoundClosureProvider())->ignoresThis());
+
+        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+
+        $this->assertTrue($trusted);
+        $this->assertNotSame('', $hash);
+    }
+
+    /** @return iterable<string, array{\Closure}> */
+    public static function boundClosuresReachingThis(): iterable
+    {
+        $provider = new BoundClosureProvider();
+
+        yield '$this property read' => [$provider->readsThis()];
+        yield '$this in double-quoted interpolation' => [$provider->interpolatesThis()];
+        yield '$this in a nested arrow fn' => [$provider->nestedArrowFnReadsThis()];
+        yield 'static::' => [$provider->usesStatic()];
+        yield 'self::' => [$provider->usesSelf()];
+        yield 'parent::' => [$provider->usesParent()];
+        yield 'variable variable' => [$provider->usesVariableVariable()];
+        yield '${} interpolation' => [(new DollarBraceProvider())->interpolatesDollarBrace()];
+        yield 'eval' => [$provider->usesEval()];
+        yield 'include' => [$provider->usesInclude()];
+        yield 'compact' => [$provider->usesCompact()];
+        yield 'debug_backtrace' => [$provider->usesDebugBacktrace()];
+        // Not closure literals: the method body lives elsewhere, so it stays untrusted by design.
+        yield 'invokable object' => [\Closure::fromCallable($provider)];
+        yield 'array callable' => [\Closure::fromCallable([$provider, 'compileWithoutThis'])];
+    }
+
+    #[Test]
+    #[DataProvider('boundClosuresReachingThis')]
+    public function a_bound_callable_that_may_reach_this_flips_trustworthy_to_false(\Closure $directive): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', $directive);
+
+        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
         $this->assertNotSame('', $hash);
     }
 

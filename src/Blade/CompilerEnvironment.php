@@ -30,7 +30,9 @@ use Illuminate\View\Compilers\BladeCompiler;
  * - `ReflectionFunction::getStaticVariables()` never exposes a closure's bound `$this`, so an
  *   invokable object or array callable (`[$service, 'compile']`) contributes nothing but its class
  *   file, no matter what state the bound object holds — {@see self::describeCallable()} distrusts
- *   any bound object other than the compiler being described itself.
+ *   any bound object other than the compiler being described itself, unless the callable is a
+ *   closure literal whose body provably never reaches it (a plain closure registered in a service
+ *   provider's `boot()` is bound to that provider, #1693).
  * - The file hash alone cannot tell two callables declared in the SAME file apart (e.g. selecting
  *   `Str::upper` versus `Str::lower`) — the reflected name, source line range, and declaring scope
  *   are folded in too.
@@ -65,15 +67,17 @@ final class CompilerEnvironment
             $trustworthy = true;
             /** @var array<string, string> $fileHashes path => sha1_file(), cached within this call */
             $fileHashes = [];
+            /** @var array<string, list<\PhpToken>> $fileTokens path => tokens, cached within this call */
+            $fileTokens = [];
 
             $descriptor = [
                 'class' => self::describeCompilerClass($compiler, $trustworthy),
-                'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), $compiler, $fileHashes, $trustworthy),
-                'extensions' => self::describeCallableMap($compiler->getExtensions(), $compiler, $fileHashes, $trustworthy),
-                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), $compiler, $fileHashes, $trustworthy),
+                'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), $compiler, $fileHashes, $fileTokens, $trustworthy),
+                'extensions' => self::describeCallableMap($compiler->getExtensions(), $compiler, $fileHashes, $fileTokens, $trustworthy),
+                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $trustworthy), $compiler, $fileHashes, $fileTokens, $trustworthy),
+                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $trustworthy), $compiler, $fileHashes, $fileTokens, $trustworthy),
+                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), $compiler, $fileHashes, $fileTokens, $trustworthy),
+                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), $compiler, $fileHashes, $fileTokens, $trustworthy),
                 'echoFormat' => self::describeValue(self::readProperty($compiler, 'echoFormat', $trustworthy), $trustworthy),
                 'encodingOptions' => self::describeValue(self::readProperty($compiler, 'encodingOptions', $trustworthy), $trustworthy),
                 'compilesComponentTags' => self::describeValue(self::readProperty($compiler, 'compilesComponentTags', $trustworthy), $trustworthy),
@@ -148,20 +152,21 @@ final class CompilerEnvironment
     }
 
     /**
-     * @param array<array-key, mixed> $map
-     * @param array<string, string>   $fileHashes
+     * @param array<array-key, mixed>          $map
+     * @param array<string, string>            $fileHashes
+     * @param array<string, list<\PhpToken>> $fileTokens
      *
      * @return list<array{0: array-key, 1: array}> a LIST of `[key, description]` pairs rather than
      *         a re-keyed array: PHP would otherwise coalesce an int key and its string form
      *         (`5` and `'5'`) into the same slot, silently dropping one callable's descriptor.
      */
-    private static function describeCallableMap(array $map, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): array
+    private static function describeCallableMap(array $map, BladeCompiler $compiler, array &$fileHashes, array &$fileTokens, bool &$trustworthy): array
     {
         $entries = [];
 
         // Keys, not values: a foreach over untyped compiler data binds a mixed local per element.
         foreach (\array_keys($map) as $key) {
-            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $trustworthy)];
+            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $fileTokens, $trustworthy)];
         }
 
         return $entries;
@@ -175,17 +180,20 @@ final class CompilerEnvironment
      * object holds. `bindDirective()` is the one exception: it always binds to the `BladeCompiler`
      * instance being described (`BladeCompiler::directive($name, $handler, bind: true)`), which
      * carries no state of its own beyond what the rest of this class already hashes, so that case
-     * alone stays trusted.
+     * stays trusted. So does a closure LITERAL whose body never reaches its bound object
+     * ({@see self::closureNeverReachesThis()}): an object the body cannot touch cannot change what
+     * it compiles to. A method turned into a closure keeps its body elsewhere and stays untrusted.
      *
      * The file hash alone also cannot tell two callables declared in the SAME file apart (e.g.
      * `Str::upper` versus `Str::lower`), so the reflected name, source line range, and declaring
      * scope are folded in alongside it.
      *
-     * @param array<string, string> $fileHashes
+     * @param array<string, string>            $fileHashes
+     * @param array<string, list<\PhpToken>> $fileTokens
      *
      * @return array{type: string, file?: string, hash?: string, name?: string, startLine?: int|false, endLine?: int|false, scope?: ?string, static?: array}
      */
-    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): array
+    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, array &$fileTokens, bool &$trustworthy): array
     {
         if (!\is_callable($callable)) {
             $trustworthy = false;
@@ -197,14 +205,6 @@ final class CompilerEnvironment
             $closure = $callable instanceof \Closure ? $callable : \Closure::fromCallable($callable);
             $reflection = new \ReflectionFunction($closure);
         } catch (\Throwable) {
-            $trustworthy = false;
-
-            return ['type' => 'unresolvable'];
-        }
-
-        $boundThis = $reflection->getClosureThis();
-
-        if ($boundThis !== null && $boundThis !== $compiler) {
             $trustworthy = false;
 
             return ['type' => 'unresolvable'];
@@ -232,6 +232,18 @@ final class CompilerEnvironment
             $fileHashes[$file] = $hash;
         }
 
+        $boundThis = $reflection->getClosureThis();
+
+        if (
+            $boundThis !== null
+            && $boundThis !== $compiler
+            && !self::closureNeverReachesThis($reflection, $file, $fileTokens)
+        ) {
+            $trustworthy = false;
+
+            return ['type' => 'unresolvable'];
+        }
+
         try {
             $scopeClass = $reflection->getClosureScopeClass()?->getName();
         } catch (\Throwable) {
@@ -250,6 +262,65 @@ final class CompilerEnvironment
             'scope' => $scopeClass !== null ? self::normalizeClassName($scopeClass) : null,
             'static' => self::describeValue($reflection->getStaticVariables(), $trustworthy),
         ];
+    }
+
+    /**
+     * Scans every token on the closure's source lines for anything that can reach the bound
+     * object: `$this` (also inside interpolation and nested closures), `self`/`static`/`parent`,
+     * variable variables and `${}` (`$$name` with `$name = 'this'` IS `$this`), `eval`/`include`
+     * (the evaluated code inherits `$this`), and the functions that hand it out (`compact('this')`,
+     * `debug_backtrace()`). `get_defined_vars()` omits `$this`, so it is not listed. Lines, not
+     * byte offsets, bound the scan, so code sharing the closure's first or last line is scanned
+     * too: that only ever errs toward distrust. A name hidden in a string
+     * (`$f = 'debug_backtrace'; $f()`) is not caught: this guards against stale output, not
+     * deliberately obfuscated source.
+     *
+     * @param array<string, list<\PhpToken>> $fileTokens
+     */
+    private static function closureNeverReachesThis(\ReflectionFunction $reflection, string $file, array &$fileTokens): bool
+    {
+        $start = $reflection->getStartLine();
+        $end = $reflection->getEndLine();
+
+        // `{closure}` before PHP 8.4, `{closure:Scope::method():12}` since: a literal, not a method.
+        if ($start === false || $end === false || !\str_contains($reflection->getName(), '{closure')) {
+            return false;
+        }
+
+        if (!isset($fileTokens[$file])) {
+            $source = @\file_get_contents($file);
+
+            if ($source === false) {
+                return false;
+            }
+
+            $fileTokens[$file] = \PhpToken::tokenize($source);
+        }
+
+        foreach ($fileTokens[$file] as $token) {
+            if ($token->line > $end) {
+                break;
+            }
+
+            if ($token->line >= $start && self::tokenMayReachThis($token)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @psalm-mutation-free */
+    private static function tokenMayReachThis(\PhpToken $token): bool
+    {
+        $name = \strtolower(\ltrim($token->text, '\\'));
+
+        return match ($token->id) {
+            \T_VARIABLE => $name === '$this',
+            \T_STRING, \T_NAME_FULLY_QUALIFIED => \in_array($name, ['self', 'parent', 'compact', 'debug_backtrace', 'debug_print_backtrace', 'get_called_class'], true),
+            \T_STATIC, \T_DOLLAR_OPEN_CURLY_BRACES, \T_EVAL, \T_INCLUDE, \T_INCLUDE_ONCE, \T_REQUIRE, \T_REQUIRE_ONCE => true,
+            default => $token->text === '$',
+        };
     }
 
     /**
