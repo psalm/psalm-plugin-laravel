@@ -177,12 +177,11 @@ jobs:
       - name: Run Psalm/Type tests
         run: composer test:type
 
-  # This job verifies both maintained laravel/ai stub variants: `pre-1.0/` for
-  # 0.11.x and `v1/` for 1.x. The plugin supports `>=0.11.0 <2.0.0`; exact
-  # floor legs prove variant selection at each boundary, while floating legs
-  # catch drift in supported releases. The weekly schedule and workflow_dispatch
-  # trigger (inherited from the workflow-level `on:` block above) exercise those
-  # installs independently of PHP-file changes.
+  # This job verifies the laravel/ai stubs. The plugin supports laravel/ai
+  # `>=1.0.0 <2.0.0` only; the exact 1.0.0 floor leg proves the lower bound
+  # while the floating leg catches drift in newer 1.x releases. The weekly
+  # schedule and workflow_dispatch trigger (inherited from the workflow-level
+  # `on:` block above) exercise those installs independently of PHP-file changes.
   #
   # What this catches: laravel/ai failing to install; a stubbed class being
   # renamed/removed (every PromptInjection phpt SKIPIFs on class presence, so
@@ -198,12 +197,10 @@ jobs:
     name: Type test (laravel/ai ${{ matrix.laravel_ai_version }})
     runs-on: ubuntu-latest
     strategy:
-      # Keep exact floors and floating stable legs for both supported majors independently visible.
+      # Keep the exact 1.0.0 floor and the floating stable leg independently visible.
       fail-fast: false
       matrix:
         include:
-          - laravel_ai_version: '0.11.0'
-          - laravel_ai_version: '>=0.11.0 <1.0.0'
           - laravel_ai_version: '1.0.0'
           - laravel_ai_version: '>=1.0.0 <2.0.0'
     steps:
@@ -241,18 +238,12 @@ jobs:
 
       # laravel/ai is optional (not a root composer.json dependency, see #937) and requires PHP
       # ^8.3, so it is installed here rather than in composer.json to keep it off the PHP 8.2
-      # lanes. Every stable leg exercises the matching pre-1.0 or v1 stub variant.
+      # lanes. Every leg exercises the 1.x stubs.
       - name: Install optional laravel/ai integration
         run: composer require --dev "laravel/ai:${{ matrix.laravel_ai_version }}" --no-interaction --no-progress
 
       - name: Run laravel/ai parity checker unit test
         run: vendor/bin/phpunit tests/Unit/Ci/LaravelAiStubParityCheckerTest.php
-
-      - name: Verify pinned laravel/ai 0.11.0 release
-        if: matrix.laravel_ai_version == '0.11.0'
-        run: >-
-          php -r 'require "vendor/autoload.php";
-          exit(Composer\InstalledVersions::getPrettyVersion("laravel/ai") === "v0.11.0" ? 0 : 1);'
 
       - name: Verify pinned laravel/ai 1.0.0 release
         if: matrix.laravel_ai_version == '1.0.0'
@@ -280,8 +271,8 @@ jobs:
         # This may be a plugin regression, or a stubbed class renamed/removed
         # upstream (the SKIPIF guard below would also catch that). A stubbed method's
         # native signature drifting is covered separately by the parity check above,
-        # not by this suite: Psalm resolves calls here against the matching
-        # pre-1.0 or v1 stub, not the vendor source. Scroll up to the psalm-tester
+        # not by this suite: Psalm resolves calls here against the registered
+        # stubs, not the vendor source. Scroll up to the psalm-tester
         # diff for the exact failing issue/class/line.
         if: failure()
         run: |
@@ -304,17 +295,13 @@ jobs:
 
   # This intentionally separate job is visible only on the scheduled/manual
   # workflow paths and never blocks a change when unreleased laravel/ai APIs
-  # drift ahead of their respective stable 0.11.x or 1.x contracts. Its matrix
-  # covers the pre-1.0 and v1 stub variants without duplicating the job.
+  # drift ahead of the stable 1.x contract. It tracks the `1.x-dev` branch, i.e.
+  # what the next 1.x release will look like, so drift surfaces before it ships.
   type_tests_laravel_ai_dev:
-    name: Type test (laravel/ai ${{ matrix.laravel_ai_version }} canary)
+    name: Type test (laravel/ai 1.x-dev canary)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        laravel_ai_version: [ '0.x-dev', '1.x-dev' ]
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -349,13 +336,13 @@ jobs:
           --no-interaction --no-progress --prefer-dist
 
       - name: Install unreleased laravel/ai canary
-        run: composer require --dev "laravel/ai:${{ matrix.laravel_ai_version }}" --no-interaction --no-progress
+        run: composer require --dev "laravel/ai:1.x-dev" --no-interaction --no-progress
 
       - name: Check laravel/ai stub-vs-vendor signature parity
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
       - name: Run Psalm/Type tests
-        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-${{ matrix.laravel_ai_version }}-junit.xml --no-progress
+        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-1.x-dev-junit.xml --no-progress
 
       - name: Verify the PromptInjection phpt suite actually ran
-        run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-${{ matrix.laravel_ai_version }}-junit.xml PromptInjection
+        run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-1.x-dev-junit.xml PromptInjection

@@ -6,7 +6,7 @@ require getcwd() . '/vendor/autoload.php';
 // LaravelAiIntegration::isEnabled()); it is not a root composer.json
 // dependency (PHP ^8.3 floor would break the PHP 8.2 CI lanes). Skip rather than fail when absent.
 if (!\Psalm\LaravelPlugin\Internal\LaravelAiIntegration::isEnabled() || !trait_exists(\Laravel\Ai\Promptable::class)) {
-    echo 'skip needs supported laravel/ai package (>=0.11.0 <2.0.0)';
+    echo 'skip needs supported laravel/ai package (>=1.0.0 <2.0.0)';
 }
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
@@ -25,7 +25,8 @@ namespace GuardAddsInvoke\Guards {
         }
     }
 
-    // handle() is untouched, but the object is now callable, so Pipeline dispatches __invoke().
+    // handle() is inherited untouched and is still what laravel/ai 1.x dispatches; adding an
+    // unannotated __invoke() does not shift dispatch, so the base escape still holds.
     final class AddsInvokeGuard extends AddsInvokeTrustedGuard
     {
         public function __invoke(\Laravel\Ai\Prompts\AgentPrompt $prompt, \Closure $next): mixed
@@ -58,4 +59,3 @@ namespace GuardAddsInvoke\Agents {
 
 ?>
 --EXPECTF--
-TaintedLlmPrompt on line %d: Detected tainted LLM prompt

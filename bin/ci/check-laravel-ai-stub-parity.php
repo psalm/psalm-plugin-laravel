@@ -57,18 +57,28 @@ declare(strict_types=1);
  * A stub method tagged `@since X.Y.Z` is exempt from the "declared in the
  * stub but not found on the installed class" finding while the installed
  * laravel/ai is older than X.Y.Z: the method genuinely doesn't exist yet on
- * that floor, so it isn't drift. The gate only reads dotted-numeric versions
- * on both sides (an unpinned `dev-master`/`x-dev` install falls through to
- * the normal check instead of being silently exempted), and once the
- * installed version reaches X.Y.Z the tag stops helping, so a real rename or
- * removal upstream is still caught.
+ * that floor, so it isn't drift. The same gate covers a stub `implements`
+ * (or, for an interface stub, `extends`) name the installed class predates.
+ * An interface clause has no per-name docblock, so the stub declares it in
+ * the CLASS docblock, one line per interface:
+ * `@since X.Y.Z implements \Fully\Qualified\Interface`. It exempts only the
+ * "stub declares an interface the installed class doesn't implement" (stale)
+ * finding. The gate only reads dotted-numeric versions on both sides (an
+ * unpinned `dev-master`/`x-dev` install falls through to the normal check
+ * instead of being silently exempted), and once the installed version
+ * reaches X.Y.Z the tag stops helping, so a real rename or removal upstream
+ * is still caught.
+ *
+ * Properties get no such gate: the checker never flags a stub-declared
+ * property the installed class lacks (only the reverse, a vendor property
+ * missing from the stub), so a property added in a later minor needs no
+ * exemption, and one that arrives via a laravel/ai trait is covered by the
+ * stub's own `use` clause.
  *
  * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]
- * With no argument it compares `shared/` plus the major-specific variant
- * directory that the installed release actually loads (`v1/` or `pre-1.0/`);
- * the inactive variant is deliberately skipped, since it redeclares the same
- * classes for the other major and would report every intended difference as
- * drift. An explicit [stubs-dir] is scanned recursively as given.
+ * With no argument it compares the stub tree under
+ * `stubs/integrations/laravel-ai`. An explicit [stubs-dir] is scanned
+ * recursively as given.
  * Exit codes: 0 = no drift found (beyond KNOWN_GAPS below), 1 = new drift
  * found or a stubbed class/method is missing from the installed vendor
  * package, 2 = laravel/ai not installed (soft skip, not a failure: the
@@ -115,13 +125,7 @@ if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
     exit(2);
 }
 
-$stubDirs = isset($argv[1])
-    ? [$argv[1]]
-    : [
-        dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai/shared',
-        dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai/'
-            . \Psalm\LaravelPlugin\Internal\LaravelAiIntegration::stubVariantDirectory(),
-    ];
+$stubDir = $argv[1] ?? dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai';
 $installedVersion = installedLaravelAiVersion();
 
 /** @var list<string> $mismatches */
@@ -138,11 +142,7 @@ $comparedClasses = 0;
 
 $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
-$stubFiles = [];
-
-foreach ($stubDirs as $stubDir) {
-    \array_push($stubFiles, ...findStubFiles($stubDir));
-}
+$stubFiles = findStubFiles($stubDir);
 
 foreach ($stubFiles as $file) {
     $ast = $parser->parse(\file_get_contents($file) ?: '');
@@ -281,9 +281,19 @@ foreach ($stubFiles as $file) {
         // the installed class no longer implements (removed/renamed
         // upstream). This is a hard mismatch, not an omission — Psalm would
         // let a project treat the class as that type when it no longer is.
+        // The one exemption is an interface the installed release predates,
+        // declared via a class-docblock `@since X.Y.Z implements Fqcn` line
+        // (see interfaceSinceTags()); it only applies while the installed
+        // version is OLDER than X.Y.Z.
         $realInterfaceNames = \array_flip($reflectionClass->getInterfaceNames());
+        $interfaceSinceTags = interfaceSinceTags($classLike->getDocComment());
         foreach (declaredInterfaceNames($classLike) as $interfaceName => $_) {
             if (isset($realInterfaceNames[$interfaceName])) {
+                continue;
+            }
+
+            if (isset($interfaceSinceTags[$interfaceName])
+                && sinceGateApplies($interfaceSinceTags[$interfaceName], $installedVersion, "{$fqcn} {$clauseWord} {$interfaceName}", $versionGated)) {
                 continue;
             }
 
@@ -321,7 +331,7 @@ if ($knownGaps !== []) {
 }
 
 if ($versionGated !== []) {
-    echo "\nVersion-gated (installed laravel/ai {$installedVersion} predates the stub method's @since tag):\n";
+    echo "\nVersion-gated (installed laravel/ai {$installedVersion} predates the stub member's @since tag):\n";
     foreach ($versionGated as $gated) {
         echo " - {$gated}\n";
     }
@@ -417,8 +427,8 @@ function installedLaravelAiVersion(): ?string
 }
 
 /**
- * Only a plain dotted-numeric version (`0.11.0`, `1.2`) is comparable against
- * an `@since` tag. A branch alias or dev version (`dev-master`, `0.x-dev`)
+ * Only a plain dotted-numeric version (`1.0.0`, `1.2`) is comparable against
+ * an `@since` tag. A branch alias or dev version (`dev-master`, `1.x-dev`)
  * sorts unpredictably under version_compare(), so treat those as "not
  * gateable" rather than risk silently exempting a method that a bleeding-edge
  * install is expected to have.
@@ -435,12 +445,25 @@ function versionGateApplies(?\PhpParser\Comment\Doc $docComment, ?string $instal
 {
     $since = sinceTag($docComment);
 
-    if ($since === null || $installedVersion === null || !isPatchVersion($since) || !isPatchVersion($installedVersion)) {
+    return $since !== null && sinceGateApplies($since, $installedVersion, "{$key}()", $versionGated);
+}
+
+/**
+ * True only while the installed version is strictly OLDER than `$since`, so
+ * a tag stops helping the moment the installed release reaches it. Both
+ * sides must be plain dotted-numeric versions; anything else falls through
+ * to the normal (un-gated) check.
+ *
+ * @param list<string> $versionGated
+ */
+function sinceGateApplies(string $since, ?string $installedVersion, string $label, array &$versionGated): bool
+{
+    if ($installedVersion === null || !isPatchVersion($since) || !isPatchVersion($installedVersion)) {
         return false;
     }
 
     if (\version_compare($installedVersion, $since, '<')) {
-        $versionGated[] = "{$key}() (@since {$since})";
+        $versionGated[] = "{$label} (@since {$since})";
 
         return true;
     }
@@ -455,6 +478,32 @@ function sinceTag(?\PhpParser\Comment\Doc $docComment): ?string
     }
 
     return $matches[1];
+}
+
+/**
+ * Interface clauses have no per-name docblock to hang a tag on, so the stub
+ * declares them in the CLASS docblock, one line per interface:
+ *
+ *     @since 1.1.0 implements \Laravel\Ai\Contracts\Approvable
+ *
+ * (`extends` for an interface stub.) The name must be fully qualified; a
+ * leading backslash is optional. Returns interface FQCN => version.
+ *
+ * @return array<string, string>
+ */
+function interfaceSinceTags(?\PhpParser\Comment\Doc $docComment): array
+{
+    if ($docComment === null
+        || \preg_match_all('/@since\s+(\S+)\s+(?:implements|extends)\s+\\\\?([A-Za-z_][\w\\\\]*)/', $docComment->getText(), $matches, \PREG_SET_ORDER) < 1) {
+        return [];
+    }
+
+    $tags = [];
+    foreach ($matches as $match) {
+        $tags[$match[2]] = $match[1];
+    }
+
+    return $tags;
 }
 
 function traitProvidesConcreteMethod(Node\Stmt\ClassLike $classLike, string $methodName): bool

@@ -6,7 +6,7 @@ require getcwd() . '/vendor/autoload.php';
 // LaravelAiIntegration::isEnabled()); it is not a root composer.json
 // dependency (PHP ^8.3 floor would break the PHP 8.2 CI lanes). Skip rather than fail when absent.
 if (!\Psalm\LaravelPlugin\Internal\LaravelAiIntegration::isEnabled() || !trait_exists(\Laravel\Ai\Promptable::class)) {
-    echo 'skip needs supported laravel/ai package (>=0.11.0 <2.0.0)';
+    echo 'skip needs supported laravel/ai package (>=1.0.0 <2.0.0)';
 }
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis

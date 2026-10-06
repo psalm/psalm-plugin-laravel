@@ -89,7 +89,7 @@ Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
 - `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work; currently `stubs/12.42.0/`, `stubs/13/`, `stubs/13.5.0/`, and `stubs/13.8.0/` exist
-- `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` uses the same pattern for major-specific declarations (see below).
+- `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is a single flat directory (see below).
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
@@ -98,41 +98,20 @@ Rules:
 
 ### The `laravel/ai` integration gate
 
-Four things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (the shared `LaravelAiIntegration::isEnabled()` check for `>=0.11.0 <2.0.0`, covering 0.11.x and 1.x), and they must stay in lockstep:
+Four things load together for `laravel/ai`, all behind `Plugin::laravelAiIntegrationEnabled()` (the shared `LaravelAiIntegration::isEnabled()` check for `>=1.0.0 <2.0.0`), and they must stay in lockstep:
 
 1. `stubs/integrations/laravel-ai/` via `Plugin::optionalIntegrationStubs()`.
 2. `Handlers\Ai\LlmOutputTaintHandler` via `Plugin::registerHandlers()`.
-3. `Handlers\Ai\PromptGuardTaintHandler` via `Plugin::registerHandlers()`, which exempts a `prompt()` / `stream()` call site whose agent middleware declares `@psalm-taint-escape llm_prompt` on its runtime-dispatched `handle()` or `__invoke()` method. Emission-time only (`BeforeAddIssueInterface`), stateless, so it needs no `resetInvocationState()` entry.
+3. `Handlers\Ai\PromptGuardTaintHandler` via `Plugin::registerHandlers()`, which exempts a `prompt()` / `stream()` call site whose agent middleware declares `@psalm-taint-escape llm_prompt` on its `handle()` method, the only one laravel/ai 1.x dispatches. Emission-time only (`BeforeAddIssueInterface`), stateless, so it needs no `resetInvocationState()` entry.
 4. `Internal\PromptInjectionIssuePolicy` via `Plugin::__invoke()`, which preserves Psalm's normal `TaintedLlmPrompt` error by default and applies a narrow D-in suppression only for `<findPromptInjection value="false" />`.
 
 Part of that set is a silent half-integration: stubs without the handlers lose the property sources and the guard exemption, and the issue policy without the stubs could suppress a project's own `llm_prompt` annotations. Adding a fifth site means adding it to that method's callers, not writing a fifth copy of the version check.
 
-`stubs/integrations/laravel-ai/` has three directories:
+`stubs/integrations/laravel-ai/` is one flat directory: namespace subdirectories (`Contracts/`, `Responses/`, `Messages/`, ...) mirroring `Laravel\Ai\`, no per-release variants. `Plugin::optionalIntegrationStubs()` registers it through `StubFileFinder::integrationStubs()`. The integration supports laravel/ai 1.x only: laravel/ai 1.0 renamed `Usage` to `TextUsage` / `TranscriptionUsage`, widened prompt input to `AgentInput|UserMessage|Decisions|string`, changed `usingVercelDataProtocol(bool, ?string)` to `usingVercelDataProtocol(?string)`, removed `pausedProviderContentBlocks()`, and added `Promptable::withMessages()` / `withTools()`, so one stub tree cannot be correct for 0.11.x as well. On 0.11.x the integration stays disabled and the plugin contributes nothing.
 
-- `shared/` — loaded for every enabled release.
-- `pre-1.0/` — loaded only for the supported 0.11.x release line.
-- `v1/` — loaded only for laravel/ai `>=1.0.0`.
+`LaravelAiIntegration::diagnostic()` reports the installed version and the constraint, for example `enabled (laravel/ai 1.0.0; requires >=1.0.0 <2.0.0)`.
 
-`Plugin::optionalIntegrationStubs()` always registers `shared/` and exactly one
-variant selected by `LaravelAiIntegration::stubVariantDirectory()`. Never load
-both variants: laravel/ai 1.0 renamed `Usage` to `TextUsage` /
-`TranscriptionUsage`, widened prompt input to
-`AgentInput|UserMessage|Decisions|string`, changed
-`usingVercelDataProtocol(bool, ?string)` to `usingVercelDataProtocol(?string)`,
-removed `pausedProviderContentBlocks()`, and added
-`Promptable::withMessages()` / `withTools()`.
-
-`LaravelAiIntegration::diagnostic()` reports both the installed version and the
-active stub variant, for example `enabled (laravel/ai 1.0.0, stubs v1; requires
->=0.11.0 <2.0.0)`.
-
-Where a new laravel/ai stub belongs:
-
-- The declaration is identical on 0.11.x and 1.x: `shared/`.
-- The declaration differs between the majors: matching files in both `pre-1.0/` and `v1/`.
-- The class exists only in 1.x: `v1/` only.
-
-Stub-versus-vendor signature drift is invisible to Psalm here (a stub-declared method wins over the reflected one), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks. With no argument, the checker scans `shared/` plus the active `v1/` or `pre-1.0/` directory only; it deliberately skips the inactive variant because it targets the other major. A stub method added after the `>=0.11.0` floor gets tagged `@since X.Y.Z`; the checker reads that tag and exempts the method for an older installed release instead of reporting it as drift.
+Stub-versus-vendor signature drift is invisible to Psalm here (a stub-declared method wins over the reflected one), so `bin/ci/check-laravel-ai-stub-parity.php` diffs the two directly in CI, and `tests/Unit/Ci/LaravelAiStubParityCheckerTest.php` pins that script's own checks. With no argument, the checker scans the whole `stubs/integrations/laravel-ai/` directory against the installed package. A stub method added in a 1.x minor after the `1.0.0` floor gets tagged `@since X.Y.Z`; the checker reads that tag and exempts the method for an older installed release instead of reporting it as drift. An `implements` (or interface `extends`) entry added in a later minor has no per-name docblock, so tag it in the CLASS docblock with one `@since X.Y.Z implements \Fully\Qualified\Interface` line per interface. Both gates apply only while the installed release is older than the tag; a name the current release lacks is still reported. Properties need no gate: the checker never reports a stub-declared property the installed class lacks, and a property that arrives through a laravel/ai trait is covered by mirroring the class's `use` clause (see `Tools/SimilaritySearch.phpstub`).
 
 Psalm otherwise *merges* a bare-redeclaration stub into the real class rather than replacing it: an omitted method/property keeps its real signature. The checker still flags a missing one, but as a taint-review tripwire (a merged-in method carries no taint annotations), not a correctness gate. The one thing genuinely erased is the interface list — `implements` — which the checker also diffs, per class, against the real one minus whatever the real parent already supplies.
 

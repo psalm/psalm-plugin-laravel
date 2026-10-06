@@ -27,17 +27,17 @@ concurrency:
   cancel-in-progress: true
 
 # The PHP >= 8.3 cells double as a fresh-app canary for the laravel/ai integration:
-# laravel-test.sh installs the newest release satisfying `>=0.11.0 <2.0.0`. That
-# current support gate selects the `pre-1.0/` stubs for 0.11.x and the `v1/` stubs
-# for 1.x; its ceiling stays below 2.0 because that unsupported major has no stub
-# variant or compatibility coverage. The weekly schedule and workflow_dispatch
-# trigger above already run this independently of which files changed.
+# laravel-test.sh installs the newest release satisfying `>=1.0.0 <2.0.0`, the
+# plugin's supported range (1.0.0 floor; the 2.0 ceiling is excluded because that
+# unsupported major has no compatibility coverage). The weekly schedule and
+# workflow_dispatch trigger above already run this independently of which files
+# changed.
 #
 # Like the PromptInjection suite in tests.yml, this catches laravel/ai failing to
 # install and the plugin's own regressions, but NOT a stubbed method's native
-# signature drifting on a laravel/ai release: this leg runs through the matching
-# registered stub variant, which overrides the vendor's reflected signature for
-# methods it declares, so Psalm never compares the two here either. Tracked
+# signature drifting on a laravel/ai release: this leg runs through the registered
+# stubs, which override the vendor's reflected signature for methods they declare,
+# so Psalm never compares the two here either. Tracked
 # separately: psalm/psalm-plugin-laravel#1331.
 jobs:
   build:
@@ -99,8 +99,7 @@ jobs:
       - name: Report fresh-app failure against the newest supported laravel/ai
         # Only the PHP >= 8.3 cells install laravel/ai (tests/Application/laravel-test.sh
         # gates the install on the same check). This cell resolves the newest release
-        # within the supported `>=0.11.0 <2.0.0` gate, using the pre-1.0 stubs for
-        # 0.11.x or the v1 stubs for 1.x, so a failure here may be a plugin regression
+        # within the supported `>=1.0.0 <2.0.0` gate, so a failure here may be a plugin regression
         # rather than something specific to this app fixture. It is NOT proof of a
         # stubbed method's native signature drifting: this leg resolves calls through
         # the same registered stubs as the phpt suite, so that class of drift stays
@@ -111,6 +110,6 @@ jobs:
           LARAVEL_INSTALLER_VERSION: ${{ matrix.laravel-installer-version }}
         run: |
           echo "::error::Fresh-app Psalm analysis failed against the newest supported" \
-            "laravel/ai release below 2.0. See the compact output above for the exact failure." \
+            "laravel/ai 1.x release. See the compact output above for the exact failure." \
             "Reproduce locally with:" \
             "LARAVEL_INSTALLER_VERSION=$LARAVEL_INSTALLER_VERSION ./tests/Application/laravel-test.sh --verbose"

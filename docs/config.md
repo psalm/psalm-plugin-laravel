@@ -209,7 +209,7 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 **default**: `auto`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). It is only relevant when `laravel/ai >=0.11.0 <2.0.0` is installed, covering 0.11.x and 1.x; the plugin leaves the level alone otherwise.
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). It is only relevant when `laravel/ai >=1.0.0 <2.0.0` is installed; the plugin leaves the level alone otherwise, including on 0.11.x, which is not supported.
 
 - element omitted (`auto`): enforced when the supported `laravel/ai` integration is installed. The plugin leaves the issue at Psalm's normal error level.
 - `value="false"`: explicit opt-out. Only `TaintedLlmPrompt` is suppressed; model-output taint sources and their ordinary SQL/HTML/shell findings remain errors.

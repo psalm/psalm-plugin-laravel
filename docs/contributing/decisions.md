@@ -239,14 +239,15 @@ than #1348:
   dispatched method populates `FunctionLikeStorage::$removed_taints` with
   `TaintKind::INPUT_LLM_PROMPT`, which is what `@psalm-taint-escape llm_prompt` already writes.
 
-**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision, not a fixed `handle`.**
-`Pipeline::carry()` tests `is_callable($pipe)` before `method_exists($pipe, 'handle')`, so an object
-entry with `__invoke` never reaches its own `handle()`, while a class-string entry is not callable,
-takes the container branch, and lands on `handle()` even when `__invoke` exists. The handler mirrors
-both orders per candidate rather than assuming one, and consults only the first method that exists:
-runtime has no fallthrough to the other one, so neither does the exemption. Confirmed against PHP's
-`is_callable()` semantics directly. A closure entry is unprovable by construction and always keeps
-the finding.
+**Which method counts: `handle()`, always.** laravel/ai 1.x does not run agent middleware through
+`Illuminate\Pipeline`. `TextGenerationLoop::middlewareFor()` takes `HasMiddleware::middleware()`
+verbatim and `runStep()` (`vendor/laravel/ai/src/Gateway/TextGenerationLoop.php:432-443`) dispatches
+each entry itself: a Closure is invoked directly, a string entry is resolved from the container and
+`handle()`ed, any other object is `handle()`ed. So a non-Closure entry always lands on `handle()`,
+whether or not its class declares `__invoke()`, and the handler reads the escape from `handle()`
+only; an annotation on `__invoke()` is ignored. Reading it there (an earlier pipeline-based model
+preferred `__invoke()` for object entries) would exempt a call site over a guard path that never
+runs, a missed finding. A closure entry is unprovable by construction and always keeps the finding.
 
 **Trust the tag, do not prove the body.** An AST proof of `middleware()`'s body was designed and
 rejected: it would hardcode one guard vendor's FQN and constructor parameter names (a pre-1.0

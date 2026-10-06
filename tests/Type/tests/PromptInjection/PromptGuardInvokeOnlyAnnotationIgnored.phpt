@@ -13,17 +13,15 @@ if (!\Psalm\LaravelPlugin\Internal\LaravelAiIntegration::isEnabled() || !trait_e
 --FILE--
 <?php declare(strict_types=1);
 
-namespace GuardShadowed\Guards {
-    final class ShadowedHandleGuard
+namespace GuardInvokeOnly\Guards {
+    // laravel/ai 1.x never calls __invoke() on a middleware entry (only handle(), or the closure
+    // itself), so an escape declared only on __invoke() is never read and the finding stays.
+    final class InvokablePromptGuard
     {
         /**
          * @psalm-taint-escape llm_prompt
+         * @psalm-flow ($prompt) -> return
          */
-        public function handle(string $prompt, \Closure $next): mixed
-        {
-            return $next($prompt);
-        }
-
         public function __invoke(string $prompt, \Closure $next): mixed
         {
             return $next($prompt);
@@ -31,26 +29,26 @@ namespace GuardShadowed\Guards {
     }
 }
 
-namespace GuardShadowed\Agents {
-    final class ShadowedHandleAgent implements \Laravel\Ai\Contracts\HasMiddleware
+namespace GuardInvokeOnly\Agents {
+    final class InvokableAgent implements \Laravel\Ai\Contracts\HasMiddleware
     {
         use \Laravel\Ai\Promptable;
 
         /**
-         * @return list<\GuardShadowed\Guards\ShadowedHandleGuard>
+         * @return list<\GuardInvokeOnly\Guards\InvokablePromptGuard>
          */
         #[\Override]
         public function middleware(): array
         {
-            return [new \GuardShadowed\Guards\ShadowedHandleGuard()];
+            return [new \GuardInvokeOnly\Guards\InvokablePromptGuard()];
         }
     }
 
-    function askShadowed(\Illuminate\Http\Request $request): \Laravel\Ai\Responses\AgentResponse
+    function askInvokable(\Illuminate\Http\Request $request): \Laravel\Ai\Responses\AgentResponse
     {
         $question = (string) $request->input('q');
 
-        return (new ShadowedHandleAgent())->prompt($question);
+        return (new InvokableAgent())->prompt($question);
     }
 }
 

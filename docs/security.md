@@ -17,8 +17,8 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` 0.11.x and 1.x prompt sinks: agents, messages, media, documents, reranking, and tool metadata; 1.x-only boundaries are noted below (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
-| LLM output reuse | LLM01:2025 | `laravel/ai` tool and model-output sources: text, structured output, reasoning, and 1.x classification answers and citations |
+| Prompt injection | LLM01:2025 | `laravel/ai` prompt sinks: agents, messages, media, documents, reranking, classification, and tool metadata (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
+| LLM output reuse | LLM01:2025 | `laravel/ai` tool and model-output sources: text, structured output, reasoning, and classification answers and citations |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
@@ -122,56 +122,54 @@ Treat any such finding from this plugin as a timing issue and fix it with
 
 Applies to projects using `laravel/ai`. The stubs, LLM-output handler,
 prompt-guard handler, and prompt-injection issue policy load together only when
-that package is installed and satisfies `>=0.11.0 <2.0.0` (0.11.x and 1.x), so
-projects without a supported package pay nothing.
+that package is installed and satisfies `>=1.0.0 <2.0.0`, so projects without a
+supported package pay nothing. `laravel/ai` 0.11.x is not supported: the
+integration stays disabled and the plugin contributes nothing for it (no stubs,
+no handlers, no issue policy).
 
 Two directions are covered. Both are errors by default; the explicit opt-out only
-suppresses the D-in `TaintedLlmPrompt` issue. A **1.x-only** boundary below is
-present in the `v1/` stubs and does not exist in laravel/ai 0.11.x.
+suppresses the D-in `TaintedLlmPrompt` issue.
 
 * **Prompt sinks.** Untrusted input reaching any listed sink is reported as
   `TaintedLlmPrompt` at the normal error level by default when the supported
   `laravel/ai` integration is installed. Set
   [`findPromptInjection`](config.md#findpromptinjection) to `false` only to
   suppress this D-in issue; an explicit issue handler still wins. The integration
-  gate is `laravel/ai >=0.11.0 <2.0.0`, covering 0.11.x and 1.x, and `true`
-  cannot bypass it.
-* **Sinks in 0.11.x and 1.x.** `Promptable` and `Contracts\Agent` each annotate
-  `prompt()`, `stream()`, `queue()`, `broadcast()`, `broadcastNow()`, and
-  `broadcastOnQueue()`; `agent()` and `AnonymousAgent::__construct()` annotate
-  their instructions and messages. `AgentPrompt::__construct()`, `prepend()`,
-  `append()`, and `revise()`; the `Messages\Message` and
-  `Messages\UserMessage` constructors; `Audio::of()`, `Image::of()`, and
-  `Reranking::of()`; `PendingReranking::rerank()`; `Files\Document::fromString()`
-  / `fromBase64()` and `Files\Image::fromBase64()`; and
-  `Tools\SimilaritySearch::withDescription()` are also sinks.
-* **1.x-only sinks.** The agent delivery methods above accept
-  `AgentInput|UserMessage|Decisions|string`. `Promptable::withMessages()` and
-  `AgentPrompt::withTools()` are sinks. Middleware mutations through
-  `PendingStep::withInstructions()`, `withMessages()`, `withTools()`, and
-  `withProviderOptions()` are sinks. Classification annotates
-  `Classification::of()`, the constructors of `Classification\Boolean`,
-  `Classification\Choice`, and `Classification\Score`, and
-  `PendingClassification::__construct()`.
-* **Sources in 0.11.x and 1.x.** `Contracts\Tool::handle()` returns a source so
-  tool output keeps flowing into later prompt sinks. `Tools\Request::validate()`,
-  `all()`, `toArray()`, `offsetGet()`, `str()`, `string()`, `array()`, `only()`,
+  gate is `laravel/ai >=1.0.0 <2.0.0`, and `true` cannot bypass it.
+* **Sinks.** `Promptable` and `Contracts\Agent` each annotate `prompt()`,
+  `stream()`, `queue()`, `broadcast()`, `broadcastNow()`, and
+  `broadcastOnQueue()`; these accept `AgentInput|UserMessage|Decisions|string`.
+  `Promptable::withMessages()` is a sink too. `agent()` and
+  `AnonymousAgent::__construct()` annotate their instructions and messages.
+  `AgentPrompt::__construct()`, `prepend()`, `append()`, `revise()`, and
+  `withTools()`; the `Messages\Message` and `Messages\UserMessage`
+  constructors; `Audio::of()`, `Image::of()`, and `Reranking::of()`;
+  `PendingReranking::rerank()`; `Files\Document::fromString()` /
+  `fromBase64()` and `Files\Image::fromBase64()`; and
+  `Tools\SimilaritySearch::withDescription()` are also sinks. Middleware
+  mutations through `PendingStep::withInstructions()`, `withMessages()`,
+  `withTools()`, and `withProviderOptions()` are sinks. Classification
+  annotates `Classification::of()`, the constructors of
+  `Classification\Boolean`, `Classification\Choice`, and
+  `Classification\Score`, and `PendingClassification::__construct()`.
+* **Sources.** `Contracts\Tool::handle()` returns a source so tool output keeps
+  flowing into later prompt sinks. `Tools\Request::validate()`, `all()`,
+  `toArray()`, `offsetGet()`, `str()`, `string()`, `array()`, `only()`,
   `except()`, and `collect()` are sources. The LLM-output handler sources
   `$text` on `TextResponse`, `AgentResponse`, `StreamedAgentResponse`,
-  `StreamableAgentResponse`, and `TranscriptionResponse`, and `$structured` on
-  `StructuredAgentResponse` and `StructuredTextResponse`. String casts on
-  `AgentResponse`, `TextResponse`, `TranscriptionResponse`,
+  `StreamableAgentResponse`, and `TranscriptionResponse`; `$structured` on
+  `StructuredAgentResponse` and `StructuredTextResponse`; `$reasoning` on
+  `TextResponse`, `StreamableAgentResponse`, `Responses\Data\Step`, and
+  `Gateway\StepResponse`; and `$citations` on `StreamableAgentResponse`.
+  String casts on `AgentResponse`, `TextResponse`, `TranscriptionResponse`,
   `StructuredAgentResponse`, and `StructuredTextResponse` are sources.
   `StructuredAgentResponse::toArray()`, `toJson()`, and `jsonSerialize()`, plus
-  `ProvidesStructuredResponse::offsetGet()`, are sources too.
-* **1.x-only sources.** The handler sources `$reasoning` on `TextResponse`,
-  `StreamableAgentResponse`, `Responses\Data\Step`, and `Gateway\StepResponse`,
-  and `$citations` on `StreamableAgentResponse`. `AgentResponse::fakeWithReasoning()`
-  and `TextResponse::withReasoning()` are sources. Classification sources are
-  `ClassificationResponse::answer()`, `collect()`, `toArray()`,
-  `jsonSerialize()`, `getIterator()`, and `offsetGet()`; `Data\Answer::toArray()`
-  and `jsonSerialize()`; `BooleanAnswer::isTrue()` and `toArray()`;
-  `ChoiceAnswer::probabilityOf()` and `toArray()`; and
+  `ProvidesStructuredResponse::offsetGet()`, are sources too, as are
+  `AgentResponse::fakeWithReasoning()` and `TextResponse::withReasoning()`.
+  Classification sources are `ClassificationResponse::answer()`, `collect()`,
+  `toArray()`, `jsonSerialize()`, `getIterator()`, and `offsetGet()`;
+  `Data\Answer::toArray()` and `jsonSerialize()`; `BooleanAnswer::isTrue()` and
+  `toArray()`; `ChoiceAnswer::probabilityOf()` and `toArray()`; and
   `ScoreAnswer::level()`, `label()`, `normalized()`, and `toArray()`.
 
 Model-output sources are unaffected by `findPromptInjection`: their ordinary
@@ -190,17 +188,17 @@ the finding by hand.
 
 Two annotations, both phpdoc:
 
-1. On the guard, annotate the method `laravel/ai` invokes with
-   `@psalm-taint-escape llm_prompt`. Use `handle()` for a cross-major guard:
-   laravel/ai 1.x invokes it once per `PendingStep`, while 0.11.x invokes it for
-   an `AgentPrompt`. In 0.11.x, an object middleware entry with `__invoke()` uses
-   that method instead; a class-string entry uses `handle()` first and falls back
-   to `__invoke()`.
+1. On the guard, annotate `handle()` with `@psalm-taint-escape llm_prompt`.
+   laravel/ai 1.x calls `handle(PendingStep $step, Closure $next)` once per
+   generation step on each non-closure middleware entry; a class-string entry is
+   resolved through the container first. Annotate `handle()` even if the guard
+   also declares `__invoke()`: laravel/ai never calls `__invoke()` on a middleware
+   object, so the plugin does not read the escape there.
 2. On the agent's unchanged `middleware()` method, declare a `@return` naming
    your guard class: `@return list<PromptGuard>` (a
    `@return list<class-string<PromptGuard>>` entry works too).
 
-This laravel/ai 1.x guard wraps each generation step:
+A guard wraps each generation step:
 
 ```php
 use Laravel\Ai\Contracts\HasMiddleware;
@@ -231,10 +229,6 @@ final class SupportAgent implements HasMiddleware
 }
 ```
 
-For laravel/ai 0.11.x, import `Laravel\Ai\Prompts\AgentPrompt` instead and use
-`handle(AgentPrompt $prompt, \Closure $next): mixed`; retarget the flow
-annotation and `$next()` call to `$prompt`.
-
 What it does: `TaintedLlmPrompt` stops being reported for `prompt()` and `stream()` on that agent.
 Every other taint kind keeps flowing, so the same value reaching SQL, HTML, or a shell command is
 still reported.
@@ -254,8 +248,9 @@ Caveats:
 * Closure middleware is never exempted. The guard lives in the closure body, which no declared type
   describes. Write the guard as a class.
 * No `@return` on `middleware()` means no exemption. A bare `array` names nothing to check.
-* An escape on a method the pipeline skips does not count. An annotated `handle()` on a class that
-  also declares `__invoke()` is never reached at runtime, so it never exempts.
+* The escape is read from `handle()` only, because that is the only method `laravel/ai` calls on a
+  middleware object. An annotation on `__invoke()` is never read: a guard whose `handle()` is
+  unannotated does not exempt, even if its `__invoke()` carries the escape.
 * The agent must implement `HasMiddleware` (inherited counts). Without it `laravel/ai` never calls
   `middleware()` at all.
 * An agent whose `middleware()` some subclass in the project replaces is not exempted at all: the
@@ -265,8 +260,8 @@ Caveats:
   consumer's own subclass can replace the stack or drop the escape without the analysis of your
   package ever seeing it.
 * A guard class that some subclass in the project extends is only trusted when every one of those
-  subclasses also carries the escape on its own dispatched method. The declared type is a bound, so
-  a subclass could otherwise drop the mitigation or move dispatch onto an unannotated `__invoke()`.
+  subclasses also carries the escape on its own `handle()`. The declared type is a bound, so a
+  subclass could otherwise drop the mitigation by overriding `handle()` without the annotation.
 * A template bound (`@return list<class-string<T>>`) names no concrete guard and is not exempted.
 * `@return list<PromptGuard>` says what the entries are, not that there is one. A body returning
   `[]` still exempts: the declaration is your claim, the same as the escape itself.
@@ -277,7 +272,7 @@ Caveats:
 
 Whether a guard blocks or only logs is usually runtime configuration and is not statically
 distinguishable, and the middleware list is read from the declared return type rather than from the
-method body. Deeper mechanics, including the exact `Pipeline` dispatch order, are in
+method body. Deeper mechanics are in
 [`docs/contributing/taint-analysis.md`](contributing/taint-analysis.md).
 
 Known limitations. Each is an upstream limitation rather than a judgement that
@@ -286,12 +281,12 @@ the flow is safe, so treat it as a blind spot when reviewing.
 * **Return-value sinks.** `Tool::description()` and `Agent::instructions()` are
   not covered: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked
   in [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
-* **1.x `decide()` macros.** `Str::decide()` and `Stringable::decide()` are not
+* **`decide()` macros.** `Str::decide()` and `Stringable::decide()` are not
   sinks. They are macro pseudo-methods with no per-method docblock on which to
   attach an `llm_prompt` sink. This is pinned by
   `tests/Type/tests/PromptInjection/ClassificationDecideKnownLimitation.phpt` and
-  documented in `stubs/integrations/laravel-ai/v1/Classification.phpstub`.
-* **1.x citation collection reads.** `StreamableAgentResponse::$citations` is a
+  documented in `stubs/integrations/laravel-ai/Classification.phpstub`.
+* **Citation collection reads.** `StreamableAgentResponse::$citations` is a
   registered source, but no end-to-end flow is observable through its
   `Collection` reads because Psalm drops the taint edge there. The handler
   caveat in `src/Handlers/Ai/LlmOutputTaintHandler.php` records this gap.

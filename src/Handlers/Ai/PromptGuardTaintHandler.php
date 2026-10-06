@@ -23,9 +23,18 @@ use Psalm\Type\Union;
 
 /**
  * Suppresses `TaintedLlmPrompt` on a `prompt()`/`stream()` call whose receiver declares an agent
- * middleware stack containing a guard annotated `@psalm-taint-escape llm_prompt` on its dispatched
+ * middleware stack containing a guard annotated `@psalm-taint-escape llm_prompt` on its `handle()`
  * method. Psalm parses that natively into `MethodStorage::$removed_taints`; nothing here names a
  * specific guard package, so any library or app-local guard opts in with that one docblock line.
+ *
+ * DISPATCH RULE (laravel/ai 1.x): agent middleware does NOT run through `Illuminate\Pipeline`.
+ * `TextGenerationLoop::middlewareFor()` takes `HasMiddleware::middleware()` verbatim and
+ * `runStep()` dispatches each entry itself (`vendor/laravel/ai/src/Gateway/TextGenerationLoop.php`
+ * :432-443): a Closure entry is invoked directly, a string entry is resolved from the container
+ * and then `handle()`ed, any other object entry is `handle()`ed. So a non-Closure entry always
+ * reaches `handle()`, whether or not its class also declares `__invoke()`, which is never called;
+ * the escape is therefore read from `handle()` only. A Closure entry carries no annotatable
+ * method, hence the closure limitation in {@see middlewareCandidates()}.
  *
  * TRUST MODEL: this is a policy, not a proof, same as any `@psalm-taint-escape`. Accepted
  * consequences: block-vs-log is not statically distinguishable; the middleware array is read from
@@ -55,9 +64,8 @@ use Psalm\Type\Union;
  *    ({@see substitutedInDescendant()}).
  * 7. `middleware()`'s declared return type names an element as an object or class-string; a bare
  *    `array`/`mixed`, a closure entry, or a template bound yields no candidate.
- * 8. Some candidate, and every analysed subclass of it, escapes `llm_prompt` on whichever method
- *    `Illuminate\Pipeline\Pipeline` would actually invoke ({@see dispatchedMethodEscapes()}, {@see
- *    guardEscapesEverywhere()}).
+ * 8. Some candidate, and every analysed subclass of it, escapes `llm_prompt` on `handle()` ({@see
+ *    handleEscapes()}, {@see guardEscapesEverywhere()}).
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  *
@@ -76,11 +84,8 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
 
     private const MIDDLEWARE_METHOD = 'middleware';
 
-    /** `Illuminate\Pipeline\Pipeline::$method` — dispatched for a class-string or non-callable object pipe. */
+    /** The only method laravel/ai 1.x calls on a non-Closure middleware entry. */
     private const GUARD_METHOD = 'handle';
-
-    /** The method `Pipeline` reaches instead whenever it invokes the pipe directly. */
-    private const INVOKE_METHOD = '__invoke';
 
     /**
      * Reads storage only, enforcing the "never edit the taint graph" ADR constraint.
@@ -122,7 +127,7 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
         }
 
         foreach (self::middlewareCandidates($middleware->return_type) as $candidate) {
-            if (self::guardEscapesEverywhere($codebase, $candidate['name'], $candidate['as_object'])) {
+            if (self::guardEscapesEverywhere($codebase, $candidate)) {
                 return false;
             }
         }
@@ -279,16 +284,16 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * Middleware entries from the VALUE position of `middleware()`'s declared array type, tagged
-     * by form since `Pipeline` dispatches them differently ({@see dispatchedMethodEscapes()}):
-     * `list<Guard>`/`array<int, Guard>` is an OBJECT entry, `class-string<Guard>`/`Guard::class` is
-     * resolved through the container first. A bare `array`/`mixed` value type yields nothing.
+     * Concrete guard class names from the VALUE position of `middleware()`'s declared array type:
+     * `list<Guard>`/`array<int, Guard>` (object entry) and `class-string<Guard>`/`Guard::class`
+     * (container-resolved entry) both end up in `handle()`, so the form is not tracked. A bare
+     * `array`/`mixed` value type yields nothing.
      *
      * ACCEPTED LIMITATION: a closure entry contributes nothing — its body is where the guard would
      * live, and no declared type can carry an escape annotation for it. Pinned by
      * `PromptGuardClosureMiddlewareKnownLimitation.phpt`.
      *
-     * @return list<array{name: string, as_object: bool}>
+     * @return list<string>
      *
      * @psalm-mutation-free
      */
@@ -314,14 +319,8 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
                     continue;
                 }
 
-                if ($value instanceof TNamedObject) {
-                    $candidates[] = ['name' => $value->value, 'as_object' => true];
-
-                    continue;
-                }
-
-                if ($value instanceof TLiteralClassString) {
-                    $candidates[] = ['name' => $value->value, 'as_object' => false];
+                if ($value instanceof TNamedObject || $value instanceof TLiteralClassString) {
+                    $candidates[] = $value->value;
 
                     continue;
                 }
@@ -331,7 +330,7 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
                     && $value->as_type instanceof TNamedObject
                     && !$value->as_type instanceof TClosure
                 ) {
-                    $candidates[] = ['name' => $value->as_type->value, 'as_object' => false];
+                    $candidates[] = $value->as_type->value;
                 }
             }
         }
@@ -340,19 +339,18 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * True when `$guardName` and every analysed subclass escapes `llm_prompt` on the dispatched
-     * method. `@return list<Guard>` is a BOUND, satisfied by any subclass — including one that
-     * overrides without the escape, or one that adds `__invoke` and shifts the dispatch path — so
-     * the whole analysed hierarchy must hold the claim. Same open-world gap as
-     * {@see substitutedInDescendant()}.
+     * True when `$guardName` and every analysed subclass escapes `llm_prompt` on `handle()`.
+     * `@return list<Guard>` is a BOUND, satisfied by any subclass — including one that overrides
+     * `handle()` without the escape — so the whole analysed hierarchy must hold the claim. Same
+     * open-world gap as {@see substitutedInDescendant()}.
      *
      * @psalm-mutation-free
      */
-    private static function guardEscapesEverywhere(Codebase $codebase, string $guardName, bool $asObject): bool
+    private static function guardEscapesEverywhere(Codebase $codebase, string $guardName): bool
     {
         $guard = self::classStorage($codebase, $guardName);
 
-        if (!$guard instanceof ClassLikeStorage || !self::dispatchedMethodEscapes($codebase, $guard, $asObject)) {
+        if (!$guard instanceof ClassLikeStorage || !self::handleEscapes($codebase, $guard)) {
             return false;
         }
 
@@ -363,7 +361,7 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
         }
 
         foreach ($descendants as $descendant) {
-            if (!self::dispatchedMethodEscapes($codebase, $descendant, $asObject)) {
+            if (!self::handleEscapes($codebase, $descendant)) {
                 return false;
             }
         }
@@ -372,31 +370,17 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
     }
 
     /**
-     * True when the method `Pipeline::carry()` would actually invoke carries the escape. Dispatch
-     * order mirrors `carry()` (`vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php`),
-     * which differs by entry form: an OBJECT entry hits `is_callable()` first, so `__invoke` wins
-     * over an adjacent `handle()`; a class-STRING entry isn't callable and takes the container
-     * branch, where `handle()` wins. Only the first method that EXISTS is consulted — no fallback
-     * to the other on a missing annotation, since runtime has none either.
+     * True when `$guard`'s `handle()` carries the escape. `handle()` is the only method laravel/ai
+     * 1.x ever calls on a non-Closure entry (see the class docblock), so an annotation on any other
+     * method, `__invoke()` included, is never read and a guard without `handle()` never escapes.
      *
      * @psalm-mutation-free
      */
-    private static function dispatchedMethodEscapes(Codebase $codebase, ClassLikeStorage $guard, bool $asObject): bool
+    private static function handleEscapes(Codebase $codebase, ClassLikeStorage $guard): bool
     {
-        $dispatchOrder = $asObject
-            ? [self::INVOKE_METHOD, self::GUARD_METHOD]
-            : [self::GUARD_METHOD, self::INVOKE_METHOD];
+        $handle = self::methodStorage($codebase, $guard, self::GUARD_METHOD);
 
-        foreach ($dispatchOrder as $methodName) {
-            $dispatched = self::methodStorage($codebase, $guard, $methodName);
-
-            if (!$dispatched instanceof MethodStorage) {
-                continue;
-            }
-
-            return ($dispatched->removed_taints & TaintKind::INPUT_LLM_PROMPT) !== 0;
-        }
-
-        return false;
+        return $handle instanceof MethodStorage
+            && ($handle->removed_taints & TaintKind::INPUT_LLM_PROMPT) !== 0;
     }
 }

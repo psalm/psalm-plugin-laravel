@@ -4,114 +4,55 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Internal;
 
-use Composer\InstalledVersions;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\ParserFactory;
-use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 
-#[CoversClass(LaravelAiIntegration::class)]
+/**
+ * Guards the laravel/ai stub tree itself: it is loaded as one flat set, so two
+ * files declaring the same symbol would make coverage depend on load order.
+ */
+#[CoversNothing]
 final class LaravelAiIntegrationTest extends TestCase
 {
     #[Test]
-    public function every_pre_v1_stub_has_a_v1_counterpart(): void
+    public function no_two_laravel_ai_stub_files_declare_the_same_symbol(): void
     {
-        $preV1Files = $this->stubFiles($this->variantDirectory('pre-1.0'));
-        $v1Files = $this->stubFiles($this->variantDirectory('v1'));
-        $missingFromV1 = \array_values(\array_diff($preV1Files, $v1Files));
+        $declarations = $this->declarationFiles();
 
-        $this->assertSame(
-            [],
-            $missingFromV1,
-            'Every pre-1.0 stub must have a v1 counterpart so type and taint coverage cannot silently disappear for laravel/ai 1.x users.',
-        );
-    }
-
-    /** @return iterable<string, array{string}> */
-    public static function variantDirectories(): iterable
-    {
-        yield 'pre-1.0' => ['pre-1.0'];
-        yield 'v1' => ['v1'];
-    }
-
-    #[Test]
-    #[DataProvider('variantDirectories')]
-    public function shared_stubs_do_not_redeclare_a_variant_declaration(string $variant): void
-    {
-        $sharedDeclarations = $this->declarationFiles($this->variantDirectory('shared'));
-        $variantDeclarations = $this->declarationFiles($this->variantDirectory($variant));
-        $duplicateNames = \array_values(\array_intersect(\array_keys($sharedDeclarations), \array_keys($variantDeclarations)));
+        // A parser that silently finds nothing would make the duplicate check below vacuous.
+        $this->assertArrayHasKey('Laravel\\Ai\\Promptable', $declarations);
+        $this->assertArrayHasKey('Laravel\\Ai\\agent', $declarations);
 
         $duplicates = [];
-        foreach ($duplicateNames as $name) {
-            $duplicates[] = \sprintf(
-                '%s: shared/%s and %s/%s',
-                $name,
-                $sharedDeclarations[$name],
-                $variant,
-                $variantDeclarations[$name],
-            );
+        foreach ($declarations as $name => $files) {
+            if (\count($files) > 1) {
+                $duplicates[] = $name . ': ' . \implode(', ', $files);
+            }
         }
 
         $this->assertSame(
             [],
             $duplicates,
-            'Shared stubs and a major-specific variant must not declare the same symbol; otherwise coverage depends on stub load order.',
+            'Each laravel/ai symbol must be stubbed in exactly one file; otherwise coverage depends on stub load order.',
         );
     }
 
-    #[Test]
-    public function declaration_parser_finds_symbols_in_each_stub_tree(): void
+    /**
+     * @return array<string, list<string>> Fully-qualified declaration name => relative stub files declaring it
+     */
+    private function declarationFiles(): array
     {
-        $this->assertSame(
-            'helpers.phpstub',
-            $this->declarationFiles($this->variantDirectory('shared'))['Laravel\\Ai\\agent'] ?? null,
-        );
-        $this->assertSame(
-            'Promptable.phpstub',
-            $this->declarationFiles($this->variantDirectory('pre-1.0'))['Laravel\\Ai\\Promptable'] ?? null,
-        );
-        $this->assertSame(
-            'Promptable.phpstub',
-            $this->declarationFiles($this->variantDirectory('v1'))['Laravel\\Ai\\Promptable'] ?? null,
-        );
-    }
+        $directory = \dirname(__DIR__, 3) . '/stubs/integrations/laravel-ai';
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $finder = new NodeFinder();
+        $declarations = [];
 
-    #[Test]
-    public function the_installed_laravel_ai_capabilities_select_an_existing_stub_variant(): void
-    {
-        if (!InstalledVersions::isInstalled(LaravelAiIntegration::PACKAGE)) {
-            $this->markTestSkipped('laravel/ai is not installed.');
-        }
-
-        $variant = LaravelAiIntegration::stubVariantDirectory();
-
-        $this->assertDirectoryExists($this->variantDirectory($variant));
-
-        if (\class_exists(\Laravel\Ai\PendingStep::class)) {
-            $this->assertSame('v1', $variant);
-
-            return;
-        }
-
-        $this->assertSame('pre-1.0', $variant);
-    }
-
-    private function variantDirectory(string $variant): string
-    {
-        return \dirname(__DIR__, 3) . '/stubs/integrations/laravel-ai/' . $variant;
-    }
-
-    /** @return list<string> */
-    private function stubFiles(string $directory): array
-    {
-        $files = [];
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
         );
@@ -121,25 +62,8 @@ final class LaravelAiIntegrationTest extends TestCase
                 continue;
             }
 
-            $files[] = \str_replace(\DIRECTORY_SEPARATOR, '/', \substr($file->getPathname(), \strlen($directory) + 1));
-        }
-
-        \sort($files);
-
-        return $files;
-    }
-
-    /**
-     * @return array<string, string> Fully-qualified declaration name => relative stub file
-     */
-    private function declarationFiles(string $directory): array
-    {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $finder = new NodeFinder();
-        $declarations = [];
-
-        foreach ($this->stubFiles($directory) as $relativePath) {
-            $path = $directory . '/' . $relativePath;
+            $path = $file->getPathname();
+            $relativePath = \str_replace(\DIRECTORY_SEPARATOR, '/', \substr($path, \strlen($directory) + 1));
             $source = \file_get_contents($path);
 
             if (!\is_string($source)) {
@@ -166,7 +90,7 @@ final class LaravelAiIntegrationTest extends TestCase
                     continue;
                 }
 
-                $declarations[$name->toString()] = $relativePath;
+                $declarations[$name->toString()][] = $relativePath;
             }
         }
 
