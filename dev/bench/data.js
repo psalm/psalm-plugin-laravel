@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791223686556,
+  "lastUpdate": 1791280704379,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12310,6 +12310,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.24,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79873c2a43d669aa2cfae16c3d51bdaaa6a9f202",
+          "message": "fix(eloquent): return the model's custom builder from Model::with() (#1689)\n\nRefs #1678",
+          "timestamp": "2026-10-06T11:54:51+02:00",
+          "tree_id": "78c9a9d88658eb7b4c25581decdfee0f7ae02f8f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/79873c2a43d669aa2cfae16c3d51bdaaa6a9f202"
+        },
+        "date": 1791280703243,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.72,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
