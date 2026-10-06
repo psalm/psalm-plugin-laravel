@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Cli;
 
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -51,6 +53,34 @@ final class AnalyzeCommand extends Command
             InputArgument::IS_ARRAY | InputArgument::OPTIONAL,
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
         );
+
+        // Declared for `analyze --help` only: scanArguments() consumes the toggle from raw argv, and the
+        // command forwards it to psalm as PSALM_LARAVEL_OPTIONS because psalm rejects unknown flags.
+        $this->addOption(
+            'blade',
+            null,
+            InputOption::VALUE_NEGATABLE,
+            'Force Blade template analysis on (--blade) or off (--no-blade) for this run, overriding psalm.xml.',
+        );
+    }
+
+    /**
+     * The child's environment: null (inherit) unless a Blade toggle was given. The toggle travels as a
+     * `blade=…` token appended to any existing PSALM_LARAVEL_OPTIONS, so it wins by last-key-wins.
+     * An explicit array REPLACES the environment in proc_open, hence the whole `getenv()` is copied.
+     *
+     * @return array<string, string>|null
+     */
+    private function childEnvironment(?bool $blade): ?array
+    {
+        if ($blade === null) {
+            return null;
+        }
+
+        $env = \getenv();
+        $env[PluginConfig::OPTIONS_ENV_VAR] = \trim(($env[PluginConfig::OPTIONS_ENV_VAR] ?? '') . ' blade=' . ($blade ? 'true' : 'false'));
+
+        return $env;
     }
 
     #[\Override]
@@ -80,7 +110,7 @@ final class AnalyzeCommand extends Command
         $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
-        $process = \proc_open($command, $descriptors, $pipes, $cwd);
+        $process = \proc_open($command, $descriptors, $pipes, $cwd, $this->childEnvironment($this->bladeOverride()));
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
@@ -113,7 +143,8 @@ final class AnalyzeCommand extends Command
      * Raw argv, not parsed input: Symfony binds `--flags` as options (not into a
      * declared argument), and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
      * Drops argv[0] and the explicit command-name/alias token (the default-command
-     * form has none, so nothing is stripped).
+     * form has none, so nothing is stripped), and the `--blade`/`--no-blade` toggles
+     * this command consumes itself (see {@see self::bladeOverride()}).
      *
      * Limits: `-h`/`-V` short-circuit to the wrapper's own help/version (use
      * `vendor/bin/psalm` for those); global options before the subcommand aren't
@@ -126,6 +157,27 @@ final class AnalyzeCommand extends Command
      */
     public function forwardedArguments(?array $argv = null): array
     {
+        return $this->scanArguments($argv)[0];
+    }
+
+    /**
+     * The per-run Blade toggle: true for `--blade`, false for `--no-blade`, null when neither was given
+     * (the last one wins). Read from the same raw-argv scan as {@see self::forwardedArguments()} so the
+     * stripped tokens and the decision cannot drift apart. Public for the same reason.
+     *
+     * @param list<string>|null $argv
+     */
+    public function bladeOverride(?array $argv = null): ?bool
+    {
+        return $this->scanArguments($argv)[1];
+    }
+
+    /**
+     * @param list<string>|null $argv
+     * @return array{list<string>, ?bool} the tokens to forward to psalm, and the Blade toggle
+     */
+    private function scanArguments(?array $argv): array
+    {
         // `argv` is absent only when `register_argc_argv` is disabled; Symfony's
         // own ArgvInput falls back the same way, so default to an empty list.
         $argv ??= $_SERVER['argv'] ?? [];
@@ -137,6 +189,23 @@ final class AnalyzeCommand extends Command
             \array_shift($tokens); // drop the explicit command-name token
         }
 
-        return $tokens;
+        $forwarded = [];
+        $blade = null;
+
+        foreach ($tokens as $index => $token) {
+            if ($token === '--') {
+                // Everything from the boundary on is positional, as in Symfony's own parsing.
+                return [[...$forwarded, ...\array_slice($tokens, $index)], $blade];
+            }
+
+            if ($token === '--blade' || $token === '--no-blade') {
+                $blade = $token === '--blade';
+                continue;
+            }
+
+            $forwarded[] = $token;
+        }
+
+        return [$forwarded, $blade];
     }
 }

@@ -156,4 +156,70 @@ final class AnalyzeCommandTest extends TestCase
             }
         }
     }
+
+    #[Test]
+    public function strips_blade_flags_from_the_forwarded_tokens_and_reports_the_override(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $argv = ['psalm-laravel', 'analyze', '--threads=1', '--blade', 'src', '--no-cache'];
+        $this->assertSame(['--threads=1', 'src', '--no-cache'], $command->forwardedArguments($argv));
+        $this->assertTrue($command->bladeOverride($argv));
+
+        $argv = ['psalm-laravel', '--no-blade', '--no-cache'];
+        $this->assertSame(['--no-cache'], $command->forwardedArguments($argv));
+        $this->assertFalse($command->bladeOverride($argv));
+    }
+
+    #[Test]
+    public function reports_no_blade_override_when_neither_flag_is_given(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertNull($command->bladeOverride(['psalm-laravel', 'analyze', '--threads=1']));
+        $this->assertNull($command->bladeOverride(['psalm-laravel', 'analyze']));
+    }
+
+    #[Test]
+    public function the_last_blade_flag_wins(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $argv = ['psalm-laravel', 'analyze', '--blade', '--no-blade', '--blade', '--no-blade'];
+        $this->assertFalse($command->bladeOverride($argv));
+        $this->assertSame([], $command->forwardedArguments($argv));
+
+        $this->assertTrue($command->bladeOverride(['psalm-laravel', 'analyze', '--no-blade', '--blade']));
+    }
+
+    #[Test]
+    public function blade_flags_after_the_double_dash_boundary_are_forwarded_untouched(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $argv = ['psalm-laravel', 'analyze', '--no-blade', '--', '--blade', 'src'];
+        $this->assertSame(['--', '--blade', 'src'], $command->forwardedArguments($argv));
+        $this->assertFalse($command->bladeOverride($argv));
+
+        $this->assertNull($command->bladeOverride(['psalm-laravel', 'analyze', '--', '--blade']));
+    }
+
+    #[Test]
+    public function flags_that_merely_resemble_the_blade_flags_are_forwarded(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $argv = ['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', 'blade'];
+        $this->assertSame(['--blade=true', '--blades', '--no-blade-x', 'blade'], $command->forwardedArguments($argv));
+        $this->assertNull($command->bladeOverride($argv));
+    }
+
+    #[Test]
+    public function blade_flags_are_declared_for_help(): void
+    {
+        $definition = (new AnalyzeCommand())->getDefinition();
+
+        $this->assertTrue($definition->hasOption('blade'));
+        $this->assertTrue($definition->hasNegation('no-blade'));
+    }
 }

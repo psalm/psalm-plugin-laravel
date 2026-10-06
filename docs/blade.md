@@ -51,6 +51,21 @@ A cached shadow is invalidated (recompiled) when either its template's own sourc
 
 What is NOT invalidated, because it is runtime state read from inside a directive's or condition's own body rather than from the compiler's registration surface: `config()`, a global, or a class static property a directive callback reads while compiling. Changing the value these read does not change anything this cache fingerprints, so delete `cacheDir` by hand after a change like that. The same is true of component metadata Laravel resolves live during compilation rather than storing on the compiler: `ComponentTagCompiler` reflects a class component's CONSTRUCTOR PARAMETERS to decide whether an attribute becomes a constructor argument or stays an HTML attribute, and it resolves `<x-foo>` against the live view `Factory` DURING compilation, not at render time. Adding a constructor parameter to an existing component class, or adding a new anonymous-component template file, changes what an unrelated, already-compiled component tag COMPILES TO the next time its parent is recompiled, even though the parent template's own source and the compiler environment above are both unchanged. Its shadow stays fresh and keeps the old compiled bytes. None of these gaps are closed by this cache.
 
+## Per-run toggle
+
+Switch Blade analysis for one run without editing `psalm.xml`:
+
+```bash
+vendor/bin/psalm-laravel analyze --blade       # on, even without <blade /> in psalm.xml
+vendor/bin/psalm-laravel analyze --no-blade    # off, even with <blade /> in psalm.xml
+PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm   # same, for a bare psalm run
+```
+
+* Precedence: `--blade`/`--no-blade` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default (off). Of repeated flags the last one wins.
+* Only the on/off decision is overridden. Settings such as [`cacheDir`](#cachedir) and `validateViewData` still come from the `<blade>` element, with their defaults when it is absent.
+* `PSALM_LARAVEL_OPTIONS` is a process environment variable read by the plugin before the app boots, not a Laravel `.env` entry. See [Per-run overrides](config.md#per-run-overrides).
+* Psalm's result cache is keyed on the config file, not on this toggle. After switching a project between on and off, results from the previous mode can be replayed: turning Blade off after a Blade run can drop dead-code findings such as `UnusedClass` for classes only templates used. Run with `--no-cache` when results look stale.
+
 ## Suppressing issues
 
 Two suppression paths work exactly as they do for ordinary PHP files:
