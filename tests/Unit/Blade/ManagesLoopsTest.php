@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -149,5 +150,56 @@ final class ManagesLoopsTest extends TestCase
 
         $this->assertPipelineReachedAnalyzer($issues);
         $this->assertSame([], $this->forFile($issues, 'Source.php'), \var_export($issues, true));
+    }
+
+    /**
+     * #1696: `$loop->parent` is typed `object|null` for the depth-1 ambient `$loop`, but inside a
+     * nested `@foreach` the compiled `$loop = $__env->getLastLoop();` is only reached with a
+     * live parent frame.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function nestedLoopTemplates(): iterable
+    {
+        yield 'two levels' => ['nested.blade.php'];
+        yield 'three levels, reads after an inner @endforeach' => ['nested-depth3.blade.php'];
+        yield 'forelse inside forelse, read inside @empty' => ['nested-forelse.blade.php'];
+        yield 'includer of a partial that reads the parent' => ['nested-include.blade.php'];
+    }
+
+    #[Test]
+    #[DataProvider('nestedLoopTemplates')]
+    public function loop_parent_is_non_null_inside_nested_loops(string $template): void
+    {
+        $issues = $this->analyze();
+
+        $this->assertTemplateCompiled($template);
+        $this->assertPipelineReachedAnalyzer($issues);
+        $this->assertSame([], $this->forFile($issues, $template), \var_export($issues, true));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> template, expected issue type
+     */
+    public static function stillNullableTemplates(): iterable
+    {
+        yield 'depth 1' => ['depth1.blade.php', 'PossiblyNullPropertyFetch'];
+        yield 'one level above the nesting depth' => ['nested-too-deep.blade.php', 'PossiblyNullPropertyFetch'];
+        yield 'loop nested only inside a top-level @for' => ['nested-in-for.blade.php', 'PossiblyNullPropertyFetch'];
+        yield '@include d partial analyzed alone' => ['partials/row.blade.php', 'PossiblyNullPropertyFetch'];
+        // The author's own assignment wins over the compiler's: the re-assert sits on Blade's assignment, not later.
+        yield 'author reassigned $loop' => ['nested-author-loop.blade.php', 'NullPropertyFetch'];
+    }
+
+    #[Test]
+    #[DataProvider('stillNullableTemplates')]
+    public function loop_parent_stays_nullable_where_nothing_proves_a_parent(string $template, string $expectedType): void
+    {
+        $issues = $this->analyze();
+        $reported = $this->forFile($issues, \basename($template));
+
+        $this->assertTemplateCompiled($template);
+        $this->assertPipelineReachedAnalyzer($issues);
+        $this->assertContains($expectedType, \array_column($reported, 'type'), \var_export($issues, true));
     }
 }

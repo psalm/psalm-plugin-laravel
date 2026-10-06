@@ -22,12 +22,18 @@ use PhpParser\ParserFactory;
  */
 final class PreludeBuilder
 {
+    /**
+     * Blade's loop cursor fields except `parent`, which {@see LoopParentReassert} nests per depth.
+     * Kept in sync by hand with the `getLastLoop()` return type in `ManagesLoops.phpstub`.
+     */
+    public const LOOP_FIELDS = 'index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int';
+
     /** @var array<string, string> variable name (without $) => FQCN, present in EVERY compiled view */
     public const AMBIENT_TYPES = [
         '__env' => '\Illuminate\View\Factory',
         'errors' => '\Illuminate\Support\ViewErrorBag',
         // Blade's loop cursor is a plain stdClass built from an array (ManagesLoops::getLastLoop()).
-        'loop' => 'object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}',
+        'loop' => 'object{' . self::LOOP_FIELDS . ', parent: object|null}',
     ];
 
     /**

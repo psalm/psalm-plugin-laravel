@@ -45,6 +45,10 @@ trait ManagesLoops
      * MoreSpecificReturnType. Prepending `\stdClass&` keeps the property shape byte-identical
      * while restoring the identity.
      *
+     * `parent` stays `object|null` here: this is the depth-1 frame. Inside a nested loop the Blade
+     * shadow compiler re-asserts a deeper, non-null `parent` after the compiled assignment
+     * (`Blade\LoopParentReassert`), built from the same field list as `PreludeBuilder::LOOP_FIELDS`.
+     *
      * @return \stdClass&object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}
      */
     public function getLastLoop()

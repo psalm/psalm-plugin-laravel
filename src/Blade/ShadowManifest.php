@@ -22,7 +22,8 @@ final class ShadowManifest
     /**
      * Bump when anything the plugin writes around a shadow changes for the same source: the marker
      * pass, the prelude ({@see PreludeBuilder}), suppression injection, or the `$attributes`
-     * restore-point re-assert ({@see AttributesRestoreReassert}). It also invalidates a changed
+     * restore-point re-assert ({@see AttributesRestoreReassert}), or the nested `$loop` re-assert
+     * ({@see LoopParentReassert}). It also invalidates a changed
      * manifest-entry layout. The shadow's own compiled bytes are never fingerprinted (see class
      * docblock), so this is the only lever that self-invalidates plugin-side derived facts such as
      * the {@see ViewDataContract} cached in slot 5.
