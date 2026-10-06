@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\AnnotateCommand;
@@ -93,6 +94,56 @@ final class AnnotateCommandTest extends TestCase
             ['--threads=1', '-c', 'psalm.xml'],
             $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '-c', 'psalm.xml']),
         );
+    }
+
+    /**
+     * @param list<string> $overrideArguments
+     */
+    #[Test]
+    #[DataProvider('overrideFlags')]
+    public function rejects_per_run_overrides_without_launching_psalm(array $overrideArguments, string $named): void
+    {
+        // The flag must reach neither psalm (which dies on it) nor the path check (where `x=y` would be a path).
+        $psalmBin = $this->tempDir . '/vendor/bin/psalm';
+        \mkdir(\dirname($psalmBin), 0o777, true);
+        \file_put_contents($psalmBin, "<?php\nfile_put_contents(__DIR__ . '/launched', '1');\n");
+
+        $argv = ['psalm-laravel', 'blade:annotate', ...$overrideArguments];
+        $application = new Application();
+        $application->addCommand(new AnnotateCommand($this->tempDir, $argv));
+
+        $tester = new CommandTester($application->find('blade:annotate'));
+
+        try {
+            $this->assertSame(Command::FAILURE, $tester->execute([]));
+            $this->assertStringContainsString('does not accept per-run plugin overrides', $tester->getDisplay());
+            $this->assertStringContainsString($named, $tester->getDisplay());
+            $this->assertFileDoesNotExist(\dirname($psalmBin) . '/launched');
+        } finally {
+            @\unlink(\dirname($psalmBin) . '/launched');
+            @\unlink($psalmBin);
+            @\rmdir(\dirname($psalmBin));
+            @\rmdir(\dirname($psalmBin, 2));
+        }
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, string}>
+     */
+    public static function overrideFlags(): iterable
+    {
+        yield 'spaced option' => [['--plugin-option', 'x=y'], '--plugin-option'];
+        yield 'equals option' => [['--plugin-option=x=y'], '--plugin-option'];
+        yield '--blade' => [['--blade'], '--blade'];
+        yield '--no-blade' => [['-c', 'psalm.xml', '--no-blade'], '--no-blade'];
+    }
+
+    #[Test]
+    public function an_override_spelled_after_the_options_terminator_is_a_plain_token(): void
+    {
+        $command = new AnnotateCommand();
+
+        $this->assertSame([], $command->rejectedOverrides(['psalm-laravel', 'blade:annotate', '--', '--blade']));
     }
 
     #[Test]
