@@ -269,17 +269,20 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
      * resolves the actual key argument regardless of call order.
      *
      * The literal-key lookup below queries the booted translator's CURRENT default
-     * locale and default fallback (`true`) — it never re-runs the lookup for an
-     * explicit `$locale` (position 2) or `$fallback` (position 3, `Translator::get()`
-     * only). A key that resolves to a string in the default locale can be an array
-     * in another one, so a call naming either argument declines entirely, whether
-     * or not it also carries a literal key.
+     * locale and default fallback (`true`), also for a call that passes an explicit
+     * `$locale` or `$fallback`. Accepted soundness gap: a key that is a string in the
+     * default locale could in principle be a group (array) in another locale, but
+     * translation files share one structure across locales, and a key missing from
+     * a locale resolves to the key itself (a string). Declining instead turned the
+     * common `trans('a.b', [], $locale)` into `string|array` and reported
+     * `PossiblyInvalidOperand` / `InvalidReturnStatement` on real projects (#1501
+     * psalm-delta). Pinned by `TranslationLocaleArgumentKnownLimitation.phpt`.
      *
-     * An unpack ANYWHERE in the argument list (not just a leading one) also declines
+     * An unpack ANYWHERE in the argument list (not just a leading one) declines
      * entirely: `get('key', ...$rest)` has exactly two AST `Arg` nodes (the literal
-     * key and the spread), so a locale or fallback `$rest` fills at runtime is
-     * invisible to the by-name-or-position checks above — there is no way to tell
-     * how many parameters the spread expands into, or with what names.
+     * key and the spread), so a `$replace` the spread fills at runtime is invisible
+     * to the by-name-or-position check below — there is no way to tell how many
+     * parameters the spread expands into, or with what names.
      *
      * @param list<Arg> $args
      */
@@ -298,12 +301,6 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
 
         if (!$keyArg instanceof Arg) {
-            return null;
-        }
-
-        if (ArgUtil::byNameOrPosition($args, 2, 'locale') instanceof Arg
-            || ArgUtil::byNameOrPosition($args, 3, 'fallback') instanceof Arg
-        ) {
             return null;
         }
 
