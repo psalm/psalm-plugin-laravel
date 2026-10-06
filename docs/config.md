@@ -265,7 +265,7 @@ This governs the prompt sink direction only. Model output as a taint source (an 
 
 See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, [tuning template findings](blade.md#tuning-template-findings), ambient variables, taint reporting, and known limits).
 
-**default**: off. The element's presence turns analysis on; the settings below are attributes of the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
+**default**: off. The element's presence turns analysis on; the settings below are attributes of the same element. Omit it, or write `<blade value="false" />`, to turn analysis off. Requires `composer require --dev stillat/blade-parser`; without it the analysis turns itself off with one warning.
 
 ```xml
 <blade />
