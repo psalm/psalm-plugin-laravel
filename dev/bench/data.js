@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791304501370,
+  "lastUpdate": 1791317007704,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12525,6 +12525,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "826f42edb18b439827449dc73766ae41dde60795",
+          "message": "refactor(blade): extract the fail-open shadow selection read (#1718)\n\nThree ShadowIssueRelocator paths repeated the same guarded CodeLocation\nread and offset arithmetic. ShadowSelection now owns the read (null on\nany Throwable), and the @aware call-text check becomes\nTemplateSnippetMatcher::endsAt(), testable on plain strings.",
+          "timestamp": "2026-10-06T22:00:13+02:00",
+          "tree_id": "a7f107d862ad9260df051fe74bbbb09973c30dbd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/826f42edb18b439827449dc73766ae41dde60795"
+        },
+        "date": 1791317006674,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.99,
+            "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1369,
             "unit": "MB"
           }
         ]
