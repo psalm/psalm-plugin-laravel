@@ -870,6 +870,40 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * The keyed-arm mirror of #1695: an all-int-key list (`@aware(['color'])`, lines 1 and 2)
+     * narrows `$__key` to `never` inside `is_string($__key) ? ...getConsumableComponentData($__key,
+     * ...)`, which Psalm reports as `NoValue`. Mixed lists (lines 3 and 4) keep a string key and
+     * never reported.
+     */
+    #[Test]
+    public function list_form_aware_does_not_report_no_value_against_the_generated_keyed_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        // Guard against a vacuous pass: the keyed arm must still be compiled.
+        $this->assertStringContainsString('$__env->getConsumableComponentData($__key, $__value)', $this->shadowSourceFor('components/aware-list-form.blade.php'));
+
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], 'components/aware-list-form.blade.php'))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** The keyed-arm gate declines when the template itself contains the generated call text. */
+    #[Test]
+    public function an_author_written_keyed_call_keeps_reporting_no_value(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            2,
+            $this->linesFor($issues, 'NoValue', 'components/aware-author-keyed-call.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     #[Test]
     public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
     {
