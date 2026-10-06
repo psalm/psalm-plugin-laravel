@@ -50,7 +50,11 @@ groups:
   livewire: Livewire components in the analysed code
   inertia: Requires inertiajs/inertia-laravel
   filament: Filament itself and apps built on it
-  ai: Apps whose locked laravel/ai is inside the plugin's LaravelAiIntegration::CONSTRAINT gate
+  # Both members lock laravel/ai v0.11.2, which is outside the plugin's
+  # >=1.0.0 gate, so they currently exercise the integration being OFF, not its
+  # stubs. Real-app coverage of the 1.x stubs is the type_tests_laravel_ai legs
+  # in tests.yml until an app pinning laravel/ai 1.x is added here.
+  ai: Apps carrying laravel/ai, whether or not the locked version is inside LaravelAiIntegration::CONSTRAINT
   blade: Apps and packages with more than 100 Blade templates
   lib: Packages and monorepos rather than full apps
   large: Slow to install or analyse; may need a raised timeout

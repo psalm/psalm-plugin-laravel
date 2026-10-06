@@ -3,97 +3,21 @@
 declare(strict_types=1);
 
 /**
- * Compare every re-declared laravel/ai stub method's native parameter/return
- * types against the installed vendor package via reflection.
+ * Diffs every re-declared laravel/ai stub signature against the installed package via reflection.
  *
- * Registered Psalm stubs (stubs/integrations/laravel-ai/) win over vendor
- * reflection during analysis (redeclaration is the declarative default for
- * these stubs), so Psalm itself never notices when a stub's native
- * signature stops matching a newer laravel/ai release. The PromptInjection
- * phpt suite and the fresh-app leg both type-check against the STUB, so a
- * drifted native signature (a param retyped, a return type changed) passes
- * every existing test silently. This script is the missing check: it reads
- * the stub source with php-parser (never loads it, since declaring the same
- * class the vendor autoloader already provides would fatal) and reflects the
- * real installed class, then diffs native types position-by-position.
+ * A registered stub overrides vendor reflection, so Psalm never notices when a stub's native signature stops matching
+ * a newer laravel/ai release, and every type test (which runs against the stub) stays green. Stubs are parsed with
+ * php-parser, never loaded: redeclaring a class the vendor autoloader provides would fatal.
  *
- * Signature metadata is compared beyond types: parameter count, parameter
- * names position-by-position, optionality/default expressions, by-reference
- * and variadic flags, and the native return type/by-reference flag. PHP
- * reflection expands `iterable` only when it appears in a union, so the stub
- * side applies the same expansion before comparing. Reflection also evaluates
- * a `new` parameter default into an object, whose exported state cannot be
- * compared to source; object defaults therefore compare by class and
- * optionality, while scalar, null, and array defaults still compare exactly.
- * Count and names are not cosmetic. A stub missing a trailing parameter makes
- * Psalm reject a call that is valid at runtime, and a parameter renamed upstream
- * silently disarms every `@psalm-taint-sink <kind> $name` hung off the old name
- * while every existing test stays green.
+ * What is compared and how `@since` gating works: "Stub merging" in docs/contributing/README.md.
  *
- * Public/protected vendor methods and properties are also checked against
- * the stub. Psalm actually MERGES an omitted one in from the real class
- * rather than erasing it (verified against Psalm 6.16.1 and 7.0.0-beta19),
- * so this isn't a correctness check — it's a taint-review tripwire: a
- * merged-in method has whatever taint annotations the real class has, i.e.
- * none. `Tools\Request::validate()` shipping without `@psalm-taint-source
- * input` is exactly this failure mode.
- *
- * The interface list IS genuinely wiped on redeclaration, unlike
- * methods/properties, so a stub `implements`/`extends` clause missing one
- * really does break `instanceof`/type-hint compatibility. Checked separately
- * below, both directions (missing and stale), against each declared name's
- * own interface-extends-interface closure (Reflection can't distinguish an
- * explicit name from one only reachable through it) and exempting
- * `Stringable`, which PHP grants implicitly to any `__toString()` class.
- *
- * Docblock-only precision (`@param non-empty-string`) is unaffected and
- * deliberately out of scope (see docs/contributing/README.md, "Stub merging":
- * Psalm-level narrowing beyond native types is expected and is not drift).
- * That exemption has a cost worth knowing: a docblock that NARROWS a native
- * `array` to `string[]` when upstream documents a union is real drift this
- * script is blind to, because both sides are natively `array`. Fixtures cover
- * those, e.g. tests/Type/tests/PromptInjection/EmbeddingsAcceptsFileInputs.phpt.
- *
- * A stub method tagged `@since X.Y.Z` is exempt from the "declared in the
- * stub but not found on the installed class" finding while the installed
- * laravel/ai is older than X.Y.Z: the method genuinely doesn't exist yet on
- * that floor, so it isn't drift. The same gate covers a stub `implements`
- * (or, for an interface stub, `extends`) name the installed class predates.
- * An interface clause has no per-name docblock, so the stub declares it in
- * the CLASS docblock, one line per interface:
- * `@since X.Y.Z implements \Fully\Qualified\Interface`. It exempts only the
- * "stub declares an interface the installed class doesn't implement" (stale)
- * finding. The gate only reads dotted-numeric versions on both sides (an
- * unpinned `dev-master`/`x-dev` install falls through to the normal check
- * instead of being silently exempted), and once the installed version
- * reaches X.Y.Z the tag stops helping, so a real rename or removal upstream
- * is still caught.
- *
- * The same tag on a stub CLASS docblock (a line of its own, no trailing
- * `implements`/`extends`) exempts the whole classlike when the installed
- * release predates it: a class a later minor introduced doesn't exist to
- * reflect, so it is reported as version-gated and skipped (no member
- * comparison, not counted in the compared totals) instead of being reported
- * as removed upstream. A class absent from the CURRENT release, or one with
- * no tag, still fails.
- *
- * Properties get no such gate: the checker never flags a stub-declared
- * property the installed class lacks (only the reverse, a vendor property
- * missing from the stub), so a property added in a later minor needs no
- * exemption, and one that arrives via a laravel/ai trait is covered by the
- * stub's own `use` clause.
- *
- * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]
- * With no argument it compares the stub tree under
- * `stubs/integrations/laravel-ai`. An explicit [stubs-dir] is scanned
- * recursively as given.
- * Exit codes: 0 = no drift found (beyond KNOWN_GAPS below), 1 = new drift
- * found or a stubbed class/method is missing from the installed vendor
- * package, 2 = laravel/ai not installed (soft skip, not a failure: the
- * calling CI leg already gates on this via SKIPIF/class-presence checks).
+ * Usage: php bin/ci/check-laravel-ai-stub-parity.php [stubs-dir]   (default: stubs/integrations/laravel-ai)
+ * Exit codes: 0 = no drift (beyond KNOWN_GAPS), 1 = drift or a stubbed class/method missing from the installed
+ *             package, 2 = laravel/ai not installed (soft skip; the calling CI leg gates on that itself).
  */
 
 use PhpParser\Node;
+use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\ParserFactory;
@@ -102,31 +26,13 @@ use PhpParser\PrettyPrinter\Standard;
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 /**
- * Escape hatch for a known mismatch that is tracked separately rather than
- * fixed here: this script owns detection, not the stub files themselves. An
- * entry is keyed by the reported label (`Fqcn::method`, or the function FQN)
- * and is printed as a finding either way, never silently hidden, it just does
- * not fail the job. An entry that stops reproducing is reported as stale
- * rather than silently kept: see the "Stale KNOWN_GAPS entries" check at the
- * end of this script. Remove a stale entry once you see that warning, so the
- * checker starts enforcing it like everything else.
- *
- * Empty is the desired steady state. It got there the intended way: the one
- * original entry (`Contracts\CanActAsTool::description`) was fixed in #1330 and
- * the stale warning named it on the next run.
+ * Findings that are tracked elsewhere rather than fixed here, keyed by finding key (`Fqcn::method`, the function FQN,
+ * `Fqcn implements Iface`, ...). They are still printed, just not fatal. A key that stops matching is reported as
+ * stale so it cannot silently suppress a future finding. Empty is the steady state.
  *
  * @var array<string, string>
  */
 const KNOWN_GAPS = [];
-
-/**
- * Public/protected vendor members intentionally omitted from a redeclaration.
- * Keep this narrow and temporary: every entry is reported and consumed, and
- * stale entries warn so an omission cannot become a permanent blind spot.
- *
- * @var array<string, string>
- */
-const INTENTIONAL_OMISSIONS = [];
 
 if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
     echo "laravel/ai is not installed; nothing to compare.\n";
@@ -134,28 +40,14 @@ if (!\class_exists(\Laravel\Ai\AnonymousAgent::class)) {
 }
 
 $stubDir = $argv[1] ?? dirname(__DIR__, 2) . '/stubs/integrations/laravel-ai';
-$installedVersion = installedLaravelAiVersion();
-
-/** @var list<string> $mismatches */
-$mismatches = [];
-/** @var list<string> $knownGaps */
-$knownGaps = [];
-/** @var list<string> $versionGated */
-$versionGated = [];
-/** @var array<string, true> $consumedGapKeys */
-$consumedGapKeys = [];
-$consumedOmissionKeys = [];
-$comparedMethods = 0;
-$comparedClasses = 0;
-
+$findings = new Findings(installedLaravelAiVersion());
 $parser = (new ParserFactory())->createForNewestSupportedVersion();
+$finder = new NodeFinder();
 
-$stubFiles = findStubFiles($stubDir);
-
-foreach ($stubFiles as $file) {
+foreach (findStubFiles($stubDir) as $file) {
     $ast = $parser->parse(\file_get_contents($file) ?: '');
     if ($ast === null) {
-        report($file, "{$file}: php-parser could not parse this stub", $mismatches, $knownGaps, $consumedGapKeys);
+        $findings->report($file, "{$file}: php-parser could not parse this stub");
         continue;
     }
 
@@ -163,211 +55,32 @@ foreach ($stubFiles as $file) {
     $traverser->addVisitor(new NameResolver());
     $ast = $traverser->traverse($ast);
 
-    foreach (findClassLikes($ast) as $classLike) {
-        $fqcn = $classLike->namespacedName?->toString();
+    foreach ($finder->findInstanceOf($ast, Node\Stmt\ClassLike::class) as $classLike) {
+        compareClassLike($findings, $classLike, $file);
+    }
+
+    foreach ($finder->findInstanceOf($ast, Node\Stmt\Function_::class) as $function) {
+        $fqcn = $function->namespacedName?->toString();
         if ($fqcn === null) {
             continue;
         }
 
-        if (!\class_exists($fqcn) && !\interface_exists($fqcn) && !\trait_exists($fqcn)) {
-            // A class (or interface/trait) a later minor introduced, tagged
-            // `@since X.Y.Z` in its own docblock, is exempt while the
-            // installed release predates it. There is nothing to reflect, so
-            // the whole class is skipped here: every per-member, property
-            // and interface comparison below needs a ReflectionClass, and
-            // running them against a missing class would only emit spurious
-            // findings for a class that genuinely does not exist yet. The
-            // class is deliberately NOT counted in $comparedClasses (nor its
-            // methods in $comparedMethods): nothing was compared, and the
-            // summary line must not claim coverage the run didn't give.
-            $classSince = classSinceTag($classLike->getDocComment());
-            if ($classSince !== null && sinceGateApplies($classSince, $installedVersion, $fqcn, $versionGated)) {
-                continue;
-            }
-
-            report($fqcn, "{$fqcn}: declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
+        if (!\function_exists($fqcn)) {
+            $findings->report($fqcn, "{$fqcn}(): declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)");
             continue;
         }
 
-        $comparedClasses++;
-        $declaredMethodNames = [];
-        $reflectionClass = new \ReflectionClass($fqcn);
-
-        foreach ($classLike->getMethods() as $method) {
-            $methodName = $method->name->toString();
-            $declaredMethodNames[$methodName] = true;
-            $key = "{$fqcn}::{$methodName}";
-
-            if (!$reflectionClass->hasMethod($methodName)) {
-                if (versionGateApplies($method->getDocComment(), $installedVersion, $key, $versionGated)) {
-                    continue;
-                }
-
-                report($key, "{$key}(): declared in the stub but not found on the installed class (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
-                continue;
-            }
-
-            $comparedMethods++;
-            diffSignature(
-                $key,
-                $method->params,
-                $method->returnType,
-                $method->byRef,
-                $reflectionClass->getMethod($methodName),
-                $fqcn,
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-            );
-        }
-
-        // Taint-review tripwire, not a correctness check (see file docblock).
-        // A trait counts as providing a method only when concretely
-        // implemented, not just required abstractly. Only laravel/ai's own
-        // implementation counts; framework trait helpers (e.g.
-        // SerializesModels) aren't this integration's API contract.
-        foreach ($reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_PROTECTED) as $method) {
-            if ($method->getDeclaringClass()->getName() !== $fqcn || !isLaravelAiSource($method->getFileName())) {
-                continue;
-            }
-
-            if (isset($declaredMethodNames[$method->getName()]) || traitProvidesConcreteMethod($classLike, $method->getName())) {
-                continue;
-            }
-
-            $visibility = $method->isProtected() ? 'protected' : 'public';
-            reportOmission(
-                "{$fqcn}::{$method->getName()}",
-                "{$fqcn}::{$method->getName()}(): {$visibility} method exists in installed laravel/ai but is missing from the stub",
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-                $consumedOmissionKeys,
-            );
-        }
-
-        $declaredPropertyNames = declaredPropertyNames($classLike);
-        foreach ($reflectionClass->getProperties() as $property) {
-            if ($property->getDeclaringClass()->getName() !== $fqcn
-                || $property->isPrivate()
-                || !isLaravelAiSource($property->getDeclaringClass()->getFileName())
-                || isset($declaredPropertyNames[$property->getName()])
-                || traitProvidesProperty($classLike, $property->getName())) {
-                continue;
-            }
-
-            reportOmission(
-                "{$fqcn}::\${$property->getName()}",
-                "{$fqcn}::\${$property->getName()}: public/protected property exists in installed laravel/ai but is missing from the stub",
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-                $consumedOmissionKeys,
-            );
-        }
-
-        // Unlike methods/properties, this one is real erasure (file docblock).
-        // `parent_classes` isn't wiped, so Psalm still derives interfaces
-        // inherited from the real parent without the stub repeating them.
-        // Each literal name in the stub's clause is expanded to its own
-        // interface-extends-interface closure (e.g. `IteratorAggregate`
-        // implies `Traversable`) before comparing, matching what a real
-        // `implements IteratorAggregate` in the stub would also grant.
-        // `Stringable` is PHP-implicit on any class with `__toString()`, on
-        // both the real class and the stub, so it's exempt rather than
-        // needing to be spelled out.
-        $clauseWord = $classLike instanceof Node\Stmt\Interface_ ? 'extends' : 'implements';
-        $declaredInterfaceClosure = declaredInterfaceClosure($classLike);
-        if (isset($declaredMethodNames['__toString'])) {
-            $declaredInterfaceClosure['Stringable'] = true;
-        }
-
-        $parentClass = $reflectionClass->getParentClass();
-        $inheritedInterfaceNames = $parentClass !== false ? \array_flip($parentClass->getInterfaceNames()) : [];
-
-        foreach ($reflectionClass->getInterfaceNames() as $interfaceName) {
-            if (isset($declaredInterfaceClosure[$interfaceName]) || isset($inheritedInterfaceNames[$interfaceName])) {
-                continue;
-            }
-
-            reportOmission(
-                "{$fqcn} implements {$interfaceName}",
-                "{$fqcn}: implements {$interfaceName} in the installed laravel/ai, but the stub's `{$clauseWord}` clause omits it (Psalm wipes the interface list on redeclaration)",
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-                $consumedOmissionKeys,
-            );
-        }
-
-        // The reverse direction: a stale interface the stub still claims but
-        // the installed class no longer implements (removed/renamed
-        // upstream). This is a hard mismatch, not an omission — Psalm would
-        // let a project treat the class as that type when it no longer is.
-        // The one exemption is an interface the installed release predates,
-        // declared via a class-docblock `@since X.Y.Z implements Fqcn` line
-        // (see interfaceSinceTags()); it only applies while the installed
-        // version is OLDER than X.Y.Z.
-        $realInterfaceNames = \array_flip($reflectionClass->getInterfaceNames());
-        $interfaceSinceTags = interfaceSinceTags($classLike->getDocComment());
-        foreach (declaredInterfaceNames($classLike) as $interfaceName => $_) {
-            if (isset($realInterfaceNames[$interfaceName])) {
-                continue;
-            }
-
-            if (isset($interfaceSinceTags[$interfaceName])
-                && sinceGateApplies($interfaceSinceTags[$interfaceName], $installedVersion, "{$fqcn} {$clauseWord} {$interfaceName}", $versionGated)) {
-                continue;
-            }
-
-            report(
-                "{$fqcn} implements {$interfaceName} (stale)",
-                "{$fqcn}: stub's `{$clauseWord}` clause declares {$interfaceName}, but the installed class doesn't implement it (renamed or removed upstream?)",
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-            );
-        }
-    }
-
-    foreach (findFunctions($ast) as $function) {
-        $fqcn = $function->namespacedName?->toString();
-        if ($fqcn === null || !\function_exists($fqcn)) {
-            if ($fqcn !== null) {
-                report($fqcn, "{$fqcn}(): declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)", $mismatches, $knownGaps, $consumedGapKeys);
-            }
-            continue;
-        }
-
-        $comparedMethods++;
-        diffSignature($fqcn, $function->params, $function->returnType, $function->byRef, new \ReflectionFunction($fqcn), null, $mismatches, $knownGaps, $consumedGapKeys);
+        $findings->comparedSignatures++;
+        diffSignature($findings, $fqcn, $function, new \ReflectionFunction($fqcn), null);
     }
 }
 
-echo "Compared {$comparedMethods} method/function signatures across {$comparedClasses} classes against the installed laravel/ai package.\n";
+echo "Compared {$findings->comparedSignatures} method/function signatures across {$findings->comparedClasses} classes against the installed laravel/ai package.\n";
 
-if ($knownGaps !== []) {
-    echo "\nKnown gaps (tracked separately, not new drift; see KNOWN_GAPS in this script):\n";
-    foreach ($knownGaps as $knownGap) {
-        echo " - {$knownGap}\n";
-    }
-}
+printSection('Known gaps (tracked separately, not new drift; see KNOWN_GAPS in this script)', $findings->allowed);
+printSection("Version-gated (installed laravel/ai {$findings->installedVersion} predates the stub declaration's @since tag)", $findings->gated);
 
-if ($versionGated !== []) {
-    echo "\nVersion-gated (installed laravel/ai {$installedVersion} predates the stub declaration's @since tag):\n";
-    foreach ($versionGated as $gated) {
-        echo " - {$gated}\n";
-    }
-}
-
-// Stale KNOWN_GAPS entries: an entry that never matched anything this run
-// means the mismatch it described no longer reproduces (its stub was fixed,
-// the method was removed, or the entry was mistyped). That is good news,
-// but a stale entry left in place would silently keep suppressing any FUTURE
-// mismatch that happens to reuse the same key, which is exactly the kind of
-// silent gap this checker exists to prevent. Loud and non-fatal: this is
-// housekeeping, not drift.
-$staleGapKeys = \array_diff(\array_keys(KNOWN_GAPS), \array_keys($consumedGapKeys));
+$staleGapKeys = $findings->staleGapKeys();
 if ($staleGapKeys !== []) {
     echo "\n";
     foreach ($staleGapKeys as $staleGapKey) {
@@ -375,67 +88,88 @@ if ($staleGapKeys !== []) {
     }
 }
 
-$staleOmissionKeys = \array_diff(\array_keys(INTENTIONAL_OMISSIONS), \array_keys($consumedOmissionKeys));
-if ($staleOmissionKeys !== []) {
-    echo "\n";
-    foreach ($staleOmissionKeys as $staleOmissionKey) {
-        echo "::warning::Intentional omission for \"{$staleOmissionKey}\" in INTENTIONAL_OMISSIONS (bin/ci/check-laravel-ai-stub-parity.php) no longer reproduces. Remove this entry.\n";
-    }
-}
-
-if ($mismatches !== []) {
-    echo "\nSignature drift detected:\n";
-    foreach ($mismatches as $mismatch) {
-        echo " - {$mismatch}\n";
-    }
+if ($findings->drift !== []) {
+    printSection('Signature drift detected', $findings->drift);
     exit(1);
 }
 
 exit(0);
 
-/**
- * @param list<string> $mismatches
- * @param list<string> $knownGaps
- * @param array<string, true> $consumedGapKeys
- */
-function report(string $key, string $message, array &$mismatches, array &$knownGaps, array &$consumedGapKeys): void
+final class Findings
 {
-    if (isset(KNOWN_GAPS[$key])) {
-        $consumedGapKeys[$key] = true;
-        $knownGaps[] = "{$message} ({$key}: " . KNOWN_GAPS[$key] . ')';
+    /** @var list<string> */
+    public array $drift = [];
 
+    /** @var list<string> */
+    public array $allowed = [];
+
+    /** @var list<string> */
+    public array $gated = [];
+
+    public int $comparedSignatures = 0;
+
+    public int $comparedClasses = 0;
+
+    /** @var array<string, true> */
+    private array $matchedGapKeys = [];
+
+    public function __construct(public readonly ?string $installedVersion) {}
+
+    public function report(string $key, string $message): void
+    {
+        if (isset(KNOWN_GAPS[$key])) {
+            $this->matchedGapKeys[$key] = true;
+            $this->allowed[] = "{$message} ({$key}: " . KNOWN_GAPS[$key] . ')';
+
+            return;
+        }
+
+        $this->drift[] = $message;
+    }
+
+    /** @return list<string> */
+    public function staleGapKeys(): array
+    {
+        return \array_values(\array_diff(\array_keys(KNOWN_GAPS), \array_keys($this->matchedGapKeys)));
+    }
+
+    /**
+     * Whether a `@since` tag in `$doc` exempts the element being checked, recording it as version-gated if so.
+     * `$target` selects the tag: '' for the documented element itself (method or class), or an interface FQCN
+     * for a class docblock's `@since X implements \Fqcn` line.
+     *
+     * Exempts only while the installed version is strictly OLDER than the tag, and only when both are plain
+     * dotted-numeric versions: a `dev-master`/`1.x-dev` install sorts unpredictably under version_compare(),
+     * so it falls through to the normal check instead of being silently exempted.
+     */
+    public function gatedBySince(?\PhpParser\Comment\Doc $doc, string $label, string $target = ''): bool
+    {
+        $since = sinceTags($doc)[$target] ?? null;
+        if ($since === null
+            || $this->installedVersion === null
+            || !isDottedVersion($since)
+            || !isDottedVersion($this->installedVersion)
+            || !\version_compare($this->installedVersion, $since, '<')) {
+            return false;
+        }
+
+        $this->gated[] = "{$label} (@since {$since})";
+
+        return true;
+    }
+}
+
+/** @param list<string> $lines */
+function printSection(string $heading, array $lines): void
+{
+    if ($lines === []) {
         return;
     }
 
-    $mismatches[] = $message;
-}
-
-/**
- * Report an intentionally omitted member without making it disappear from
- * the output. KNOWN_GAPS is for mismatched declarations; this list is for
- * deliberate, documented omissions where a full redeclaration is out of
- * scope.
- *
- * @param list<string> $mismatches
- * @param list<string> $knownGaps
- * @param array<string, true> $consumedGapKeys
- * @param array<string, true> $consumedOmissionKeys
- */
-function reportOmission(string $key, string $message, array &$mismatches, array &$knownGaps, array &$consumedGapKeys, array &$consumedOmissionKeys): void
-{
-    if (isset(INTENTIONAL_OMISSIONS[$key])) {
-        $consumedOmissionKeys[$key] = true;
-        $knownGaps[] = "{$message} ({$key}: " . INTENTIONAL_OMISSIONS[$key] . ')';
-
-        return;
+    echo "\n{$heading}:\n";
+    foreach ($lines as $line) {
+        echo " - {$line}\n";
     }
-
-    report($key, $message, $mismatches, $knownGaps, $consumedGapKeys);
-}
-
-function isLaravelAiSource(?string $file): bool
-{
-    return $file !== null && \str_contains(\str_replace('\\', '/', $file), '/vendor/laravel/ai/');
 }
 
 function installedLaravelAiVersion(): ?string
@@ -449,156 +183,201 @@ function installedLaravelAiVersion(): ?string
     return $version !== null ? \ltrim($version, 'v') : null;
 }
 
-/**
- * Only a plain dotted-numeric version (`1.0.0`, `1.2`) is comparable against
- * an `@since` tag. A branch alias or dev version (`dev-master`, `1.x-dev`)
- * sorts unpredictably under version_compare(), so treat those as "not
- * gateable" rather than risk silently exempting a method that a bleeding-edge
- * install is expected to have.
- */
-function isPatchVersion(string $version): bool
+function isDottedVersion(string $version): bool
 {
     return \preg_match('/^\d+(\.\d+){1,3}$/', $version) === 1;
 }
 
 /**
- * @param list<string> $versionGated
- */
-function versionGateApplies(?\PhpParser\Comment\Doc $docComment, ?string $installedVersion, string $key, array &$versionGated): bool
-{
-    $since = sinceTag($docComment);
-
-    return $since !== null && sinceGateApplies($since, $installedVersion, "{$key}()", $versionGated);
-}
-
-/**
- * True only while the installed version is strictly OLDER than `$since`, so
- * a tag stops helping the moment the installed release reaches it. Both
- * sides must be plain dotted-numeric versions; anything else falls through
- * to the normal (un-gated) check.
+ * Parses every `@since X.Y.Z [implements|extends \Fqcn]` line of a docblock. Without a clause the tag is for the
+ * documented element itself (key ''); with one it is for that interface, which has no docblock of its own.
  *
- * @param list<string> $versionGated
+ * @return array<string, string> target => version, first tag wins
  */
-function sinceGateApplies(string $since, ?string $installedVersion, string $label, array &$versionGated): bool
+function sinceTags(?\PhpParser\Comment\Doc $doc): array
 {
-    if ($installedVersion === null || !isPatchVersion($since) || !isPatchVersion($installedVersion)) {
-        return false;
-    }
-
-    if (\version_compare($installedVersion, $since, '<')) {
-        $versionGated[] = "{$label} (@since {$since})";
-
-        return true;
-    }
-
-    return false;
-}
-
-/**
- * The version of a CLASS-level `@since X.Y.Z` line, i.e. one that stands
- * alone on its line. A line carrying a trailing `implements|extends \Fqcn`
- * is an interface-clause tag (see interfaceSinceTags()) and says nothing
- * about the class itself, so it must not exempt a missing class.
- */
-function classSinceTag(?\PhpParser\Comment\Doc $docComment): ?string
-{
-    if ($docComment === null
-        || \preg_match('/^[ \t]*(?:\/\*\*|\*)?[ \t]*@since[ \t]+(\S+)[ \t]*(?:\*\/)?[ \t]*\r?$/m', $docComment->getText(), $matches) !== 1) {
-        return null;
-    }
-
-    return $matches[1];
-}
-
-function sinceTag(?\PhpParser\Comment\Doc $docComment): ?string
-{
-    if ($docComment === null || \preg_match('/@since\s+(\S+)/', $docComment->getText(), $matches) !== 1) {
-        return null;
-    }
-
-    return $matches[1];
-}
-
-/**
- * Interface clauses have no per-name docblock to hang a tag on, so the stub
- * declares them in the CLASS docblock, one line per interface:
- *
- *     @since 1.1.0 implements \Laravel\Ai\Contracts\Approvable
- *
- * (`extends` for an interface stub.) The name must be fully qualified; a
- * leading backslash is optional. Returns interface FQCN => version.
- *
- * @return array<string, string>
- */
-function interfaceSinceTags(?\PhpParser\Comment\Doc $docComment): array
-{
-    if ($docComment === null
-        || \preg_match_all('/@since\s+(\S+)\s+(?:implements|extends)\s+\\\\?([A-Za-z_][\w\\\\]*)/', $docComment->getText(), $matches, \PREG_SET_ORDER) < 1) {
+    if ($doc === null
+        || \preg_match_all('/@since[ \t]+(\S+)(?:[ \t]+(?:implements|extends)[ \t]+\\\\?([A-Za-z_][\w\\\\]*))?/', $doc->getText(), $matches, \PREG_SET_ORDER) < 1) {
         return [];
     }
 
     $tags = [];
     foreach ($matches as $match) {
-        $tags[$match[2]] = $match[1];
+        $tags[$match[2] ?? ''] ??= $match[1];
     }
 
     return $tags;
 }
 
-function traitProvidesConcreteMethod(Node\Stmt\ClassLike $classLike, string $methodName): bool
+function compareClassLike(Findings $findings, Node\Stmt\ClassLike $classLike, string $file): void
 {
-    foreach (stubTraits($classLike) as $trait) {
-        if (!\trait_exists($trait)) {
+    $fqcn = $classLike->namespacedName?->toString();
+    if ($fqcn === null) {
+        return;
+    }
+
+    if (!\class_exists($fqcn) && !\interface_exists($fqcn) && !\trait_exists($fqcn)) {
+        // A gated class is skipped before any reflection and stays out of the compared counters: nothing was
+        // compared, and the summary must not claim coverage the run didn't give.
+        if (!$findings->gatedBySince($classLike->getDocComment(), $fqcn)) {
+            $findings->report($fqcn, "{$fqcn}: declared in {$file} but not found in the installed laravel/ai package (renamed or removed upstream?)");
+        }
+
+        return;
+    }
+
+    $findings->comparedClasses++;
+    $reflectionClass = new \ReflectionClass($fqcn);
+
+    $declaredMethodNames = [];
+    foreach ($classLike->getMethods() as $method) {
+        $methodName = $method->name->toString();
+        $declaredMethodNames[$methodName] = true;
+        $key = "{$fqcn}::{$methodName}";
+
+        if (!$reflectionClass->hasMethod($methodName)) {
+            if (!$findings->gatedBySince($method->getDocComment(), "{$key}()")) {
+                $findings->report($key, "{$key}(): declared in the stub but not found on the installed class (renamed or removed upstream?)");
+            }
+
             continue;
         }
 
-        $reflectionClass = new \ReflectionClass($trait);
-        if ($reflectionClass->hasMethod($methodName) && !$reflectionClass->getMethod($methodName)->isAbstract()) {
-            return true;
-        }
+        $findings->comparedSignatures++;
+        diffSignature($findings, $key, $method, $reflectionClass->getMethod($methodName), $fqcn);
     }
 
-    return false;
+    compareOmittedMembers($findings, $classLike, $reflectionClass, $declaredMethodNames);
+    compareInterfaces($findings, $classLike, $reflectionClass, isset($declaredMethodNames['__toString']));
 }
 
-function traitProvidesProperty(Node\Stmt\ClassLike $classLike, string $propertyName): bool
+/**
+ * Psalm merges a member the stub omits in from the real class, so this is a taint-review tripwire rather than a
+ * correctness check: the merged-in member carries none of the stub's taint annotations. Only laravel/ai's own
+ * members count (not framework trait helpers like SerializesModels), and a trait the stub `use`s counts as
+ * providing a member only when it implements it concretely.
+ *
+ * @param array<string, true> $declaredMethodNames
+ */
+function compareOmittedMembers(Findings $findings, Node\Stmt\ClassLike $classLike, \ReflectionClass $reflectionClass, array $declaredMethodNames): void
 {
-    foreach (stubTraits($classLike) as $trait) {
-        if (\trait_exists($trait) && (new \ReflectionClass($trait))->hasProperty($propertyName)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/** @return list<string> */
-function stubTraits(Node\Stmt\ClassLike $classLike): array
-{
+    $fqcn = $reflectionClass->getName();
     $traits = [];
-    foreach ($classLike->stmts ?? [] as $statement) {
-        if (!$statement instanceof Node\Stmt\TraitUse) {
-            continue;
-        }
-
-        foreach ($statement->traits as $trait) {
-            $traits[] = $trait->toString();
+    foreach ($classLike->getTraitUses() as $traitUse) {
+        foreach ($traitUse->traits as $trait) {
+            if (\trait_exists($trait->toString())) {
+                $traits[] = new \ReflectionClass($trait->toString());
+            }
         }
     }
 
-    return $traits;
+    foreach ($reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_PROTECTED) as $method) {
+        $name = $method->getName();
+        if ($method->getDeclaringClass()->getName() !== $fqcn
+            || !isLaravelAiSource($method->getFileName())
+            || isset($declaredMethodNames[$name])) {
+            continue;
+        }
+
+        foreach ($traits as $trait) {
+            if ($trait->hasMethod($name) && !$trait->getMethod($name)->isAbstract()) {
+                continue 2;
+            }
+        }
+
+        $visibility = $method->isProtected() ? 'protected' : 'public';
+        $findings->report("{$fqcn}::{$name}", "{$fqcn}::{$name}(): {$visibility} method exists in installed laravel/ai but is missing from the stub");
+    }
+
+    $declaredPropertyNames = declaredPropertyNames($classLike);
+    foreach ($reflectionClass->getProperties() as $property) {
+        $name = $property->getName();
+        if ($property->getDeclaringClass()->getName() !== $fqcn
+            || $property->isPrivate()
+            || !isLaravelAiSource($property->getDeclaringClass()->getFileName())
+            || isset($declaredPropertyNames[$name])) {
+            continue;
+        }
+
+        foreach ($traits as $trait) {
+            if ($trait->hasProperty($name)) {
+                continue 2;
+            }
+        }
+
+        $findings->report("{$fqcn}::\${$name}", "{$fqcn}::\${$name}: public/protected property exists in installed laravel/ai but is missing from the stub");
+    }
+}
+
+/**
+ * Unlike methods/properties, the interface list IS wiped by a redeclaration (`parent_classes` is not, so
+ * interfaces inherited from the real parent need no repeating). Checked both ways: an interface the stub omits,
+ * and a stale one it still declares.
+ */
+function compareInterfaces(Findings $findings, Node\Stmt\ClassLike $classLike, \ReflectionClass $reflectionClass, bool $hasToString): void
+{
+    $fqcn = $reflectionClass->getName();
+    $clauseWord = $classLike instanceof Node\Stmt\Interface_ ? 'extends' : 'implements';
+
+    $declared = declaredInterfaceNames($classLike);
+
+    // Reflection can't tell a written name from one only reachable through it (`IteratorAggregate` implies
+    // `Traversable`), and PHP grants `Stringable` to any class with `__toString()`, so both count as declared.
+    $implied = $declared;
+    foreach (\array_keys($declared) as $interfaceName) {
+        if (\interface_exists($interfaceName)) {
+            foreach ((new \ReflectionClass($interfaceName))->getInterfaceNames() as $inherited) {
+                $implied[$inherited] = true;
+            }
+        }
+    }
+
+    if ($hasToString) {
+        $implied['Stringable'] = true;
+    }
+
+    $parentClass = $reflectionClass->getParentClass();
+    $inherited = $parentClass !== false ? \array_flip($parentClass->getInterfaceNames()) : [];
+    $real = $reflectionClass->getInterfaceNames();
+
+    foreach ($real as $interfaceName) {
+        if (!isset($implied[$interfaceName]) && !isset($inherited[$interfaceName])) {
+            $findings->report(
+                "{$fqcn} implements {$interfaceName}",
+                "{$fqcn}: implements {$interfaceName} in the installed laravel/ai, but the stub's `{$clauseWord}` clause omits it (Psalm wipes the interface list on redeclaration)",
+            );
+        }
+    }
+
+    $realSet = \array_flip($real);
+    foreach (\array_keys($declared) as $interfaceName) {
+        if (isset($realSet[$interfaceName])
+            || $findings->gatedBySince($classLike->getDocComment(), "{$fqcn} {$clauseWord} {$interfaceName}", $interfaceName)) {
+            continue;
+        }
+
+        $findings->report(
+            "{$fqcn} implements {$interfaceName} (stale)",
+            "{$fqcn}: stub's `{$clauseWord}` clause declares {$interfaceName}, but the installed class doesn't implement it (renamed or removed upstream?)",
+        );
+    }
+}
+
+function isLaravelAiSource(string|false|null $file): bool
+{
+    return \is_string($file) && \str_contains(\str_replace('\\', '/', $file), '/vendor/laravel/ai/');
 }
 
 /** @return array<string, true> */
 function declaredInterfaceNames(Node\Stmt\ClassLike $classLike): array
 {
-    $interfaces = [];
     $names = match (true) {
         $classLike instanceof Node\Stmt\Class_, $classLike instanceof Node\Stmt\Enum_ => $classLike->implements,
         $classLike instanceof Node\Stmt\Interface_ => $classLike->extends,
         default => [],
     };
 
+    $interfaces = [];
     foreach ($names as $name) {
         $interfaces[$name->toString()] = true;
     }
@@ -606,49 +385,20 @@ function declaredInterfaceNames(Node\Stmt\ClassLike $classLike): array
     return $interfaces;
 }
 
-/**
- * Each literal name expanded to include the interfaces it itself extends
- * (e.g. `IteratorAggregate` implies `Traversable`), matching what Reflection
- * reports for a real `implements IteratorAggregate` — Reflection can't tell
- * the difference between a name explicitly written and one only reachable
- * through it.
- *
- * @return array<string, true>
- */
-function declaredInterfaceClosure(Node\Stmt\ClassLike $classLike): array
-{
-    $closure = declaredInterfaceNames($classLike);
-
-    foreach (\array_keys($closure) as $interfaceName) {
-        if (\interface_exists($interfaceName)) {
-            foreach ((new \ReflectionClass($interfaceName))->getInterfaceNames() as $inherited) {
-                $closure[$inherited] = true;
-            }
-        }
-    }
-
-    return $closure;
-}
-
 /** @return array<string, true> */
 function declaredPropertyNames(Node\Stmt\ClassLike $classLike): array
 {
     $properties = [];
-    foreach ($classLike->stmts ?? [] as $statement) {
-        if ($statement instanceof Node\Stmt\Property) {
-            foreach ($statement->props as $property) {
-                $properties[$property->name->toString()] = true;
-            }
+    foreach ($classLike->getProperties() as $property) {
+        foreach ($property->props as $item) {
+            $properties[$item->name->toString()] = true;
         }
+    }
 
-        if ($statement instanceof Node\Stmt\ClassMethod && $statement->name->toString() === '__construct') {
-            foreach ($statement->params as $parameter) {
-                if (($parameter->flags & (Node\Stmt\Class_::MODIFIER_PUBLIC | Node\Stmt\Class_::MODIFIER_PROTECTED | Node\Stmt\Class_::MODIFIER_PRIVATE)) !== 0
-                    && $parameter->var instanceof Node\Expr\Variable
-                    && \is_string($parameter->var->name)) {
-                    $properties[$parameter->var->name] = true;
-                }
-            }
+    foreach ($classLike->getMethod('__construct')?->params ?? [] as $parameter) {
+        $name = paramName($parameter);
+        if ($parameter->isPromoted() && $name !== null) {
+            $properties[$name] = true;
         }
     }
 
@@ -668,222 +418,100 @@ function findStubFiles(string $dir): \Generator
     }
 }
 
-/**
- * @param list<Node\Stmt> $nodes
- * @return list<Node\Stmt\ClassLike>
- */
-function findClassLikes(array $nodes): array
+function flagDifference(string $on, string $off, bool $stub, bool $vendor): string
 {
-    $found = [];
-    foreach ($nodes as $node) {
-        if ($node instanceof Node\Stmt\ClassLike) {
-            $found[] = $node;
-        }
-        if (isset($node->stmts) && \is_array($node->stmts)) {
-            /** @var list<Node\Stmt> $childStmts */
-            $childStmts = $node->stmts;
-            $found = [...$found, ...findClassLikes($childStmts)];
-        }
-    }
-
-    return $found;
+    return '(stub: ' . ($stub ? $on : $off) . ', installed laravel/ai: ' . ($vendor ? $on : $off) . ')';
 }
 
-/**
- * @param list<Node\Stmt> $nodes
- * @return list<Node\Stmt\Function_>
- */
-function findFunctions(array $nodes): array
+/** @param Node\Stmt\ClassMethod|Node\Stmt\Function_ $stub */
+function diffSignature(Findings $findings, string $label, Node\FunctionLike $stub, \ReflectionFunctionAbstract $reflected, ?string $enclosingFqcn): void
 {
-    $found = [];
-    foreach ($nodes as $node) {
-        if ($node instanceof Node\Stmt\Function_) {
-            $found[] = $node;
-        }
-        if (isset($node->stmts) && \is_array($node->stmts)) {
-            /** @var list<Node\Stmt> $childStmts */
-            $childStmts = $node->stmts;
-            $found = [...$found, ...findFunctions($childStmts)];
-        }
-    }
+    // Plain functions have no `self`, and ReflectionFunction has no getDeclaringClass().
+    $declaringFqcn = $reflected instanceof \ReflectionMethod ? $reflected->getDeclaringClass()->getName() : null;
+    $fail = static fn(string $message, string $scope = '') => $findings->report($label, "{$label}({$scope}): {$message}");
 
-    return $found;
-}
+    $stubParams = $stub->getParams();
+    $vendorParams = $reflected->getParameters();
 
-/**
- * @param list<Node\Param> $stubParams
- * @param list<string> $mismatches
- * @param list<string> $knownGaps
- * @param array<string, true> $consumedGapKeys
- */
-function diffSignature(
-    string $label,
-    array $stubParams,
-    Node\Identifier|Node\Name|Node\ComplexType|null $stubReturnType,
-    bool $stubReturnsReference,
-    \ReflectionFunctionAbstract $reflected,
-    ?string $enclosingFqcn,
-    array &$mismatches,
-    array &$knownGaps,
-    array &$consumedGapKeys,
-): void {
-    // Plain functions have no `self`, and ReflectionFunction has no
-    // getDeclaringClass(), so the resolution context is class-only.
-    $declaringFqcn = $reflected instanceof \ReflectionMethod
-        ? $reflected->getDeclaringClass()->getName()
-        : null;
-
-    $reflectedParams = $reflected->getParameters();
-
-    if (\count($stubParams) !== \count($reflectedParams)) {
-        report(
-            $label,
-            "{$label}(): stub declares " . \count($stubParams) . ' parameter(s) (' . paramNameList($stubParams)
-                . '), installed laravel/ai declares ' . \count($reflectedParams) . ' (' . reflectedParamNameList($reflectedParams) . ')',
-            $mismatches,
-            $knownGaps,
-            $consumedGapKeys,
+    if (\count($stubParams) !== \count($vendorParams)) {
+        $fail(
+            'stub declares ' . \count($stubParams) . ' parameter(s) (' . parameterNames(\array_map(paramName(...), $stubParams))
+            . '), installed laravel/ai declares ' . \count($vendorParams) . ' ('
+            . parameterNames(\array_map(static fn(\ReflectionParameter $p): string => $p->getName(), $vendorParams)) . ')',
         );
     }
 
     foreach ($stubParams as $position => $stubParam) {
-        if (isset($reflectedParams[$position])) {
-            $stubParamName = paramName($stubParam);
-            $vendorParamName = $reflectedParams[$position]->getName();
-
-            // Names are API: `@psalm-taint-sink llm_prompt $prompt` matches by
-            // name, and named arguments bind by name, so a rename that keeps
-            // the type is a silent break in both directions.
-            if ($stubParamName !== null && $stubParamName !== $vendorParamName) {
-                report(
-                    $label,
-                    "{$label}(): parameter at position {$position} is named \"\${$stubParamName}\" in the stub, \"\${$vendorParamName}\" in the installed laravel/ai",
-                    $mismatches,
-                    $knownGaps,
-                    $consumedGapKeys,
-                );
-            }
-        }
-
-        $vendorParamType = isset($reflectedParams[$position]) ? $reflectedParams[$position]->getType() : null;
-
-        if (!isset($reflectedParams[$position])) {
+        $vendorParam = $vendorParams[$position] ?? null;
+        if ($vendorParam === null) {
             continue;
         }
 
-        if ($stubParam->byRef !== $reflectedParams[$position]->isPassedByReference()) {
-            report(
-                $label,
-                "{$label}(): parameter at position {$position} by-reference metadata differs (stub: "
-                    . ($stubParam->byRef ? 'by-reference' : 'by-value') . ', installed laravel/ai: '
-                    . ($reflectedParams[$position]->isPassedByReference() ? 'by-reference' : 'by-value') . ')',
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-            );
+        $at = "parameter at position {$position}";
+        $stubName = paramName($stubParam);
+
+        // Names are API: `@psalm-taint-sink llm_prompt $prompt` matches by name, and named arguments bind by
+        // name, so a rename that keeps the type silently disarms the sink.
+        if ($stubName !== null && $stubName !== $vendorParam->getName()) {
+            $fail("{$at} is named \"\${$stubName}\" in the stub, \"\${$vendorParam->getName()}\" in the installed laravel/ai");
         }
 
-        if ($stubParam->variadic !== $reflectedParams[$position]->isVariadic()) {
-            report(
-                $label,
-                "{$label}(): parameter at position {$position} variadic metadata differs (stub: "
-                    . ($stubParam->variadic ? 'variadic' : 'non-variadic') . ', installed laravel/ai: '
-                    . ($reflectedParams[$position]->isVariadic() ? 'variadic' : 'non-variadic') . ')',
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-            );
+        if ($stubParam->byRef !== $vendorParam->isPassedByReference()) {
+            $fail("{$at} by-reference metadata differs " . flagDifference('by-reference', 'by-value', $stubParam->byRef, $vendorParam->isPassedByReference()));
+        }
+
+        if ($stubParam->variadic !== $vendorParam->isVariadic()) {
+            $fail("{$at} variadic metadata differs " . flagDifference('variadic', 'non-variadic', $stubParam->variadic, $vendorParam->isVariadic()));
         }
 
         $stubDefault = $stubParam->default;
-        $stubHasDefault = $stubDefault !== null;
-        $vendorHasDefault = $reflectedParams[$position]->isDefaultValueAvailable();
-        if ($stubHasDefault !== $vendorHasDefault
-            || ($stubDefault !== null && $vendorHasDefault && !defaultValuesMatch(
-                $stubDefault,
-                $reflectedParams[$position],
-                $enclosingFqcn,
-            ))) {
-            report(
-                $label,
-                "{$label}(): parameter at position {$position} default/optionality differs (stub: "
-                    . ($stubHasDefault ? stubDefaultToString($stubParam->default) : 'required')
-                    . ', installed laravel/ai: ' . ($vendorHasDefault ? reflectionDefaultToString($reflectedParams[$position]) : 'required') . ')',
-                $mismatches,
-                $knownGaps,
-                $consumedGapKeys,
-            );
+        $vendorHasDefault = $vendorParam->isDefaultValueAvailable();
+        if (($stubDefault !== null) !== $vendorHasDefault
+            || ($stubDefault !== null && !defaultValuesMatch($stubDefault, $vendorParam, $enclosingFqcn))) {
+            $fail("{$at} default/optionality differs (stub: " . stubDefaultToString($stubDefault)
+                . ', installed laravel/ai: ' . ($vendorHasDefault ? reflectionDefaultToString($vendorParam) : 'required') . ')');
         }
 
-        $vendorParamType = $reflectedParams[$position]->getType();
-        if ($stubParam->type === null || $vendorParamType === null) {
-            // Psalm stubs often spell an untyped vendor parameter as `mixed`
-            // for useful local analysis. PHP reflection reports that as no
-            // native type, so treat it as equivalent while still catching a
-            // concrete type introduced on only one side.
-            $stubIsEffectivelyUntyped = $stubParam->type instanceof Node\Identifier
+        $vendorType = $vendorParam->getType();
+        if ($stubParam->type === null || $vendorType === null) {
+            // Stubs often spell an untyped vendor parameter `mixed`; Reflection reports no native type for it.
+            $mixedForUntyped = $vendorType === null
+                && $stubParam->type instanceof Node\Identifier
                 && \strtolower($stubParam->type->toString()) === 'mixed';
-            if ($stubIsEffectivelyUntyped && $vendorParamType === null) {
-                continue;
-            }
-            if ($stubParam->type !== null || $vendorParamType !== null) {
-                report(
-                    $label,
-                    "{$label}(): parameter at position {$position} has a native type on only one side (stub: "
-                        . ($stubParam->type === null ? 'none' : stubTypeToString($stubParam->type, $stubParam->default, $enclosingFqcn))
-                        . ', installed laravel/ai: ' . ($vendorParamType === null ? 'none' : reflectionTypeToString($vendorParamType, $declaringFqcn)) . ')',
-                    $mismatches,
-                    $knownGaps,
-                    $consumedGapKeys,
-                );
+
+            if (($stubParam->type !== null || $vendorType !== null) && !$mixedForUntyped) {
+                $fail("{$at} has a native type on only one side (stub: "
+                    . ($stubParam->type === null ? 'none' : stubTypeToString($stubParam->type, $stubParam->default, $enclosingFqcn))
+                    . ', installed laravel/ai: ' . ($vendorType === null ? 'none' : reflectionTypeToString($vendorType, $declaringFqcn)) . ')');
             }
 
             continue;
         }
 
         $stubType = stubTypeToString($stubParam->type, $stubParam->default, $enclosingFqcn);
-        $vendorType = reflectionTypeToString($vendorParamType, $declaringFqcn);
-
-        if ($stubType !== $vendorType) {
-            $stubParamName = paramName($stubParam);
-            $described = $stubParamName !== null ? '$' . $stubParamName : "position {$position}";
-            report($label, "{$label}({$described}): stub says \"{$stubType}\", installed laravel/ai says \"{$vendorType}\"", $mismatches, $knownGaps, $consumedGapKeys);
+        $vendorTypeString = reflectionTypeToString($vendorType, $declaringFqcn);
+        if ($stubType !== $vendorTypeString) {
+            $fail("stub says \"{$stubType}\", installed laravel/ai says \"{$vendorTypeString}\"", $stubName !== null ? '$' . $stubName : "position {$position}");
         }
     }
 
-    if ($stubReturnsReference !== $reflected->returnsReference()) {
-        report(
-            $label,
-            "{$label}(): return-by-reference metadata differs (stub: "
-                . ($stubReturnsReference ? 'by-reference' : 'by-value') . ', installed laravel/ai: '
-                . ($reflected->returnsReference() ? 'by-reference' : 'by-value') . ')',
-            $mismatches,
-            $knownGaps,
-            $consumedGapKeys,
-        );
+    if ($stub->returnsByRef() !== $reflected->returnsReference()) {
+        $fail('return-by-reference metadata differs ' . flagDifference('by-reference', 'by-value', $stub->returnsByRef(), $reflected->returnsReference()));
     }
 
-    if ($stubReturnType !== null) {
-        $vendorReturnType = $reflected->getReturnType();
-        if ($vendorReturnType === null) {
-            // Docblock/native precision on an untyped framework trait method
-            // is an intentional Psalm enhancement, not vendor drift.
-            return;
-        }
-
+    // A stub narrowing an untyped vendor return is an intentional Psalm enhancement, not drift.
+    $stubReturnType = $stub->getReturnType();
+    $vendorReturnType = $reflected->getReturnType();
+    if ($stubReturnType !== null && $vendorReturnType !== null) {
         $stubReturn = stubTypeToString($stubReturnType, null, $enclosingFqcn);
         $vendorReturn = reflectionTypeToString($vendorReturnType, $declaringFqcn);
-
         if ($stubReturn !== $vendorReturn) {
-            report($label, "{$label}(): return type stub says \"{$stubReturn}\", installed laravel/ai says \"{$vendorReturn}\"", $mismatches, $knownGaps, $consumedGapKeys);
+            $fail("return type stub says \"{$stubReturn}\", installed laravel/ai says \"{$vendorReturn}\"");
         }
     }
 }
 
-/**
- * Null for a destructuring or otherwise non-plain parameter variable, which
- * php-parser models as an arbitrary expression.
- */
+/** Null for a destructuring or otherwise non-plain parameter variable. */
 function paramName(Node\Param $param): ?string
 {
     return $param->var instanceof Node\Expr\Variable && \is_string($param->var->name)
@@ -891,30 +519,12 @@ function paramName(Node\Param $param): ?string
         : null;
 }
 
-/** @param list<Node\Param> $params */
-function paramNameList(array $params): string
+/** @param list<?string> $names */
+function parameterNames(array $names): string
 {
-    if ($params === []) {
-        return 'none';
-    }
-
-    return \implode(', ', \array_map(
-        static fn(Node\Param $param): string => '$' . (paramName($param) ?? '?'),
-        $params,
-    ));
-}
-
-/** @param list<\ReflectionParameter> $params */
-function reflectedParamNameList(array $params): string
-{
-    if ($params === []) {
-        return 'none';
-    }
-
-    return \implode(', ', \array_map(
-        static fn(\ReflectionParameter $param): string => '$' . $param->getName(),
-        $params,
-    ));
+    return $names === []
+        ? 'none'
+        : \implode(', ', \array_map(static fn(?string $name): string => '$' . ($name ?? '?'), $names));
 }
 
 function stubDefaultToString(?Node\Expr $default): string
@@ -927,15 +537,14 @@ function stubDefaultToString(?Node\Expr $default): string
         return 'array()';
     }
 
-    return \strtolower((new Standard())->prettyPrintExpr($default)) === 'null'
-        ? 'null'
-        : (new Standard())->prettyPrintExpr($default);
+    $source = (new Standard())->prettyPrintExpr($default);
+
+    return \strtolower($source) === 'null' ? 'null' : $source;
 }
 
 /**
- * A `new` initializer reaches Reflection as an object rather than its source
- * expression. Its state is not a reliable comparison basis, but its class is.
- * Other default values retain their exact source/runtime comparison.
+ * Reflection evaluates a `new` initializer into an object whose state can't be compared to source, so such a
+ * default compares by class (and optionality); every other default compares exactly.
  */
 function defaultValuesMatch(Node\Expr $stubDefault, \ReflectionParameter $parameter, ?string $enclosingFqcn): bool
 {
@@ -944,11 +553,9 @@ function defaultValuesMatch(Node\Expr $stubDefault, \ReflectionParameter $parame
         return stubDefaultToString($stubDefault) === reflectionDefaultToString($parameter);
     }
 
-    if (!$stubDefault instanceof Node\Expr\New_ || !$stubDefault->class instanceof Node\Name) {
-        return false;
-    }
-
-    return stubTypeToString($stubDefault->class, null, $enclosingFqcn) === $vendorDefault::class;
+    return $stubDefault instanceof Node\Expr\New_
+        && $stubDefault->class instanceof Node\Name
+        && stubTypeToString($stubDefault->class, null, $enclosingFqcn) === $vendorDefault::class;
 }
 
 function reflectionDefaultToString(\ReflectionParameter $parameter): string
@@ -958,37 +565,38 @@ function reflectionDefaultToString(\ReflectionParameter $parameter): string
     }
 
     $value = $parameter->getDefaultValue();
-    if ($value === null) {
-        return 'null';
-    }
-    if ($value === true) {
-        return 'true';
-    }
-    if ($value === false) {
-        return 'false';
-    }
-    if (\is_object($value)) {
-        return 'new ' . $value::class;
-    }
-    if (\is_array($value) && $value === []) {
-        return 'array()';
-    }
 
-    return \var_export($value, true);
+    return match (true) {
+        $value === null => 'null',
+        \is_bool($value) => $value ? 'true' : 'false',
+        \is_object($value) => 'new ' . $value::class,
+        $value === [] => 'array()',
+        default => \var_export($value, true),
+    };
 }
 
 /**
- * Native-type-only normalization, comparable against reflectionTypeToString().
- * Docblock precision is intentionally invisible here; see the file docblock.
- *
- * PHP reflection expands `iterable` to `Traversable|array` only when it is a
- * union member. The same expansion here preserves equivalent declarations
- * while still distinguishing a bare `array` from `iterable`.
- *
- * `self`/`parent` are resolved to the enclosing class's FQCN because
- * ReflectionNamedType::getName() resolves them too (unlike `static`, which
- * both sides keep literal); otherwise every legitimately `self`-typed stub
- * method would misreport as drift.
+ * `getName()` resolving `self` to the declaring class is PHP-version dependent (resolving only one side reported
+ * every fluent `self` method as drift on CI while staying clean locally), so both sides normalize explicitly.
+ * `static` stays literal on both.
+ */
+function resolveRelativeTypeName(string $name, ?string $enclosingFqcn): string
+{
+    if ($enclosingFqcn === null) {
+        return $name;
+    }
+
+    return match (\strtolower($name)) {
+        'self' => $enclosingFqcn,
+        'parent' => (new \ReflectionClass($enclosingFqcn))->getParentClass()?->getName() ?? $name,
+        default => $name,
+    };
+}
+
+/**
+ * Native-type-only normalization, comparable against reflectionTypeToString(): docblock precision is
+ * deliberately invisible. Reflection expands `iterable` to `Traversable|array` only as a union member, so the
+ * same expansion applies here, which keeps a bare `array` distinct from `iterable`.
  */
 function stubTypeToString(Node\Identifier|Node\Name|Node\ComplexType $type, ?Node\Expr $default, ?string $enclosingFqcn): string
 {
@@ -996,43 +604,21 @@ function stubTypeToString(Node\Identifier|Node\Name|Node\ComplexType $type, ?Nod
         return '?' . stubTypeToString($type->type, null, $enclosingFqcn);
     }
 
-    if ($type instanceof Node\UnionType) {
+    if ($type instanceof Node\UnionType || $type instanceof Node\IntersectionType) {
         $parts = [];
-        foreach ($type->types as $unionMember) {
-            $part = stubTypeToString($unionMember, null, $enclosingFqcn);
-            if (\strtolower($part) === 'iterable') {
-                \array_push($parts, 'Traversable', 'array');
-                continue;
-            }
-
-            $parts[] = $part;
+        foreach ($type->types as $member) {
+            $part = stubTypeToString($member, null, $enclosingFqcn);
+            \array_push($parts, ...(\strtolower($part) === 'iterable' ? ['Traversable', 'array'] : [$part]));
         }
         \sort($parts);
 
-        return \implode('|', $parts);
+        return \implode($type instanceof Node\UnionType ? '|' : '&', $parts);
     }
 
-    if ($type instanceof Node\IntersectionType) {
-        $parts = \array_map(static fn(Node\Identifier|Node\Name $t): string => stubTypeToString($t, null, $enclosingFqcn), $type->types);
-        \sort($parts);
+    $name = resolveRelativeTypeName($type->toString(), $enclosingFqcn);
 
-        return \implode('&', $parts);
-    }
-
-    // Identifier | Name from here on: a plain scalar/class type.
-    $name = $type->toString();
-
-    if (\strtolower($name) === 'self' && $enclosingFqcn !== null) {
-        $name = $enclosingFqcn;
-    } elseif (\strtolower($name) === 'parent' && $enclosingFqcn !== null) {
-        $parentClass = (new \ReflectionClass($enclosingFqcn))->getParentClass();
-        $name = $parentClass !== false ? $parentClass->getName() : $name;
-    }
-
-    // PHP's deprecated implicit-nullable rule: a bare (non-"?", non-union)
-    // type with an explicit `= null` default is nullable even without `?`,
-    // and ReflectionNamedType::allowsNull() reports that. `mixed`/`null`
-    // already cover null and cannot take a `?` prefix at all.
+    // A bare type with an explicit `= null` default is implicitly nullable (deprecated, but Reflection's
+    // allowsNull() reports it). `mixed`/`null` already cover null and can't take a `?` prefix.
     $impliedNullable = $default instanceof Node\Expr\ConstFetch
         && \strtolower($default->name->toString()) === 'null'
         && !\in_array(\strtolower($name), ['mixed', 'null'], true);
@@ -1040,52 +626,20 @@ function stubTypeToString(Node\Identifier|Node\Name|Node\ComplexType $type, ?Nod
     return ($impliedNullable ? '?' : '') . $name;
 }
 
-/**
- * Whether `getName()` resolves `self` to the declaring class is PHP-version
- * dependent, so both sides must be normalized explicitly. Resolving only the
- * stub side reported every fluent `self`-returning method as drift on the CI
- * runtime while staying clean locally.
- *
- * @param ?string $declaringFqcn declaring class, for `self`/`parent`
- */
-function reflectionTypeToString(?\ReflectionType $type, ?string $declaringFqcn = null): string
+function reflectionTypeToString(\ReflectionType $type, ?string $declaringFqcn): string
 {
-    if ($type === null) {
-        return 'NOTYPE';
-    }
-
-    if ($type instanceof \ReflectionUnionType) {
+    if ($type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType) {
         $parts = \array_map(
-            static fn(\ReflectionType $t): string => reflectionTypeToString($t, $declaringFqcn),
+            static fn(\ReflectionType $member): string => reflectionTypeToString($member, $declaringFqcn),
             $type->getTypes(),
         );
         \sort($parts);
 
-        return \implode('|', $parts);
+        return \implode($type instanceof \ReflectionUnionType ? '|' : '&', $parts);
     }
 
-    if ($type instanceof \ReflectionIntersectionType) {
-        $parts = \array_map(
-            static fn(\ReflectionType $t): string => reflectionTypeToString($t, $declaringFqcn),
-            $type->getTypes(),
-        );
-        \sort($parts);
-
-        return \implode('&', $parts);
-    }
-
-    // ReflectionNamedType from here on.
-    $name = $type->getName();
-
-    if ($declaringFqcn !== null) {
-        if (\strtolower($name) === 'self') {
-            $name = $declaringFqcn;
-        } elseif (\strtolower($name) === 'parent') {
-            $parentClass = (new \ReflectionClass($declaringFqcn))->getParentClass();
-            $name = $parentClass !== false ? $parentClass->getName() : $name;
-        }
-    }
-
+    \assert($type instanceof \ReflectionNamedType);
+    $name = resolveRelativeTypeName($type->getName(), $declaringFqcn);
     $nullable = $type->allowsNull() && !\in_array(\strtolower($name), ['mixed', 'null'], true);
 
     return ($nullable ? '?' : '') . $name;

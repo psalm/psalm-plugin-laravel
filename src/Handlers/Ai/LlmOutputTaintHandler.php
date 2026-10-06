@@ -14,99 +14,19 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
 
 /**
- * Marks the properties on Laravel AI response objects that hold model output as
- * an `input` taint source. The model's output is downstream of every untrusted
- * source that reached its prompt (indirect prompt injection — attacker content
- * in a web page, RAG corpus, tool output, or email), so passing it unsanitized
- * to SQL, shell, HTML, header, or filesystem sinks should fire the matching
- * `Tainted*` issue.
+ * Sources reads of the Laravel AI response properties that hold model output as
+ * `input` taint. The output is downstream of everything that reached the prompt
+ * (indirect prompt injection), so unsanitized flow into SQL, shell, HTML, header
+ * or filesystem sinks should report the matching `Tainted*` issue.
  *
- * Psalm's `@psalm-taint-source` docblock annotation is not honored on
- * properties, only on method return types. This handler bridges that gap by
- * intercepting reads of the property and adding the taint via
- * `Codebase::addTaintSource()`. The response stubs under
- * `stubs/integrations/laravel-ai/Responses/` complement it with
- * `@psalm-taint-source` on `__toString()` and the payload accessors, which are
- * method returns and so can be annotated declaratively.
+ * Psalm ignores `@psalm-taint-source` on properties, which is why this handler
+ * exists; the response stubs annotate the method returns declaratively.
  *
- * `$text` is covered on:
- * - `Laravel\Ai\Responses\TextResponse` (and subclasses, including
- *   `AgentResponse` and `StreamedAgentResponse` — the snapshot returned to
- *   `Promptable::stream()->then()` callbacks).
- * - `Laravel\Ai\Responses\StreamableAgentResponse` (separate hierarchy in
- *   the real package — `$text` is populated after the stream completes).
- * - `Laravel\Ai\Responses\TranscriptionResponse` (also its own hierarchy; a
- *   transcript of user-supplied audio is attacker-authored text that a speech
- *   model merely re-typed).
- *
- * `$reasoning` is covered on:
- * - `TextResponse`, where `vendor/laravel/ai/src/Responses/TextResponse.php`
- *   declares raw model reasoning inherited by the text response subclasses.
- * - `StreamableAgentResponse`, where
- *   `vendor/laravel/ai/src/Responses/StreamableAgentResponse.php` combines
- *   provider reasoning deltas after streaming.
- * - `Responses\Data\Step`, where
- *   `vendor/laravel/ai/src/Responses/Data/Step.php` records an individual
- *   model-generation step's reasoning.
- * - `Gateway\StepResponse`, where
- *   `vendor/laravel/ai/src/Gateway/StepResponse.php` carries gateway model
- *   response reasoning.
- *
- * `$citations` is covered on `StreamableAgentResponse`, whose
- * `vendor/laravel/ai/src/Responses/StreamableAgentResponse.php` collection
- * contains provider-supplied citation payloads. No phpt pins an end-to-end
- * flow for it: the payloads only leave the response through `Collection`
- * reads, and Psalm drops the taint edge there, the same core gap the
- * array-access note below describes. The source stays registered so the flow
- * reports the moment Psalm carries taint through those reads.
- *
- * `$text` is also covered on:
- * - `Responses\Data\Step` (and `StructuredStep`, which extends it), where
- *   `vendor/laravel/ai/src/Responses/Data/Step.php` holds the text of one
- *   model-generation step, reached through `AgentResponse::$steps`.
- * - `Gateway\StepResponse`, where
- *   `vendor/laravel/ai/src/Gateway/StepResponse.php` holds the gateway
- *   response agent middleware reads via `$next($step)->response()->text`.
- * - `Responses\Data\TranscriptionSegment`, where
- *   `vendor/laravel/ai/src/Responses/Data/TranscriptionSegment.php` is one
- *   diarized slice of the same provider transcript as `TranscriptionResponse`.
- *
- * `$structured` is also covered on `StructuredStep`
- * (`vendor/laravel/ai/src/Responses/Data/StructuredStep.php`) and
- * `Gateway\StepResponse` (`vendor/laravel/ai/src/Gateway/StepResponse.php`,
- * nullable), both of which hold the provider's decoded JSON for a step.
- *
- * `$delta` is covered on `Streaming\Events\TextDelta` and `ReasoningDelta`,
- * whose `vendor/laravel/ai/src/Streaming/Events/TextDelta.php` and
- * `ReasoningDelta.php` carry the raw model tokens, the documented way to
- * consume `stream()`.
- *
- * Classification answers (`vendor/laravel/ai/src/Gateway/Concerns/AnswersQuestions.php`
- * builds them from the provider JSON):
- * - `ChoiceAnswer::$choice` is taken verbatim from the provider and never
- *   validated against the options the caller offered.
- * - `ScoreAnswer::$legend` is the provider's `legend` when it returns one; the
- *   caller's `Score` levels are only the fallback.
- * - `ClassificationResponse::$answers` is the array of those answer objects.
- *
- * `ScoreAnswer::$score` and `$confidence` are floats and `BooleanAnswer` is a
- * bool, so they stay unsourced. `$probabilities` is float-valued; its array
- * keys (option labels echoed by the provider) are not sourced.
- *
- * `StructuredAgentResponse` and `StructuredTextResponse` are absent from the
- * `$text` list but still covered: both inherit it from `TextResponse`. They
- * additionally expose the decoded payload as a public `$structured` array,
- * which laravel/ai's own console command reads, so that property is sourced on
- * the pair directly.
- *
- * Array-access reads (`$response['field']`, `$request['task']`) are covered by
- * nothing, here or in the stubs: Psalm discards the taint edge when it resolves
- * the `[]` sugar, so an `ArrayDimFetch` branch here would work around a core gap
- * on one of the hottest node types. Deferred to upstream
- * (https://github.com/vimeo/psalm/issues/11912) and pinned by the
- * `*KnownLimitation.phpt` fixtures. The covered paths for structured output are
- * an explicit `$response->offsetGet('field')` call and `toArray()`. Mechanism
- * and rationale: `docs/contributing/taint-analysis.md`.
+ * Array-access reads (`$response['field']`) are not sourced here or in the
+ * stubs: Psalm drops the taint edge when it resolves the `[]` sugar
+ * (https://github.com/vimeo/psalm/issues/11912). Use `offsetGet()` or
+ * `toArray()`; the `*KnownLimitation.phpt` fixtures pin the gap and
+ * `docs/contributing/taint-analysis.md` explains it.
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  * @see https://github.com/laravel/ai Laravel AI SDK
@@ -118,32 +38,26 @@ use Psalm\Type\TaintKind;
 final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
 {
     /**
-     * Property name => classes declaring it with LLM-generated (untrusted)
-     * contents. Scoped per property rather than as one class list crossed with
-     * one property list, because each output property belongs to a distinct
-     * response hierarchy. That avoids sourcing an unrelated property with the
-     * same name on a user-defined class.
-     *
-     * Subclasses are still covered via `classExtendsOrImplements`; the explicit
-     * lists shortcut the common case to a single `in_array()` check.
+     * Property => classes declaring it with model-generated contents. Keyed per
+     * property, not as classes x properties: each belongs to a different response
+     * hierarchy, and a cross-product would source same-named properties on
+     * unrelated classes. Subclasses (`AgentResponse`, `StructuredStep`, user
+     * wrappers) match via `classExtendsOrImplements`, so only roots are listed.
      *
      * @var array<string, list<string>>
      */
     private const TAINTED_PROPERTIES = [
         'text' => [
             'Laravel\\Ai\\Responses\\TextResponse',
-            'Laravel\\Ai\\Responses\\AgentResponse',
-            'Laravel\\Ai\\Responses\\StreamedAgentResponse',
             'Laravel\\Ai\\Responses\\StreamableAgentResponse',
+            // A transcript of user-supplied audio is attacker-authored text.
             'Laravel\\Ai\\Responses\\TranscriptionResponse',
             'Laravel\\Ai\\Responses\\Data\\Step',
             'Laravel\\Ai\\Gateway\\StepResponse',
             'Laravel\\Ai\\Responses\\Data\\TranscriptionSegment',
         ],
-        // The decoded structured payload, declared by the
-        // ProvidesStructuredResponse trait. A plain `array`, so reading an offset
-        // off it propagates normally; the array-access gap below applies to
-        // `$response['field']` on the response object, not to this.
+        // A plain `array`, so offset reads propagate; the array-access gap above
+        // concerns `$response['field']` on the response object.
         'structured' => [
             'Laravel\\Ai\\Responses\\StructuredAgentResponse',
             'Laravel\\Ai\\Responses\\StructuredTextResponse',
@@ -156,14 +70,17 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
             'Laravel\\Ai\\Responses\\Data\\Step',
             'Laravel\\Ai\\Gateway\\StepResponse',
         ],
+        // No phpt pins a flow: payloads leave only through `Collection` reads,
+        // where Psalm drops the edge. Stays registered for when it doesn't.
         'citations' => [
             'Laravel\\Ai\\Responses\\StreamableAgentResponse',
         ],
-        // Streamed model tokens: the documented way to consume `stream()`.
         'delta' => [
             'Laravel\\Ai\\Streaming\\Events\\TextDelta',
             'Laravel\\Ai\\Streaming\\Events\\ReasoningDelta',
         ],
+        // Classification answers come verbatim from the provider and are never
+        // validated against the options the caller offered.
         'choice' => [
             'Laravel\\Ai\\Responses\\Data\\ChoiceAnswer',
         ],
@@ -181,8 +98,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
     {
         $codebase = $event->getCodebase();
 
-        // Pure performance gate: taint analysis is off → do nothing. Saves the per-expression
-        // type lookup on every Psalm run that doesn't pass --taint-analysis.
+        // Performance gate: skip the per-expression type lookup unless --taint-analysis is on.
         if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
@@ -224,14 +140,9 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
                 break;
             }
 
-            // Cover user-defined subclasses (e.g. a project's own response
-            // wrapper extending AgentResponse).
+            // Subclasses, including a project's own response wrapper.
             if ($codebase->classExists($atomic->value)) {
                 foreach ($taintedClasses as $taintedClass) {
-                    if (!$codebase->classExists($taintedClass)) {
-                        continue;
-                    }
-
                     if ($codebase->classExtendsOrImplements($atomic->value, $taintedClass)) {
                         $isLlmResponse = true;
 
@@ -245,10 +156,8 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
-        // The expression type may be unset when Psalm couldn't resolve the property —
-        // fall back to `string` so the taint annotation survives. That is the right
-        // shape for `$text`; a `$structured` read that Psalm could not type is rare
-        // enough that a narrower fallback is not worth a second lookup.
+        // Unresolved property type: fall back to `string` so the taint survives.
+        // Right for `$text`; a rare untyped `$structured` read is not worth a second lookup.
         $exprType = $nodeTypeProvider->getType($expr) ?? Type::getString();
 
         $taintId = 'llm-output-' . $expr->name->name

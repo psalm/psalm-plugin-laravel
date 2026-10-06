@@ -243,17 +243,13 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 **default**: `auto`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). It is only relevant when `laravel/ai >=1.0.0 <2.0.0` is installed; the plugin leaves the level alone otherwise, including on 0.11.x, which is not supported.
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt sink. See [LLM prompt injection](security.md#llm-prompt-injection-owasp-llm012025) for what is covered and for when the integration loads (`laravel/ai >=1.0.0 <2.0.0` only).
 
-- element omitted (`auto`): enforced when the supported `laravel/ai` integration is installed. The plugin leaves the issue at Psalm's normal error level.
-- `value="false"`: explicit opt-out. Only `TaintedLlmPrompt` is suppressed; model-output taint sources and their ordinary SQL/HTML/shell findings remain errors.
-- `value="true"`: enforced inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
+- element omitted (`auto`): enforced when the supported integration is installed, at Psalm's normal error level.
+- `value="false"`: explicit opt-out. Suppresses only `TaintedLlmPrompt`; model-output taint sources keep their ordinary `Tainted*` findings.
+- `value="true"`: enforced, but only inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
 
-If your agents already run prompt-injection middleware, annotate the guard instead of opting out globally: [Marking prompt-guard middleware as trusted](security.md#marking-prompt-guard-middleware-as-trusted).
-
-Use the explicit opt-out only where direct prompt flows are intentional. In security-sensitive applications, the default auto mode reports prompts assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). An explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
-
-This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.
+An explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` always wins over this setting. If your agents already run a prompt guard, annotate the guard (see the link above) instead of opting out globally.
 
 ### Example
 
