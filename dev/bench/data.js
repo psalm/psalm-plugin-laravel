@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791280704379,
+  "lastUpdate": 1791285121499,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12350,6 +12350,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fddcab977249d90142249c3a509bd73e2d044dc2",
+          "message": "Add opt-in Blade template analysis (#1501)\n\nCompiles every `.blade.php` template of the booted application into a PHP\nshadow file, analyzes it with the rest of the project, and reports type,\ntaint, and contract issues at the template's own file and line. Opt-in:\n`<blade />` in the plugin config, plus `composer require --dev\nstillat/blade-parser`.\n\nPipeline\n- Shadow compiler, manifest and cache (#1469, #1473, #1517), bootstrapper,\n  config and graceful degradation (#1470, #1518), namespaced and\n  case-variant view roots (#1497, #1552), multi-threaded analysis (#1530).\n- Issues relocated onto template lines (#1471, #1544); taint journeys\n  rewritten to name templates, including sinks in application PHP (#1472,\n  #1519).\n- Template contracts from `{{-- @var --}}`, raw `@var` docblocks and\n  `@props` (#1475); opt-in `validateViewData` (MissingViewVariable,\n  InvalidViewVariableType, #1476) and `reportUnusedViewData`\n  (UnusedViewData, #1478). Class-component `data()` counts as supplied view\n  data and wins a key `render()` also passes; `with()` dispatches on the\n  key's type.\n- `psalm-laravel blade:annotate` writes missing `@var` contracts from the\n  `view()` call sites (#1524, #1527).\n\nFalse-positive work on real templates\n#1494, #1495 (Mixed* suppressed by default, `reportMixedIssues` to opt\nback in), #1496, #1498, #1499, #1500, #1505, #1525, #1532, #1533, #1534,\n#1535, #1540, #1542, #1543, #1545, #1546, #1551, #1553, #1554, #1557,\n#1558, #1559, #1566; bare-CR line endings counted consistently.\n\nChanges visible without `<blade />`\n- `old()` returns `string|array|null|TDefault` for a non-Model fallback.\n- `e()` accepts `Stringable`; `ManagesLoops` and `ViewErrorBag` stubs.\n- `__()` / `trans()` / `Translator::get()` keep narrowing with named and\n  reordered arguments and on `app('translator')->get()` (#1499).\n\nPsalm 7 line\n- Ported from the 3.x development line (#1580, closed); the Psalm 6\n  taint-run gate is dropped since Psalm 7 reports type and taint issues\n  from one run. Purity annotations fit beta23 capabilities.\n- The UnusedView rule from #1477 is removed before release: zero findings\n  across a 9-project corpus, since any component tag disables it.\n- `stillat/blade-parser` is a `suggest` dependency (it requires\n  `laravel/framework`); replacing it is #1705. Per-run CLI overrides are\n  #1702, gated on #1703.\n\nCloses #1481",
+          "timestamp": "2026-10-06T13:07:24+02:00",
+          "tree_id": "8c485d6899a60fddd431863fbfc1c688bfcf07bc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fddcab977249d90142249c3a509bd73e2d044dc2"
+        },
+        "date": 1791285120440,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.24,
+            "range": "± 0.36",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1373,
             "unit": "MB"
           }
         ]
