@@ -102,12 +102,15 @@ final class AnalyzeCommand extends Command
         // Validate both layers here so a typo is a clean message, not a stack trace from inside psalm.
         try {
             $scan = $this->scanArguments();
-            $env = \getenv();
-            $effective = PluginOverrides::fromEnv($env[PluginOverrides::ENV_VAR] ?? null)
+            $childEnv = \getenv();
+            // Only this command may set the private CLI layer; an inherited one would bypass validation and the gate.
+            unset($childEnv[PluginOverrides::CLI_ENV_VAR]);
+            $effective = PluginOverrides::fromEnv($childEnv[PluginOverrides::ENV_VAR] ?? null)
                 ->over(PluginOverrides::parse($scan['options'], '--plugin-option'));
-            $childEnv = $scan['options'] === []
-                ? null
-                : [...$env, PluginOverrides::CLI_ENV_VAR => \json_encode($scan['options'], \JSON_THROW_ON_ERROR)];
+
+            if ($scan['options'] !== []) {
+                $childEnv[PluginOverrides::CLI_ENV_VAR] = \json_encode($scan['options'], \JSON_THROW_ON_ERROR);
+            }
         } catch (\InvalidArgumentException|\JsonException $e) {
             $io->error($e->getMessage());
             return Command::FAILURE;

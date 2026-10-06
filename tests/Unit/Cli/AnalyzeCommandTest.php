@@ -356,6 +356,17 @@ final class AnalyzeCommandTest extends TestCase
         $this->assertSame([], $report['argv']);
     }
 
+    #[Test]
+    public function an_inherited_private_cli_variable_never_reaches_the_child(): void
+    {
+        \putenv('PSALM_LARAVEL_CLI_OPTIONS=["blade=true"]');
+
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']));
+
+        $this->assertFalse($report['cli'], 'only analyze itself may set the private CLI layer');
+        $this->assertSame(['--threads=1'], $report['argv'], 'a forged layer must not trigger the reference-cache gate');
+    }
+
     /** @return iterable<string, array{list<string>, ?string, list<string>}> */
     public static function referenceCacheGate(): iterable
     {
