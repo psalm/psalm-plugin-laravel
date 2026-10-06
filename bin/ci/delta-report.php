@@ -30,14 +30,16 @@ declare(strict_types=1);
  *   php delta-report.php <output_dir> <base_label> <head_label> \
  *       --apps=monica,pixelfed,coolify \
  *       [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] \
- *       [--date-marker=cache] [--details] [--selection='default + octane']
+ *       [--date-marker=cache] [--details] [--selection='default + octane'] \
+ *       [--flags='--blade']
  *
  * --details prints the changed, added and removed entries and crash text. They
  * carry file paths and issue messages, so they are OFF by default (safe for a
  * private app).
  *
  * --selection is the resolved /psalm-delta selector label (bin/ci/delta-select-apps.php),
- * printed under the header with the app count.
+ * printed under the header with the app count. --flags is the run-wide
+ * `psalm-laravel analyze` flags both sides ran with, printed below it.
  *
  * Exit codes: 0 = report produced, 2 = usage error.
  */
@@ -87,7 +89,7 @@ foreach (array_slice($argv, 1) as $arg) {
 
 $fail = static function (string $message): never {
     fwrite(STDERR, "Error: {$message}\n");
-    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache] [--details] [--selection=label]\n");
+    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--date-marker=cache] [--details] [--selection=label] [--flags='--blade']\n");
     exit(2);
 };
 
@@ -111,6 +113,7 @@ $headSha = $options['head-sha'] ?? '';
 $dateMarker = $options['date-marker'] ?? 'cache';
 $details = isset($options['details']);
 $selection = $options['selection'] ?? '';
+$flags = $options['flags'] ?? '';
 
 // Issue types whose presence depends on the order Psalm merges parallel workers
 // (first-merge-wins CodeUseGraph::$mutation_info after the thread pool join),
@@ -516,6 +519,10 @@ $out[] = "## PR delta: {$baseDesc} -> {$headDesc}";
 $out[] = '';
 if ($selection !== '') {
     $out[] = sprintf('Apps: %s → %d', $selection, count($apps));
+    $out[] = '';
+}
+if ($flags !== '') {
+    $out[] = sprintf('Flags (both sides): `%s`', $flags);
     $out[] = '';
 }
 

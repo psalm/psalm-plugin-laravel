@@ -12,13 +12,15 @@
 #   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(4.x, head)
 #   bash bin/ci/delta.sh <base-ref> vs <head-ref>   # explicit base + head
 #   bash bin/ci/delta.sh --apps "octane,vito" <head-ref>   # default group + octane + vito
+#   bash bin/ci/delta.sh --apps "blade --blade" <head-ref> # + blade apps, Blade analysis on
 #
 # --apps takes the `/psalm-delta` comment grammar without the prefix (resolved by
 # bin/ci/delta-select-apps.php): group tags and app names add to the `default` group,
-# `all` selects every app, `help` lists groups. Omitted = `default`.
+# `all` selects every app, `help` lists groups, and `--flag` tokens declared under
+# `flags:` in the registry go to `psalm-laravel analyze` on both sides. Omitted = `default`.
 #
 # Output: markdown delta report on stdout; raw JSON cached under
-#   .cache/psalm-delta-ci/<BASE_SHA>--<HEAD_SHA>/ (gitignored, reused on rerun).
+#   .cache/psalm-delta-ci/<BASE_SHA>--<HEAD_SHA>[+<flag>...]/ (gitignored, reused on rerun).
 
 set -euo pipefail
 
@@ -52,6 +54,7 @@ case "$(yq -p=json '.status' <<< "$SELECTION")" in
     *) yq -p=json '.reply' <<< "$SELECTION" >&2; exit 2 ;;
 esac
 SELECTION_LABEL=$(yq -p=json '.label' <<< "$SELECTION")
+RUN_FLAGS=$(yq -p=json '.flags' <<< "$SELECTION")
 IFS=',' read -ra RUN_APPS <<< "$(yq -p=json '.apps_csv' <<< "$SELECTION")"
 
 # --- Resolve base / head refs ------------------------------------------------
@@ -76,7 +79,13 @@ fi
 BASE_LABEL="base-${BASE_SHA}"
 HEAD_LABEL="pr-${HEAD_SHA}"
 
-OUT="${PLUGIN_DIR}/.cache/psalm-delta-ci/${BASE_SHA}--${HEAD_SHA}"
+# Flags change the results, so they key the cache too: `--blade` -> `+blade`.
+# Registry flags are [a-z0-9._=-] only, so the unquoted split is glob-safe.
+FLAGS_SUFFIX=""
+for flag in $RUN_FLAGS; do
+    FLAGS_SUFFIX+="+${flag#--}"
+done
+OUT="${PLUGIN_DIR}/.cache/psalm-delta-ci/${BASE_SHA}--${HEAD_SHA}${FLAGS_SUFFIX}"
 mkdir -p "$OUT"
 
 echo "Base: $BASE_REF ($BASE_SHA)   Head: $HEAD_REF ($HEAD_SHA)" >&2
@@ -130,6 +139,7 @@ for app in "${RUN_APPS[@]}"; do
     [[ -n "$pdir"  ]] && args+=(--project-dir "$pdir")
     [[ -n "$before_install" ]] && args+=(--before-install "$before_install")
     [[ -n "$psalm_args" ]] && args+=(--psalm-args "$psalm_args")
+    [[ -n "$RUN_FLAGS" ]] && args+=(--flags "$RUN_FLAGS")
 
     echo "=== $app ===" >&2
     bash "${PLUGIN_DIR}/bin/ci/delta-app.sh" "${args[@]}" || echo "WARN: $app runner failed" >&2
@@ -142,7 +152,7 @@ APPS_CSV=$(IFS=,; echo "${RUN_APPS[*]}")
 php -d memory_limit=-1 "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
     --apps="$APPS_CSV" --base-ref="$BASE_REF" --head-ref="$HEAD_REF" \
     --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" --date-marker=cache \
-    --selection="$SELECTION_LABEL"
+    --selection="$SELECTION_LABEL" --flags="$RUN_FLAGS"
 
 echo "" >&2
 echo "Raw data: $OUT (reused on rerun for this SHA pair; rm -rf to force clean)" >&2
