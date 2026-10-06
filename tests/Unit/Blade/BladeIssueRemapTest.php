@@ -891,6 +891,25 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * A marker between the attribute lines of a multi-line `<x-...>` tag leaves the opening tag
+     * uncompiled while `</x-alert>` still compiles, and its orphan `endif` is a `ParseError`. The
+     * `->`/`=>` inside the tag's `{{ }}` and `@class()` attributes must not end the skip early.
+     */
+    #[Test]
+    public function a_multiline_component_tag_compiles_without_a_parse_error(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/multiline-tag.blade.php';
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        // The opening tag compiled rather than surviving as literal text.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString('->renderComponent()', $shadow);
+        $this->assertStringNotContainsString('<x-alert', $shadow);
+    }
+
     /** The keyed-arm gate declines when the template itself contains the generated call text. */
     #[Test]
     public function an_author_written_keyed_call_keeps_reporting_no_value(): void
