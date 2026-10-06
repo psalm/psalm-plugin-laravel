@@ -3,7 +3,7 @@
 Psalm plugin for Laravel. It boots a real Laravel application (the analyzed project's own `bootstrap/app.php`, with Orchestra Testbench as the package fallback), then hooks Psalm's event system and registers stubs to type Laravel's magic. It also ships taint sources, sinks, and escapes for security analysis.
 
 Active majors:
-- `4.x` is the Psalm 7 line (PHP 8.2+, Laravel `^12.14 || ^13.3`, Psalm 7 beta)
+- `4.x` is the Psalm 7 line (PHP 8.2+, Laravel `^12.20 || ^13.3`, Psalm 7 beta)
 - `3.x` is the Psalm 6 line (Laravel `^11.35+`), backports only
 
 Taint: Psalm 6 runs in exactly one mode per invocation: plain `psalm` reports type issues only, `psalm --taint-analysis` reports taint issues only, so full coverage takes two runs. Psalm 7 runs taint BY DEFAULT and emits type and taint issues together in one run, on a rewritten engine with different internals; `psalm-laravel init` additionally writes `runTaintAnalysis="true"` to make that explicit.

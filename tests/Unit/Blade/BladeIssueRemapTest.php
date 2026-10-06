@@ -817,10 +817,6 @@ final class BladeIssueRemapTest extends TestCase
     #[Test]
     public function context_previous_value_stack_is_not_reported(): void
     {
-        if (!\trait_exists(\Illuminate\View\Compilers\Concerns\CompilesContexts::class)) {
-            $this->markTestSkipped('@context needs CompilesContexts (Laravel 12.20+); below it the directive compiles as literal text');
-        }
-
         $issues = $this->analyze('psalm.xml');
         $template = 'context-previous.blade.php';
 
