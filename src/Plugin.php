@@ -82,7 +82,7 @@ final class Plugin implements PluginEntryPointInterface
 
             // Always called — provides type narrowing (string vs array) regardless
             // of whether findMissingTranslations is enabled
-            $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations);
+            $this->initTranslationKeyHandler($output, $pluginConfig->findMissingTranslations, $pluginConfig->findMissingTranslationsKeys);
 
             // Resolve the 'view' binding once and share it: the diagnostic init
             // (finder fallback) and the always-on view() narrowing both need it.
@@ -852,7 +852,7 @@ final class Plugin implements PluginEntryPointInterface
      * keys. The $reportMissing flag controls only whether MissingTranslation issues
      * are emitted for keys that don't exist.
      */
-    private function initTranslationKeyHandler(\Psalm\Progress\Progress $output, bool $reportMissing): void
+    private function initTranslationKeyHandler(\Psalm\Progress\Progress $output, bool $reportMissing, Config\TranslationKeys $translationKeys): void
     {
         $app = ApplicationProvider::getApp();
 
@@ -882,7 +882,7 @@ final class Plugin implements PluginEntryPointInterface
             return;
         }
 
-        Handlers\Translations\TranslationKeyHandler::init($translator, $reportMissing);
+        Handlers\Translations\TranslationKeyHandler::init($translator, $reportMissing, $translationKeys);
     }
 
     /**

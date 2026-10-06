@@ -179,7 +179,7 @@ final class IssueUrlGeneratorTest extends TestCase
             '<pluginClass>'
             . '<modelProperties columnFallback="none" />'
             . '<resolveDynamicWhereClauses value="false" />'
-            . '<findMissingTranslations value="true" />'
+            . '<findMissingTranslations value="true" keys="short" />'
             . '<findMissingViews value="true" />'
             . '<findUnregisteredRouteNames value="true" />'
             . '<findOctaneIncompatibleBinding value="true" />'
@@ -194,6 +194,7 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- modelPropertiesColumnFallback: none', $body);
         $this->assertStringContainsString('- resolveDynamicWhereClauses: false', $body);
         $this->assertStringContainsString('- findMissingTranslations: true', $body);
+        $this->assertStringContainsString('- findMissingTranslationsKeys: short', $body);
         $this->assertStringContainsString('- findMissingViews: true', $body);
         $this->assertStringContainsString('- findUnregisteredRouteNames: true', $body);
         $this->assertStringContainsString('- findOctaneIncompatibleBinding: true', $body);
