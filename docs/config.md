@@ -348,18 +348,32 @@ Psalm's `--no-progress` installs a progress implementation that discards warning
 
 ## Per-run overrides
 
-The `PSALM_LARAVEL_OPTIONS` environment variable overrides plugin settings for one run, without touching `psalm.xml`. `vendor/bin/psalm` rejects flags it does not know, so a per-run switch has to travel through the environment.
+Every setting on this page can be overridden for one run, without touching `psalm.xml`. `vendor/bin/psalm` rejects flags it does not know, so there are two entry points:
 
 ```bash
-PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm
+# psalm-laravel: repeatable flag, values may contain spaces
+vendor/bin/psalm-laravel analyze --plugin-option experimental=true --plugin-option modelProperties.columnFallback=none
+vendor/bin/psalm-laravel analyze --plugin-option 'blade.cacheDir=/tmp/blade shadows' --blade
+
+# bare psalm: process environment variable
+PSALM_LARAVEL_OPTIONS='experimental=true modelProperties.columnFallback=none' vendor/bin/psalm
 ```
 
-* Grammar: whitespace-separated `KEY=VALUE` tokens, keys named as in the XML. No quoting. A repeated key is last-wins.
-* Supported keys: `blade` (`true` or `false`), which switches [Blade analysis](blade.md#per-run-toggle) on or off. Other `<blade>` settings keep coming from the XML.
-* Precedence per key: command-line flag > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. `psalm-laravel analyze --blade` / `--no-blade` is that command-line flag: it appends `blade=true|false` to the variable for the Psalm process it launches.
-* An unknown key, a token without `=` or with an empty value, or a value other than `true`/`false` aborts the run with a non-zero exit and a message naming the problem.
-* It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
-* Psalm's result cache is keyed on the config file, so after changing an override between runs use `--no-cache` if results look stale.
+* Keys mirror the XML names; nested settings use a dot: `modelProperties.columnFallback`, `blade.cacheDir`, `blade.validateViewData`, and so on. `psalm-laravel analyze --help` lists every key with its type and default. `cachePath` is not a key.
+* Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules): an override can force them on or off, but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`. Paths are taken verbatim, with the same meaning as the XML attribute; a relative path resolves against Psalm's working directory (the directory of the config file), not the directory you typed it in.
+* `configDirectory` is a list: repeat the key (`--plugin-option configDirectory=a --plugin-option configDirectory=b`). Repeats accumulate within one layer, and a higher layer replaces the lower layer's list entirely.
+* Precedence per key: `--plugin-option` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. A repeated scalar key is last-wins. `--blade` / `--no-blade` are shorthand for `--plugin-option blade=true|false` and share its ordering.
+* `experimental` is applied after the layers are merged: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless a layer sets one of them explicitly.
+* `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
+* `PSALM_LARAVEL_OPTIONS` is whitespace-separated `KEY=VALUE` tokens with no quoting, so a value cannot contain whitespace (use `psalm.xml` or `analyze --plugin-option` for those). A value starting with `"` is rejected: it is reserved for future quoting. It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
+* `analyze` hands its `--plugin-option` values to Psalm in a private variable (`PSALM_LARAVEL_CLI_OPTIONS`, JSON). It is internal; do not set it yourself.
+* An unknown key, a token without `=` or with an empty key or value, or a value outside a key's type aborts the run with a non-zero exit and a message naming the problem. `analyze` checks its own flags and `PSALM_LARAVEL_OPTIONS` before it starts Psalm. An override never skips the XML checks: a malformed element in `psalm.xml` still fails the run.
+
+### Result cache
+
+Psalm's result cache is keyed on the config file, not on per-run overrides. Every setting except `blade` only changes which findings are reported, so flipping it between runs reuses a warm cache and still gives the same result as a cold run.
+
+`blade` is the exception: it changes which files are analysed, and Psalm's persisted file-reference cache keeps what the template shadows referenced. After turning Blade off, dead-code findings such as `UnusedClass` for classes only templates used can be lost. `psalm-laravel analyze` therefore adds `--no-reference-cache` whenever a `blade` override (flag, `--plugin-option`, or an inherited `PSALM_LARAVEL_OPTIONS`) is in effect, unless you already passed `--no-cache` or `--no-reference-cache`. A bare `vendor/bin/psalm` with `blade=…` in the environment has no such hook: pass `--no-reference-cache` yourself.
 
 ## Cache directory
 
