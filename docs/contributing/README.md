@@ -181,8 +181,9 @@ Maintainers can comment `/psalm-delta` on a PR to run the plugin's base and head
 - `/psalm-delta` runs the `default` group.
 - `/psalm-delta octane vito` adds group tags and app names to `default` (spaces or commas). Pick the groups that exercise your change, e.g. `ai` for `laravel/ai` stubs, `blade` for view resolution or view taint, or `filament` for Filament-heavy code.
 - `/psalm-delta all` runs every app; `/psalm-delta help` replies with the groups and their apps.
+- A token starting with `--` is a flag for `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade` runs `default` plus the `blade` group with Blade template analysis on. Only flags declared under `flags:` in `bin/ci/test-apps.yml` are accepted; add one there to allow it. A flag the base plugin predates crashes the base side.
 
-To reproduce locally (needs `yq`), run `bash bin/ci/delta.sh --apps "octane vito" <pr-branch>`.
+To reproduce locally (needs `yq`), run `bash bin/ci/delta.sh --apps "octane vito" <pr-branch>` (flags go in the same string: `--apps "blade --blade"`).
 
 ## Code style
 

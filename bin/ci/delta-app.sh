@@ -17,7 +17,7 @@
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
 #     [--php 8.3] [--project-dir app] [--date-marker cache] \
 #     [--before-install 'composer update foo --no-interaction'] \
-#     [--psalm-args '--php-version=8.0'] \
+#     [--psalm-args '--php-version=8.0'] [--flags '--blade'] \
 #     [--app-src /cache/monica-src] [--mem 4G]
 #
 # Output (per side, <label> in {base-label, head-label}):
@@ -35,7 +35,7 @@ set -euo pipefail
 
 APP="" REPO="" REF="" PLUGIN_BASE="" PLUGIN_HEAD="" OUT=""
 BASE_LABEL="" HEAD_LABEL="" PROJECT_DIR=""
-DATE_MARKER="cache" BEFORE_INSTALL="" APP_SRC="" MEM="4G" PSALM_ARGS=""
+DATE_MARKER="cache" BEFORE_INSTALL="" APP_SRC="" MEM="4G" PSALM_ARGS="" FLAGS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -54,6 +54,7 @@ while [[ $# -gt 0 ]]; do
         --date-marker) DATE_MARKER="$2"; shift 2 ;;
         --before-install) BEFORE_INSTALL="$2"; shift 2 ;;
         --psalm-args) PSALM_ARGS="$2"; shift 2 ;;
+        --flags) FLAGS="$2"; shift 2 ;;
         --app-src) APP_SRC="$2"; shift 2 ;;
         --mem) MEM="$2"; shift 2 ;;
         *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
@@ -79,12 +80,14 @@ APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
 
-# Optional extra Psalm CLI args (e.g. --php-version=8.0), split on whitespace
-# into an array so each token is passed as a separate argument. `=` is not in
-# IFS, so --php-version=8.0 stays one token. `read -ra` returns 0 even on empty
-# input (set -e safe); the array is expanded with the bash-3.2-safe
-# ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
+# Optional extra CLI args, split on whitespace into arrays so each token is
+# passed as a separate argument: --psalm-args is the registry's per-app Psalm
+# args (e.g. --php-version=8.0), --flags the run-wide `/psalm-delta` flags (e.g.
+# --blade). `=` is not in IFS, so --php-version=8.0 stays one token. `read -ra`
+# returns 0 even on empty input (set -e safe); the arrays are expanded with the
+# bash-3.2-safe ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
 read -ra PSALM_EXTRA <<< "$PSALM_ARGS"
+read -ra FLAGS_EXTRA <<< "$FLAGS"
 
 # Copy a tree using a copy-on-write clone where the filesystem supports it
 # (APFS clonefile on macOS, btrfs/xfs reflinks on Linux): instant and low-disk,
@@ -358,11 +361,16 @@ run_side() {
     # Own TMPDIR per side: both sides share the work-dir cwd, so the plugin's
     # psalm-laravel-<md5(cwd)> temp cache would otherwise carry base's migration
     # schema into head.
+    #
+    # Through the side's own `psalm-laravel analyze`, not vendor/bin/psalm: it
+    # consumes plugin options Psalm rejects (--blade/--no-blade) and forwards
+    # everything else to Psalm verbatim, with Psalm's exit code and streams.
     (
         cd "$app_dir"
         TMPDIR="$side_tmp" php -d memory_limit="$MEM" \
-            vendor/bin/psalm -c psalm.xml \
+            vendor/bin/psalm-laravel analyze -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
+            ${FLAGS_EXTRA[@]+"${FLAGS_EXTRA[@]}"} \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?

@@ -14,7 +14,8 @@
 # `/psalm-delta octane vito` adds a group and an app, `all` runs everything,
 # `help` lists the groups. bin/ci/delta-select-apps.php resolves it from
 # `yq -o=json bin/ci/test-apps.yml`, so tags and names must be [a-z0-9_-] and
-# neither may be `all` or `help`.
+# neither may be `all` or `help`. A token starting with `-` is a flag: it must
+# be a key of `flags:` below, verbatim (`/psalm-delta blade --blade`).
 #
 # Read with mikefarah yq v4 (preinstalled on ubuntu-latest, `brew install yq`
 # locally), e.g. `yq '.apps[] | select(.groups[] == "octane") | .name'`.
@@ -58,6 +59,16 @@ groups:
   blade: Apps and packages with more than 100 Blade templates
   lib: Packages and monorepos rather than full apps
   large: Slow to install or analyse; may need a raised timeout
+
+# Flags a /psalm-delta comment may pass to `vendor/bin/psalm-laravel analyze`,
+# which handles its own options and forwards the rest to Psalm. They apply to
+# both sides of every selected app. The workflow runs PR code with them, so a
+# comment can only use these exact strings: add a line to allow another flag.
+# Lowercase `--name` or `--name=value`. A flag the base plugin predates crashes
+# the base side (the report's Crashed bucket shows it).
+flags:
+  "--blade": Analyse Blade templates, overriding psalm.xml
+  "--no-blade": Skip Blade templates, overriding psalm.xml
 
 apps:
   - name: monica
