@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Cli;
 
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotateRequest;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -162,6 +163,8 @@ final class AnnotateCommand extends Command
         // getenv() with no argument so the child keeps the caller's whole environment: proc_open
         // REPLACES it rather than extending it, and Psalm reads PATH and XDG_CACHE_HOME from there.
         $env = \getenv();
+        // Only `analyze` may set the private CLI layer; an inherited one would bypass validation.
+        unset($env[PluginOverrides::CLI_ENV_VAR]);
         $env[AnnotateRequest::ENV_VAR] = $controlFile;
 
         $process = \proc_open($command, [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR], $pipes, $cwd, $env);

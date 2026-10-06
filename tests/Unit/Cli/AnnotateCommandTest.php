@@ -139,6 +139,34 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
+    public function an_inherited_private_cli_variable_never_reaches_the_child_but_the_public_one_does(): void
+    {
+        // The private variable is the top override layer and skips validation: only `analyze` may set it.
+        $binDir = $this->tempDir . '/vendor/bin';
+        \mkdir($binDir, 0o777, true);
+        \file_put_contents($binDir . '/psalm', "<?php\nfile_put_contents(__DIR__ . '/env.json', json_encode([getenv('PSALM_LARAVEL_CLI_OPTIONS'), getenv('PSALM_LARAVEL_OPTIONS')]));\n");
+
+        $previous = [\getenv('PSALM_LARAVEL_CLI_OPTIONS'), \getenv('PSALM_LARAVEL_OPTIONS')];
+        \putenv('PSALM_LARAVEL_CLI_OPTIONS=["blade.cacheDir=/forged"]');
+        \putenv('PSALM_LARAVEL_OPTIONS=findMissingViews=true');
+
+        try {
+            $application = new Application();
+            $application->addCommand(new AnnotateCommand($this->tempDir, ['psalm-laravel', 'blade:annotate']));
+            (new CommandTester($application->find('blade:annotate')))->execute([]);
+
+            $this->assertSame([false, 'findMissingViews=true'], \json_decode((string) \file_get_contents($binDir . '/env.json'), true));
+        } finally {
+            \putenv($previous[0] === false ? 'PSALM_LARAVEL_CLI_OPTIONS' : 'PSALM_LARAVEL_CLI_OPTIONS=' . $previous[0]);
+            \putenv($previous[1] === false ? 'PSALM_LARAVEL_OPTIONS' : 'PSALM_LARAVEL_OPTIONS=' . $previous[1]);
+            @\unlink($binDir . '/env.json');
+            @\unlink($binDir . '/psalm');
+            @\rmdir($binDir);
+            @\rmdir(\dirname($binDir));
+        }
+    }
+
+    #[Test]
     public function an_override_spelled_after_the_options_terminator_is_a_plain_token(): void
     {
         $command = new AnnotateCommand();
