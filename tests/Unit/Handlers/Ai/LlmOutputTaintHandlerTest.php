@@ -109,21 +109,27 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_scopes_the_structured_payload_to_the_structured_responses(): void
+    public function it_scopes_the_structured_payload_to_the_classes_declaring_it(): void
     {
-        // Not a cross-product with the $text class list: only these two declare
-        // $structured, and tainting the property on a class that does not have it
-        // would source whatever a user subclass happens to name the same way.
+        // Not a cross-product with the $text class list: only these classes
+        // declare $structured, and tainting the property on a class that does
+        // not have it would source whatever a user subclass happens to name the
+        // same way.
         $this->assertSame([
             'Laravel\\Ai\\Responses\\StructuredAgentResponse',
             'Laravel\\Ai\\Responses\\StructuredTextResponse',
+            'Laravel\\Ai\\Responses\\Data\\StructuredStep',
+            'Laravel\\Ai\\Gateway\\StepResponse',
         ], $this->taintedProperties()['structured'] ?? []);
     }
 
     #[Test]
     public function it_only_taints_the_known_model_output_properties(): void
     {
-        $this->assertSame(['text', 'structured', 'reasoning', 'citations'], array_keys($this->taintedProperties()));
+        $this->assertSame(
+            ['text', 'structured', 'reasoning', 'citations', 'delta', 'choice', 'legend', 'answers'],
+            array_keys($this->taintedProperties()),
+        );
     }
 
     /** @return array<string, list<string>> */

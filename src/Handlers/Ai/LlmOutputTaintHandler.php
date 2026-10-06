@@ -60,6 +60,39 @@ use Psalm\Type\TaintKind;
  * array-access note below describes. The source stays registered so the flow
  * reports the moment Psalm carries taint through those reads.
  *
+ * `$text` is also covered on:
+ * - `Responses\Data\Step` (and `StructuredStep`, which extends it), where
+ *   `vendor/laravel/ai/src/Responses/Data/Step.php` holds the text of one
+ *   model-generation step, reached through `AgentResponse::$steps`.
+ * - `Gateway\StepResponse`, where
+ *   `vendor/laravel/ai/src/Gateway/StepResponse.php` holds the gateway
+ *   response agent middleware reads via `$next($step)->response()->text`.
+ * - `Responses\Data\TranscriptionSegment`, where
+ *   `vendor/laravel/ai/src/Responses/Data/TranscriptionSegment.php` is one
+ *   diarized slice of the same provider transcript as `TranscriptionResponse`.
+ *
+ * `$structured` is also covered on `StructuredStep`
+ * (`vendor/laravel/ai/src/Responses/Data/StructuredStep.php`) and
+ * `Gateway\StepResponse` (`vendor/laravel/ai/src/Gateway/StepResponse.php`,
+ * nullable), both of which hold the provider's decoded JSON for a step.
+ *
+ * `$delta` is covered on `Streaming\Events\TextDelta` and `ReasoningDelta`,
+ * whose `vendor/laravel/ai/src/Streaming/Events/TextDelta.php` and
+ * `ReasoningDelta.php` carry the raw model tokens, the documented way to
+ * consume `stream()`.
+ *
+ * Classification answers (`vendor/laravel/ai/src/Gateway/Concerns/AnswersQuestions.php`
+ * builds them from the provider JSON):
+ * - `ChoiceAnswer::$choice` is taken verbatim from the provider and never
+ *   validated against the options the caller offered.
+ * - `ScoreAnswer::$legend` is the provider's `legend` when it returns one; the
+ *   caller's `Score` levels are only the fallback.
+ * - `ClassificationResponse::$answers` is the array of those answer objects.
+ *
+ * `ScoreAnswer::$score` and `$confidence` are floats and `BooleanAnswer` is a
+ * bool, so they stay unsourced. `$probabilities` is float-valued; its array
+ * keys (option labels echoed by the provider) are not sourced.
+ *
  * `StructuredAgentResponse` and `StructuredTextResponse` are absent from the
  * `$text` list but still covered: both inherit it from `TextResponse`. They
  * additionally expose the decoded payload as a public `$structured` array,
@@ -103,6 +136,9 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
             'Laravel\\Ai\\Responses\\StreamedAgentResponse',
             'Laravel\\Ai\\Responses\\StreamableAgentResponse',
             'Laravel\\Ai\\Responses\\TranscriptionResponse',
+            'Laravel\\Ai\\Responses\\Data\\Step',
+            'Laravel\\Ai\\Gateway\\StepResponse',
+            'Laravel\\Ai\\Responses\\Data\\TranscriptionSegment',
         ],
         // The decoded structured payload, declared by the
         // ProvidesStructuredResponse trait. A plain `array`, so reading an offset
@@ -111,6 +147,8 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         'structured' => [
             'Laravel\\Ai\\Responses\\StructuredAgentResponse',
             'Laravel\\Ai\\Responses\\StructuredTextResponse',
+            'Laravel\\Ai\\Responses\\Data\\StructuredStep',
+            'Laravel\\Ai\\Gateway\\StepResponse',
         ],
         'reasoning' => [
             'Laravel\\Ai\\Responses\\TextResponse',
@@ -120,6 +158,20 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         ],
         'citations' => [
             'Laravel\\Ai\\Responses\\StreamableAgentResponse',
+        ],
+        // Streamed model tokens: the documented way to consume `stream()`.
+        'delta' => [
+            'Laravel\\Ai\\Streaming\\Events\\TextDelta',
+            'Laravel\\Ai\\Streaming\\Events\\ReasoningDelta',
+        ],
+        'choice' => [
+            'Laravel\\Ai\\Responses\\Data\\ChoiceAnswer',
+        ],
+        'legend' => [
+            'Laravel\\Ai\\Responses\\Data\\ScoreAnswer',
+        ],
+        'answers' => [
+            'Laravel\\Ai\\Responses\\ClassificationResponse',
         ],
     ];
 

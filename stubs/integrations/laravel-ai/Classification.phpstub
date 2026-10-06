@@ -7,10 +7,15 @@ use Laravel\Ai\Gateway\FakeClassificationGateway;
 use Laravel\Ai\PendingResponses\PendingClassification;
 
 /**
- * `AiServiceProvider` registers `Str::decide()` and `Stringable::decide()` as
- * macros, but Macroable exposes only pseudo-methods with no per-method
- * docblock on which to declare an `llm_prompt` sink. Closing that coverage gap
- * requires a call-analysis handler for both macro forms, or Psalm support for
+ * `AiServiceProvider::boot()` registers several macros that forward their
+ * input to a model, and none is declared as an `llm_prompt` sink here or
+ * anywhere else: `Str::summarize()` and `Stringable::summarize()` (prompt a
+ * `SummarizeAgent`), `Stringable::toAudio()` (calls `Audio::of()`),
+ * `Str::decide()`, `Stringable::decide()`, and `Collection::decide()` (calls
+ * `CollectionChoice::decide()`), and `Collection::rerank()` (calls
+ * `PendingReranking::rerank()`). Macroable exposes only pseudo-methods with no
+ * per-method docblock on which to declare a sink. Closing that coverage gap
+ * requires a call-analysis handler for the macro forms, or Psalm support for
  * taint annotations on registered macro signatures.
  */
 class Classification

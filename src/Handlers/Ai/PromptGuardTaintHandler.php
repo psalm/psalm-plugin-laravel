@@ -66,6 +66,16 @@ use Psalm\Type\Union;
  *    `array`/`mixed`, a closure entry, or a template bound yields no candidate.
  * 8. Some candidate, and every analysed subclass of it, escapes `llm_prompt` on `handle()` ({@see
  *    handleEscapes()}, {@see guardEscapesEverywhere()}).
+ * 9. The receiver does NOT remember conversations ({@see remembersConversations()}). laravel/ai's own
+ *    `Middleware\RememberConversation` is installed for such an agent and, when a conversation
+ *    starts, `openTurn()` calls `generateTitle($prompt->prompt)` with the RAW prompt
+ *    (`vendor/laravel/ai/src/Middleware/RememberConversation.php:149-161`). `generate()` is invoked
+ *    with four positional arguments, so `$options` is null (:212-227), and
+ *    `TextGenerationLoop::middlewareFor(null)` returns `[]` (`vendor/laravel/ai/src/Gateway/
+ *    TextGenerationLoop.php:433-436`): the agent's guard never runs on that second model call, so a
+ *    guard's escape does not hold. `ai.conversations.generate_title` defaults to true. The check
+ *    mirrors `RememberConversation::appliesTo()` (:32-36): the `Contracts\RemembersConversations`
+ *    contract, or the `Concerns\RemembersConversations` trait anywhere up the parent chain.
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  *
@@ -81,6 +91,12 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
 
     /** Lowercased, matching the key spelling in `ClassLikeStorage::$class_implements`. */
     private const HAS_MIDDLEWARE_INTERFACE = 'laravel\ai\contracts\hasmiddleware';
+
+    /** Lowercased `class_implements` key: laravel/ai's conversation-remembering contract. */
+    private const REMEMBERS_CONVERSATIONS_INTERFACE = 'laravel\ai\contracts\remembersconversations';
+
+    /** Lowercased `used_traits` key: laravel/ai's conversation-remembering trait. */
+    private const REMEMBERS_CONVERSATIONS_TRAIT = 'laravel\ai\concerns\remembersconversations';
 
     private const MIDDLEWARE_METHOD = 'middleware';
 
@@ -117,6 +133,10 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
             return null;
         }
 
+        if (self::remembersConversations($codebase, $receiver)) {
+            return null;
+        }
+
         $middleware = self::methodStorage($codebase, $receiver, self::MIDDLEWARE_METHOD);
 
         if (!$middleware instanceof MethodStorage
@@ -133,6 +153,81 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
         }
 
         return null;
+    }
+
+    /**
+     * Mirrors `RememberConversation::appliesTo()`: the contract, or the trait via
+     * `class_uses_recursive()` (the class, its parents, and traits nested in traits). Psalm does not
+     * merge `used_traits` from parents or nested traits, so the chain is walked here. Any analysed
+     * subclass counts too, because the call dispatches on the runtime object and a subclass can add
+     * the trait; an unreadable descendant declines toward a retained finding.
+     *
+     * @psalm-mutation-free
+     */
+    private static function remembersConversations(Codebase $codebase, ClassLikeStorage $storage): bool
+    {
+        $descendants = self::descendantsOf($codebase, $storage);
+
+        if ($descendants === null) {
+            return true;
+        }
+
+        foreach ([$storage, ...\array_values($descendants)] as $candidate) {
+            if (self::remembersConversationsDirectly($codebase, $candidate)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @psalm-mutation-free
+     */
+    private static function remembersConversationsDirectly(Codebase $codebase, ClassLikeStorage $storage): bool
+    {
+        if (isset($storage->class_implements[self::REMEMBERS_CONVERSATIONS_INTERFACE])) {
+            return true;
+        }
+
+        $pending = [$storage];
+
+        foreach (\array_keys($storage->parent_classes) as $parentLc) {
+            $parent = self::classStorage($codebase, $parentLc);
+
+            if (!$parent instanceof ClassLikeStorage) {
+                return true;
+            }
+
+            $pending[] = $parent;
+        }
+
+        $visited = [];
+
+        while ($pending !== []) {
+            $current = \array_pop($pending);
+
+            foreach (\array_keys($current->used_traits) as $traitLc) {
+                if ($traitLc === self::REMEMBERS_CONVERSATIONS_TRAIT) {
+                    return true;
+                }
+
+                if (isset($visited[$traitLc])) {
+                    continue;
+                }
+
+                $visited[$traitLc] = true;
+                $trait = self::classStorage($codebase, $traitLc);
+
+                if (!$trait instanceof ClassLikeStorage) {
+                    return true;
+                }
+
+                $pending[] = $trait;
+            }
+        }
+
+        return false;
     }
 
     /**

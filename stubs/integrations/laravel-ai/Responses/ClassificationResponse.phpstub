@@ -34,6 +34,8 @@ class ClassificationResponse implements Arrayable, ArrayAccess, Countable, Itera
 
     /**
      * @psalm-taint-source input
+     *
+     * @return Collection<string, Answer>
      */
     public function collect(): Collection {}
 
@@ -51,6 +53,8 @@ class ClassificationResponse implements Arrayable, ArrayAccess, Countable, Itera
 
     /**
      * @psalm-taint-source input
+     *
+     * @return Traversable<string, Answer>
      */
     public function getIterator(): Traversable {}
 

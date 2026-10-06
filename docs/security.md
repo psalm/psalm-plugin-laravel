@@ -19,8 +19,8 @@ nav_order: 6
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
-| Prompt injection | LLM01:2025 | `laravel/ai` prompt sinks: agents, messages, media, documents, reranking, classification, and tool metadata (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site) |
-| LLM output reuse | LLM01:2025 | `laravel/ai` tool and model-output sources: text, structured output, reasoning, and classification answers and citations |
+| Prompt injection | LLM01:2025 | `laravel/ai` prompt sinks: agents, messages, media (including audio generation instructions), documents, reranking, classification (state, questions, criteria, options, levels, and `CollectionChoice::decide()`), and tool metadata (enforced by default when the supported integration is installed; [`findPromptInjection`](config.md#findpromptinjection) can explicitly suppress D-in findings; an annotated guard in the agent's middleware exempts the call site, except for agents that remember conversations) |
+| LLM output reuse | LLM01:2025 | `laravel/ai` tool and model-output sources: text, step text, streamed text and reasoning deltas, structured output, reasoning, transcription text and segments, and classification answers and citations |
 
 `UploadedFile::getClientOriginalExtension()` is deliberately not a `file` source:
 Symfony's `File::getName()` and `UploadedFile::getClientOriginalExtension()` yield a
@@ -153,28 +153,37 @@ suppresses the D-in `TaintedLlmPrompt` issue.
 * **Sinks.** `Promptable` and `Contracts\Agent` each annotate `prompt()`,
   `stream()`, `queue()`, `broadcast()`, `broadcastNow()`, and
   `broadcastOnQueue()`; these accept `AgentInput|UserMessage|Decisions|string`.
-  `Promptable::withMessages()` is a sink too. `agent()` and
-  `AnonymousAgent::__construct()` annotate their instructions and messages.
+  `Promptable::withMessages()` is a sink too. `agent()`,
+  `AnonymousAgent::__construct()`, and `StructuredAnonymousAgent::__construct()`
+  annotate their instructions and messages.
   `AgentPrompt::__construct()`, `prepend()`, `append()`, `revise()`, and
-  `withTools()`; the `Messages\Message` and `Messages\UserMessage`
-  constructors; `Audio::of()`, `Image::of()`, and `Reranking::of()`;
+  `withTools()`; the `Messages\Message`, `Messages\UserMessage`, and
+  `Messages\AssistantMessage` constructors; `Audio::of()`, `Image::of()`, and
+  `Reranking::of()`; `PendingAudioGeneration::instructions()`;
   `PendingReranking::rerank()`; `Files\Document::fromString()` /
   `fromBase64()` and `Files\Image::fromBase64()`; and
   `Tools\SimilaritySearch::withDescription()` are also sinks. Middleware
   mutations through `PendingStep::withInstructions()`, `withMessages()`,
   `withTools()`, and `withProviderOptions()` are sinks. Classification
   annotates `Classification::of()`, the constructors of
-  `Classification\Boolean`, `Classification\Choice`, and
-  `Classification\Score`, and `PendingClassification::__construct()`.
+  `Classification\Boolean` (question and criteria), `Classification\Choice`
+  (question and options), and `Classification\Score` (question and levels),
+  `PendingClassification::__construct()`, and `Classification\CollectionChoice::decide()`
+  (question and text).
 * **Sources.** `Contracts\Tool::handle()` returns a source so tool output keeps
   flowing into later prompt sinks. `Tools\Request::validate()`, `all()`,
   `toArray()`, `offsetGet()`, `str()`, `string()`, `array()`, `only()`,
   `except()`, and `collect()` are sources. The LLM-output handler sources
   `$text` on `TextResponse`, `AgentResponse`, `StreamedAgentResponse`,
-  `StreamableAgentResponse`, and `TranscriptionResponse`; `$structured` on
-  `StructuredAgentResponse` and `StructuredTextResponse`; `$reasoning` on
-  `TextResponse`, `StreamableAgentResponse`, `Responses\Data\Step`, and
-  `Gateway\StepResponse`; and `$citations` on `StreamableAgentResponse`.
+  `StreamableAgentResponse`, `TranscriptionResponse`, `Responses\Data\Step`,
+  and `Gateway\StepResponse`; `$delta` on the streaming `TextDelta` and
+  `ReasoningDelta` events; `$text` on `Responses\Data\TranscriptionSegment`;
+  `$structured` on `StructuredAgentResponse`, `StructuredTextResponse`,
+  `Responses\Data\StructuredStep`, and `Gateway\StepResponse`;
+  `$reasoning` on `TextResponse`, `StreamableAgentResponse`,
+  `Responses\Data\Step`, and `Gateway\StepResponse`; `$citations` on
+  `StreamableAgentResponse`; `$answers` on `ClassificationResponse`; `$choice`
+  on `ChoiceAnswer`; and `$legend` on `ScoreAnswer`.
   String casts on `AgentResponse`, `TextResponse`, `TranscriptionResponse`,
   `StructuredAgentResponse`, and `StructuredTextResponse` are sources.
   `StructuredAgentResponse::toArray()`, `toJson()`, and `jsonSerialize()`, plus
@@ -283,6 +292,18 @@ Caveats:
   another pipe is invisible here. This is the same trust layer as the guard's own configuration.
 * `queue()` and `broadcast*()` run the same pipeline but are not exempted yet, so they keep
   reporting.
+* An agent that remembers conversations is never exempted, even with an annotated guard, and
+  `TaintedLlmPrompt` stays reported at its `prompt()` and `stream()` call sites. This is intended,
+  not a limit of the annotation. An agent remembers conversations when it uses the
+  `Concerns\RemembersConversations` trait (anywhere up its parent chain), implements
+  `Contracts\RemembersConversations`, or has an analysed subclass that adds either. laravel/ai's
+  own `RememberConversation` middleware then names each new conversation with a second model call,
+  made straight through the provider's text generation loop with the first 500 characters of the
+  raw prompt. That call carries no agent options, so the loop runs no agent middleware for it and
+  the guard never sees the prompt. Setting `ai.conversations.generate_title` to `false` removes
+  the second call (the title becomes a 50-character truncation of the prompt), but the plugin
+  cannot read that setting, so the finding stays and needs an explicit suppression once you have
+  turned title generation off.
 
 Whether a guard blocks or only logs is usually runtime configuration and is not statically
 distinguishable, and the middleware list is read from the declared return type rather than from the
@@ -295,11 +316,23 @@ the flow is safe, so treat it as a blind spot when reviewing.
 * **Return-value sinks.** `Tool::description()` and `Agent::instructions()` are
   not covered: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked
   in [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
-* **`decide()` macros.** `Str::decide()` and `Stringable::decide()` are not
-  sinks. They are macro pseudo-methods with no per-method docblock on which to
-  attach an `llm_prompt` sink. This is pinned by
-  `tests/Type/tests/PromptInjection/ClassificationDecideKnownLimitation.phpt` and
-  documented in `stubs/integrations/laravel-ai/Classification.phpstub`.
+* **Prompt macros.** `AiServiceProvider` registers several macros that forward
+  their input to a model, and none of them is a sink: `Str::summarize()` and
+  `Stringable::summarize()` (they prompt a `SummarizeAgent`),
+  `Stringable::toAudio()` (it calls `Audio::of()`), `Str::decide()`,
+  `Stringable::decide()`, and `Collection::decide()` (it calls
+  `CollectionChoice::decide()`), and `Collection::rerank()` (it calls
+  `PendingReranking::rerank()`, which the plugin does sink when called
+  directly). A macro is a `Macroable` pseudo-method with no per-method docblock
+  on which to attach an `llm_prompt` sink, so `Str::summarize($request->input('d'))`
+  and `collect($items)->rerank('name', $query)` report nothing even when the
+  argument is tainted. Closing the gap takes a call-analysis handler for the
+  macro forms, or Psalm support for taint annotations on registered macro
+  signatures. The `decide()` form is pinned by
+  `tests/Type/tests/PromptInjection/ClassificationDecideKnownLimitation.phpt`
+  and the list is documented in `stubs/integrations/laravel-ai/Classification.phpstub`.
+  Call the underlying class (`Classification::of()`, `Audio::of()`,
+  `Reranking::of()`, or an agent's `prompt()`) where the input is untrusted.
 * **Citation collection reads.** `StreamableAgentResponse::$citations` is a
   registered source, but no end-to-end flow is observable through its
   `Collection` reads because Psalm drops the taint edge there. The handler

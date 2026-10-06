@@ -1,0 +1,48 @@
+<?php
+
+namespace Laravel\Ai\Classification;
+
+use Closure;
+use Illuminate\Support\Collection;
+use Laravel\Ai\Enums\Lab;
+
+/**
+ * `decide()` builds `Classification::of($text)` and `new Choice($question, ...)` inside
+ * vendor code, which Psalm never analyses, so the sinks on those constructors cannot fire
+ * for a caller. They are therefore re-declared on `decide()` itself. This class backs the
+ * `Collection::decide` macro registered by `AiServiceProvider`.
+ */
+final class CollectionChoice
+{
+    protected array $options = [];
+
+    protected array $items = [];
+
+    public function __construct(
+        Collection $collection,
+        Closure|string|null $by = null,
+        Closure|array|string|null $describe = null,
+    ) {}
+
+    /**
+     * @param  string|array<string, mixed>  $text
+     *
+     * @psalm-taint-sink llm_prompt $question
+     * @psalm-taint-sink llm_prompt $text
+     */
+    public function decide(
+        string $question,
+        string|array $text,
+        ?float $threshold = null,
+        Lab|array|string|null $provider = null,
+        ?string $model = null,
+        ?int $timeout = null,
+    ): mixed {}
+
+    protected function resolveLabel(mixed $item, Closure|string|null $by): string {}
+
+    /**
+     * @return string|array<string, mixed>|null
+     */
+    protected function resolveDescription(mixed $item, Closure|array|string|null $describe): string|array|null {}
+}
