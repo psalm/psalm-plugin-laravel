@@ -178,11 +178,12 @@ final class CompilerEnvironmentTest extends TestCase
      * A body that never reaches the bound object cannot compile differently because of it.
      */
     #[Test]
-    public function a_provider_bound_closure_that_never_reaches_this_stays_trustworthy(): void
+    #[DataProvider('boundClosuresIgnoringThis')]
+    public function a_provider_bound_closure_that_never_reaches_this_stays_trustworthy(\Closure $directive): void
     {
         $compiler = $this->compiler();
-        $compiler->directive('mine', (new BoundClosureProvider())->ignoresThis());
-        $compiler->if('feature', (new BoundClosureProvider())->ignoresThis());
+        $compiler->directive('mine', $directive);
+        $compiler->if('feature', $directive);
 
         [$hash, $trusted] = CompilerEnvironment::describe($compiler);
 
@@ -191,9 +192,20 @@ final class CompilerEnvironmentTest extends TestCase
     }
 
     /** @return iterable<string, array{\Closure}> */
+    public static function boundClosuresIgnoringThis(): iterable
+    {
+        yield 'closure' => [(new BoundClosureProvider())->ignoresThis()];
+        yield 'arrow fn' => [(new BoundClosureProvider())->arrowFnIgnoresThis()];
+    }
+
+    /** @return iterable<string, array{\Closure}> */
     public static function boundClosuresReachingThis(): iterable
     {
+        // A global-namespace class cannot be PSR-4 autoloaded.
+        require_once __DIR__ . '/Fixtures/BoundClosures/GlobalNamespaceProvider.php';
+
         $provider = new BoundClosureProvider();
+        $globalProvider = new \GlobalNamespaceProvider();
 
         yield '$this property read' => [$provider->readsThis()];
         yield '$this in double-quoted interpolation' => [$provider->interpolatesThis()];
@@ -207,6 +219,12 @@ final class CompilerEnvironmentTest extends TestCase
         yield 'include' => [$provider->usesInclude()];
         yield 'compact' => [$provider->usesCompact()];
         yield 'debug_backtrace' => [$provider->usesDebugBacktrace()];
+        yield 'debug_print_backtrace' => [$provider->usesDebugPrintBacktrace()];
+        yield 'get_called_class' => [$provider->usesGetCalledClass()];
+        yield 'namespace\\compact' => [$globalProvider->usesRelativeCompact()];
+        yield 'namespace\\debug_backtrace' => [$globalProvider->usesRelativeDebugBacktrace()];
+        yield 'nested arrow fn inheriting $this' => [$provider->nestedClosureCarriesThis()];
+        yield 'nested function inheriting $this' => [$provider->nestedFunctionCarriesThis()];
         // Not closure literals: the method body lives elsewhere, so it stays untrusted by design.
         yield 'invokable object' => [\Closure::fromCallable($provider)];
         yield 'array callable' => [\Closure::fromCallable([$provider, 'compileWithoutThis'])];

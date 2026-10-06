@@ -31,6 +31,11 @@ final class BoundClosureProvider extends BaseClosureProvider
         };
     }
 
+    public function arrowFnIgnoresThis(): \Closure
+    {
+        return fn(string $expression): string => '<?php ?>';
+    }
+
     public function interpolatesThis(): \Closure
     {
         return function (string $expression): string {
@@ -42,6 +47,23 @@ final class BoundClosureProvider extends BaseClosureProvider
     {
         return function (string $expression): string {
             return (fn(): string => $this->mark)();
+        };
+    }
+
+    public function nestedClosureCarriesThis(): \Closure
+    {
+        return function (string $expression): string {
+            // The inner arrow fn inherits the bound object without naming it.
+            return \get_debug_type((new \ReflectionFunction(fn(): int => 0))->getClosureThis());
+        };
+    }
+
+    public function nestedFunctionCarriesThis(): \Closure
+    {
+        return function (string $expression): string {
+            return \print_r(function (): int {
+                return 0;
+            }, true);
         };
     }
 
@@ -102,6 +124,22 @@ final class BoundClosureProvider extends BaseClosureProvider
     {
         return function (string $expression): string {
             return \get_debug_type(\debug_backtrace()[0]['object'] ?? null);
+        };
+    }
+
+    public function usesGetCalledClass(): \Closure
+    {
+        return function (string $expression): string {
+            return \get_called_class();
+        };
+    }
+
+    public function usesDebugPrintBacktrace(): \Closure
+    {
+        return function (string $expression): string {
+            \debug_print_backtrace();
+
+            return '<?php ?>';
         };
     }
 

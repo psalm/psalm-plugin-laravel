@@ -265,15 +265,19 @@ final class CompilerEnvironment
     }
 
     /**
-     * Scans every token on the closure's source lines for anything that can reach the bound
-     * object: `$this` (also inside interpolation and nested closures), `self`/`static`/`parent`,
-     * variable variables and `${}` (`$$name` with `$name = 'this'` IS `$this`), `eval`/`include`
-     * (the evaluated code inherits `$this`), and the functions that hand it out (`compact('this')`,
-     * `debug_backtrace()`). `get_defined_vars()` omits `$this`, so it is not listed. Lines, not
-     * byte offsets, bound the scan, so code sharing the closure's first or last line is scanned
-     * too: that only ever errs toward distrust. A name hidden in a string
-     * (`$f = 'debug_backtrace'; $f()`) is not caught: this guards against stale output, not
-     * deliberately obfuscated source.
+     * Scans every token on the closure's source lines for the known routes to the bound object:
+     * `$this` (also inside interpolation), `self`/`static`/`parent`, variable variables and `${}`
+     * (`$$name` with `$name = 'this'` IS `$this`), `eval`/`include` (the evaluated code inherits
+     * `$this`), the functions that hand it out (`compact('this')`, `debug_backtrace()`, also
+     * spelled `namespace\compact` in the global namespace), and any nested closure, which inherits
+     * `$this` without naming it (`print_r(fn () => 0)` dumps it). `get_defined_vars()` omits
+     * `$this`, so it is not listed. Lines, not byte offsets, bound the scan, so code sharing the
+     * closure's first or last line is scanned too: that only ever errs toward distrust.
+     *
+     * Accepted residuals, since this guards against stale output, not deliberately obfuscated
+     * source: a function name hidden in a string (`$f = 'debug_backtrace'; $f()`), and a lookup
+     * through global state (`app()->getProvider(...)`, `$GLOBALS`), the same runtime-state gap
+     * `config()` already has.
      *
      * @param array<string, list<\PhpToken>> $fileTokens
      */
@@ -297,12 +301,25 @@ final class CompilerEnvironment
             $fileTokens[$file] = \PhpToken::tokenize($source);
         }
 
+        $ownKeywordSeen = false;
+
         foreach ($fileTokens[$file] as $token) {
             if ($token->line > $end) {
                 break;
             }
 
-            if ($token->line >= $start && self::tokenMayReachThis($token)) {
+            if ($token->line < $start) {
+                continue;
+            }
+
+            // The first `function`/`fn` is the closure's own; a nested `static` one already hit T_STATIC.
+            if ($token->is([\T_FUNCTION, \T_FN])) {
+                if ($ownKeywordSeen) {
+                    return false;
+                }
+
+                $ownKeywordSeen = true;
+            } elseif (self::tokenMayReachThis($token)) {
                 return false;
             }
         }
@@ -313,11 +330,12 @@ final class CompilerEnvironment
     /** @psalm-mutation-free */
     private static function tokenMayReachThis(\PhpToken $token): bool
     {
-        $name = \strtolower(\ltrim($token->text, '\\'));
+        // `\compact` and, in the global namespace, `namespace\compact` both call the built-in.
+        $name = \strtolower(\preg_replace('/^(?:namespace)?\\\\/i', '', $token->text) ?? $token->text);
 
         return match ($token->id) {
             \T_VARIABLE => $name === '$this',
-            \T_STRING, \T_NAME_FULLY_QUALIFIED => \in_array($name, ['self', 'parent', 'compact', 'debug_backtrace', 'debug_print_backtrace', 'get_called_class'], true),
+            \T_STRING, \T_NAME_FULLY_QUALIFIED, \T_NAME_RELATIVE => \in_array($name, ['self', 'parent', 'compact', 'debug_backtrace', 'debug_print_backtrace', 'get_called_class'], true),
             \T_STATIC, \T_DOLLAR_OPEN_CURLY_BRACES, \T_EVAL, \T_INCLUDE, \T_INCLUDE_ONCE, \T_REQUIRE, \T_REQUIRE_ONCE => true,
             default => $token->text === '$',
         };
