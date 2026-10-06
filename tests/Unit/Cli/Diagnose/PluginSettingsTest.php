@@ -62,6 +62,47 @@ final class PluginSettingsTest extends TestCase
     }
 
     #[Test]
+    public function the_same_key_set_in_several_layers_reports_the_highest_one(): void
+    {
+        $xml = '<findMissingViews value="true" /><blade value="false" />';
+        $env = 'findMissingViews=false blade=true';
+
+        $all = $this->resolve($xml, $env, ['findMissingViews=true', 'blade=false']);
+        $this->assertSame(['true', 'cli'], $all['findMissingViews']);
+        $this->assertSame(['false', 'cli'], $all['blade']);
+
+        $noCli = $this->resolve($xml, $env, []);
+        $this->assertSame(['false', 'env'], $noCli['findMissingViews']);
+        $this->assertSame(['true', 'env'], $noCli['blade']);
+
+        $xmlOnly = $this->resolve($xml, null, []);
+        $this->assertSame(['true', 'xml'], $xmlOnly['findMissingViews']);
+        $this->assertSame(['false', 'xml'], $xmlOnly['blade']);
+    }
+
+    #[Test]
+    public function a_higher_layer_replaces_the_config_directory_list_wholesale(): void
+    {
+        $xml = '<configDirectory name="a" /><configDirectory name="b" />';
+        $env = 'configDirectory=/e1 configDirectory=/e2';
+
+        $this->assertSame(['/c1', 'cli'], $this->resolve($xml, $env, ['configDirectory=/c1'])['configDirectory']);
+        $this->assertSame(['/e1, /e2', 'env'], $this->resolve($xml, $env, [])['configDirectory']);
+        $this->assertSame(['a, b', 'xml'], $this->resolve($xml, null, [])['configDirectory']);
+    }
+
+    #[Test]
+    public function keys_set_through_xml_elements_and_attributes_are_attributed_to_xml(): void
+    {
+        $rows = $this->resolve('<blade cacheDir="/x" validateViewData="true" />', null, []);
+
+        $this->assertSame(['true', 'xml'], $rows['blade']);
+        $this->assertSame(['/x', 'xml'], $rows['blade.cacheDir']);
+        $this->assertSame(['true', 'xml'], $rows['blade.validateViewData']);
+        $this->assertSame(['false', 'default'], $rows['blade.reportMixedIssues']);
+    }
+
+    #[Test]
     public function an_invalid_override_or_xml_value_throws_a_message_naming_it(): void
     {
         try {

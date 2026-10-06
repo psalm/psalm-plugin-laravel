@@ -221,6 +221,24 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
+    public function a_malformed_psalm_xml_is_a_hard_failure(): void
+    {
+        $failures = $this->collectIn('<psalm><plugins>')->hardFailures;
+
+        $this->assertContains('Plugin settings: psalm.xml is not well-formed XML.', $failures);
+    }
+
+    #[Test]
+    public function without_a_psalm_xml_every_setting_is_a_default(): void
+    {
+        $report = $this->collectIn(null);
+
+        $this->assertNotSame([], $report->pluginSettings);
+        $this->assertSame(['default'], \array_values(\array_unique(\array_column($report->pluginSettings, 'source'))));
+        $this->assertSame('runtime', $report->phpAnalysisSource);
+    }
+
+    #[Test]
     public function real_diagnostics_collect_returns_well_formed_report(): void
     {
         $report = (new Diagnostics())->collect();
@@ -237,6 +255,29 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame($sorted, $report->loadedProviders);
     }
 
+
+    /** Collects from a temp project root holding the given psalm.xml, or none. */
+    private function collectIn(?string $psalmXml): Report
+    {
+        $root = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-diagnose-' . \uniqid('', true);
+        \mkdir($root);
+        $previous = \getcwd();
+        \assert(\is_string($previous));
+
+        if ($psalmXml !== null) {
+            \file_put_contents($root . '/psalm.xml', $psalmXml);
+        }
+
+        try {
+            \chdir($root);
+
+            return (new Diagnostics())->collect();
+        } finally {
+            \chdir($previous);
+            @\unlink($root . '/psalm.xml');
+            @\rmdir($root);
+        }
+    }
 
     /**
      * @param list<string> $argv
