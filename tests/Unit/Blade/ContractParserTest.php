@@ -199,6 +199,53 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function a_blank_line_before_unrelated_parens_does_not_extend_the_previous_directive(): void
+    {
+        // Blade only skips SAME-LINE whitespace (`[ \t]*`) between a directive name and its `(`:
+        // a scan that also skips newlines would let `@endif` (which never takes an argument)
+        // swallow this unrelated, later parenthesised `@props` as its own "argument".
+        $contract = $this->parse("@if(true)\nhello\n@endif\n(\n@props(['real'])\n)");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_props_call_after_email_like_text_is_still_found(): void
+    {
+        // Blade's own directive regex is anchored `\B@`: a `@` preceded by a word character
+        // (`a@example`) is never a directive at all, so the LATER, genuine `@props(...)` must
+        // still be found independently, not swallowed as "@example"'s argument.
+        $contract = $this->parse("a@example(@props(['real']))");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_directive_argument_cannot_span_a_raw_php_tag(): void
+    {
+        // Blade tokenizes the WHOLE template first and compiles each T_INLINE_HTML segment
+        // independently: a `(` before a raw PHP open tag and the real `@props(...)` after it are
+        // never in the same segment, so `@unknown`'s "argument" can never reach past the tag to
+        // swallow the genuine declaration.
+        $contract = $this->parse("@unknown(<?php echo 'hello'; ?>\n@props(['real']))");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_later_live_props_is_still_declared_alongside_a_phantom_free_scan(): void
+    {
+        $contract = $this->parse("@php(\$x = \"@props(['phantom'])\")\n@props(['real'])\n<div>{{ \$real }}</div>\n");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertArrayNotHasKey('phantom', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
     public function foreach_subject_is_read_but_its_alias_is_local(): void
     {
         $contract = $this->parse("@foreach(\$items as \$item)\n{{ \$item }}\n@endforeach\n");

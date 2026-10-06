@@ -48,17 +48,24 @@ final class ContractParser
     private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . self::IDENTIFIER . ')/';
 
     /**
-     * Mirrors `BladeCompiler::compileStatements()`: every `@name` optionally followed by its own
-     * balanced `(...)` argument, matched left-to-right over the MASKED source. `preg_match_all()`
-     * never backtracks into an already-consumed match, so a directive's FULL argument span — a
-     * string, a comment, a nested call — is consumed as part of THAT directive's one match before
-     * the scan resumes past it; text spelling `@props` inside another directive's argument
-     * (a `@php($x = "@props([...])")` string, a `@props([... 'Use @props here' ...])` string
-     * value, a block comment inside a `@props(...)` argument) is therefore never read as a
-     * second, independent declaration. `(?<!@)` skips an escaped `@@props`; case-insensitive,
+     * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
+     * (`/\B@(@?\w+(?:::\w+)?)([ \t]*)(\( ( [\S\s]*? ) \))?/x`), matched left-to-right over the
+     * MASKED source: `\B@` (not `(?<!@)`) so a mid-word `@` — `a@example(...)` — is never read as
+     * a directive, `[ \t]*` (not `\s*`) so only SAME-LINE whitespace separates the name from its
+     * args — a blank line's worth of unrelated, later parens can never be misread as THIS
+     * directive's argument — and an optional leading `@` inside the name captures Blade's own
+     * `@@props` escape (`str_contains($match[1], '@')` in `compileStatement()`) without a
+     * lookbehind, which can't tell `@@props` from a SECOND escaped `@@@props` apart.
+     *
+     * `preg_match_all()` never backtracks into an already-consumed match, so a directive's FULL
+     * argument span — a string, a comment, a nested call — is consumed as part of THAT
+     * directive's one match before the scan resumes past it; text spelling `@props` inside
+     * another directive's argument (a `@php($x = "@props([...])")` string, a
+     * `@props([... 'Use @props here' ...])` string value, a block comment inside a `@props(...)`
+     * argument) is therefore never read as a second, independent declaration. Case-insensitive,
      * like Blade's own directive dispatch.
      */
-    private const DIRECTIVE_PATTERN = '/(?<!@)@(?<name>[A-Za-z_]\w*)(?:\s*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
+    private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
     private ?Parser $parser = null;
 
@@ -180,47 +187,35 @@ final class ContractParser
         $maskedSource = MarkerPrePass::blankRanges($source, $masked);
         $propsUnknown = false;
 
-        if (\preg_match_all(self::DIRECTIVE_PATTERN, $maskedSource, $directives, \PREG_OFFSET_CAPTURE) === false) {
-            $propsUnknown = true;
-        } else {
-            /** @var list<array{0: string, 1: int}> $fullMatches */
-            $fullMatches = $directives[0];
-            /** @var list<array{0: string, 1: int}> $names */
-            $names = $directives['name'];
-            /** @var list<array{0: string, 1: int}> $argLists */
-            $argLists = $directives['args'];
+        /*
+         * A raw open-tag (raw PHP, not `@php`) is a HARD boundary a directive's argument can
+         * never cross: `BladeCompiler::compileString()` tokenizes the WHOLE template with
+         * `token_get_all()` first and runs `compileStatements()` on each resulting `T_INLINE_HTML`
+         * token SEPARATELY (`parseToken()`), so a `(` before one of these tags and a `)` after it
+         * are never scanned as the same string, let alone the same match. `@verbatim` and
+         * `@php...@endphp` are NOT boundaries: `storeUncompiledBlocks()` replaces their whole body
+         * with a short inline placeholder BEFORE tokenizing, so the surrounding text stays in the
+         * SAME `T_INLINE_HTML` token and a directive's argument can legitimately span across one.
+         */
+        $segmentStart = 0;
+        $hardBoundaries = [];
 
-            foreach ($names as $i => [$directiveName]) {
-                if (\strtolower($directiveName) !== 'props') {
-                    continue;
-                }
-
-                $offset = $fullMatches[$i][1];
-                [$argsText, $argsOffset] = $argLists[$i];
-
-                if ($argsOffset === -1) {
-                    // No `(...)` follows this `@props` at all: unparseable, same as a props array
-                    // that isn't fully literal.
-                    $propsUnknown = true;
-
-                    continue;
-                }
-
-                $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
-                $props = $this->parseProps($rawArgs);
-
-                if ($props === null) {
-                    $propsUnknown = true;
-
-                    continue;
-                }
-
-                $line = 1 + SourceLines::breaksIn($source, 0, $offset);
-
-                foreach ($props as $propName => $optional) {
-                    $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional)];
-                }
+        foreach ($masked as [$text, $offset]) {
+            if (\str_starts_with($text, '{{--') || \str_starts_with($text, '@verbatim') || \str_starts_with($text, '@php')) {
+                continue;
             }
+
+            $hardBoundaries[] = [$offset, $offset + \strlen($text)];
+        }
+
+        $hardBoundaries[] = [\strlen($source), \strlen($source)];
+
+        foreach ($hardBoundaries as [$hardStart, $hardEnd]) {
+            $segment = \substr($maskedSource, $segmentStart, $hardStart - $segmentStart);
+
+            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown);
+
+            $segmentStart = $hardEnd;
         }
 
         // Stable since PHP 8.0: several props declared by the SAME `@props(...)` call keep their
@@ -235,6 +230,64 @@ final class ContractParser
         }
 
         return [$vars, $propsUnknown];
+    }
+
+    /**
+     * One segment's worth of {@see self::DIRECTIVE_PATTERN} matches, appending every `@props`
+     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable.
+     *
+     * @param list<array{0: int, 1: string, 2: ContractVar}> $declarations
+     */
+    private function scanPropsDirectives(string $segment, int $segmentOffset, string $source, array &$declarations, bool &$propsUnknown): void
+    {
+        if (\preg_match_all(self::DIRECTIVE_PATTERN, $segment, $directives, \PREG_OFFSET_CAPTURE) === false) {
+            $propsUnknown = true;
+
+            return;
+        }
+
+        /** @var list<array{0: string, 1: int}> $fullMatches */
+        $fullMatches = $directives[0];
+        /** @var list<array{0: string, 1: int}> $names */
+        $names = $directives['name'];
+        /** @var list<array{0: string, 1: int}> $argLists */
+        $argLists = $directives['args'];
+
+        foreach ($names as $i => [$directiveName]) {
+            // A leading `@` in the captured name is Blade's own `@@props` escape: the match is
+            // STILL consumed (so the scan does not re-enter its argument looking for a nested
+            // `@props`), it is simply never a live declaration.
+            if (\str_starts_with($directiveName, '@') || \strtolower($directiveName) !== 'props') {
+                continue;
+            }
+
+            $offset = $segmentOffset + $fullMatches[$i][1];
+            [$argsText, $localArgsOffset] = $argLists[$i];
+
+            if ($localArgsOffset === -1) {
+                // No `(...)` follows this `@props` at all: unparseable, same as a props array
+                // that isn't fully literal.
+                $propsUnknown = true;
+
+                continue;
+            }
+
+            $argsOffset = $segmentOffset + $localArgsOffset;
+            $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
+            $props = $this->parseProps($rawArgs);
+
+            if ($props === null) {
+                $propsUnknown = true;
+
+                continue;
+            }
+
+            $line = 1 + SourceLines::breaksIn($source, 0, $offset);
+
+            foreach ($props as $propName => $optional) {
+                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional)];
+            }
+        }
     }
 
     /** One parser for every template in the pass: constructing one re-reads PHP's own token tables. */
