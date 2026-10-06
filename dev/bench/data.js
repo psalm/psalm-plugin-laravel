@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791285879023,
+  "lastUpdate": 1791298287571,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12420,6 +12420,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4d2d235f3eacb2996dd35b75954abd3bdf61e041",
+          "message": "Drop `stillat/blade-parser`: parse Blade contracts with the plugin's own masking (#1711)\n\n* refactor(blade): parse contracts without stillat/blade-parser #1705\n\nContractParser reads @var comments and @props off MarkerPrePass's\nmasked-range scan plus nikic/php-parser instead of a Document AST;\nlines come from byte-offset SourceLines::breaksIn(), fixing multi-byte\nand bare-CR drift without the mb_strlen branch. Comments inside\n@verbatim/@php/raw <?php blocks are no longer misread as declarations.\n\nDropped the dead ContractParser suppression path (SUPPRESS_PATTERN,\nnextStatementLine, nodeLine, TemplateContract::$suppressions): nothing\nin production ever consumed it, suppressions ship through\nSuppressionInjector unchanged.\n\n* chore(deps): drop stillat/blade-parser #1705\n\nContractParser no longer depends on it. Removed from suggest,\nconflict, and require-dev, and from the test:app fixture install.\n\n* docs(blade): remove stillat/blade-parser install step #1705\n\nBlade analysis needs no extra dependency now; enabling it is just\n<blade /> in psalm.xml.\n\n* fix(blade): skip @props text inside directive arguments #1705\n\nThe @props scanner now mirrors BladeCompiler::compileStatements(): one\nleft-to-right walk over every @directive, consuming each one's balanced\n(...) argument via MarkerPrePass::ARGUMENT_PATTERN before resuming the\nscan. preg_match_all() never backtracks into an already-consumed match,\nso @props text sitting inside ANOTHER directive's argument (a string, a\ncomment, a nested call) is never reread as a second declaration — fixes\nphantom props from @php($x = \"@props([...])\"), false propsUnknown\nfrom a @props string value mentioning @props, and a PHP comment inside\na @props argument.\n\nBumped MARKER_PASS_VERSION: the parser swap already changed what\nViewDataContract (manifest slot 5) holds for identical source, and a\nsame-version upgrade would otherwise keep stale cached contracts.\n\n* fix(blade): match Blade's directive boundaries in the @props scan #1705\n\nThe @props scan's DIRECTIVE_PATTERN now copies BladeCompiler::compileStatements()'s\nown tokenizer regex exactly: \\B@ (not a lookbehind) so a mid-word @ (a@example(...))\nis never read as a directive, [ \\t]* (not \\s*) so only same-line whitespace\nseparates a name from its args, and an optional leading @ in the name captures\nBlade's @@props escape without a lookbehind that can't tell @@props from @@@props\napart. A prior fix's two-pass scan still let one directive's balanced-paren\nargument swallow a LATER, unrelated @props across a blank line or past an\nemail-like a@example(...).\n\nThe scan is also now segmented at raw <?php ... ?> / <?= ... ?> tags: Blade\ntokenizes the whole template first and compiles each resulting T_INLINE_HTML\nchunk separately, so a directive's argument can never span one of these tags.\n@verbatim and @php...@endphp stay unsegmented (Blade replaces their body with\na short inline placeholder before tokenizing, so surrounding text stays in the\nsame chunk).\n\nReset ShadowManifest::MARKER_PASS_VERSION to 0: Blade analysis is unreleased,\nso there is no prior value worth preserving, and 0 still differs from base and\ninvalidates dev caches built by any parser revision in this PR.\n\n* docs(blade): drop external-parser history phrasing\n\nThe Blade shadow files paragraph still described the parser swap\n(\"no external Blade parser involved\") instead of just stating how\nContractParser reads declarations now.\n\n* docs(blade): tighten BladeBootstrapper comments\n\nTrimmed docblocks and inline comments across the whole file to the\nnon-obvious WHY only: constraints, ordering reasons, Psalm-internal\ntraps, issue refs. Dropped narration of what the next lines do and\nrepetition. No behavior change; @psalm-*/@param/@return kept intact.\n\n* fix(blade): treat short open tags as PHP boundaries when enabled #1705\n\nmaskedRanges() only matched `<?php`/`<?=` openers, so a bare `<?` tag\nwas never masked and never a hard boundary for the @props directive\nscan, even when short_open_tag is on and PHP's own tokenizer DOES open\nPHP mode there. The existing token_get_all() check right below already\ntells a live opener from literal text under whichever ini setting is\nactive; matching any `<?` and letting that check decide keeps masking\nin sync with the SAME tokenizer Blade compiles through, instead of a\nsecond, narrower guess.",
+          "timestamp": "2026-10-06T16:47:55+02:00",
+          "tree_id": "7b925dbd9c8feb802858d780463bcf0ba8e7d3c6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/4d2d235f3eacb2996dd35b75954abd3bdf61e041"
+        },
+        "date": 1791298285712,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38,
+            "range": "± 0.53",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1372,
             "unit": "MB"
           }
         ]
