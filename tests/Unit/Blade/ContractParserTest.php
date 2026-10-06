@@ -246,6 +246,38 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function a_short_open_tag_is_a_boundary_when_enabled(): void
+    {
+        if (!\filter_var(\ini_get('short_open_tag'), \FILTER_VALIDATE_BOOL)) {
+            $this->markTestSkipped('short_open_tag is off for this run (PHP_INI_PERDIR, no runtime toggle).');
+        }
+
+        // Same shape as a_directive_argument_cannot_span_a_raw_php_tag(), with the bare `<?`
+        // spelling Blade's own tokenizer also opens PHP mode for when short tags are on.
+        $contract = $this->parse("@unknown(<? echo 'hello'; ?>\n@props(['real']))");
+
+        $this->assertArrayHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_short_open_tag_is_not_a_boundary_when_disabled(): void
+    {
+        if (\filter_var(\ini_get('short_open_tag'), \FILTER_VALIDATE_BOOL)) {
+            $this->markTestSkipped('short_open_tag is on for this run (PHP_INI_PERDIR, no runtime toggle).');
+        }
+
+        // Same shape as a_short_open_tag_is_a_boundary_when_enabled(): with short tags off, a
+        // bare `<?` is inline HTML text, not a PHP opener, so it creates no segment boundary —
+        // `@unknown`'s argument still spans straight through to the final `)`, exactly as any
+        // other plain text would, same as before this directive-boundary work existed.
+        $contract = $this->parse("@unknown(<? echo 'hello'; ?>\n@props(['real']))");
+
+        $this->assertArrayNotHasKey('real', $contract->vars);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
     public function foreach_subject_is_read_but_its_alias_is_local(): void
     {
         $contract = $this->parse("@foreach(\$items as \$item)\n{{ \$item }}\n@endforeach\n");

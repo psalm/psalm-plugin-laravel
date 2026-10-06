@@ -65,7 +65,11 @@ final class MarkerPrePass
     public static function maskedRanges(string $source): array
     {
         // Consume the earliest construct first: PHP-like text inside a Blade comment is inert.
-        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?(?i:php\b|=)/s';
+        // `<\?` alone (not `<\?(?:php\b|=)`): a bare `<?` only opens PHP when short_open_tag is
+        // on, and the token_get_all() check right below already tells live code from literal
+        // text under whichever setting is active — matching broader here and narrowing there
+        // keeps this in sync with the SAME tokenizer Blade itself compiles through.
+        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?/s';
         $ranges = [];
         $cursor = 0;
         while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {
