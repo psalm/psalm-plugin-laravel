@@ -4,7 +4,7 @@
 <?php declare(strict_types=1);
 
 // keys="short": dotted `group.key` references are still checked
-__('validation.attributes.emial');
+__('validation.attributes.nonexistent_field');
 trans('messages.missing');
 
 // Sentence-style keys (whitespace) are skipped
@@ -23,5 +23,5 @@ $failed = __('auth.failed');
 echo $failed;
 ?>
 --EXPECTF--
-MissingTranslation on line %d: Translation key 'validation.attributes.emial' not found in language files
+MissingTranslation on line %d: Translation key 'validation.attributes.nonexistent_field' not found in language files
 MissingTranslation on line %d: Translation key 'messages.missing' not found in language files

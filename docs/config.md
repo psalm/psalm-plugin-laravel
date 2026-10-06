@@ -158,7 +158,7 @@ See [MissingTranslation](issues/MissingTranslation.md) for details.
 | Value | Reports |
 |---|---|
 | `all` | Every literal key that is not found, including JSON-style sentence keys such as `__('Online courses - more coming up!')`. |
-| `short` | Only Laravel "short keys" (`group.key`, e.g. `validation.attributes.emial`, `admin/users.title`). |
+| `short` | Only Laravel "short keys" (`group.key`, e.g. `validation.attributes.email`, `admin/users.title`). |
 
 A short key has at least two non-empty dot-separated segments and no whitespace. `short` therefore skips sentences with whitespace (`Online courses - more coming up!`), keys with an empty segment (`Done.`, `e.g.`), and keys without a dot (`Dashboard`). Keys such as `example.com` or `1.5` look like short keys and are still checked.
 
