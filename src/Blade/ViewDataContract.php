@@ -9,8 +9,7 @@ namespace Psalm\LaravelPlugin\Blade;
  * against: the declared variables, whether the template's `@props` were fully readable, and the
  * set of variables its compiled body reads.
  *
- * Split from TemplateContract because only these facts survive into the shadow manifest. The rest
- * of TemplateContract (the suppression map) is already persisted in its own manifest slot.
+ * Split from TemplateContract because only these facts survive into the shadow manifest.
  *
  * @psalm-immutable
  * @internal

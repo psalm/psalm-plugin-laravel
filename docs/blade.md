@@ -17,13 +17,7 @@ Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports 
 
 ## Enabling it
 
-Install the Blade parser the analysis depends on. It is optional so projects without Blade analysis do not pull it (and `laravel/framework` with it) in:
-
-```bash
-composer require --dev stillat/blade-parser
-```
-
-Then add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
+Add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 
 ```xml
 <plugins>
@@ -33,7 +27,7 @@ Then add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 </plugins>
 ```
 
-**default**: disabled. The element's presence turns analysis on, and every setting below goes on the same element. Omit it, or write `<blade value="false" />`, to turn analysis off. Without `stillat/blade-parser` installed, the analysis turns itself off for the run with one warning.
+**default**: disabled. The element's presence turns analysis on, and every setting below goes on the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
 
 ### `cacheDir`
 
@@ -192,7 +186,7 @@ Nothing in the pipeline needs a single process, and that is checked rather than 
 `psalm-laravel blade:annotate` is the one exception, and forces `--threads=1` on the Psalm run it drives (see [Annotating templates](#annotating-templates)). That restriction is about the producer types the command collects, not about analysis.
 ## Degradation
 
-Blade analysis never fails a run. If `stillat/blade-parser` is not installed, the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
+Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
 Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata) and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
 

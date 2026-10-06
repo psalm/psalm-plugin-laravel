@@ -9,18 +9,12 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
-use Stillat\BladeParser\Document\Document;
-use Stillat\BladeParser\Nodes\AbstractNode;
-use Stillat\BladeParser\Nodes\CommentNode;
-use Stillat\BladeParser\Nodes\DirectiveNode;
-use Stillat\BladeParser\Nodes\LiteralNode;
-use Stillat\BladeParser\Nodes\Position;
 
 /**
  * Extracts a {@see TemplateContract} from a Blade template: `@var`
- * declarations, `@props` entries, `@psalm-suppress` targets, and the set of
- * top-level variables the compiled body reads. Read-only; wiring the result
- * into shadow compilation is a separate step.
+ * declarations, `@props` entries, and the set of top-level variables the
+ * compiled body reads. Read-only; wiring the result into shadow compilation
+ * is a separate step.
  *
  * @psalm-api
  */
@@ -53,15 +47,33 @@ final class ContractParser
      */
     private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . self::IDENTIFIER . ')/';
 
-    private const SUPPRESS_PATTERN = '/^\s*@psalm-suppress\s+(.+?)\s*$/';
+    /**
+     * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
+     * (`/\B@(@?\w+(?:::\w+)?)([ \t]*)(\( ( [\S\s]*? ) \))?/x`), matched left-to-right over the
+     * MASKED source: `\B@` (not `(?<!@)`) so a mid-word `@` — `a@example(...)` — is never read as
+     * a directive, `[ \t]*` (not `\s*`) so only SAME-LINE whitespace separates the name from its
+     * args — a blank line's worth of unrelated, later parens can never be misread as THIS
+     * directive's argument — and an optional leading `@` inside the name captures Blade's own
+     * `@@props` escape (`str_contains($match[1], '@')` in `compileStatement()`) without a
+     * lookbehind, which can't tell `@@props` from a SECOND escaped `@@@props` apart.
+     *
+     * `preg_match_all()` never backtracks into an already-consumed match, so a directive's FULL
+     * argument span — a string, a comment, a nested call — is consumed as part of THAT
+     * directive's one match before the scan resumes past it; text spelling `@props` inside
+     * another directive's argument (a `@php($x = "@props([...])")` string, a
+     * `@props([... 'Use @props here' ...])` string value, a block comment inside a `@props(...)`
+     * argument) is therefore never read as a second, independent declaration. Case-insensitive,
+     * like Blade's own directive dispatch.
+     */
+    private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
     private ?Parser $parser = null;
 
     public function parse(string $source, string $compiled): TemplateContract
     {
-        [$vars, $suppressions, $propsUnknown] = $this->parseSource($source);
+        [$vars, $propsUnknown] = $this->parseSource($source);
 
-        return new TemplateContract($vars, $this->readVariables($compiled), $suppressions, $propsUnknown);
+        return new TemplateContract($vars, $this->readVariables($compiled), $propsUnknown);
     }
 
     /**
@@ -73,7 +85,7 @@ final class ContractParser
      */
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
-        [$vars, , $propsUnknown] = $this->parseSource($source);
+        [$vars, $propsUnknown] = $this->parseSource($source);
         [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
         // Raw declarations are consumed-only, never contract types: in a template a raw `@var` is as
@@ -93,15 +105,15 @@ final class ContractParser
      */
     public function parseDeclarations(string $source): ViewDataContract
     {
-        [$vars, , $propsUnknown] = $this->parseSource($source);
+        [$vars, $propsUnknown] = $this->parseSource($source);
 
         return new ViewDataContract($vars, $propsUnknown);
     }
 
     /**
      * Names a template declares in the raw `<?php` docblock spelling, which
-     * {@see self::parseSource()} does not read: `Document::fromText()` hands a raw PHP block back as
-     * one opaque node.
+     * {@see self::parseSource()} does not read: a raw PHP block reaches the shadow byte-for-byte,
+     * so its own docblocks never pass through the Blade-comment scan above.
      *
      * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND an
      * `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which is
@@ -143,109 +155,139 @@ final class ContractParser
     }
 
     /**
-     * @return array{0: array<string, ContractVar>, 1: array<int, list<string>>, 2: bool}
+     * @return array{0: array<string, ContractVar>, 1: bool}
      */
     private function parseSource(string $source): array
     {
-        $mbLines = \strlen($source) !== \mb_strlen($source);
+        $masked = MarkerPrePass::maskedRanges($source);
 
-        try {
-            // Reindex: getNodeArray() only promises AbstractNode[], not a list, and
-            // nextStatementLine() below needs genuine int keys to walk forward from one.
-            $nodes = \array_values(Document::fromText($source)->getNodeArray());
-        } catch (\Throwable) {
-            // Parse failure means any @props the template may carry is
-            // unknowable; flag it rather than claiming "no props".
-            return [[], [], true];
+        // Later byte offset wins on a name collision, same as a document-order walk: a `@props`
+        // entry and a `{{-- @var --}}` comment can both declare the same name, and whichever
+        // appears LATER in the template is the one the author meant to win.
+        /** @var list<array{0: int, 1: string, 2: ContractVar}> $declarations */
+        $declarations = [];
+
+        foreach ($masked as [$text, $offset]) {
+            // Blade strips comments before it recognises directives, so only the `{{-- --}}`
+            // ranges (never a `@verbatim` body, `@php` block, or raw `<?php` tag) are comments.
+            if (!\str_starts_with($text, '{{--')) {
+                continue;
+            }
+
+            $inner = \substr($text, 4, -4);
+
+            if (\preg_match(self::VAR_PATTERN, $inner, $matches) === 1) {
+                // Greedy capture keeps a separator space when several precede the
+                // variable name; the type string must not carry it.
+                $line = 1 + SourceLines::breaksIn($source, 0, $offset);
+                $declarations[] = [$offset, $matches[2], new ContractVar($matches[2], \rtrim($matches[1]), $line, false)];
+            }
         }
 
-        $vars = [];
-        $suppressions = [];
+        $maskedSource = MarkerPrePass::blankRanges($source, $masked);
         $propsUnknown = false;
 
-        foreach ($nodes as $index => $node) {
-            if ($node instanceof CommentNode) {
-                $line = $this->nodeLine($node, $source, $mbLines);
+        /*
+         * A raw open-tag (raw PHP, not `@php`) is a HARD boundary a directive's argument can
+         * never cross: `BladeCompiler::compileString()` tokenizes the WHOLE template with
+         * `token_get_all()` first and runs `compileStatements()` on each resulting `T_INLINE_HTML`
+         * token SEPARATELY (`parseToken()`), so a `(` before one of these tags and a `)` after it
+         * are never scanned as the same string, let alone the same match. `@verbatim` and
+         * `@php...@endphp` are NOT boundaries: `storeUncompiledBlocks()` replaces their whole body
+         * with a short inline placeholder BEFORE tokenizing, so the surrounding text stays in the
+         * SAME `T_INLINE_HTML` token and a directive's argument can legitimately span across one.
+         */
+        $segmentStart = 0;
+        $hardBoundaries = [];
 
-                if (\preg_match(self::VAR_PATTERN, $node->innerContent, $matches) === 1) {
-                    // Greedy capture keeps a separator space when several precede the
-                    // variable name; the type string must not carry it.
-                    $vars[$matches[2]] = new ContractVar($matches[2], \rtrim($matches[1]), $line, false);
-                }
-
-                if (\preg_match(self::SUPPRESS_PATTERN, $node->innerContent, $matches) === 1) {
-                    $targetLine = $this->nextStatementLine($nodes, $index, $source, $mbLines);
-
-                    $rules = SuppressionInjector::parseRuleList($matches[1]);
-
-                    if ($targetLine !== null && $rules !== []) {
-                        $suppressions[$targetLine] = [...$suppressions[$targetLine] ?? [], ...$rules];
-                    }
-                }
-
+        foreach ($masked as [$text, $offset]) {
+            if (\str_starts_with($text, '{{--') || \str_starts_with($text, '@verbatim') || \str_starts_with($text, '@php')) {
                 continue;
             }
 
-            if ($node instanceof DirectiveNode && $node->content === 'props') {
-                $props = $this->parseProps($node);
-
-                if ($props === null) {
-                    $propsUnknown = true;
-
-                    continue;
-                }
-
-                $line = $this->nodeLine($node, $source, $mbLines);
-
-                foreach ($props as $name => $optional) {
-                    $vars[$name] = new ContractVar($name, 'mixed', $line, $optional);
-                }
-            }
+            $hardBoundaries[] = [$offset, $offset + \strlen($text)];
         }
 
-        return [$vars, $suppressions, $propsUnknown];
+        $hardBoundaries[] = [\strlen($source), \strlen($source)];
+
+        foreach ($hardBoundaries as [$hardStart, $hardEnd]) {
+            $segment = \substr($maskedSource, $segmentStart, $hardStart - $segmentStart);
+
+            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown);
+
+            $segmentStart = $hardEnd;
+        }
+
+        // Stable since PHP 8.0: several props declared by the SAME `@props(...)` call keep their
+        // array order among themselves, and a var/props tie (same byte offset) cannot happen —
+        // `{{--` and `@props` never start at the same position.
+        \usort($declarations, static fn(array $a, array $b): int => $a[0] <=> $b[0]);
+
+        $vars = [];
+
+        foreach ($declarations as [, $name, $var]) {
+            $vars[$name] = $var;
+        }
+
+        return [$vars, $propsUnknown];
     }
 
     /**
-     * @param list<AbstractNode> $nodes
+     * One segment's worth of {@see self::DIRECTIVE_PATTERN} matches, appending every `@props`
+     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable.
      *
-     * @psalm-mutation-free
+     * @param list<array{0: int, 1: string, 2: ContractVar}> $declarations
      */
-    private function nextStatementLine(array $nodes, int $afterIndex, string $source, bool $mbLines): ?int
+    private function scanPropsDirectives(string $segment, int $segmentOffset, string $source, array &$declarations, bool &$propsUnknown): void
     {
-        $counter = \count($nodes);
-        for ($i = $afterIndex + 1; $i < $counter; $i++) {
-            $candidate = $nodes[$i];
+        if (\preg_match_all(self::DIRECTIVE_PATTERN, $segment, $directives, \PREG_OFFSET_CAPTURE) === false) {
+            $propsUnknown = true;
 
-            if ($candidate instanceof CommentNode || $candidate instanceof LiteralNode) {
+            return;
+        }
+
+        /** @var list<array{0: string, 1: int}> $fullMatches */
+        $fullMatches = $directives[0];
+        /** @var list<array{0: string, 1: int}> $names */
+        $names = $directives['name'];
+        /** @var list<array{0: string, 1: int}> $argLists */
+        $argLists = $directives['args'];
+
+        foreach ($names as $i => [$directiveName]) {
+            // A leading `@` in the captured name is Blade's own `@@props` escape: the match is
+            // STILL consumed (so the scan does not re-enter its argument looking for a nested
+            // `@props`), it is simply never a live declaration.
+            if (\str_starts_with($directiveName, '@') || \strtolower($directiveName) !== 'props') {
                 continue;
             }
 
-            return $this->nodeLine($candidate, $source, $mbLines);
+            $offset = $segmentOffset + $fullMatches[$i][1];
+            [$argsText, $localArgsOffset] = $argLists[$i];
+
+            if ($localArgsOffset === -1) {
+                // No `(...)` follows this `@props` at all: unparseable, same as a props array
+                // that isn't fully literal.
+                $propsUnknown = true;
+
+                continue;
+            }
+
+            $argsOffset = $segmentOffset + $localArgsOffset;
+            $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
+            $props = $this->parseProps($rawArgs);
+
+            if ($props === null) {
+                $propsUnknown = true;
+
+                continue;
+            }
+
+            $line = 1 + SourceLines::breaksIn($source, 0, $offset);
+
+            foreach ($props as $propName => $optional) {
+                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional)];
+            }
         }
-
-        return null;
-    }
-
-    /**
-     * @psalm-mutation-free
-     */
-    private function nodeLine(AbstractNode $node, string $source, bool $mbLines): int
-    {
-        $position = $node->position;
-
-        if (!$position instanceof Position || $position->startLine === null) {
-            return 1;
-        }
-
-        if (!$mbLines) {
-            return $position->startLine;
-        }
-
-        // blade-parser's own line tracking drifts low once the template contains
-        // multi-byte characters; its offsets stay mb-char-accurate, so recompute
-        // the line ourselves from the mb-aware prefix instead of trusting startLine.
-        return 1 + \substr_count(\mb_substr($source, 0, $position->startOffset), "\n");
     }
 
     /** One parser for every template in the pass: constructing one re-reads PHP's own token tables. */
@@ -255,13 +297,14 @@ final class ContractParser
     }
 
     /**
+     * @param string $innerContent the raw source text between `@props(` and the matching `)`,
+     *        exactly as it reads in the template
+     *
      * @return array<string, bool>|null prop name => has a literal default; null when the array isn't fully literal
      */
-    private function parseProps(DirectiveNode $node): ?array
+    private function parseProps(string $innerContent): ?array
     {
-        $innerContent = $node->arguments?->innerContent;
-
-        if ($innerContent === null || $innerContent === '') {
+        if ($innerContent === '') {
             return null;
         }
 
