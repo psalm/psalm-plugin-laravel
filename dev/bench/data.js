@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791317007704,
+  "lastUpdate": 1791321549642,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12555,6 +12555,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.99,
             "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1369,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "939cebbc2f160a9c33566c6ccf0762ce23afe9b8",
+          "message": "Fix Blade `NoValue` on list-form `@aware` and harden the component-tag marker skip (#1716)\n\n* fix(blade): drop NoValue on the keyed arm of list-form @aware\n\nAn all-int-key @aware list (`@aware(['color'])`) narrows `$__key` to\n`never` inside the compiled `getConsumableComponentData($__key, ...)` arm,\nwhich Psalm reports as NoValue at every errorLevel. Generalize the #1695\nlist-form gate to cover that selection; an author-written call keeps\nreporting.\n\n* fix(blade): harden the component-tag skip pattern\n\n- Require whitespace, `/` or `>` after the tag name, as\n  ComponentTagCompiler does: `a < x-1)` inside a `<script>` no longer\n  opens a \"tag\" that runs to a later `>` and skips unrelated lines.\n- Make the `@class()`/`@style()` recursion loop possessive: unbalanced\n  parens over a long argument exhausted the PCRE JIT stack, failing\n  preg_match_all and dropping every component-tag skip in the template.\n\nUnit tests pin the name lookahead and both possessive loops (#1700).\n\n* test(blade): cover a multi-line component tag end to end\n\nA real `<x-alert>` tag spanning several attribute lines, with `->`/`=>`\ninside its `{{ }}` and `@class()` attributes and an `@if` in its body,\nmust compile without a ParseError.",
+          "timestamp": "2026-10-06T23:15:27+02:00",
+          "tree_id": "bbfa13f4bf8243432e3f87ca9497c419e97de01b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/939cebbc2f160a9c33566c6ccf0762ce23afe9b8"
+        },
+        "date": 1791321547933,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.01,
+            "range": "± 0.4",
             "unit": "s"
           },
           {
