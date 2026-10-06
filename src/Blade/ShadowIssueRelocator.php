@@ -9,16 +9,16 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
+use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
-use Psalm\Issue\NullArgument;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
-use Psalm\Issue\PossiblyNullArgument;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
@@ -349,12 +349,11 @@ final class ShadowIssueRelocator
         // `@aware` compiles to a `foreach` over its literal array whose body picks
         // `getConsumableComponentData($__key, $__value)` or the list-form
         // `getConsumableComponentData($__value)` by `is_string($__key)` (CompilesComponents::
-        // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so a
-        // keyed `null` default reaches the list-form arm, which only runs for an int key (#1695).
-        if (
-            ($issue instanceof NullArgument || $issue instanceof PossiblyNullArgument)
-            && self::isGeneratedAwareListFormArgument($issue, $target)
-        ) {
+        // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
+        // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
+        // which only runs for an int key (#1695). Every argument issue on that selection is the
+        // same artifact, plus the string casts Psalm reports alongside it.
+        if (self::isGeneratedAwareListFormArgument($issue, $target)) {
             return false;
         }
 
@@ -549,19 +548,23 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * Whether an argument issue points at `$__value` in the list-form call `@aware`'s compiled loop
-     * makes. The call text cut out of the shadow must be absent from the template, the same
+     * Whether an argument or string-cast issue points at `$__value` in the list-form call
+     * `@aware`'s compiled loop makes. The call text cut out of the shadow must be absent from the template, the same
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
      * same arguments inside `@php` keeps reporting.
      *
      * @psalm-mutation-free
      */
-    private static function isGeneratedAwareListFormArgument(ArgumentIssue $issue, ShadowTarget $target): bool
+    private static function isGeneratedAwareListFormArgument(CodeIssue $issue, ShadowTarget $target): bool
     {
-        if (
-            $issue->function_id !== 'illuminate\\view\\factory::getconsumablecomponentdata'
-            || !\str_starts_with($issue->message, 'Argument 1 ')
-        ) {
+        if ($issue instanceof ArgumentIssue) {
+            if (
+                $issue->function_id !== 'illuminate\\view\\factory::getconsumablecomponentdata'
+                || !\str_starts_with($issue->message, 'Argument 1 ')
+            ) {
+                return false;
+            }
+        } elseif (!$issue instanceof InvalidCast && !$issue instanceof ImplicitToStringCast) {
             return false;
         }
 

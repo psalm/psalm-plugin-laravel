@@ -130,8 +130,14 @@ final class MarkerPrePass
             // between two attributes matches no alternative and the whole tag is
             // silently left uncompiled as literal text. MANDATORY: never drop this.
             // `{{ ... }}` and `@class(...)`/`@style(...)` are consumed whole, mirroring that
-            // compiler's attribute alternatives: their bodies may hold a `>` (`->`, `=>`).
-            '/<\s*x[-:][\w\-:.]*(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
+            // compiler's attribute alternatives: their bodies may hold a `>` (`->`, `=>`). The
+            // possessive `*+` is load-bearing: those alternatives overlap `[^>"']`, so a
+            // backtracking loop on a never-closed tag exhausts pcre.backtrack_limit. Livewire's
+            // `<livewire:...>` tag compiler is just as strict.
+            '/<\s*(?:x[-:]|livewire:)[\w\-:.]*(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
+            // compileClosingTags() matches `<\/\s*x[-\:][\w\-\:\.]*\s*>`: a marker before the
+            // `>` of a wrapped closing tag (Prettier's HTML output) leaves it uncompiled.
+            '/<\/\s*(?:x[-:]|livewire:)[\w\-:.]*\s*>/',
         ];
 
         $skip = [];

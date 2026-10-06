@@ -98,6 +98,29 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
+    public function skips_the_wrapped_end_of_a_multiline_closing_component_tag(): void
+    {
+        // compileClosingTags() needs `</x-alert` and its `>` with only whitespace between.
+        $source = "<x-alert class=\"a\"\n    >Read more</x-alert\n    >\ndone\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function skips_a_multiline_livewire_tag_body(): void
+    {
+        $source = "<livewire:counter\n    :count=\"\$multi\"\n    wire:key=\"c\"\n/>\ndone\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayHasKey(4, $skip);
+        $this->assertArrayNotHasKey(5, $skip);
+    }
+
+    #[Test]
     public function whitespace_only_lines_get_no_marker(): void
     {
         $marked = MarkerPrePass::inject("line one\n   \nline three\n");
