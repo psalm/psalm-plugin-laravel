@@ -256,11 +256,9 @@ info "Installing psalm/plugin-laravel from local source"
 composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} repositories.0 '{"type": "path", "url": "../../"}'
 composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} minimum-stability 'dev'
 export COMPOSER_MEMORY_LIMIT=-1
-# stillat/blade-parser is the optional (`suggest`) Blade dependency; installed the way docs/blade.md
-# tells users to, so the blade:annotate step below runs with Blade analysis bootable.
 quiet_run "composer require psalm/plugin-laravel" \
     composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n --dev \
-        "psalm/plugin-laravel:*" "stillat/blade-parser:^2.1" --update-with-all-dependencies
+        "psalm/plugin-laravel:*" --update-with-all-dependencies
 
 # Install laravel/ai so the integration stubs are loaded under real reflection.
 # The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=0.11.0 <1.0.0')`,
