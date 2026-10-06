@@ -17,6 +17,7 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
+use Psalm\Issue\NoValue;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
@@ -352,8 +353,10 @@ final class ShadowIssueRelocator
         // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
         // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
         // which only runs for an int key (#1695). Every argument issue on that selection is the
-        // same artifact, plus the string casts Psalm reports alongside it.
-        if (self::isGeneratedAwareListFormArgument($issue, $target)) {
+        // same artifact, plus the string casts Psalm reports alongside it. The mirror image: an
+        // all-int-key list (`@aware(['color'])`) narrows `$__key` to `never` in the keyed arm, and
+        // Psalm reports `NoValue` on it.
+        if (self::isGeneratedAwareArgument($issue, $target)) {
             return false;
         }
 
@@ -548,32 +551,43 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * Whether an argument or string-cast issue points at `$__value` in the list-form call
-     * `@aware`'s compiled loop makes. The call text cut out of the shadow must be absent from the template, the same
+     * Whether an issue points at an argument of a call `@aware`'s compiled loop makes: an argument
+     * or string-cast issue on `$__value` in the list-form call, or `NoValue` on `$__key` in the
+     * keyed call. The call text cut out of the shadow must be absent from the template, the same
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
      * same arguments inside `@php` keeps reporting.
      *
      * @psalm-mutation-free
      */
-    private static function isGeneratedAwareListFormArgument(CodeIssue $issue, ShadowTarget $target): bool
+    private static function isGeneratedAwareArgument(CodeIssue $issue, ShadowTarget $target): bool
     {
-        if ($issue instanceof ArgumentIssue) {
+        if ($issue instanceof NoValue) {
+            if (!\str_starts_with($issue->message, 'All possible types for this argument ')) {
+                return false;
+            }
+
+            $argument = '$__key';
+        } elseif ($issue instanceof ArgumentIssue) {
             if (
                 $issue->function_id !== 'illuminate\\view\\factory::getconsumablecomponentdata'
                 || !\str_starts_with($issue->message, 'Argument 1 ')
             ) {
                 return false;
             }
-        } elseif (!$issue instanceof InvalidCast && !$issue instanceof ImplicitToStringCast) {
+
+            $argument = '$__value';
+        } elseif ($issue instanceof InvalidCast || $issue instanceof ImplicitToStringCast) {
+            $argument = '$__value';
+        } else {
             return false;
         }
 
         $selection = ShadowSelection::of($issue->code_location);
-        $call = '$__env->getConsumableComponentData($__value';
+        $call = '$__env->getConsumableComponentData(' . $argument;
 
         if (
             !$selection instanceof ShadowSelection
-            || $selection->end - $selection->start !== \strlen('$__value')
+            || $selection->end - $selection->start !== \strlen($argument)
             || !TemplateSnippetMatcher::endsAt($selection->snippet, $selection->end, $call)
         ) {
             return false;
