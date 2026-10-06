@@ -37,39 +37,30 @@ final class BladeBootstrapper
         private readonly ShadowRegistrar $registrar,
         private readonly Progress $output,
         private readonly string $shadowDir,
-        /**
-         * Opt-in for UnusedViewData (`reportUnusedViewData`). Gates both the read-set extraction and
-         * the data-include collection that closes it over the `@include` chain: two extra AST walks
-         * per template, paid only by projects that turned the rule on.
-         */
+        /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
         private readonly bool $collectDataIncludes = false,
         /**
-         * Test seam: the Composer vendor directory used by the hint-root filter. Null derives it
-         * from laravel/framework's install path, which in a unit test is the plugin's own vendor.
+         * Test seam: vendor dir for the hint-root filter. Null derives it from
+         * laravel/framework's install path (the plugin's own vendor, in a unit test).
          */
         private readonly ?string $vendorDirOverride = null,
     ) {}
 
-    /**
-     * The finder the roots came from, kept for name-ownership checks against namespaces that lost
-     * a root to the vendor filter. Set by {@see resolveViewPaths()}, once per run instance.
-     */
+    /** Kept for name-ownership checks against namespaces that lost a root to the vendor filter. */
     private ?FileViewFinder $finder = null;
 
     /**
-     * Namespaces with at least one hint root dropped by the vendor filter. For these, root order
-     * alone no longer mirrors Laravel's resolution — the dropped root still wins names in Laravel —
-     * so each surviving root's claim is verified against the finder. @see templateOwnsName()
+     * Namespaces with a hint root dropped by the vendor filter: root order no longer mirrors
+     * Laravel's resolution there (the dropped root still wins), so each survivor is verified
+     * against the finder. @see templateOwnsName()
      *
      * @var array<string, true>
      */
     private array $vendorShadowedNamespaces = [];
 
     /**
-     * Template facts collected while compiling, published only once activation has succeeded
-     * (#1518). Contract validation and template annotation read these registries, so a degraded
-     * run must leave them empty. Insertion order is preserved and the registries keep their own
-     * lowest-root-index-wins precedence.
+     * Buffered, not written to the registries directly: a degraded run must leave them empty
+     * (#1518). Registries keep their own lowest-root-index-wins precedence.
      *
      * @var list<array{0: string, 1: int, 2: string}> view name, view root index, template path
      */
@@ -105,11 +96,8 @@ final class BladeBootstrapper
             return false;
         }
 
-        // Resolved ONCE and fed to both discovery below and compileAll() further down: two
-        // independent calls each deduping the same raw $viewPaths could only ever agree by
-        // construction, but a single shared list is the simpler invariant to keep, and it is what
-        // lets findTemplates() below enumerate from the SAME case-collapsed roots that
-        // registerContract()/ViewName::resolve() later match template paths against.
+        // Shared with compileAll()'s findTemplates() call below: both must enumerate from the
+        // SAME case-collapsed roots that registerContract()/ViewName::resolve() match against.
         $roots = $this->resolveRoots($viewPaths);
 
         /** @var array<string, string> $failures template path => reason */
@@ -117,24 +105,19 @@ final class BladeBootstrapper
         $templates = $this->findTemplates($roots, $failures);
 
         if ($templates === [] && $failures === []) {
-            // Not a failure (an API-only app or a package with no views is normal), but silent under
-            // --no-progress: worth stating because it is the shape of #1497 — a real view tree the
-            // plugin nonetheless discovered nothing from.
+            // Not a failure (an API-only app is normal), but worth surfacing under --no-progress:
+            // the shape of #1497, a real view tree that discovered nothing.
             $this->output->warning(
                 'Laravel plugin: Blade template analysis is enabled, but no Blade templates were discovered.',
             );
         }
 
-        // A view root that failed to scan can hide templates that still exist on disk; pruning
-        // against an incomplete list would delete their shadows for nothing more than a
-        // transient read failure, so pruning is only safe once discovery is known-complete.
+        // An incomplete scan can hide templates still on disk; pruning is only safe once
+        // discovery is known-complete, or a transient read failure deletes live shadows.
         $templatesFullyDiscovered = $failures === [];
 
-        // No templates is the normal state of a package or an API-only application, not a
-        // failure, but it still has to reach prune() below: a template deleted since the
-        // previous run leaves its shadow and manifest entry behind otherwise, permanently,
-        // since a run with no templates is exactly the run that would never come back to
-        // clean them up.
+        // A run with no templates still has to reach prune() below, or a template deleted since
+        // the last run leaves its shadow and manifest entry behind forever.
         $shadowDir = $this->prepareShadowDir();
 
         if ($shadowDir === null) {
@@ -169,10 +152,8 @@ final class BladeBootstrapper
             return false;
         }
 
-        // Reached only with at least one shadow, because nothing can be reported on a template path
-        // without one: a remap needs a ShadowRegistry entry. The list is the discovered set rather
-        // than the compiled one because the two differ only by compile failures, which are harmless
-        // extras here, and Config::reportIssueInFile() consults nothing but this project-file list.
+        // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry.
+        // Config::reportIssueInFile() consults only this project-file list.
         if (!$this->registrar->markTemplatesReportable($templates)) {
             $this->degrade(
                 "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
@@ -182,20 +163,14 @@ final class BladeBootstrapper
             return false;
         }
 
-        // Every shadow's prelude carries the ambient classes only in stacked docblocks, and Psalm's
-        // scanner only ever sees the last one (see ShadowRegistrar::queueClassLikesForScanning);
-        // queue them here, once per run, so a warm-manifest run (which skips ShadowCompiler entirely)
-        // still gets them.
+        // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
+        // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
+        // (which skips ShadowCompiler) still gets them.
         $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
 
-        // #1505: a vendor directive can compile a class name into a PHP string literal
-        // (`app('Vendor\Package\Class')::method()`) instead of code position or a docblock, which
-        // neither Psalm's scanner nor the ambient queue above ever sees. Read every shadow off DISK
-        // rather than the fresh compile result above: on a warm-manifest run compileAll() never
-        // invokes ShadowCompiler at all (isFresh() short-circuits per template), so the file is the
-        // only source that exists on every run, not just a fresh one. This runs for every shadow
-        // every run, fresh or warm; the per-file token scan costs single-digit milliseconds even
-        // across a thousand shadows, so no manifest slot caches the result.
+        // #1505: a vendor directive can compile a class name into a string literal, invisible to
+        // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
+        // result, so a warm-manifest run (which skips ShadowCompiler) is covered too.
         $collector = new ClassLiteralCollector();
         $literalCandidates = [];
 
@@ -213,11 +188,8 @@ final class BladeBootstrapper
 
         $this->registrar->queueResolvableClassLikesForScanning(\array_keys($literalCandidates));
 
-        // The enqueue goes last because it is the one irreversible step: everything above can fail
-        // and leave the run indistinguishable from Blade having never started. The remap entries
-        // publish in a finally rather than after, because they only RELOCATE issues onto the
-        // template they came from — a partial enqueue that then threw would otherwise report raw
-        // shadow paths, which is strictly worse than entries for shadows nothing analyzed.
+        // Enqueue is the one irreversible step, done last. Remap entries publish in a `finally`:
+        // a partial enqueue that then throws must not leave shadow paths unmapped.
         try {
             $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
         } finally {
@@ -293,9 +265,8 @@ final class BladeBootstrapper
                 continue;
             }
 
-            // Recorded off the bytes that compiled, or that a freshness hit proved identical to
-            // them, because the relocator reads the template again later and a prefix re-derived
-            // from changed bytes silently disables the marker strip ({@see ShadowTarget}).
+            // The relocator re-reads the template later; a prefix derived from stale bytes
+            // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
@@ -312,10 +283,8 @@ final class BladeBootstrapper
                 continue;
             }
 
-            // Deliberately NOT fed into compile(): contract types in the prelude would change every
-            // shadow's content and fingerprint. Declarations are read as a side channel for
-            // call-site validation only — which is also why the contract is built AFTER the compile,
-            // so the read set can be taken off the compiled output without reaching compile().
+            // NOT fed into compile(): contract types in the prelude would change the shadow's
+            // fingerprint. Built AFTER compile so the read set comes off compiled output.
             $shadow = $compiler->compile($template, $source);
 
             if ($shadow instanceof BladeCompileError) {
@@ -329,10 +298,8 @@ final class BladeBootstrapper
                 ? $parser->parseDataContract($source, $shadow->contents)
                 : $parser->parseDeclarations($source);
 
-            // Read from the compiled output, not the raw template: Laravel has already resolved
-            // the directive arguments. Null (not an empty pair) when the pass is off, so a later
-            // flag flip cannot mistake "never collected" for "collected, found nothing" — see
-            // ShadowManifest::isFresh().
+            // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
+            // from "collected nothing".
             $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
 
             try {
@@ -351,13 +318,9 @@ final class BladeBootstrapper
 
 
     /**
-     * View roots as realpaths, in finder order, skipping the ones that do not resolve, deduped by
-     * (path, namespace): a published override's directory is both the last segment of the default
-     * root AND a namespace's own hint root, and both names it earns have to survive. The template
-     * paths this is matched against are realpaths too, so both sides have to be normalized or a
-     * symlinked root never matches its own templates. Callers pass paths already run through
-     * {@see PathCaseCanonicalizer} — this dedup is by exact string, so two spellings of the same
-     * physical root would otherwise realpath to two different strings and survive as two roots.
+     * Realpaths, deduped by (path, namespace): a published override's directory is both the
+     * default root's last segment AND its own hint root, and both names must survive. Callers
+     * pre-canonicalize; this dedups by exact string only.
      *
      * @param list<array{0: string, 1: string|null}> $viewPaths
      *
@@ -375,12 +338,10 @@ final class BladeBootstrapper
                 continue;
             }
 
-            // realpath() expands a symlink using the link's STORED target string, so a link whose
-            // target is spelled in the wrong case re-introduces a mis-cased spelling AFTER the
-            // entry-point canonicalization already ran — canonicalize the resolved form too.
+            // realpath() preserves a symlink's STORED target casing, which can reintroduce a
+            // mis-cased spelling after canonicalization — canonicalize again.
             $resolved = PathCaseCanonicalizer::canonicalize($resolved);
-            // Trimming the filesystem root would leave '', which no is_dir() or prefix test
-            // downstream survives — '/' is an odd but usable view root.
+            // Trimming the filesystem root would leave '', which no downstream check survives.
             $trimmed = \rtrim($resolved, \DIRECTORY_SEPARATOR);
             $resolved = $trimmed === '' ? $resolved : $trimmed;
             // "\0" never occurs in a namespace, so a null (default-root) marker cannot collide.
@@ -398,12 +359,9 @@ final class BladeBootstrapper
     }
 
     /**
-     * Claim a view name for a template this pass could not process, with no declarations attached.
-     *
-     * Laravel renders the first root's file whether or not the plugin could read or compile it, so
-     * leaving the name unclaimed hands it to a same-named template in a later root, whose
-     * declarations would then be checked against callers that never reach it. An empty contract
-     * blocks that without asserting anything about a template we failed on.
+     * Claims a view name with no declarations for a template this pass couldn't process: Laravel
+     * still renders the first root's file, so an unclaimed name would let a same-named template
+     * in a later root wrongly own it.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      */
@@ -414,11 +372,9 @@ final class BladeBootstrapper
     }
 
     /**
-     * A template that declares nothing is registered too, with an empty contract. Skipping it would
-     * leave its view name unclaimed, and a same-named template in a LATER view root would then own
-     * the name and have its declarations checked against callers that Laravel resolves to this
-     * file instead. A template this pass could not process is claimed in the same way — see
-     * {@see claimNameOnly()}.
+     * Registers an empty contract too: skipping it would leave the view name unclaimed for a
+     * same-named template in a LATER root to wrongly own. {@see claimNameOnly()} is the same
+     * idea for a template this pass couldn't process at all.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array{0: list<string>, 1: bool}|null   $dataIncludes null when the collection pass was off
@@ -429,9 +385,8 @@ final class BladeBootstrapper
         ?ViewDataContract $contract,
         ?array $dataIncludes = null,
     ): void {
-        // A published override's file matches more than one root (its default-root name AND its
-        // namespace's own name) — every match gets registered, or one of the two names a call site
-        // can legitimately use resolves to nothing.
+        // A published override's file matches two roots (default-root name AND namespace name);
+        // both must register or one becomes unresolvable.
         foreach (ViewName::resolve($templatePath, $roots) as [$rootIndex, $viewName]) {
             if (!$this->templateOwnsName($viewName, $templatePath)) {
                 continue;
@@ -475,20 +430,11 @@ final class BladeBootstrapper
     }
 
     /**
-     * View roots paired with their namespace (null for the default, unqualified roots), or null when
-     * the finder cannot be resolved. `getPaths()` roots come first, in finder order — deciding which
-     * template wins a name two roots both define — followed by each `getHints()` namespace's own
-     * paths, in the finder's own order (a namespace's published override before its package
-     * fallback, see `ServiceProvider::loadViewsFrom()`). `loadViewsFrom()` populates hints via a
-     * `callAfterResolving('view')` callback, so `resolveFinder()` touches the `'view'` binding itself
-     * rather than depending on some earlier, unrelated resolve to have already fired it.
+     * View roots paired with namespace (null = default). `getPaths()` roots first — decides which
+     * template wins a shared name — then each namespace's `getHints()` roots in finder order.
      *
-     * Hint roots inside the analyzed project's Composer vendor directory are dropped so third-party
-     * template diagnostics and annotation writes stay outside the analyzed project. A project's own
-     * published override (`resources/views/vendor/<namespace>`, see {@see ViewName}) is NOT inside
-     * the vendor directory — the boundary is the Composer install root, not the literal substring
-     * "vendor" — so that case is unaffected. `getPaths()` roots are never filtered: Laravel never
-     * configures one inside the vendor directory.
+     * Vendor-directory hint roots are dropped so third-party template diagnostics and annotation
+     * writes stay outside the analyzed project; `getPaths()` roots are never filtered.
      *
      * @return list<array{0: string, 1: string|null}>|null
      */
@@ -517,12 +463,10 @@ final class BladeBootstrapper
 
         foreach ($hints as $namespace => $hintPaths) {
             foreach ($hintPaths as $hint) {
-                // Canonicalized BEFORE the vendor check and before entering $roots: the same
-                // physical view root reaches here twice under different case (a published
-                // override's own hint vs. its default-root path, #1552) — realpath() alone cannot
-                // collapse them (it preserves the caller's casing on a case-insensitive
-                // filesystem), so without this the vendor filter below and every downstream
-                // dedup-by-string see two roots instead of one.
+                // Canonicalized before the vendor check: the same physical root can reach here
+                // twice under different case (a published override's hint vs. its default-root
+                // path, #1552), and realpath() alone won't collapse that on a case-insensitive
+                // filesystem.
                 $hint = PathCaseCanonicalizer::canonicalize($hint);
 
                 if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
@@ -541,12 +485,9 @@ final class BladeBootstrapper
     }
 
     /**
-     * Whether Laravel itself would resolve `$viewName` to `$templatePath`. Only consulted for
-     * qualified names in a namespace that lost a hint root to the vendor filter: there, an earlier
-     * (dropped) root can still own the name, and letting a surviving root's same-named template
-     * claim it would cover the file with references that never reach it and check callers against
-     * a contract Laravel never renders. Everywhere else root order mirrors the finder exactly, so
-     * no filesystem probe is spent. A finder failure keeps the claim (the pre-check behavior).
+     * Whether Laravel would actually resolve `$viewName` to `$templatePath`. Only checked for a
+     * namespace that lost a hint root to the vendor filter: the dropped root can still own the
+     * name there. A finder failure keeps the claim (fail open).
      */
     private function templateOwnsName(string $viewName, string $templatePath): bool
     {
@@ -562,17 +503,15 @@ final class BladeBootstrapper
             return true;
         }
 
-        // The finder resolves against its OWN (uncanonicalized) hint list, so a mis-cased root
-        // can still hand back a differently-cased winner than the canonical $templatePath this is
-        // compared against — canonicalize it too, or a legitimately-owned name would read as lost.
+        // The finder resolves against its OWN uncanonicalized hints, so its winner needs
+        // canonicalizing too before comparing.
         return $winner !== false && PathCaseCanonicalizer::canonicalize($winner) === $templatePath;
     }
 
     /**
-     * The analyzed project's own Composer vendor directory, or the test override. Null when it
-     * cannot be determined, in which case the vendor filter above is skipped rather than guessed
-     * at. See {@see VendorDirectory} for why the boundary is the
-     * install root and not the substring `vendor`.
+     * The analyzed project's Composer vendor directory, or the test override. Null when it
+     * cannot be determined — the vendor filter above is then skipped. {@see VendorDirectory} for
+     * why the boundary is the install root, not the substring `vendor`.
      */
     private function vendorDirectory(): ?string
     {
@@ -582,10 +521,8 @@ final class BladeBootstrapper
             return null;
         }
 
-        // The hints tested against this boundary are canonicalized, so the boundary has to be too,
-        // in the same realpath-then-canonicalize order: a configured or derived vendor path whose
-        // spelling differs from the on-disk dirent casing otherwise fails the prefix test against
-        // every hint, and the filter silently stops filtering anything.
+        // Must match the hints' canonicalization (realpath-then-canonicalize) or a vendor path
+        // whose spelling differs from the on-disk casing fails the prefix test against every hint.
         $resolved = \realpath($vendorDir);
 
         return $resolved === false ? $vendorDir : PathCaseCanonicalizer::canonicalize($resolved);
@@ -597,12 +534,10 @@ final class BladeBootstrapper
     }
 
     /**
-     * `ViewServiceProvider::registerViewFinder()` binds 'view.finder' with `bind()`, not
-     * `singleton()` — every `make('view.finder')` constructs a BRAND NEW `FileViewFinder`, none of
-     * which carries the namespace hints `loadViewsFrom()` added to the ONE finder instance the
-     * 'view' Factory singleton captured at its own construction. Resolving 'view' and reading
-     * `getFinder()` off it is therefore the only path that ever sees hints; 'view.finder' is kept
-     * only as a fallback for a boot that bound it directly without a Factory at all.
+     * `ViewServiceProvider::registerViewFinder()` binds `'view.finder'` with `bind()`, not
+     * `singleton()`: a fresh `make('view.finder')` never carries the hints `loadViewsFrom()` added
+     * to the `'view'` Factory's own finder. `'view.finder'` is kept only as a fallback for a boot
+     * with no Factory at all.
      */
     private function resolveFinder(): ?FileViewFinder
     {
@@ -694,10 +629,8 @@ final class BladeBootstrapper
                     $real = $file->getRealPath();
 
                     if ($real !== false) {
-                        // getRealPath() expands a symlinked template through the link's STORED
-                        // target, so a mis-cased target re-introduces a spelling the roots already
-                        // collapsed — the same physical file would land here twice, under two
-                        // keys, and become two shadows.
+                        // getRealPath() can expand a mis-cased symlink target, reintroducing a
+                        // spelling the roots already collapsed — same file, two shadows.
                         $templates[PathCaseCanonicalizer::canonicalize($real)] = true;
                     }
                 }
