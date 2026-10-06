@@ -1,0 +1,9 @@
+{
+    "name": "psalm-laravel-plugin/blade-issue-remap-fixture",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}
