@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791302360446,
+  "lastUpdate": 1791304501370,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12490,6 +12490,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "861ccfd755ad0ca97f9de2d5d4d17426294ac1b8",
+          "message": "Support laravel/ai 1.x (#1588)\n\nCloses #1586.\n\nThe optional `laravel/ai` integration now targets **1.x only** (`>=1.0.0 <2.0.0`). On 0.11.x the gate stays off and the plugin contributes nothing — no stubs, no handlers, no issue policy — rather than reporting false positives against declarations 1.0 renamed.\n\n## Stubs\n\nRewritten against `vendor/laravel/ai/src`: `TextUsage`/`TranscriptionUsage`, the widened `AgentInput|UserMessage|Decisions|string` prompt union, `usingVercelDataProtocol(?string)`, `usingProtocol()`, `catch()`, removed `pausedProviderContentBlocks()`, the 13-parameter `AgentPrompt` constructor. Plus 11 new 1.0-only classes: `PendingStep`, the classification surface, the answer data objects.\n\n## Taint coverage\n\n- New sinks: `Promptable::withMessages()`, `AgentPrompt::withTools()`, the `PendingStep` middleware mutators, `Classification::of()`, the `Boolean`/`Choice`/`Score` question instructions and criteria, `CollectionChoice::decide()`, `AssistantMessage::__construct()`, `StructuredAnonymousAgent::__construct()`, `PendingAudioGeneration::instructions()`.\n- New sources: `$reasoning` on `TextResponse`, `StreamableAgentResponse`, `Step`, `StepResponse`; `$text` on `Step`, `StepResponse`, `TranscriptionSegment`; `$delta` on the streaming `TextDelta`/`ReasoningDelta`; `$citations`; the classification answer payloads.\n\n## Prompt-guard fix\n\n`PromptGuardTaintHandler` modelled `Illuminate\\Pipeline::carry()`, which prefers `__invoke()`. laravel/ai 1.x does not use that pipeline for agent middleware: `Gateway\\TextGenerationLoop::runStep()` calls `handle()` on every non-Closure entry. A guard annotated only on `__invoke()` was therefore exempting a call site laravel/ai never guards — a false negative. The escape is now read from `handle()` only.\n\nA second exemption gap: an agent that remembers conversations keeps reporting, because `RememberConversation` generates the conversation title with a model call that passes no agent options, so no agent middleware runs on the raw prompt.\n\n## Parity checker\n\n- Scans the single stub directory; the `@since` gate covers a method, an `implements` clause and a whole class (`Classification\\CollectionChoice` ships only in 1.1.0).\n- Two false positives fixed: `iterable` inside a union, and object `new` parameter defaults.\n- New `@stub-waive` tag records a deliberate deviation inside the stub, next to the class, with a mandatory reason. Waived findings are still printed and go stale when they stop matching. A trailing `*` waives a family; a bare `*` is rejected. Applied to the 52 members that cannot carry text to or from a model.\n\n## CI\n\n`type_tests_laravel_ai` runs exact `1.0.0` and floating `>=1.0.0 <2.0.0`, plus a non-blocking `1.x-dev` canary. The `/psalm-delta` registry gains two apps that actually use laravel/ai 1.x (`agent-fleet`, `relaticle`), and its per-app `prime` hook is renamed `before_install`.\n\n## Known gaps, each documented and pinned\n\n- The prompt macros laravel/ai registers (`Str::summarize`, `Stringable::toAudio`, `Str::decide`, `Collection::decide`, `Collection::rerank`, ...) carry no sink: a macro pseudo-method has no per-method docblock for one.\n- `$citations` is a registered source with no observable flow, because Psalm drops taint through `Collection` reads.",
+          "timestamp": "2026-10-06T18:31:19+02:00",
+          "tree_id": "2699aa03fad6e08b953082a26863cfb85ce2ca33",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/861ccfd755ad0ca97f9de2d5d4d17426294ac1b8"
+        },
+        "date": 1791304498767,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.84,
+            "range": "± 1.44",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1371,
             "unit": "MB"
           }
         ]
