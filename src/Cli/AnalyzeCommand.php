@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Cli;
 
-use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
+use Psalm\LaravelPlugin\Config\Setting;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -54,34 +55,26 @@ final class AnalyzeCommand extends Command
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
         );
 
-        // Declared for `analyze --help` only: scanArguments() consumes the toggle from raw argv, and the
-        // command forwards it to psalm as PSALM_LARAVEL_OPTIONS because psalm rejects unknown flags.
+        // The two overrides below are declared for `analyze --help` only: scanArguments() consumes them
+        // from raw argv and the plugin in the child psalm applies them, because psalm rejects unknown flags.
         $this->addOption(
             'blade',
             null,
             InputOption::VALUE_NEGATABLE,
-            'Force Blade template analysis on (--blade) or off (--no-blade) for this run, overriding psalm.xml.',
+            'Shorthand for --plugin-option blade=true (--blade) or blade=false (--no-blade).',
         );
-    }
-
-    /**
-     * The child's environment: null (inherit) unless a Blade toggle was given. The toggle travels as a
-     * `blade=…` token appended to any existing PSALM_LARAVEL_OPTIONS, so it wins by last-key-wins.
-     * An explicit array REPLACES the environment in proc_open, hence the whole `getenv()` is copied.
-     *
-     * @return array<string, string>|null
-     */
-    private function childEnvironment(?bool $blade): ?array
-    {
-        if ($blade === null) {
-            return null;
-        }
-
-        $env = \getenv();
-        $inherited = $env[PluginConfig::OPTIONS_ENV_VAR] ?? '';
-        $env[PluginConfig::OPTIONS_ENV_VAR] = \trim($inherited . ' blade=' . ($blade ? 'true' : 'false'));
-
-        return $env;
+        $this->addOption(
+            'plugin-option',
+            null,
+            InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
+            'Override a plugin setting for this run, over PSALM_LARAVEL_OPTIONS and psalm.xml (KEY=VALUE, repeatable).',
+        );
+        $this->setHelp(
+            "Plugin settings accepted by <info>--plugin-option KEY=VALUE</info>:\n\n"
+            . \implode("\n", \array_map(static fn(Setting $setting): string => $setting->describe(), Setting::all()))
+            . "\n\nPrecedence: --plugin-option > PSALM_LARAVEL_OPTIONS (whitespace-separated KEY=VALUE) > psalm.xml > default."
+            . "\nA repeated key is last-wins; configDirectory accumulates, and a higher layer replaces the lower list.",
+        );
     }
 
     #[\Override]
@@ -106,14 +99,38 @@ final class AnalyzeCommand extends Command
             return Command::FAILURE;
         }
 
-        $scan = $this->scanArguments();
+        // Validate both layers here so a typo is a clean message, not a stack trace from inside psalm.
+        try {
+            $scan = $this->scanArguments();
+            $env = \getenv();
+            $effective = PluginOverrides::fromEnv($env[PluginOverrides::ENV_VAR] ?? null)
+                ->over(PluginOverrides::parse($scan['options'], '--plugin-option'));
+            $childEnv = $scan['options'] === []
+                ? null
+                : [...$env, PluginOverrides::CLI_ENV_VAR => \json_encode($scan['options'], \JSON_THROW_ON_ERROR)];
+        } catch (\InvalidArgumentException|\JsonException $e) {
+            $io->error($e->getMessage());
+            return Command::FAILURE;
+        }
+
+        $forwarded = $scan['forwarded'];
+        $boundary = \array_search('--', $forwarded, true);
+        $psalmFlags = $boundary === false ? $forwarded : \array_slice($forwarded, 0, $boundary);
+
+        // Toggling `blade` changes which files are analysed under an identical config hash, and psalm's
+        // persisted file-reference cache keeps the shadows' references (stale dead-code findings) on an
+        // on->off flip. Only `--no-reference-cache` fixes that; every other setting is report-only.
+        if ($effective->has('blade') && \array_intersect(['--no-cache', '--no-reference-cache'], $psalmFlags) === []) {
+            \array_unshift($forwarded, '--no-reference-cache');
+        }
 
         // proc_open with an array argv runs the binary directly (no shell), so
         // forwarded tokens are passed literally and never re-interpreted.
-        $command = [\PHP_BINARY, $psalmBin, ...$scan['forwarded']];
+        $command = [\PHP_BINARY, $psalmBin, ...$forwarded];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
-        $process = \proc_open($command, $descriptors, $pipes, $cwd, $this->childEnvironment($scan['blade']));
+        // An explicit env array REPLACES the environment in proc_open, hence the whole getenv() is copied above.
+        $process = \proc_open($command, $descriptors, $pipes, $cwd, $childEnv);
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
@@ -141,14 +158,15 @@ final class AnalyzeCommand extends Command
     }
 
     /**
-     * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run Blade toggle
-     * (`--blade` true, `--no-blade` false, the last one wins, null when neither was given). One scan
-     * yields both, so the stripped tokens and the toggle cannot drift apart.
+     * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run plugin
+     * overrides, as ordered `KEY=VALUE` tokens: `--plugin-option KEY=VALUE` / `--plugin-option=KEY=VALUE`
+     * verbatim, `--blade` / `--no-blade` as `blade=true|false`, so the last one wins whichever spelling it
+     * used. One scan yields both, so the stripped tokens and the overrides cannot drift apart.
      *
-     * Raw argv, not parsed input: Symfony binds `--flags` as options (not into a
-     * declared argument), and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
+     * Raw argv, not parsed input: with ignoreValidationErrors one bad option makes Symfony drop ALL
+     * parsed options, and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
      * Drops argv[0] and the explicit command-name/alias token (the default-command
-     * form has none, so nothing is stripped). The toggles are consumed here because psalm
+     * form has none, so nothing is stripped). The override flags are consumed here because psalm
      * rejects flags it does not know; scanning stops at a standalone `--`, past which every
      * token is positional, as in Symfony's own option parsing.
      *
@@ -159,7 +177,9 @@ final class AnalyzeCommand extends Command
      * Public (not private) so it is unit-testable: CommandTester can't set argv.
      *
      * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
-     * @return array{forwarded: list<string>, blade: ?bool}
+     * @return array{forwarded: list<string>, options: list<string>}
+     *
+     * @throws \InvalidArgumentException When `--plugin-option` has no value.
      */
     public function scanArguments(?array $argv = null): array
     {
@@ -175,21 +195,34 @@ final class AnalyzeCommand extends Command
         }
 
         $forwarded = [];
-        $blade = null;
+        $options = [];
 
-        foreach ($tokens as $index => $token) {
+        for ($index = 0, $count = \count($tokens); $index < $count; ++$index) {
+            $token = $tokens[$index];
+
             if ($token === '--') {
-                return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'blade' => $blade];
+                return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'options' => $options];
             }
 
             if ($token === '--blade' || $token === '--no-blade') {
-                $blade = $token === '--blade';
-                continue;
-            }
+                $options[] = 'blade=' . ($token === '--blade' ? 'true' : 'false');
+            } elseif (\str_starts_with($token, '--plugin-option=')) {
+                $options[] = \substr($token, \strlen('--plugin-option='));
+            } elseif ($token === '--plugin-option') {
+                $value = $tokens[$index + 1] ?? '-';
 
-            $forwarded[] = $token;
+                // Mirrors Symfony: a following token starting with `-` is an option, not the value.
+                if (\str_starts_with($value, '-')) {
+                    throw new \InvalidArgumentException('--plugin-option requires a KEY=VALUE argument, e.g. --plugin-option blade=true.');
+                }
+
+                $options[] = $value;
+                ++$index;
+            } else {
+                $forwarded[] = $token;
+            }
         }
 
-        return ['forwarded' => $forwarded, 'blade' => $blade];
+        return ['forwarded' => $forwarded, 'options' => $options];
     }
 }

@@ -9,19 +9,13 @@ use Psalm\Config;
 /**
  * Immutable value object holding all plugin configuration.
  *
- * Built once from the `<pluginClass>` XML element in psalm.xml,
+ * Built once from the `<pluginClass>` XML element in psalm.xml plus the per-run {@see PluginOverrides},
  * then threaded through to handlers that need it.
  *
  * @internal
  */
 final readonly class PluginConfig
 {
-    /**
-     * Process environment variable carrying per-run setting overrides (`blade=true`), which win over
-     * the XML. A real process variable, not a Laravel `.env` entry: it is read before the app boots.
-     */
-    public const OPTIONS_ENV_VAR = 'PSALM_LARAVEL_OPTIONS';
-
     /**
      * @param list<string> $configDirectories
      *
@@ -70,8 +64,13 @@ final readonly class PluginConfig
         public bool $failOnInternalError,
     ) {}
 
-    public static function fromXml(?\SimpleXMLElement $config): self
+    /**
+     * Resolves every setting per key: override layers (CLI over env, already merged) > XML > default.
+     * The XML is read and validated first, so a malformed element fails even when an override wins.
+     */
+    public static function fromXml(?\SimpleXMLElement $config, ?PluginOverrides $overrides = null): self
     {
+        $overrides ??= PluginOverrides::none();
         $columnFallbackValue = self::xmlStringAttr($config?->modelProperties, 'columnFallback', 'migrations');
         $columnFallback = ColumnFallback::tryFrom($columnFallbackValue);
 
@@ -86,50 +85,51 @@ final readonly class PluginConfig
             );
         }
 
+        $columnFallbackOverride = $overrides->string('modelProperties.columnFallback');
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
-        $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
+        $xmlExperimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        // experimental = early access to rules not yet promoted to default; an explicit
-        // value always overrides it, in either direction.
-        $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks') ?? $experimental;
-        $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
-        $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames') ?? $experimental;
+        // experimental = early access to rules not yet promoted to default; an explicit value in any
+        // layer always overrides it, in either direction, so it resolves after the layers are merged.
+        $experimental = $overrides->bool('experimental') ?? $xmlExperimental;
+        $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks');
+        $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
+        $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $findPromptInjection = self::xmlPromptInjectionAttr($config);
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
-        // Computed first so a malformed <blade> element still fails when the env override would win.
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
-        $bladeEnabled = self::envBladeOverride() ?? $xmlBladeEnabled;
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
         return new self(
-            modelPropertiesColumnFallback: $columnFallback,
-            configDirectories: $configDirectories,
-            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
-            resolveConfigReturnTypes: $resolveConfigReturnTypes,
-            reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
-            findMissingTranslations: $findMissingTranslations,
-            findMissingViews: $findMissingViews,
-            findUnconfiguredFilesystemDisks: $findUnconfiguredFilesystemDisks,
-            findUnregisteredRouteNames: $findUnregisteredRouteNames,
-            findSerializedQueuedModels: $findSerializedQueuedModels,
-            findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
-            findPromptInjection: $findPromptInjection,
+            modelPropertiesColumnFallback: $columnFallbackOverride === null ? $columnFallback : ColumnFallback::from($columnFallbackOverride),
+            configDirectories: $overrides->list('configDirectory') ?? $configDirectories,
+            resolveDynamicWhereClauses: $overrides->bool('resolveDynamicWhereClauses') ?? $resolveDynamicWhereClauses,
+            resolveConfigReturnTypes: $overrides->bool('resolveConfigReturnTypes') ?? $resolveConfigReturnTypes,
+            reportImplicitQueryBuilderCalls: $overrides->bool('reportImplicitQueryBuilderCalls') ?? $reportImplicitQueryBuilderCalls,
+            findMissingTranslations: $overrides->bool('findMissingTranslations') ?? $findMissingTranslations,
+            findMissingViews: $overrides->bool('findMissingViews') ?? $findMissingViews,
+            findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? $experimental,
+            findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,
+            findSerializedQueuedModels: $overrides->bool('findSerializedQueuedModels') ?? $findSerializedQueuedModels ?? $experimental,
+            findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
+            findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
             cachePath: $cachePath,
-            bladeEnabled: $bladeEnabled,
-            bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
-            bladeValidateViewData: $bladeValidateViewData,
-            bladeReportUnusedViewData: $bladeReportUnusedViewData,
-            bladeReportMixedIssues: $bladeReportMixedIssues,
+            // Sub-settings below never reach this switch: only `blade` itself enables the Blade pass.
+            bladeEnabled: $overrides->bool('blade') ?? $xmlBladeEnabled,
+            bladeCacheDir: self::resolveBladeCacheDir($config, $overrides, $cachePath),
+            bladeValidateViewData: $overrides->bool('blade.validateViewData') ?? $bladeValidateViewData,
+            bladeReportUnusedViewData: $overrides->bool('blade.reportUnusedViewData') ?? $bladeReportUnusedViewData,
+            bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
             experimental: $experimental,
-            failOnInternalError: $failOnInternalError,
+            failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
         );
     }
 
@@ -271,15 +271,6 @@ final readonly class PluginConfig
     }
 
     /**
-     * Shadow files default to a subdirectory of the plugin's own cache directory, alongside the
-     * generated alias stub and the migration schema cache: `--clear-cache` then drops them too.
-     *
-     * Deliberately outside the project tree. A shadow that a `<projectFiles>` glob picks up
-     * becomes reportable, which both leaks compiled-template issues at their compiled locations
-     * and makes Psalm skip taint flows whose source sits in a reportable file. A `cacheDir`
-     * pointing inside the project must therefore be excluded from `<projectFiles>` by the user.
-     */
-    /**
      * `<blade />` opts in by its presence, so its settings live on the same element without a
      * separate switch; `value="false"` turns a present element off without deleting it.
      */
@@ -296,55 +287,17 @@ final readonly class PluginConfig
     }
 
     /**
-     * Per-run override of plugin settings from the process environment: whitespace-separated
-     * `KEY=VALUE` tokens, keys mirroring the XML names, a repeated key last-wins. It exists because
-     * `vendor/bin/psalm` rejects unknown flags and plugins only ever see the XML; `psalm-laravel
-     * analyze --blade` hands its toggle to the child psalm through this variable.
+     * Shadow files default to a subdirectory of the plugin's own cache directory, alongside the
+     * generated alias stub and the migration schema cache: `--clear-cache` then drops them too.
      *
-     * Every token is validated, including ones a later repeat shadows, so a typo never hides.
-     * Returns null (no override) for an unset, empty or blank variable and when `blade` is absent.
+     * Deliberately outside the project tree. A shadow that a `<projectFiles>` glob picks up
+     * becomes reportable, which both leaks compiled-template issues at their compiled locations
+     * and makes Psalm skip taint flows whose source sits in a reportable file. A `cacheDir`
+     * pointing inside the project must therefore be excluded from `<projectFiles>` by the user.
      */
-    private static function envBladeOverride(): ?bool
+    private static function resolveBladeCacheDir(?\SimpleXMLElement $config, PluginOverrides $overrides, string $cachePath): string
     {
-        $raw = \getenv(self::OPTIONS_ENV_VAR);
-
-        if (!\is_string($raw)) {
-            return null;
-        }
-
-        $blade = null;
-        $tokens = \preg_split('/\s+/', $raw, -1, \PREG_SPLIT_NO_EMPTY);
-
-        foreach ($tokens === false ? [] : $tokens as $token) {
-            [$key, $value] = \explode('=', $token, 2) + [1 => ''];
-
-            if ($key === '' || $value === '') {
-                throw new \InvalidArgumentException(
-                    self::OPTIONS_ENV_VAR . " token '{$token}' is invalid: expected KEY=VALUE with a non-empty value.",
-                );
-            }
-
-            if ($key !== 'blade') {
-                throw new \InvalidArgumentException(
-                    self::OPTIONS_ENV_VAR . " contains unknown key '{$key}'. Supported keys: 'blade'.",
-                );
-            }
-
-            if (!\in_array($value, ['true', 'false'], true)) {
-                throw new \InvalidArgumentException(
-                    "Invalid " . self::OPTIONS_ENV_VAR . " blade value '{$value}'. Valid values: 'true', 'false'.",
-                );
-            }
-
-            $blade = $value === 'true';
-        }
-
-        return $blade;
-    }
-
-    private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
-    {
-        $configured = \rtrim(self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
+        $configured = \rtrim($overrides->string('blade.cacheDir') ?? self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
 
         if ($configured !== '') {
             return $configured;

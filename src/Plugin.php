@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -32,7 +33,7 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $pluginConfig = PluginConfig::fromXml($config);
+        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::fromEnvironment(\getenv()));
         require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
