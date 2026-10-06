@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791285121499,
+  "lastUpdate": 1791285879023,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12385,6 +12385,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1373,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "60c7a1d5ae6e616d7a60d7ef56ce0815947a8155",
+          "message": "Add `psalm-laravel analyze --blade/--no-blade` per-run toggle (#1704)\n\nPsalm rejects unknown flags and plugins only see the XML, so the toggle reaches the child psalm as PSALM_LARAVEL_OPTIONS (whitespace-separated KEY=VALUE, last key wins), resolved in PluginConfig::fromXml(). The env var also works with bare vendor/bin/psalm; invalid input fails the run.\n\nRefs #1702",
+          "timestamp": "2026-10-06T13:21:14+02:00",
+          "tree_id": "656f51b3725079bfef67ebd3bac2289b4aaf409d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/60c7a1d5ae6e616d7a60d7ef56ce0815947a8155"
+        },
+        "date": 1791285877828,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.53,
+            "range": "± 0.42",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1371,
             "unit": "MB"
           }
         ]
