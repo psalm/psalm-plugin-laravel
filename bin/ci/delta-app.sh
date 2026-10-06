@@ -16,7 +16,7 @@
 #     --plugin-base /path/plugin-base --plugin-head /path/plugin-head \
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
 #     [--php 8.3] [--project-dir app] [--date-marker cache] \
-#     [--prime 'composer update foo --no-interaction'] \
+#     [--before-install 'composer update foo --no-interaction'] \
 #     [--psalm-args '--php-version=8.0'] \
 #     [--app-src /cache/monica-src] [--mem 4G]
 #
@@ -35,7 +35,7 @@ set -euo pipefail
 
 APP="" REPO="" REF="" PLUGIN_BASE="" PLUGIN_HEAD="" OUT=""
 BASE_LABEL="" HEAD_LABEL="" PROJECT_DIR=""
-DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G" PSALM_ARGS=""
+DATE_MARKER="cache" BEFORE_INSTALL="" APP_SRC="" MEM="4G" PSALM_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
         --php) shift 2 ;;
         --project-dir) PROJECT_DIR="$2"; shift 2 ;;
         --date-marker) DATE_MARKER="$2"; shift 2 ;;
-        --prime) PRIME="$2"; shift 2 ;;
+        --before-install) BEFORE_INSTALL="$2"; shift 2 ;;
         --psalm-args) PSALM_ARGS="$2"; shift 2 ;;
         --app-src) APP_SRC="$2"; shift 2 ;;
         --mem) MEM="$2"; shift 2 ;;
@@ -270,9 +270,9 @@ if [[ "$need_install" == 1 ]]; then
     echo "[$APP] installing dependencies" >&2
     (
         cd "$APP_SRC"
-        if [[ -n "$PRIME" ]]; then
-            echo "[$APP] prime: $PRIME" >&2
-            eval "$PRIME"
+        if [[ -n "$BEFORE_INSTALL" ]]; then
+            echo "[$APP] before_install: $BEFORE_INSTALL" >&2
+            eval "$BEFORE_INSTALL"
         fi
     )
     configure_plugin_repo "$APP_SRC" "$PLUGIN_BASE" 1

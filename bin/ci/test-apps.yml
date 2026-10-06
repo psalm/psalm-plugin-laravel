@@ -31,7 +31,7 @@
 #   groups       tags from `groups:` below; [] = reachable only by name or `all`
 #   project_dir  optional explicit Psalm projectFiles root, `*` globs allowed (else
 #                auto-detected: app/ Laravel apps, packages/*/src monorepos, src/ libs)
-#   prime        optional shell run in the app dir before `composer update`
+#   before_install  optional shell run in the app dir before `composer update`
 #                (one-off install quirks, e.g. bumping a flagged dependency)
 #   psalm_args   optional extra CLI args appended to the Psalm invocation, split
 #                on whitespace (e.g. "--php-version=8.0" to pin the ANALYSIS php
@@ -67,7 +67,7 @@ apps:
     groups: [default, phpunit, sanctum, inertia]
     # Monica's lock pins laravel-lang/http-statuses at a version Packagist flags
     # as malware; bump that one package (constraint ^3.8) before install.
-    prime: composer update laravel-lang/http-statuses --no-interaction --no-progress --ignore-platform-reqs
+    before_install: composer update laravel-lang/http-statuses --no-interaction --no-progress --ignore-platform-reqs
 
   - name: pixelfed
     repo: https://github.com/pixelfed/pixelfed.git
@@ -122,7 +122,7 @@ apps:
     # on the covariance check the moment the class loads. No composer.lock is
     # committed for this repo (it's a library), so nothing pins the solve away
     # from ^3.0 on its own; cap the constraint before the real install.
-    prime: composer require psr/simple-cache:"^1.0||^2.0" --no-update --no-interaction
+    before_install: composer require psr/simple-cache:"^1.0||^2.0" --no-update --no-interaction
 
   - name: bagisto
     repo: https://github.com/bagisto/bagisto.git
@@ -150,7 +150,7 @@ apps:
     groups: [octane, blade, pest, livewire]
     # config/secure-headers.php parse_url()s env('VITE_ECHO_ADDRESS') at boot, so
     # composer's artisan scripts fatal without the example .env.
-    prime: cp .env.example .env
+    before_install: cp .env.example .env
 
   - name: vito
     repo: https://github.com/vitodeploy/vito.git
@@ -204,7 +204,7 @@ apps:
     # artisan scripts; and config/broadcasting.php builds a Pusher client that
     # fatals on a null REVERB_APP_SECRET. Disable the plugin, pin the locked
     # commit, and give the scripts an .env with a secret.
-    prime: >-
+    before_install: >-
       composer config --no-interaction allow-plugins.laravel/vet false
       && composer require --no-update --no-interaction
       "shuvroroy/filament-spatie-laravel-backup:dev-main#b0508d906e4b5b3b38da17440fa93e5a0ad996c4"
@@ -218,6 +218,10 @@ apps:
     # Agent-fleet manager: ~70 files import Laravel\Ai, so it exercises agents,
     # tools and streaming rather than a single prompt call. Its `^1.0` resolves
     # inside the plugin's gate, unlike the 0.11-pinned apps above.
+    # `artisan boost:update` runs in post-update-cmd and exits 1 without the
+    # project's own config; the whole hook only publishes assets, which a
+    # type-only analysis never reads.
+    before_install: composer config --no-interaction --unset scripts.post-update-cmd
 
   - name: relaticle
     repo: https://github.com/relaticle/relaticle.git
@@ -226,3 +230,5 @@ apps:
     groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire, large]
     # The densest laravel/ai usage found in public code (~115 files), on a
     # Filament 5 CRM, so the AI surface is analysed beside a real admin panel.
+    # Same asset-publishing hook as agent-fleet; dropped for the same reason.
+    before_install: composer config --no-interaction --unset scripts.post-update-cmd
