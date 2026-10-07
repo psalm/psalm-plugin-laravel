@@ -246,4 +246,13 @@ final class TemplateAnnotatorTest extends TestCase
         $this->assertNotNull($result, 'the parser reads one comment here, and its text is not a declaration');
         $this->assertSame("{{-- @var X \$x --}}\n{{-- note {{-- @var X \$x --}}\n<p>x</p>\n", $result[0]);
     }
+
+    #[Test]
+    public function reads_a_live_comment_whose_start_a_dead_match_would_otherwise_swallow(): void
+    {
+        // The dead `{{-- @var A $a` inside `@php` lazily runs to the LIVE comment's `--}}`.
+        $source = "@php {{-- @var A \$a @endphp {{-- @var B \$b --}}\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['b' => 'B']));
+    }
 }

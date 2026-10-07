@@ -30,9 +30,10 @@ final class TemplateAnnotator
      * A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one.
      * Group 1 is the inner content, which is what {@see ContractParser::VAR_PATTERN} reads.
      *
-     * Matches raw source, so it also hits text the parser ignores; go through {@see self::liveContractComments()}.
+     * `\G`-anchored: only meaningful at an offset {@see self::liveContractComments()} supplies, because
+     * an unanchored scan also hits dead text, whose lazy match can swallow a live comment's start.
      */
-    private const CONTRACT_COMMENT = '/\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
+    private const CONTRACT_COMMENT = '/\G\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
 
     /**
      * @param array<string, string> $vars variable name (without `$`) => type string
@@ -127,9 +128,9 @@ final class TemplateAnnotator
     }
 
     /**
-     * CONTRACT_COMMENT matches that {@see ContractParser} would also read: those starting where a
-     * top-level Blade comment does. A `{{-- @var --}}` inside `@verbatim`, `@php`, raw PHP, or
-     * another comment sits within a larger masked range, so it is literal text, not a declaration.
+     * CONTRACT_COMMENT matches at each top-level Blade comment, the only place {@see ContractParser}
+     * reads a declaration. A `{{-- @var --}}` inside `@verbatim`, `@php`, raw PHP, or another comment
+     * sits within a larger masked range, so it is literal text.
      *
      * @return list<array{0: string, 1: int, 2: string}> full match, byte offset, group 1
      *
@@ -137,23 +138,14 @@ final class TemplateAnnotator
      */
     private static function liveContractComments(string $source): array
     {
-        if (\preg_match_all(self::CONTRACT_COMMENT, $source, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
-            return [];
-        }
-
-        $commentStarts = [];
-
-        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
-            if (\str_starts_with($text, '{{--')) {
-                $commentStarts[$offset] = true;
-            }
-        }
-
         $live = [];
 
-        foreach ($matches as $match) {
-            if (isset($commentStarts[$match[0][1]])) {
-                $live[] = [$match[0][0], $match[0][1], $match[1][0]];
+        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
+            if (
+                \str_starts_with($text, '{{--')
+                && \preg_match(self::CONTRACT_COMMENT, $source, $match, \PREG_OFFSET_CAPTURE, $offset) === 1
+            ) {
+                $live[] = [$match[0][0], $offset, $match[1][0]];
             }
         }
 
