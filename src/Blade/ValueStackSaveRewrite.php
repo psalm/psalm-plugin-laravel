@@ -24,6 +24,11 @@ namespace Psalm\LaravelPlugin\Blade;
  * own PHP comment, a `@verbatim` body) is never rewritten. The replacement stays on its line, so
  * {@see LineMapBuilder} sees nothing different.
  *
+ * A template with an author-written `unset($value)` is left alone: past it the prelude declaration
+ * no longer holds, and the rewritten condition proves nothing to Psalm, so the save's `$value` read
+ * would report as undefined. The compiler's own end-of-block `unset($value)` restores the outer value
+ * right after, so it does not count.
+ *
  * @internal
  *
  * @psalm-immutable
@@ -34,6 +39,9 @@ final class ValueStackSaveRewrite
     private const SAVE_PATTERN = '/if \((session|context)\(\)->has\(\$__\1Args\[0\]\)\) :\R'
         . '(if \(isset\(\$value\)\) \{) \$__\1Previous\[\] = \$value; \}\R'
         . '\$value = \1\(\)->get\(\$__\1Args\[0\]\); \?>/';
+
+    /** The end-of-block restore that follows the compiler's own `unset($value)`. */
+    private const RESTORE_PATTERN = '/unset\(\$value\);\Rif \(isset\(\$__(?:session|context)Previous\) && !empty\(\$__(?:session|context)Previous\)\)/';
 
     private const REWRITTEN_CONDITION = 'if (\array_key_exists(\'value\', \get_defined_vars())) {';
 
@@ -46,7 +54,11 @@ final class ValueStackSaveRewrite
             return $compiled;
         }
 
-        $ifOffsets = self::ifOffsets($compiled);
+        [$ifOffsets, $authorUnsetsValue] = self::scan($compiled);
+
+        if ($authorUnsetsValue) {
+            return $compiled;
+        }
 
         /** @var array<int, array{0: string, 1: int}> $match */
         foreach (\array_reverse($matches) as $match) {
@@ -62,25 +74,43 @@ final class ValueStackSaveRewrite
     }
 
     /**
-     * Byte offsets of every genuine `if` token, never a range folded into a comment or string.
+     * Byte offsets of every genuine `if` token (never a range folded into a comment or string), and
+     * whether any genuine `unset()` outside the compiler's restore shape names `$value`.
      *
-     * @return array<int, true>
+     * @return array{array<int, true>, bool}
      *
      * @psalm-pure
      */
-    private static function ifOffsets(string $compiled): array
+    private static function scan(string $compiled): array
     {
-        $offsets = [];
+        $restoreOffsets = [];
+        if (\preg_match_all(self::RESTORE_PATTERN, $compiled, $restores, \PREG_OFFSET_CAPTURE) !== false) {
+            foreach ($restores[0] as [, $restoreOffset]) {
+                $restoreOffsets[$restoreOffset] = true;
+            }
+        }
+
+        $ifOffsets = [];
+        $authorUnsetsValue = false;
+        $inUnset = false;
         $offset = 0;
 
         foreach (\token_get_all($compiled) as $token) {
-            if (\is_array($token) && $token[0] === \T_IF) {
-                $offsets[$offset] = true;
+            if (\is_array($token)) {
+                if ($token[0] === \T_IF) {
+                    $ifOffsets[$offset] = true;
+                } elseif ($token[0] === \T_UNSET) {
+                    $inUnset = !isset($restoreOffsets[$offset]);
+                } elseif ($inUnset && $token[0] === \T_VARIABLE && $token[1] === '$value') {
+                    $authorUnsetsValue = true;
+                }
+            } elseif ($token === ')') {
+                $inUnset = false;
             }
 
             $offset += \strlen(\is_array($token) ? $token[1] : $token);
         }
 
-        return $offsets;
+        return [$ifOffsets, $authorUnsetsValue];
     }
 }

@@ -79,4 +79,36 @@ final class ValueStackSaveRewriteTest extends TestCase
 
         $this->assertSame($compiled, ValueStackSaveRewrite::apply($compiled));
     }
+
+    #[Test]
+    #[DataProvider('directives')]
+    public function a_template_that_unsets_value_is_untouched(string $directive): void
+    {
+        $compiled = "<?php unset(\$a, \$value); ?>\n" . $this->save($directive);
+
+        $this->assertSame($compiled, ValueStackSaveRewrite::apply($compiled));
+    }
+
+    #[Test]
+    public function an_unset_of_another_variable_does_not_block_the_rewrite(): void
+    {
+        $applied = ValueStackSaveRewrite::apply('<?php unset($valueOther, $values); ?>' . "\n" . $this->save('session'));
+
+        $this->assertStringContainsString(self::REWRITTEN_CONDITION, $applied);
+    }
+
+    #[Test]
+    #[DataProvider('directives')]
+    public function the_compilers_own_end_of_block_unset_does_not_block_the_rewrite(string $directive): void
+    {
+        $end = "<?php unset(\$value);\n"
+            . "if (isset(\$__{$directive}Previous) && !empty(\$__{$directive}Previous)) { \$value = array_pop(\$__{$directive}Previous); }\n"
+            . "if (isset(\$__{$directive}Previous) && empty(\$__{$directive}Previous)) { unset(\$__{$directive}Previous); }\n"
+            . "endif;\n"
+            . "unset(\$__{$directive}Args); ?>\n";
+
+        $applied = ValueStackSaveRewrite::apply($this->save($directive) . $end . $this->save($directive) . $end);
+
+        $this->assertSame(2, \substr_count($applied, self::REWRITTEN_CONDITION));
+    }
 }

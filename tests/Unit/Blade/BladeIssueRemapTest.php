@@ -841,6 +841,7 @@ final class BladeIssueRemapTest extends TestCase
         yield 'session after foreach value' => ['session-value-foreach.blade.php', 2];
         yield 'session after null assignment' => ['session-value-null.blade.php', 2];
         yield 'context after literal assignment' => ['context-value.blade.php', 2];
+        yield "second session block after the first one's own unset" => ['session-value-sequential.blade.php', 3];
     }
 
     #[Test]
@@ -855,6 +856,27 @@ final class BladeIssueRemapTest extends TestCase
             \array_values(\array_filter(
                 $issues,
                 static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template) && $issue['line_from'] === $line,
+            )),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1724: after an author's `unset($value)` the prelude declaration no longer covers the save, and
+     * `array_key_exists()` proves nothing to Psalm, so the rewrite would report the save's `$value` read as undefined.
+     */
+    #[Test]
+    public function the_value_stack_save_keeps_its_isset_after_an_authors_unset(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-value-unset.blade.php';
+
+        $this->assertStringNotContainsString("array_key_exists('value'", $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template) && $issue['line_from'] === 2,
             )),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
