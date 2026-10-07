@@ -41,4 +41,17 @@ class Kernel implements KernelContract
      * @return array<array-key, \Symfony\Component\Console\Command\Command>
      */
     public function all() {}
+
+    /**
+     * Register a Closure based command with the application.
+     *
+     * At runtime ClosureCommand::execute() binds the callback to the command instance, so `$this`
+     * inside the closure is the ClosureCommand.
+     *
+     * @param  string  $signature
+     * @param  \Closure  $callback
+     * @param-closure-this \Illuminate\Foundation\Console\ClosureCommand $callback
+     * @return \Illuminate\Foundation\Console\ClosureCommand
+     */
+    public function command($signature, \Closure $callback) {}
 }

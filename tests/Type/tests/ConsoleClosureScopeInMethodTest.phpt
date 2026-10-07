@@ -12,7 +12,7 @@ class ConsoleServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Artisan::command('inspire', function (): void {
-            /** @psalm-check-type-exact $this = \Illuminate\Foundation\Console\ClosureCommand&static */
+            /** @psalm-check-type-exact $this = \Illuminate\Foundation\Console\ClosureCommand */
             $this->comment('x');
         });
 
