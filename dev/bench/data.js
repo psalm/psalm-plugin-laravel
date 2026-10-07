@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791321549642,
+  "lastUpdate": 1791369450825,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12595,6 +12595,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1369,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72e3554b6c43a40dd280e436e8de8379d56d1bdb",
+          "message": "Resolve Eloquent `Builder` passthru methods (`exists`, `toSql`, `raw`, …) on relations (#1739)\n\n* fix(eloquent): declare Builder passthru methods for relation forwarding\n\nRelations reach Eloquent\\Builder through a single @mixin hop, so Query\\Builder methods forwarded via Eloquent\\Builder::$passthru (exists, toSql, insert, raw, ...) resolved to mixed. Re-declare them on the Eloquent\\Builder stub with Query\\Builder types and taint sinks; add insertOrIgnoreReturning for Laravel 13.30.1+.\n\nFixes #1734\n\n* docs(contributing): stop enumerating stub version dirs",
+          "timestamp": "2026-10-07T12:35:03+02:00",
+          "tree_id": "66b2ea75195c3e11566c15f4bacfc62382ecbf2c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/72e3554b6c43a40dd280e436e8de8379d56d1bdb"
+        },
+        "date": 1791369449582,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.65,
+            "range": "± 0.67",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1372,
             "unit": "MB"
           }
         ]
