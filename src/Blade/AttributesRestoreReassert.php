@@ -110,7 +110,7 @@ final class AttributesRestoreReassert
             return $compiled;
         }
 
-        $openTagOffsets = self::openTagOffsets($compiled);
+        [$openTagOffsets] = PhpTokenOffsets::scan($compiled);
 
         /** @var array{0: string, 1: int} $match */
         foreach (\array_reverse($matches[0]) as $match) {
@@ -125,30 +125,5 @@ final class AttributesRestoreReassert
         }
 
         return $compiled;
-    }
-
-    /**
-     * Byte offsets where {@see \token_get_all()} found a genuine `<?php`/`<?=` transition into PHP
-     * mode — never a byte range PHP's own lexer folded into a comment or string token, which is
-     * exactly the distinction `apply()` needs to leave an author's own comment alone (finding 1).
-     *
-     * @return array<int, true>
-     *
-     * @psalm-pure
-     */
-    private static function openTagOffsets(string $compiled): array
-    {
-        $offsets = [];
-        $offset = 0;
-
-        foreach (\token_get_all($compiled) as $token) {
-            if (\is_array($token) && ($token[0] === \T_OPEN_TAG || $token[0] === \T_OPEN_TAG_WITH_ECHO)) {
-                $offsets[$offset] = true;
-            }
-
-            $offset += \strlen(\is_array($token) ? $token[1] : $token);
-        }
-
-        return $offsets;
     }
 }

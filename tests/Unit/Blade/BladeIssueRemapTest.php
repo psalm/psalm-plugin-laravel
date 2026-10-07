@@ -992,6 +992,123 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1701: a `<x-...>` tag's compiled `resolve()` assigns `$component` to the tag's own component
+     * and its restore only runs behind `isset($__componentOriginal*)`, so Psalm unions the tag's
+     * `AnonymousComponent` into the author's declared type after the tag. The re-assert puts the
+     * declared type back (the restore ran, or the save never did, with the value the declaration
+     * described either way).
+     */
+    #[Test]
+    public function a_declared_component_type_survives_a_component_tag(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: the tag must have actually compiled its save/restore pair.
+        $this->assertStringContainsString('$__componentOriginal', $this->shadowSourceFor($template));
+    }
+
+    /**
+     * #1701: only a restore that returns the tag stack to depth 0 is re-asserted. After an inner tag
+     * closes, the runtime `$component` is the OUTER tag's component, so the read on line 2 (inside the
+     * outer body) must keep reporting while the read after the outer tag (line 3) is clean.
+     */
+    #[Test]
+    public function a_declared_component_type_is_only_reasserted_at_the_top_level(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component-nested-diff.blade.php';
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1701: both tags share one `$__componentOriginal<hash>` (the hash is keyed by component name),
+     * so the inner save overwrites the outer's and the OUTER restore never fires: at runtime
+     * `$component` stays the outer tag's component after `</x-alert>`. Re-asserting the declared type
+     * there would be unsound.
+     */
+    #[Test]
+    public function a_declared_component_type_is_not_reasserted_after_same_name_nested_tags(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component-nested-same.blade.php';
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1701: a `{{-- @var --}}` comment is stripped by Blade and never reaches the compiled body, so
+     * it declares nothing the re-assert could carry (consistent with "Contract annotations do not
+     * type the template body"). The shadow gets no re-assert docblock either.
+     */
+    #[Test]
+    public function a_blade_comment_declaration_is_not_reasserted(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component-blade-comment.blade.php';
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString('$__componentOriginal', $shadow);
+        $this->assertStringNotContainsString('endif; /** @var', $shadow);
+    }
+
+    /**
+     * #1701: the save is `isset($component)`-gated, so a declared-nullable `$component` that is null
+     * at runtime is NOT restored and stays the tag's own component. Re-asserting `?Widget` there would
+     * be unsound; only a plain class name is carried.
+     */
+    #[Test]
+    public function a_nullable_component_declaration_is_not_reasserted(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component-nullable.blade.php';
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1701: a template that itself reassigns `$component` (here a `foreach` value) leaves the
+     * declaration unproven at the tag, so the whole re-assert is withheld.
+     */
+    #[Test]
+    public function a_template_assigning_component_gets_no_reassert(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component-foreach.blade.php';
+
+        $this->assertSame(
+            [4],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1525 acceptance (d), the negative case for the message gate: an author's own redundant
      * check against their own docblock must still report, even though it shares a class with the
      * dropped ambient-guard families. Deliberately outside `components/` and never mentions
