@@ -370,6 +370,17 @@ final class ShadowIssueRelocator
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
         $message = $issue->message;
 
+        // "Defined in try block" names the prelude's mechanism for an optional view variable
+        // (#1697), not anything the template author wrote. Gated on the shadow's own prelude, so an
+        // author's `try` inside `@php` keeps Psalm's wording.
+        if (
+            $issue instanceof PossiblyUndefinedGlobalVariable
+            && \preg_match('/^Possibly undefined global variable \$(\w+) defined in try block$/', $message, $matches) === 1
+            && PreludeBuilder::liftsOptional((string) @\file_get_contents($issue->code_location->file_path), $matches[1])
+        ) {
+            $message = "Optional view variable \${$matches[1]} is used without isset() or ??";
+        }
+
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
             // `MixedIssue` there is an artifact of the prelude typing every unresolved template

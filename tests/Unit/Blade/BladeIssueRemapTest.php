@@ -1327,6 +1327,79 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1697: a name the template documents in its own raw `@var` and first reads through `??=`,
+     * `??` or `isset()` is optional view data, so the guard is not a contradiction.
+     */
+    #[Test]
+    public function a_documented_optional_variable_guard_reports_nothing(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/optional-guard.blade.php';
+
+        $this->assertSame([], \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template),
+        )), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        // Guard against a vacuous pass: the lifted declarations must carry the template's own type.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString('/** @var \\BladeIssueRemapFixture\\Greeter $greeter */', $shadow);
+        $this->assertStringNotContainsString('@var mixed $label', $shadow);
+    }
+
+    /**
+     * #1697 negative side: a name whose first read is unguarded is required, and a name the
+     * template declares twice is ambiguous, so both keep reporting the redundant guard.
+     */
+    #[Test]
+    public function a_required_or_ambiguous_variable_guard_still_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [5, 9],
+            $this->linesFor($issues, 'DocblockTypeContradiction', 'resources/views/optional-guard-required.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1697: a lifted name read without a guard on a path where no guard ran is reported in
+     * template wording, not as Psalm's "defined in try block".
+     */
+    #[Test]
+    public function an_unguarded_read_of_an_optional_variable_reports_in_template_wording(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $matching = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'resources/views/optional-guard-residual.blade.php')));
+
+        $this->assertSame([[
+            'type' => 'PossiblyUndefinedGlobalVariable',
+            'file_path' => $matching[0]['file_path'] ?? '',
+            'line_from' => 3,
+            'message' => 'Optional view variable $title is used without isset() or ??',
+        ]], $matching, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * #1697 known limitation: Psalm treats a possibly-undefined variable as defined after its
+     * first `isset()`/`??` read even though neither assigns it, so a second guard on the same
+     * optional name still reports. See {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::compose()}.
+     */
+    #[Test]
+    public function a_second_guard_on_an_optional_variable_still_reports_known_limitation(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'DocblockTypeContradiction', 'resources/views/optional-guard-repeat.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * One template's own compiled shadow, matched via `manifest.php`'s shadow-path => template-path
      * map, rather than {@see allShadowSources()}'s whole-directory concatenation: a fixture-wide
      * substring count cannot tell THIS template's compiled output apart from every other fixture's.

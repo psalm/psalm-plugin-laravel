@@ -47,7 +47,7 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
-        $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
+        [$prelude, $compiled] = $this->preludeBuilder->compose($compiled, $contractVars, $source);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");

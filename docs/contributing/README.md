@@ -143,7 +143,7 @@ To inspect a shadow, run once so the cache is warm, then find the file by hashin
 php -r "echo sha1(realpath('resources/views/profile.blade.php')), \"\n\";"
 ```
 
-Open the `<hash>-<fingerprint>.php` referenced by `manifest.php` in the `cacheDir` directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output.
+Open the `<hash>-<fingerprint>.php` referenced by `manifest.php` in the `cacheDir` directly: it is plain PHP, with the `PreludeBuilder` output as a leading docblock block followed by the compiled Blade output. Optional view variables (#1697) are declared on one `try { ... } catch (\Throwable) {}` line of that block, and the template's own `@var` tag for each is rewritten to the same-length `@opt` in the body.
 
 Two flags matter when working on this pipeline:
 

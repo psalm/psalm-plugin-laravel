@@ -45,12 +45,30 @@ final class PreludeBuilder
 
     private const COMPONENT_SLOT_TYPE = '\Illuminate\View\ComponentSlot';
 
+    /** Type words that resolve the same anywhere in the file, so a `@var` using only these (plus FQCNs) may move. */
+    private const LIFTABLE_KEYWORDS = [
+        'array' => true, 'array-key' => true, 'bool' => true, 'callable' => true, 'class-string' => true,
+        'false' => true, 'float' => true, 'int' => true, 'iterable' => true, 'list' => true, 'max' => true,
+        'min' => true, 'mixed' => true, 'negative-int' => true, 'non-empty-array' => true,
+        'non-empty-list' => true, 'non-empty-string' => true, 'non-negative-int' => true, 'null' => true,
+        'numeric' => true, 'numeric-string' => true, 'object' => true, 'positive-int' => true,
+        'scalar' => true, 'string' => true, 'true' => true,
+    ];
+
     private ?Parser $parser = null;
 
     /**
+     * The prelude plus the compiled body it pairs with. A name the template documents in its own
+     * raw `@var` and first reads through `isset()`, `??` or `??=` is optional view data (#1697):
+     * the prelude declares it with that type inside a `try`, which Psalm models as typed AND
+     * possibly undefined, and the body's own tag for it is neutralized so it cannot re-declare the
+     * name as always set. An unguarded read then reports PossiblyUndefinedGlobalVariable.
+     *
      * @param array<string, string> $contractVars variable name (without $) => FQCN
+     *
+     * @return array{0: string, 1: string} prelude, compiled body (same bytes and line breaks)
      */
-    public function build(string $compiled, array $contractVars, string $source): string
+    public function compose(string $compiled, array $contractVars, string $source): array
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
@@ -73,11 +91,111 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        foreach ($this->undeclaredVariables($compiled, $declared) as $name) {
+        [$undeclared, $firstGuarded] = $this->undeclaredVariables($compiled, $declared);
+        $tags = $this->rawVarTags($compiled);
+        $lifted = [];
+
+        foreach ($undeclared as $name) {
+            $tag = $tags[$name] ?? [];
+
+            if (isset($firstGuarded[$name], $tag[0]) && \count($tag) === 1 && !isset(self::BLADE_OWNED_NAMES[$name])) {
+                [$offset, $type] = $tag[0];
+
+                if ($type !== null) {
+                    $lifted[] = "/** @var {$type} \${$name} */ \${$name} = \$GLOBALS['{$name}'];";
+                    // Same length, still a tag (so the next line is not read as its continuation),
+                    // but no longer one Psalm declares a type from.
+                    $compiled = \substr_replace($compiled, '@opt', $offset, 4);
+
+                    continue;
+                }
+            }
+
             $lines[] = "/** @var mixed \${$name} */";
         }
 
-        return "<?php\n" . \implode("\n", $lines) . "\n?>\n";
+        if ($lifted !== []) {
+            $lines[] = 'try { ' . \implode(' ', $lifted) . ' } catch (\\Throwable) {}';
+        }
+
+        return ["<?php\n" . \implode("\n", $lines) . "\n?>\n", $compiled];
+    }
+
+    /**
+     * Whether a shadow's own prelude declared `$name` as an optional view variable via
+     * {@see compose()}, read back from the shadow text so a relocated issue can be told apart
+     * from one on an author's own `try`.
+     *
+     * @psalm-pure
+     */
+    public static function liftsOptional(string $shadow, string $name): bool
+    {
+        $end = \strpos($shadow, "\n?>\n");
+
+        return $end !== false
+            && \preg_match('/^try \{ .* \$' . \preg_quote($name, '/') . ' = \$GLOBALS\[/m', \substr($shadow, 0, $end)) === 1;
+    }
+
+    /**
+     * Every `@var`-family tag in the compiled body's real doc comments (tokenizer-verified, so
+     * author text in a string, inline HTML or a plain comment never counts), by declared name.
+     * The type is null unless the tag is a plain `@var` whose type is safe to move into the
+     * prelude: a relative class name resolves against the template's own `use` imports, which the
+     * prelude sits above.
+     *
+     * @return array<string, list<array{0: int, 1: ?string}>> name => [offset of `@var`, liftable type]
+     *
+     * @psalm-mutation-free
+     */
+    private function rawVarTags(string $compiled): array
+    {
+        $tags = [];
+        $offset = 0;
+
+        foreach (@\token_get_all($compiled) as $token) {
+            $text = \is_array($token) ? $token[1] : $token;
+
+            if (\is_array($token) && $token[0] === \T_DOC_COMMENT
+                && \preg_match_all('/@(psalm-|phpstan-)?var\b([^\n]*)/', $text, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) > 0
+            ) {
+                foreach ($matches as $match) {
+                    $rest = $match[2][0];
+                    $type = $match[1][1] === -1
+                        && \preg_match('/^\s+([^$]+?)\s+\$(' . ContractParser::IDENTIFIER . ')(?![\w\x80-\xff])/', $rest, $typed) === 1
+                        && $this->isLiftableType($typed[1]) ? $typed[1] : null;
+
+                    \preg_match_all('/\$(' . ContractParser::IDENTIFIER . ')/', $rest, $names);
+
+                    foreach (\array_unique($names[1]) as $name) {
+                        $tags[$name][] = [$offset + $match[0][1], isset($typed[2]) && $typed[2] === $name ? $type : null];
+                    }
+
+                    unset($typed);
+                }
+            }
+
+            $offset += \strlen($text);
+        }
+
+        return $tags;
+    }
+
+    /** @psalm-pure */
+    private function isLiftableType(string $type): bool
+    {
+        if (\preg_match('/^[\w\\\\|?<>,\s\[\]-]+$/', $type) !== 1) {
+            return false;
+        }
+
+        \preg_match_all('/\\\\?[A-Za-z_][\w\\\\-]*/', $type, $words);
+
+        foreach ($words[0] as $word) {
+            if ($word[0] !== '\\' && !isset(self::LIFTABLE_KEYWORDS[\strtolower($word)])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -182,7 +300,8 @@ final class PreludeBuilder
 
     /**
      * @param array<string, string> $declared
-     * @return list<string> variable names (without $), sorted, deduplicated
+     * @return array{0: list<string>, 1: array<string, true>} variable names (without $), sorted and
+     *     deduplicated; the names whose first read in AST order is a guard at file scope
      */
     private function undeclaredVariables(string $compiled, array $declared): array
     {
@@ -198,7 +317,7 @@ final class PreludeBuilder
         try {
             $ast = $parser->parse($compiled, new Collecting()) ?? [];
         } catch (\Throwable) {
-            return [];
+            return [[], []];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -208,13 +327,32 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $written = [];
 
+            /** @var array<string, true> */
+            public array $firstGuarded = [];
+
+            /** @var array<int, true> object ids of the variables a file-scope guard reads */
+            private array $guards = [];
+
+            private int $functionDepth = 0;
+
             /**
              * @psalm-external-mutation-free
              */
             #[\Override]
             public function enterNode(Node $node): null
             {
+                if ($node instanceof Node\FunctionLike) {
+                    ++$this->functionDepth;
+                } elseif ($this->functionDepth === 0) {
+                    $this->collectGuards($node);
+                }
+
+                // Parents enter before children, so the first visit of a name is its first use.
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
+                    if (!isset($this->found[$node->name]) && isset($this->guards[\spl_object_id($node)])) {
+                        $this->firstGuarded[$node->name] = true;
+                    }
+
                     $this->found[$node->name] = true;
                 }
 
@@ -234,6 +372,36 @@ final class PreludeBuilder
                 }
 
                 return null;
+            }
+
+            /**
+             * @psalm-external-mutation-free
+             */
+            #[\Override]
+            public function leaveNode(Node $node): null
+            {
+                if ($node instanceof Node\FunctionLike) {
+                    --$this->functionDepth;
+                }
+
+                return null;
+            }
+
+            /**
+             * @psalm-external-mutation-free
+             */
+            private function collectGuards(Node $node): void
+            {
+                $operands = match (true) {
+                    $node instanceof Node\Expr\Isset_ => $node->vars,
+                    $node instanceof Node\Expr\BinaryOp\Coalesce => [$node->left],
+                    $node instanceof Node\Expr\AssignOp\Coalesce => [$node->var],
+                    default => [],
+                };
+
+                foreach ($operands as $operand) {
+                    $this->guards[\spl_object_id($operand)] = true;
+                }
             }
 
             /**
@@ -290,6 +458,6 @@ final class PreludeBuilder
 
         \sort($names);
 
-        return $names;
+        return [$names, $visitor->firstGuarded];
     }
 }
