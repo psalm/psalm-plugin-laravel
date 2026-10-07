@@ -273,6 +273,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
      * `self::`, `parent::` or `new Class` names the class and is always exact.
      *
      * @param non-empty-string $functionId
+     *
+     * @psalm-mutation-free
      */
     private static function isExactDispatch(
         FuncCall|MethodCall|NullsafeMethodCall|StaticCall|New_ $expr,
