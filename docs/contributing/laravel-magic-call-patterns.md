@@ -596,6 +596,13 @@ When Psalm encounters `$obj->method()` during analysis, it follows PHP's own met
      are already in Builder's declaring_method_ids (declared explicitly in the
      plugin's stubs — @mixin never populates declaring_method_ids).
      The mixin resolves one hop, finding the method on Builder.
+     Consequence: Query\Builder methods NOT re-declared on the Eloquent\Builder stub
+     are invisible to relations and fall to Relation::__call. MethodForwardingHandler
+     still resolves the fluent ones (returning the relation), but non-fluent results
+     (bool, string, int, ...) stay `mixed`. The Eloquent\Builder::$passthru methods
+     (exists, toSql, insert, raw, ...) are all non-fluent, so they are re-declared on
+     stubs/common/Database/Eloquent/Builder.phpstub with the Query\Builder return
+     types and taint sinks (#1734).
 
 4. __call / __callStatic (three-step process, not just a type lookup)
    a. Psalm first fires MethodReturnTypeProvider with the ORIGINAL method_id
@@ -801,7 +808,7 @@ but the handler ensures template params propagate correctly.
 | Pattern                    | Psalm mechanism                                              | Known limitations                                                    |
 |----------------------------|--------------------------------------------------------------|----------------------------------------------------------------------|
 | Relation → Builder fluent  | Relation stubs + `MethodForwardingHandler` + related custom-builder storage resolution | Instance-local builder macros that have no static metadata remain unresolved |
-| Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | Same mixin issue, but less impactful                                 |
+| Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | `$passthru` re-declared on Eloquent\Builder for relations (#1734)    |
 | Facade → Service           | Generated alias stubs                                        | Taint annotations lost through `__callStatic`                        |
 | Model → Builder static     | `ModelMethodHandler`                                         | Scopes need `@mixin` or scope handler                                |
 | Model scopes               | `BuilderScopeHandler`                                        | Resolves scope calls on Builder to model scope methods               |
