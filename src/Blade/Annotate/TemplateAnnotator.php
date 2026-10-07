@@ -30,8 +30,9 @@ final class TemplateAnnotator
      * A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one.
      * Group 1 is the inner content, which is what {@see ContractParser::VAR_PATTERN} reads.
      *
-     * `\G`-anchored: only meaningful at an offset {@see self::liveContractComments()} supplies, because
-     * an unanchored scan also hits dead text, whose lazy match can swallow a live comment's start.
+     * `\G`-anchored so it matches only at the offset {@see self::liveContractComments()} supplies: when
+     * it fails at a live comment (not an `@var`, or multi-line), an unanchored search would slide
+     * forward into dead text and read that instead.
      */
     private const CONTRACT_COMMENT = '/\G\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
 
@@ -130,7 +131,8 @@ final class TemplateAnnotator
     /**
      * CONTRACT_COMMENT matches at each top-level Blade comment, the only place {@see ContractParser}
      * reads a declaration. A `{{-- @var --}}` inside `@verbatim`, `@php`, raw PHP, or another comment
-     * sits within a larger masked range, so it is literal text.
+     * sits within a larger masked range, so it is literal text. Single-line comments only, like
+     * CONTRACT_COMMENT itself (a multi-line `{{--\n@var ...\n--}}` is a known gap).
      *
      * @return list<array{0: string, 1: int, 2: string}> full match, byte offset, group 1
      *

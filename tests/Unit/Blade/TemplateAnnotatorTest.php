@@ -248,11 +248,12 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function reads_a_live_comment_whose_start_a_dead_match_would_otherwise_swallow(): void
+    public function does_not_slide_from_a_non_matching_live_comment_into_a_verbatim_body(): void
     {
-        // The dead `{{-- @var A $a` inside `@php` lazily runs to the LIVE comment's `--}}`.
-        $source = "@php {{-- @var A \$a @endphp {{-- @var B \$b --}}\n";
+        // `{{-- note --}}` is a live comment but not a declaration; an unanchored search from its
+        // offset would continue into the verbatim body and read the dead `$x` declaration.
+        $source = "{{-- note --}}\n@verbatim {{-- @var X \$x --}} @endverbatim\n";
 
-        $this->assertNull(TemplateAnnotator::annotate($source, ['b' => 'B']));
+        $this->assertNotNull(TemplateAnnotator::annotate($source, ['x' => 'X']));
     }
 }
