@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791379502993,
+  "lastUpdate": 1791407843722,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12700,6 +12700,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "69d439b8a515a0b702e4e5b3d3d0e0dba782f04b",
+          "message": "docs: correct stub-merging rules and stale rationales (#1763)\n\nVerified on Psalm 7.0.0-rc1:\n- param @psalm-taint-sink is last-loaded-wins (setParams([]) rebuilds\n  params); only method-level taints accumulate\n- stub re-declaration resets implements/interface extends only\n- $this and static both substitute; &static marker needs covariance\n- relation methods collapse because Psalm ignores inferred returns\n- class templates are out of scope in static methods",
+          "timestamp": "2026-10-07T23:13:48+02:00",
+          "tree_id": "d764cdf9449001498d67e1ca37240e048ba3ce6a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/69d439b8a515a0b702e4e5b3d3d0e0dba782f04b"
+        },
+        "date": 1791407842353,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.99,
+            "range": "± 0.35",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1372,
             "unit": "MB"
           }
         ]
