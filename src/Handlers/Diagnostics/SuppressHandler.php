@@ -209,7 +209,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // are themselves only invoked by Laravel through reflection (router, container),
             // so Psalm marks them unreachable from any visible entry point — and `new MyMail()`
             // sitting inside them inherits that unreachability, leaving `__construct` reported
-            // as `PossiblyUnusedMethod`. Verified against IxDF's real codebase. The visibility
+            // as `PossiblyUnusedMethod`. Verified against a real-world app. The visibility
             // filter in `suppressFrameworkHookMethod()` keeps non-public constructors flagged
             // (a `protected __construct` would fail at `new` from outside the class anyway).
             //
