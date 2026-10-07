@@ -8,3 +8,4 @@
     'shade' => null,
     'hue',
 ])
+@aware(['05' => null, 'x'])

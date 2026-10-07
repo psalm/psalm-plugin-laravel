@@ -8,3 +8,5 @@
     null,
 ])
 @aware(['0' => null])
+@php $d = ['a' => null, 'x']; @endphp
+@aware($d)

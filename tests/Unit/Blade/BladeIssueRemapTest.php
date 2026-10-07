@@ -859,7 +859,8 @@ final class BladeIssueRemapTest extends TestCase
      * misuse (a null key into `array_key_exists()` at runtime) and keeps reporting: a literal
      * `null` (lines 1 and 5, `[...]` and `array(...)`), a nullable variable (line 3), a null list
      * item next to a keyed string default (line 4, and multi-line from line 6), and a `'0'` key,
-     * which PHP stores as int 0 (line 10).
+     * which PHP stores as int 0 (line 10). A non-literal argument (line 12) declines too, even
+     * though its only non-string sits at a string key: the accepted residual.
      */
     #[Test]
     public function non_string_aware_list_items_report_against_the_generated_list_form_call(): void
@@ -869,7 +870,7 @@ final class BladeIssueRemapTest extends TestCase
         $template = 'components/aware-int-key-non-string.blade.php';
 
         $this->assertSame([1, 5, 10], $this->linesFor($issues, 'NullArgument', $template), $json);
-        $this->assertSame([3, 4, 6], $this->linesFor($issues, 'PossiblyNullArgument', $template), $json);
+        $this->assertSame([3, 4, 6, 12], $this->linesFor($issues, 'PossiblyNullArgument', $template), $json);
     }
 
     /**
@@ -891,7 +892,8 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * The keyed-arm mirror of #1695: an all-int-key list (`@aware(['color'])`, lines 1 and 2)
      * narrows `$__key` to `never` inside `is_string($__key) ? ...getConsumableComponentData($__key,
-     * ...)`, which Psalm reports as `NoValue`. Mixed lists (lines 3, 4, 6 and 7) report nothing
+     * ...)`, which Psalm reports as `NoValue`. Mixed lists (lines 3, 4, 6, 7 and 11, where `'05'`
+     * stays a string key) report nothing
      * either: their keyed non-string default reaches the list-form arm only in Psalm's view, since
      * every int-keyed item is a string (#1725).
      */

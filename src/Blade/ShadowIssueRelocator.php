@@ -607,11 +607,12 @@ final class ShadowIssueRelocator
 
     /**
      * Whether the `@aware` array whose compiled list-form call the location points into is a
-     * literal whose every item that can land on an int key has a string literal value, so the
-     * list-form arm never receives a non-string at runtime. The array is cut out of the
-     * `foreach (<array> as $__key => $__value)` head that `compileAware()` emits a fixed distance
-     * before the call. Declines (false) on anything else: a non-literal array (`@aware($defaults)`),
-     * a spread, or a key that is not a string literal PHP keeps as a string (`'0'` becomes int 0).
+     * literal in which every item whose key is not a non-numeric string literal has a string
+     * literal value, so the list-form arm never receives a non-string at runtime. The array is cut
+     * out of the `foreach (<array> as $__key => $__value)` head that `compileAware()` emits a fixed
+     * distance before the call. Declines (false) on anything else: a non-literal array
+     * (`@aware($defaults)`), a spread (its value is never a string literal), or a key PHP stores as
+     * an int (`'0'`).
      */
     private static function awareListItemsAreStrings(CodeLocation $location): bool
     {
@@ -648,7 +649,8 @@ final class ShadowIssueRelocator
         }
 
         foreach ($array->items as $item) {
-            if ($item === null || $item->unpack) {
+            // Never null outside a `list()` target, but Psalm's php-parser stub types it nullable.
+            if ($item === null) {
                 return false;
             }
 
