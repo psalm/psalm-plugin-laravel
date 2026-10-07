@@ -105,6 +105,8 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Rejected:** a stub or variance change (`MorphTo<Model, static>` is all the stub can claim, and no variance makes `Model` fit a narrower X; #913); a morph-map-aware resolver (the map is runtime state and lists every morphable model, not the subset one relation targets).
 
+**External-call path (#1753):** the call-site handler reads the same declaration through `RelationMethodParser::declaredMorphToRelatedModelType()`, from the declaring method's `MethodStorage::return_type` (a trait-hosted method declares on the trait). A regex over the raw docblock was tried first and dropped: it split on `|` only and namespace-prefixed a `Model&Contract` token into a bogus `App\Models\Model&Contract`. The `$this`-collapse that motivated it does not happen on Psalm 7.0.0-rc1: storage keeps the generics for `$this`, `self`, `static`, trait-hosted, `@phpstan-return`-only and `|null` declarations. A nullable or MorphTo-subclass declaration declines, so Psalm's declared return applies.
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally
