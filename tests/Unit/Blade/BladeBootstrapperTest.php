@@ -133,6 +133,52 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertFileExists($this->shadowDir . '/manifest.php');
     }
 
+    /** #1710: only a shadow that fails to parse is rewritten, with a new nonce on every boot. */
+    #[Test]
+    public function only_a_broken_shadow_gets_a_fresh_reparse_nonce_on_every_boot(): void
+    {
+        $this->writeTemplate('broken.blade.php', "@php echo [1, , 2]; @endphp\n");
+        $this->writeTemplate('clean.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $shadowsAfterBoot = function (): array {
+            $registrar = new RecordingShadowRegistrar();
+            $this->bootstrapper($this->app(), $registrar)->boot();
+            $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+
+            $contents = [];
+
+            foreach ($registrar->analyzedShadows as $shadow) {
+                $contents[$shadow] = (string) \file_get_contents($shadow);
+            }
+
+            \ksort($contents);
+
+            return $contents;
+        };
+
+        $first = $shadowsAfterBoot();
+        $second = $shadowsAfterBoot();
+
+        $this->assertSame(\array_keys($first), \array_keys($second), 'a warm boot reuses the same shadow paths');
+
+        $nonced = 0;
+
+        foreach ($first as $shadow => $contents) {
+            if (!\str_contains($contents, 'psalm-laravel-reparse:')) {
+                $this->assertSame($contents, $second[$shadow], 'a parsing shadow is never rewritten');
+
+                continue;
+            }
+
+            ++$nonced;
+            $this->assertNotSame($contents, $second[$shadow], 'the nonce changes on every boot');
+            $this->assertSame(\substr_count($contents, "\n"), \substr_count($second[$shadow], "\n"));
+            $this->assertSame(1, \substr_count($second[$shadow], 'psalm-laravel-reparse:'), 'the previous nonce is replaced');
+        }
+
+        $this->assertSame(1, $nonced, 'exactly the broken template carries a nonce');
+    }
+
     /**
      * `loadViewsFrom($dir, $namespace)` puts its directory in the finder's `getHints()`, never
      * `getPaths()` — a template that lives ONLY there was invisible to discovery entirely (#1497).

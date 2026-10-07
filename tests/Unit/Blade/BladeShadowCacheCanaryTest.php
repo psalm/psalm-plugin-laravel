@@ -137,4 +137,61 @@ final class BladeShadowCacheCanaryTest extends TestCase
             "second run's raw output leaked a shadow path.\n{$second['raw']}",
         );
     }
+
+    /**
+     * #1710: Psalm caches the statements of a file that failed to parse and replays no ParseError
+     * on a cache hit, so a broken template went silent from the second run on. Three runs, because
+     * a cache buster that changes the shadow only once (say, only when it is first found fresh)
+     * passes run 2 and fails run 3. The whole report is compared, so a re-parse that reports
+     * anything twice fails too.
+     */
+    #[Test]
+    public function a_warm_psalm_cache_keeps_reporting_template_parse_errors(): void
+    {
+        $cold = $this->report();
+        $this->assertNotSame([], $this->parseErrorsIn($cold), 'the fixture must contain templates whose shadow fails to parse');
+
+        $this->assertSame($cold, $this->report(), 'second (warm) run changed the report');
+        $this->assertSame($cold, $this->report(), 'third (warm) run changed the report');
+    }
+
+    /** The recompile path: a fresh shadow dir writes byte-identical shadows at the same paths. */
+    #[Test]
+    public function a_recompiled_shadow_keeps_reporting_template_parse_errors_on_a_warm_psalm_cache(): void
+    {
+        $cold = $this->report();
+        $this->assertNotSame([], $this->parseErrorsIn($cold));
+
+        $this->deleteDir(self::SHADOW_DIR);
+        $this->assertSame($cold, $this->report(), 'first recompile on a warm Psalm cache changed the report');
+
+        $this->deleteDir(self::SHADOW_DIR);
+        $this->assertSame($cold, $this->report(), 'second recompile on a warm Psalm cache changed the report');
+    }
+
+    /** @return list<string> "type file:line:column message" of every issue, sorted */
+    private function report(): array
+    {
+        /** @var list<array{type: string, file_path: string, line_from: int, column_from: int, message: string}> $issues */
+        $issues = \json_decode($this->analyze()['raw'], true);
+        $lines = [];
+
+        foreach ($issues as $issue) {
+            $lines[] = "{$issue['type']} {$issue['file_path']}:{$issue['line_from']}:{$issue['column_from']} {$issue['message']}";
+        }
+
+        \sort($lines);
+
+        return $lines;
+    }
+
+    /**
+     * @param list<string> $report
+     *
+     * @return list<string>
+     */
+    private function parseErrorsIn(array $report): array
+    {
+        return \array_values(\array_filter($report, static fn(string $line): bool => \str_starts_with($line, 'ParseError ')));
+    }
 }

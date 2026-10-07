@@ -176,6 +176,16 @@ Document every workaround with a comment linking to the upstream issue.
 
 **Why:** Workarounds accumulate tech debt and can mask the root cause. They also break silently when the upstream behavior changes. But waiting indefinitely for upstream fixes blocks real users.
 
+### Blade shadows that fail to parse get a per-run nonce
+
+**Decision:** `ShadowParseCheck` lints each compiled shadow for the analysis PHP version and the manifest persists the verdict. Every run, `BladeBootstrapper` appends a random `// psalm-laravel-reparse:<hex>` to the last line of each failing shadow, replacing the previous one. Shadows that parse are never touched.
+
+**Why:** `StatementsProvider::parseStatements()` in vimeo/psalm saves statements to the parser cache even when the parse had errors, and a cache hit replays no `ParseError`. Vanilla Psalm loses the error for any broken file from the second run on; for a shadow, recompiling does not help because the bytes are identical. A content change is the only lever, since the cache is keyed by content hash and `Internal\Cache` exposes no delete. The nonce stays on the last line so no error line moves, and it is a line comment so it cannot close a block comment the template left open.
+
+**Remove when** Psalm skips the cache save for a parse with errors: drop `ShadowParseCheck`, the manifest's parses slot, and `refreshReparseNonces()`. `BladeShadowCacheCanaryTest` must stay green without them.
+
+**See:** [#1710](https://github.com/psalm/psalm-plugin-laravel/issues/1710).
+
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 
 **Decision:** The `\Closure(self<TModel>): mixed` arm on `Builder::where`, `firstWhere`, `whereNot`, `orWhereNot` is intentionally non-`static`. Users subclassing `Builder` and writing `$this->where(static fn (self $q) => ...)` should type the closure parameter as base `\Illuminate\Database\Eloquent\Builder`, not `self`.

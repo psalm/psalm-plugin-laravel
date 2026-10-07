@@ -44,6 +44,8 @@ final class BladeBootstrapper
          * laravel/framework's install path (the plugin's own vendor, in a unit test).
          */
         private readonly ?string $vendorDirOverride = null,
+        /** Psalm's `Codebase::$analysis_php_version_id`: shadows are linted for the version Psalm parses them as. */
+        private readonly int $analysisPhpVersionId = \PHP_VERSION_ID,
     ) {}
 
     /** Kept for name-ownership checks against namespaces that lost a root to the vendor filter. */
@@ -136,10 +138,12 @@ final class BladeBootstrapper
             );
         }
 
-        $manifest = new ShadowManifest($shadowDir, $environmentHash);
+        // The PHP version decides the persisted parses flag, so a version change must recompile.
+        $manifest = new ShadowManifest($shadowDir, $environmentHash . '|' . $this->analysisPhpVersionId);
         $manifest->load();
 
         $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
+        $this->refreshReparseNonces($manifest, $shadows);
 
         if ($templatesFullyDiscovered) {
             $manifest->prune($templates);
@@ -202,6 +206,32 @@ final class BladeBootstrapper
     }
 
     /**
+     * Never applied to a shadow that parses: a changed hash drops Psalm's parser cache for it.
+     *
+     * @param array<string, string> $shadows template path => shadow path
+     */
+    private function refreshReparseNonces(ShadowManifest $manifest, array $shadows): void
+    {
+        $nonce = \bin2hex(\random_bytes(16));
+
+        foreach ($shadows as $templatePath => $shadowPath) {
+            if ($manifest->parses($shadowPath)) {
+                continue;
+            }
+
+            try {
+                $manifest->refreshReparseNonce($shadowPath, $nonce);
+            } catch (\RuntimeException $exception) {
+                // Still analyzable; only a ParseError hidden by a warm Psalm cache is at stake.
+                $this->output->warning(
+                    "Laravel plugin: a parse error in Blade template '{$templatePath}' may go unreported "
+                    . "on a warm Psalm cache: {$exception->getMessage()}",
+                );
+            }
+        }
+    }
+
+    /**
      * @param array<string, string> $shadows template path => shadow path
      */
     private function publishShadowEntries(ShadowManifest $manifest, array $shadows): void
@@ -252,6 +282,7 @@ final class BladeBootstrapper
     ): array {
         $shadows = [];
         $parser = new ContractParser();
+        $parseCheck = new ShadowParseCheck($this->analysisPhpVersionId);
         $collector = $this->collectDataIncludes ? new ViewReferenceCollector() : null;
         $requiredSlots = $this->collectDataIncludes ? ShadowManifest::SLOT_DATA_INCLUDES : 0;
 
@@ -303,7 +334,7 @@ final class BladeBootstrapper
             $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
 
             try {
-                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes, $parseCheck->parses($shadow->contents));
                 $shadows[$template] = $shadowPath;
                 $this->registerContract($template, $roots, $contract, $dataIncludes);
 

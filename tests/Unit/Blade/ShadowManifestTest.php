@@ -430,4 +430,90 @@ final class ShadowManifestTest extends TestCase
         $this->assertTrue($reloaded->isFresh('/a.blade.php', 'a'));
         $this->assertFalse($reloaded->isFresh('/b.blade.php', 'b'));
     }
+
+    #[Test]
+    public function the_parses_flag_survives_a_reload_and_defaults_to_parsing(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $broken = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php if (', [1 => 1], null), $this->emptyContract(), parses: false);
+        $clean = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $manifest->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $this->assertFalse($reloaded->parses($broken));
+        $this->assertTrue($reloaded->parses($clean));
+        $this->assertTrue($reloaded->parses('/unknown-shadow.php'));
+    }
+
+    #[Test]
+    public function an_entry_from_before_the_parses_slot_is_dropped(): void
+    {
+        // Kept, it would stay fresh with no parses flag, so a broken shadow would never get its
+        // reparse nonce and its ParseError would stay hidden behind Psalm's parser cache (#1710).
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', [], [[], false, [], false, [], []], null]];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertNull($manifest->shadowEntry('/shadow.php'));
+    }
+
+    #[Test]
+    public function a_non_bool_parses_slot_drops_the_entry(): void
+    {
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', [], [[], false, [], false, [], []], null, 1]];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertNull($manifest->shadowEntry('/shadow.php'));
+    }
+
+    #[Test]
+    public function the_reparse_nonce_replaces_its_predecessor_and_never_adds_a_line(): void
+    {
+        $contents = "<?php if (\$a) { ?>\n<p>x</p>\n";
+
+        $first = ShadowManifest::withReparseNonce($contents, 'aa11');
+        $second = ShadowManifest::withReparseNonce($first, 'bb22');
+
+        $this->assertSame($contents . ' // psalm-laravel-reparse:aa11', $first);
+        $this->assertSame($contents . ' // psalm-laravel-reparse:bb22', $second);
+        $this->assertSame($second, ShadowManifest::withReparseNonce($second, 'bb22'));
+        $this->assertSame(\substr_count($contents, "\n"), \substr_count($second, "\n"));
+    }
+
+    #[Test]
+    public function the_reparse_nonce_strip_ignores_a_lookalike_the_template_wrote(): void
+    {
+        // Not a nonce: text follows the hex, so it is template content and must survive.
+        $contents = "<?php // psalm-laravel-reparse:aa11 kept ?>\n";
+
+        $this->assertSame($contents . ' // psalm-laravel-reparse:bb22', ShadowManifest::withReparseNonce($contents, 'bb22'));
+    }
+
+    #[Test]
+    public function refresh_reparse_nonce_rewrites_the_shadow_on_disk(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php if (', [1 => 1], null), $this->emptyContract(), parses: false);
+
+        $manifest->refreshReparseNonce($shadowPath, 'aa11');
+        $manifest->refreshReparseNonce($shadowPath, 'bb22');
+
+        $this->assertSame('<?php if ( // psalm-laravel-reparse:bb22', \file_get_contents($shadowPath));
+        $this->assertSame([$shadowPath], \glob($this->shadowDir . '/*.php*'));
+    }
 }

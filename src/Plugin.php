@@ -974,7 +974,8 @@ final class Plugin implements PluginEntryPointInterface
      */
     private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
     {
-        $registrar = new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance());
+        $projectAnalyzer = ProjectAnalyzer::getInstance();
+        $registrar = new Blade\PsalmShadowRegistrar($projectAnalyzer);
 
         $bootstrapper = new Blade\BladeBootstrapper(
             ApplicationProvider::getApp(),
@@ -982,6 +983,7 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViewData || $annotating,
+            analysisPhpVersionId: $projectAnalyzer->getCodebase()->analysis_php_version_id,
         );
 
         if (!$bootstrapper->boot()) {

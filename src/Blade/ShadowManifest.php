@@ -19,6 +19,9 @@ final class ShadowManifest
 {
     private const MANIFEST_FILE = 'manifest.php';
 
+    /** Leading space: a shadow ending on a bare `<?php` still needs whitespace after the tag. */
+    private const REPARSE_NONCE_PREFIX = ' // psalm-laravel-reparse:';
+
     /**
      * Bump when anything the plugin writes around a shadow changes for the same source: the marker
      * pass, the prelude ({@see PreludeBuilder}), suppression injection, or the `$attributes`
@@ -33,9 +36,9 @@ final class ShadowManifest
     public const SLOT_DATA_INCLUDES = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: bool}>
      *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract,
-     *      dataIncludes]. The final slot is null when its collection pass was disabled.
+     *      dataIncludes, parses]. The dataIncludes slot is null when its collection pass was disabled.
      */
     private array $entries = [];
 
@@ -86,7 +89,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: bool}>
      *
      * @psalm-mutation-free
      */
@@ -99,15 +102,15 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            // Arity 7 gates entries written before the removed references slot. Recompiling is
-            // safer than misreading a derived cache entry of a different shape.
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 7) {
+            // Arity 8 gates entries written before the parses slot. Recompiling is safer than
+            // misreading a derived cache entry of a different shape.
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 8) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $dataIncludes] = \array_values($entry);
+            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $dataIncludes, $parses] = \array_values($entry);
 
-            if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
+            if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash) || !\is_bool($parses)) {
                 continue;
             }
 
@@ -145,7 +148,7 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validDataIncludes];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validDataIncludes, $parses];
         }
 
         return $entries;
@@ -376,29 +379,12 @@ final class ShadowManifest
      * @param array{0: list<string>, 1: bool}|null $dataIncludes the subset of references the shadow
      *        hands its whole scope to (`@include`, `@extends`, ...); null when that pass is disabled,
      *        distinct from "collected, found none" and making the read set decline
+     * @param bool $parses whether Psalm's parse of the shadow is clean; {@see self::refreshReparseNonce()}
      */
-    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $dataIncludes = null): string
+    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $dataIncludes = null, bool $parses = true): string
     {
         $shadowPath = $this->shadowPath($templatePath, $source);
-        $pid = \getmypid();
-        $tmpPath = $shadowPath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
-
-        if (@\file_put_contents($tmpPath, $shadow->contents) === false) {
-            // Capture the reason before the cleanup unlink() below, which fails and overwrites it
-            // whenever the temp file was never created (only a partial write, e.g. disk full mid-
-            // write, actually leaves one behind for that unlink to remove).
-            $detail = $this->lastErrorDetail();
-            @\unlink($tmpPath);
-
-            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'{$detail}");
-        }
-
-        if (!@\rename($tmpPath, $shadowPath)) {
-            $detail = $this->lastErrorDetail();
-            @\unlink($tmpPath);
-
-            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'{$detail}");
-        }
+        $this->writeShadow($shadowPath, $shadow->contents);
 
         $vars = [];
 
@@ -415,9 +401,77 @@ final class ShadowManifest
             $shadow->suppressions,
             [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
             $dataIncludes,
+            $parses,
         ];
 
         return $shadowPath;
+    }
+
+    /** @psalm-mutation-free */
+    public function parses(string $shadowPath): bool
+    {
+        return $this->entries[$shadowPath][7] ?? true;
+    }
+
+    /**
+     * Psalm caches the statements of a file that failed to parse and replays no ParseError on a
+     * cache hit (vimeo/psalm `StatementsProvider::parseStatements()` saves even when `$has_errors`),
+     * so a broken shadow goes silent from the second run on. A fresh nonce per run changes the
+     * content hash, forcing the real parse that reports the error.
+     *
+     * @throws \RuntimeException when the shadow cannot be read or rewritten
+     */
+    public function refreshReparseNonce(string $shadowPath, string $nonce): void
+    {
+        $contents = @\file_get_contents($shadowPath);
+
+        if ($contents === false) {
+            throw new \RuntimeException("cannot read shadow file '{$shadowPath}'{$this->lastErrorDetail()}");
+        }
+
+        $this->writeShadow($shadowPath, self::withReparseNonce($contents, $nonce));
+    }
+
+    /**
+     * Appended on the last line, never after a newline, so no ParseError line moves. Shadows usually
+     * end in inline HTML, where this is inert text; in PHP mode it must be a line comment, because a
+     * block comment's closing token would end a block comment the template left open.
+     *
+     * @psalm-pure
+     */
+    public static function withReparseNonce(string $contents, string $nonce): string
+    {
+        $previous = \strrpos($contents, self::REPARSE_NONCE_PREFIX);
+
+        if ($previous !== false && \preg_match('/\A[0-9a-f]+\z/', \substr($contents, $previous + \strlen(self::REPARSE_NONCE_PREFIX))) === 1) {
+            $contents = \substr($contents, 0, $previous);
+        }
+
+        return $contents . self::REPARSE_NONCE_PREFIX . $nonce;
+    }
+
+    /** Temp file + rename: a concurrent invocation reading the shadow sees old or new bytes, never a mix. */
+    private function writeShadow(string $shadowPath, string $contents): void
+    {
+        $pid = \getmypid();
+        $tmpPath = $shadowPath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
+
+        if (@\file_put_contents($tmpPath, $contents) === false) {
+            // Capture the reason before the cleanup unlink() below, which fails and overwrites it
+            // whenever the temp file was never created (only a partial write, e.g. disk full mid-
+            // write, actually leaves one behind for that unlink to remove).
+            $detail = $this->lastErrorDetail();
+            @\unlink($tmpPath);
+
+            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'{$detail}");
+        }
+
+        if (!@\rename($tmpPath, $shadowPath)) {
+            $detail = $this->lastErrorDetail();
+            @\unlink($tmpPath);
+
+            throw new \RuntimeException("cannot write shadow file '{$shadowPath}'{$detail}");
+        }
     }
 
 
