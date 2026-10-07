@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791369450825,
+  "lastUpdate": 1791375127822,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12630,6 +12630,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1372,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a1ec0c8b60fbf81aaeb5e647528e9991a4668da6",
+          "message": "fix: forward facade calls to the root's @method tags (#1745)\n\nPackage managers (e.g. GrahamCampbell GitHubManager) forward through __call\nand document targets with class-level @method tags. The facade resolver only\nread the root's real methods, so those calls reported UndefinedMagicMethod.\nFall back to the root's instance pseudo-methods; real methods and the facade's\nown @method still take precedence.",
+          "timestamp": "2026-10-07T14:08:43+02:00",
+          "tree_id": "9e603ce31ed79332a11ff7ccea9809061c501d8b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a1ec0c8b60fbf81aaeb5e647528e9991a4668da6"
+        },
+        "date": 1791375126004,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.48,
+            "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
