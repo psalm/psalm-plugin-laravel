@@ -7,7 +7,9 @@ namespace Psalm\LaravelPlugin\Handlers\Taint;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Name;
+use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\Codebase\InternalCallMapHandler;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Type\Atomic\TLiteralInt;
@@ -24,20 +26,24 @@ use Psalm\Type\Union;
  *
  * Removal is per call site. The stripped edge is the `json_encode()` stub's own argument-to-return
  * edge, which Psalm specializes per call location for stubs it ships. A project that re-declares
- * `json_encode()` in its own stub loses that specialization and the strip would pool across sites.
+ * `json_encode()` in its own stub without `@psalm-taint-specialize` loses that, and the edge would be
+ * shared by every call: `json_encode('safe', 15)` would then overwrite the removal of another call's
+ * `json_encode($tainted, 0)`. The handler declines unless the resolved storage is specialized, with
+ * the same test as `TaintFlowGraph::isCallSpecialized()`.
  *
  * - HEX_TAG removes html only. The has_quotes taint is deliberately kept whatever the other HEX flags
  *   say: `json_encode()` always emits raw `"` delimiters around attacker-controlled content, so
  *   `<div data-x="@json($x)">` is still an attribute breakout (unlike `htmlspecialchars(ENT_QUOTES)`,
- *   whose output has no quotes at all). `Js::from()` is attribute-safe only because it wraps the
- *   payload in `JSON.parse('...')`.
+ *   whose output has no quotes at all). `Js::from()` avoids this by re-quoting strings with single
+ *   quotes (arrays and objects go through `JSON.parse('...')`), so it fits a double-quoted attribute.
  * - Flags are read from the literal node type, AND-ed across a literal union so only bits set in
  *   every possible value count. Any non-literal atomic, unpack argument, or missing flags declines.
  * - The `flags` named argument is honoured; the encoded value must stay positional, because
  *   {@see NamedArgumentTaintHandler} strips a named value before this handler matters.
  * - Only the core function qualifies: `\json_encode`, or an unqualified call whose resolved id is
  *   `json_encode` or a missing `<namespace>\json_encode` (Psalm's fallback to the global function).
- *   A userland function of that name, `\Foo\json_encode()`, and an alias to any other function decline.
+ *   A userland function of that name, `\Foo\json_encode()`, `namespace\json_encode()` (whose
+ *   qualifier Psalm's name resolver drops) and an alias to any other function decline.
  *   `use function json_encode as enc` is a known false positive of the written-name gate: the
  *   finding is kept.
  *
@@ -96,12 +102,39 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
             return 0;
         }
 
-        return ($flags & \JSON_HEX_TAG) !== 0 ? TaintKind::INPUT_HTML : 0;
+        if (($flags & \JSON_HEX_TAG) === 0 || !self::isSpecializedPerCallSite($event->getCodebase(), $source)) {
+            return 0;
+        }
+
+        return TaintKind::INPUT_HTML;
+    }
+
+    /** Same test as `TaintFlowGraph::isCallSpecialized()` for a function that is not a project-dir userland one. */
+    private static function isSpecializedPerCallSite(Codebase $codebase, StatementsAnalyzer $source): bool
+    {
+        try {
+            $storage = $codebase->functions->getStorage($source, 'json_encode');
+        } catch (\UnexpectedValueException) {
+            return false;
+        }
+
+        if ($storage->specialize_call) {
+            return true;
+        }
+
+        return $storage->location instanceof \Psalm\CodeLocation
+            ? \in_array($storage->location->file_path, $codebase->config->internal_stubs, true)
+            : InternalCallMapHandler::inCallMap('json_encode');
     }
 
     /** Mirrors FunctionCallAnalyzer's function-id resolution: fully qualified, or unqualified with a namespace fallback. */
     private static function resolvesToCoreFunction(AddRemoveTaintsEvent $event, Name $name, StatementsAnalyzer $source): bool
     {
+        // Psalm resolves a Name\Relative without its `namespace\` qualifier, and then applies `use function`.
+        if ($name instanceof Name\Relative) {
+            return false;
+        }
+
         if ($name instanceof Name\FullyQualified) {
             return \strtolower($name->toString()) === 'json_encode';
         }

@@ -45,11 +45,31 @@ namespace Aliased {
         echo json_encode($v, 15);
     }
 }
+
+namespace Relative {
+    use function json_encode;
+
+    /**
+     * @psalm-flow ($value) -> return
+     */
+    function json_encode(string $value, int $flags = 0): string {
+        return $value . $flags;
+    }
+
+    function render(\Illuminate\Http\Request $request): void {
+        $v = (string) $request->input('v');
+
+        // PHP ignores `use function` for a namespace-relative call, so this is the userland function above.
+        echo namespace\json_encode($v, 15);
+    }
+}
 ?>
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
