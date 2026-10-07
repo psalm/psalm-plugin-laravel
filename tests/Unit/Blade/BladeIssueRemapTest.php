@@ -860,7 +860,9 @@ final class BladeIssueRemapTest extends TestCase
      * `null` (lines 1 and 5, `[...]` and `array(...)`), a nullable variable (line 3), a null list
      * item next to a keyed string default (line 4, and multi-line from line 6), and a `'0'` key,
      * which PHP stores as int 0 (line 10). A non-literal argument (line 12) declines too, even
-     * though its only non-string sits at a string key: the accepted residual.
+     * though its only non-string sits at a string key: the accepted residual. Line 13 hides a
+     * decoy `<?php foreach ((` in a comment inside the argument, which must not be read as the
+     * loop head (its `0 => [1]` item is genuine).
      */
     #[Test]
     public function non_string_aware_list_items_report_against_the_generated_list_form_call(): void
@@ -871,6 +873,7 @@ final class BladeIssueRemapTest extends TestCase
 
         $this->assertSame([1, 5, 10], $this->linesFor($issues, 'NullArgument', $template), $json);
         $this->assertSame([3, 4, 6, 12], $this->linesFor($issues, 'PossiblyNullArgument', $template), $json);
+        $this->assertSame([13], $this->linesFor($issues, 'InvalidArgument', $template), $json);
     }
 
     /**

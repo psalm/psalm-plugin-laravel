@@ -607,12 +607,12 @@ final class ShadowIssueRelocator
 
     /**
      * Whether the `@aware` array whose compiled list-form call the location points into is a
-     * literal in which every item whose key is not a non-numeric string literal has a string
-     * literal value, so the list-form arm never receives a non-string at runtime. The array is cut
-     * out of the `foreach (<array> as $__key => $__value)` head that `compileAware()` emits a fixed
-     * distance before the call. Declines (false) on anything else: a non-literal array
-     * (`@aware($defaults)`), a spread (its value is never a string literal), or a key PHP stores as
-     * an int (`'0'`).
+     * literal in which every item has a string literal value or a string literal key PHP does not
+     * cast to int (`'05'` and `'1.5'` stay strings), so the list-form arm never receives a
+     * non-string at runtime. The array is cut out of the `foreach (<array> as $__key => $__value)`
+     * head that `compileAware()` emits a fixed distance before the call. Declines (false) on
+     * anything else: a non-literal array (`@aware($defaults)`), a spread (its value is never a
+     * string literal), or a key PHP stores as an int (`'0'`).
      */
     private static function awareListItemsAreStrings(CodeLocation $location): bool
     {
@@ -629,15 +629,15 @@ final class ShadowIssueRelocator
                 return false;
             }
 
-            $head = \strrpos(\substr($shadow, 0, $bodyStart), '<?php foreach (');
+            $prefix = \substr($shadow, 0, $bodyStart);
+            $head = self::awareExpressionStart($prefix);
 
-            if ($head === false) {
+            if ($head === null) {
                 return false;
             }
 
-            $head += \strlen('<?php foreach (');
             $statements = (new ParserFactory())->createForNewestSupportedVersion()
-                ->parse('<?php ' . \substr($shadow, $head, $bodyStart - $head) . ';') ?? [];
+                ->parse('<?php ' . \substr($prefix, $head) . ';') ?? [];
         } catch (\Throwable) {
             return false;
         }
@@ -663,6 +663,62 @@ final class ShadowIssueRelocator
         }
 
         return true;
+    }
+
+    /**
+     * Byte offset just past the `(` of the last `<?php foreach (` head in `$prefix`, found by tokens
+     * so a look-alike inside a comment or string inside the `@aware` argument never counts; null
+     * unless the rest of `$prefix` stays inside that `(` (brackets balanced, never closing it, no
+     * `?>`), which proves it is the one the compiled body's `) {` closes.
+     *
+     * @psalm-pure
+     */
+    private static function awareExpressionStart(string $prefix): ?int
+    {
+        $offset = 0;
+        $start = null;
+        $depth = 0;
+        $expect = null;
+
+        foreach (\token_get_all($prefix) as $token) {
+            [$id, $text] = \is_array($token) ? [$token[0], $token[1]] : [null, $token];
+            $offset += \strlen($text);
+
+            if ($id === \T_WHITESPACE) {
+                continue;
+            }
+
+            if ($id === \T_OPEN_TAG) {
+                $expect = \T_FOREACH;
+
+                continue;
+            }
+
+            if ($expect === \T_FOREACH && $id === \T_FOREACH) {
+                $expect = '(';
+
+                continue;
+            }
+
+            if ($expect === '(' && $text === '(') {
+                [$start, $depth, $expect] = [$offset, 0, null];
+
+                continue;
+            }
+
+            $expect = null;
+            $depth += match (true) {
+                in_array($text, ['(', '[', '{'], true), $id === \T_CURLY_OPEN, $id === \T_DOLLAR_OPEN_CURLY_BRACES => 1,
+                in_array($text, [')', ']', '}'], true) => -1,
+                default => 0,
+            };
+
+            if ($depth < 0 || $id === \T_CLOSE_TAG || $id === \T_INLINE_HTML) {
+                $start = null;
+            }
+        }
+
+        return $depth === 0 ? $start : null;
     }
 
     /**

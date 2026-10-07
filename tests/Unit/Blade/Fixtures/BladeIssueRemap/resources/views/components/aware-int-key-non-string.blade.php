@@ -10,3 +10,5 @@
 @aware(['0' => null])
 @php $d = ['a' => null, 'x']; @endphp
 @aware($d)
+@aware([[1]] + // @verbatim<?php foreach ((@endverbatim
+['a' => null, 'x'])
