@@ -92,6 +92,18 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
 
+### `$this->morphTo()` takes its related model from the enclosing method's declared return
+
+**Decision:** `$this->morphTo()` inside a method declaring `@return MorphTo<X, …>` resolves to `MorphTo<X, receiver>` (`ModelRelationReturnTypeHandler::getEnclosingMorphToReturnType()`, #1091). The stub keeps `MorphTo<Model, static>`: the morph map picks the target at runtime, so nothing else can prove X, and without this a narrowed declaration raises MoreSpecificReturnType / LessSpecificReturnStatement (InvalidReturnType for `Model&Contract`).
+
+- **One closure on the `HasRelationships` trait**, registered at the top of `ModelRegistrationHandler::afterCodebasePopulated()`. Return-type providers fall back to the declaring trait, so it fires for every model, including the non-autoloadable ones the per-model loop skips. The per-model `getReturnType()` cannot carry it: it never registers for those models, and its `$unionCache` key has no enclosing method.
+- **Only slot 1 of the declaration is read.** Slot 2 can still be an unresolved `self` (trait methods) or `static`; the declaring model comes from the receiver, exactly as for the other relation factories.
+- **Declines:** any receiver other than `$this`, `parent::morphTo()`, closures and arrow functions (their own declaration applies), and any declaration other than exactly `MorphTo<X, …>` (parent or subclass relation, `|null`, native-only) or with an X that is not a concrete model (template, `static`, non-model class).
+
+**Accepted unsoundness** (same trust as the external-call path's docblock read): X is the user's docblock, unverified. A declaration naming the wrong models is believed, and every `$this->morphTo()` in such a method narrows, returned or not (`MorphToEnclosingDeclaredTypeKnownLimitation`).
+
+**Rejected:** a stub or variance change (`MorphTo<Model, static>` is all the stub can claim, and no variance makes `Model` fit a narrower X; #913); a morph-map-aware resolver (the map is runtime state and lists every morphable model, not the subset one relation targets).
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally
