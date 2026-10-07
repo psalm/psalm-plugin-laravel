@@ -95,17 +95,26 @@ no coverage relative to running without the plugin.
 
 ### Known limitation: named arguments captured by a variadic
 
-Psalm maps an unpacked argument onto every parameter from its offset to the end and ignores
-string keys. A variadic that re-spreads its arguments (`run(mixed ...$arguments)` forwarding to
-`handle(...$arguments)`, the `AsAction::run()` shape) therefore reports a named argument
-against the wrong parameter of `handle()`, for example a spurious `TaintedFile`
-(#1395, vimeo/psalm unpacking bug). To keep that false positive silent, the plugin drops the
-taint from a named argument that Psalm binds to a callee's variadic.
+Two Psalm bugs misreport a named argument that a variadic parameter captures:
+[vimeo/psalm#12252](https://github.com/vimeo/psalm/issues/12252) (an unpacked argument is mapped
+onto every parameter and string keys are ignored, so `run(string ...$arguments)` forwarding to
+`handle(...$arguments)` reports `run(page: $input)` against the wrong parameter, for example a
+spurious `TaintedFile`, #1395) and [vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251)
+(a named argument bound to a variadic is keyed by its written position, so it collides with the
+fixed parameter declared there). To keep those false positives silent, the plugin drops the taint
+from a named argument that Psalm binds to a callee's variadic.
 
-The trade: such an argument is also not reported at its genuine destination, even when
-`handle()`'s own parameter really reaches a sink. Every other named-argument call (reordered or
-skipped arguments, methods, static calls, constructors, facades, builtins, a dynamic callee)
-keeps full detection. Passing the argument positionally always reports.
+The trade: versus plain Psalm this loses genuine findings, because the whole flow is dropped.
+Not reported: a sink behind the re-spread (`handle()`'s own parameter), a sink in the variadic's
+own body for an unknown or variadic-naming argument (`foreach ($rest as $r) system($r)` called as
+`f(zzz: $input)`), and `static::s(sink: $input)` where the enclosing class's `s()` is variadic and a
+subclass overrides it with fixed parameters. The suppression also only covers a callee the plugin
+resolves (a function name, `Class::`/`self`/`static`/`parent`, `new`, or a `$variable` receiver of
+one known class): through a chained or property receiver (`Action::make()->run(page: $input)`,
+`$this->action->run(...)`) the false positive remains. Abstract and interface methods are not
+stripped. Every other named-argument call (reordered or skipped arguments, methods, static
+calls, constructors, facades) keeps full detection, and passing the argument positionally always
+reports.
 
 ### Timing-unsafe secret comparison (CWE-208)
 

@@ -32,7 +32,7 @@ function run(string ...$arguments): void
  * value at the call site to keep the #1395 spread fan-out false positive
  * (`SafeNamedArgumentVariadicRespreadFileFilesReporterShape.phpt`) silent, and that strip kills
  * the whole source flow, genuine destination included. Fixing this means Psalm honoring string
- * keys when it maps an unpacked argument onto parameters.
+ * keys when it maps an unpacked argument onto parameters (vimeo/psalm#12252).
  */
 function forwarderGenuineDestinationIsMissed(): void
 {

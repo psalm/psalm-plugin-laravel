@@ -336,8 +336,8 @@ final class Plugin implements PluginEntryPointInterface
         bool $bladeActive,
         ?Blade\Annotate\AnnotateRequest $annotate,
     ): void {
-        // Global stop-gap for Psalm's unpacked-argument mapping (a named argument captured by a
-        // variadic and re-spread reports against the wrong parameter, #1395).
+        // Global stop-gap for named arguments captured by a variadic (vimeo/psalm#12251, #12252;
+        // #1395).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';

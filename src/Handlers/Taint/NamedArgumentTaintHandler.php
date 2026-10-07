@@ -21,41 +21,64 @@ use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
 
 /**
  * Strips taint from a named-argument VALUE that Psalm binds to the callee's VARIADIC parameter.
  *
- * Why: a variadic that re-spreads its arguments (`function run(string ...$arguments)` calling
- * `handle(...$arguments)`, the `AsAction::run()` shape of lorisleiva/laravel-actions) makes
- * `ArgumentsAnalyzer` map the unpacked argument onto EVERY parameter of `handle()` from its
- * offset to the end, ignoring the array's string keys. `run(page: $input)` therefore reports
- * against `handle()`'s first parameter (a spurious `TaintedFile` for `File::files($directory)`)
- * even though `$input` only ever reaches `$page` (#1395). Plain Psalm 7.0.0-rc1 behaves the same.
+ * Why, two Psalm 7.0.0-rc1 defects that both surface as spurious reports:
  *
- * Everything else is PRESERVED. Psalm 7.0.0-rc1 keys a named argument's taint node by the
- * parameter's DECLARED index (`DataFlowNode::getParameterOffset()`, vimeo/psalm#11923 fixed), so
- * reordered, skipped, inherited and `static::` named arguments already reach the right sink; a
- * callee this handler cannot resolve, a receiver that is not exactly one known class, and every
- * CallMap-only builtin are left to Psalm too.
+ * - Re-spread (vimeo/psalm#12252, `ArgumentsAnalyzer` unpacking). A variadic that forwards its
+ *   arguments (`function run(string ...$arguments)` calling `handle(...$arguments)`, the
+ *   `AsAction::run()` shape of lorisleiva/laravel-actions) makes Psalm map the unpacked argument
+ *   onto EVERY parameter of `handle()` from its offset to the end, ignoring the array's string
+ *   keys. `run(page: $input)` therefore reports against `handle()`'s first parameter (a spurious
+ *   `TaintedFile` for `File::files($directory)`) although `$input` only reaches `$page` (#1395).
+ * - Written-offset key (vimeo/psalm#12251, `DataFlowNode::getParameterOffset()`). For a variadic
+ *   parameter it returns the argument's WRITTEN offset, so a named argument bound to the variadic
+ *   collides with whatever fixed parameter is declared at that offset. This needs no re-spread:
+ *   `v(zzz: $input)` on `v(string $a = '', string ...$rest)` reports against `$a`'s sink.
+ *
+ * Everything else is PRESERVED. Psalm keys a named argument's taint node by the parameter's
+ * DECLARED index (`getParameterOffset()`, vimeo/psalm#11923 fixed), so reordered, skipped,
+ * inherited and `self::`/`parent::` named arguments already reach the right sink. Not handled
+ * here, all left to Psalm: first-class callables of plain functions (vimeo/psalm#12249), CallMap
+ * return flows read by written offset (#12248) and `HtmlFunctionTainter` reading `flags`
+ * positionally (#12250). Stubbed variadic builtins (`sprintf`, `array_merge`) do resolve storage
+ * and are stripped; PHP rejects unknown named arguments to them anyway, so no real finding is lost.
  *
  * Binding mirrors `ArgumentsAnalyzer::checkArgumentsMatch()`: the FIRST declared parameter
  * satisfying `name === $arg->name || is_variadic` takes the argument, so the variadic captures
  * both an unmatched name and an argument naming the variadic itself. Anything binding to a
  * non-variadic parameter, even one declared before a variadic, is preserved.
  *
- * KNOWN LIMITATION (accepted trade, pinned by
- * `TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation.phpt`): the strip is
- * kind-agnostic ({@see TaintKind::ALL_INPUT}) and kills the argument's whole source flow at the
- * call site, so a named argument captured by a variadic is also not reported at its GENUINE
- * destination, e.g. `run(page: $input)` where `handle()`'s `$page` really reaches a sink. That
- * equals the pre-existing behaviour of this handler. The alternative, dropping the strip and
- * reporting the spread fan-out false positive, was rejected because Psalm offers no hook that
- * removes only the mis-attributed flows (see decisions.md). `ALL_INPUT` also excludes secret and
- * project-defined kinds, which are not stripped.
+ * SCOPE: only a callee resolved here is covered: a function name, `Class::`/`self::`/`static::`/
+ * `parent::`, `new`, or a plain `$var` receiver already typed as exactly one non-intersection
+ * class. A chained (`Action::make()->run(page: $x)`) or property (`$this->action->run(...)`)
+ * receiver is not resolved, so the #1395 false positive stays visible there. Abstract and
+ * interface methods are skipped: with no body there is nothing to re-spread.
  *
- * Retirement: delete once upstream's unpacked-argument mapping honors string keys.
+ * KNOWN LIMITATIONS (accepted trade). The strip is kind-agnostic ({@see TaintKind::ALL_INPUT})
+ * and kills the argument's whole source flow at the call site, so versus plain Psalm it loses
+ * genuine findings; it only equals the handler this replaced. `ALL_INPUT` excludes secret and
+ * project-defined kinds, which are not stripped. Each loss is pinned by a fixture:
+ *
+ * - a genuine sink behind the re-spread (`handle()`'s `$page` really reaches a sink):
+ *   `TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation.phpt`;
+ * - a sink in the variadic's own body (`foreach ($rest as $r) system($r)`) for `zzz:` or an
+ *   argument naming the variadic: `TaintedNamedArgumentVariadicBodySinkKnownLimitation.phpt`;
+ * - `static::s(sink: ...)` where the enclosing class's `s()` is variadic and a subclass overrides
+ *   it with fixed parameters, since `static` cannot be resolved here:
+ *   `TaintedNamedArgumentStaticOverrideVariadicParentKnownLimitation.phpt`;
+ * - the unresolved chained/property receiver above:
+ *   `TaintedNamedArgumentChainedReceiverVariadicRespreadKnownLimitation.phpt`.
+ *
+ * The rejected alternative, dropping the strip and reporting the false positive, is recorded in
+ * decisions.md: Psalm offers no hook that removes only the mis-attributed flows.
+ *
+ * Retirement: delete once BOTH vimeo/psalm#12251 and #12252 are fixed.
  */
 final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterface, RemoveTaintsInterface
 {
@@ -190,8 +213,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     /**
      * The callee's declared params, or `null` when the callee stays unresolvable: a dynamic
      * call/class, a receiver that is not one known class, a name none of whose candidates
-     * resolve, or a callee without `FunctionLikeStorage` (a CallMap-only builtin or a facade
-     * `@method` pseudo-method, neither of which has a body that could re-spread a variadic).
+     * resolve, an abstract or interface method (no body to re-spread), or a callee without
+     * `FunctionLikeStorage` (a CallMap-only builtin or a facade `@method` pseudo-method).
      * `null` preserves every named argument on the call.
      *
      * @return list<FunctionLikeParameter>|null
@@ -208,13 +231,44 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
 
         foreach (self::resolveCalleeIdCandidates($expr, $event) as $functionId) {
             try {
-                return $event->getCodebase()->getFunctionLikeStorage($statementsSource, $functionId)->params;
+                $storage = $event->getCodebase()->getFunctionLikeStorage($statementsSource, $functionId);
             } catch (\Throwable) {
                 // No FunctionStorage/MethodStorage under this candidate: try the next one.
+                continue;
             }
+
+            // An abstract or interface method has no body that could re-spread the variadic, so
+            // there is no spread false positive to silence, while a concrete override with fixed
+            // parameters can hold a genuine sink for the very same argument.
+            if ($storage instanceof MethodStorage && self::isBodiless($storage, $event)) {
+                return null;
+            }
+
+            return $storage->params;
         }
 
         return null;
+    }
+
+    /**
+     * Psalm leaves `MethodStorage::$abstract` false for an interface method, so the declaring
+     * class is consulted as well.
+     */
+    private static function isBodiless(MethodStorage $storage, BeforeExpressionAnalysisEvent $event): bool
+    {
+        if ($storage->abstract) {
+            return true;
+        }
+
+        if ($storage->defining_fqcln === null) {
+            return false;
+        }
+
+        try {
+            return $event->getCodebase()->classlike_storage_provider->get($storage->defining_fqcln)->is_interface;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
     }
 
     /**
@@ -269,8 +323,10 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
      * so the two cannot disagree. A union or non-object receiver declines, per the house rule
      * that narrowing on anything but exactly one known class turns into false positives.
      *
-     * A CHAINED receiver (`Storage::disk('local')->put(path: ...)`) is not a `Variable` and has
-     * no entry to read, so it declines and the call is left to Psalm.
+     * A CHAINED (`Storage::disk('local')->put(path: ...)`) or property (`$this->disk->put(...)`)
+     * receiver is not a `Variable` and has no entry to read, so it declines and the call is left
+     * to Psalm. A nullsafe call is the exception: Psalm re-dispatches it as a `MethodCall` on a
+     * virtual variable that holds the receiver's type, so it can resolve like a plain variable.
      *
      * @psalm-mutation-free
      */

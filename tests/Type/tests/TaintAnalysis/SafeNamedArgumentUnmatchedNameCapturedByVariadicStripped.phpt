@@ -42,10 +42,12 @@ function w(string $a = '', string $b = '', string ...$rest): void
 /**
  * `zzz:` names no declared parameter, so `ArgumentsAnalyzer::checkArgumentsMatch()` matches it
  * against the variadic `$rest` — and `DataFlowNode::getParameterOffset()` bails to the WRITTEN
- * offset for a variadic parameter, so the node collides with `$a`, declared at offset 0. Vanilla
+ * offset for a variadic parameter (vimeo/psalm#12251), so the node collides with `$a`, declared at
+ * offset 0. Vanilla
  * reports `TaintedFile` against `$a`'s `file` sink plus `TaintedHtml`/`TaintedTextWithQuotes` at
  * `echo $a`, all three mis-attributed; it reports nothing against `$rest`, the parameter the
- * value actually reaches. So the strip costs no measurable detection here.
+ * value actually reaches. The callee has no body sink on `$rest`, so the strip loses nothing here;
+ * see `TaintedNamedArgumentVariadicBodySinkKnownLimitation.phpt` for the shape where it does.
  */
 function unmatchedNameCapturedByVariadicIsStripped(): void
 {
