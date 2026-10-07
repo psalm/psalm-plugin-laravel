@@ -223,10 +223,11 @@ A new gated site calls `laravelAiIntegrationEnabled()` instead of copying the ve
 
 When **multiple stub files declare the same method on the same class**, Psalm reuses a single MethodStorage object and re-applies docblock parsing. The merging rules differ by annotation kind:
 
-- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`)
-- **Taint annotations** (`@psalm-taint-*`): all files accumulate (bitwise OR `|=`)
+- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`).
+- **Parameter-level taint annotations** (`@psalm-taint-sink`, `@psalm-assert-untainted`): last-loaded file wins. Each re-declaration rebuilds the parameter storages (`FunctionLikeNodeScanner` calls `setParams([])`), so sinks from an earlier file are dropped, not OR-ed. Verified on Psalm 7.0.0-rc1: an `html` sink in one stub plus an `sql` sink on the same parameter in a later stub reports only `TaintedSql`.
+- **Method-level taint annotations** (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`): all files accumulate (bitwise OR `|=` on the reused MethodStorage).
 
-This means splitting type and taint annotations for the same method across two stub files is fragile -- the type that "wins" depends on file loading order. Always put both in the same file.
+Splitting annotations for the same method across two stub files is therefore fragile: which type and which sinks survive depends on load order. Always put all of them in the same file, and have an override restate every `@psalm-taint-sink` of the declaration it replaces.
 
 When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
@@ -256,8 +257,8 @@ A file in a version dir (`stubs/13.16.0/...`, loaded when installed Laravel `>=`
 Authoring an override:
 
 - Declare only the changed methods; the rest merge from `common`.
-- Copy the full class header (`extends`/`implements` + `use`) verbatim, because a class re-declaration resets Psalm's interface list and silently strips contracts (see stub-authoring rules).
-- Types replace, taints accumulate (OR), so keep both for a method in one file.
+- Repeat the `implements` clause (interface stubs: the `extends` list) verbatim, because a re-declaration resets Psalm's `class_implements` / `parent_interfaces` and silently strips contracts. Class `extends` and trait `use` survive, but copy the full header anyway to stay diffable against Laravel source.
+- Types and parameter sinks replace, method-level taints accumulate (see "Stub merging"), so restate every `@psalm-taint-sink` of the method you override.
 
 **Common vs version dir.** Return narrowing that holds across all versions (Laravel only improved its annotation) goes in `common`. A parameter widened by behavior present only in a newer Laravel (e.g. `firstOrNew`'s `values` taking `\Closure|array` only on 13) must go in the version dir: widening `common` would tell Psalm a call is valid that fatals at runtime on older versions (silent false negative).
 
