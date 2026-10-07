@@ -28,6 +28,7 @@ use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\MethodStorage;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
@@ -109,35 +110,6 @@ final class RelationMethodParser
         self::$resolving = [];
         self::$passthru = null;
     }
-
-    /** @var list<string> Types that should not be resolved as class names in generic params */
-    private const NON_CLASS_TYPES = [
-        'static',
-        'self',
-        'parent',
-        'null',
-        'int',
-        'string',
-        'bool',
-        'float',
-        'mixed',
-        'array',
-        'object',
-        'callable',
-        'iterable',
-        'void',
-        'never',
-        'true',
-        'false',
-        'scalar',
-        'numeric',
-        'resource',
-        // Deprecated aliases recognized by Psalm's TypeTokenizer
-        'boolean',
-        'integer',
-        'double',
-        'real',
-    ];
 
     /**
      * Maps HasRelationships factory method names to their corresponding Relation class FQCNs.
@@ -937,8 +909,10 @@ final class RelationMethodParser
 
     /**
      * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
-     * every alternative of X is a named class, or an intersection of named classes (`Model&Contract`),
-     * at least one of which is a Model subclass, with no `static` part and no template part.
+     * every alternative of X is a plain named class, or a flat intersection of plain named classes
+     * (`Model&Contract`), at least one of which is a Model subclass. A generic related model
+     * (`Box<Target>`), `static`, `self` and templates decline: a provider result skips Psalm's type
+     * expansion, so they would leak unbound.
      *
      * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
      * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
@@ -963,13 +937,10 @@ final class RelationMethodParser
 
         $related = $relation->type_params[0];
         foreach ($related->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                return null;
-            }
-
             $isModel = false;
-            foreach ([$atomic, ...$atomic->extra_types] as $part) {
-                if (!$part instanceof TNamedObject || $part->is_static) {
+            foreach ([$atomic, ...($atomic instanceof TNamedObject ? $atomic->extra_types : [])] as $part) {
+                // Flat intersections only: Psalm can keep `Model&(Contract&self)` as a part with its own parts.
+                if (!self::isPlainNamedClass($part) || ($part !== $atomic && $part->extra_types !== [])) {
                     return null;
                 }
 
@@ -982,6 +953,20 @@ final class RelationMethodParser
         }
 
         return $related;
+    }
+
+    /**
+     * A non-generic named class: not `static`, `self` or `parent`, which only bind against a receiver.
+     * Anything else (a generic object, a template, a class-constant reference) is a type Psalm must expand.
+     *
+     * @psalm-assert-if-true TNamedObject $part
+     * @psalm-pure
+     */
+    private static function isPlainNamedClass(Atomic $part): bool
+    {
+        return $part::class === TNamedObject::class
+            && !$part->is_static
+            && !\in_array(\strtolower($part->value), ['self', 'static', 'parent'], true);
     }
 
     /**
@@ -1013,177 +998,4 @@ final class RelationMethodParser
 
         return false;
     }
-
-    /**
-     * Extract TRelatedModel from the method's docblock generic return type annotation.
-     *
-     * Used for morphTo relations where the related model can't be determined from the
-     * factory call arguments but may be annotated via @return MorphTo<User|Post, $this>.
-     *
-     * When Psalm resolves $this in generic params, it may collapse the type to a
-     * non-generic TNamedObject, losing the generic info. This method reads the raw
-     * docblock to recover it.
-     *
-     * @return ?Union The related model type (e.g. User|Post), or null if not annotated
-     */
-    public static function extractDocblockRelatedModelType(Codebase $codebase, string $className, string $methodName): ?Union
-    {
-        $context = ClassMethodResolver::resolve($codebase, MethodIdentifier::wrap($className . '::' . $methodName));
-        if ($context === null) {
-            return null;
-        }
-
-        $docComment = $context['classMethod']->getDocComment();
-        if (!$docComment instanceof \PhpParser\Comment\Doc) {
-            return null;
-        }
-
-        // Extract the first generic param from @psalm-return (preferred), @phpstan-return, or @return
-        $firstParam = self::extractFirstGenericParam($docComment->getText());
-        if ($firstParam === null) {
-            return null;
-        }
-
-        // Resolve short class names against the file's use statements
-        $useMap = self::buildUseMap($context['fileStmts']);
-        $namespace = self::extractNamespace($className);
-
-        return self::resolveTypeNames($firstParam, $useMap, $namespace);
-    }
-
-    /**
-     * Extract the first generic type parameter from a docblock @return annotation.
-     *
-     * Checks @psalm-return, @phpstan-return, then @return (matching Psalm's priority).
-     * e.g. "@psalm-return MorphTo<User|Post, $this>" → "User|Post"
-     *
-     * @psalm-pure
-     */
-    private static function extractFirstGenericParam(string $docblock): ?string
-    {
-        // Psalm's priority: @psalm-return > @phpstan-return > @return
-        foreach (['@psalm-return', '@phpstan-return', '@return'] as $tag) {
-            if (\preg_match('/' . $tag . '\s+\S+<([^,>]+)/', $docblock, $matches)) {
-                return \trim($matches[1]);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Build a map of short class name → FQCN from use statements in the file AST.
-     *
-     * Handles both regular use statements and group use statements (use App\Models\{User, Post}).
-     *
-     * @param list<PhpParser\Node\Stmt> $stmts
-     * @return array<string, string> alias → FQCN
-     */
-    private static function buildUseMap(array $stmts): array
-    {
-        $map = [];
-
-        foreach ($stmts as $stmt) {
-            self::collectUseStatements($stmt, $map);
-
-            // Also check inside namespace blocks
-            if ($stmt instanceof PhpParser\Node\Stmt\Namespace_) {
-                foreach ($stmt->stmts as $nsStmt) {
-                    self::collectUseStatements($nsStmt, $map);
-                }
-            }
-        }
-
-        return $map;
-    }
-
-    /**
-     * Collect use and group-use statements into the alias map.
-     *
-     * @param array<string, string> $map
-     */
-    private static function collectUseStatements(PhpParser\Node\Stmt $stmt, array &$map): void
-    {
-        // Only collect class imports (TYPE_NORMAL), skip use function/use const
-        if ($stmt instanceof PhpParser\Node\Stmt\Use_ && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
-            foreach ($stmt->uses as $use) {
-                $alias = $use->alias?->toString() ?? $use->name->getLast();
-                $map[$alias] = $use->name->toString();
-            }
-        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse) {
-            $prefix = $stmt->prefix->toString();
-            foreach ($stmt->uses as $use) {
-                // Combine statement-level and item-level type via bitwise OR, matching
-                // PhpParser's NameResolver. For "use App\Models\{User}" the GroupUse
-                // has TYPE_UNKNOWN and items have TYPE_NORMAL. For "use function App\{foo}"
-                // the GroupUse has TYPE_FUNCTION and items have TYPE_UNKNOWN.
-                $type = $stmt->type | $use->type;
-                if (
-                    $type === PhpParser\Node\Stmt\Use_::TYPE_FUNCTION
-                    || $type === PhpParser\Node\Stmt\Use_::TYPE_CONSTANT
-                ) {
-                    continue;
-                }
-
-                $alias = $use->alias?->toString() ?? $use->name->getLast();
-                $map[$alias] = $prefix . '\\' . $use->name->toString();
-            }
-        }
-    }
-
-    /**
-     * Extract the namespace from a FQCN (everything before the last backslash).
-     *
-     * @psalm-pure
-     */
-    private static function extractNamespace(string $className): string
-    {
-        $lastSlash = \strrpos($className, '\\');
-
-        return $lastSlash !== false ? \substr($className, 0, $lastSlash) : '';
-    }
-
-    /**
-     * Resolve a pipe-separated type string (e.g. "User|Post") to a Psalm Union type.
-     *
-     * Each name is resolved against the use map, falling back to the current namespace.
-     *
-     * @param array<string, string> $useMap
-     * @psalm-pure
-     */
-    private static function resolveTypeNames(string $typeString, array $useMap, string $namespace): ?Union
-    {
-        $names = \array_map(\trim(...), \explode('|', $typeString));
-        $atomics = [];
-
-        foreach ($names as $name) {
-            // Skip non-class types ($this, static, self, scalar types)
-            if ($name === '' || $name[0] === '$' || \in_array(\strtolower($name), self::NON_CLASS_TYPES, true)) {
-                continue;
-            }
-
-            // Already fully qualified
-            if ($name[0] === '\\') {
-                $atomics[] = new TNamedObject(\ltrim($name, '\\'));
-                continue;
-            }
-
-            // Check use map
-            if (isset($useMap[$name])) {
-                $atomics[] = new TNamedObject($useMap[$name]);
-                continue;
-            }
-
-            // Fall back to current namespace
-            $fqcn = $namespace !== '' ? $namespace . '\\' . $name : $name;
-            $atomics[] = new TNamedObject($fqcn);
-        }
-
-        if ($atomics === []) {
-            return null;
-        }
-
-        return new Union($atomics);
-    }
-
 }

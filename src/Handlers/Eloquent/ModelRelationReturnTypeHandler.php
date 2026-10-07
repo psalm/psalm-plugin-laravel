@@ -16,9 +16,11 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\ClassMethod;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -32,7 +34,6 @@ use Psalm\Type\Union;
  * Without this handler, `(new WorkOrder())->invoice()` resolves to `HasOne<Model, Model>`
  * even when the method body is `return $this->hasOne(Invoice::class)` and the docblock
  * says `@psalm-return HasOne<Invoice, $this>`. Two Psalm limitations cause the collapse:
- *
  * 1. The `class-string<TRelatedModel>` argument's TRelatedModel binding is not propagated
  *    to the stub's `@return HasOne<TRelatedModel, $this>` return.
  * 2. `$this` in template position is not substituted with the late-static-bound class.
@@ -52,10 +53,10 @@ use Psalm\Type\Union;
  * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
  * related model is statically declared via a docblock generic
  * (`@phpstan-return MorphTo<User|Post, $this>` — read by
- * {@see RelationMethodParser::extractDocblockRelatedModelType}; the `$this->morphTo()` call such a
- * method returns is narrowed by {@see getEnclosingMorphToReturnType()}); without that the
- * handler defers because the related class is determined at runtime. `HasOneThrough`
- * and `HasManyThrough` require both factory class-string args (related and intermediate)
+ * {@see RelationMethodParser::declaredMorphToRelatedModelType} from the method's storage; the
+ * `$this->morphTo()` call such a method returns is narrowed by {@see getEnclosingMorphToReturnType()});
+ * without that the handler defers because the related class is determined at runtime.
+ * `HasOneThrough` and `HasManyThrough` require both factory class-string args (related and intermediate)
  * to resolve statically. The declaring-model generic comes from the receiver
  * (`$bindingClass`), not a factory arg, so it is always available; if either factory
  * arg is dynamic the handler defers.
@@ -322,11 +323,13 @@ final class ModelRelationReturnTypeHandler
     /**
      * Resolve the related-model Union for the parsed relation. Most factories return a
      * single Model FQCN via `relatedModel`; polymorphic `morphTo` returns null there
-     * but may declare its target via `@psalm-return MorphTo<User|Post, $this>`, which
-     * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
-     * docblock. Returns null when neither path produces a usable type.
+     * but may declare its target via `@return MorphTo<User|Post, $this>`, which
+     * {@see RelationMethodParser::declaredMorphToRelatedModelType} reads from the declaring
+     * method's storage. Returns null when neither path produces a usable type.
      *
      * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     *
+     * @psalm-capabilities read-props
      */
     private static function resolveRelatedModelType(
         array $parsed,
@@ -339,13 +342,36 @@ final class ModelRelationReturnTypeHandler
         }
 
         // morphTo: the factory's first arg is not a class-string, so the parser yields
-        // null. Fall back to the docblock generic for users who annotated their morphTo
-        // with the candidate model union.
+        // null. Fall back to the generic of the declared return for users who annotated
+        // their morphTo with the candidate models.
         if ($parsed['relationClass'] === MorphTo::class) {
-            return RelationMethodParser::extractDocblockRelatedModelType($codebase, $declaringClass, $methodName);
+            return RelationMethodParser::declaredMorphToRelatedModelType(
+                $codebase,
+                self::declaredReturnType($codebase, $declaringClass, $methodName),
+            );
         }
 
         return null;
+    }
+
+    /**
+     * Declared return of the method as stored, docblock merged. A trait-hosted method is declared
+     * on the trait, not on the composing model.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function declaredReturnType(Codebase $codebase, string $className, string $methodName): ?Union
+    {
+        try {
+            $declaringId = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($className . '::' . $methodName));
+            if (!$declaringId instanceof MethodIdentifier) {
+                return null;
+            }
+
+            return $codebase->methods->getStorage($declaringId)->return_type;
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
     }
 
     /**

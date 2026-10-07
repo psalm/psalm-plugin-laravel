@@ -159,9 +159,8 @@ final class RelationResolver
      * The model FQCN when the type resolves to exactly one model, else null. A
      * multi-model union is polymorphic (a `morphTo`'s TRelated, e.g.
      * `MorphTo<Vehicle|WorkOrder, $this>`) and cannot be pinned to one target for
-     * dot-notation walking, so it defers rather than guessing one arm. In practice
-     * Psalm collapses morphTo's `<..., $this>` generic before this is reached; this
-     * keeps the deferral correct even when it does not.
+     * dot-notation walking, so it defers rather than guessing one arm. This is what stops the
+     * walk at a morphTo whose declared return names several models.
      *
      * @psalm-mutation-free
      */
