@@ -480,15 +480,16 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
-    public function the_reparse_nonce_replaces_its_predecessor_and_never_adds_a_line(): void
+    public function the_reparse_nonce_replaces_its_predecessor_on_line_one_and_never_adds_a_line(): void
     {
-        $contents = "<?php if (\$a) { ?>\n<p>x</p>\n";
+        $contents = "<?php\n/** @var int $a */\n?>\n<?php if (\$a) { ?>\n<p>x</p>\n";
+        $body = \substr($contents, \strlen("<?php\n"));
 
         $first = ShadowManifest::withReparseNonce($contents, 'aa11');
         $second = ShadowManifest::withReparseNonce($first, 'bb22');
 
-        $this->assertSame($contents . ' // psalm-laravel-reparse:aa11', $first);
-        $this->assertSame($contents . ' // psalm-laravel-reparse:bb22', $second);
+        $this->assertSame("<?php /*psalm-laravel-reparse:aa11*/\n" . $body, $first);
+        $this->assertSame("<?php /*psalm-laravel-reparse:bb22*/\n" . $body, $second);
         $this->assertSame($second, ShadowManifest::withReparseNonce($second, 'bb22'));
         $this->assertSame(\substr_count($contents, "\n"), \substr_count($second, "\n"));
     }
@@ -496,10 +497,21 @@ final class ShadowManifestTest extends TestCase
     #[Test]
     public function the_reparse_nonce_strip_ignores_a_lookalike_the_template_wrote(): void
     {
-        // Not a nonce: text follows the hex, so it is template content and must survive.
-        $contents = "<?php // psalm-laravel-reparse:aa11 kept ?>\n";
+        // Only line 1 of the prelude is plugin-owned; the same text anywhere else is template content.
+        $contents = "<?php\n?>\n<?php /*psalm-laravel-reparse:aa11*/\n?> // psalm-laravel-reparse:aa11";
 
-        $this->assertSame($contents . ' // psalm-laravel-reparse:bb22', ShadowManifest::withReparseNonce($contents, 'bb22'));
+        $this->assertSame(
+            "<?php /*psalm-laravel-reparse:bb22*/\n" . \substr($contents, \strlen("<?php\n")),
+            ShadowManifest::withReparseNonce($contents, 'bb22'),
+        );
+    }
+
+    #[Test]
+    public function the_reparse_nonce_refuses_a_shadow_without_the_prelude_opener(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ShadowManifest::withReparseNonce('<p>no prelude</p>', 'aa11');
     }
 
     #[Test]
@@ -508,12 +520,12 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowPath = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php if (', [1 => 1], null), $this->emptyContract(), parses: false);
+        $shadowPath = $manifest->store('/a.blade.php', 'a', new ShadowResult("<?php\nif (", [1 => 1], null), $this->emptyContract(), parses: false);
 
         $manifest->refreshReparseNonce($shadowPath, 'aa11');
         $manifest->refreshReparseNonce($shadowPath, 'bb22');
 
-        $this->assertSame('<?php if ( // psalm-laravel-reparse:bb22', \file_get_contents($shadowPath));
+        $this->assertSame("<?php /*psalm-laravel-reparse:bb22*/\nif (", \file_get_contents($shadowPath));
         $this->assertSame([$shadowPath], \glob($this->shadowDir . '/*.php*'));
     }
 }

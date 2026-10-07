@@ -19,8 +19,10 @@ final class ShadowManifest
 {
     private const MANIFEST_FILE = 'manifest.php';
 
-    /** Leading space: a shadow ending on a bare `<?php` still needs whitespace after the tag. */
-    private const REPARSE_NONCE_PREFIX = ' // psalm-laravel-reparse:';
+    /** {@see PreludeBuilder::build()} opens every shadow with exactly this. */
+    private const SHADOW_OPENER = "<?php\n";
+
+    private const REPARSE_NONCE_PATTERN = '~\A<\?php /\*psalm-laravel-reparse:[0-9a-f]+\*/\n~';
 
     /**
      * Bump when anything the plugin writes around a shadow changes for the same source: the marker
@@ -434,21 +436,24 @@ final class ShadowManifest
     }
 
     /**
-     * Appended on the last line and never adds a newline, so no ParseError line moves. Shadows usually
-     * end in inline HTML, where this is inert text; in PHP mode it must be a line comment, because a
-     * block comment's closing token would end a block comment the template left open.
+     * Placed inside the prelude's own opening tag on line 1: no template comment can be open there,
+     * no line moves, and nothing lands outside the template's PHP structure (text appended at EOF
+     * after a bracketed `namespace {}` adds its own ParseError). Only that exact position is ever
+     * stripped, so template text that looks like a nonce survives.
+     *
+     * @throws \RuntimeException when the shadow does not open with the prelude
      *
      * @psalm-pure
      */
     public static function withReparseNonce(string $contents, string $nonce): string
     {
-        $previous = \strrpos($contents, self::REPARSE_NONCE_PREFIX);
+        $bare = \preg_replace(self::REPARSE_NONCE_PATTERN, self::SHADOW_OPENER, $contents, 1) ?? $contents;
 
-        if ($previous !== false && \preg_match('/\A[0-9a-f]+\z/', \substr($contents, $previous + \strlen(self::REPARSE_NONCE_PREFIX))) === 1) {
-            $contents = \substr($contents, 0, $previous);
+        if (!\str_starts_with($bare, self::SHADOW_OPENER)) {
+            throw new \RuntimeException('the shadow does not open with the plugin prelude');
         }
 
-        return $contents . self::REPARSE_NONCE_PREFIX . $nonce;
+        return "<?php /*psalm-laravel-reparse:{$nonce}*/\n" . \substr($bare, \strlen(self::SHADOW_OPENER));
     }
 
     /** Temp file + rename: a concurrent invocation reading the shadow sees old or new bytes, never a mix. */
