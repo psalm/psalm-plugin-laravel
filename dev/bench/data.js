@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791407843722,
+  "lastUpdate": 1791409760439,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12735,6 +12735,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1372,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bfc80b0ee370353a3a02a9d01c17dec3eecfa1fe",
+          "message": "chore(deps): require vimeo/psalm ^7.0.0-rc1 (#1764)",
+          "timestamp": "2026-10-07T23:45:23+02:00",
+          "tree_id": "692e33863f7405742995229911ec4452225d17b4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bfc80b0ee370353a3a02a9d01c17dec3eecfa1fe"
+        },
+        "date": 1791409758811,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.38,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1371,
             "unit": "MB"
           }
         ]
