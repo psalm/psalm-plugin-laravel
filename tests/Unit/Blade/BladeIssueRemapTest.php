@@ -995,8 +995,9 @@ final class BladeIssueRemapTest extends TestCase
      * #1701: a `<x-...>` tag's compiled `resolve()` assigns `$component` to the tag's own component
      * and its restore only runs behind `isset($__componentOriginal*)`, so Psalm unions the tag's
      * `AnonymousComponent` into the author's declared type after the tag. The re-assert puts the
-     * declared type back (the restore ran, or the save never did, with the value the declaration
-     * described either way).
+     * declared type back, which is sound only because the declaration is a non-null class name:
+     * when the save never ran (`$component` was unset or null) the tag's own component would stay
+     * in place, which is exactly why a nullable declaration is not carried.
      */
     #[Test]
     public function a_declared_component_type_survives_a_component_tag(): void
@@ -1033,7 +1034,8 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1701: both tags share one `$__componentOriginal<hash>` (the hash is keyed by component name),
+     * #1701: both tags share one `$__componentOriginal<hash>` (the hash is keyed by component class,
+     * or `AnonymousComponent:<alias>` for an anonymous one, so two tags of the same component collide),
      * so the inner save overwrites the outer's and the OUTER restore never fires: at runtime
      * `$component` stays the outer tag's component after `</x-alert>`. Re-asserting the declared type
      * there would be unsound.
@@ -1105,6 +1107,76 @@ final class BladeIssueRemapTest extends TestCase
             [4],
             $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1701 review: the declared type is only carried when nothing in the template can have
+     * rewritten `$component` between the declaration and the tag. Psalm itself sees each of these
+     * writes (a foreach target, `UNSET`, destructuring, a reference alias, a `catch` variable, raw
+     * PHP inside `@verbatim`), so re-asserting the declaration would replace its correct type.
+     */
+    private const WRITING_TEMPLATES = [
+        'resources/views/declared-component-write-foreach-destructure.blade.php',
+        'resources/views/declared-component-write-foreach-list.blade.php',
+        'resources/views/declared-component-write-unset.blade.php',
+        'resources/views/declared-component-write-destructure.blade.php',
+        'resources/views/declared-component-write-reference.blade.php',
+        'resources/views/declared-component-write-catch.blade.php',
+        'resources/views/declared-component-write-verbatim.blade.php',
+    ];
+
+    #[Test]
+    public function a_template_that_may_write_component_gets_no_reassert(): void
+    {
+        $this->analyze('psalm.xml');
+
+        foreach (self::WRITING_TEMPLATES as $template) {
+            $shadow = $this->shadowSourceFor($template);
+
+            $this->assertStringContainsString('$__componentOriginal', $shadow, $template);
+            $this->assertStringNotContainsString('endif; /** @var', $shadow, $template);
+        }
+    }
+
+    /**
+     * #1701 review: a declaration inside a branch or a closure body is not the type in force at the
+     * tag. Carrying `Gadget` from the `@else` arm (or the closure-local `@var`) would turn Psalm's
+     * correct `Widget|Gadget` (or `Widget`) into a definite `UndefinedMethod`, so a declaration
+     * that is not at block depth 0 withholds the re-assert.
+     */
+    #[Test]
+    public function a_declaration_inside_a_branch_or_closure_is_not_reasserted(): void
+    {
+        $this->analyze('psalm.xml');
+
+        foreach (['declared-component-branch', 'declared-component-closure-var'] as $name) {
+            $shadow = $this->shadowSourceFor("resources/views/{$name}.blade.php");
+
+            $this->assertStringContainsString('$__componentOriginal', $shadow, $name);
+            $this->assertStringNotContainsString('endif; /** @var', $shadow, $name);
+        }
+    }
+
+    /**
+     * #1701: the issue's own shape. A component view (`@props` and `$attributes`, so the
+     * `$attributes` pass runs first) with a multi-line `@var` docblock, a nested tag, and a read.
+     * Pins that the two passes compose and that a multi-line declaration is carried.
+     */
+    #[Test]
+    public function a_declared_component_type_survives_a_tag_in_a_component_view(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/declared-component-view.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyUndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        $this->assertStringContainsString(
+            'endif; /** @var \BladeIssueRemapFixture\Widget $component */ ?>',
+            $this->shadowSourceFor($template),
         );
     }
 

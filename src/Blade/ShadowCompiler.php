@@ -48,7 +48,8 @@ final class ShadowCompiler
         }
 
         // Not gated on a component view: a plain page that declares `$component` and renders a tag is the shape.
-        if (!ComponentRestoreReassert::templateAssignsComponent($source)) {
+        // The compiled-text check is the cheap one, so most templates never reach the source scan.
+        if (\str_contains($compiled, '$__componentOriginal') && ComponentRestoreReassert::templateOnlyReadsComponent($source)) {
             $compiled = ComponentRestoreReassert::apply($compiled);
         }
 

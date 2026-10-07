@@ -25,17 +25,22 @@ namespace Psalm\LaravelPlugin\Blade;
  * - Nesting: after an inner tag's restore the runtime `$component` is the OUTER tag's component,
  *   so only a restore that empties the tag stack is re-asserted, and a declaration inside a tag
  *   body (it describes the child) never leaks out.
- * - A repeated hash: the hash is keyed by component NAME, so `<x-a><x-a /></x-a>` re-saves the same
- *   `$__componentOriginal<hash>` inside the outer tag, the inner restore unsets it, and the outer
- *   restore never fires (Laravel leaves the outer component in `$component` after the tag).
+ * - A repeated hash: the hash is keyed by component CLASS (`AnonymousComponent:<alias>` for an
+ *   anonymous one), so `<x-a><x-a /></x-a>` re-saves the same `$__componentOriginal<hash>` inside
+ *   the outer tag, the inner restore unsets it, and the outer restore never fires (Laravel leaves
+ *   the outer component in `$component` after the tag).
  * - A declaration that is not a plain class name: the save is `isset($component)`-gated, so a
  *   declared-nullable value that is null at runtime is not restored and `?Foo` would be wrong.
+ *   Unions, generics and shapes are declined too: only a bare name is provably safe to repeat.
+ * - A declaration that is not at block depth 0 (a branch arm, a loop body, a closure body): it is
+ *   not the type in force at the tag, so it resets the carried type instead of replacing it.
  *
  * Every shape this pass does not understand (a save without its restore, a restore for another
  * hash) returns the input unchanged. A match counts only at a real open tag per
  * {@see PhpTokenOffsets}, so author text that looks like a save or restore, inside a comment or
- * string, is ignored. A template that assigns `$component` itself is skipped whole, as
- * {@see AttributesRestoreReassert::templateAssignsAttributes()} does for `$attributes`.
+ * string, is ignored. A template is skipped whole unless {@see self::templateOnlyReadsComponent()}
+ * proves it never rewrites `$component` itself: Psalm sees such a write and types the variable
+ * correctly, so the declared type must not replace it.
  *
  * @internal
  *
@@ -57,37 +62,55 @@ final class ComponentRestoreReassert
     /** A plain (optionally namespaced) class name; a nullable, union, generic or shape type does not match. */
     private const DECLARATION_PATTERN = '/@(?:psalm-)?var\s+(\\\\?' . self::NAME . '(?:\\\\' . self::NAME . ')*)\s+\$component\b/';
 
-    /**
-     * Each way a template can write `$component`: a bare `=` (`==`/`===` and compound operators do
-     * not match), `unset()`, `[..] =`/`list(..) =` destructuring, and a `foreach` value. Over-matching
-     * (`$map[$component] = 1`) only withholds the re-assert.
-     */
-    private const ASSIGNMENT_PATTERNS = [
-        '/\$component\s*=(?!=)/',
-        '/\bunset\s*\([^)]*\$component\b/',
-        '/(?:\[[^\[\]]*|\blist\s*\([^()]*)\$component\b[^\[\]()]*[\])]\s*=(?!=)/',
-        '/\bas\s+(?:&?\s*\$\w+\s*=>\s*)?&?\s*\$component\b/i',
-    ];
+    /** Every `$component` occurrence, any case, never as the tail of a longer name (`$components`). */
+    private const OCCURRENCE_PATTERN = '/\$component(?![A-Za-z0-9_\x80-\xff])/i';
+
+    /** What may follow a read: a member access, a comparison, `instanceof`, or `??` (but never `??=`). */
+    private const READ_AFTER_PATTERN = '/^\s*(?:->|\?->|\?\?(?!=)|={2,3}|!==?|<>|instanceof\b)/i';
+
+    /** The sole argument of `isset(`/`empty(` or `@isset(`/`@empty(`, which only inspect the variable. */
+    private const INSPECTED_BEFORE_PATTERN = '/(?:@|\b)(?:isset|empty)\s*\(\s*$/i';
+
+    /** The variable name of a `@var`/`@psalm-var <type> $component` declaration, which writes nothing. */
+    private const DECLARATION_BEFORE_PATTERN = '/@(?:psalm-)?var\s+\S+\s+$/';
 
     /**
-     * Whether the template's own source writes `$component`. Scanned over
-     * {@see MarkerPrePass::blankInertText()}, so a mention in a Blade comment or `@verbatim` body
-     * (never executed) cannot trip it. Accepted gaps, as for `$attributes`: `extract()`, `$$name`,
-     * a by-reference out-parameter, and `@props`/`@aware` writing a `component` key.
+     * Whether EVERY `$component` in the template source is a proven read. An allowlist, because a
+     * denylist of write shapes (`=`, `unset()`, destructuring, `foreach`, `catch`, references, in
+     * any casing) is always one syntax short: declining only keeps the pre-tag finding. Bare uses
+     * (`{{ $component }}`, a function argument, `$$component`), `??=` and a reversed comparison
+     * (`$x === $component`) all decline. Scanned over the source with only `{{-- --}}` comments
+     * removed: `@verbatim` is NOT blanked because raw PHP inside it still executes.
+     *
+     * Out of scope, since Psalm is equally blind to them without a tag, so the re-assert agrees
+     * with its pre-tag view: `extract()`, `${'component'}`, `@aware`/`@props` writing a `component` key.
      *
      * @psalm-pure
      */
-    public static function templateAssignsComponent(string $source): bool
+    public static function templateOnlyReadsComponent(string $source): bool
     {
-        $executable = MarkerPrePass::blankInertText($source);
+        $source = \preg_replace('/\{\{--.*?--\}\}/s', ' ', $source);
 
-        foreach (self::ASSIGNMENT_PATTERNS as $pattern) {
-            if (\preg_match($pattern, $executable) === 1) {
-                return true;
+        if ($source === null || \preg_match_all(self::OCCURRENCE_PATTERN, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+            return false;
+        }
+
+        foreach ($matches[0] as [$name, $offset]) {
+            $before = \substr($source, \max(0, $offset - 200), \min(200, $offset));
+            $after = \substr($source, $offset + \strlen($name), 200);
+
+            $isRead = !\str_ends_with($before, '$') && (
+                \preg_match(self::READ_AFTER_PATTERN, $after) === 1
+                || (\preg_match(self::INSPECTED_BEFORE_PATTERN, $before) === 1 && \preg_match('/^\s*\)/', $after) === 1)
+                || \preg_match(self::DECLARATION_BEFORE_PATTERN, $before) === 1
+            );
+
+            if (!$isRead) {
+                return false;
             }
         }
 
-        return false;
+        return true;
     }
 
     /**
@@ -102,12 +125,12 @@ final class ComponentRestoreReassert
 
         [$openTags, $docComments] = PhpTokenOffsets::scan($compiled);
 
-        /** @var array<int, array{0: 'declare'|'save'|'restore', 1: ?string, 2: int}> $events offset => [kind, type or hash, restore length] */
+        /** @var array<int, array{0: 'declare'|'save'|'restore', 1: ?string, 2: int}> $events offset => [kind, type or hash, restore length or block depth] */
         $events = [];
 
-        foreach ($docComments as $offset => $docblock) {
+        foreach ($docComments as $offset => [$docblock, $blockDepth]) {
             if (\preg_match_all('/\$component\b/', $docblock) > 0) {
-                $events[$offset] = ['declare', self::declaredType($docblock), 0];
+                $events[$offset] = ['declare', self::declaredType($docblock), $blockDepth];
             }
         }
 
@@ -132,8 +155,9 @@ final class ComponentRestoreReassert
         foreach ($events as $offset => [$kind, $value, $length]) {
             if ($kind === 'declare') {
                 // Inside a tag body a declaration describes the child component, not the caller's.
+                // Inside a branch, loop or closure it is not the type in force at a later tag.
                 if ($stack === []) {
-                    $declared = $value;
+                    $declared = $length === 0 ? $value : null;
                 }
 
                 continue;

@@ -307,23 +307,40 @@ final class ComponentRestoreReassertTest extends TestCase
     /**
      * @return \Iterator<string, array{string}>
      */
-    public static function assigningTemplates(): \Iterator
+    public static function unprovenTemplates(): \Iterator
     {
         yield 'plain assignment' => ['@php $component = new Widget; @endphp'];
         yield 'raw php assignment' => ['<?php $component = null; ?>'];
+        yield 'null coalescing assignment' => ['@php $component ??= new Widget; @endphp'];
+        yield 'compound assignment' => ['@php $component .= "x"; @endphp'];
         yield 'unset' => ['@php unset($component); @endphp'];
+        yield 'upper case unset' => ['@php UNSET($component); @endphp'];
+        yield 'upper case variable' => ['@php $Component = new Widget; @endphp'];
         yield 'short destructuring' => ['@php [$a, $component] = $pair; @endphp'];
+        yield 'offset destructuring' => ['@php [$o[\'x\'], $component] = $pair; @endphp'];
         yield 'list destructuring' => ['@php list($a, $component) = $pair; @endphp'];
         yield 'foreach value' => ['@foreach ($items as $component) @endforeach'];
         yield 'foreach key value' => ['@foreach ($items as $key => $component) @endforeach'];
         yield 'foreach by reference' => ['@foreach ($items as &$component) @endforeach'];
+        yield 'foreach short destructuring' => ['@foreach ($items as [$k, $component]) @endforeach'];
+        yield 'foreach list destructuring' => ['@foreach ($items as list($k, $component)) @endforeach'];
+        yield 'reference alias' => ['@php $ref = &$component; @endphp'];
+        yield 'catch variable' => ['@php try { f(); } catch (\Exception $component) {} @endphp'];
+        yield 'bare echo' => ['{{ $component }}'];
+        yield 'function argument' => ['@php f($component); @endphp'];
+        yield 'by reference out parameter' => ['@php preg_match(\'/x/\', \'x\', $component); @endphp'];
+        yield 'variable variable' => ['@php $$component = 1; @endphp'];
+        yield 'isset with several arguments' => ['@php isset($component, $other); @endphp'];
+        yield 'variable variable read' => ['{{ $$component->id() }}'];
+        yield 'verbatim body' => ['@verbatim <?php $component = new Widget; ?> @endverbatim'];
+        yield 'one write among reads' => ['{{ $component->id() }} @php $component = null; @endphp {{ $component->id() }}'];
     }
 
     #[Test]
-    #[DataProvider('assigningTemplates')]
-    public function a_template_that_writes_component_is_detected(string $source): void
+    #[DataProvider('unprovenTemplates')]
+    public function a_template_with_an_unproven_component_use_is_not_a_reassert_candidate(string $source): void
     {
-        $this->assertTrue(ComponentRestoreReassert::templateAssignsComponent($source));
+        $this->assertFalse(ComponentRestoreReassert::templateOnlyReadsComponent($source));
     }
 
     /**
@@ -331,20 +348,95 @@ final class ComponentRestoreReassertTest extends TestCase
      */
     public static function readingTemplates(): \Iterator
     {
-        yield 'read only' => ['{{ $component->id() }}'];
+        yield 'no mention' => ['<x-alert />'];
+        yield 'property read' => ['{{ $component->id() }}'];
+        yield 'nullsafe read' => ['{{ $component?->id() }}'];
+        yield 'method chain on a new line' => ["{{ \$component\n    ->id() }}"];
         yield 'comparison' => ['@php $same = $component == $other; @endphp'];
         yield 'strict comparison' => ['@if ($component === $other) x @endif'];
+        yield 'not identical' => ['@if ($component !== null) x @endif'];
+        yield 'not equal' => ['@if ($component != null) x @endif'];
+        yield 'instanceof' => ['@if ($component instanceof Widget) x @endif'];
+        yield 'null coalescing read' => ['{{ $component ?? "none" }}'];
         yield 'isset' => ['@if (isset($component)) x @endif'];
+        yield 'empty' => ['@if (empty($component)) x @endif'];
+        yield 'isset directive' => ['@isset($component) x @endisset'];
+        yield 'empty directive' => ['@empty($component) x @endempty'];
+        yield 'single line docblock' => ['<?php /** @var Widget $component */ ?>'];
+        yield 'psalm docblock' => ['<?php /** @psalm-var \\App\\Widget $component */ ?>'];
+        yield 'multi line docblock' => ["<?php\n/**\n * @var \\App\\Widget \$component\n */\n?>"];
         yield 'blade comment only' => ['{{-- $component = 1; --}}'];
-        yield 'verbatim only' => ['@verbatim $component = 1; @endverbatim'];
         yield 'other variable' => ['@php $components = []; @endphp'];
-        yield 'foreach over it' => ['@foreach ($component->items() as $item) @endforeach'];
+        yield 'foreach over a property' => ['@foreach ($component->items() as $item) @endforeach'];
     }
 
     #[Test]
     #[DataProvider('readingTemplates')]
-    public function a_template_that_only_reads_component_is_not_flagged(string $source): void
+    public function a_template_that_only_reads_component_is_a_reassert_candidate(string $source): void
     {
-        $this->assertFalse(ComponentRestoreReassert::templateAssignsComponent($source));
+        $this->assertTrue(ComponentRestoreReassert::templateOnlyReadsComponent($source));
+    }
+
+    #[Test]
+    public function a_declaration_after_a_closed_block_is_carried_again(): void
+    {
+        $compiled = '<?php if ($a): ?><?php endif; ?>' . self::DECLARE . self::save(self::HASH_A) . self::restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_declaration_after_a_closed_brace_block_is_carried_again(): void
+    {
+        $compiled = '<?php if ($a) { f(); } ?>' . self::DECLARE . self::save(self::HASH_A) . self::restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    /** A `}` inside an interpolated string is string text, not a closing brace. */
+    #[Test]
+    public function a_brace_inside_an_encapsed_string_does_not_change_the_block_depth(): void
+    {
+        $compiled = '<?php echo "$a}"; ?>' . self::DECLARE . self::save(self::HASH_A) . self::restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_tag_inside_a_block_is_reasserted_from_a_declaration_before_it(): void
+    {
+        $compiled = self::DECLARE . '<?php if ($a): ?>' . self::save(self::HASH_A) . self::restore(self::HASH_A) . '<?php endif; ?>';
+
+        $this->assertStringContainsString('endif; /** @var \App\Widget $component */ ?><?php endif; ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    /**
+     * @return \Iterator<string, array{string}>
+     */
+    public static function nestedDeclarations(): \Iterator
+    {
+        $gadget = '/** @var \App\Gadget $component */';
+
+        yield 'alternative if arm' => ["<?php if (\$a): ?><?php {$gadget} ?><?php endif; ?>"];
+        yield 'else arm' => ["<?php if (\$a): ?><?php else: ?><?php {$gadget} ?><?php endif; ?>"];
+        yield 'elseif arm' => ["<?php if (\$a): ?><?php elseif (\$b): ?><?php {$gadget} ?><?php endif; ?>"];
+        yield 'foreach body' => ["<?php foreach (\$xs as \$x): ?><?php {$gadget} ?><?php endforeach; ?>"];
+        yield 'for body' => ["<?php for (\$i = 0; \$i < 2; \$i++): ?><?php {$gadget} ?><?php endfor; ?>"];
+        yield 'while body' => ["<?php while (\$a): ?><?php {$gadget} ?><?php endwhile; ?>"];
+        yield 'switch case' => ["<?php switch (\$a): ?><?php case 1: ?><?php {$gadget} ?><?php endswitch; ?>"];
+        yield 'brace if' => ["<?php if (\$a) { {$gadget} } ?>"];
+        yield 'closure body' => ["<?php \$f = function (\$c) { {$gadget} return 1; }; ?>"];
+        yield 'nested parens in the condition' => ["<?php if (f(g(\$a)) && (\$b)): ?><?php {$gadget} ?><?php endif; ?>"];
+        yield 'interpolated brace before it' => ["<?php echo \"{\$a}\"; if (\$a): ?><?php {$gadget} ?><?php endif; ?>"];
+    }
+
+    /** The declaration is not in force at the tag, so it must not be carried AND must reset the one that was. */
+    #[Test]
+    #[DataProvider('nestedDeclarations')]
+    public function a_declaration_at_block_depth_above_zero_resets_the_carried_type(string $block): void
+    {
+        $compiled = self::DECLARE . $block . self::save(self::HASH_A) . self::restore(self::HASH_A);
+
+        $this->assertSame($compiled, ComponentRestoreReassert::apply($compiled));
     }
 }
