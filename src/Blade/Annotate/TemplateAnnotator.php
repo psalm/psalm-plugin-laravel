@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
 use Psalm\LaravelPlugin\Blade\ContractParser;
+use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\SourceLines;
 
 /**
@@ -28,6 +29,8 @@ final class TemplateAnnotator
     /**
      * A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one.
      * Group 1 is the inner content, which is what {@see ContractParser::VAR_PATTERN} reads.
+     *
+     * Matches raw source, so it also hits text the parser ignores; go through {@see self::liveContractComments()}.
      */
     private const CONTRACT_COMMENT = '/\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
 
@@ -85,11 +88,9 @@ final class TemplateAnnotator
     {
         $declared = [];
 
-        if (\preg_match_all(self::CONTRACT_COMMENT, $source, $comments) > 0) {
-            foreach ($comments[1] as $innerContent) {
-                if (\preg_match(ContractParser::VAR_PATTERN, $innerContent, $matched) === 1) {
-                    $declared[$matched[2]] = true;
-                }
+        foreach (self::liveContractComments($source) as [, , $innerContent]) {
+            if (\preg_match(ContractParser::VAR_PATTERN, $innerContent, $matched) === 1) {
+                $declared[$matched[2]] = true;
             }
         }
 
@@ -114,14 +115,49 @@ final class TemplateAnnotator
      */
     private static function insertionPoint(string $source): array
     {
-        if (\preg_match_all(self::CONTRACT_COMMENT, $source, $matches, \PREG_OFFSET_CAPTURE) > 0) {
-            /** @var array{0: string, 1: int} $last */
-            $last = \end($matches[0]);
+        $comments = self::liveContractComments($source);
 
-            return [$last[1] + \strlen($last[0]), !\str_ends_with($last[0], "\n")];
+        if ($comments !== []) {
+            [$text, $offset] = \end($comments);
+
+            return [$offset + \strlen($text), !\str_ends_with($text, "\n")];
         }
 
         return [\str_starts_with($source, self::BOM) ? \strlen(self::BOM) : 0, false];
+    }
+
+    /**
+     * CONTRACT_COMMENT matches that {@see ContractParser} would also read: those starting where a
+     * top-level Blade comment does. A `{{-- @var --}}` inside `@verbatim`, `@php`, raw PHP, or
+     * another comment sits within a larger masked range, so it is literal text, not a declaration.
+     *
+     * @return list<array{0: string, 1: int, 2: string}> full match, byte offset, group 1
+     *
+     * @psalm-pure
+     */
+    private static function liveContractComments(string $source): array
+    {
+        if (\preg_match_all(self::CONTRACT_COMMENT, $source, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
+            return [];
+        }
+
+        $commentStarts = [];
+
+        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
+            if (\str_starts_with($text, '{{--')) {
+                $commentStarts[$offset] = true;
+            }
+        }
+
+        $live = [];
+
+        foreach ($matches as $match) {
+            if (isset($commentStarts[$match[0][1]])) {
+                $live[] = [$match[0][0], $match[0][1], $match[1][0]];
+            }
+        }
+
+        return $live;
     }
 
     /**
