@@ -18,18 +18,11 @@ namespace TaintedNamedArgumentFunctionNameCandidatesReports {
     function localSink(string $path = 'safe', string $label = 'x'): void { echo $label; }
 
     /**
-     * The two attribute-derived candidates in `functionNameCandidates()`, each of which is the
-     * ONLY one that resolves for its own call shape. `Functions::getStorage()` looks its id up
-     * as a key in file storage and reflection; it does not consult the file's alias table, so
-     * dropping either attribute silently strips the matching call.
-     *
-     * `resolvedName`: an aliased call whose written name (`aliasedSink`) names no real function.
-     * `namespacedName`: an unqualified call to a same-namespace function, which PHP-Parser
-     * leaves without a `resolvedName` because PHP itself defers it to runtime.
-     *
-     * The third candidate, the raw written name, is pinned by
-     * `TaintedNamedArgumentBuiltinFunctionPositionMatchReports.phpt` (a global builtin called
-     * unqualified from inside a namespace).
+     * An aliased call and an unqualified same-namespace call, each naming a sunk parameter with
+     * `label:` written at offset 0. Neither callee declares a variadic, so
+     * NamedArgumentTaintHandler leaves both alone. The same two call shapes pin the handler's
+     * name resolution in
+     * `SafeNamedArgumentFunctionNameCandidatesVariadicCaptureStripped.phpt`.
      */
     function aliasedCallKeepsTaint(): void
     {

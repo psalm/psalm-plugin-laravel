@@ -176,6 +176,18 @@ Document every workaround with a comment linking to the upstream issue.
 
 **Why:** Workarounds accumulate tech debt and can mask the root cause. They also break silently when the upstream behavior changes. But waiting indefinitely for upstream fixes blocks real users.
 
+### `NamedArgumentTaintHandler` strips only named arguments bound to a variadic
+
+**Decision:** The handler strips taint (`TaintKind::ALL_INPUT`) from a named-argument value only when Psalm's own declaration-order matcher (`ArgumentsAnalyzer`: first parameter with `name === $arg->name || is_variadic`) binds it to the callee's variadic parameter. Every other named argument is left to Psalm.
+
+**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1: argument taint nodes are keyed by the DECLARED parameter index (`DataFlowNode::getParameterOffset()`), so the earlier "strip everything we cannot prove" handler only hid true positives. One bug remains, a separate one: `ArgumentsAnalyzer` maps an unpacked argument onto every parameter from its offset to the end and ignores string keys, so `run(string ...$arguments) { handle(...$arguments); }` (`AsAction::run()` -> `handle()`) reports `run(page: $x)` against `handle()`'s first parameter (#1395, a spurious `TaintedFile` for `File::files()`). Vanilla rc1 reproduces it with no named argument at all (`handle(...['page' => $x])`).
+
+**Accepted limitation:** the strip kills the argument's whole source flow at the call site, so a named argument captured by a variadic is also not reported at its GENUINE re-spread destination (pinned by `TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation.phpt`). This equals the behavior shipped before the shrink; nothing regresses. Psalm offers no hook that removes only the mis-attributed flows: `AddRemoveTaintsEvent` names neither the parameter nor the destination.
+
+**Rejected (draft PR #1579):** strip only when the written offset collides with a non-variadic parameter, and preserve the rest. It keeps the genuine destination finding, but it reopens the reported #1395 false positive, because there the named argument sits at the variadic's own declared index and is "keyed correctly". Trading the reported false positive on the real laravel-actions shape for a finding that needs a sink behind a variadic forwarder was judged the worse deal.
+
+**Guards the single rule still needs (each pinned by a fixture):** a value that Psalm separately dispatches `AddRemoveTaintsEvent` against (`eval`, `include`, a dynamic callee or class) is never recorded, or the strip would erase its own `TaintedEval`/`TaintedInclude`/`TaintedCallable`; an intersection receiver is not resolved, because Psalm's primary component is not the written order and one component's variadic would erase the other's finding. Unresolvable callees, CallMap-only builtins and facade pseudo-methods have nothing to capture and are left to Psalm.
+
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 
 **Decision:** The `\Closure(self<TModel>): mixed` arm on `Builder::where`, `firstWhere`, `whereNot`, `orWhereNot` is intentionally non-`static`. Users subclassing `Builder` and writing `$this->where(static fn (self $q) => ...)` should type the closure parameter as base `\Illuminate\Database\Eloquent\Builder`, not `self`.

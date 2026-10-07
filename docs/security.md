@@ -93,20 +93,19 @@ the call reports nothing at all instead of reporting one of its flows. The
 longer flows are discarded whether or not the exemption applies, so this costs
 no coverage relative to running without the plugin.
 
-### Known limitation: named arguments
+### Known limitation: named arguments captured by a variadic
 
-Psalm keys a named argument's taint node by the argument's written position rather than by the
-parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
-can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
-taint from a named argument it cannot prove is attributed correctly.
+Psalm maps an unpacked argument onto every parameter from its offset to the end and ignores
+string keys. A variadic that re-spreads its arguments (`run(mixed ...$arguments)` forwarding to
+`handle(...$arguments)`, the `AsAction::run()` shape) therefore reports a named argument
+against the wrong parameter of `handle()`, for example a spurious `TaintedFile`
+(#1395, vimeo/psalm unpacking bug). To keep that false positive silent, the plugin drops the
+taint from a named argument that Psalm binds to a callee's variadic.
 
-Detection is unaffected when the callee is statically known (a plain function, a facade, a
-static call, a constructor, or a method on a receiver typed as exactly one class) and the
-argument names the parameter at its own position, which covers ordinary application code. It is
-lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
-chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
-expression rather than a variable), an argument captured by a variadic, and a `static::` call
-resolved through a subclass override. Passing the same values positionally always reports.
+The trade: such an argument is also not reported at its genuine destination, even when
+`handle()`'s own parameter really reaches a sink. Every other named-argument call (reordered or
+skipped arguments, methods, static calls, constructors, facades, builtins, a dynamic callee)
+keeps full detection. Passing the argument positionally always reports.
 
 ### Timing-unsafe secret comparison (CWE-208)
 

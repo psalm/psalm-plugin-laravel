@@ -8,19 +8,19 @@ namespace TaintedNamedArgumentSelfDispatchedDynamicCalleeSurvives;
 /** @psalm-taint-source input */
 function tainted(): string { return 'attacker'; }
 
-function outer(string $safe = '', mixed $label = null): void { echo (string) $label; }
+function outer(mixed ...$rest): int { return \count($rest); }
 
 /**
- * `$fn()` — a `FuncCall` with a DYNAMIC (tainted) callee — is written as `label:`'s
- * mismatched value. `FunctionCallAnalyzer` independently dispatches
- * `AddRemoveTaintsEvent` on that SAME `FuncCall` node to check its own `INPUT_CALLABLE`
- * ("variable-call") sink; recording it for the mismatch strip would erase
- * `TaintedCallable` too (MUST-FIX A, #1395 round 3).
+ * `$fn()` — a `FuncCall` with a DYNAMIC (tainted) callee — is the value of `label:`, which
+ * `outer()`'s variadic captures, so the handler would record it for the variadic strip.
+ * `FunctionCallAnalyzer` independently dispatches `AddRemoveTaintsEvent` on that SAME `FuncCall`
+ * node to check its own `INPUT_CALLABLE` ("variable-call") sink; recording it would erase
+ * `TaintedCallable` too.
  */
 function dynamicFuncCallCalleeSurvives(): void
 {
     $fn = tainted();
-    outer(label: $fn());
+    $_ = outer(label: $fn());
 }
 
 /**
@@ -30,7 +30,7 @@ function dynamicFuncCallCalleeSurvives(): void
 function dynamicNewCalleeSurvives(): void
 {
     $class = tainted();
-    outer(label: new $class());
+    $_ = outer(label: new $class());
 }
 ?>
 --EXPECTF--

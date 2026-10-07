@@ -20,8 +20,8 @@ function sink(string $path = 'safe', string $label = 'x'): void
 
 /**
  * `label: tainted()` is written at offset 1, and the declared parameter at offset 1 is
- * `$label` — its own name, so upstream (buggy or not) already attributes this correctly.
- * NamedArgumentTaintHandler must NOT strip it: detection must survive the fix.
+ * `$label`: the plainest named-argument shape. The callee declares no variadic, so
+ * NamedArgumentTaintHandler must not strip it.
  */
 function positionMatchKeepsTaint(): void
 {

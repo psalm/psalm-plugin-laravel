@@ -23,24 +23,29 @@ final class OtherWriter
 }
 
 /**
- * A DI-injected receiver is a plain `$var` whose type is already in scope, so the handler
- * resolves `Filesystem::delete` and sees that `paths:` names the declared parameter at its own
- * written offset. Upstream attributes it correctly, so the finding must survive.
+ * A DI-injected receiver is a plain `$var` whose type is already in scope. `paths:` names the
+ * declared parameter, so the finding reports.
  */
-function resolvedReceiverKeepsTaint(Filesystem $filesystem): void
+function resolvedReceiverReports(Filesystem $filesystem): void
 {
     $filesystem->delete(paths: tainted());
 }
 
 /**
- * The negative half of the same narrowing: a union receiver is not "exactly one known class",
- * so the callee stays unresolvable and the argument is stripped. Reports nothing, even though
- * both members declare the same sunk parameter at the same offset.
+ * A union receiver is not "exactly one known class", so the handler declines to resolve the
+ * callee. It has nothing to strip anyway: both members declare the sunk parameter and the value
+ * genuinely reaches a file sink, so Psalm reports it.
  */
-function unionReceiverIsStripped(Writer|OtherWriter $writer): void
+function unionReceiverReports(Writer|OtherWriter $writer): void
 {
     $writer->store(path: tainted());
 }
 ?>
 --EXPECTF--
+TaintedFile on line %d: Detected tainted file handling
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedFile on line %d: Detected tainted file handling
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedFile on line %d: Detected tainted file handling

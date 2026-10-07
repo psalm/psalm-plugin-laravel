@@ -35,10 +35,12 @@ final class ListChangelogEntriesAction
 }
 
 /**
- * `run(page: ...)` names its ONLY written argument `page`, at offset 0 — but `run`'s only
- * declared parameter is the variadic `$arguments`, not `$page`, so NamedArgumentTaintHandler
- * strips the value here at the call site, before it can ever re-spread into `handle()`'s
- * `$directory` and mis-report TaintedFile (#1395).
+ * `run(page: ...)` is captured by `run`'s variadic `$arguments`, and Psalm maps an unpacked
+ * argument onto EVERY parameter of `handle()` from its offset on, ignoring the string key, so
+ * the value would also reach `$directory` and mis-report TaintedFile (#1395). Plain Psalm
+ * 7.0.0-rc1 reports it; NamedArgumentTaintHandler strips the value at the call site instead.
+ * The price, a missed genuine finding at the re-spread destination, is pinned by
+ * `TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation.phpt`.
  */
 function controllerAction(Request $request): mixed
 {

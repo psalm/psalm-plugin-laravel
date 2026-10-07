@@ -12,11 +12,9 @@ use Illuminate\Support\Facades\Storage;
 function tainted(): string { return 'attacker'; }
 
 /**
- * A facade's `@method static` tag declares params but no real MethodStorage, so
- * `Codebase::getFunctionLikeStorage()` cannot see it and the callee used to count as
- * "unresolvable" — stripping every named argument on every facade call. Both names below
- * match the declared parameter at their own written offset, so upstream attributes them
- * correctly and the findings must survive.
+ * A facade's `@method static` tag declares params but no real MethodStorage, so the handler
+ * cannot resolve the callee and leaves it to Psalm. Named arguments on facade calls must
+ * keep reporting.
  */
 function facadeNamedArgumentsKeepTaint(): void
 {

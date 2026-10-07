@@ -20,8 +20,7 @@ function sink(string $path = 'safe', string $label = 'x'): void
 
 /**
  * A plain positional call carries no named `Arg`, so NamedArgumentTaintHandler records
- * nothing for it — the upstream bug it works around only mis-attributes NAMED arguments.
- * Detection must be untouched here.
+ * nothing for it. Detection must be untouched here.
  */
 function positionalCallIsUntouched(): void
 {
