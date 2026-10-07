@@ -49,7 +49,7 @@ function static_with(): \Closure
     return Customer::with(...);
 }
 
-// ConsoleClosureScopeHandler: Artisan::command() callback lookup.
+// Artisan::command() has no callback argument to bind `$this` to when taken as a first-class callable.
 function artisan_command(): \Closure
 {
     return Artisan::command(...);
