@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Collections\DamageReportCollection;
+use App\Models\Concerns\Reportable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -23,6 +24,16 @@ class DamageReport extends Model
      * @phpstan-return MorphTo<Vehicle|WorkOrder, $this>
      */
     public function reportable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Intersection related type: Model plus a contract (the call-site type must keep both parts).
+     *
+     * @return MorphTo<Model&Reportable, self>
+     */
+    public function subject(): MorphTo
     {
         return $this->morphTo();
     }
