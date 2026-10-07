@@ -315,7 +315,6 @@ final class ComponentRestoreReassertTest extends TestCase
         yield 'compound assignment' => ['@php $component .= "x"; @endphp'];
         yield 'unset' => ['@php unset($component); @endphp'];
         yield 'upper case unset' => ['@php UNSET($component); @endphp'];
-        yield 'upper case variable' => ['@php $Component = new Widget; @endphp'];
         yield 'short destructuring' => ['@php [$a, $component] = $pair; @endphp'];
         yield 'offset destructuring' => ['@php [$o[\'x\'], $component] = $pair; @endphp'];
         yield 'list destructuring' => ['@php list($a, $component) = $pair; @endphp'];
@@ -331,6 +330,13 @@ final class ComponentRestoreReassertTest extends TestCase
         yield 'by reference out parameter' => ['@php preg_match(\'/x/\', \'x\', $component); @endphp'];
         yield 'variable variable' => ['@php $$component = 1; @endphp'];
         yield 'isset with several arguments' => ['@php isset($component, $other); @endphp'];
+        yield 'line comment declaration before a write' => ["@php // @var \\App\\Gadget\n\$component = new Gadget; @endphp"];
+        yield 'hash comment declaration before a write' => ["@php # @var \\App\\Gadget\n\$component = new Gadget; @endphp"];
+        yield 'line comment declaration on the write line' => ['@php // @var \\App\\Gadget $component = new Gadget; @endphp'];
+        yield 'line comment after a closed docblock' => ['@php /** note */ // @var \\App\\Gadget $component = new Gadget; @endphp'];
+        yield 'docblock with the name on the next line' => ["<?php /** @var \\App\\Widget\n \$component */ ?>"];
+        yield 'method named isset' => ['@php $z->isset($component); @endphp'];
+        yield 'static method named empty' => ['@php Foo::empty($component); @endphp'];
         yield 'variable variable read' => ['{{ $$component->id() }}'];
         yield 'verbatim body' => ['@verbatim <?php $component = new Widget; ?> @endverbatim'];
         yield 'one write among reads' => ['{{ $component->id() }} @php $component = null; @endphp {{ $component->id() }}'];
@@ -349,6 +355,7 @@ final class ComponentRestoreReassertTest extends TestCase
     public static function readingTemplates(): \Iterator
     {
         yield 'no mention' => ['<x-alert />'];
+        yield 'other case is another variable' => ['@php $Component = new Widget; @endphp {{ $COMPONENT->id() }}'];
         yield 'property read' => ['{{ $component->id() }}'];
         yield 'nullsafe read' => ['{{ $component?->id() }}'];
         yield 'method chain on a new line' => ["{{ \$component\n    ->id() }}"];
@@ -375,6 +382,30 @@ final class ComponentRestoreReassertTest extends TestCase
     public function a_template_that_only_reads_component_is_a_reassert_candidate(string $source): void
     {
         $this->assertTrue(ComponentRestoreReassert::templateOnlyReadsComponent($source));
+    }
+
+    /**
+     * @return \Iterator<string, array{string}>
+     */
+    public static function topLevelControlFlow(): \Iterator
+    {
+        yield 'closed alternative switch' => ['<?php switch ($a): ?><?php case 1: ?><?php break; ?><?php endswitch; ?>'];
+        yield 'closed alternative foreach' => ['<?php foreach ($xs as $x): ?><?php endforeach; ?>'];
+        yield 'ternary' => ['<?php $v = $a ? 1 : 2; $w = $a ?: 3; ?>'];
+        yield 'match' => ['<?php $v = match (true) { default => 1 }; ?>'];
+        yield 'do while' => ['<?php do { $i++; } while ($i < 3); ?>'];
+        yield 'unbraced if else' => ['<?php if ($a) $v = 1; else $v = 2; ?>'];
+        yield 'braces inside a string' => ['<?php $s = "if (x): {"; ?>'];
+    }
+
+    /** Constructs that open and close (or never open) a block leave the depth at 0 for the declaration after them. */
+    #[Test]
+    #[DataProvider('topLevelControlFlow')]
+    public function control_flow_before_a_declaration_does_not_withhold_it(string $before): void
+    {
+        $compiled = $before . self::DECLARE . self::save(self::HASH_A) . self::restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
     }
 
     #[Test]

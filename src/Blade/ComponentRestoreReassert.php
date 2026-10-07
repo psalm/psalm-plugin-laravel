@@ -19,7 +19,7 @@ namespace Psalm\LaravelPlugin\Blade;
  * The type comes from the compiled string's own doc comments, not from {@see ContractRegistry}: only
  * a raw `<?php /** @var T $component *\/ ?>` or `@php` block types the template body, while a
  * `{{-- @var --}}` comment never reaches the compiled output. A carried type is where the
- * declaration stood when the tag SAVED it, which is what the restore puts back. Three shapes would
+ * declaration stood when the tag SAVED it, which is what the restore puts back. Four shapes would
  * make that unsound, so the pass declines instead:
  *
  * - Nesting: after an inner tag's restore the runtime `$component` is the OUTER tag's component,
@@ -62,22 +62,21 @@ final class ComponentRestoreReassert
     /** A plain (optionally namespaced) class name; a nullable, union, generic or shape type does not match. */
     private const DECLARATION_PATTERN = '/@(?:psalm-)?var\s+(\\\\?' . self::NAME . '(?:\\\\' . self::NAME . ')*)\s+\$component\b/';
 
-    /** Every `$component` occurrence, any case, never as the tail of a longer name (`$components`). */
-    private const OCCURRENCE_PATTERN = '/\$component(?![A-Za-z0-9_\x80-\xff])/i';
+    /** Every `$component` occurrence, never as the tail of a longer name (`$components`). PHP variables are case-sensitive. */
+    private const OCCURRENCE_PATTERN = '/\$component(?![A-Za-z0-9_\x80-\xff])/';
 
     /** What may follow a read: a member access, a comparison, `instanceof`, or `??` (but never `??=`). */
     private const READ_AFTER_PATTERN = '/^\s*(?:->|\?->|\?\?(?!=)|={2,3}|!==?|<>|instanceof\b)/i';
 
-    /** The sole argument of `isset(`/`empty(` or `@isset(`/`@empty(`, which only inspect the variable. */
-    private const INSPECTED_BEFORE_PATTERN = '/(?:@|\b)(?:isset|empty)\s*\(\s*$/i';
+    /** The sole argument of the language construct `isset(`/`empty(` or `@isset(`/`@empty(`, never a method of that name. */
+    private const INSPECTED_BEFORE_PATTERN = '/(?:@|(?<![\w>:$]))(?:isset|empty)\s*\(\s*$/i';
 
-    /** The variable name of a `@var`/`@psalm-var <type> $component` declaration, which writes nothing. */
-    private const DECLARATION_BEFORE_PATTERN = '/@(?:psalm-)?var\s+\S+\s+$/';
+    /** The variable name of a `@var`/`@psalm-var <type> $component` declaration, type and name on ONE line. */
+    private const DECLARATION_BEFORE_PATTERN = '/@(?:psalm-)?var[ \t]+\S+[ \t]+$/';
 
     /**
      * Whether EVERY `$component` in the template source is a proven read. An allowlist, because a
-     * denylist of write shapes (`=`, `unset()`, destructuring, `foreach`, `catch`, references, in
-     * any casing) is always one syntax short: declining only keeps the pre-tag finding. Bare uses
+     * denylist of write shapes (`=`, `unset()`, destructuring, `foreach`, `catch`, references) is always one syntax short: declining only keeps the pre-tag finding. Bare uses
      * (`{{ $component }}`, a function argument, `$$component`), `??=` and a reversed comparison
      * (`$x === $component`) all decline. Scanned over the source with only `{{-- --}}` comments
      * removed: `@verbatim` is NOT blanked because raw PHP inside it still executes.
@@ -102,7 +101,7 @@ final class ComponentRestoreReassert
             $isRead = !\str_ends_with($before, '$') && (
                 \preg_match(self::READ_AFTER_PATTERN, $after) === 1
                 || (\preg_match(self::INSPECTED_BEFORE_PATTERN, $before) === 1 && \preg_match('/^\s*\)/', $after) === 1)
-                || \preg_match(self::DECLARATION_BEFORE_PATTERN, $before) === 1
+                || (\preg_match(self::DECLARATION_BEFORE_PATTERN, $before) === 1 && self::endsInsideDocComment($before))
             );
 
             if (!$isRead) {
@@ -111,6 +110,19 @@ final class ComponentRestoreReassert
         }
 
         return true;
+    }
+
+    /**
+     * Whether the text ends inside an unterminated `/** ... *\/`: a `// @var T` or `# @var T` line
+     * comment is not a declaration, and it can sit right above a write.
+     *
+     * @psalm-pure
+     */
+    private static function endsInsideDocComment(string $before): bool
+    {
+        $open = \strrpos($before, '/**');
+
+        return $open !== false && \strrpos($before, '*/', $open + 3) === false;
     }
 
     /**

@@ -1,4 +1,4 @@
 <?php /** @var \BladeIssueRemapFixture\Widget $component */ ?>
-@php $f = function (\BladeIssueRemapFixture\Gadget $component): string { /** @var \BladeIssueRemapFixture\Gadget $component */ return $component->gadget(); }; @endphp
+@php $f = function (): int { /** @var \BladeIssueRemapFixture\Gadget $component */ return 1; }; @endphp
 <x-alert />
 {{ $component->id() }}
