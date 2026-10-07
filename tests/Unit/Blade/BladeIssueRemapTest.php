@@ -103,6 +103,24 @@ final class BladeIssueRemapTest extends TestCase
         return $lines;
     }
 
+    /**
+     * @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues
+     *
+     * @return list<string> the messages the issue type was reported with for that template
+     */
+    private function messagesFor(array $issues, string $type, string $template): array
+    {
+        $messages = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === $type && \str_ends_with($issue['file_path'], $template)) {
+                $messages[] = $issue['message'];
+            }
+        }
+
+        return $messages;
+    }
+
     #[Test]
     public function suppressions_cover_issues_inside_their_own_docblock(): void
     {
@@ -811,6 +829,13 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+
+        // #1723: "first seen on line N" names the template line of the assignment (7), not the
+        // shadow line Psalm counted.
+        $this->assertSame(
+            ['Possibly undefined global variable $__authorLocal, first seen on line 7'],
+            $this->messagesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+        );
     }
 
     /** #1694: the `@context` twin of the `@session` stack above (`$__contextPrevious`). */
@@ -1223,6 +1248,11 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'ParseError', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+
+        // #1723: php-parser's trailing " on line N" names the template line too.
+        foreach ($this->messagesFor($issues, 'ParseError', $template) as $message) {
+            $this->assertStringEndsWith(' on line 3', $message);
+        }
 
         // Guard against a vacuous pass: a well-formed `<x-alert />` alone already emits several
         // `endif;` lines as part of its own save/restore bookkeeping, so a bare substring check for

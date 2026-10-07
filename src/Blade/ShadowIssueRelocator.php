@@ -18,9 +18,11 @@ use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
+use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -55,6 +57,18 @@ use Psalm\Issue\UnusedVariable;
 final class ShadowIssueRelocator
 {
     private const UNMAPPED_SUFFIX = ' (unmapped)';
+
+    /**
+     * Message wordings that name a shadow line, keyed by exact (final) issue class so no other
+     * wording is touched. Capture 1 is the clause prefix, capture 2 the line. End-anchored with `\z`
+     * (`$` also matches before a trailing newline) so quoted parser text cannot fake the suffix.
+     */
+    private const MESSAGE_LINE_REFERENCES = [
+        PossiblyUndefinedGlobalVariable::class => '/(, first seen on line )(\d++)\z/',
+        PossiblyUndefinedVariable::class => '/(, first seen on line )(\d++)\z/',
+        // php-parser's `Error::updateMessage()` appends ' on line N' to the raw message
+        ParseError::class => '/( on line )(\d++)\z/',
+    ];
 
     /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
@@ -368,7 +382,7 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = $issue->message;
+        $message = self::remapMessageLine($issue, $target);
 
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
@@ -432,6 +446,37 @@ final class ShadowIssueRelocator
         }
 
         return self::rebuild($issue, $overrides);
+    }
+
+    /**
+     * Rewrites the shadow line an issue message names (`first seen on line N`) onto the template,
+     * through the same {@see ShadowTarget::templateLineFor()} the location and the journey use.
+     * Unlike {@see JourneyRemapper}, a line inside the prelude drops the clause instead of clamping
+     * to line 1 (that would state a false fact), and a regex failure keeps Psalm's message instead
+     * of declining: this rewrite is cosmetic and must never lose the issue.
+     *
+     * @psalm-mutation-free
+     */
+    private static function remapMessageLine(CodeIssue $issue, ShadowTarget $target): string
+    {
+        foreach (self::MESSAGE_LINE_REFERENCES as $class => $pattern) {
+            if ($issue::class !== $class) {
+                continue;
+            }
+
+            return \preg_replace_callback(
+                $pattern,
+                /** @param array<array-key, string> $matches */
+                static function (array $matches) use ($target): string {
+                    $templateLine = $target->templateLineFor((int) $matches[2]);
+
+                    return $templateLine >= 1 ? $matches[1] . $templateLine : '';
+                },
+                $issue->message,
+            ) ?? $issue->message;
+        }
+
+        return $issue->message;
     }
 
     /**
