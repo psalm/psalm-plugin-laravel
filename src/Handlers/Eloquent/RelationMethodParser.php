@@ -917,8 +917,6 @@ final class RelationMethodParser
      * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
      * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
      * nullable or union return and a MorphTo subclass.
-     *
-     * @psalm-mutation-free
      */
     public static function declaredMorphToRelatedModelType(Codebase $codebase, ?Union $declaredReturn): ?Union
     {
@@ -967,8 +965,6 @@ final class RelationMethodParser
      * that only binds against a receiver: a template parameter, `static` / `$this`, or a `self` / `parent`
      * a trait method keeps unresolved. Provider results skip Psalm's type expansion, so such a part would
      * leak into the call's type as written (a nested `static` also recurses in the expander).
-     *
-     * @psalm-mutation-free
      */
     private static function containsContextDependentType(Union $type): bool
     {
@@ -986,9 +982,7 @@ final class RelationMethodParser
             }
         };
 
-        // traverse() returns false exactly when enterNode() stopped the traversal. The visitor keeps no
-        // state, so the call mutates nothing; Psalm cannot see that through the abstract base.
-        /** @psalm-suppress ImpureMethodCall */
+        // traverse() returns false exactly when enterNode() stopped the traversal.
         return !$visitor->traverse($type);
     }
 
