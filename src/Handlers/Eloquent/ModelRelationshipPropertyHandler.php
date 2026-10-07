@@ -182,22 +182,6 @@ final class ModelRelationshipPropertyHandler
         // types (plain BelongsTo) and untyped methods (public function image() { return $this->morphOne(...); }).
         $relation = self::registryRelation($fq_classlike_name, $property_name);
         if ($relation instanceof RelationInfo) {
-            // When relatedModel is null (morphTo — polymorphic), the AST can't determine the related
-            // type. Before falling back to ?Model, check the method docblock for generics that narrow
-            // TRelatedModel — e.g. @return MorphTo<User|Post, $this>, where getMethodReturnType()
-            // resolves $this and loses the generic params.
-            if ($relation->relatedModel === null) {
-                $docblockResult = self::resolveFromDocblockGenerics(
-                    $codebase,
-                    $fq_classlike_name,
-                    $property_name,
-                    $relation->relationClass,
-                );
-                if ($docblockResult instanceof Union) {
-                    return $docblockResult;
-                }
-            }
-
             return self::buildPropertyType($codebase, $relation->relationClass, self::relatedModelType($relation->relatedModel));
         }
 
@@ -255,32 +239,6 @@ final class ModelRelationshipPropertyHandler
         }
 
         return null;
-    }
-
-    /**
-     * Extract TRelatedModel from the method's docblock generic return type.
-     *
-     * When getMethodReturnType() resolves $this in annotations like MorphTo<User|Post, $this>,
-     * Psalm may collapse the type to a non-generic TNamedObject, losing the generic info.
-     * This method reads the raw docblock to recover TRelatedModel and build the property type.
-     */
-    private static function resolveFromDocblockGenerics(
-        Codebase $codebase,
-        string $fq_classlike_name,
-        string $property_name,
-        string $relationClassName,
-    ): ?Union {
-        $modelType = RelationMethodParser::extractDocblockRelatedModelType(
-            $codebase,
-            $fq_classlike_name,
-            $property_name,
-        );
-
-        if (!$modelType instanceof Union) {
-            return null;
-        }
-
-        return self::buildPropertyType($codebase, $relationClassName, $modelType);
     }
 
     /**
