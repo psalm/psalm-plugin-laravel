@@ -149,18 +149,121 @@ final class ComponentRestoreReassertTest extends TestCase
         $this->assertSame($compiled, ComponentRestoreReassert::apply($compiled));
     }
 
+    /** The collided outer restore never ran, so the original is gone: a later sibling would restore the tag's component. */
     #[Test]
-    public function a_sibling_after_a_collided_tag_is_still_reasserted(): void
+    public function a_sibling_after_a_collided_tag_is_not_reasserted(): void
     {
         $collided = $this->save(self::HASH_A) . $this->save(self::HASH_A) . $this->restore(self::HASH_A) . $this->restore(self::HASH_A);
         $sibling = $this->save(self::HASH_B) . $this->restore(self::HASH_B);
 
-        $applied = ComponentRestoreReassert::apply(self::DECLARE . $collided . $sibling);
+        $compiled = self::DECLARE . $collided . $sibling;
 
-        $this->assertSame(
-            self::DECLARE . $collided . $this->save(self::HASH_B) . $this->reasserted($this->restore(self::HASH_B), '\App\Widget'),
-            $applied,
-        );
+        $this->assertSame($compiled, ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_declaration_after_a_collided_tag_is_carried_again(): void
+    {
+        $collided = $this->save(self::HASH_A) . $this->save(self::HASH_A) . $this->restore(self::HASH_A) . $this->restore(self::HASH_A);
+        $sibling = $this->save(self::HASH_B) . $this->restore(self::HASH_B);
+
+        $applied = ComponentRestoreReassert::apply(self::DECLARE . $collided . self::DECLARE . $sibling);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', $applied);
+    }
+
+    /**
+     * @return \Iterator<string, array{string}>
+     */
+    public static function statementStarts(): \Iterator
+    {
+        yield 'after a statement' => ['<?php f(); '];
+        yield 'after a braced block' => ['<?php if ($a) { f(); } '];
+        yield 'after an open tag' => ['<?php '];
+    }
+
+    /** A docblock after `;`, `}` or an open tag begins its own statement, so it is the type in force afterwards. */
+    #[Test]
+    #[DataProvider('statementStarts')]
+    public function a_docblock_that_starts_a_statement_is_carried(string $before): void
+    {
+        $compiled = $before . '/** @var \App\Widget $component */ ?>' . $this->save(self::HASH_A) . $this->restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    /**
+     * @return \Iterator<string, array{string}>
+     */
+    public static function jumpTokens(): \Iterator
+    {
+        yield 'break' => ['<?php break; ?>'];
+        yield 'continue' => ['<?php continue; ?>'];
+        yield 'goto' => ['<?php goto end; ?>'];
+    }
+
+    /** A jump out of a tag body can skip its restore, so the carried type at the next tag is unknown. */
+    #[Test]
+    #[DataProvider('jumpTokens')]
+    public function a_jump_inside_a_tag_body_disables_reassert_for_the_template(string $jump): void
+    {
+        $compiled = self::DECLARE
+            . $this->save(self::HASH_A) . $jump . $this->restore(self::HASH_A)
+            . $this->save(self::HASH_B) . $this->restore(self::HASH_B);
+
+        $this->assertSame($compiled, ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_break_outside_any_tag_is_harmless(): void
+    {
+        $compiled = self::DECLARE . '<?php foreach ($xs as $x) { break; } ?>' . $this->save(self::HASH_A) . $this->restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    /** The tag's save runs in a different PHP variable scope, where the outer declaration does not apply. */
+    #[Test]
+    public function a_tag_inside_a_function_body_is_not_reasserted(): void
+    {
+        $compiled = self::DECLARE . '<?php function inner($env) { ?>' . $this->save(self::HASH_A) . $this->restore(self::HASH_A) . '<?php } ?>';
+
+        $this->assertSame($compiled, ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_function_scoped_tag_does_not_change_the_carried_type_for_the_next_top_level_tag(): void
+    {
+        $inner = '<?php function inner($env) { ?>' . $this->save(self::HASH_A) . $this->restore(self::HASH_A) . '<?php } ?>';
+
+        $applied = ComponentRestoreReassert::apply(self::DECLARE . $inner . $this->save(self::HASH_B) . $this->restore(self::HASH_B));
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', $applied);
+    }
+
+    /** `$componenté` is another PHP variable: the `\b` of an ASCII regex sees `$component` in its prefix. */
+    #[Test]
+    public function a_docblock_for_a_lookalike_variable_name_is_ignored(): void
+    {
+        $compiled = self::DECLARE . '<?php /** @var \App\Gadget $componenté */ ?>' . $this->save(self::HASH_A) . $this->restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_declaration_written_in_prose_is_not_carried(): void
+    {
+        $compiled = self::DECLARE . '<?php /** Example: @var \App\Gadget $component */ ?>' . $this->save(self::HASH_A) . $this->restore(self::HASH_A);
+
+        $this->assertSame($compiled, ComponentRestoreReassert::apply($compiled));
+    }
+
+    #[Test]
+    public function a_declaration_on_a_continuation_line_of_a_docblock_is_carried(): void
+    {
+        $compiled = "<?php /**\n * Why.\n *\n * @var \\App\\Widget \$component\n */ ?>" . $this->save(self::HASH_A) . $this->restore(self::HASH_A);
+
+        $this->assertStringEndsWith('endif; /** @var \App\Widget $component */ ?>', ComponentRestoreReassert::apply($compiled));
     }
 
     #[Test]
@@ -264,6 +367,8 @@ final class ComponentRestoreReassertTest extends TestCase
         yield 'prose mention' => ['/** The $component is a \App\Widget here. */'];
         yield 'two mentions' => ["/**\n * @var \\App\\Widget \$component\n * @var \\App\\Gadget \$component\n */"];
         yield 'array shape' => ['/** @var array{id: int} $component */'];
+        yield 'lookalike declaration with a plain mention' => ['/** @var \App\Gadget $componenté (see $component) */'];
+        yield 'prose before the tag' => ['/** Example: @var \App\Gadget $component */'];
     }
 
     /** The save is `isset()`-gated: a null declared `$component` is not restored, so the type is unsound there. */
@@ -329,6 +434,13 @@ final class ComponentRestoreReassertTest extends TestCase
         yield 'function argument' => ['@php f($component); @endphp'];
         yield 'by reference out parameter' => ['@php preg_match(\'/x/\', \'x\', $component); @endphp'];
         yield 'variable variable' => ['@php $$component = 1; @endphp'];
+        yield 'blade comment with a write' => ['{{-- $component = 1; --}}'];
+        yield 'blade comment declaration' => ['{{-- @var \\App\\Widget $component --}}'];
+        yield 'write hidden by a comment-looking span in a php block' => ["@php\n/* {{-- */ \$component = new Gadget; /* --}} */\n@endphp"];
+        yield 'write in a comment inside verbatim' => ['@verbatim {{-- <?php $component = new Gadget; ?> --}} @endverbatim'];
+        yield 'method named empty after double colon and space' => ['@php Mutator:: empty($component); @endphp'];
+        yield 'method named empty after double colon and newline' => ["@php Mutator::\nempty(\$component); @endphp"];
+        yield 'method named isset after a comment' => ['@php /* x */ isset($component); @endphp'];
         yield 'isset with several arguments' => ['@php isset($component, $other); @endphp'];
         yield 'line comment declaration before a write' => ["@php // @var \\App\\Gadget\n\$component = new Gadget; @endphp"];
         yield 'hash comment declaration before a write' => ["@php # @var \\App\\Gadget\n\$component = new Gadget; @endphp"];
@@ -367,12 +479,20 @@ final class ComponentRestoreReassertTest extends TestCase
         yield 'null coalescing read' => ['{{ $component ?? "none" }}'];
         yield 'isset' => ['@if (isset($component)) x @endif'];
         yield 'empty' => ['@if (empty($component)) x @endif'];
+        yield 'isset after a negation' => ['@if (!isset($component)) x @endif'];
+        yield 'isset after a semicolon' => ['@php f(); isset($component); @endphp'];
+        yield 'isset after and' => ['@if ($a && isset($component)) x @endif'];
+        yield 'empty after or' => ['@if ($a || empty($component)) x @endif'];
+        yield 'isset after an open brace' => ['@php if ($a) { isset($component); } @endphp'];
+        yield 'isset after a close brace' => ['@php if ($a) {} isset($component); @endphp'];
+        yield 'isset after a comma' => ['@php f($a, isset($component)); @endphp'];
+        yield 'isset after an equals sign' => ['@php $x = isset($component); @endphp'];
+        yield 'isset after a question mark' => ['@php $x = $a ? isset($component) : 0; @endphp'];
         yield 'isset directive' => ['@isset($component) x @endisset'];
         yield 'empty directive' => ['@empty($component) x @endempty'];
         yield 'single line docblock' => ['<?php /** @var Widget $component */ ?>'];
         yield 'psalm docblock' => ['<?php /** @psalm-var \\App\\Widget $component */ ?>'];
         yield 'multi line docblock' => ["<?php\n/**\n * @var \\App\\Widget \$component\n */\n?>"];
-        yield 'blade comment only' => ['{{-- $component = 1; --}}'];
         yield 'other variable' => ['@php $components = []; @endphp'];
         yield 'foreach over a property' => ['@foreach ($component->items() as $item) @endforeach'];
     }
@@ -448,6 +568,10 @@ final class ComponentRestoreReassertTest extends TestCase
     {
         $gadget = '/** @var \App\Gadget $component */';
 
+        yield 'unbraced if body' => ["<?php if (\$a) {$gadget} \$x = 1; ?>"];
+        yield 'unbraced while body' => ["<?php while (\$a) {$gadget} \$x = 1; ?>"];
+        yield 'unbraced else body' => ["<?php if (\$a) { f(); } else {$gadget} \$x = 1; ?>"];
+        yield 'do body' => ["<?php do {$gadget} \$x = 1; while (\$a); ?>"];
         yield 'alternative if arm' => ["<?php if (\$a): ?><?php {$gadget} ?><?php endif; ?>"];
         yield 'else arm' => ["<?php if (\$a): ?><?php else: ?><?php {$gadget} ?><?php endif; ?>"];
         yield 'elseif arm' => ["<?php if (\$a): ?><?php elseif (\$b): ?><?php {$gadget} ?><?php endif; ?>"];

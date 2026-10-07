@@ -19,8 +19,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * The type comes from the compiled string's own doc comments, not from {@see ContractRegistry}: only
  * a raw `<?php /** @var T $component *\/ ?>` or `@php` block types the template body, while a
  * `{{-- @var --}}` comment never reaches the compiled output. A carried type is where the
- * declaration stood when the tag SAVED it, which is what the restore puts back. Four shapes would
- * make that unsound, so the pass declines instead:
+ * declaration stood when the tag SAVED it, which is what the restore puts back. These shapes
+ * would make that unsound, so the pass declines instead:
  *
  * - Nesting: after an inner tag's restore the runtime `$component` is the OUTER tag's component,
  *   so only a restore that empties the tag stack is re-asserted, and a declaration inside a tag
@@ -28,12 +28,19 @@ namespace Psalm\LaravelPlugin\Blade;
  * - A repeated hash: the hash is keyed by component CLASS (`AnonymousComponent:<alias>` for an
  *   anonymous one), so `<x-a><x-a /></x-a>` re-saves the same `$__componentOriginal<hash>` inside
  *   the outer tag, the inner restore unsets it, and the outer restore never fires (Laravel leaves
- *   the outer component in `$component` after the tag).
+ *   the outer component in `$component` after the tag). The original is gone for every later tag
+ *   too, so the carried type is dropped until the next declaration.
  * - A declaration that is not a plain class name: the save is `isset($component)`-gated, so a
  *   declared-nullable value that is null at runtime is not restored and `?Foo` would be wrong.
  *   Unions, generics and shapes are declined too: only a bare name is provably safe to repeat.
- * - A declaration that is not at block depth 0 (a branch arm, a loop body, a closure body): it is
- *   not the type in force at the tag, so it resets the carried type instead of replacing it.
+ * - A declaration that is not the type in force: inside a branch arm, loop body or closure body
+ *   (block depth above 0), or owned by an unbraced conditional statement (`if ($a) /** @var ... *\/`),
+ *   it resets the carried type instead of replacing it. Only a doc comment that starts a statement
+ *   at block depth 0 counts, and only `@var`/`@psalm-var T $component` at the start of a docblock line.
+ * - A tag whose save sits inside a function or closure body: that scope never saw the outer
+ *   declaration, so its restore is left alone.
+ * - A `break`, `continue` or `goto` while a tag is open: it can skip the restore, so the type in
+ *   force at the next tag is unknown and the whole template is left alone.
  *
  * Every shape this pass does not understand (a save without its restore, a restore for another
  * hash) returns the input unchanged. A match counts only at a real open tag per
@@ -60,26 +67,36 @@ final class ComponentRestoreReassert
         . '<\?php endif; \?>/';
 
     /** A plain (optionally namespaced) class name; a nullable, union, generic or shape type does not match. */
-    private const DECLARATION_PATTERN = '/@(?:psalm-)?var\s+(\\\\?' . self::NAME . '(?:\\\\' . self::NAME . ')*)\s+\$component\b/';
+    private const DECLARATION_PATTERN = '/(?:\/\*\*|^[ \t]*\*)[ \t]*@(?:psalm-)?var[ \t]+(\\\\?' . self::NAME . '(?:\\\\' . self::NAME . ')*)[ \t]+\$component(?![A-Za-z0-9_\x80-\xff])/m';
 
-    /** Every `$component` occurrence, never as the tail of a longer name (`$components`). PHP variables are case-sensitive. */
+    /**
+     * Every `$component` occurrence, never as the tail of a longer name: PHP identifiers include the
+     * bytes `\x80-\xff`, so `$componenté` is another variable. PHP variables are case-sensitive.
+     */
     private const OCCURRENCE_PATTERN = '/\$component(?![A-Za-z0-9_\x80-\xff])/';
 
     /** What may follow a read: a member access, a comparison, `instanceof`, or `??` (but never `??=`). */
     private const READ_AFTER_PATTERN = '/^\s*(?:->|\?->|\?\?(?!=)|={2,3}|!==?|<>|instanceof\b)/i';
 
-    /** The sole argument of the language construct `isset(`/`empty(` or `@isset(`/`@empty(`, never a method of that name. */
-    private const INSPECTED_BEFORE_PATTERN = '/(?:@|(?<![\w>:$]))(?:isset|empty)\s*\(\s*$/i';
+    /**
+     * The sole argument of the language construct `isset(`/`empty(` or `@isset(`/`@empty(`. The
+     * previous non-whitespace character must open an expression (never `:`, `>`, `$`, `\`, a word
+     * character or a comment end), or the name could be a method that takes the variable by reference.
+     */
+    private const INSPECTED_BEFORE_PATTERN = '/(?:@|[(!&|;{},=?]\s*)(?:isset|empty)\s*\(\s*$/i';
 
     /** The variable name of a `@var`/`@psalm-var <type> $component` declaration, type and name on ONE line. */
     private const DECLARATION_BEFORE_PATTERN = '/@(?:psalm-)?var[ \t]+\S+[ \t]+$/';
 
     /**
      * Whether EVERY `$component` in the template source is a proven read. An allowlist, because a
-     * denylist of write shapes (`=`, `unset()`, destructuring, `foreach`, `catch`, references) is always one syntax short: declining only keeps the pre-tag finding. Bare uses
+     * denylist of write shapes (`=`, `unset()`, destructuring, `foreach`, `catch`, references) is
+     * always one syntax short: declining only keeps the pre-tag finding. Bare uses
      * (`{{ $component }}`, a function argument, `$$component`), `??=` and a reversed comparison
-     * (`$x === $component`) all decline. Scanned over the source with only `{{-- --}}` comments
-     * removed: `@verbatim` is NOT blanked because raw PHP inside it still executes.
+     * (`$x === $component`) all decline. Scanned over the RAW source: Blade protects `@php` and
+     * `@verbatim` bodies before it compiles `{{-- --}}`, so a comment-looking span can hide an
+     * executed write. A mention inside a Blade comment therefore declines too, unless it is itself
+     * a proven read (`{{-- @var T $component --}}` is not).
      *
      * Out of scope, since Psalm is equally blind to them without a tag, so the re-assert agrees
      * with its pre-tag view: `extract()`, `${'component'}`, `@aware`/`@props` writing a `component` key.
@@ -88,9 +105,7 @@ final class ComponentRestoreReassert
      */
     public static function templateOnlyReadsComponent(string $source): bool
     {
-        $source = \preg_replace('/\{\{--.*?--\}\}/s', ' ', $source);
-
-        if ($source === null || \preg_match_all(self::OCCURRENCE_PATTERN, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
+        if (\preg_match_all(self::OCCURRENCE_PATTERN, $source, $matches, \PREG_OFFSET_CAPTURE) === false) {
             return false;
         }
 
@@ -135,14 +150,20 @@ final class ComponentRestoreReassert
             return $compiled;
         }
 
-        [$openTags, $docComments] = PhpTokenOffsets::scan($compiled);
+        [$openTags, $docComments, $jumps] = PhpTokenOffsets::scan($compiled);
 
-        /** @var array<int, array{0: 'declare'|'save'|'restore', 1: ?string, 2: int}> $events offset => [kind, type or hash, restore length or block depth] */
+        /** @var array<int, array{0: 'declare'|'save'|'restore'|'jump', 1: ?string, 2: int}> $events offset => [kind, type or hash, restore length, brace depth of a save, or 1 for an uncarryable declaration] */
         $events = [];
 
-        foreach ($docComments as $offset => [$docblock, $blockDepth]) {
-            if (\preg_match_all('/\$component\b/', $docblock) > 0) {
-                $events[$offset] = ['declare', self::declaredType($docblock), $blockDepth];
+        foreach ($jumps as $offset => $_) {
+            $events[$offset] = ['jump', null, 0];
+        }
+
+        foreach ($docComments as $offset => [$docblock, $blockDepth, $startsStatement]) {
+            $carryable = $blockDepth === 0 && $startsStatement;
+
+            if (\preg_match_all(self::OCCURRENCE_PATTERN, $docblock) > 0) {
+                $events[$offset] = ['declare', self::declaredType($docblock), $carryable ? 0 : 1];
             }
         }
 
@@ -151,7 +172,7 @@ final class ComponentRestoreReassert
 
             foreach ($matches as $match) {
                 if (isset($openTags[$match[0][1]])) {
-                    $events[$match[0][1]] = [$kind, $match[1][0], \strlen($match[0][0])];
+                    $events[$match[0][1]] = [$kind, $match[1][0], $kind === 'save' ? $openTags[$match[0][1]] : \strlen($match[0][0])];
                 }
             }
         }
@@ -159,7 +180,7 @@ final class ComponentRestoreReassert
         \ksort($events);
 
         $declared = null;
-        /** @psalm-var list<array{hash: string, type: ?string, collided: bool}> $stack */
+        /** @psalm-var list<array{hash: string, type: ?string, collided: bool, scoped: bool}> $stack */
         $stack = [];
         /** @psalm-var array<int, array{0: int, 1: string}> $edits offset => [restore length, type] */
         $edits = [];
@@ -167,9 +188,19 @@ final class ComponentRestoreReassert
         foreach ($events as $offset => [$kind, $value, $length]) {
             if ($kind === 'declare') {
                 // Inside a tag body a declaration describes the child component, not the caller's.
-                // Inside a branch, loop or closure it is not the type in force at a later tag.
+                // Inside a branch, loop or closure, or owned by an unbraced conditional statement, it is
+                // not the type in force at a later tag.
                 if ($stack === []) {
                     $declared = $length === 0 ? $value : null;
+                }
+
+                continue;
+            }
+
+            if ($kind === 'jump') {
+                // `@break` inside a tag body can skip the restore, so the type in force afterwards is unknown.
+                if ($stack !== []) {
+                    return $compiled;
                 }
 
                 continue;
@@ -182,7 +213,9 @@ final class ComponentRestoreReassert
                     }
                 }
 
-                $stack[] = ['hash' => (string) $value, 'type' => $declared, 'collided' => false];
+                // A save inside a function or closure body runs in another variable scope, where the
+                // outer declaration says nothing about `$component`.
+                $stack[] = ['hash' => (string) $value, 'type' => $declared, 'collided' => false, 'scoped' => $length > 0];
 
                 continue;
             }
@@ -193,7 +226,12 @@ final class ComponentRestoreReassert
                 return $compiled;
             }
 
-            if ($stack === [] && !$frame['collided'] && $frame['type'] !== null) {
+            if ($stack === [] && $frame['collided']) {
+                // The outer restore never ran, so the original value is gone for every later tag.
+                $declared = null;
+            }
+
+            if ($stack === [] && !$frame['collided'] && !$frame['scoped'] && $frame['type'] !== null) {
                 $edits[$offset] = [$length, $frame['type']];
             }
         }
@@ -222,7 +260,7 @@ final class ComponentRestoreReassert
     private static function declaredType(string $docblock): ?string
     {
         if (
-            \preg_match_all('/\$component\b/', $docblock) !== 1
+            \preg_match_all(self::OCCURRENCE_PATTERN, $docblock) !== 1
             || \preg_match(self::DECLARATION_PATTERN, $docblock, $match) !== 1
             || \strcasecmp(\ltrim($match[1], '\\'), 'null') === 0
         ) {

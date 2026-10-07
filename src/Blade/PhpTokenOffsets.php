@@ -21,11 +21,17 @@ final class PhpTokenOffsets
     private const BLOCK_CLOSERS = [\T_ENDIF => true, \T_ENDFOREACH => true, \T_ENDFOR => true, \T_ENDWHILE => true, \T_ENDSWITCH => true];
 
     /**
-     * @return array{0: array<int, true>, 1: array<int, array{0: string, 1: int}>} start offsets of every
-     *     `<?php`/`<?=` transition into PHP mode, and start offset => [text, block depth] of every doc
-     *     comment. The depth counts open braces (blocks, closure bodies, `{$x}` interpolation) plus
-     *     alternative-syntax blocks (`if (...):` ... `endif;`), so 0 means "straight-line top level".
-     *     A malformed shadow can go negative, which a caller must treat as "not top level" too.
+     * @return array{0: array<int, int>, 1: array<int, array{0: string, 1: int, 2: bool}>, 2: array<int, true>}
+     *     start offset => brace depth of every `<?php`/`<?=` transition into PHP mode; start offset
+     *     => [text, block depth, starts a statement] of every doc comment; and the offsets of every
+     *     `break`/`continue`/`goto`.
+     *
+     *     The block depth counts open braces (blocks, closure and function bodies, `{$x}`
+     *     interpolation) plus alternative-syntax blocks (`if (...):` ... `endif;`), so 0 means
+     *     "straight-line top level"; a malformed shadow can go negative, which a caller must treat
+     *     as "not top level" too. A doc comment starts a statement only when the previous
+     *     significant token is an open tag, `;` or `}`: after `)`, `else` or `do` it belongs to
+     *     an unbraced conditional statement.
      *
      * @psalm-pure
      */
@@ -33,8 +39,11 @@ final class PhpTokenOffsets
     {
         $openTags = [];
         $docComments = [];
+        $jumps = [];
         $offset = 0;
-        $depth = 0;
+        $braces = 0;
+        $alternative = 0;
+        $previous = null;
         // One frame per control keyword awaiting its `:`: [open parentheses, condition closed yet].
         /** @psalm-var list<array{0: int, 1: bool}> $pending */
         $pending = [];
@@ -49,19 +58,19 @@ final class PhpTokenOffsets
                 // Insignificant between a condition's `)` and its `:`.
             } elseif ($pending !== [] && $pending[\count($pending) - 1][1]) {
                 \array_pop($pending);
-                $depth += $char === ':' ? 1 : 0;
+                $alternative += $char === ':' ? 1 : 0;
             }
 
             if ($id === \T_OPEN_TAG || $id === \T_OPEN_TAG_WITH_ECHO) {
-                $openTags[$offset] = true;
+                $openTags[$offset] = $braces;
             } elseif ($id === \T_DOC_COMMENT) {
-                $docComments[$offset] = [$text, $depth];
+                $docComments[$offset] = [$text, $braces + $alternative, \in_array($previous, [\T_OPEN_TAG, ';', '}'], true)];
             } elseif ($id === \T_CURLY_OPEN || $id === \T_DOLLAR_OPEN_CURLY_BRACES || $char === '{') {
-                ++$depth;
+                ++$braces;
             } elseif ($char === '}') {
-                --$depth;
+                --$braces;
             } elseif ($id !== null && isset(self::BLOCK_CLOSERS[$id])) {
-                --$depth;
+                --$alternative;
             } elseif ($id !== null && isset(self::BLOCK_KEYWORDS[$id])) {
                 $pending[] = [0, false];
             } elseif ($pending !== [] && $char === '(') {
@@ -72,9 +81,17 @@ final class PhpTokenOffsets
                 $pending[$top][1] = $pending[$top][0] === 0;
             }
 
+            if (\in_array($id, [\T_BREAK, \T_CONTINUE, \T_GOTO], true)) {
+                $jumps[$offset] = true;
+            }
+
+            if (!\in_array($id, [\T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT], true)) {
+                $previous = $id ?? $char;
+            }
+
             $offset += \strlen($text);
         }
 
-        return [$openTags, $docComments];
+        return [$openTags, $docComments, $jumps];
     }
 }

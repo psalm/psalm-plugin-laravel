@@ -1159,6 +1159,54 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1701 external review: each template reaches a tag with a declaration that is NOT the type in
+     * force there. The re-assert would replace what Psalm (and the runtime) see:
+     * a write hidden in a `@php` block that also holds a Blade-comment-looking span, one inside
+     * `@verbatim`, a method named `empty` called with `$component`, a docblock owned by an unbraced
+     * conditional statement, a tag inside a separate function scope, a later sibling of a
+     * collided tag pair, a tag whose restore is skipped by `@break`, and a docblock for a
+     * look-alike variable name or inside prose.
+     */
+    private const UNPROVEN_STATE_TEMPLATES = [
+        'declared-component-write-protected-comment',
+        'declared-component-write-verbatim-comment',
+        'declared-component-write-method-empty',
+        'declared-component-conditional-declaration',
+        'declared-component-function-scope',
+        'declared-component-collision-sibling',
+        'declared-component-break-past-restore',
+        'declared-component-prose-declaration',
+    ];
+
+    #[Test]
+    public function a_declaration_that_is_not_the_type_in_force_at_the_tag_is_not_reasserted(): void
+    {
+        $this->analyze('psalm.xml');
+
+        foreach (self::UNPROVEN_STATE_TEMPLATES as $name) {
+            $shadow = $this->shadowSourceFor("resources/views/{$name}.blade.php");
+
+            $this->assertStringContainsString('$__componentOriginal', $shadow, $name);
+            $this->assertStringNotContainsString('endif; /** @var', $shadow, $name);
+        }
+    }
+
+    /** #1701 external review: `$componenté` is another variable, so its docblock must not replace `$component`'s. */
+    #[Test]
+    public function a_lookalike_variable_docblock_does_not_replace_the_declared_type(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/declared-component-lookalike-variable.blade.php';
+
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyUndefinedMethod', $template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedMethod', $template));
+        $this->assertStringContainsString(
+            'endif; /** @var \BladeIssueRemapFixture\Widget $component */ ?>',
+            $this->shadowSourceFor($template),
+        );
+    }
+
+    /**
      * #1701: the issue's own shape. A component view (`@props` and `$attributes`, so the
      * `$attributes` pass runs first) with a multi-line `@var` docblock, a nested tag, and a read.
      * Pins that the two passes compose and that a multi-line declaration is carried.
