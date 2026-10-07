@@ -224,10 +224,11 @@ A new gated site calls `laravelAiIntegrationEnabled()` instead of copying the ve
 
 When **multiple stub files declare the same method on the same class**, Psalm reuses a single MethodStorage object and re-applies docblock parsing. The merging rules differ by annotation kind:
 
-- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`)
-- **Taint annotations** (`@psalm-taint-*`): all files accumulate (bitwise OR `|=`)
+- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`).
+- **Parameter-level taint annotations** (`@psalm-taint-sink`, `@psalm-assert-untainted`): last-loaded file wins. Each re-declaration rebuilds the parameter storages (`FunctionLikeNodeScanner` calls `setParams([])`), so sinks from an earlier file are dropped, not OR-ed. Verified on Psalm 7.0.0-rc1: an `html` sink in one stub plus an `sql` sink on the same parameter in a later stub reports only `TaintedSql`.
+- **Method-level taint annotations** (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`): all files accumulate (bitwise OR `|=` on the reused MethodStorage).
 
-This means splitting type and taint annotations for the same method across two stub files is fragile -- the type that "wins" depends on file loading order. Always put both in the same file.
+Splitting annotations for the same method across two stub files is therefore fragile: which type and which sinks survive depends on load order. Always put all of them in the same file, and have an override restate every `@psalm-taint-sink` of the declaration it replaces.
 
 When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
@@ -244,7 +245,7 @@ Psalm cannot see stub-versus-vendor drift ([why](taint-analysis.md#optional-thir
 - Properties need no gate: a stub property the installed class lacks is never reported, and a trait-provided property is covered by mirroring the class's `use` clause (see `Tools/SimilaritySearch.phpstub`).
 - A real member the stub omits fails the run unless the class docblock waives it with `@stub-waive` (below); nothing is allow-listed in the script.
 
-**`@since X.Y.Z`** tags anything a 1.x minor added after the `1.0.0` floor, so the checker skips it while the installed release is older. Method: tag its docblock. `implements` / interface `extends` entry: one `@since X.Y.Z implements \Fully\Qualified\Interface` line per interface in the class docblock. Whole class: a standalone `@since X.Y.Z` line in its class docblock (reported as version-gated, not compared). A name or class the installed release lacks, or a class with no tag, is still reported.
+**`@since X.Y.Z`** tags anything a 1.x minor added after the `1.0.0` floor, so the checker skips it while the installed release is older. Method: tag its docblock. The tag also gates a method the older release already has but whose signature a later minor changed (e.g. an appended parameter): the checker skips that method's whole signature diff, and does not count it as compared, while installed < tag. `implements` / interface `extends` entry: one `@since X.Y.Z implements \Fully\Qualified\Interface` line per interface in the class docblock. Whole class: a standalone `@since X.Y.Z` line in its class docblock (reported as version-gated, not compared). A name or class the installed release lacks, or a class with no tag, is still reported.
 
 **`@stub-waive`** lets a stub leave out a member that carries no taint or type value instead of restating it. In the class docblock, one line per member: `@stub-waive withMaxTokens() <reason>`, `@stub-waive $runtimeTools <reason>` or `@stub-waive implements \Fully\Qualified\Interface <reason>`. A trailing `*` waives a family by name prefix: `@stub-waive assert*() <reason>` (or `$prefix*` for properties). The `*` is a prefix marker only at the very end of a name (`*Timeout()` and `get*Timeout()` are not targets), and a bare `*` is an error, because a blanket waiver would delete the tripwire this tag exists to keep. Wildcards belong to the class docblock; in a docblock of a member the stub does declare, a bare `@stub-waive <reason>` instead waives drift of that member's own signature. The reason is mandatory (a tag without one fails the run), every waived member is still printed on its own line with its reason under "Waived by @stub-waive" (also when a wildcard covered it), and a waiver or wildcard that matches nothing (the member reappeared in the stub or left the vendor class) is reported as a `::warning::` so it gets deleted.
 
@@ -257,8 +258,8 @@ A file in a version dir (`stubs/13.16.0/...`, loaded when installed Laravel `>=`
 Authoring an override:
 
 - Declare only the changed methods; the rest merge from `common`.
-- Copy the full class header (`extends`/`implements` + `use`) verbatim, because a class re-declaration resets Psalm's interface list and silently strips contracts (see stub-authoring rules).
-- Types replace, taints accumulate (OR), so keep both for a method in one file.
+- Repeat the `implements` clause (interface stubs: the `extends` list) verbatim, because a re-declaration resets Psalm's `class_implements` / `parent_interfaces` and silently strips contracts. Class `extends` and trait `use` survive, but copy the full header anyway to stay diffable against Laravel source.
+- Types and parameter sinks replace, method-level taints accumulate (see "Stub merging"), so restate every `@psalm-taint-sink` of the method you override.
 
 **Common vs version dir.** Return narrowing that holds across all versions (Laravel only improved its annotation) goes in `common`. A parameter widened by behavior present only in a newer Laravel (e.g. `firstOrNew`'s `values` taking `\Closure|array` only on 13) must go in the version dir: widening `common` would tell Psalm a call is valid that fatals at runtime on older versions (silent false negative).
 
