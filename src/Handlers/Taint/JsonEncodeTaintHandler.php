@@ -15,25 +15,31 @@ use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Treats `json_encode()` with literal `JSON_HEX_*` flags as escaping, the way `Js::from()` is.
+ * Treats `json_encode()` with a literal `JSON_HEX_TAG` flag as html-escaping.
  *
  * Psalm core models `json_encode()` as a plain taint pass-through, so the Blade `@json` directive
  * (which compiles to `json_encode($x, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT, 512)`)
- * and hand-written equivalents report TaintedHtml and TaintedTextWithQuotes on safe output.
+ * and hand-written equivalents report TaintedHtml on output that cannot contain `<` or `>`.
  * Core already does this for `htmlspecialchars()` flags (`HtmlFunctionTainter`); it has no `json_encode()` branch.
  *
  * Removal is per call site. The stripped edge is the `json_encode()` stub's own argument-to-return
  * edge, which Psalm specializes per call location for stubs it ships. A project that re-declares
  * `json_encode()` in its own stub loses that specialization and the strip would pool across sites.
  *
- * - HEX_TAG removes html. HEX_AMP is not needed: an entity cannot close a tag or an attribute.
- * - has_quotes needs BOTH HEX_QUOT and HEX_APOS, since either quote kind can end an attribute.
+ * - HEX_TAG removes html only. The has_quotes taint is deliberately kept whatever the other HEX flags
+ *   say: `json_encode()` always emits raw `"` delimiters around attacker-controlled content, so
+ *   `<div data-x="@json($x)">` is still an attribute breakout (unlike `htmlspecialchars(ENT_QUOTES)`,
+ *   whose output has no quotes at all). `Js::from()` is attribute-safe only because it wraps the
+ *   payload in `JSON.parse('...')`.
  * - Flags are read from the literal node type, AND-ed across a literal union so only bits set in
  *   every possible value count. Any non-literal atomic, unpack argument, or missing flags declines.
  * - The `flags` named argument is honoured; the encoded value must stay positional, because
  *   {@see NamedArgumentTaintHandler} strips a named value before this handler matters.
- * - A userland `json_encode()` in the current namespace declines. Qualified `Foo\json_encode()`
- *   declines. `use function json_encode as enc` is a known false negative of the written-name gate.
+ * - Only the core function qualifies: `\json_encode`, or an unqualified call whose resolved id is
+ *   `json_encode` or a missing `<namespace>\json_encode` (Psalm's fallback to the global function).
+ *   A userland function of that name, `\Foo\json_encode()`, and an alias to any other function decline.
+ *   `use function json_encode as enc` is a known false positive of the written-name gate: the
+ *   finding is kept.
  *
  * Return-statement leak: `ReturnAnalyzer` accumulates the removal it gets for a returned expression
  * into the enclosing function's storage, which then applies to EVERY return path of that function.
@@ -90,23 +96,14 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
             return 0;
         }
 
-        $removed = 0;
-        if (($flags & \JSON_HEX_TAG) !== 0) {
-            $removed |= TaintKind::INPUT_HTML;
-        }
-
-        if (($flags & (\JSON_HEX_QUOT | \JSON_HEX_APOS)) === (\JSON_HEX_QUOT | \JSON_HEX_APOS)) {
-            $removed |= TaintKind::INPUT_HAS_QUOTES;
-        }
-
-        return $removed;
+        return ($flags & \JSON_HEX_TAG) !== 0 ? TaintKind::INPUT_HTML : 0;
     }
 
     /** Mirrors FunctionCallAnalyzer's function-id resolution: fully qualified, or unqualified with a namespace fallback. */
     private static function resolvesToCoreFunction(AddRemoveTaintsEvent $event, Name $name, StatementsAnalyzer $source): bool
     {
         if ($name instanceof Name\FullyQualified) {
-            return true;
+            return \strtolower($name->toString()) === 'json_encode';
         }
 
         if (\count($name->getParts()) !== 1) {
@@ -116,7 +113,15 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
         $functions = $event->getCodebase()->functions;
         $functionId = \strtolower($functions->getFullyQualifiedFunctionNameFromString($name->toString(), $source));
 
-        return $functionId === 'json_encode' || !$functions->functionExists($source, $functionId);
+        if ($functionId === 'json_encode') {
+            return true;
+        }
+
+        $namespace = $source->getNamespace();
+
+        return $namespace !== null && $namespace !== ''
+            && $functionId === \strtolower($namespace) . '\\json_encode'
+            && !$functions->functionExists($source, $functionId);
     }
 
     /** Bits set in every possible literal value of the flags argument, or null when any value is unknown. */

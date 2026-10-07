@@ -134,12 +134,12 @@ Every other variable a template uses without a type the plugin can prove gets `m
 One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
 
 * **Type analysis**: the same issue types Psalm reports anywhere else, at the template's file and line — except Psalm's `MixedIssue` family (`MixedArgument`, `MixedAssignment`, and the rest), which is suppressed by default because an undeclared template variable typing as `mixed` produces it constantly. Opt back in with [`reportMixedIssues`](config.md#reportmixedissues).
-* **Taint analysis**: `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged, and neither is `@json($value)`, whose default flags include `JSON_HEX_TAG`, `JSON_HEX_QUOT` and `JSON_HEX_APOS`. Passing your own flags without `JSON_HEX_TAG` (`@json($value, JSON_UNESCAPED_SLASHES)`) is reported. Keep the directive's arguments comma free: Blade splits them on every comma.
+* **Taint analysis**: `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged. `@json($value)` drops the `TaintedHtml` finding, because its default flags include `JSON_HEX_TAG`, but keeps `TaintedTextWithQuotes`: the directive always emits raw `"` delimiters, so it is not safe inside a double-quoted attribute or JS string. Use `{{ }}` or `@js` there. Passing your own flags without `JSON_HEX_TAG` (`@json($value, JSON_UNESCAPED_SLASHES)`) is reported in full. Keep the directive's arguments comma free: Blade splits them on every comma.
 
 ```blade
 {{ request()->input('q') }}   {{-- escaped: not flagged --}}
 {!! request()->input('q') !!} {{-- unescaped: TaintedHtml --}}
-@json(request()->input('q'))  {{-- default flags escape html: not flagged --}}
+@json(request()->input('q'))  {{-- html escaped, quotes still reported --}}
 ```
 
 * **`e()` accepts `\Stringable` by design.** Laravel's `e()` has no type declaration on its `$value` parameter; `htmlspecialchars()` coerces it to string at runtime regardless of caller strictness, so passing a `\Stringable` is safe everywhere, not only at echo positions. `{{ $stringable }}` and an explicit `e($stringable)` call anywhere, including inside `@php`, no longer report `ImplicitToStringCast`. Other `ImplicitToStringCast` sites are unchanged: a `\Stringable` passed to a plain function such as `strlen()`, or used in a concatenation under `strict_binary_operands`, still reports.

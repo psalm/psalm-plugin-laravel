@@ -28,9 +28,30 @@ namespace Plain {
         // No shadow in this namespace: the unqualified call falls back to the global function.
         echo json_encode($v, 15);
         echo \json_encode($v, 15);
+
+        // A fully qualified call to some other namespace's function is not the core function either.
+        echo \Shadow\json_encode($v, 15);
+    }
+}
+
+namespace Aliased {
+    use function Unscanned\renamed as json_encode;
+
+    function render(\Illuminate\Http\Request $request): void {
+        $v = (string) $request->input('v');
+
+        // The alias target is unknown to Psalm, which then resolves the name to the core function
+        // and keeps the finding; the handler must not strip it just because no userland function exists.
+        echo json_encode($v, 15);
     }
 }
 ?>
 --EXPECTF--
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

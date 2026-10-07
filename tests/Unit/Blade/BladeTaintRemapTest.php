@@ -171,9 +171,13 @@ final class BladeTaintRemapTest extends TestCase
     }
 
     #[Test]
-    public function json_directive_with_default_flags_reports_no_taint(): void
+    public function json_directive_with_default_flags_drops_html_taint_but_keeps_quotes(): void
     {
-        $this->assertSame([], $this->taintIssuesFor('resources/views/json.blade.php'), $this->report()[0]);
+        $types = \array_column($this->taintIssuesFor('resources/views/json.blade.php'), 'type');
+
+        // json_encode() always emits raw `"` delimiters, so the quoted-text finding stays by design.
+        $this->assertNotContains('TaintedHtml', $types, $this->report()[0]);
+        $this->assertContains('TaintedTextWithQuotes', $types, $this->report()[0]);
     }
 
     #[Test]

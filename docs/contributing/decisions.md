@@ -278,7 +278,7 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 ### `json_encode()` HEX flags use `RemoveTaintsInterface`, with a type-unset gate
 
-**Decision:** `JsonEncodeTaintHandler` removes html and quoted-text taint from `json_encode()` calls whose flags are provably literal `JSON_HEX_*` values, through `RemoveTaintsInterface`.
+**Decision:** `JsonEncodeTaintHandler` removes only the html taint from `json_encode()` calls whose flags provably contain literal `JSON_HEX_TAG`, through `RemoveTaintsInterface`. The quoted-text taint is never removed: `json_encode()` always emits raw `"` delimiters around attacker-controlled content, so a double-quoted attribute or JS string is still an injection point (`htmlspecialchars(ENT_QUOTES)` has no such delimiters, which is why core can strip quotes there). `Js::from()` is attribute-safe only because it wraps the payload in `JSON.parse('...')`.
 
 **Why this is not the graph mutation rejected above:** the hazard there is a removal landing on a callee's single project-wide argument-to-return edge. `json_encode()` is a Psalm-shipped stub, so Psalm specializes both of its nodes per call location, and the removal affects only that call's own edge. The handler is stateless and keys on the call expression, not on a recorded node. Emission-time suppression does not fit: the escape belongs to the transform, not to any one sink, so there is no sink call site to key on.
 

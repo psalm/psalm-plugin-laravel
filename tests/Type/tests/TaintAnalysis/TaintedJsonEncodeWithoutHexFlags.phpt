@@ -21,6 +21,7 @@ function dynamicFlags(\Illuminate\Http\Request $request): void {
     echo json_encode($v, (int) $request->input('flags'));
 }
 
+/** A deliberately pinned false positive: HEX_TAG is always set at runtime here, but the value is not a literal. */
 function nonLiteralOr(\Illuminate\Http\Request $request): void {
     $v = (string) $request->input('v');
 
@@ -36,8 +37,17 @@ function spreadWithNamedFlags(\Illuminate\Http\Request $request): void {
     $args = [(string) $request->input('v')];
     echo json_encode(...$args, flags: 15);
 }
+
+/** Every possible value must carry HEX_TAG: 14 does not, so the union proves nothing. */
+function unionWithoutHexTag(\Illuminate\Http\Request $request): void {
+    $v = (string) $request->input('v');
+
+    echo json_encode($v, $request->boolean('b') ? 15 : 14);
+}
 ?>
 --EXPECTF--
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
