@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791375127822,
+  "lastUpdate": 1791379502993,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12660,6 +12660,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.48,
             "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "60ca490b376b304c7dfa1edf836f257c1200ccce",
+          "message": "feat: type Relation::getMorphAlias() return (#1748)\n\nLaravel declares int|string, but the ?: fallback guarantees the class\nname (never empty) when no alias maps, so the result is int|non-empty-string.",
+          "timestamp": "2026-10-07T15:20:23+02:00",
+          "tree_id": "6dcb48e149a40806052f0d7a72130027de078c2b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/60ca490b376b304c7dfa1edf836f257c1200ccce"
+        },
+        "date": 1791379501312,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.2,
+            "range": "± 0.38",
             "unit": "s"
           },
           {
