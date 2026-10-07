@@ -176,6 +176,76 @@ function fallback_untyped_creator(UntypedCreatorManager $manager): void
     /** @psalm-check-type-exact $_fallbackUntyped = mixed */
 }
 
+// A private creator is invoked from Manager's scope: PHP routes the call to
+// Manager::__call(), so its declared return type proves nothing about the result.
+class PrivateCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    private function createSecretDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+}
+
+class NoCreatorDynamicManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+}
+
+class NeverCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    protected function createBarDriver(): never
+    {
+        throw new \LogicException();
+    }
+}
+
+function private_creator(PrivateCreatorManager $manager): void
+{
+    $_privateFallback = $manager->driver();
+    /** @psalm-check-type-exact $_privateFallback = mixed */
+
+    $_privateLiteral = $manager->driver('secret');
+    /** @psalm-check-type-exact $_privateLiteral = mixed */
+}
+
+function fallback_no_creator(NoCreatorDynamicManager $manager): void
+{
+    $_fallbackNone = $manager->driver();
+    /** @psalm-check-type-exact $_fallbackNone = mixed */
+}
+
+function fallback_never_creator(NeverCreatorManager $manager): void
+{
+    $_fallbackNever = $manager->driver();
+    /** @psalm-check-type-exact $_fallbackNever = mixed */
+}
+
 /**
  * Pins the method-name gate. `getDefaultDriver()` is unusable for this: it is
  * ABSTRACT on Manager, so every fixture here overrides it, which makes IT the

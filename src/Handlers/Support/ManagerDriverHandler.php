@@ -9,13 +9,19 @@ use Illuminate\Support\Str;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Analyzer\Statements\Expression\Call\ClassTemplateParamCollector;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TemplateInferredTypeReplacer;
+use Psalm\Internal\Type\TemplateResult;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -76,25 +82,28 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         }
 
         $driverName = self::resolveDriverName($codebase, $receiver, $event);
+        $typeParams = $event->getTemplateTypeParameters();
+        $receiverType = $typeParams === null ? new TNamedObject($receiver) : new TGenericObject($receiver, $typeParams);
 
         if ($driverName !== null) {
             // A resolved name with no matching creator is likely an extend()'d driver — decline, never fall back.
-            return self::creatorReturnType($codebase, $receiver, \strtolower('create' . Str::studly($driverName) . 'Driver'));
+            return self::creatorReturnType($codebase, $receiverType, \strtolower('create' . Str::studly($driverName) . 'Driver'));
         }
 
-        return self::creatorUnion($codebase, $receiver);
+        return self::creatorUnion($codebase, $receiverType);
     }
 
     /**
      * Union of every `create{X}Driver()` the receiver declares or inherits, for a name
      * that cannot be resolved statically. ANY creator without a usable declared type
-     * (void/never/untyped) makes the whole union unprovable, so it declines. Private,
-     * static, and param-taking creators are included too: over-approximating is sound.
+     * (void/never/untyped, private, or with an unbound template) makes the whole union
+     * unprovable, so it declines. Static and param-taking creators are included too:
+     * over-approximating is sound.
      */
-    private static function creatorUnion(Codebase $codebase, string $receiver): ?Union
+    private static function creatorUnion(Codebase $codebase, TNamedObject $receiver): ?Union
     {
         try {
-            $storage = $codebase->classlike_storage_provider->get(\strtolower($receiver));
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($receiver->value));
         } catch (\InvalidArgumentException) {
             return null;
         }
@@ -119,8 +128,10 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         return $types === [] ? null : Type::combineUnionTypeArray($types, $codebase);
     }
 
-    private static function creatorReturnType(Codebase $codebase, string $receiver, string $creator): ?Union
+    /** @param lowercase-string $creator */
+    private static function creatorReturnType(Codebase $codebase, TNamedObject $receiverType, string $creator): ?Union
     {
+        $receiver = $receiverType->value;
         $creatorId = self::declaringMethodId($codebase, $receiver, $creator);
 
         if (!$creatorId instanceof MethodIdentifier) {
@@ -128,8 +139,24 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         }
 
         try {
-            $returnType = $codebase->methods->getStorage($creatorId)->return_type;
-        } catch (\UnexpectedValueException) {
+            $creatorStorage = $codebase->methods->getStorage($creatorId);
+            $receiverStorage = $codebase->classlike_storage_provider->get(\strtolower($receiver));
+            $templateParams = ClassTemplateParamCollector::collect(
+                $codebase,
+                $codebase->methods->getClassLikeStorageForMethod($creatorId),
+                $receiverStorage,
+                $creator,
+                $receiverType,
+            );
+        } catch (\InvalidArgumentException|\UnexpectedValueException|\AssertionError) {
+            return null;
+        }
+
+        $returnType = $creatorStorage->return_type;
+
+        // Manager::createDriver() calls `$this->$method()` from Manager's scope: a private
+        // creator on a subclass/trait is unreachable there, so PHP routes it to __call().
+        if ($creatorStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
             return null;
         }
 
@@ -147,7 +174,7 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         // collapses to the plain class rather than an open-ended intersection.
         $selfClass = self::appearingMethodId($codebase, $receiver, $creator)?->fq_class_name ?? $creatorId->fq_class_name;
 
-        return TypeExpander::expandUnion(
+        $expanded = TypeExpander::expandUnion(
             $codebase,
             $returnType,
             $selfClass,
@@ -155,6 +182,14 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
             null,
             final: true,
         );
+
+        // Inherited `@return T`: bind the receiver's `@extends` arguments like a direct
+        // call would; a template that stays unbound proves nothing, so decline.
+        if ($templateParams !== null) {
+            $expanded = TemplateInferredTypeReplacer::replace($expanded, new TemplateResult([], $templateParams), $codebase);
+        }
+
+        return $expanded->hasTemplate() ? null : $expanded;
     }
 
     /**
@@ -189,7 +224,7 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
      * `return '...'` statement is knowable statically. Anything else — a
      * conditional, extra statements, a second reachable return — means a
      * DIFFERENT literal can come back depending on state we cannot see, so
-     * that whole shape declines rather than picking one branch to trust.
+     * that whole shape is unresolvable (creator-union fallback, not a literal).
      */
     private static function defaultDriverLiteral(Codebase $codebase, string $receiver): ?string
     {

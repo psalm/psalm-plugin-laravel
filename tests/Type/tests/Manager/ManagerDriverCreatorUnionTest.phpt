@@ -146,5 +146,42 @@ function inherited_creator_joins_own(InheritingCreatorManager $manager, string $
     $_inherited = $manager->driver($name);
     /** @psalm-check-type-exact $_inherited = UnionChildDriver|UnionParentDriver */
 }
+
+/** @template T of SmsDriver */
+abstract class GenericCreatorManager extends Manager
+{
+    /** @return T */
+    protected function createFooDriver(): SmsDriver
+    {
+        throw new \LogicException();
+    }
+}
+
+/** @extends GenericCreatorManager<LogSmsDriver> */
+final class ConcreteGenericCreatorManager extends GenericCreatorManager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return 'foo';
+    }
+}
+
+/** The creator's template resolves through the receiver's `@extends`, as a direct call would. */
+function inherited_template_return(ConcreteGenericCreatorManager $manager, string $name): void
+{
+    $_literal = $manager->driver('foo');
+    /** @psalm-check-type-exact $_literal = LogSmsDriver */
+
+    $_fallback = $manager->driver($name);
+    /** @psalm-check-type-exact $_fallback = LogSmsDriver */
+}
+
+/** A receiver without `@extends` arguments resolves `T` to its bound, never leaking `T`. */
+function unbound_template_uses_bound(GenericCreatorManager $manager): void
+{
+    $_unbound = $manager->driver('foo');
+    /** @psalm-check-type-exact $_unbound = SmsDriver */
+}
 ?>
 --EXPECTF--
