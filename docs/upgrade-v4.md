@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-beta23` or later. Upgrade Psalm and the plugin in one command (v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6):
+v4 requires `vimeo/psalm ^7.0.0-rc1` or later. Upgrade Psalm and the plugin in one command (v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6):
 
 ```bash
 composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies

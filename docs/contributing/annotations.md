@@ -6,7 +6,7 @@ nav_order: 4
 
 # Docblock Annotations
 
-Every docblock tag Psalm 7 reads, with the spellings it accepts. Verified against Psalm `7.0.0-beta24`; the tag list did not change since `7.0.0-beta23`, the plugin's floor.
+Every docblock tag Psalm 7 reads, with the spellings it accepts. Verified against Psalm `7.0.0-beta24`; the tag list did not change since `7.0.0-beta23`.
 
 The types these tags carry: [Psalm Type Syntax](types.md). Purity tags: [Purity and Capabilities](purity.md). Taint tags: [Taint Analysis Stubs](taint-analysis.md#annotations-quick-reference).
 
