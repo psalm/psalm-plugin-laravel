@@ -14,7 +14,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Stmt\ClassMethod;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -50,8 +52,8 @@ use Psalm\Type\Union;
  * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
  * related model is statically declared via a docblock generic
  * (`@phpstan-return MorphTo<User|Post, $this>` — read by
- * {@see RelationMethodParser::extractDocblockRelatedModelType}; the `$this->morphTo()` call inside
- * such a method is narrowed by {@see getEnclosingMorphToReturnType()}); without that the
+ * {@see RelationMethodParser::extractDocblockRelatedModelType}; the `$this->morphTo()` call such a
+ * method returns is narrowed by {@see getEnclosingMorphToReturnType()}); without that the
  * handler defers because the related class is determined at runtime. `HasOneThrough`
  * and `HasManyThrough` require both factory class-string args (related and intermediate)
  * to resolve statically. The declaring-model generic comes from the receiver
@@ -223,15 +225,18 @@ final class ModelRelationReturnTypeHandler
      * Psalm falls back to the declaring trait's return-type providers, so this reaches `$this->morphTo()`
      * in every model (also ones the per-model registration skips as non-autoloadable) and in model traits.
      *
-     * Answers `$this->morphTo()` inside a method declaring `@return MorphTo<X, …>` with
+     * Answers a `$this->morphTo()` that a return statement of a method declaring `@return MorphTo<X, …>`
+     * yields, directly or as the root of a relation-keeping chain (`->withTrashed()`), with
      * `MorphTo<X, receiver>` (#1091). The stub can only return `MorphTo<Model, static>`, as the target
      * class comes from the morph map at runtime, so a narrowed declaration otherwise raises
      * MoreSpecificReturnType / LessSpecificReturnStatement (InvalidReturnType for `Model&Contract`).
-     * Closures and arrow functions inside the method decline: their own declaration applies there.
+     * Any other morphTo() call keeps the stub type: one assigned or passed on, one inside a closure or
+     * arrow function (its own declaration applies there), and `self::` / `static::morphTo()`, which
+     * Psalm analyzes as a virtual `$this->morphTo()` node that no return statement holds.
+     * The declaring slot is the receiver's own type (template arguments, `&static` included).
      *
      * Caveat, accepted unsoundness: X is the user's docblock, unverified, as on the external-call path
-     * ({@see resolveRelatedModelType()}). A declaration naming the wrong models is believed, and every
-     * `$this->morphTo()` in such a method narrows, returned or not.
+     * ({@see resolveRelatedModelType()}). A declaration naming the wrong models is believed.
      */
     public static function getEnclosingMorphToReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -257,23 +262,33 @@ final class ModelRelationReturnTypeHandler
             return null;
         }
 
-        $related = RelationMethodParser::declaredMorphToRelatedModelType(
-            $source->getCodebase(),
-            $method->getStorage()->return_type,
-        );
+        $receiver = $source->getNodeTypeProvider()->getType($stmt->var);
+        $declaring = $receiver instanceof Union && $receiver->isSingle() ? $receiver->getSingleAtomic() : null;
+        if (!$declaring instanceof TNamedObject || \strtolower($declaring->value) !== \strtolower($calledClass)) {
+            return null;
+        }
+
+        $codebase = $source->getCodebase();
+        $related = RelationMethodParser::declaredMorphToRelatedModelType($codebase, $method->getStorage()->return_type);
         if (!$related instanceof Union) {
             return null;
         }
 
-        return self::buildRelationType(
-            MorphTo::class,
-            $related,
-            null,
-            null,
-            null,
-            $calledClass,
-            self::isStaticReceiver($source, $stmt, $calledClass),
-        );
+        // The analyzed method node is the only way to match the call by identity; Psalm exposes no getter.
+        try {
+            $classMethod = (new \ReflectionProperty(FunctionLikeAnalyzer::class, 'function'))->getValue($method);
+        } catch (\ReflectionException) {
+            return null;
+        }
+
+        if (
+            !$classMethod instanceof ClassMethod
+            || !RelationMethodParser::isReturnedFactoryCall($codebase, $classMethod, $stmt, $calledClass)
+        ) {
+            return null;
+        }
+
+        return new Union([new TGenericObject(MorphTo::class, [$related, new Union([$declaring])])]);
     }
 
     /**

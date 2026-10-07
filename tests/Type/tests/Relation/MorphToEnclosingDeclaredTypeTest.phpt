@@ -43,9 +43,7 @@ class Comment extends Model
     /** @return MorphTo<Post|Video, self> */
     public function selfSlot(): MorphTo
     {
-        $r = $this->morphTo();
-        /** @psalm-check-type-exact $r = MorphTo<Post|Video, Comment&static> */
-        return $r;
+        return $this->morphTo();
     }
 
     /** @return MorphTo<Post|Video, static> */
@@ -75,9 +73,7 @@ class Comment extends Model
     /** @return MorphTo<Model&HasTitle, self> */
     public function intersection(): MorphTo
     {
-        $r = $this->morphTo();
-        /** @psalm-check-type-exact $r = MorphTo<Model&HasTitle, Comment&static> */
-        return $r;
+        return $this->morphTo();
     }
 
     /** @return MorphTo<Post|Video, self> */
@@ -89,7 +85,24 @@ class Comment extends Model
     /** @return MorphTo<Post|Video, self> */
     public function chainScopes(): MorphTo
     {
-        return $this->morphTo()->withoutGlobalScopes();
+        return $this->morphTo()->withTrashed()->withoutGlobalScopes();
+    }
+
+    /** @return MorphTo<Post|Video, self> */
+    public function chainQuery(): MorphTo
+    {
+        return $this->morphTo()->take(1)->where('active', true)->latest();
+    }
+
+    // Every return of the method's own body supplies the relation.
+    /** @return MorphTo<Post|Video, self> */
+    public function earlyReturn(bool $legacy): MorphTo
+    {
+        if ($legacy) {
+            return $this->morphTo('legacy');
+        }
+
+        return $this->morphTo();
     }
 }
 
@@ -98,9 +111,7 @@ final class FinalComment extends Model
     /** @return MorphTo<Post|Video, self> */
     public function commentable(): MorphTo
     {
-        $r = $this->morphTo();
-        /** @psalm-check-type-exact $r = MorphTo<Post|Video, FinalComment> */
-        return $r;
+        return $this->morphTo();
     }
 }
 
@@ -109,9 +120,27 @@ class PinnedComment extends Comment
     /** @return MorphTo<Video, self> */
     public function pinnedTarget(): MorphTo
     {
-        $r = $this->morphTo();
-        /** @psalm-check-type-exact $r = MorphTo<Video, PinnedComment&static> */
-        return $r;
+        return $this->morphTo();
+    }
+}
+
+/**
+ * The declaring slot is the receiver's own type, template arguments included.
+ *
+ * @template T of int|string
+ */
+class GenericComment extends Model
+{
+    /** @return MorphTo<Model, GenericComment<T>> */
+    public function wide(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /** @return MorphTo<Post, GenericComment<T>> */
+    public function narrowed(): MorphTo
+    {
+        return $this->morphTo();
     }
 }
 
