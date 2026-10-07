@@ -47,6 +47,8 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
+        $compiled = ValueStackSaveRewrite::apply($compiled);
+
         $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
         $content = $prelude . $compiled;
 

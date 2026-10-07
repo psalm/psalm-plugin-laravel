@@ -120,6 +120,32 @@ final class ShadowCompilerTest extends TestCase
         $this->assertStringContainsString('<?php strlen([1]); ?>', $result->contents);
     }
 
+    /**
+     * #1724 canary against the REAL compiler: if Laravel changes the `@session`/`@context` save text,
+     * the rewrite silently stops matching and the redundant-condition false positive returns.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function valueStackDirectives(): iterable
+    {
+        yield 'session' => ["@session('k') x @endsession\n", 'session'];
+        yield 'context' => ["@context('k') x @endcontext\n", 'context'];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('valueStackDirectives')]
+    public function the_value_stack_save_condition_is_rewritten_off_isset(string $source, string $directive): void
+    {
+        $result = $this->compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString(
+            "if (\\array_key_exists('value', \\get_defined_vars())) { \$__{$directive}Previous[] = \$value; }",
+            $result->contents,
+        );
+        $this->assertStringNotContainsString('if (isset($value))', $result->contents);
+    }
+
     #[Test]
     public function compiles_a_plain_echo(): void
     {

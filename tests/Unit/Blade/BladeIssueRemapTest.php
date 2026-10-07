@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -826,6 +827,52 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #1724: the compiled save `if (isset($value)) { $__sessionPrevious[] = $value; }` is checked
+     * against the author's own `$value` type, so a proven non-null (foreach value, literal) or
+     * proven null `$value` reported a redundant-condition issue on the directive line.
+     *
+     * @return iterable<string, array{string, int}>
+     */
+    public static function valueStackSaveTemplates(): iterable
+    {
+        yield 'session after foreach value' => ['session-value-foreach.blade.php', 2];
+        yield 'session after null assignment' => ['session-value-null.blade.php', 2];
+        yield 'context after literal assignment' => ['context-value.blade.php', 2];
+    }
+
+    #[Test]
+    #[DataProvider('valueStackSaveTemplates')]
+    public function the_compiled_value_stack_save_reports_nothing_on_the_directive_line(string $template, int $line): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertStringContainsString("array_key_exists('value'", $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template) && $issue['line_from'] === $line,
+            )),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** #1724: the rewrite touches only the compiler's save; the author's own `isset($value)` on line 2 still reports. */
+    #[Test]
+    public function an_authors_own_isset_guard_near_a_session_block_still_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-value-author-guard.blade.php';
+
+        $reported = \array_values(\array_unique(\array_merge(
+            $this->linesFor($issues, 'RedundantCondition', $template),
+            $this->linesFor($issues, 'TypeDoesNotContainNull', $template),
+        )));
+
+        $this->assertSame([2], $reported, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     /**
