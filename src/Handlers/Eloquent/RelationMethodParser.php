@@ -28,6 +28,7 @@ use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\MethodStorage;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
@@ -911,7 +912,7 @@ final class RelationMethodParser
      * every alternative of X is a plain named class, or a flat intersection of plain named classes
      * (`Model&Contract`), at least one of which is a Model subclass. A generic related model
      * (`Box<Target>`), `static`, `self` and templates decline: a provider result skips Psalm's type
-     * expansion, so they would leak unbound (a nested `static` also recurses in the expander).
+     * expansion, so they would leak unbound.
      *
      * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
      * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
@@ -961,7 +962,7 @@ final class RelationMethodParser
      * @psalm-assert-if-true TNamedObject $part
      * @psalm-pure
      */
-    private static function isPlainNamedClass(\Psalm\Type\Atomic $part): bool
+    private static function isPlainNamedClass(Atomic $part): bool
     {
         return $part::class === TNamedObject::class
             && !$part->is_static
