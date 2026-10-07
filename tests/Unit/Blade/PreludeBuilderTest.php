@@ -290,12 +290,38 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function session_and_context_save_stacks_are_declared_as_lists(): void
     {
-        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; $__contextPrevious[] = $value; } ?>';
+        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
+            . ' if (isset($value)) { $__contextPrevious[] = $value; } ?>';
 
         $prelude = (new PreludeBuilder())->build($compiled, [], '');
 
         $this->assertStringContainsString('@var list<mixed> $__contextPrevious */', $prelude);
         $this->assertStringContainsString('@var list<mixed> $__sessionPrevious */', $prelude);
+    }
+
+    /**
+     * #1722: the `list<mixed>` type keys on the compiler's own push shape, not the name. Without
+     * `@session`/`@context`, an author's own stack-named variable keeps the base behavior: written
+     * is skipped (its read before the assignment still reports UndefinedGlobalVariable),
+     * read-only is a shared global typed `mixed`.
+     */
+    #[Test]
+    public function an_author_written_save_stack_name_without_the_compiled_push_keeps_the_skip(): void
+    {
+        $compiled = '<?php echo count($__sessionPrevious); $__sessionPrevious = []; $__contextPrevious[] = 1; ?>';
+
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringNotContainsString('$__sessionPrevious', $prelude);
+        $this->assertStringNotContainsString('$__contextPrevious', $prelude);
+    }
+
+    #[Test]
+    public function a_read_only_save_stack_name_without_the_compiled_push_gets_var_mixed(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo strlen($__sessionPrevious); ?>', [], '');
+
+        $this->assertStringContainsString('@var mixed $__sessionPrevious */', $prelude);
     }
 
     #[Test]

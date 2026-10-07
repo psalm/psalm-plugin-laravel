@@ -850,7 +850,11 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame([], $stacks, $json);
     }
 
-    /** #1722: nested and repeated `@session`/`@context` blocks report nothing under the default config. */
+    /**
+     * #1722: nested and repeated `@session`/`@context` blocks report nothing under the default
+     * config. Also passes before #1722 (the deleted name gate covered it): it pins the gate
+     * deletion; the red-first test is the report-mixed one above.
+     */
     #[Test]
     public function nested_and_repeated_session_and_context_blocks_report_nothing(): void
     {
@@ -859,6 +863,22 @@ final class BladeIssueRemapTest extends TestCase
         $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
             => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php')));
         $this->assertSame([], $stacks, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * #1722: without `@session`/`@context`, an author's own `$__sessionPrevious` read before its
+     * assignment (line 2) still reports UndefinedGlobalVariable, and a read-only
+     * `$__contextPrevious` stays a silent `mixed` shared global (line 5), not `list<mixed>`.
+     */
+    #[Test]
+    public function author_save_stack_names_without_the_directive_keep_base_behavior(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-stack-author-names.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'InvalidArgument', $template), $json);
+        $this->assertSame([2], $this->linesFor($issues, 'UndefinedGlobalVariable', $template), $json);
     }
 
     /**
