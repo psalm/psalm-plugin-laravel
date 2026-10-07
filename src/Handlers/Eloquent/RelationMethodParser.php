@@ -908,7 +908,7 @@ final class RelationMethodParser
 
     /**
      * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
-     * every alternative of X is a plain named class, or an intersection of plain named classes
+     * every alternative of X is a plain named class, or a flat intersection of plain named classes
      * (`Model&Contract`), at least one of which is a Model subclass. A generic related model
      * (`Box<Target>`), `static`, `self` and templates decline: a provider result skips Psalm's type
      * expansion, so they would leak unbound (a nested `static` also recurses in the expander).
@@ -938,7 +938,8 @@ final class RelationMethodParser
         foreach ($related->getAtomicTypes() as $atomic) {
             $isModel = false;
             foreach ([$atomic, ...($atomic instanceof TNamedObject ? $atomic->extra_types : [])] as $part) {
-                if (!self::isPlainNamedClass($part)) {
+                // Flat intersections only: Psalm can keep `Model&(Contract&self)` as a part with its own parts.
+                if (!self::isPlainNamedClass($part) || ($part !== $atomic && $part->extra_types !== [])) {
                     return null;
                 }
 
