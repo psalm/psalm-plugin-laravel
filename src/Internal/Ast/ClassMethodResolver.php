@@ -23,7 +23,7 @@ use Psalm\Storage\MethodStorage;
 final class ClassMethodResolver
 {
     /**
-     * @return ?array{classMethod: Stmt\ClassMethod, fileStmts: list<Stmt>, methodStorage: MethodStorage}
+     * @return ?array{classMethod: Stmt\ClassMethod, methodStorage: MethodStorage}
      */
     public static function resolve(Codebase $codebase, MethodIdentifier $methodId): ?array
     {
@@ -62,7 +62,7 @@ final class ClassMethodResolver
             return null;
         }
 
-        return ['classMethod' => $classMethod, 'fileStmts' => $fileStmts, 'methodStorage' => $methodStorage];
+        return ['classMethod' => $classMethod, 'methodStorage' => $methodStorage];
     }
 
     /**
