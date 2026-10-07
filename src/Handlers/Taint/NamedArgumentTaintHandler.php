@@ -15,7 +15,9 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\Analyzer\TraitAnalyzer;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
@@ -54,11 +56,18 @@ use Psalm\Type\TaintKind;
  * both an unmatched name and an argument naming the variadic itself. Anything binding to a
  * non-variadic parameter, even one declared before a variadic, is preserved.
  *
- * SCOPE: only a callee resolved here is covered: a function name, `Class::`/`self::`/`static::`/
- * `parent::`, `new`, or a plain `$var` receiver already typed as exactly one non-intersection
- * class. A chained (`Action::make()->run(page: $x)`) or property (`$this->action->run(...)`)
+ * SCOPE: only a callee resolved here AND provably the one the call reaches is covered: a function
+ * name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a plain `$var` receiver
+ * already typed as exactly one non-intersection class. Instance calls, `static::` and
+ * `new static` are late-bound, so they count only when the class is final (or an enum) or the
+ * method is final or private; otherwise a subclass may override with fixed parameters in front of
+ * a trailing variadic and the parent's variadic signature says nothing about where the argument
+ * lands. A chained (`Action::make()->run(page: $x)`) or property (`$this->action->run(...)`)
  * receiver is not resolved, so the #1395 false positive stays visible there. Abstract and
- * interface methods are skipped: with no body there is nothing to re-spread.
+ * interface methods are skipped (no body, nothing to re-spread), and so is any call written
+ * inside a trait method: Psalm analyses the trait body once per using class over the same AST
+ * nodes and shares expression-internal taint edges (`source() . 'x'`) between those visits, so a
+ * strip for one user would erase a genuine finding of another.
  *
  * KNOWN LIMITATIONS (accepted trade). The strip is kind-agnostic ({@see TaintKind::ALL_INPUT})
  * and kills the argument's whole source flow at the call site, so versus plain Psalm it loses
@@ -69,11 +78,13 @@ use Psalm\Type\TaintKind;
  *   `TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation.phpt`;
  * - a sink in the variadic's own body (`foreach ($rest as $r) system($r)`) for `zzz:` or an
  *   argument naming the variadic: `TaintedNamedArgumentVariadicBodySinkKnownLimitation.phpt`;
- * - `static::s(sink: ...)` where the enclosing class's `s()` is variadic and a subclass overrides
- *   it with fixed parameters, since `static` cannot be resolved here:
- *   `TaintedNamedArgumentStaticOverrideVariadicParentKnownLimitation.phpt`;
  * - the unresolved chained/property receiver above:
  *   `TaintedNamedArgumentChainedReceiverVariadicRespreadKnownLimitation.phpt`.
+ *
+ * The exact-dispatch and trait declines have the opposite cost, a retained false positive
+ * (`TaintedNamedArgumentNonExactInstanceDispatchReports.phpt`,
+ * `TaintedNamedArgumentTraitConcatReentrantReports.phpt`): the #1395 suppression does not apply to
+ * a re-spread call on a non-final receiver, nor to a call site written inside a trait.
  *
  * The rejected alternative, dropping the strip and reporting the false positive, is recorded in
  * decisions.md: Psalm offers no hook that removes only the mis-attributed flows.
@@ -225,7 +236,7 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     ): ?array {
         $statementsSource = $event->getStatementsSource();
 
-        if (!$statementsSource instanceof StatementsAnalyzer) {
+        if (!$statementsSource instanceof StatementsAnalyzer || self::isInsideTrait($statementsSource)) {
             return null;
         }
 
@@ -240,7 +251,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
             // An abstract or interface method has no body that could re-spread the variadic, so
             // there is no spread false positive to silence, while a concrete override with fixed
             // parameters can hold a genuine sink for the very same argument.
-            if ($storage instanceof MethodStorage && self::isBodiless($storage, $event)) {
+            if ($storage instanceof MethodStorage
+                && (self::isBodiless($storage, $event) || !self::isExactDispatch($expr, $functionId, $storage, $event))
+            ) {
                 return null;
             }
 
@@ -248,6 +261,76 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
         }
 
         return null;
+    }
+
+    /**
+     * True when the resolved class and method are provably the ones the call reaches at runtime.
+     * A receiver typed as one concrete class is only an upper bound for an instance call, and
+     * `static::`/`new static` are late-bound: a subclass can override the method with fixed
+     * parameters in front of a trailing variadic, and the variadic signature read here then
+     * says nothing about where the argument lands. Exact means a final class (an enum is
+     * implicitly final), a final method, or a private method. An explicit `Class::m()`,
+     * `self::`, `parent::` or `new Class` names the class and is always exact.
+     *
+     * @param non-empty-string $functionId
+     */
+    private static function isExactDispatch(
+        FuncCall|MethodCall|NullsafeMethodCall|StaticCall|New_ $expr,
+        string $functionId,
+        MethodStorage $method,
+        BeforeExpressionAnalysisEvent $event,
+    ): bool {
+        $lateBound = match (true) {
+            $expr instanceof MethodCall, $expr instanceof NullsafeMethodCall => true,
+            $expr instanceof StaticCall, $expr instanceof New_ => $expr->class instanceof Name
+                && \strtolower($expr->class->toString()) === 'static',
+            default => false,
+        };
+
+        if (!$lateBound) {
+            return true;
+        }
+
+        if ($method->final || $method->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
+            return true;
+        }
+
+        $separator = \strpos($functionId, '::');
+
+        if ($separator === false) {
+            return false;
+        }
+
+        try {
+            $class = $event->getCodebase()->classlike_storage_provider->get(\substr($functionId, 0, $separator));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        return $class->final || $class->is_enum;
+    }
+
+    /**
+     * True when the call is written inside a trait method (including a closure within one).
+     * Psalm analyses a trait body once per using class over the SAME AST nodes, and an
+     * expression-internal taint edge (`source() . 'x'` feeding the argument) is shared between
+     * those visits, so a strip recorded for one using class also removes taint from the visit of
+     * a class whose fixed parameter holds a genuine sink.
+     */
+    private static function isInsideTrait(StatementsAnalyzer $statementsSource): bool
+    {
+        $source = $statementsSource->getSource();
+
+        // The chain ends at the FileAnalyzer, whose getSource() is itself.
+        while ($source !== $source->getSource()) {
+            if ($source instanceof TraitAnalyzer) {
+                return true;
+            }
+
+            $source = $source->getSource();
+        }
+
+        return false;
     }
 
     /**

@@ -107,12 +107,14 @@ from a named argument that Psalm binds to a callee's variadic.
 The trade: versus plain Psalm this loses genuine findings, because the whole flow is dropped.
 Not reported: a sink behind the re-spread (`handle()`'s own parameter), a sink in the variadic's
 own body for an unknown or variadic-naming argument (`foreach ($rest as $r) system($r)` called as
-`f(zzz: $input)`), and `static::s(sink: $input)` where the enclosing class's `s()` is variadic and a
-subclass overrides it with fixed parameters. The suppression also only covers a callee the plugin
-resolves (a function name, `Class::`/`self`/`static`/`parent`, `new`, or a `$variable` receiver of
-one known class): through a chained or property receiver (`Action::make()->run(page: $input)`,
-`$this->action->run(...)`) the false positive remains. Abstract and interface methods are not
-stripped. Every other named-argument call (reordered or skipped arguments, methods, static
+`f(zzz: $input)`). The suppression only covers a callee the plugin resolves and can prove exact:
+a function name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a `$variable`
+receiver of one known class whose class or method is final (or private, or an enum). Instance calls
+and `static::` on a non-final class are late-bound (a subclass may override with fixed parameters in
+front of a trailing variadic), so they keep full detection and the re-spread false positive;
+so do a chained or property receiver (`Action::make()->run(page: $input)`,
+`$this->action->run(...)`) and any call written inside a trait method. Abstract and interface
+methods are not stripped. Every other named-argument call (reordered or skipped arguments, methods, static
 calls, constructors, facades) keeps full detection, and passing the argument positionally always
 reports.
 

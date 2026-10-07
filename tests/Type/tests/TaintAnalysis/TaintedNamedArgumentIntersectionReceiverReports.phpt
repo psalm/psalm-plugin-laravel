@@ -18,10 +18,10 @@ interface HtmlWriter
     public function write(string $path = '', string $label = ''): void;
 }
 
-interface VariadicWriter
+class VariadicWriter
 {
     /** @psalm-impure */
-    public function write(string $path = '', string ...$label): void;
+    final public function write(string $path = '', string ...$label): void {}
 }
 
 interface OtherHtmlWriter
@@ -34,10 +34,10 @@ interface OtherHtmlWriter
     public function report(string $path = '', string $label = ''): void;
 }
 
-interface OtherVariadicWriter
+class OtherVariadicWriter
 {
     /** @psalm-impure */
-    public function report(string $path = '', string ...$label): void;
+    final public function report(string $path = '', string ...$label): void {}
 }
 
 /**
@@ -45,7 +45,9 @@ interface OtherVariadicWriter
  * carries the rest in `extra_types`. So `getSingleAtomic()` silently answers with one component and
  * the handler would resolve that component's parameters alone: here the variadic one proves a
  * capture, the strip fires on the shared argument node, and the OTHER component's correctly
- * attributed `html` sink is erased with it. `resolveReceiverClass()` therefore declines on a
+ * attributed `html` sink is erased with it. The variadic component is a CONCRETE class with a
+ * final method, so neither the abstract/interface decline nor the exact-dispatch gate hides the
+ * intersection guard: removing the `extra_types` check turns this fixture red. `resolveReceiverClass()` therefore declines on a
  * nonempty `extra_types` — an intersection is not "exactly one known class".
  *
  * Both orders are pinned because which component becomes the primary atomic is Psalm's choice, not
