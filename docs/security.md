@@ -109,11 +109,14 @@ Not reported: a sink behind the re-spread (`handle()`'s own parameter), a sink i
 own body for an unknown or variadic-naming argument (`foreach ($rest as $r) system($r)` called as
 `f(zzz: $input)`). The suppression only covers a callee the plugin resolves and can prove exact:
 a function name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a `$variable`
-receiver of one known class whose class or method is final (or private, or an enum). Instance calls
-and `static::` on a non-final class are late-bound (a subclass may override with fixed parameters in
-front of a trailing variadic), so they keep full detection and the re-spread false positive;
-so do a chained or property receiver (`Action::make()->run(page: $input)`,
-`$this->action->run(...)`) and any call written inside a trait method. Abstract and interface
+receiver of one known class whose class or method is final (or, for an instance call, private, or
+an enum). Instance calls and `static::` on a non-final class are late-bound (a subclass may
+override with fixed parameters in front of a trailing variadic; a private method does not pin
+`static::`), so they keep full detection and the re-spread false positive; so do a chained or
+property receiver (`Action::make()->run(page: $input)`, `$this->action->run(...)`) and any call
+written inside a trait method. The exception is a nullsafe call (`$maybe?->run(zzz: $input)`),
+which Psalm rewrites onto a virtual variable holding the receiver's type, so it resolves and is
+stripped even for a chained receiver. Abstract and interface
 methods are not stripped. Every other named-argument call (reordered or skipped arguments, methods, static
 calls, constructors, facades) keeps full detection, and passing the argument positionally always
 reports.

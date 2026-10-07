@@ -60,7 +60,7 @@ use Psalm\Type\TaintKind;
  * name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a plain `$var` receiver
  * already typed as exactly one non-intersection class. Instance calls, `static::` and
  * `new static` are late-bound, so they count only when the class is final (or an enum) or the
- * method is final or private; otherwise a subclass may override with fixed parameters in front of
+ * method is final (or private, for an instance call); otherwise a subclass may override with fixed parameters in front of
  * a trailing variadic and the parent's variadic signature says nothing about where the argument
  * lands. A chained (`Action::make()->run(page: $x)`) or property (`$this->action->run(...)`)
  * receiver is not resolved, so the #1395 false positive stays visible there. Abstract and
@@ -269,7 +269,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
      * `static::`/`new static` are late-bound: a subclass can override the method with fixed
      * parameters in front of a trailing variadic, and the variadic signature read here then
      * says nothing about where the argument lands. Exact means a final class (an enum is
-     * implicitly final), a final method, or a private method. An explicit `Class::m()`,
+     * implicitly final), a final method, or, for an INSTANCE call only, a private method (PHP
+     * resolves it in the calling scope). A private method does not pin `static::`: PHP dispatches
+     * it to the late-bound class's own public method of that name. An explicit `Class::m()`,
      * `self::`, `parent::` or `new Class` names the class and is always exact.
      *
      * @param non-empty-string $functionId
@@ -282,18 +284,17 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
         MethodStorage $method,
         BeforeExpressionAnalysisEvent $event,
     ): bool {
-        $lateBound = match (true) {
-            $expr instanceof MethodCall, $expr instanceof NullsafeMethodCall => true,
-            $expr instanceof StaticCall, $expr instanceof New_ => $expr->class instanceof Name
-                && \strtolower($expr->class->toString()) === 'static',
-            default => false,
-        };
+        $instanceCall = $expr instanceof MethodCall || $expr instanceof NullsafeMethodCall;
+        $lateBound = $instanceCall
+            || (($expr instanceof StaticCall || $expr instanceof New_)
+                && $expr->class instanceof Name
+                && \strtolower($expr->class->toString()) === 'static');
 
         if (!$lateBound) {
             return true;
         }
 
-        if ($method->final || $method->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
+        if ($method->final || ($instanceCall && $method->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE)) {
             return true;
         }
 
