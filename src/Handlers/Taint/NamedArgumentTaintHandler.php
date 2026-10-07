@@ -253,6 +253,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     /**
      * Psalm leaves `MethodStorage::$abstract` false for an interface method, so the declaring
      * class is consulted as well.
+     *
+     * @psalm-mutation-free
      */
     private static function isBodiless(MethodStorage $storage, BeforeExpressionAnalysisEvent $event): bool
     {
