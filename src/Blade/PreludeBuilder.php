@@ -41,6 +41,17 @@ final class PreludeBuilder
         'attributes' => true, 'slot' => true, 'component' => true,
     ];
 
+    /**
+     * `@session`/`@context` push an outer `$value` with `$__sessionPrevious[] = $value` and pop it
+     * back in `@endsession`/`@endcontext` (CompilesSessions, CompilesContexts). Left undeclared, the
+     * append reports PossiblyUndefinedGlobalVariable; declared `mixed`, the `array_pop()` and a
+     * nested block's append report Mixed* (#1722).
+     */
+    private const SAVE_STACK_TYPES = [
+        '__sessionPrevious' => 'list<mixed>',
+        '__contextPrevious' => 'list<mixed>',
+    ];
+
     private const COMPONENT_ATTRIBUTES_TYPE = '\Illuminate\View\ComponentAttributeBag';
 
     private const COMPONENT_SLOT_TYPE = '\Illuminate\View\ComponentSlot';
@@ -74,7 +85,8 @@ final class PreludeBuilder
         }
 
         foreach ($this->undeclaredVariables($compiled, $declared) as $name) {
-            $lines[] = "/** @var mixed \${$name} */";
+            $type = self::SAVE_STACK_TYPES[$name] ?? 'mixed';
+            $lines[] = "/** @var {$type} \${$name} */";
         }
 
         return "<?php\n" . \implode("\n", $lines) . "\n?>\n";
@@ -276,12 +288,11 @@ final class PreludeBuilder
                 continue;
             }
 
-            // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping (Blade's
-            // `@session`/`@context` append to `$__sessionPrevious`/`$__contextPrevious` without a
-            // whole assignment); declaring it `mixed` widens the append result and turns the
-            // compiler's own `!empty()` epilogue into a RiskyTruthyFalsyComparison on the template
-            // line. Only a read-only `__` name is a host-app shared global (#1558).
-            if (\str_starts_with($name, '__') && isset($visitor->written[$name])) {
+            // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping; declaring
+            // an append target `mixed` widens the append result and turns an `!empty()` check on it
+            // into a RiskyTruthyFalsyComparison. Only a read-only `__` name is a host-app shared
+            // global (#1558). The save stacks get a real type instead (SAVE_STACK_TYPES).
+            if (\str_starts_with($name, '__') && isset($visitor->written[$name]) && !isset(self::SAVE_STACK_TYPES[$name])) {
                 continue;
             }
 

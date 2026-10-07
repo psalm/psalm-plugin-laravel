@@ -264,23 +264,38 @@ final class PreludeBuilderTest extends TestCase
     }
 
     /**
-     * #1558: a `__`-prefixed name the compiled output WRITES (Blade's `@session` bookkeeping
-     * appends to `$__sessionPrevious` without ever assigning it whole) must keep the skip: a
+     * #1558: a `__`-prefixed name the compiled output WRITES is bookkeeping and keeps the skip: a
      * `mixed` declaration on an append target widens the appended array to
-     * `mixed|non-empty-list<mixed>` and turns the compiler's own `!empty()` epilogue check into a
-     * new `RiskyTruthyFalsyComparison` on the template line. Only read-only `__` names are shared
-     * globals; a written one is bookkeeping.
+     * `mixed|non-empty-list<mixed>` and turns an `!empty()` check on it into a new
+     * `RiskyTruthyFalsyComparison` on the template line. Only read-only `__` names are shared
+     * globals.
      */
     #[Test]
     public function a_written_underscore_prefixed_variable_keeps_the_skip(): void
     {
-        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
-            . ' if (!empty($__sessionPrevious)) { echo 1; } echo $__readOnlyShared; ?>';
+        $compiled = '<?php if (isset($value)) { $__stack[] = $value; }'
+            . ' if (!empty($__stack)) { echo 1; } echo $__readOnlyShared; ?>';
 
         $prelude = (new PreludeBuilder())->build($compiled, [], '');
 
-        $this->assertStringNotContainsString('$__sessionPrevious', $prelude);
+        $this->assertStringNotContainsString('$__stack', $prelude);
         $this->assertStringContainsString('@var mixed $__readOnlyShared */', $prelude);
+    }
+
+    /**
+     * #1722: the `@session`/`@context` save stacks are written bookkeeping too, but get a real
+     * `list<mixed>` type: undeclared, the append reports PossiblyUndefinedGlobalVariable; `mixed`,
+     * the `@endsession` `array_pop()` reports MixedArgument.
+     */
+    #[Test]
+    public function session_and_context_save_stacks_are_declared_as_lists(): void
+    {
+        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; $__contextPrevious[] = $value; } ?>';
+
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringContainsString('@var list<mixed> $__contextPrevious */', $prelude);
+        $this->assertStringContainsString('@var list<mixed> $__sessionPrevious */', $prelude);
     }
 
     #[Test]

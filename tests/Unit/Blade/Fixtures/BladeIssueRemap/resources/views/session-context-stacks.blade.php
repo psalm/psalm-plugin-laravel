@@ -1,0 +1,18 @@
+@session('outer')
+    <p>outer</p>
+    @session('inner')
+        <p>inner</p>
+    @endsession
+@endsession
+@session('again')
+    <p>again</p>
+@endsession
+@context('outer')
+    <p>outer</p>
+    @context('inner')
+        <p>inner</p>
+    @endcontext
+@endcontext
+@context('again')
+    <p>again</p>
+@endcontext
