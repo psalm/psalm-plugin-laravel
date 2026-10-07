@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791409760439,
+  "lastUpdate": 1791412049193,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12770,6 +12770,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2aba9dd38068cb8e73b5bf725e4587d03678987",
+          "message": "Type `$this` in `Artisan::command()` closures with `@param-closure-this` stubs (#1767)\n\n* chore(deps): require vimeo/psalm ^7.0.0-rc1\n\n* refactor(console): replace ConsoleClosureScopeHandler with @param-closure-this stubs\n\nTypes `$this` in Artisan::command() and Kernel::command() callbacks via\n@param-closure-this on real stubbed methods; the instance form is newly covered.\n\nRefs #1759\n\n* test(console): drop stale handler references from closure-scope comments",
+          "timestamp": "2026-10-08T00:23:57+02:00",
+          "tree_id": "83ce9d7b8185a1d5771d72a1aa0493381c5a09a9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f2aba9dd38068cb8e73b5bf725e4587d03678987"
+        },
+        "date": 1791412047844,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.19,
+            "range": "± 0.66",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1375,
             "unit": "MB"
           }
         ]
