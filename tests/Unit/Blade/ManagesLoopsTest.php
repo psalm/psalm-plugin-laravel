@@ -188,6 +188,10 @@ final class ManagesLoopsTest extends TestCase
         yield 'loop nested only inside a top-level @for' => ['nested-in-for.blade.php', 'PossiblyNullPropertyFetch'];
         yield '@include d partial analyzed alone' => ['partials/row.blade.php', 'PossiblyNullPropertyFetch'];
         // The author's own assignment wins over the compiler's: the re-assert sits on Blade's assignment, not later.
+        yield 'author PHP imitating the compiled push and pop' => ['nested-fake-loop-calls.blade.php', 'PossiblyNullPropertyFetch'];
+        yield 'author PHP imitating them inside nested interpolated strings' => ['nested-fake-loop-calls-in-string.blade.php', 'PossiblyNullPropertyFetch'];
+        // The bare @empty has already popped the inner frame: `$loop` is the outer, depth-1 loop there.
+        yield '@empty arm of a nested @forelse' => ['nested-empty-arm.blade.php', 'PossiblyNullPropertyFetch'];
         yield 'author reassigned $loop' => ['nested-author-loop.blade.php', 'NullPropertyFetch'];
     }
 

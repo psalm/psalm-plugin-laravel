@@ -21,6 +21,12 @@ final class LoopParentReassertTest extends TestCase
     /** `CompilesLoops::compileEndforeach()`'s tail. */
     private const POP = '$__env->popLoop(); $loop = $__env->getLastLoop();';
 
+    /** A whole compiled `@foreach` opener (after the `<?php `), `CompilesLoops::compileForeach()`. */
+    private function push(string $list, string $alias): string
+    {
+        return '$__currentLoopData = ' . $list . '; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as ' . $alias . '): ' . self::PUSH;
+    }
+
     private function frame(string $parent): string
     {
         return '\stdClass&object{' . PreludeBuilder::LOOP_FIELDS . ', parent: ' . $parent . '}';
@@ -39,7 +45,7 @@ final class LoopParentReassertTest extends TestCase
     #[Test]
     public function a_single_loop_is_left_alone(): void
     {
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n<?php endforeach; " . self::POP . " ?>\n";
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n<?php endforeach; " . self::POP . " ?>\n";
 
         $this->assertSame($compiled, LoopParentReassert::apply($compiled));
     }
@@ -47,8 +53,8 @@ final class LoopParentReassertTest extends TestCase
     #[Test]
     public function the_push_at_depth_two_gets_a_depth_two_frame_on_the_same_line(): void
     {
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
-            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n"
+            . '<?php ' . $this->push('$b', '$y') . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n";
 
@@ -66,9 +72,9 @@ final class LoopParentReassertTest extends TestCase
     #[Test]
     public function the_pop_back_to_depth_two_is_reasserted_but_the_pop_to_depth_one_is_not(): void
     {
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
-            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
-            . '<?php foreach($c as $z): ' . self::PUSH . " ?>\n"
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n"
+            . '<?php ' . $this->push('$b', '$y') . " ?>\n"
+            . '<?php ' . $this->push('$c', '$z') . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n";
@@ -147,7 +153,7 @@ final class LoopParentReassertTest extends TestCase
     {
         // Each fake region holds a push AND its pop, so an ungated pass would stay balanced and rewrite it.
         $pair = self::PUSH . ' ' . self::POP;
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n"
             . "<?php /* {$pair} */ ?>\n"
             . "<?php // {$pair}\n ?>\n"
             . "<?php \$s = '{$pair}'; \$t = \"{$pair}\"; ?>\n"
@@ -157,13 +163,13 @@ final class LoopParentReassertTest extends TestCase
         $this->assertSame($compiled, LoopParentReassert::apply($compiled));
     }
 
-    /** A heredoc BEFORE a nested pair must not leave the string tracker stuck on (the real loops would go unasserted). */
+    /** A heredoc BEFORE a nested pair does not hide the real loops that follow it. */
     #[Test]
     public function a_preceding_heredoc_does_not_hide_the_real_nested_loops(): void
     {
         $compiled = "<?php \$h = <<<EOT\nplain \$text\nEOT;\n?>\n"
-            . '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
-            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
+            . '<?php ' . $this->push('$a', '$x') . " ?>\n"
+            . '<?php ' . $this->push('$b', '$y') . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n";
 
@@ -174,20 +180,20 @@ final class LoopParentReassertTest extends TestCase
     public function a_heredoc_or_backtick_string_containing_the_pattern_is_ignored(): void
     {
         $pair = self::PUSH . ' ' . self::POP;
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n"
             . "<?php \$h = <<<EOT\n{$pair}\nEOT;\n\$s = `{$pair}`; ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n";
 
         $this->assertSame($compiled, LoopParentReassert::apply($compiled));
     }
 
-    /** A backtick string BEFORE a nested pair must not leave the tracker stuck on either. */
+    /** Likewise a preceding backtick string. */
     #[Test]
     public function a_preceding_backtick_string_does_not_hide_the_real_nested_loops(): void
     {
         $compiled = "<?php \$s = `ls`; ?>\n"
-            . '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
-            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
+            . '<?php ' . $this->push('$a', '$x') . " ?>\n"
+            . '<?php ' . $this->push('$b', '$y') . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n";
 
@@ -206,12 +212,50 @@ final class LoopParentReassertTest extends TestCase
         );
     }
 
+    /** Codex review P2: author PHP that merely CONTAINS the statements, behind a branch, never runs them. */
+    #[Test]
+    public function author_php_that_imitates_the_statements_behind_a_branch_is_ignored(): void
+    {
+        $compiled = "<?php\nif (false) { " . self::PUSH . " }\n?>\n"
+            . '<?php ' . $this->push('$a', '$x') . " ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n"
+            . "<?php\nif (false) { " . self::POP . " }\n?>\n";
+
+        $this->assertStringNotContainsString('@var', LoopParentReassert::apply($compiled));
+    }
+
+    /** Codex review P2: nested interpolated strings defeat any single quote toggle; provenance does not care. */
+    #[Test]
+    public function statements_inside_nested_interpolated_strings_are_ignored(): void
+    {
+        $nested = '$s = "{$f->format("' . self::PUSH . '")}"; $t = "{$f->format("' . self::POP . '")}";';
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n"
+            . "<?php {$nested} ?>\n"
+            . '<?php endforeach; ' . self::POP . " ?>\n";
+
+        $this->assertSame($compiled, LoopParentReassert::apply($compiled));
+    }
+
+    /** The loop expression and alias are author code: semicolons, nesting and strings in them must not end the match early. */
+    #[Test]
+    public function an_awkward_loop_expression_and_alias_still_count(): void
+    {
+        $compiled = self::compile(
+            "@foreach (\$a as \$x)\n"
+            . "@foreach (array_map(function (\$i) { \$j = ';)'; return \$i; }, \$x) as [\$k, \$v])\n"
+            . "@foreach (\"{\$x['a']}\" as &\$w)\n@endforeach\n@endforeach\n@endforeach\n",
+        );
+
+        // Push at depth 2 and 3, pop back to depth 2.
+        $this->assertSame(3, \substr_count(LoopParentReassert::apply($compiled), '@var'));
+    }
+
     #[Test]
     public function a_comment_embedded_match_does_not_skew_the_depth_of_real_ones(): void
     {
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n"
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n"
             . '<?php /* ' . self::PUSH . " */ ?>\n"
-            . '<?php foreach($b as $y): ' . self::PUSH . " ?>\n"
+            . '<?php ' . $this->push('$b', '$y') . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n"
             . '<?php endforeach; ' . self::POP . " ?>\n";
 
@@ -224,7 +268,7 @@ final class LoopParentReassertTest extends TestCase
     #[Test]
     public function an_unclosed_loop_is_returned_unchanged(): void
     {
-        $compiled = '<?php foreach($a as $x): ' . self::PUSH . " ?>\n<?php foreach(\$b as \$y): " . self::PUSH . " ?>\n";
+        $compiled = '<?php ' . $this->push('$a', '$x') . " ?>\n<?php " . $this->push('$b', '$y') . " ?>\n";
 
         $this->assertSame($compiled, LoopParentReassert::apply($compiled));
     }
@@ -232,7 +276,7 @@ final class LoopParentReassertTest extends TestCase
     #[Test]
     public function a_pop_without_a_push_is_returned_unchanged(): void
     {
-        $compiled = '<?php endforeach; ' . self::POP . " ?>\n<?php foreach(\$a as \$x): " . self::PUSH . " ?>\n<?php foreach(\$b as \$y): " . self::PUSH . " ?>\n";
+        $compiled = '<?php endforeach; ' . self::POP . " ?>\n<?php " . $this->push('$a', '$x') . " ?>\n<?php " . $this->push('$b', '$y') . " ?>\n";
 
         $this->assertSame($compiled, LoopParentReassert::apply($compiled));
     }
