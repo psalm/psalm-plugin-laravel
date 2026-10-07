@@ -27,7 +27,7 @@ $_closure = LazyCollection::make(function () {
 /** @psalm-check-type-exact $_closure = LazyCollection<array-key, mixed> */
 
 $_array = LazyCollection::make([1, 2]);
-/** @psalm-check-type-exact $_array = LazyCollection<int<0, 1>, 1|2> */
+/** @psalm-check-type-exact $_array = LazyCollection<int, 1|2>&static */
 
 $_string = LazyCollection::make('str');
 /** @psalm-check-type-exact $_string = LazyCollection<0, 'str'>&static */

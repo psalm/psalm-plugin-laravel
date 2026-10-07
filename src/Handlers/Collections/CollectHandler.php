@@ -12,7 +12,7 @@ use Psalm\Type\Union;
 
 /**
  * Narrows `collect($x)` for inputs the stub's own template inference can't bind: null, scalars,
- * and UnitEnum cases.
+ * and UnitEnum cases. For arrays it widens literal and range keys (vimeo/psalm#10985).
  *
  * Deliberately does nothing for the no-args call and every other shape - the stub's own
  * widened-but-unbound `object` template branch already infers the sound `Collection<array-key,
