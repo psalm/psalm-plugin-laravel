@@ -516,9 +516,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
 
-        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
-        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
-
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
