@@ -276,6 +276,14 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Trust the tag, do not prove the body.** The exemption is opt-in by the guard author and names no guard package. Rejected: an AST proof of `middleware()`'s body, which would hardcode one vendor's FQN and constructor parameters, could not tell a blocking guard from a logging one, and would exempt nothing for an app-local guard. The cost is an accepted caveat documented in `docs/security.md`: the annotation records that a mitigation is attached, not that a payload is neutralised.
 
+### `json_encode()` HEX flags use `RemoveTaintsInterface`, with a type-unset gate
+
+**Decision:** `JsonEncodeTaintHandler` removes html and quoted-text taint from `json_encode()` calls whose flags are provably literal `JSON_HEX_*` values, through `RemoveTaintsInterface`.
+
+**Why this is not the graph mutation rejected above:** the hazard there is a removal landing on a callee's single project-wide argument-to-return edge. `json_encode()` is a Psalm-shipped stub, so Psalm specializes both of its nodes per call location, and the removal affects only that call's own edge. The handler is stateless and keys on the call expression, not on a recorded node. Emission-time suppression does not fit: the escape belongs to the transform, not to any one sink, so there is no sink call site to key on.
+
+**Constraint:** `ReturnAnalyzer` accumulates the removal returned for a returned expression into the enclosing function's removed taints, which then apply to every return path of that function. A handler that answered on that dispatch would silence `return $tainted;` in the same function. The handler answers only while the call's type is still unset, which is true for the dispatch that writes the edge and false for the return and argument dispatches. This is an internal-ordering heuristic, not counting, and it fails toward a retained finding if Psalm reorders it. The same leak exists in core for `htmlspecialchars()`.
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in

@@ -34,6 +34,8 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+`json_encode()` called with literal `JSON_HEX_*` flags is treated as escaped, mirroring `Js::from()`: `JSON_HEX_TAG` clears the html taint, and `JSON_HEX_QUOT` together with `JSON_HEX_APOS` clears the quoted-text taint. That covers the Blade `@json($value)` directive, whose default flags include all four. Flags the analyzer cannot prove literal (a variable of unknown value, `(int) $request->input()`, a spread argument) and calls without the flags stay reported.
+
 Blade template scanning is opt-in: enable it with `<blade />` to also get `TaintedHtml` findings on unescaped `{!! !!}` output inside `.blade.php` files. See [Blade template analysis](blade.md).
 
 ### `ResponseFactory::make()` and `new Response()` HTML responses

@@ -169,4 +169,18 @@ final class BladeTaintRemapTest extends TestCase
     {
         $this->assertSame([], $this->taintIssuesFor('resources/views/literal.blade.php'), $this->report()[0]);
     }
+
+    #[Test]
+    public function json_directive_with_default_flags_reports_no_taint(): void
+    {
+        $this->assertSame([], $this->taintIssuesFor('resources/views/json.blade.php'), $this->report()[0]);
+    }
+
+    #[Test]
+    public function json_directive_with_non_escaping_flags_stays_tainted(): void
+    {
+        $types = \array_column($this->taintIssuesFor('resources/views/json-unsafe.blade.php'), 'type');
+
+        $this->assertContains('TaintedHtml', $types, $this->report()[0]);
+    }
 }
