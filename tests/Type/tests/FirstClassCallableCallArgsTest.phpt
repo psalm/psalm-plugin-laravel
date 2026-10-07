@@ -49,7 +49,7 @@ function static_with(): \Closure
     return Customer::with(...);
 }
 
-// Artisan::command() has no callback argument to bind `$this` to when taken as a first-class callable.
+// First-class callable of a facade method backed by a real stub method.
 function artisan_command(): \Closure
 {
     return Artisan::command(...);
