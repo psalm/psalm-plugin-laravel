@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -25,7 +26,9 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\MethodStorage;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
@@ -926,6 +929,50 @@ final class RelationMethodParser
         }
 
         return $expr->class->toString();
+    }
+
+    /**
+     * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
+     * every alternative of X is a concrete model class or an intersection with one (`Model&Contract`).
+     *
+     * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
+     * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
+     * nullable or union return, a MorphTo subclass, and a template, `static`, or non-model X.
+     *
+     * @psalm-mutation-free
+     */
+    public static function declaredMorphToRelatedModelType(Codebase $codebase, ?Union $declaredReturn): ?Union
+    {
+        if (!$declaredReturn instanceof Union || !$declaredReturn->isSingle()) {
+            return null;
+        }
+
+        $relation = $declaredReturn->getSingleAtomic();
+        if (
+            !$relation instanceof TGenericObject
+            || \strtolower($relation->value) !== \strtolower(MorphTo::class)
+            || !isset($relation->type_params[0])
+        ) {
+            return null;
+        }
+
+        $related = $relation->type_params[0];
+        foreach ($related->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                return null;
+            }
+
+            $isModel = false;
+            foreach ([$atomic, ...$atomic->extra_types] as $part) {
+                $isModel = $isModel || ($part instanceof TNamedObject && ClassLineage::isA($codebase, $part->value, Model::class));
+            }
+
+            if (!$isModel) {
+                return null;
+            }
+        }
+
+        return $related;
     }
 
     /**

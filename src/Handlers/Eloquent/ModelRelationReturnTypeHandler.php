@@ -13,7 +13,9 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
@@ -48,7 +50,8 @@ use Psalm\Type\Union;
  * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
  * related model is statically declared via a docblock generic
  * (`@phpstan-return MorphTo<User|Post, $this>` — read by
- * {@see RelationMethodParser::extractDocblockRelatedModelType}); without that the
+ * {@see RelationMethodParser::extractDocblockRelatedModelType}; the `$this->morphTo()` call inside
+ * such a method is narrowed by {@see getEnclosingMorphToReturnType()}); without that the
  * handler defers because the related class is determined at runtime. `HasOneThrough`
  * and `HasManyThrough` require both factory class-string args (related and intermediate)
  * to resolve statically. The declaring-model generic comes from the receiver
@@ -213,6 +216,64 @@ final class ModelRelationReturnTypeHandler
         self::$unionCache[$cacheKey] = $result;
 
         return $result;
+    }
+
+    /**
+     * Closure target registered once on the `HasRelationships` trait by {@see ModelRegistrationHandler}.
+     * Psalm falls back to the declaring trait's return-type providers, so this reaches `$this->morphTo()`
+     * in every model (also ones the per-model registration skips as non-autoloadable) and in model traits.
+     *
+     * Answers `$this->morphTo()` inside a method declaring `@return MorphTo<X, …>` with
+     * `MorphTo<X, receiver>` (#1091). The stub can only return `MorphTo<Model, static>`, as the target
+     * class comes from the morph map at runtime, so a narrowed declaration otherwise raises
+     * MoreSpecificReturnType / LessSpecificReturnStatement (InvalidReturnType for `Model&Contract`).
+     * Closures and arrow functions inside the method decline: their own declaration applies there.
+     *
+     * Caveat, accepted unsoundness: X is the user's docblock, unverified, as on the external-call path
+     * ({@see resolveRelatedModelType()}). A declaration naming the wrong models is believed, and every
+     * `$this->morphTo()` in such a method narrows, returned or not.
+     */
+    public static function getEnclosingMorphToReturnType(MethodReturnTypeProviderEvent $event): ?Union
+    {
+        if ($event->getMethodNameLowercase() !== 'morphto') {
+            return null;
+        }
+
+        $calledClass = $event->getCalledFqClasslikeName();
+        $stmt = $event->getStmt();
+        $source = $event->getSource();
+        if (
+            $calledClass === null
+            || !$stmt instanceof MethodCall
+            || !$stmt->var instanceof Variable
+            || $stmt->var->name !== 'this'
+            || !$source instanceof StatementsAnalyzer
+        ) {
+            return null;
+        }
+
+        $method = $source->getSource();
+        if (!$method instanceof MethodAnalyzer) {
+            return null;
+        }
+
+        $related = RelationMethodParser::declaredMorphToRelatedModelType(
+            $source->getCodebase(),
+            $method->getStorage()->return_type,
+        );
+        if (!$related instanceof Union) {
+            return null;
+        }
+
+        return self::buildRelationType(
+            MorphTo::class,
+            $related,
+            null,
+            null,
+            null,
+            $calledClass,
+            self::isStaticReceiver($source, $stmt, $calledClass),
+        );
     }
 
     /**
