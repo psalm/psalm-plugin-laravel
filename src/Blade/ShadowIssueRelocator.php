@@ -382,7 +382,7 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = self::remapMessageLine($issue, $target);
+        $message = self::remapMessage($issue, $target);
 
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
@@ -449,22 +449,26 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * Rewrites the shadow line an issue message names (`first seen on line N`) onto the template,
-     * through the same {@see ShadowTarget::templateLineFor()} the location and the journey use.
-     * Unlike {@see JourneyRemapper}, a line inside the prelude drops the clause instead of clamping
-     * to line 1 (that would state a false fact), and a regex failure keeps Psalm's message instead
-     * of declining: this rewrite is cosmetic and must never lose the issue.
+     * Rewrites the shadow positions an issue message names onto the template, through the same
+     * {@see ShadowTarget::templateLineFor()} the location and the journey use: `first seen on line N`
+     * (see MESSAGE_LINE_REFERENCES) and the `file:line:column` descriptor of the issue's own shadow
+     * that a few messages embed. Unlike {@see JourneyRemapper}'s clamp-to-1, a `first seen` line
+     * inside the prelude drops the clause (a clamped number would read as a claim), while a
+     * descriptor still clamps because it has no clause to drop. A regex failure keeps Psalm's
+     * message instead of declining: this rewrite is cosmetic and must never lose the issue.
      *
      * @psalm-mutation-free
      */
-    private static function remapMessageLine(CodeIssue $issue, ShadowTarget $target): string
+    private static function remapMessage(CodeIssue $issue, ShadowTarget $target): string
     {
-        foreach (self::MESSAGE_LINE_REFERENCES as $class => $pattern) {
-            if ($issue::class !== $class) {
-                continue;
-            }
+        $message = $issue->message;
+        // Widened: Psalm rejects a `class-string` offset into the literal-keyed constant.
+        /** @psalm-var array<string, non-empty-string> $patterns */
+        $patterns = self::MESSAGE_LINE_REFERENCES;
+        $pattern = $patterns[$issue::class] ?? null;
 
-            return \preg_replace_callback(
+        if ($pattern !== null) {
+            $message = \preg_replace_callback(
                 $pattern,
                 /** @param array<array-key, string> $matches */
                 static function (array $matches) use ($target): string {
@@ -472,11 +476,11 @@ final class ShadowIssueRelocator
 
                     return $templateLine >= 1 ? $matches[1] . $templateLine : '';
                 },
-                $issue->message,
-            ) ?? $issue->message;
+                $message,
+            ) ?? $message;
         }
 
-        return $issue->message;
+        return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
     }
 
     /**

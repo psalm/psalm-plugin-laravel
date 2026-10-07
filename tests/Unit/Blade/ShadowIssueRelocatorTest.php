@@ -23,6 +23,7 @@ use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
+use Psalm\Issue\ReferenceReusedFromConfusingScope;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
@@ -285,6 +286,53 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(ParseError::class, $relocated);
         $this->assertSame('Syntax error, unexpected identifier "x on line 31" on line 3', $relocated->message);
+    }
+
+    /**
+     * #1723: `ReferenceReusedFromConfusingScope` embeds `CodeLocation::getShortSummary()`
+     * (`<shadow file name>:<line>:<column>`) in its message. The descriptor must name the template,
+     * with the line resolved through the same map and the column kept.
+     */
+    #[Test]
+    public function a_location_descriptor_inside_a_message_names_the_template(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope(
+            '$x is possibly a reference defined at shadow.php:31:64. Reusing this variable may cause the referenced value to change.',
+            $this->shadowLocation(40),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame(
+            '$x is possibly a reference defined at resources/views/profile.blade.php:3:64. Reusing this variable may cause the referenced value to change.',
+            $relocated->message,
+        );
+        $this->assertSame(2, $relocated->code_location->getLineNumber());
+    }
+
+    /** The journey convention: a descriptor into the prelude clamps to line 1. */
+    #[Test]
+    public function a_location_descriptor_into_the_prelude_clamps_to_line_one(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at shadow.php:5:9.', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 0, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame('$x is possibly a reference defined at resources/views/profile.blade.php:1:9.', $relocated->message);
+    }
+
+    /** Only the issue's own shadow is rewritten; another file's descriptor is ordinary text. */
+    #[Test]
+    public function a_descriptor_naming_another_file_is_left_alone(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at app/Other.php:31:64.', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame('$x is possibly a reference defined at app/Other.php:31:64.', $relocated->message);
     }
 
     /**
