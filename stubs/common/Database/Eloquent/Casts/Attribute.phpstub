@@ -14,8 +14,8 @@ class Attribute
      * Laravel calls getter/setter with ($value, $attributes), but PHP allows closures to
      * ignore trailing arguments, so 0, 1, or 2 params are all valid in practice.
      *
-     * Method-level @template is required because Psalm 7 cannot resolve class-level
-     * templates referenced inside callable parameter types.
+     * Method-level @template is required because class-level templates are not in scope
+     * in static methods (they bind per instance).
      *
      * @template TGetResult
      * @template TSetParam
