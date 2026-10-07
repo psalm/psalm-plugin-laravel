@@ -25,20 +25,21 @@ use Psalm\Type\Union;
 /**
  * Returns the precise generic relation type for user-defined relationship methods on Models.
  *
- * Without this handler, `(new WorkOrder())->invoice()` resolves to `HasOne<Model, Model>`
- * even when the method body is `return $this->hasOne(Invoice::class)` and the docblock
- * says `@psalm-return HasOne<Invoice, $this>`. Two Psalm limitations cause the collapse:
+ * Relationship methods are usually written without a docblock return, or with only a native
+ * `: HasOne`, and Psalm types callers from the DECLARED return alone: it never uses the
+ * type it infers from the method body. So `(new WorkOrder())->invoice()` with body
+ * `return $this->hasOne(Invoice::class)` resolves to `mixed` (no declared return) or to
+ * `HasOne<Model, Model>` (native `: HasOne`, template bounds), even though the factory call
+ * itself infers `HasOne<Invoice, WorkOrder&static>` (Psalm 7.0.0-rc1 prints that type in
+ * its `MissingReturnType` suggestion, then discards it). A docblock
+ * `@return HasOne<Invoice, $this>` already resolves natively; this handler covers the
+ * undocumented majority. It binds the receiver class itself, keeping the `&static` marker
+ * when the call is made on `$this` inside a non-final model (#1614).
  *
- * 1. The `class-string<TRelatedModel>` argument's TRelatedModel binding is not propagated
- *    to the stub's `@return HasOne<TRelatedModel, $this>` return.
- * 2. `$this` in template position is not substituted with the late-static-bound class.
- *    The handler binds the receiver class itself, keeping the `&static` marker when the
- *    call is made on `$this` inside a non-final model (#1614).
- *
- * Both collapses happen before any handler registered on the Relation hierarchy can
- * observe a useful generic — the called-on type already arrives at `getRelated()` etc.
- * with `[Model, Model]` template params. Fixing the upstream method's return is the
- * only path that lets the existing stub `@return TRelatedModel` resolve correctly.
+ * The collapse reaches every handler registered on the Relation hierarchy: the called-on
+ * type arrives at `getRelated()` etc. with `[Model, Model]` template params, so fixing
+ * the model method's return is the only path that lets the stub `@return TRelatedModel`
+ * resolve correctly.
  *
  * Strategy: at codebase population time, {@see ModelRegistrationHandler} registers this
  * closure per concrete Model class. For every method call dispatched on the model,
