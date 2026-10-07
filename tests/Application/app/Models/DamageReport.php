@@ -37,4 +37,14 @@ class DamageReport extends Model
     {
         return $this->morphTo();
     }
+
+    /**
+     * Nested `static` in the related slot: the stored type still needs Psalm's late-static binding.
+     *
+     * @return MorphTo<GenericBox<static>, self>
+     */
+    public function boxed(): MorphTo
+    {
+        return $this->morphTo();
+    }
 }

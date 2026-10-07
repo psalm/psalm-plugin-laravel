@@ -3,6 +3,7 @@
 
 use App\Models\Concerns\Reportable;
 use App\Models\DamageReport;
+use App\Models\GenericBox;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -32,6 +33,15 @@ function issue1753_property_keeps_intersection(DamageReport $report): ?Model
     $subject = $report->subject;
     /** @psalm-check-type-exact $subject = Model&Reportable|null */
     return $subject;
+}
+
+// A nested `static` cannot be bound by a provider result (it skips Psalm's expansion), so the call
+// declines and the declared return applies, bound by Psalm.
+function issue1753_nested_static_declines(DamageReport $report): MorphTo
+{
+    $relation = $report->boxed();
+    /** @psalm-check-type-exact $relation = MorphTo<GenericBox<DamageReport&static>, DamageReport> */
+    return $relation;
 }
 
 ?>
