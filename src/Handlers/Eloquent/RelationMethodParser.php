@@ -34,9 +34,6 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TObject;
 use Psalm\Type\Atomic\TTemplateParam;
-use Psalm\Type\Atomic\TTemplateParamClass;
-use Psalm\Type\TypeNode;
-use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -911,12 +908,16 @@ final class RelationMethodParser
 
     /**
      * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
-     * every alternative of X is a named class, or an intersection of named classes (`Model&Contract`),
-     * at least one of which is a Model subclass, with no `static`, `self` or template part at any depth.
+     * every alternative of X is a plain named class, or an intersection of plain named classes
+     * (`Model&Contract`), at least one of which is a Model subclass. A generic related model
+     * (`Box<Target>`), `static`, `self` and templates decline: a provider result skips Psalm's type
+     * expansion, so they would leak unbound (a nested `static` also recurses in the expander).
      *
      * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
      * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
      * nullable or union return and a MorphTo subclass.
+     *
+     * @psalm-mutation-free
      */
     public static function declaredMorphToRelatedModelType(Codebase $codebase, ?Union $declaredReturn): ?Union
     {
@@ -934,18 +935,10 @@ final class RelationMethodParser
         }
 
         $related = $relation->type_params[0];
-        if (self::containsContextDependentType($related)) {
-            return null;
-        }
-
         foreach ($related->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
-                return null;
-            }
-
             $isModel = false;
-            foreach ([$atomic, ...$atomic->extra_types] as $part) {
-                if (!$part instanceof TNamedObject) {
+            foreach ([$atomic, ...($atomic instanceof TNamedObject ? $atomic->extra_types : [])] as $part) {
+                if (!self::isPlainNamedClass($part)) {
                     return null;
                 }
 
@@ -961,29 +954,17 @@ final class RelationMethodParser
     }
 
     /**
-     * Whether the type holds, at any depth (generic arguments and intersection parts included), a part
-     * that only binds against a receiver: a template parameter, `static` / `$this`, or a `self` / `parent`
-     * a trait method keeps unresolved. Provider results skip Psalm's type expansion, so such a part would
-     * leak into the call's type as written (a nested `static` also recurses in the expander).
+     * A non-generic named class: not `static`, `self` or `parent`, which only bind against a receiver.
+     * Anything else (a generic object, a template, a class-constant reference) is a type Psalm must expand.
+     *
+     * @psalm-assert-if-true TNamedObject $part
+     * @psalm-pure
      */
-    private static function containsContextDependentType(Union $type): bool
+    private static function isPlainNamedClass(\Psalm\Type\Atomic $part): bool
     {
-        $visitor = new class extends TypeVisitor {
-            /** @psalm-pure */
-            #[\Override]
-            protected function enterNode(TypeNode $type): ?int
-            {
-                $contextDependent = $type instanceof TTemplateParam
-                    || $type instanceof TTemplateParamClass
-                    || ($type instanceof TNamedObject
-                        && ($type->is_static || \in_array(\strtolower($type->value), ['self', 'static', 'parent'], true)));
-
-                return $contextDependent ? self::STOP_TRAVERSAL : null;
-            }
-        };
-
-        // traverse() returns false exactly when enterNode() stopped the traversal.
-        return !$visitor->traverse($type);
+        return $part::class === TNamedObject::class
+            && !$part->is_static
+            && !\in_array(\strtolower($part->value), ['self', 'static', 'parent'], true);
     }
 
     /**

@@ -328,6 +328,8 @@ final class ModelRelationReturnTypeHandler
      * method's storage. Returns null when neither path produces a usable type.
      *
      * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     *
+     * @psalm-capabilities read-props
      */
     private static function resolveRelatedModelType(
         array $parsed,
