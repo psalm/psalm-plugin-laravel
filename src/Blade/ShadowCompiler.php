@@ -47,10 +47,9 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
-        $compiled = ValueStackSaveRewrite::apply($compiled);
-
         $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
-        $content = $prelude . $compiled;
+        // The prelude reads the compiler's own shapes, so it is built before the save rewrite replaces one.
+        $content = $prelude . ValueStackSaveRewrite::apply($compiled);
 
         $preludeLines = \substr_count($prelude, "\n");
         $lineMap = LineMapBuilder::build($content, $preludeLines, $markerPrefix);
