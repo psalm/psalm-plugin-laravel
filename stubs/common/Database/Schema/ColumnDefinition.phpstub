@@ -9,7 +9,7 @@ use Illuminate\Support\Fluent;
  * in Laravel's source (kept when Psalm merges this declaration into the reflected class).
  *
  * Laravel documents lock() with the same four-literal union, but Psalm does not enforce an
- * @method param union of 4+ literals (3 are enforced): https://github.com/vimeo/psalm/issues/TBD
+ * @method param union of 4+ literals (3 are enforced): https://github.com/vimeo/psalm/issues/12247
  * A real method is checked, so lock() is declared here until that is fixed upstream.
  */
 class ColumnDefinition extends Fluent

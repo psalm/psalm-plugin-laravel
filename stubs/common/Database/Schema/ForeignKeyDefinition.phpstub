@@ -10,7 +10,7 @@ use Illuminate\Support\Fluent;
  * reflected class).
  *
  * - lock(): Laravel documents the same four-literal union, but Psalm does not enforce an @method
- *   param union of 4+ literals (3 are enforced): https://github.com/vimeo/psalm/issues/TBD
+ *   param union of 4+ literals (3 are enforced): https://github.com/vimeo/psalm/issues/12247
  *   A real method is checked, so it is declared here until that is fixed upstream.
  * - onDelete()/onUpdate(): deliberate narrowing of Laravel's `string` param, an exception to the
  *   usual "match the vendor signature" rule. It catches typos by allowing exactly the four actions
