@@ -283,4 +283,16 @@ abstract class Relation implements BuilderContract
      * @return mixed
      */
     public function max($column) {}
+
+    /**
+     * Get the alias associated with a custom polymorphic class.
+     *
+     * Laravel declares `int|string`. The body is `array_search(...) ?: $className`: the `?:`
+     * discards the falsy keys 0 and '', so the fallback is the class name, never ''. Integer
+     * keys survive in an associative morph map; non-zero is not expressible, hence `int`.
+     *
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $className
+     * @return int|non-empty-string
+     */
+    public static function getMorphAlias(string $className) {}
 }
