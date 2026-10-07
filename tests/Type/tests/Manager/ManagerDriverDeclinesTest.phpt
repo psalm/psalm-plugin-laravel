@@ -246,6 +246,64 @@ function fallback_never_creator(NeverCreatorManager $manager): void
     /** @psalm-check-type-exact $_fallbackNever = mixed */
 }
 
+// PHP's method_exists() still finds a PRIVATE creator declared on an ancestor (the
+// child's own method table omits it), and Manager forwards the call via __call().
+abstract class PrivateCreatorParentManager extends Manager
+{
+    private function createSecretDriver(): string
+    {
+        return 'secret';
+    }
+}
+
+final class AncestorPrivateCreatorManager extends PrivateCreatorParentManager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+}
+
+// Templates nested inside the return type (`list<U>`) are still unbound.
+class NestedTemplateCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return 'foo';
+    }
+
+    /**
+     * @template U of DeclineFooDriver
+     * @return list<U>
+     */
+    protected function createFooDriver(): array
+    {
+        return [];
+    }
+}
+
+function ancestor_private_creator(AncestorPrivateCreatorManager $manager, string $name): void
+{
+    $_ancestorPrivate = $manager->driver($name);
+    /** @psalm-check-type-exact $_ancestorPrivate = mixed */
+}
+
+function nested_template_creator(NestedTemplateCreatorManager $manager, string $name): void
+{
+    $_nestedLiteral = $manager->driver('foo');
+    /** @psalm-check-type-exact $_nestedLiteral = mixed */
+
+    $_nestedFallback = $manager->driver($name);
+    /** @psalm-check-type-exact $_nestedFallback = mixed */
+}
+
 /**
  * Pins the method-name gate. `getDefaultDriver()` is unusable for this: it is
  * ABSTRACT on Manager, so every fixture here overrides it, which makes IT the

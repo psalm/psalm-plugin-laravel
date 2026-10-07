@@ -15,6 +15,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TemplateInferredTypeReplacer;
 use Psalm\Internal\Type\TemplateResult;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\Internal\TypeVisitor\TemplateTypeCollector;
 use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -44,7 +45,10 @@ use Psalm\Type\Union;
  * pre-populated some other way, both take precedence over `create{X}Driver()` at
  * runtime and neither is statically provable from the call site — narrowing here
  * assumes the stock creator-method dispatch path Laravel documents. Likewise, a
- * subclass of a non-final receiver may declare extra creators the union does not see.
+ * subclass of a non-final receiver may declare extra creators the union does not see,
+ * and a trait visibility adaptation (`use T { createXDriver as private; }`) is not
+ * read: the creator keeps the trait method's original visibility
+ * (see ManagerDriverTraitVisibilityAdaptationKnownLimitation.phpt).
  *
  * @internal
  */
@@ -104,15 +108,24 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
     {
         try {
             $storage = $codebase->classlike_storage_provider->get(\strtolower($receiver->value));
-        } catch (\InvalidArgumentException) {
+
+            // A parent's PRIVATE creator is absent from the receiver's method table, yet
+            // method_exists() finds it at runtime and Manager forwards it through __call().
+            foreach (\array_keys($storage->parent_classes) as $parent) {
+                foreach ($codebase->classlike_storage_provider->get($parent)->declaring_method_ids as $name => $id) {
+                    if (self::isCreatorName($name) && $codebase->methods->getStorage($id)->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
+                        return null;
+                    }
+                }
+            }
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return null;
         }
 
         $types = [];
 
         foreach (\array_keys($storage->declaring_method_ids) as $methodName) {
-            // Longer than `create` + `driver` (12): a non-empty middle, so `createDriver()` itself is excluded.
-            if (\strlen($methodName) <= 12 || !\str_starts_with($methodName, 'create') || !\str_ends_with($methodName, 'driver')) {
+            if (!self::isCreatorName($methodName)) {
                 continue;
             }
 
@@ -184,12 +197,23 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         );
 
         // Inherited `@return T`: bind the receiver's `@extends` arguments like a direct
-        // call would; a template that stays unbound proves nothing, so decline.
+        // call would; a template that stays unbound (at any depth, e.g. `list<U>`)
+        // proves nothing, so decline.
         if ($templateParams !== null) {
             $expanded = TemplateInferredTypeReplacer::replace($expanded, new TemplateResult([], $templateParams), $codebase);
         }
 
-        return $expanded->hasTemplate() ? null : $expanded;
+        $templates = new TemplateTypeCollector();
+        $templates->traverse($expanded);
+
+        return $templates->getTemplateTypes() === [] ? $expanded : null;
+    }
+
+    /** @psalm-pure */
+    private static function isCreatorName(string $methodNameLower): bool
+    {
+        // Longer than `create` + `driver` (12): a non-empty middle, so `createDriver()` itself is excluded.
+        return \strlen($methodNameLower) > 12 && \str_starts_with($methodNameLower, 'create') && \str_ends_with($methodNameLower, 'driver');
     }
 
     /**
