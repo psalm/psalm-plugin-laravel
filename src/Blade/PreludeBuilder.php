@@ -93,17 +93,17 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        [$undeclared, $firstGuarded, $mayWrite] = $this->undeclaredVariables($compiled, $declared);
+        [$undeclared, $firstGuarded, $mayWrite, $localBound, $functionSpans] = $this->undeclaredVariables($compiled, $declared);
         $tags = $this->rawVarTags($compiled);
         $lifted = [];
 
         foreach ($undeclared as $name) {
             $tag = $tags[$name] ?? [];
 
-            if (isset($firstGuarded[$name], $tag[0]) && \count($tag) === 1 && !isset(self::BLADE_OWNED_NAMES[$name])) {
+            if (isset($firstGuarded[$name], $tag[0]) && \count($tag) === 1 && !isset(self::BLADE_OWNED_NAMES[$name]) && !isset($localBound[$name])) {
                 [$offset, $type] = $tag[0];
 
-                if ($type !== null) {
+                if ($type !== null && !$this->within($offset, $functionSpans)) {
                     // A name the body never writes is undefined on EVERY path, so each of its guards
                     // is meaningful; the marker lets the relocator drop what Psalm reports on the
                     // second one (see liftsUnwritten()).
@@ -175,7 +175,7 @@ final class PreludeBuilder
                 $name = $declaration[1][0];
 
                 foreach (self::docCommentTags($shadow, '@opt') as [$tagOffset, $rest, , $commentStart]) {
-                    if ($tagOffset > $end && \preg_match('/^\s.*?\$' . \preg_quote($name, '/') . '(?![\w\x80-\xff])/', $rest) === 1) {
+                    if ($tagOffset > $end && self::declaredName($rest) === $name) {
                         return [$commentStart, $tagOffset];
                     }
                 }
@@ -183,6 +183,22 @@ final class PreludeBuilder
         }
 
         return null;
+    }
+
+    /**
+     * @param list<array{0: int, 1: int}> $spans
+     *
+     * @psalm-pure
+     */
+    private function within(int $offset, array $spans): bool
+    {
+        foreach ($spans as [$start, $end]) {
+            if ($offset >= $start && $offset <= $end) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @psalm-pure */
@@ -196,11 +212,32 @@ final class PreludeBuilder
     }
 
     /**
+     * The variable a `@var`-style tag declares, from the rest of its line after the tag; null when
+     * the line does not parse as `[type] $name`. Later `$names` are description text.
+     *
+     * @return array{0: string, 1: string}|null type (empty when omitted), name
+     *
+     * @psalm-pure
+     */
+    private static function declaredTypeAndName(string $rest): ?array
+    {
+        return \preg_match('/^\s+(?:([^$]+?)\s+)?&?(?:\.\.\.)?\$(' . ContractParser::IDENTIFIER . ')(?![\w\x80-\xff])/', $rest, $typed) === 1
+            ? [$typed[1], $typed[2]]
+            : null;
+    }
+
+    /** @psalm-pure */
+    private static function declaredName(string $rest): ?string
+    {
+        return self::declaredTypeAndName($rest)[1] ?? null;
+    }
+
+    /**
      * Every `$tag` occurrence in a real doc comment (tokenizer-verified, so author text in a
      * string, inline HTML or a plain comment never counts), with the rest of its line.
      *
-     * @return list<array{0: int, 1: string, 2: string, 3: int}> offset of the tag, rest of its line,
-     *     the tag itself, offset of the doc comment
+     * @return list<array{0: int, 1: string, 2: string, 3: int, 4: string}> offset of the tag, rest of
+     *     its line, the tag itself, offset of the doc comment, the doc comment
      *
      * @psalm-pure
      */
@@ -216,7 +253,7 @@ final class PreludeBuilder
                 && \preg_match_all('/' . $tag . '\b([^\n]*)/', $text, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) > 0
             ) {
                 foreach ($matches as $match) {
-                    $tags[] = [$offset + $match[0][1], $match[1][0], \substr($match[0][0], 0, \strlen($match[0][0]) - \strlen($match[1][0])), $offset];
+                    $tags[] = [$offset + $match[0][1], $match[1][0], \substr($match[0][0], 0, \strlen($match[0][0]) - \strlen($match[1][0])), $offset, $text];
                 }
             }
 
@@ -241,11 +278,16 @@ final class PreludeBuilder
     {
         $tags = [];
 
-        foreach (self::docCommentTags($compiled, '@(?:psalm-|phpstan-)?var') as [$offset, $rest, $tag]) {
+        foreach (self::docCommentTags($compiled, '@(?:psalm-|phpstan-)?var') as [$offset, $rest, $tag, , $comment]) {
             // Only the declared name counts: `$f` in "Shown next to $f" is description text.
-            if (\preg_match('/^\s+(?:([^$]+?)\s+)?&?(?:\.\.\.)?\$(' . ContractParser::IDENTIFIER . ')(?![\w\x80-\xff])/', $rest, $typed) === 1) {
-                $type = $tag === '@var' && $typed[1] !== '' && $this->isLiftableType($typed[1]) ? $typed[1] : null;
-                $tags[$typed[2]][] = [$offset, $type];
+            $typed = self::declaredTypeAndName($rest);
+
+            if ($typed !== null) {
+                // A suppression in the same docblock covers issues on the type only where it stands;
+                // the lifted copy in the prelude would lose it.
+                $type = $tag === '@var' && $typed[0] !== '' && $this->isLiftableType($typed[0])
+                    && \preg_match('/@(?:psalm-)?suppress\b/', $comment) !== 1 ? $typed[0] : null;
+                $tags[$typed[1]][] = [$offset, $type];
 
                 continue;
             }
@@ -377,9 +419,10 @@ final class PreludeBuilder
 
     /**
      * @param array<string, string> $declared
-     * @return array{0: list<string>, 1: array<string, true>, 2: array<string, true>} variable names
-     *     (without $), sorted and deduplicated; the names whose first read in AST order is a guard at
-     *     file scope; the names the body may write in any way
+     * @return array{0: list<string>, 1: array<string, true>, 2: array<string, true>, 3: array<string, true>, 4: list<array{0: int, 1: int}>}
+     *     variable names (without $), sorted and deduplicated; the names whose first read in AST
+     *     order is a guard at file scope; the names the body may write in any way; the names a
+     *     function-like binds in its own scope; the byte spans of every function-like
      */
     private function undeclaredVariables(string $compiled, array $declared): array
     {
@@ -395,7 +438,7 @@ final class PreludeBuilder
         try {
             $ast = $parser->parse($compiled, new Collecting()) ?? [];
         } catch (\Throwable) {
-            return [[], [], []];
+            return [[], [], [], [], []];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -414,6 +457,12 @@ final class PreludeBuilder
             /** A construct that can define any name (`$$x`, `extract()`, `include`, ...) occurs. */
             public bool $dynamicWrite = false;
 
+            /** @var array<string, true> names a function, closure or arrow fn binds in its own scope */
+            public array $localBound = [];
+
+            /** @var list<array{0: int, 1: int}> byte spans of every function, closure and arrow fn */
+            public array $functionSpans = [];
+
             /** @var array<int, true> object ids of the variables a file-scope guard reads */
             private array $guards = [];
 
@@ -424,6 +473,15 @@ final class PreludeBuilder
             {
                 if ($node instanceof Node\FunctionLike) {
                     ++$this->functionDepth;
+                    $this->functionSpans[] = [$node->getStartFilePos(), $node->getEndFilePos()];
+
+                    foreach ($node->getParams() as $param) {
+                        $this->markWritten($param->var);
+                    }
+
+                    foreach ($node instanceof Node\Expr\Closure ? $node->uses : [] as $use) {
+                        $this->markWritten($use->var);
+                    }
                 } elseif ($this->functionDepth === 0) {
                     $this->collectGuards($node);
                 }
@@ -443,6 +501,16 @@ final class PreludeBuilder
                     || $node instanceof Node\Expr\AssignOp
                     || $node instanceof Node\Expr\AssignRef
                 ) {
+                    $this->markWritten($node->var);
+                }
+
+                if ($node instanceof Node\Expr\PreInc || $node instanceof Node\Expr\PreDec
+                    || $node instanceof Node\Expr\PostInc || $node instanceof Node\Expr\PostDec
+                ) {
+                    $this->markWritten($node->var);
+                }
+
+                if ($node instanceof Node\Stmt\Catch_ && $node->var instanceof Node\Expr\Variable) {
                     $this->markWritten($node->var);
                 }
 
@@ -559,6 +627,10 @@ final class PreludeBuilder
                         $this->written[$target->name] = true;
                     }
 
+                    if ($this->functionDepth > 0) {
+                        $this->localBound[$target->name] = true;
+                    }
+
                     $this->mayWrite[$target->name] = true;
 
                     return;
@@ -607,6 +679,6 @@ final class PreludeBuilder
 
         // A dynamic write (`@props`/`@aware` compile to `$$__key = ...`) can define any name, so
         // no first read is provably a read of an undefined variable.
-        return [$names, $visitor->dynamicWrite ? [] : $visitor->firstGuarded, $visitor->mayWrite];
+        return [$names, $visitor->dynamicWrite ? [] : $visitor->firstGuarded, $visitor->mayWrite, $visitor->localBound, $visitor->functionSpans];
     }
 }

@@ -1423,7 +1423,7 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringNotContainsString('$GLOBALS', $this->shadowSourceFor($template));
     }
 
-    /** #1697: a closure `use` of an optional name reports in template wording too. */
+    /** #1697: an arrow fn's implicit capture of an optional name reports in template wording too. */
     #[Test]
     public function a_closure_use_of_an_optional_variable_reports_in_template_wording(): void
     {
@@ -1432,9 +1432,29 @@ final class BladeIssueRemapTest extends TestCase
             => $issue['type'] === 'PossiblyUndefinedVariable' && \str_ends_with($issue['file_path'], 'resources/views/optional-guard-closure.blade.php')));
 
         $this->assertCount(1, $matching, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-        // Psalm reports the read inside the closure body, not the `use` clause.
         $this->assertSame(4, $matching[0]['line_from']);
         $this->assertSame('Optional view variable $cl is used without isset() or ??', $matching[0]['message']);
+    }
+
+    /**
+     * #1697 negative: a closure parameter shadowing a documented name is a different variable, so
+     * the outer name is not lifted and the closure's own redundant guard keeps reporting.
+     */
+    #[Test]
+    public function a_closure_parameter_shadowing_an_optional_name_keeps_its_guard_issue(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/optional-guard-shadowed.blade.php';
+
+        $this->assertSame(
+            [4],
+            \array_values(\array_unique(\array_merge(
+                $this->linesFor($issues, 'RedundantCondition', $template),
+                $this->linesFor($issues, 'TypeDoesNotContainNull', $template),
+            ))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        $this->assertStringNotContainsString('$GLOBALS', $this->shadowSourceFor($template));
     }
 
     /** #1697: an issue on a lifted TYPE reports on the template line that declared it, not line 1. */

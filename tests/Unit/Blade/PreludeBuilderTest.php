@@ -364,6 +364,12 @@ final class PreludeBuilderTest extends TestCase
         yield 'plain comment' => ["<?php\n/* @var string \$x */\n\$x ??= '';\n?>"];
         yield 'variable-variable write (@props)' => ["<?php\nforeach (['x' => ''] as \$__key => \$__value) { \$\$__key = \$\$__key ?? \$__value; }\n/** @var string \$y */\n\$y ??= '';\n?>"];
         yield 'extract' => ["<?php\nextract(\$data);\n/** @var string \$x */\n\$x ??= '';\n?>"];
+        yield 'declared only inside a closure' => ["<?php\necho \$x ?? '';\n\$f = static function (mixed \$item): void {\n    /** @var \\DateTimeImmutable \$x */\n    \$x = \$item;\n};\n?>"];
+        yield 'closure parameter of the same name' => ["<?php\n/** @var string \$x */\necho \$x ?? '';\n\$f = static fn(string \$x): string => \$x ?? '';\n?>"];
+        yield 'by-ref closure use of the same name' => ["<?php\n/** @var string \$x */\necho \$x ?? '';\n\$f = function () use (&\$x) {};\n?>"];
+        yield 'closure use of the same name' => ["<?php\n/** @var string \$x */\necho \$x ?? '';\n\$f = function () use (\$x) { return \$x; };\n?>"];
+        yield 'catch variable inside a closure' => ["<?php\n/** @var string \$x */\necho \$x ?? '';\n\$f = function () { try {} catch (\\Throwable \$x) {} };\n?>"];
+        yield 'docblock carries a suppression' => ["<?php\n/**\n * @var \\Missing\\Type \$x\n * @psalm-suppress UndefinedDocblockClass\n */\necho \$x ?? '';\n?>"];
     }
 
     #[Test]
@@ -394,11 +400,15 @@ final class PreludeBuilderTest extends TestCase
     {
         yield 'assigned' => ["\$x = 'a';"];
         yield 'unset' => ['unset($x);'];
-        yield 'by-ref closure use' => ['$f = function () use (&$x) {};'];
         yield 'by-ref function argument' => ["\\preg_match('/a/', 'a', \$x);"];
         yield 'unknown call argument' => ['$__env->fill($x);'];
         yield 'global' => ['global $x;'];
         yield 'reference source' => ['$y = &$x;'];
+        yield 'pre-increment' => ['++$x;'];
+        yield 'post-decrement' => ['$x--;'];
+        yield 'catch variable' => ['try {} catch (\\Throwable $x) {}'];
+        yield 'short list destructuring' => ['[$x] = [1];'];
+        yield 'foreach key' => ['foreach ([] as $x => $v) {}'];
     }
 
     #[Test]
@@ -436,6 +446,18 @@ final class PreludeBuilderTest extends TestCase
 
         $this->assertSame([\strpos($shadow, "/**\n"), \strpos($shadow, '@opt bool $stacked')], $offset);
         $this->assertNull(PreludeBuilder::optionalTagOffset($shadow, \strlen($prelude) + 2));
+    }
+
+    #[Test]
+    public function the_opt_tag_offset_ignores_the_name_in_another_tag_description(): void
+    {
+        $compiled = "<?php\n/**\n * @var string \$a Shown next to \$b\n * @var \\Missing \$b\n */\necho \$a ?? '';\necho \$b ?? '';\n?>";
+        [$prelude, $body] = (new PreludeBuilder())->compose($compiled, [], '');
+        $shadow = $prelude . $body;
+        $inB = \strpos($shadow, '@var \\Missing $b');
+        $this->assertIsInt($inB);
+
+        $this->assertSame([\strpos($shadow, "/**\n"), \strpos($shadow, '@opt \\Missing $b')], PreludeBuilder::optionalTagOffset($shadow, $inB));
     }
 
     #[Test]

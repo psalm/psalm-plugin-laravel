@@ -372,7 +372,8 @@ final class ShadowIssueRelocator
         $message = $issue->message;
 
         // Optional view variables (#1697) are declared in a prelude `try`; read the shadow only
-        // for the issue shapes that can involve one.
+        // for the issue shapes that can involve one. The name-keyed gates below are scope-safe
+        // because compose() never lifts a name any function-like binds in its own scope.
         $shadow = null;
 
         // "Defined in try block" names the prelude's mechanism, not anything the template author
