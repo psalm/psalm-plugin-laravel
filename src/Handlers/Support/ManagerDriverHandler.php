@@ -15,6 +15,7 @@ use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
@@ -26,11 +27,18 @@ use Psalm\Type\Union;
  * `driver()` itself shadows this handler (accepted FN, see
  * ManagerDriverOverrideShadowKnownLimitation.phpt).
  *
+ * When the name cannot be resolved statically (non-literal argument, config-driven
+ * default), the result falls back to the union of every `create{X}Driver()` the
+ * receiver declares or inherits — sound on the stock dispatch path, where
+ * Manager::createDriver() calls one of them or throws. A RESOLVED name whose creator
+ * is missing still declines (likely an `extend()`'d driver).
+ *
  * Accepted runtime imprecision that stays OUT of scope: `Manager::extend()`
  * registering a custom creator closure, and the `$this->drivers[$name]` cache
  * pre-populated some other way, both take precedence over `create{X}Driver()` at
  * runtime and neither is statically provable from the call site — narrowing here
- * assumes the stock creator-method dispatch path Laravel documents.
+ * assumes the stock creator-method dispatch path Laravel documents. Likewise, a
+ * subclass of a non-final receiver may declare extra creators the union does not see.
  *
  * @internal
  */
@@ -69,11 +77,50 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
 
         $driverName = self::resolveDriverName($codebase, $receiver, $event);
 
-        if ($driverName === null) {
+        if ($driverName !== null) {
+            // A resolved name with no matching creator is likely an extend()'d driver — decline, never fall back.
+            return self::creatorReturnType($codebase, $receiver, \strtolower('create' . Str::studly($driverName) . 'Driver'));
+        }
+
+        return self::creatorUnion($codebase, $receiver);
+    }
+
+    /**
+     * Union of every `create{X}Driver()` the receiver declares or inherits, for a name
+     * that cannot be resolved statically. ANY creator without a usable declared type
+     * (void/never/untyped) makes the whole union unprovable, so it declines. Private,
+     * static, and param-taking creators are included too: over-approximating is sound.
+     */
+    private static function creatorUnion(Codebase $codebase, string $receiver): ?Union
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($receiver));
+        } catch (\InvalidArgumentException) {
             return null;
         }
 
-        $creator = \strtolower('create' . Str::studly($driverName) . 'Driver');
+        $types = [];
+
+        foreach (\array_keys($storage->declaring_method_ids) as $methodName) {
+            // Longer than `create` + `driver` (12): a non-empty middle, so `createDriver()` itself is excluded.
+            if (\strlen($methodName) <= 12 || !\str_starts_with($methodName, 'create') || !\str_ends_with($methodName, 'driver')) {
+                continue;
+            }
+
+            $type = self::creatorReturnType($codebase, $receiver, $methodName);
+
+            if (!$type instanceof Union) {
+                return null;
+            }
+
+            $types[] = $type;
+        }
+
+        return $types === [] ? null : Type::combineUnionTypeArray($types, $codebase);
+    }
+
+    private static function creatorReturnType(Codebase $codebase, string $receiver, string $creator): ?Union
+    {
         $creatorId = self::declaringMethodId($codebase, $receiver, $creator);
 
         if (!$creatorId instanceof MethodIdentifier) {
@@ -112,7 +159,8 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
 
     /**
      * A literal string argument wins; a present-but-non-literal argument (dynamic
-     * name, `\UnitEnum` instance) declines; a genuinely MISSING argument falls
+     * name, `\UnitEnum` instance) is unresolvable: null, which means "fall back to
+     * the creator union", not "decline". A genuinely MISSING argument falls
      * through to the manager's own default driver. Laravel resolves the argument
      * with `enum_value($driver) ?: $this->getDefaultDriver()`: a FALSY literal
      * (`''` or `'0'`) is therefore "no driver given" too, not a literal name.
