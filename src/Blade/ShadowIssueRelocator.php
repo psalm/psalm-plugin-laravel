@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Expression;
+use PhpParser\ParserFactory;
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
@@ -353,9 +358,10 @@ final class ShadowIssueRelocator
         // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
         // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
         // which only runs for an int key (#1695). Every argument issue on that selection is the
-        // same artifact, plus the string casts Psalm reports alongside it. The mirror image: an
-        // all-int-key list (`@aware(['color'])`) narrows `$__key` to `never` in the keyed arm, and
-        // Psalm reports `NoValue` on it.
+        // same artifact, plus the string casts Psalm reports alongside it, unless an int-keyed
+        // item can carry a non-string (`@aware([null])`), which is real misuse (#1725). The mirror
+        // image: an all-int-key list (`@aware(['color'])`) narrows `$__key` to `never` in the keyed
+        // arm, and Psalm reports `NoValue` on it.
         if (self::isGeneratedAwareArgument($issue, $target)) {
             return false;
         }
@@ -555,9 +561,8 @@ final class ShadowIssueRelocator
      * or string-cast issue on `$__value` in the list-form call, or `NoValue` on `$__key` in the
      * keyed call. The call text cut out of the shadow must be absent from the template, the same
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
-     * same arguments inside `@php` keeps reporting.
-     *
-     * @psalm-mutation-free
+     * same arguments inside `@php` keeps reporting. A `$__value` issue also needs
+     * {@see self::awareListItemsAreStrings()}: the list-form call does run for an int key.
      */
     private static function isGeneratedAwareArgument(CodeIssue $issue, ShadowTarget $target): bool
     {
@@ -593,7 +598,69 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource, $target->markerPrefix());
+        if (TemplateSnippetMatcher::occursIn($call, $target->templateSource, $target->markerPrefix())) {
+            return false;
+        }
+
+        return $argument === '$__key' || self::awareListItemsAreStrings($issue->code_location);
+    }
+
+    /**
+     * Whether the `@aware` array whose compiled list-form call the location points into is a
+     * literal whose every item that can land on an int key has a string literal value, so the
+     * list-form arm never receives a non-string at runtime. The array is cut out of the
+     * `foreach (<array> as $__key => $__value)` head that `compileAware()` emits a fixed distance
+     * before the call. Declines (false) on anything else: a non-literal array (`@aware($defaults)`),
+     * a spread, or a key that is not a string literal PHP keeps as a string (`'0'` becomes int 0).
+     */
+    private static function awareListItemsAreStrings(CodeLocation $location): bool
+    {
+        $body = ' as $__key => $__value) {' . "\n"
+            . '    $__consumeVariable = is_string($__key) ? $__key : $__value;' . "\n"
+            . '    $$__consumeVariable = is_string($__key) ? $__env->getConsumableComponentData($__key, $__value)'
+            . ' : $__env->getConsumableComponentData(';
+
+        try {
+            $shadow = ProjectAnalyzer::getInstance()->getCodebase()->getFileContents($location->file_path);
+            $bodyStart = $location->raw_file_start - \strlen($body);
+
+            if ($bodyStart < 0 || \substr_compare($shadow, $body, $bodyStart, \strlen($body)) !== 0) {
+                return false;
+            }
+
+            $head = \strrpos(\substr($shadow, 0, $bodyStart), '<?php foreach (');
+
+            if ($head === false) {
+                return false;
+            }
+
+            $head += \strlen('<?php foreach (');
+            $statements = (new ParserFactory())->createForNewestSupportedVersion()
+                ->parse('<?php ' . \substr($shadow, $head, $bodyStart - $head) . ';') ?? [];
+        } catch (\Throwable) {
+            return false;
+        }
+
+        $array = \count($statements) === 1 && $statements[0] instanceof Expression ? $statements[0]->expr : null;
+
+        if (!$array instanceof Array_) {
+            return false;
+        }
+
+        foreach ($array->items as $item) {
+            if ($item === null || $item->unpack) {
+                return false;
+            }
+
+            // PHP stores a canonical decimal string key (`'0'`, `'-5'`, not `'05'`) as an int.
+            $stringKey = $item->key instanceof String_ && (string) (int) $item->key->value !== $item->key->value;
+
+            if (!$stringKey && !$item->value instanceof String_) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

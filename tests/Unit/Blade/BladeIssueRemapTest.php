@@ -855,6 +855,24 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1725: the list-form arm DOES run for an int key, so a non-string value there is a real
+     * misuse (a null key into `array_key_exists()` at runtime) and keeps reporting: a literal
+     * `null` (lines 1 and 5, `[...]` and `array(...)`), a nullable variable (line 3), a null list
+     * item next to a keyed string default (line 4, and multi-line from line 6), and a `'0'` key,
+     * which PHP stores as int 0 (line 10).
+     */
+    #[Test]
+    public function non_string_aware_list_items_report_against_the_generated_list_form_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+        $template = 'components/aware-int-key-non-string.blade.php';
+
+        $this->assertSame([1, 5, 10], $this->linesFor($issues, 'NullArgument', $template), $json);
+        $this->assertSame([3, 4, 6], $this->linesFor($issues, 'PossiblyNullArgument', $template), $json);
+    }
+
+    /**
      * #1695: the gate declines when the template itself contains the generated call text, so an
      * author-written `getConsumableComponentData($__value)` with a null `$__value` keeps reporting.
      */
@@ -873,8 +891,9 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * The keyed-arm mirror of #1695: an all-int-key list (`@aware(['color'])`, lines 1 and 2)
      * narrows `$__key` to `never` inside `is_string($__key) ? ...getConsumableComponentData($__key,
-     * ...)`, which Psalm reports as `NoValue`. Mixed lists (lines 3 and 4) keep a string key and
-     * never reported.
+     * ...)`, which Psalm reports as `NoValue`. Mixed lists (lines 3, 4, 6 and 7) report nothing
+     * either: their keyed non-string default reaches the list-form arm only in Psalm's view, since
+     * every int-keyed item is a string (#1725).
      */
     #[Test]
     public function list_form_aware_does_not_report_no_value_against_the_generated_keyed_call(): void
