@@ -415,7 +415,8 @@ final class ShadowManifest
 
     /**
      * Psalm caches the statements of a file that failed to parse and replays no ParseError on a
-     * cache hit (vimeo/psalm `StatementsProvider::parseStatements()` saves even when `$has_errors`),
+     * cache hit (vimeo/psalm `StatementsProvider::getStatementsForFile()` calls
+     * `saveStatementsToCache()` even when `$has_errors`; only `parseStatements()` emits the error),
      * so a broken shadow goes silent from the second run on. A fresh nonce per run changes the
      * content hash, forcing the real parse that reports the error.
      *
@@ -433,7 +434,7 @@ final class ShadowManifest
     }
 
     /**
-     * Appended on the last line, never after a newline, so no ParseError line moves. Shadows usually
+     * Appended on the last line and never adds a newline, so no ParseError line moves. Shadows usually
      * end in inline HTML, where this is inert text; in PHP mode it must be a line comment, because a
      * block comment's closing token would end a block comment the template left open.
      *

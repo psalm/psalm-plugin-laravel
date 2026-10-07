@@ -180,7 +180,9 @@ Document every workaround with a comment linking to the upstream issue.
 
 **Decision:** `ShadowParseCheck` lints each compiled shadow for the analysis PHP version and the manifest persists the verdict. Every run, `BladeBootstrapper` appends a random `// psalm-laravel-reparse:<hex>` to the last line of each failing shadow, replacing the previous one. Shadows that parse are never touched.
 
-**Why:** `StatementsProvider::parseStatements()` in vimeo/psalm saves statements to the parser cache even when the parse had errors, and a cache hit replays no `ParseError`. Vanilla Psalm loses the error for any broken file from the second run on; for a shadow, recompiling does not help because the bytes are identical. A content change is the only lever, since the cache is keyed by content hash and `Internal\Cache` exposes no delete. The nonce stays on the last line so no error line moves, and it is a line comment so it cannot close a block comment the template left open.
+**Why:** `StatementsProvider::getStatementsForFile()` in vimeo/psalm calls `saveStatementsToCache()` even when the parse had errors, and a cache hit replays no `ParseError`, which only `parseStatements()` emits during a real parse. Vanilla Psalm loses the error for any broken file from the second run on; for a shadow, recompiling does not help because the bytes are identical. A content change is the only lever, since the cache is keyed by content hash and `Internal\Cache` exposes no delete. The nonce stays on the last line so no error line moves, and it is a line comment so it cannot close a block comment the template left open.
+
+**Upstream:** unfiled. The fix is to skip `saveStatementsToCache()` in `getStatementsForFile()` when the parse had errors.
 
 **Remove when** Psalm skips the cache save for a parse with errors: drop `ShadowParseCheck`, the manifest's parses slot, and `refreshReparseNonces()`. `BladeShadowCacheCanaryTest` must stay green without them.
 

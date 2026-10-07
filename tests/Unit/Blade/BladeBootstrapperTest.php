@@ -179,6 +179,26 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame(1, $nonced, 'exactly the broken template carries a nonce');
     }
 
+    /** A parses verdict is only valid for the PHP version it was linted for. */
+    #[Test]
+    public function changing_the_analysis_php_version_relints_a_fresh_shadow(): void
+    {
+        // `match` is a plain function name on PHP 7.4 and a keyword from PHP 8.0.
+        $this->writeTemplate('match.blade.php', "<p>{{ match(1) }}</p>\n");
+
+        $shadowAfterBoot = function (int $phpVersionId): string {
+            $registrar = new RecordingShadowRegistrar();
+            (new BladeBootstrapper($this->app(), $registrar, $this->progress, $this->shadowDir, analysisPhpVersionId: $phpVersionId))->boot();
+            $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+            $this->assertCount(1, $registrar->analyzedShadows);
+
+            return (string) \file_get_contents($registrar->analyzedShadows[0]);
+        };
+
+        $this->assertStringNotContainsString('psalm-laravel-reparse:', $shadowAfterBoot(70400));
+        $this->assertStringContainsString('psalm-laravel-reparse:', $shadowAfterBoot(80000), 'the 7.4 verdict was reused for 8.0');
+    }
+
     /**
      * `loadViewsFrom($dir, $namespace)` puts its directory in the finder's `getHints()`, never
      * `getPaths()` — a template that lives ONLY there was invisible to discovery entirely (#1497).
