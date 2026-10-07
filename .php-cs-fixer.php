@@ -27,6 +27,8 @@ return (new Config())
             // Laravel writes packages.php/services.php into fixture bootstrap/cache dirs when
             // subprocess tests boot the app; those generated files must never be style-checked.
             ->notPath('#Fixtures/.+/bootstrap/cache/#')
+            // Blade templates are not PHP files; a template fixture may legitimately be unparseable as PHP.
+            ->notName('*.blade.php')
             ->in(__DIR__ . '/bin/ci')
             ->append([
                 __FILE__,
