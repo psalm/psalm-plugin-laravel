@@ -166,8 +166,17 @@ jobs:
             const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
             const isFork = headRepo !== expectedRepo;
             core.setOutput('is_fork', isFork ? 'true' : 'false');
-            const baseSha = pr.base.sha;
+            // Base = merge-base, not pr.base.sha: the base-branch tip includes commits
+            // the PR branch lacks, so every 4.x change since the fork point would show
+            // up inverted as PR delta. Matches bin/ci/delta.sh's merge-base default.
             const headSha = pr.head.sha;
+            const { data: cmp } = await github.rest.repos.compareCommitsWithBasehead({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              basehead: `${pr.base.sha}...${headSha}`,
+              per_page: 1,
+            });
+            const baseSha = cmp.merge_base_commit.sha;
             core.setOutput('base_sha', baseSha);
             core.setOutput('head_sha', headSha);
             core.setOutput('base_label', `base-${baseSha.substring(0, 8)}`);
