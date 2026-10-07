@@ -1,0 +1,7 @@
+<?php
+
+/**
+ * Defined by an application's `public/index.php` and `artisan`, which Psalm never analyses.
+ * The cast keeps the type a plain `float`; a literal would be inferred as `float(0)`.
+ */
+const LARAVEL_START = (float) 0;
