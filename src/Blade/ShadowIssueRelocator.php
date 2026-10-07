@@ -21,6 +21,7 @@ use Psalm\Issue\NoValue;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -370,15 +371,48 @@ final class ShadowIssueRelocator
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
         $message = $issue->message;
 
-        // "Defined in try block" names the prelude's mechanism for an optional view variable
-        // (#1697), not anything the template author wrote. Gated on the shadow's own prelude, so an
-        // author's `try` inside `@php` keeps Psalm's wording.
+        // Optional view variables (#1697) are declared in a prelude `try`; read the shadow only
+        // for the issue shapes that can involve one.
+        $shadow = null;
+
+        // "Defined in try block" names the prelude's mechanism, not anything the template author
+        // wrote. Gated on the shadow's own prelude declaring the name; an author's own `try` that
+        // assigns the SAME lifted name is reworded too, which still describes the read correctly.
         if (
-            $issue instanceof PossiblyUndefinedGlobalVariable
-            && \preg_match('/^Possibly undefined global variable \$(\w+) defined in try block$/', $message, $matches) === 1
-            && PreludeBuilder::liftsOptional((string) @\file_get_contents($issue->code_location->file_path), $matches[1])
+            ($issue instanceof PossiblyUndefinedGlobalVariable || $issue instanceof PossiblyUndefinedVariable)
+            && \preg_match('/^Possibly undefined (?:global )?variable \$(' . ContractParser::IDENTIFIER . ') defined in try block$/', $message, $matches) === 1
+            && PreludeBuilder::liftsOptional($shadow = self::shadowSource($issue), $matches[1])
         ) {
             $message = "Optional view variable \${$matches[1]} is used without isset() or ??";
+        }
+
+        // Psalm treats a possibly-undefined variable as defined after its first `isset()`/`??`
+        // read even though neither assigns it, so every later guard on an optional name reports
+        // "never null". For a name the body never writes, the variable is undefined on every path
+        // the caller omits it, so each such guard is meaningful. Accepted loss: a guard nested in
+        // another guard's true branch (`@isset($x) {{ $x ?? '' }}`) is silenced too.
+        if (
+            ($issue instanceof DocblockTypeContradiction || $issue instanceof RedundantConditionGivenDocblockType
+                || $issue instanceof RedundantCondition || $issue instanceof TypeDoesNotContainNull)
+            && \preg_match('/(?:^Cannot resolve types for \$(' . ContractParser::IDENTIFIER . ') - .* does not contain null$| for \$(' . ContractParser::IDENTIFIER . ') is never null$)/', $message, $matches) === 1
+            && PreludeBuilder::liftsUnwritten($shadow ??= self::shadowSource($issue), $matches[1] !== '' ? $matches[1] : ($matches[2] ?? ''))
+        ) {
+            return false;
+        }
+
+        // An issue on a lifted TYPE (UndefinedDocblockClass, ...) sits on the prelude's `try` line;
+        // report it where the template wrote that `@var`, now the body's `@opt` tag.
+        if ($templateLine < 1) {
+            $shadow ??= self::shadowSource($issue);
+            $tag = PreludeBuilder::optionalTagOffset($shadow, $issue->code_location->raw_file_start);
+
+            // A doc comment carries no line markers inside it, but it is the template's own text
+            // verbatim: map its first line, then count lines down to the tag.
+            if ($tag !== null) {
+                [$commentStart, $tagOffset] = $tag;
+                $commentLine = $target->templateLineFor(1 + \substr_count($shadow, "\n", 0, $commentStart));
+                $templateLine = $commentLine < 1 ? 0 : $commentLine + \substr_count($shadow, "\n", $commentStart, $tagOffset - $commentStart);
+            }
         }
 
         if ($templateLine < 1) {
@@ -756,5 +790,11 @@ final class ShadowIssueRelocator
         }
 
         throw new \RuntimeException("cannot resolve constructor parameter \${$name} of " . $issue::class);
+    }
+
+    /** The shadow text an issue was raised in; empty when unreadable, which every caller treats as "not proven". */
+    private static function shadowSource(CodeIssue $issue): string
+    {
+        return (string) @\file_get_contents($issue->code_location->file_path);
     }
 }

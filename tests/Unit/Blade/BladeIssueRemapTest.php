@@ -1383,20 +1383,71 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1697 known limitation: Psalm treats a possibly-undefined variable as defined after its
-     * first `isset()`/`??` read even though neither assigns it, so a second guard on the same
-     * optional name still reports. See {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::compose()}.
+     * #1697: Psalm treats a possibly-undefined variable as defined after its first non-assigning
+     * `isset()`/`??` read, so every later guard on a never-written optional name reported a
+     * contradiction. The relocator drops those for names the prelude marks never-written.
      */
     #[Test]
-    public function a_second_guard_on_an_optional_variable_still_reports_known_limitation(): void
+    public function later_guards_on_a_never_written_optional_variable_report_nothing(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/optional-guard-repeat.blade.php';
+
+        $this->assertSame([], \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template),
+        )), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /** #1697 negative: after `$s1 ??= ''` the name is set, so a later `??` is genuinely redundant. */
+    #[Test]
+    public function a_guard_after_an_optional_variable_is_written_still_reports(): void
     {
         $issues = $this->analyze('psalm.xml');
 
         $this->assertSame(
-            [3],
-            $this->linesFor($issues, 'DocblockTypeContradiction', 'resources/views/optional-guard-repeat.blade.php'),
+            [2],
+            $this->linesFor($issues, 'DocblockTypeContradiction', 'resources/views/optional-guard-written.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /** #1697: `@props` writes every declared name through `$$__key`, so it is never optional. */
+    #[Test]
+    public function a_props_declared_name_is_not_lifted(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/optional-guard-props.blade.php';
+
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertStringNotContainsString('$GLOBALS', $this->shadowSourceFor($template));
+    }
+
+    /** #1697: a closure `use` of an optional name reports in template wording too. */
+    #[Test]
+    public function a_closure_use_of_an_optional_variable_reports_in_template_wording(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $matching = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => $issue['type'] === 'PossiblyUndefinedVariable' && \str_ends_with($issue['file_path'], 'resources/views/optional-guard-closure.blade.php')));
+
+        $this->assertCount(1, $matching, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        // Psalm reports the read inside the closure body, not the `use` clause.
+        $this->assertSame(4, $matching[0]['line_from']);
+        $this->assertSame('Optional view variable $cl is used without isset() or ??', $matching[0]['message']);
+    }
+
+    /** #1697: an issue on a lifted TYPE reports on the template line that declared it, not line 1. */
+    #[Test]
+    public function an_issue_on_a_lifted_type_reports_on_its_declaration_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $matching = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => $issue['type'] === 'UndefinedDocblockClass' && \str_ends_with($issue['file_path'], 'resources/views/optional-guard-type.blade.php')));
+
+        $this->assertCount(1, $matching, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertSame(4, $matching[0]['line_from']);
+        $this->assertStringNotContainsString('(unmapped)', $matching[0]['message']);
     }
 
     /**

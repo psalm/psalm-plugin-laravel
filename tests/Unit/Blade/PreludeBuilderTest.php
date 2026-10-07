@@ -323,7 +323,7 @@ final class PreludeBuilderTest extends TestCase
         [$prelude, $body] = (new PreludeBuilder())->compose(self::OPTIONAL_BODY, [], '');
 
         $this->assertStringContainsString(
-            "try { /** @var string \$label */ \$label = \$GLOBALS['label']; /** @var bool \$stacked */ \$stacked = \$GLOBALS['stacked']; } catch (\\Throwable) {}",
+            "try { /** @var string \$label */ \$label = \$GLOBALS['label']; /** @var bool \$stacked */ \$stacked = \$GLOBALS['stacked']; /* unwritten */ } catch (\\Throwable) {}",
             $prelude,
         );
         $this->assertStringNotContainsString('@var mixed $label', $prelude);
@@ -362,6 +362,8 @@ final class PreludeBuilderTest extends TestCase
         yield 'guard inside a closure' => ["<?php\n/** @var string \$x */\n\$f = function () { return \$x ?? ''; };\necho \$x;\n?>"];
         yield 'look-alike in a string' => ["<?php\necho '/** @var string \$x */';\n\$x ??= '';\n?>"];
         yield 'plain comment' => ["<?php\n/* @var string \$x */\n\$x ??= '';\n?>"];
+        yield 'variable-variable write (@props)' => ["<?php\nforeach (['x' => ''] as \$__key => \$__value) { \$\$__key = \$\$__key ?? \$__value; }\n/** @var string \$y */\n\$y ??= '';\n?>"];
+        yield 'extract' => ["<?php\nextract(\$data);\n/** @var string \$x */\n\$x ??= '';\n?>"];
     }
 
     #[Test]
@@ -383,5 +385,66 @@ final class PreludeBuilderTest extends TestCase
         $this->assertTrue(PreludeBuilder::liftsOptional($prelude . $body, 'label'));
         $this->assertFalse(PreludeBuilder::liftsOptional($prelude . $body, 'lab'));
         $this->assertFalse(PreludeBuilder::liftsOptional($prelude . $body . "\n" . $authorTry, 'name'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function writtenOptionalShapes(): iterable
+    {
+        yield 'assigned' => ["\$x = 'a';"];
+        yield 'unset' => ['unset($x);'];
+        yield 'by-ref closure use' => ['$f = function () use (&$x) {};'];
+        yield 'by-ref function argument' => ["\\preg_match('/a/', 'a', \$x);"];
+        yield 'unknown call argument' => ['$__env->fill($x);'];
+        yield 'global' => ['global $x;'];
+        yield 'reference source' => ['$y = &$x;'];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('writtenOptionalShapes')]
+    public function a_lifted_name_the_template_may_write_is_not_marked_unwritten(string $write): void
+    {
+        $compiled = "<?php\n/** @var string \$x */\necho \$x ?? '';\n{$write}\n?>";
+
+        [$prelude, $body] = (new PreludeBuilder())->compose($compiled, [], '');
+
+        $this->assertTrue(PreludeBuilder::liftsOptional($prelude . $body, 'x'));
+        $this->assertFalse(PreludeBuilder::liftsUnwritten($prelude . $body, 'x'));
+    }
+
+    #[Test]
+    public function a_lifted_name_only_read_or_passed_by_value_is_marked_unwritten(): void
+    {
+        $compiled = "<?php\n/** @var string \$x */\necho \$x ?? '';\necho \\e(\$x);\n?>";
+
+        [$prelude, $body] = (new PreludeBuilder())->compose($compiled, [], '');
+
+        $this->assertTrue(PreludeBuilder::liftsUnwritten($prelude . $body, 'x'));
+        $this->assertFalse(PreludeBuilder::liftsUnwritten($prelude . $body, 'y'));
+    }
+
+    #[Test]
+    public function the_opt_tag_offset_is_found_from_a_prelude_offset(): void
+    {
+        [$prelude, $body] = (new PreludeBuilder())->compose(self::OPTIONAL_BODY, [], '');
+        $shadow = $prelude . $body;
+        $inStacked = \strpos($shadow, '@var bool $stacked');
+        $this->assertIsInt($inStacked);
+
+        $offset = PreludeBuilder::optionalTagOffset($shadow, $inStacked);
+
+        $this->assertSame([\strpos($shadow, "/**\n"), \strpos($shadow, '@opt bool $stacked')], $offset);
+        $this->assertNull(PreludeBuilder::optionalTagOffset($shadow, \strlen($prelude) + 2));
+    }
+
+    #[Test]
+    public function only_the_declared_name_is_attributed_to_a_tag(): void
+    {
+        $compiled = "<?php\n/**\n * @var string \$e Shown next to \$f\n * @var string \$f\n */\necho \$e ?? '';\necho \$f ?? '';\n?>";
+
+        [$prelude] = (new PreludeBuilder())->compose($compiled, [], '');
+
+        $this->assertStringContainsString('$f = $GLOBALS', $prelude);
     }
 }

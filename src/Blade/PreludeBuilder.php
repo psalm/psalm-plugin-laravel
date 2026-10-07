@@ -55,6 +55,8 @@ final class PreludeBuilder
         'scalar' => true, 'string' => true, 'true' => true,
     ];
 
+    private const UNWRITTEN_MARKER = '/* unwritten */';
+
     private ?Parser $parser = null;
 
     /**
@@ -91,7 +93,7 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        [$undeclared, $firstGuarded] = $this->undeclaredVariables($compiled, $declared);
+        [$undeclared, $firstGuarded, $mayWrite] = $this->undeclaredVariables($compiled, $declared);
         $tags = $this->rawVarTags($compiled);
         $lifted = [];
 
@@ -102,7 +104,11 @@ final class PreludeBuilder
                 [$offset, $type] = $tag[0];
 
                 if ($type !== null) {
-                    $lifted[] = "/** @var {$type} \${$name} */ \${$name} = \$GLOBALS['{$name}'];";
+                    // A name the body never writes is undefined on EVERY path, so each of its guards
+                    // is meaningful; the marker lets the relocator drop what Psalm reports on the
+                    // second one (see liftsUnwritten()).
+                    $lifted[] = "/** @var {$type} \${$name} */ \${$name} = \$GLOBALS['{$name}'];"
+                        . (isset($mayWrite[$name]) ? '' : ' ' . self::UNWRITTEN_MARKER);
                     // Same length, still a tag (so the next line is not read as its continuation),
                     // but no longer one Psalm declares a type from.
                     $compiled = \substr_replace($compiled, '@opt', $offset, 4);
@@ -130,10 +136,94 @@ final class PreludeBuilder
      */
     public static function liftsOptional(string $shadow, string $name): bool
     {
+        return self::preludeDeclares($shadow, $name, '');
+    }
+
+    /**
+     * Whether {@see compose()} also marked that optional `$name` as never written by the body.
+     *
+     * @psalm-pure
+     */
+    public static function liftsUnwritten(string $shadow, string $name): bool
+    {
+        return self::preludeDeclares($shadow, $name, ' ' . \preg_quote(self::UNWRITTEN_MARKER, '/'));
+    }
+
+    /**
+     * Where the `@opt` tag {@see compose()} left in the body sits, for the optional declaration
+     * covering `$offset` in the prelude, so an issue Psalm raises on the lifted TYPE can report
+     * where the template wrote it. Null when `$offset` is not in a lifted declaration.
+     *
+     * @return array{0: int, 1: int}|null shadow offsets of the doc comment's start and of the tag
+     *
+     * @psalm-pure
+     */
+    public static function optionalTagOffset(string $shadow, int $offset): ?array
+    {
         $end = \strpos($shadow, "\n?>\n");
 
+        if ($end === false || $offset >= $end
+            || \preg_match_all('/\/\*\* @var .+? \$(' . ContractParser::IDENTIFIER . ') \*\/ \$\1 = \$GLOBALS\[[^\]]+\];/', \substr($shadow, 0, $end), $declarations, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1
+        ) {
+            return null;
+        }
+
+        foreach ($declarations as $declaration) {
+            [$text, $start] = $declaration[0];
+
+            if ($offset >= $start && $offset < $start + \strlen($text)) {
+                $name = $declaration[1][0];
+
+                foreach (self::docCommentTags($shadow, '@opt') as [$tagOffset, $rest, , $commentStart]) {
+                    if ($tagOffset > $end && \preg_match('/^\s.*?\$' . \preg_quote($name, '/') . '(?![\w\x80-\xff])/', $rest) === 1) {
+                        return [$commentStart, $tagOffset];
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** @psalm-pure */
+    private static function preludeDeclares(string $shadow, string $name, string $suffix): bool
+    {
+        $end = \strpos($shadow, "\n?>\n");
+        $quoted = \preg_quote($name, '/');
+
         return $end !== false
-            && \preg_match('/^try \{ .* \$' . \preg_quote($name, '/') . ' = \$GLOBALS\[/m', \substr($shadow, 0, $end)) === 1;
+            && \preg_match("/^try \\{ .* \\\${$quoted} = \\\$GLOBALS\\['{$quoted}'\\];{$suffix}/m", \substr($shadow, 0, $end)) === 1;
+    }
+
+    /**
+     * Every `$tag` occurrence in a real doc comment (tokenizer-verified, so author text in a
+     * string, inline HTML or a plain comment never counts), with the rest of its line.
+     *
+     * @return list<array{0: int, 1: string, 2: string, 3: int}> offset of the tag, rest of its line,
+     *     the tag itself, offset of the doc comment
+     *
+     * @psalm-pure
+     */
+    private static function docCommentTags(string $source, string $tag): array
+    {
+        $tags = [];
+        $offset = 0;
+
+        foreach (@\token_get_all($source) as $token) {
+            $text = \is_array($token) ? $token[1] : $token;
+
+            if (\is_array($token) && $token[0] === \T_DOC_COMMENT
+                && \preg_match_all('/' . $tag . '\b([^\n]*)/', $text, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) > 0
+            ) {
+                foreach ($matches as $match) {
+                    $tags[] = [$offset + $match[0][1], $match[1][0], \substr($match[0][0], 0, \strlen($match[0][0]) - \strlen($match[1][0])), $offset];
+                }
+            }
+
+            $offset += \strlen($text);
+        }
+
+        return $tags;
     }
 
     /**
@@ -150,31 +240,22 @@ final class PreludeBuilder
     private function rawVarTags(string $compiled): array
     {
         $tags = [];
-        $offset = 0;
 
-        foreach (@\token_get_all($compiled) as $token) {
-            $text = \is_array($token) ? $token[1] : $token;
+        foreach (self::docCommentTags($compiled, '@(?:psalm-|phpstan-)?var') as [$offset, $rest, $tag]) {
+            // Only the declared name counts: `$f` in "Shown next to $f" is description text.
+            if (\preg_match('/^\s+(?:([^$]+?)\s+)?&?(?:\.\.\.)?\$(' . ContractParser::IDENTIFIER . ')(?![\w\x80-\xff])/', $rest, $typed) === 1) {
+                $type = $tag === '@var' && $typed[1] !== '' && $this->isLiftableType($typed[1]) ? $typed[1] : null;
+                $tags[$typed[2]][] = [$offset, $type];
 
-            if (\is_array($token) && $token[0] === \T_DOC_COMMENT
-                && \preg_match_all('/@(psalm-|phpstan-)?var\b([^\n]*)/', $text, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) > 0
-            ) {
-                foreach ($matches as $match) {
-                    $rest = $match[2][0];
-                    $type = $match[1][1] === -1
-                        && \preg_match('/^\s+([^$]+?)\s+\$(' . ContractParser::IDENTIFIER . ')(?![\w\x80-\xff])/', $rest, $typed) === 1
-                        && $this->isLiftableType($typed[1]) ? $typed[1] : null;
-
-                    \preg_match_all('/\$(' . ContractParser::IDENTIFIER . ')/', $rest, $names);
-
-                    foreach (\array_unique($names[1]) as $name) {
-                        $tags[$name][] = [$offset + $match[0][1], isset($typed[2]) && $typed[2] === $name ? $type : null];
-                    }
-
-                    unset($typed);
-                }
+                continue;
             }
 
-            $offset += \strlen($text);
+            // Unparseable: attribute it to every name it mentions, so none is lifted past it.
+            \preg_match_all('/\$(' . ContractParser::IDENTIFIER . ')/', $rest, $names);
+
+            foreach (\array_unique($names[1]) as $name) {
+                $tags[$name][] = [$offset, null];
+            }
         }
 
         return $tags;
@@ -183,10 +264,6 @@ final class PreludeBuilder
     /** @psalm-pure */
     private function isLiftableType(string $type): bool
     {
-        if (\preg_match('/^[\w\\\\|?<>,\s\[\]-]+$/', $type) !== 1) {
-            return false;
-        }
-
         \preg_match_all('/\\\\?[A-Za-z_][\w\\\\-]*/', $type, $words);
 
         foreach ($words[0] as $word) {
@@ -300,8 +377,9 @@ final class PreludeBuilder
 
     /**
      * @param array<string, string> $declared
-     * @return array{0: list<string>, 1: array<string, true>} variable names (without $), sorted and
-     *     deduplicated; the names whose first read in AST order is a guard at file scope
+     * @return array{0: list<string>, 1: array<string, true>, 2: array<string, true>} variable names
+     *     (without $), sorted and deduplicated; the names whose first read in AST order is a guard at
+     *     file scope; the names the body may write in any way
      */
     private function undeclaredVariables(string $compiled, array $declared): array
     {
@@ -317,7 +395,7 @@ final class PreludeBuilder
         try {
             $ast = $parser->parse($compiled, new Collecting()) ?? [];
         } catch (\Throwable) {
-            return [[], []];
+            return [[], [], []];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -330,14 +408,17 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $firstGuarded = [];
 
+            /** @var array<string, true> the written names plus every write this pass cannot rule out */
+            public array $mayWrite = [];
+
+            /** A construct that can define any name (`$$x`, `extract()`, `include`, ...) occurs. */
+            public bool $dynamicWrite = false;
+
             /** @var array<int, true> object ids of the variables a file-scope guard reads */
             private array $guards = [];
 
             private int $functionDepth = 0;
 
-            /**
-             * @psalm-external-mutation-free
-             */
             #[\Override]
             public function enterNode(Node $node): null
             {
@@ -348,6 +429,8 @@ final class PreludeBuilder
                 }
 
                 // Parents enter before children, so the first visit of a name is its first use.
+                $this->collectPossibleWrites($node);
+
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
                     if (!isset($this->found[$node->name]) && isset($this->guards[\spl_object_id($node)])) {
                         $this->firstGuarded[$node->name] = true;
@@ -388,6 +471,66 @@ final class PreludeBuilder
             }
 
             /**
+             * Writes {@see markWritten()} does not count because they are not plain assignments:
+             * by-reference bindings, `unset`, `global`/`static`, and any call argument that may be
+             * taken by reference. Over-approximates; only the never-written marker relies on it.
+             */
+            private function collectPossibleWrites(Node $node): void
+            {
+                if (($node instanceof Node\Expr\Variable && !\is_string($node->name))
+                    || $node instanceof Node\Expr\Include_
+                    || $node instanceof Node\Expr\Eval_
+                    || ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name
+                        && \in_array($node->name->toLowerString(), ['extract', 'parse_str', 'get_defined_vars'], true))
+                ) {
+                    $this->dynamicWrite = true;
+                }
+
+                $targets = match (true) {
+                    $node instanceof Node\Stmt\Unset_ => $node->vars,
+                    $node instanceof Node\Stmt\Global_ => $node->vars,
+                    $node instanceof Node\Stmt\Static_ => \array_map(static fn(Node\StaticVar $var): Node\Expr\Variable => $var->var, $node->vars),
+                    $node instanceof Node\ClosureUse && $node->byRef => [$node->var],
+                    $node instanceof Node\Expr\AssignRef => [$node->expr],
+                    $node instanceof Node\Expr\CallLike && !$node->isFirstClassCallable() => $this->byRefCandidates($node),
+                    default => [],
+                };
+
+                foreach ($targets as $target) {
+                    $this->markWritten($target, false);
+                }
+            }
+
+            /**
+             * Arguments of a call that may bind by reference: all of them unless the callee is a
+             * plain function this process can reflect.
+             *
+             * @return list<Node\Expr>
+             */
+            private function byRefCandidates(Node\Expr\CallLike $call): array
+            {
+                $parameters = null;
+
+                $function = $call instanceof Node\Expr\FuncCall && $call->name instanceof Node\Name ? $call->name->toString() : null;
+
+                if ($function !== null && \function_exists($function)) {
+                    $parameters = (new \ReflectionFunction($function))->getParameters();
+                }
+
+                $candidates = [];
+
+                foreach (\array_values($call->getArgs()) as $index => $arg) {
+                    $parameter = $parameters === null || $arg->name !== null || $arg->unpack ? null : ($parameters[$index] ?? \end($parameters));
+
+                    if (!$parameter instanceof \ReflectionParameter || $parameter->isPassedByReference()) {
+                        $candidates[] = $arg->value;
+                    }
+                }
+
+                return $candidates;
+            }
+
+            /**
              * @psalm-external-mutation-free
              */
             private function collectGuards(Node $node): void
@@ -409,16 +552,20 @@ final class PreludeBuilder
              *
              * @psalm-external-mutation-free
              */
-            private function markWritten(Node\Expr $target): void
+            private function markWritten(Node\Expr $target, bool $definite = true): void
             {
                 if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
-                    $this->written[$target->name] = true;
+                    if ($definite) {
+                        $this->written[$target->name] = true;
+                    }
+
+                    $this->mayWrite[$target->name] = true;
 
                     return;
                 }
 
                 if ($target instanceof Node\Expr\ArrayDimFetch) {
-                    $this->markWritten($target->var);
+                    $this->markWritten($target->var, $definite);
 
                     return;
                 }
@@ -426,7 +573,7 @@ final class PreludeBuilder
                 if ($target instanceof Node\Expr\List_) {
                     foreach ($target->items as $item) {
                         if ($item !== null) {
-                            $this->markWritten($item->value);
+                            $this->markWritten($item->value, $definite);
                         }
                     }
                 }
@@ -458,6 +605,8 @@ final class PreludeBuilder
 
         \sort($names);
 
-        return [$names, $visitor->firstGuarded];
+        // A dynamic write (`@props`/`@aware` compile to `$$__key = ...`) can define any name, so
+        // no first read is provably a read of an undefined variable.
+        return [$names, $visitor->dynamicWrite ? [] : $visitor->firstGuarded, $visitor->mayWrite];
     }
 }

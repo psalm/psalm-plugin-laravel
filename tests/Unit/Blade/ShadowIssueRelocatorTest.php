@@ -1025,4 +1025,42 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertInstanceOf(NonStaticSelfCall::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
+
+    /**
+     * A location on a real shadow file whose prelude declares `$r` optional, with or without the
+     * never-written marker.
+     */
+    private function optionalShadowLocation(bool $unwritten, int $line): Raw
+    {
+        $path = \sys_get_temp_dir() . '/optional-shadow-' . ($unwritten ? 'u' : 'w') . '.php';
+        $marker = $unwritten ? ' /* unwritten */' : '';
+        \file_put_contents($path, "<?php\ntry { /** @var string \$r */ \$r = \$GLOBALS['r'];{$marker} } catch (\\Throwable) {}\n?>\n<?php echo \$r ?? ''; ?>\n<?php echo \$r ?? ''; ?>\n");
+
+        return new Raw(\str_repeat("\n", $line - 1), $path, 'shadow.php', $line - 1, $line - 1);
+    }
+
+    #[Test]
+    public function a_null_guard_on_a_never_written_optional_variable_is_dropped(): void
+    {
+        $location = $this->optionalShadowLocation(true, 5);
+
+        foreach ([
+            new DocblockTypeContradiction('Cannot resolve types for $r - docblock-defined type string does not contain null', $location, 'x'),
+            new RedundantConditionGivenDocblockType('Docblock-defined type string for $r is never null', $location, 'x'),
+        ] as $issue) {
+            $this->assertFalse($this->relocate($issue, $this->entry([5 => 2])), $issue->message);
+        }
+    }
+
+    #[Test]
+    public function a_null_guard_on_a_written_or_other_variable_is_kept(): void
+    {
+        $written = new DocblockTypeContradiction('Cannot resolve types for $r - docblock-defined type string does not contain null', $this->optionalShadowLocation(false, 5), 'x');
+        $other = new DocblockTypeContradiction('Cannot resolve types for $q - docblock-defined type string does not contain null', $this->optionalShadowLocation(true, 5), 'x');
+        $notNull = new DocblockTypeContradiction('Cannot resolve types for $r - docblock-defined type string does not contain int', $this->optionalShadowLocation(true, 5), 'x');
+
+        foreach ([$written, $other, $notNull] as $issue) {
+            $this->assertInstanceOf(DocblockTypeContradiction::class, $this->relocate($issue, $this->entry([5 => 2])), $issue->message);
+        }
+    }
 }
