@@ -1049,7 +1049,7 @@ final class BladeBootstrapperTest extends TestCase
      * #1517 M3: positive-side coverage for the `$trustedEnvironment && $manifest->isFresh(...)`
      * gate (`BladeBootstrapper::compileAll()`). An internal-function directive handler
      * (`getFileName()` returns `false`) makes `CompilerEnvironment::describe()` report
-     * `trustworthy = false`, which must (a) emit the untrusted-environment warning every run, and
+     * an untrusted reason, which must (a) emit the untrusted-environment warning every run, and
      * (b) force a recompile even on a SECOND run against an unchanged template and an unchanged
      * (still-untrustworthy) environment — the existing coverage only pins the negative side
      * (`assertSame([], $this->progress->warnings)` elsewhere in this suite).
@@ -1071,7 +1071,8 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($firstApp, $first)->boot();
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
-        $this->assertStringContainsString('compiler environment', $this->progress->warningText());
+        $this->assertStringContainsString('Blade shadow cache skipped for this run', $this->progress->warningText());
+        $this->assertStringContainsString("\n  - directive \"shout\": internal function strtoupper() has no source file", $this->progress->warningText());
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1088,5 +1089,28 @@ final class BladeBootstrapperTest extends TestCase
             (string) \file_get_contents($second->analyzedShadows[0]),
             'an untrustworthy environment must force a recompile even though nothing else changed',
         );
+    }
+
+    #[Test]
+    public function the_untrusted_environment_warning_lists_at_most_three_reasons_and_the_fix(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $compiler->directive($name, 'strtoupper');
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $warning = $this->progress->warningText();
+        $this->assertSame(3, \substr_count($warning, "\n  - "));
+        $this->assertStringContainsString("\n  (+2 more)\n", $warning);
+        $this->assertStringContainsString('analysis results are unaffected', $warning);
+        $this->assertStringEndsWith("register a static method (`[Foo::class, 'bar']`).", $warning);
     }
 }

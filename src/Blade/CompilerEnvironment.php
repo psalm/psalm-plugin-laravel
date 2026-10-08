@@ -30,7 +30,8 @@ use Illuminate\View\Compilers\BladeCompiler;
  * - `ReflectionFunction::getStaticVariables()` never exposes a closure's bound `$this`, so an
  *   invokable object or array callable (`[$service, 'compile']`) contributes nothing but its class
  *   file, no matter what state the bound object holds — {@see self::describeCallable()} distrusts
- *   any bound object other than the compiler being described itself.
+ *   any bound object other than the compiler being described itself, unless a closure's source
+ *   provably never reaches it ({@see self::closureReachesThis()}).
  * - The file hash alone cannot tell two callables declared in the SAME file apart (e.g. selecting
  *   `Str::upper` versus `Str::lower`) — the reflected name, source line range, and declaring scope
  *   are folded in too.
@@ -43,11 +44,12 @@ use Illuminate\View\Compilers\BladeCompiler;
  *   that shifts whenever an unrelated anonymous class loads earlier, with nothing about the
  *   compiler itself changing — {@see self::normalizeClassName()} strips it.
  *
- * Every failure degrades to `trustworthy = false` rather than guessing: a callable this class
+ * Every failure degrades to an untrusted reason rather than guessing: a callable this class
  * cannot resolve to a readable file (an internal function, an `eval()`'d closure) or a static
  * variable it cannot deterministically describe (an object, another closure) means the hash
  * cannot be trusted to invalidate correctly, so the caller is told to skip the freshness check
- * for this run instead of risking a stale shadow silently surviving forever. Never throws: a
+ * for this run instead of risking a stale shadow silently surviving forever. Each reason names the
+ * input and, when known, its source location, so the user can fix it. Never throws: a
  * `\Throwable` escaping into {@see BladeBootstrapper::boot()}'s catch would disable Blade
  * analysis for the whole run over what is, at worst, one uncacheable input.
  *
@@ -55,38 +57,61 @@ use Illuminate\View\Compilers\BladeCompiler;
  */
 final class CompilerEnvironment
 {
+    /** @var array<string, string> path => sha1_file() */
+    private array $fileHashes = [];
+
+    /** @var array<string, list<array{0: int|string, 1: string, 2: int}>|null> path => normalized tokens, null when unreadable */
+    private array $fileTokens = [];
+
+    /** @var list<string> */
+    private array $reasons = [];
+
+    /** @psalm-capabilities read-props */
+    private function __construct(
+        private readonly BladeCompiler $compiler,
+        private readonly ?string $displayRoot,
+    ) {}
+
     /**
-     * @return array{0: string, 1: bool} the environment hash, and whether every input that fed it
-     *         could be resolved deterministically
+     * @param ?string $displayRoot prefix stripped from paths in the reasons, for display only
+     *
+     * @return array{0: string, 1: list<string>} the environment hash, and why it cannot be
+     *         trusted (empty when every input that fed it resolved deterministically)
      */
-    public static function describe(BladeCompiler $compiler): array
+    public static function describe(BladeCompiler $compiler, ?string $displayRoot = null): array
     {
         try {
-            $trustworthy = true;
-            /** @var array<string, string> $fileHashes path => sha1_file(), cached within this call */
-            $fileHashes = [];
+            $self = new self($compiler, $displayRoot);
+            $hash = $self->hash();
 
-            $descriptor = [
-                'class' => self::describeCompilerClass($compiler, $trustworthy),
-                'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), $compiler, $fileHashes, $trustworthy),
-                'extensions' => self::describeCallableMap($compiler->getExtensions(), $compiler, $fileHashes, $trustworthy),
-                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'echoFormat' => self::describeValue(self::readProperty($compiler, 'echoFormat', $trustworthy), $trustworthy),
-                'encodingOptions' => self::describeValue(self::readProperty($compiler, 'encodingOptions', $trustworthy), $trustworthy),
-                'compilesComponentTags' => self::describeValue(self::readProperty($compiler, 'compilesComponentTags', $trustworthy), $trustworthy),
-                'classComponentAliases' => self::describeValue($compiler->getClassComponentAliases(), $trustworthy),
-                'classComponentNamespaces' => self::describeValue($compiler->getClassComponentNamespaces(), $trustworthy),
-                'anonymousComponentPaths' => self::describeValue($compiler->getAnonymousComponentPaths(), $trustworthy),
-                'anonymousComponentNamespaces' => self::describeValue($compiler->getAnonymousComponentNamespaces(), $trustworthy),
-            ];
-
-            return [\hash('xxh128', \json_encode($descriptor, \JSON_THROW_ON_ERROR)), $trustworthy];
-        } catch (\Throwable) {
-            return ['', false];
+            return [$hash, \array_values(\array_unique($self->reasons))];
+        } catch (\Throwable $throwable) {
+            return ['', ['the compiler environment could not be described: ' . $throwable->getMessage()]];
         }
+    }
+
+    private function hash(): string
+    {
+        $compiler = $this->compiler;
+
+        $descriptor = [
+            'class' => $this->describeCompilerClass(),
+            'customDirectives' => $this->describeCallableMap($compiler->getCustomDirectives(), 'directive "%s"'),
+            'extensions' => $this->describeCallableMap($compiler->getExtensions(), 'extension #%s'),
+            'conditions' => $this->describeCallableMap($this->readArrayProperty('conditions'), 'condition "%s"'),
+            'precompilers' => $this->describeCallableMap($this->readArrayProperty('precompilers'), 'precompiler #%s'),
+            'prepareStringsForCompilationUsing' => $this->describeCallableMap($this->readArrayProperty('prepareStringsForCompilationUsing'), 'string preparation callback #%s'),
+            'echoHandlers' => $this->describeCallableMap($this->readArrayProperty('echoHandlers'), 'echo handler for %s'),
+            'echoFormat' => $this->describeValue($this->readProperty('echoFormat'), 'compiler property $echoFormat'),
+            'encodingOptions' => $this->describeValue($this->readProperty('encodingOptions'), 'compiler property $encodingOptions'),
+            'compilesComponentTags' => $this->describeValue($this->readProperty('compilesComponentTags'), 'compiler property $compilesComponentTags'),
+            'classComponentAliases' => $this->describeValue($compiler->getClassComponentAliases(), 'class component aliases'),
+            'classComponentNamespaces' => $this->describeValue($compiler->getClassComponentNamespaces(), 'class component namespaces'),
+            'anonymousComponentPaths' => $this->describeValue($compiler->getAnonymousComponentPaths(), 'anonymous component paths'),
+            'anonymousComponentNamespaces' => $this->describeValue($compiler->getAnonymousComponentNamespaces(), 'anonymous component namespaces'),
+        ];
+
+        return \hash('xxh128', \json_encode($descriptor, \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -98,23 +123,25 @@ final class CompilerEnvironment
      *
      * @return array{class: string, file?: string, hash?: string}
      *
-     * @psalm-external-mutation-free
+     * @psalm-capabilities read-props|write-this-props|write-refs
      */
-    private static function describeCompilerClass(BladeCompiler $compiler, bool &$trustworthy): array
+    private function describeCompilerClass(): array
     {
-        $class = self::normalizeClassName($compiler::class);
+        $compiler = $this->compiler;
+        $class = $this->normalizeClassName($compiler::class);
 
         if ($compiler::class === BladeCompiler::class) {
             return ['class' => $class];
         }
-
-        $trustworthy = false;
 
         try {
             $file = (new \ReflectionClass($compiler))->getFileName();
         } catch (\Throwable) {
             $file = false;
         }
+
+        $this->reasons[] = "compiler class {$class} is a BladeCompiler subclass, whose instance state cannot be fingerprinted"
+            . (\is_string($file) ? ' (' . $this->displayPath($file) . ')' : '');
 
         if (!\is_string($file)) {
             return ['class' => $class];
@@ -142,26 +169,26 @@ final class CompilerEnvironment
      *
      * @psalm-pure
      */
-    private static function normalizeClassName(string $class): string
+    private function normalizeClassName(string $class): string
     {
         return \preg_replace('/\$[0-9a-fA-F]+$/', '', $class) ?? $class;
     }
 
     /**
      * @param array<array-key, mixed> $map
-     * @param array<string, string>   $fileHashes
+     * @param string                  $label sprintf() format naming one entry by its key
      *
      * @return list<array{0: array-key, 1: array}> a LIST of `[key, description]` pairs rather than
      *         a re-keyed array: PHP would otherwise coalesce an int key and its string form
      *         (`5` and `'5'`) into the same slot, silently dropping one callable's descriptor.
      */
-    private static function describeCallableMap(array $map, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): array
+    private function describeCallableMap(array $map, string $label): array
     {
         $entries = [];
 
         // Keys, not values: a foreach over untyped compiler data binds a mixed local per element.
         foreach (\array_keys($map) as $key) {
-            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $trustworthy)];
+            $entries[] = [$key, $this->describeCallable($map[$key], \sprintf($label, (string) $key))];
         }
 
         return $entries;
@@ -172,23 +199,21 @@ final class CompilerEnvironment
      * invokable object (`Blade::directive('x', new SomeDirective)`), an array callable
      * (`[$service, 'compile']`), or any `Closure::bindTo($stateObject)` therefore contributes
      * NOTHING but its (shared, unchanging) class file to the hash, no matter what state the bound
-     * object holds. `bindDirective()` is the one exception: it always binds to the `BladeCompiler`
-     * instance being described (`BladeCompiler::directive($name, $handler, bind: true)`), which
-     * carries no state of its own beyond what the rest of this class already hashes, so that case
-     * alone stays trusted.
+     * object holds. Two exceptions stay trusted: `bindDirective()` binds to the `BladeCompiler`
+     * being described, which carries no state beyond what the rest of this class hashes; and a
+     * closure whose source never reaches its bound object ({@see self::closureReachesThis()}),
+     * the shape of every non-static closure written in a ServiceProvider's `boot()`.
      *
      * The file hash alone also cannot tell two callables declared in the SAME file apart (e.g.
      * `Str::upper` versus `Str::lower`), so the reflected name, source line range, and declaring
      * scope are folded in alongside it.
      *
-     * @param array<string, string> $fileHashes
-     *
-     * @return array{type: string, file?: string, hash?: string, name?: string, startLine?: int|false, endLine?: int|false, scope?: ?string, static?: array}
+     * @return array{type: string, file?: string, hash?: string, name?: string, startLine?: int|false, endLine?: int|false, scope?: ?string, static?: array, boundClass?: string}
      */
-    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): array
+    private function describeCallable(mixed $callable, string $label): array
     {
         if (!\is_callable($callable)) {
-            $trustworthy = false;
+            $this->reasons[] = "{$label}: not callable (" . \get_debug_type($callable) . ')';
 
             return ['type' => 'unresolvable'];
         }
@@ -197,15 +222,7 @@ final class CompilerEnvironment
             $closure = $callable instanceof \Closure ? $callable : \Closure::fromCallable($callable);
             $reflection = new \ReflectionFunction($closure);
         } catch (\Throwable) {
-            $trustworthy = false;
-
-            return ['type' => 'unresolvable'];
-        }
-
-        $boundThis = $reflection->getClosureThis();
-
-        if ($boundThis !== null && $boundThis !== $compiler) {
-            $trustworthy = false;
+            $this->reasons[] = "{$label}: callable cannot be reflected";
 
             return ['type' => 'unresolvable'];
         }
@@ -215,41 +232,205 @@ final class CompilerEnvironment
         // Internal functions return `false`; an `eval()`'d closure returns a string ending in
         // "eval()'d code" rather than a real path — neither can be hashed as a file.
         if ($file === false || \str_contains($file, "eval()'d code")) {
-            $trustworthy = false;
+            $this->reasons[] = $file === false
+                ? "{$label}: internal function {$reflection->getName()}() has no source file to fingerprint"
+                : "{$label}: callable declared in eval()'d code has no source file to fingerprint";
 
             return ['type' => 'unresolvable'];
         }
 
-        if (!isset($fileHashes[$file])) {
-            $hash = @\sha1_file($file);
+        $location = ' (' . $this->displayPath($file) . ':' . (int) $reflection->getStartLine() . ')';
 
-            if ($hash === false) {
-                $trustworthy = false;
+        try {
+            $scopeClass = $reflection->getClosureScopeClass();
+        } catch (\Throwable) {
+            $this->reasons[] = "{$label}: closure scope cannot be resolved{$location}";
+
+            return ['type' => 'unresolvable'];
+        }
+
+        $boundThis = $reflection->getClosureThis();
+        $boundClass = null;
+
+        if ($boundThis !== null && $boundThis !== $this->compiler) {
+            $boundClass = $this->normalizeClassName($boundThis::class);
+
+            if (!$callable instanceof \Closure) {
+                $this->reasons[] = \is_object($callable)
+                    ? "{$label}: invokable {$boundClass} object, whose state cannot be fingerprinted{$location}"
+                    : "{$label}: method of a {$boundClass} instance, whose state cannot be fingerprinted{$location}";
 
                 return ['type' => 'unresolvable'];
             }
 
-            $fileHashes[$file] = $hash;
+            if ($this->closureReachesThis($reflection, $file, $scopeClass, $boundThis)) {
+                $this->reasons[] = "{$label}: closure bound to {$boundClass} can reach \$this{$location}";
+
+                return ['type' => 'unresolvable'];
+            }
         }
 
-        try {
-            $scopeClass = $reflection->getClosureScopeClass()?->getName();
-        } catch (\Throwable) {
-            $trustworthy = false;
+        if (!isset($this->fileHashes[$file])) {
+            $hash = @\sha1_file($file);
 
-            return ['type' => 'unresolvable'];
+            if ($hash === false) {
+                $this->reasons[] = "{$label}: source file cannot be read{$location}";
+
+                return ['type' => 'unresolvable'];
+            }
+
+            $this->fileHashes[$file] = $hash;
         }
 
-        return [
+        $scopeName = $scopeClass?->getName();
+
+        // Same shape as describeValue() of the whole array, labelled per variable.
+        $staticPairs = [];
+        $staticVariables = $reflection->getStaticVariables();
+
+        foreach (\array_keys($staticVariables) as $name) {
+            $staticPairs[] = [$name, $this->describeValue($staticVariables[$name], "{$label}: captured variable \${$name}", $location)];
+        }
+
+        $description = [
             'type' => 'callable',
             'file' => $file,
-            'hash' => $fileHashes[$file],
+            'hash' => $this->fileHashes[$file],
             'name' => $reflection->getName(),
             'startLine' => $reflection->getStartLine(),
             'endLine' => $reflection->getEndLine(),
-            'scope' => $scopeClass !== null ? self::normalizeClassName($scopeClass) : null,
-            'static' => self::describeValue($reflection->getStaticVariables(), $trustworthy),
+            'scope' => $scopeName !== null ? $this->normalizeClassName($scopeName) : null,
+            'static' => ['t' => 'array', 'v' => $staticPairs],
         ];
+
+        if ($boundClass !== null) {
+            // `static::` resolves against the bound object's class, not the declaring scope.
+            $description['boundClass'] = $boundClass;
+        }
+
+        return $description;
+    }
+
+    /**
+     * Sound because the bound object is reachable only through `$this` (directly, via a
+     * variable-variable, or forwarded by an instance method called as `self::`/`static::`/
+     * `parent::m()`); the declaring file, scope, and bound class are hashed, so `self::`/`static::`
+     * constants and static members are already covered. Scans every token on the closure's lines,
+     * so other code sharing those lines only makes this stricter.
+     */
+    private function closureReachesThis(\ReflectionFunction $reflection, string $file, ?\ReflectionClass $scope, object $boundThis): bool
+    {
+        $tokens = $this->tokens($file);
+        $start = $reflection->getStartLine();
+        $end = $reflection->getEndLine();
+
+        if ($tokens === null || $start === false || $end === false) {
+            return true;
+        }
+
+        $count = \count($tokens);
+
+        for ($i = 0; $i < $count; $i++) {
+            [$id, $text, $line] = $tokens[$i];
+
+            if ($line < $start || $line > $end) {
+                continue;
+            }
+
+            if ($id === \T_VARIABLE && $text === '$this') {
+                return true;
+            }
+
+            // `$$name`, `${expr}`, `"${name}"`: the variable name is computed.
+            if ($text === '$' || $id === \T_DOLLAR_OPEN_CURLY_BRACES) {
+                return true;
+            }
+
+            $keyword = \strtolower($text);
+
+            if (!\in_array($keyword, ['self', 'static', 'parent'], true)
+                || ($tokens[$i + 1][1] ?? null) !== '::'
+            ) {
+                continue;
+            }
+
+            [$memberId, $member] = $tokens[$i + 2] ?? [null, ''];
+            $next = $tokens[$i + 3][1] ?? '';
+
+            // `self::{$m}()` / `self::$m()`: an unknown method, maybe non-static.
+            if ($member === '{' || ($memberId === \T_VARIABLE && $next === '(')) {
+                return true;
+            }
+
+            if ($memberId !== \T_STRING || $next !== '(') {
+                continue; // constant, static property, `::class`
+            }
+
+            $class = match ($keyword) {
+                'self' => $scope,
+                // Bound class may differ from the scope, and its file is not hashed.
+                'static' => $boundThis::class === $scope?->getName() ? $scope : null,
+                default => $scope?->getParentClass() ?: null,
+            };
+
+            if ($class === null || !$class->hasMethod($member) || !$class->getMethod($member)->isStatic()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whitespace and comments dropped, so a lookahead of one token is the next meaningful one.
+     *
+     * @return list<array{0: int|string, 1: string, 2: int}>|null
+     */
+    private function tokens(string $file): ?array
+    {
+        if (\array_key_exists($file, $this->fileTokens)) {
+            return $this->fileTokens[$file];
+        }
+
+        $source = @\file_get_contents($file);
+        $tokens = null;
+
+        if ($source !== false) {
+            $tokens = [];
+            $line = 1;
+
+            foreach (\token_get_all($source) as $token) {
+                if (\is_array($token)) {
+                    $line = $token[2];
+
+                    if (!\in_array($token[0], [\T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT], true)) {
+                        $tokens[] = [$token[0], $token[1], $line];
+                    }
+
+                    $line += \substr_count($token[1], "\n");
+
+                    continue;
+                }
+
+                $tokens[] = [$token, $token, $line];
+            }
+        }
+
+        return $this->fileTokens[$file] = $tokens;
+    }
+
+    /** @psalm-capabilities read-props */
+    private function displayPath(string $path): string
+    {
+        $root = $this->displayRoot;
+
+        if ($root === null || $root === '') {
+            return $path;
+        }
+
+        $root = \rtrim($root, '/\\') . \DIRECTORY_SEPARATOR;
+
+        return \str_starts_with($path, $root) ? \substr($path, \strlen($root)) : $path;
     }
 
     /**
@@ -258,14 +439,14 @@ final class CompilerEnvironment
      * equal another entry's flattened text) could otherwise describe identically. Arrays are
      * encoded as a LIST of `[key, value]` pairs, immune to the same int-vs-string key coalescing
      * {@see self::describeCallableMap()} avoids. Anything not JSON-representable on its own terms
-     * (an object, another closure, a resource) flips `$trustworthy` instead of guessing at a
+     * (an object, another closure, a resource) records a reason instead of guessing at a
      * description for it.
      *
      * @return array{t: string, v: mixed}
      *
-     * @psalm-external-mutation-free
+     * @psalm-capabilities read-props|write-this-props|write-refs
      */
-    private static function describeValue(mixed $value, bool &$trustworthy): array
+    private function describeValue(mixed $value, string $label, string $location = ''): array
     {
         if ($value === null || \is_scalar($value)) {
             return ['t' => \get_debug_type($value), 'v' => $value];
@@ -275,13 +456,13 @@ final class CompilerEnvironment
             $pairs = [];
 
             foreach (\array_keys($value) as $key) {
-                $pairs[] = [$key, self::describeValue($value[$key], $trustworthy)];
+                $pairs[] = [$key, $this->describeValue($value[$key], $label, $location)];
             }
 
             return ['t' => 'array', 'v' => $pairs];
         }
 
-        $trustworthy = false;
+        $this->reasons[] = "{$label} holds " . (\is_object($value) ? 'an object' : 'a value') . ' of type ' . \get_debug_type($value) . $location;
 
         return ['t' => 'unresolvable', 'v' => \get_debug_type($value)];
     }
@@ -290,12 +471,14 @@ final class CompilerEnvironment
      * `new ReflectionProperty($object, $name)` cannot find a PRIVATE property declared on an
      * ancestor class when `$object` is an instance of a subclass — a documented PHP reflection
      * quirk, not a sign the property is absent (`encodingOptions` is `private`, declared on
-     * `BladeCompiler` via `CompilesJson`, and every compiler *subclass* would otherwise flip
-     * `$trustworthy` for no reason). Walking the hierarchy and reflecting via the exact class
-     * that declares the property works around it.
+     * `BladeCompiler` via `CompilesJson`, and every compiler *subclass* would otherwise be
+     * distrusted for no reason). Walking the hierarchy and reflecting via the exact class that
+     * declares the property works around it.
      */
-    private static function readProperty(object $object, string $property, bool &$trustworthy): mixed
+    private function readProperty(string $property): mixed
     {
+        $object = $this->compiler;
+
         for ($class = $object::class; $class !== false; $class = \get_parent_class($class)) {
             try {
                 return (new \ReflectionProperty($class, $property))->getValue($object);
@@ -304,18 +487,21 @@ final class CompilerEnvironment
             }
         }
 
-        $trustworthy = false;
+        $this->reasons[] = "compiler property \${$property} cannot be read";
 
         return null;
     }
 
     /** @return array<array-key, mixed> */
-    private static function readArrayProperty(object $object, string $property, bool &$trustworthy): array
+    private function readArrayProperty(string $property): array
     {
-        $value = self::readProperty($object, $property, $trustworthy);
+        $before = \count($this->reasons);
+        $value = $this->readProperty($property);
 
         if (!\is_array($value)) {
-            $trustworthy = false;
+            if (\count($this->reasons) === $before) {
+                $this->reasons[] = "compiler property \${$property} is not an array";
+            }
 
             return [];
         }

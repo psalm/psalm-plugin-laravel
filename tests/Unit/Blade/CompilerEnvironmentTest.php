@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\CompilerEnvironment;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\CompilerEnvironment\DirectiveProvider;
 
 #[CoversClass(CompilerEnvironment::class)]
 final class CompilerEnvironmentTest extends TestCase
@@ -47,11 +48,11 @@ final class CompilerEnvironmentTest extends TestCase
     #[Test]
     public function a_stock_compiler_is_trustworthy_and_stable_across_calls(): void
     {
-        [$first, $firstTrusted] = CompilerEnvironment::describe($this->compiler());
-        [$second, $secondTrusted] = CompilerEnvironment::describe($this->compiler());
+        [$first, $firstReasons] = CompilerEnvironment::describe($this->compiler());
+        [$second, $secondReasons] = CompilerEnvironment::describe($this->compiler());
 
-        $this->assertTrue($firstTrusted);
-        $this->assertTrue($secondTrusted);
+        $this->assertSame([], $firstReasons);
+        $this->assertSame([], $secondReasons);
         $this->assertNotSame('', $first);
         $this->assertSame($first, $second, 'two fresh, unconfigured compilers must describe identically');
     }
@@ -64,9 +65,9 @@ final class CompilerEnvironmentTest extends TestCase
 
         $customized = $this->compiler();
         $customized->directive('mine', static fn(string $expression): string => '<?php ?>');
-        [$customizedHash, $trusted] = CompilerEnvironment::describe($customized);
+        [$customizedHash, $reasons] = CompilerEnvironment::describe($customized);
 
-        $this->assertTrue($trusted);
+        $this->assertSame([], $reasons);
         $this->assertNotSame($plain, $customizedHash);
         $this->assertNotSame($plainHash, $customizedHash);
     }
@@ -76,14 +77,14 @@ final class CompilerEnvironmentTest extends TestCase
      * source file to hash, so the input cannot be trusted rather than silently ignored.
      */
     #[Test]
-    public function an_internal_function_directive_flips_trustworthy_to_false(): void
+    public function an_internal_function_directive_is_untrusted(): void
     {
         $compiler = $this->compiler();
         $compiler->directive('mine', 'strtoupper');
 
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+        [$hash, $reasons] = CompilerEnvironment::describe($compiler);
 
-        $this->assertFalse($trusted);
+        $this->assertNotSame([], $reasons);
         $this->assertNotSame('', $hash, 'the rest of the environment must still be described');
     }
 
@@ -92,7 +93,7 @@ final class CompilerEnvironmentTest extends TestCase
      * "eval()'d code", not a real path — nothing on disk to hash means the input is unresolvable.
      */
     #[Test]
-    public function an_evald_directive_flips_trustworthy_to_false(): void
+    public function an_evald_directive_is_untrusted(): void
     {
         $compiler = $this->compiler();
         // Constructing a closure this way (rather than loading one from a real file that returns
@@ -103,9 +104,9 @@ final class CompilerEnvironmentTest extends TestCase
         \assert(\is_callable($handler));
         $compiler->directive('mine', $handler);
 
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+        [$hash, $reasons] = CompilerEnvironment::describe($compiler);
 
-        $this->assertFalse($trusted);
+        $this->assertNotSame([], $reasons);
         $this->assertNotSame('', $hash);
     }
 
@@ -117,14 +118,14 @@ final class CompilerEnvironmentTest extends TestCase
      * the actual state difference.
      */
     #[Test]
-    public function an_invokable_object_directive_flips_trustworthy_to_false(): void
+    public function an_invokable_object_directive_is_untrusted(): void
     {
         $compiler = $this->compiler();
         $compiler->directive('mine', new MarkerDirective('V1'));
 
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+        [$hash, $reasons] = CompilerEnvironment::describe($compiler);
 
-        $this->assertFalse($trusted);
+        $this->assertNotSame([], $reasons);
         $this->assertNotSame('', $hash);
     }
 
@@ -142,11 +143,11 @@ final class CompilerEnvironmentTest extends TestCase
         $withV2 = $this->compiler();
         $withV2->directive('mine', new MarkerDirective('V2'));
 
-        [, $v1Trusted] = CompilerEnvironment::describe($withV1);
-        [, $v2Trusted] = CompilerEnvironment::describe($withV2);
+        [, $v1Reasons] = CompilerEnvironment::describe($withV1);
+        [, $v2Reasons] = CompilerEnvironment::describe($withV2);
 
-        $this->assertFalse($v1Trusted);
-        $this->assertFalse($v2Trusted);
+        $this->assertNotSame([], $v1Reasons);
+        $this->assertNotSame([], $v2Reasons);
     }
 
     /**
@@ -163,10 +164,90 @@ final class CompilerEnvironmentTest extends TestCase
             return '<?php ?>';
         });
 
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+        [$hash, $reasons] = CompilerEnvironment::describe($compiler);
 
-        $this->assertTrue($trusted);
+        $this->assertSame([], $reasons);
         $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * A non-static closure in a ServiceProvider's `boot()` is auto-bound to the provider. With no
+     * `$this` in its source the bound object is unreachable, so the environment stays trusted.
+     */
+    #[Test]
+    public function a_closure_bound_to_a_foreign_object_that_never_uses_this_is_trusted(): void
+    {
+        $compiler = $this->compiler();
+        (new DirectiveProvider())->registerIgnoringThis($compiler);
+
+        [$hash, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertSame([], $reasons);
+        $this->assertNotSame('', $hash);
+    }
+
+    #[Test]
+    public function a_bound_closure_calling_a_static_method_through_self_is_trusted(): void
+    {
+        $compiler = $this->compiler();
+        (new DirectiveProvider())->registerCallingStaticMethodViaSelf($compiler);
+
+        [, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertSame([], $reasons);
+    }
+
+    #[Test]
+    public function a_bound_closure_reading_this_is_untrusted_and_names_the_directive(): void
+    {
+        $compiler = $this->compiler();
+        (new DirectiveProvider())->registerReadingThis($compiler);
+
+        [, $reasons] = CompilerEnvironment::describe($compiler, \dirname(__DIR__, 3));
+
+        $this->assertCount(1, $reasons);
+        $this->assertMatchesRegularExpression(
+            '~^directive "money": closure bound to ' . \preg_quote(DirectiveProvider::class, '~')
+            . ' can reach \$this \(tests/Unit/Blade/Fixtures/CompilerEnvironment/DirectiveProvider\.php:\d+\)$~',
+            $reasons[0],
+        );
+    }
+
+    /** `self::m()` on an instance method forwards the bound `$this` without spelling it. */
+    #[Test]
+    public function a_bound_closure_forwarding_this_through_self_is_untrusted(): void
+    {
+        $compiler = $this->compiler();
+        (new DirectiveProvider())->registerCallingInstanceMethodViaSelf($compiler);
+
+        [, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertCount(1, $reasons);
+        $this->assertStringStartsWith('directive "money": closure bound to', $reasons[0]);
+    }
+
+    #[Test]
+    public function a_captured_object_reason_names_the_variable(): void
+    {
+        $compiler = $this->compiler();
+        (new DirectiveProvider())->registerCapturingObject($compiler);
+
+        [, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertCount(1, $reasons);
+        $this->assertStringStartsWith('precompiler #0: captured variable $service holds an object of type stdClass (', $reasons[0]);
+    }
+
+    #[Test]
+    public function an_invokable_object_reason_names_the_directive_and_class(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', new MarkerDirective('V1'));
+
+        [, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertCount(1, $reasons);
+        $this->assertStringStartsWith('directive "mine": invokable ' . MarkerDirective::class . ' object', $reasons[0]);
     }
 
     #[Test]
@@ -177,9 +258,9 @@ final class CompilerEnvironmentTest extends TestCase
 
         $withCondition = $this->compiler();
         $withCondition->if('disco', static fn(): bool => true);
-        [$conditionHash, $trusted] = CompilerEnvironment::describe($withCondition);
+        [$conditionHash, $reasons] = CompilerEnvironment::describe($withCondition);
 
-        $this->assertTrue($trusted);
+        $this->assertSame([], $reasons);
         $this->assertNotSame($plainHash, $conditionHash);
     }
 
@@ -199,11 +280,11 @@ final class CompilerEnvironmentTest extends TestCase
         $withLower = $this->compiler();
         $withLower->directive('shout', [Str::class, 'lower']);
 
-        [$upperHash, $upperTrusted] = CompilerEnvironment::describe($withUpper);
-        [$lowerHash, $lowerTrusted] = CompilerEnvironment::describe($withLower);
+        [$upperHash, $upperReasons] = CompilerEnvironment::describe($withUpper);
+        [$lowerHash, $lowerReasons] = CompilerEnvironment::describe($withLower);
 
-        $this->assertTrue($upperTrusted);
-        $this->assertTrue($lowerTrusted);
+        $this->assertSame([], $upperReasons);
+        $this->assertSame([], $lowerReasons);
         $this->assertNotSame($upperHash, $lowerHash);
     }
 
@@ -259,11 +340,12 @@ final class CompilerEnvironmentTest extends TestCase
         $withNeedleA = new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled-a', '@needle-a');
         $withNeedleB = new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled-b', '@needle-b');
 
-        [$hashA, $trustedA] = CompilerEnvironment::describe($withNeedleA);
-        [$hashB, $trustedB] = CompilerEnvironment::describe($withNeedleB);
+        [$hashA, $reasonsA] = CompilerEnvironment::describe($withNeedleA);
+        [$hashB, $reasonsB] = CompilerEnvironment::describe($withNeedleB);
 
-        $this->assertFalse($trustedA);
-        $this->assertFalse($trustedB);
+        $this->assertCount(1, $reasonsA);
+        $this->assertStringStartsWith('compiler class ' . ThrowingBladeCompiler::class . ' is a BladeCompiler subclass', $reasonsA[0]);
+        $this->assertNotSame([], $reasonsB);
         $this->assertNotSame('', $hashA);
         $this->assertNotSame('', $hashB);
     }
@@ -322,11 +404,11 @@ final class CompilerEnvironmentTest extends TestCase
             'the warmup must land on a hex-lettered ordinal, or this test never exercises the bug it pins',
         );
 
-        [$firstHash, $firstTrusted] = CompilerEnvironment::describe($first);
-        [$secondHash, $secondTrusted] = CompilerEnvironment::describe($second);
+        [$firstHash, $firstReasons] = CompilerEnvironment::describe($first);
+        [$secondHash, $secondReasons] = CompilerEnvironment::describe($second);
 
-        $this->assertFalse($firstTrusted);
-        $this->assertFalse($secondTrusted);
+        $this->assertNotSame([], $firstReasons);
+        $this->assertNotSame([], $secondReasons);
         $this->assertSame($firstHash, $secondHash, 'identical anonymous-subclass source must describe identically regardless of the process-local ordinal');
     }
 }

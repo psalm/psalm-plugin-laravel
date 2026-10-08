@@ -126,14 +126,12 @@ final class BladeBootstrapper
             return false;
         }
 
-        [$environmentHash, $trustedEnvironment] = CompilerEnvironment::describe($compiler);
+        $cwd = \getcwd();
+        [$environmentHash, $untrustedReasons] = CompilerEnvironment::describe($compiler, $cwd === false ? null : $cwd);
+        $trustedEnvironment = $untrustedReasons === [];
 
         if (!$trustedEnvironment) {
-            $this->output->warning(
-                'Laravel plugin: the Blade compiler environment (a custom directive, condition, precompiler, '
-                . 'extension, or component map) could not be fully resolved, so cached Blade shadows are not '
-                . 'trusted for this run; every template is recompiled.',
-            );
+            $this->warnUntrustedEnvironment($untrustedReasons);
         }
 
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
@@ -226,6 +224,32 @@ final class BladeBootstrapper
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
 
+    }
+
+    /**
+     * Costs only speed, never results, so the text says so and names the inputs to fix.
+     *
+     * @param list<string> $reasons
+     */
+    private function warnUntrustedEnvironment(array $reasons): void
+    {
+        $shown = 3;
+        $lines = \array_map(
+            static fn(string $reason): string => '  - ' . $reason,
+            \array_slice($reasons, 0, $shown),
+        );
+
+        if (\count($reasons) > $shown) {
+            $lines[] = '  (+' . (\count($reasons) - $shown) . ' more)';
+        }
+
+        $this->output->warning(
+            'Laravel plugin: Blade shadow cache skipped for this run: every template is recompiled '
+            . '(slower; analysis results are unaffected). Cannot fingerprint the Blade compiler environment:' . "\n"
+            . \implode("\n", $lines) . "\n"
+            . 'To restore caching, declare such callbacks `static fn` / `static function`, '
+            . "or register a static method (`[Foo::class, 'bar']`).",
+        );
     }
 
     /**
