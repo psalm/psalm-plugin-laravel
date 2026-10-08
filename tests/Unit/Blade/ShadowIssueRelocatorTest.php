@@ -5,17 +5,23 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
+use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\NonStaticSelfCall;
+use Psalm\Issue\NoValue;
+use Psalm\Issue\NullArgument;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\RedundantCondition;
@@ -44,6 +50,19 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private const TEMPLATE_SOURCE = "<div>\n  <p>first</p>\n  <p>second</p>\n</div>\n";
 
+    /** The loop body line `CompilesComponents::compileAware()` emits. */
+    private const AWARE_SHADOW_LINE = '$$__consumeVariable = is_string($__key) ? $__env->getConsumableComponentData($__key, $__value) : $__env->getConsumableComponentData($__value);';
+
+    private const AWARE_KEYED_CALL = '$__env->getConsumableComponentData($__key';
+
+    private const AWARE_LIST_CALL = '$__env->getConsumableComponentData($__value';
+
+    private const AWARE_CALLEE = 'Illuminate\View\Factory::getConsumableComponentData';
+
+    private const AWARE_NULL_ARGUMENT = 'Argument 1 of Illuminate\View\Factory::getConsumableComponentData cannot be null, null value provided to parameter with type string';
+
+    private const AWARE_NO_VALUE = 'All possible types for this argument were invalidated - This may be dead code';
+
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -61,8 +80,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         ShadowEntry $entry,
         bool $reportMixed = false,
         bool $isComponentView = false,
+        string $templateSource = self::TEMPLATE_SOURCE,
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor(self::TEMPLATE_SOURCE));
+        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource));
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
@@ -438,6 +458,108 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(PossiblyFalseArgument::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1695: `compileAware()`'s loop body, as one shadow line. Argument and cast issues on `$__value`
+     * in the list-form call, and `NoValue` on `$__key` in the keyed call, are compiler artifacts.
+     * {@see BladeIssueRemapTest} pins the same gate end to end on real compiled shadows.
+     */
+    #[Test]
+    #[DataProvider('compiledAwareIssues')]
+    public function a_compiled_aware_argument_issue_is_dropped(CodeIssue $issue): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function compiledAwareIssues(): iterable
+    {
+        yield 'NoValue on the keyed call' => [new NoValue(self::AWARE_NO_VALUE, self::awareLocation(self::AWARE_KEYED_CALL, 6))];
+        yield 'NullArgument on the list-form call' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::awareLocation(self::AWARE_LIST_CALL, 8), self::AWARE_CALLEE)];
+        yield 'InvalidCast on the list-form call' => [new InvalidCast('array<never, never> cannot be cast to string', self::awareLocation(self::AWARE_LIST_CALL, 8))];
+        yield 'ImplicitToStringCast on the list-form call' => [new ImplicitToStringCast('Argument 1 of Illuminate\View\Factory::getConsumableComponentData expects string, Foo provided with a __toString method', self::awareLocation(self::AWARE_LIST_CALL, 8))];
+    }
+
+    /**
+     * Negatives: each case differs from a dropped one above in exactly ONE gate condition, so the
+     * case goes red if that condition is removed.
+     */
+    #[Test]
+    #[DataProvider('authorAwareLookAlikes')]
+    public function an_aware_look_alike_keeps_reporting(CodeIssue $issue, string $templateSource = self::TEMPLATE_SOURCE): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        // Line 3 rather than the unmapped fallback (line 1 plus a suffix), so this is a real mapping.
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+        $this->assertSame($issue->message, $relocated->message);
+    }
+
+    /** @return iterable<string, array{0: CodeIssue, 1?: string}> */
+    public static function authorAwareLookAlikes(): iterable
+    {
+        $list = self::awareLocation(self::AWARE_LIST_CALL, 8);
+
+        yield 'issue class outside the gate' => [new UndefinedVariable('Cannot find referenced variable $__value', $list)];
+        yield 'NoValue on an assignment' => [new NoValue('All possible types for this assignment were invalidated - This may be dead code', self::awareLocation(self::AWARE_KEYED_CALL, 6))];
+        yield 'another callee' => [new NullArgument(self::AWARE_NULL_ARGUMENT, $list, 'foo')];
+        yield 'second argument' => [new NullArgument(\str_replace('Argument 1 ', 'Argument 2 ', self::AWARE_NULL_ARGUMENT), $list, self::AWARE_CALLEE)];
+        yield 'selection wider than the argument' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::awareLocation(self::AWARE_LIST_CALL, 9), self::AWARE_CALLEE)];
+        // An author's own factory: same callee and argument, so only the `$__env->` call text differs.
+        yield 'receiver other than $__env' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::awareLocation('$factory->getConsumableComponentData($__value', 8, '$factory->getConsumableComponentData($__value);'), self::AWARE_CALLEE)];
+        yield 'call text written in the template' => [
+            new NullArgument(self::AWARE_NULL_ARGUMENT, $list, self::AWARE_CALLEE),
+            "<div>\n@php \$__value = null; \$__env->getConsumableComponentData(\$__value); @endphp\n</div>\n",
+        ];
+    }
+
+    /** Same "cannot be read" case as the arity gate: an unreadable snippet is no evidence, so no drop. */
+    #[Test]
+    public function an_aware_shaped_issue_is_kept_when_its_snippet_cannot_be_read(): void
+    {
+        $relocated = $this->relocate(new NoValue(self::AWARE_NO_VALUE, $this->shadowLocation(9)), $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(NoValue::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * A shadow-line-9 location whose snippet is readable without a booted ProjectAnalyzer, selecting
+     * the $width bytes that end where $anchor ends. Offset 1000 keeps file and snippet offsets apart.
+     */
+    private static function awareLocation(string $anchor, int $width, string $snippet = self::AWARE_SHADOW_LINE): CodeLocation
+    {
+        $end = 1000 + (int) \strpos($snippet, $anchor) + \strlen($anchor);
+
+        return new class ($snippet, [$end - $width, $end]) extends CodeLocation {
+            /** @param array{int, int} $selection */
+            public function __construct(
+                private readonly string $snippetText,
+                private readonly array $selection,
+            ) {
+                $this->raw_line_number = 9;
+            }
+
+            #[\Override]
+            public function getSnippet(): string
+            {
+                return $this->snippetText;
+            }
+
+            #[\Override]
+            public function getSelectionBounds(): array
+            {
+                return $this->selection;
+            }
+
+            #[\Override]
+            public function getSnippetBounds(): array
+            {
+                return [1000, 1000 + \strlen($this->snippetText)];
+            }
+        };
     }
 
     /**
