@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791412049193,
+  "lastUpdate": 1791480067239,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12805,6 +12805,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1375,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "37e856a55b1309258b5bf0537e0565b3312a69e1",
+          "message": "feat(auth): narrow Request::user() on subclasses that override it (#1744)\n\nPsalm dispatches return-type providers only for the called or declaring\nclass, so a Request subclass overriding user() (Laravel Nova's\nNovaRequest) never reached the Request registration and stayed mixed.\nRegister the closure on every Request subclass whose user() resolves to\nan override, unless Psalm resolves the override's return type to\nnon-mixed.\nOverrides narrow only an explicit literal or enum-case guard; no-arg and\nnull decline because the override may choose its own default guard.\n\nRefs #1735",
+          "timestamp": "2026-10-08T19:17:35+02:00",
+          "tree_id": "bb7fe01503af69e061d4f0d02aee8c555f95f5b7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/37e856a55b1309258b5bf0537e0565b3312a69e1"
+        },
+        "date": 1791480064793,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.31,
+            "range": "± 0.75",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1369,
             "unit": "MB"
           }
         ]
