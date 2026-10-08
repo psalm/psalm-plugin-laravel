@@ -141,3 +141,27 @@ final class PublicControl
         return self::class;
     }
 }
+
+final class InvokeParamDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}
+
+final class JobHandleDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}
+
+final class PrivateInvokeDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}

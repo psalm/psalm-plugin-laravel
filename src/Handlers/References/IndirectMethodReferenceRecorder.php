@@ -21,7 +21,7 @@ use Psalm\Internal\MethodIdentifier;
  * constructed instance) Laravel discards after injecting it, so it stays `false`. {@see
  * recordFileReference()} is used only for relationship methods and already-proven framework
  * entrypoints, whose return value Laravel's dispatcher (eager-loading, the router, the console
- * kernel) actually consumes, so it is `true`.
+ * kernel) actually consumes, so it is `true`. {@see recordClassReference()} takes the flag from the caller.
  *
  * @internal
  */
@@ -41,6 +41,34 @@ final class IndirectMethodReferenceRecorder
             null,
             $context,
             false,
+        );
+    }
+
+    /**
+     * Record "the class is alive, so this convention method is called". Psalm 7 resolves dead code by
+     * reachability, and an edge sourced at the class node only fires once the class itself is reached,
+     * so an unreferenced job or invokable stays an UnusedClass. No file path is passed: addReference()
+     * would pin the class node to it and break invalidation of that node when its own file changes.
+     * Unlike {@see record()}, the caller states whether Laravel consumes the method's return value.
+     */
+    public static function recordClassReference(
+        Codebase $codebase,
+        string $className,
+        MethodIdentifier $methodId,
+        bool $isReturnValueUsed,
+    ): void {
+        if ($codebase->find_unused_code === null) {
+            return;
+        }
+
+        $context = new Context();
+        $context->self = $className;
+
+        $codebase->addReferenceToFunctionLike(
+            \strtolower((string) $methodId),
+            null,
+            $context,
+            $isReturnValueUsed,
         );
     }
 

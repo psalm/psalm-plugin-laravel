@@ -328,6 +328,20 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - Prefer parent-class/trait matching over FQCN matching (FQCN breaks for custom namespaces)
 - Never suppress issues that *could* be legitimate bugs (e.g. don't suppress `InvalidReturnType` just because it's common)
 
+### Dead code on Psalm 7: edges, not suppressions, for convention entry points
+
+**Decision:** Methods Laravel calls by convention (invokable `__invoke`, pipe/middleware `handle`/`terminate`, queued/bus job `handle`/`failed`, `Dispatchable` job constructors) are rooted by class-conditional edges recorded in `IndirectMethodReferenceHandler` ("class is alive => this method is alive"), not by `SuppressHandler` entries. The edge is sourced at the class node (`Context::$self`, no file path), so an unreferenced job or invokable is still reported as `UnusedClass`.
+
+**Why:** Psalm 7 resolves dead code by reachability over the code-use graph, so an uncalled entry method is never alive and its private dependencies cascade into error-level `UnusedProperty`/`UnusedMethod`. A suppression hides only the entry point's own issue and adds no edge.
+
+**Probed dead ends:**
+- Suppression: adds no edge, so the cascade stays.
+- Mutating `MethodStorage::$public_api`: an unconditional root (even for dead classes) that mutates Psalm storage instead of using the reference API.
+- Call-site AST hooks on `Route::*` / `dispatch()`: too many syntactic forms, and string aliases (`'Plain@show'`) need a booted app.
+- Roots derived from the booted router: deferred; it needs a trusted boot and goes stale with route caching and env.
+
+**Boundaries:** Concrete user classes only; the target is the declaring method, public and non-static. A pipe is recognised only by a *native* `Closure` type on `handle()`'s second parameter. Route actions on non-controller classes, auto-discovered listeners and the remaining `SuppressHandler` convention entries are not migrated yet.
+
 ## Handler Registration Order
 
 ### Property handler priority: relationship > factory > accessor > column

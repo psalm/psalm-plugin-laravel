@@ -8,6 +8,13 @@ use IndirectMethodReferencesFixture\Commands\ReferenceCommand;
 use IndirectMethodReferencesFixture\Controllers\ConcreteController;
 use IndirectMethodReferencesFixture\Controllers\DriverController;
 use IndirectMethodReferencesFixture\Controllers\InvocableController;
+use IndirectMethodReferencesFixture\Conventions\AddHeaderMiddleware;
+use IndirectMethodReferencesFixture\Conventions\DispatchedJob;
+use IndirectMethodReferencesFixture\Conventions\PlainHandleClass;
+use IndirectMethodReferencesFixture\Conventions\PlainInvokable;
+use IndirectMethodReferencesFixture\Conventions\PrivateInvokable;
+use IndirectMethodReferencesFixture\Conventions\SendReportJob;
+use IndirectMethodReferencesFixture\Conventions\UntypedNextMiddleware;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
 use IndirectMethodReferencesFixture\Dependencies\ContractImplementation;
 use IndirectMethodReferencesFixture\Dependencies\DocblockOnlyDependency;
@@ -33,5 +40,12 @@ function consume(): array
         AbstractDependency::class,
         DocblockOnlyDependency::class,
         User::class,
+        PlainInvokable::class,
+        AddHeaderMiddleware::class,
+        UntypedNextMiddleware::class,
+        PlainHandleClass::class,
+        PrivateInvokable::class,
+        new SendReportJob('report', 'note'),
+        DispatchedJob::dispatch('payload'),
     ];
 }

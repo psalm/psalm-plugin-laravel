@@ -32,7 +32,7 @@ final class IndirectMethodReferencesTest extends TestCase
     private const FIXTURE = __DIR__ . '/Fixtures/IndirectMethodReferences';
 
     /** @var list<string> */
-    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass'];
+    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass', 'UnusedProperty'];
 
     /** @var list<string> */
     private const DEAD_RETURNS = ['PossiblyUnusedReturnValue', 'UnusedReturnValue'];
@@ -47,7 +47,7 @@ final class IndirectMethodReferencesTest extends TestCase
             '::update',                         // controller action
             '::inherited',                      // action inherited from an abstract base controller
             '::traitAction',                    // action pulled in from a trait
-            '::handle',                         // console command entrypoint
+            'ReferenceCommand::handle',         // console command entrypoint
             '::team',                           // relationship declared on the model itself
             '::baseTeam',                       // relationship inherited from a parent model
             '::traitTeam',                      // relationship pulled in from a trait
@@ -62,6 +62,15 @@ final class IndirectMethodReferencesTest extends TestCase
             'Dependencies\NestedDependency',    // resolved recursively out of OwnerDependency
             'Dependencies\InheritedActionDependency', // parameter of an inherited action
             'Dependencies\TraitActionDependency',     // parameter of a trait-provided action
+            // Convention entry points (#1779): Laravel calls these without a Psalm-visible call, so
+            // every dependency below is only reachable through the class-conditional edges.
+            'Conventions\PlainInvokable',             // invokable: promoted dep, __construct, __invoke
+            'Conventions\InvokableService',           // collaborator reached only through __invoke
+            'Dependencies\InvokeParamDependency',     // __invoke parameter
+            'Conventions\AddHeaderMiddleware',        // Closure-typed pipe: handle + terminate
+            'Conventions\SendReportJob',              // ShouldQueue: handle + failed
+            'Dependencies\JobHandleDependency',       // queued handle() parameter
+            'Conventions\DispatchedJob',              // Bus Dispatchable: dispatch() builds it via `new static`
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -76,6 +85,9 @@ final class IndirectMethodReferencesTest extends TestCase
             'Commands\ReferenceCommand::helper',                 // public command method other than handle()
             'Models\User::privateTeam',                          // non-public relationship
             'Models\User::ordinaryUnused',                       // plain model method
+            'Dependencies\DocblockOnlyDependency::__construct',  // docblock-only type: invisible to the container
+            'Conventions\UntypedNextMiddleware::handle',         // $next is not a native Closure: not a pipe
+            'Conventions\PlainHandleClass::handle',              // a bare handle() is no contract
         ] as $marker) {
             $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }
@@ -88,6 +100,12 @@ final class IndirectMethodReferencesTest extends TestCase
             $this->report($findings, ['UnusedClass']),
             'Expected HelperDependency to remain an unused class.',
         );
+
+        $unusedClasses = $this->report($findings, ['UnusedClass']);
+        // Nothing ever builds or dispatches this job, and an edge from a dead class never fires.
+        $this->assertStringContainsString('Conventions\DeadJob', $unusedClasses, 'Expected an unreferenced job to remain an unused class.');
+        // A private __invoke is not callable by Laravel, so its parameter is not autowired.
+        $this->assertStringContainsString('Dependencies\PrivateInvokeDependency', $unusedClasses, 'Expected a private __invoke to be no entry point.');
 
         // A public command method other than handle() is not an entrypoint either; its
         // parameter staying an unused class proves the restriction applies beyond controllers.
@@ -103,6 +121,8 @@ final class IndirectMethodReferencesTest extends TestCase
         $deadReturns = $this->report($findings, self::DEAD_RETURNS);
         $this->assertStringNotContainsString('function team(', $deadReturns, 'Expected the relationship return value to read as used.');
         $this->assertStringNotContainsString('function show(', $deadReturns, 'Expected the controller action return value to read as used.');
+        $this->assertStringNotContainsString('function __invoke(InvokeParamDependency', $deadReturns, 'Expected the invokable return value to read as used.');
+        $this->assertStringNotContainsString('function handle(string $request, \Closure $next)', $deadReturns, 'Expected the middleware return value to read as used.');
         $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
     }
 
@@ -137,7 +157,12 @@ final class IndirectMethodReferencesTest extends TestCase
         try {
             $this->runPsalm($fixtureDir, true);
 
-            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php'] as $changed) {
+            foreach ([
+                '/app/Dependencies/Dependencies.php',
+                '/app/Models/User.php',
+                '/app/Conventions/SendReportJob.php',
+                '/app/Conventions/AddHeaderMiddleware.php',
+            ] as $changed) {
                 $this->assertNotFalse(
                     \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
                 );
@@ -160,6 +185,16 @@ final class IndirectMethodReferencesTest extends TestCase
                 '::team',
                 $deadCode,
                 'Expected the queued relationship edge to be replayed after the model changed.',
+            );
+            $this->assertStringNotContainsString(
+                'Conventions\SendReportJob',
+                $deadCode,
+                'Expected the job entry edges to be replayed after the job file changed.',
+            );
+            $this->assertStringNotContainsString(
+                'Conventions\AddHeaderMiddleware',
+                $deadCode,
+                'Expected the middleware entry edges to be replayed after the middleware file changed.',
             );
             // The relationship edge is anchored to the plugin file (recordFileReference()), which is
             // never re-analyzed, so its "return value used" half must survive the model file's own

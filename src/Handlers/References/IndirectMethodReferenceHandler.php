@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\References;
 
+use Illuminate\Bus\Queueable as BusQueueable;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\Bus\Dispatchable as BusDispatchable;
+use Illuminate\Foundation\Queue\Queueable as FoundationQueueable;
 use Illuminate\Routing\Controller;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
@@ -37,11 +41,21 @@ use Psalm\Type\Union;
  * dead-code consolidation. It never boots or queries Laravel's container, and only writes through
  * Codebase's supported reference API ({@see Codebase::addReferenceToFunctionLike()}).
  *
- * Discovery is intentionally limited to Illuminate's Controller and Command base classes. Arbitrary
- * non-Illuminate route classes are not treated as dispatched without a statically proven Laravel
- * route registration, because doing so would broadly hide genuine dead-code findings.
+ * Controller and Command discovery is limited to Illuminate's base classes: an arbitrary
+ * non-Illuminate route class is not treated as dispatched without a statically proven route
+ * registration, because doing so would broadly hide genuine dead-code findings. Independently of
+ * the base class, a concrete class is rooted by the contract Laravel calls it through, as a
+ * class-conditional edge (alive class => its entry method), so an unreferenced class stays dead:
+ * - invokable: a public non-static `__invoke()`, built by the container, parameters injected;
+ * - pipe/middleware: a public `handle()` whose second parameter is natively typed `Closure`
+ *   (and `terminate()`), built by the container, parameters not injected;
+ * - queued/bus job: `ShouldQueue` or a Bus `Dispatchable`/`Queueable` trait, `handle()` (parameters
+ *   injected) and `failed()`, constructed by the application itself;
+ * - `Dispatchable` jobs additionally have their constructor called by `dispatch()`.
+ * Route actions on non-controller classes and event listeners are intentionally not covered.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1419
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1779
  * @internal
  */
 final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInterface, AfterFileAnalysisInterface
@@ -52,12 +66,16 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     /** @var array<string, MethodIdentifier> */
     private static array $fileReferences = [];
 
+    /** @var array<string, array{class: string, target: MethodIdentifier, returnUsed: bool}> */
+    private static array $classReferences = [];
+
     private static bool $recorded = false;
 
     public static function reset(): void
     {
         self::$methodReferences = [];
         self::$fileReferences = [];
+        self::$classReferences = [];
         self::$recorded = false;
     }
 
@@ -71,7 +89,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         }
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
-            if (!$storage->user_defined || $storage->abstract || $storage->is_interface) {
+            if (!$storage->user_defined || $storage->abstract || $storage->is_interface || $storage->is_trait) {
                 continue;
             }
 
@@ -79,6 +97,8 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             if ($framework !== null) {
                 self::recordContainerReferences($codebase, $storage, $framework);
             }
+
+            self::queueConventionReferences($codebase, $storage);
         }
 
         self::queueRelationReferences($codebase);
@@ -109,6 +129,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
                 $codebase,
                 $reference['calling'],
                 $reference['target'],
+            );
+        }
+
+        foreach (self::$classReferences as $reference) {
+            IndirectMethodReferenceRecorder::recordClassReference(
+                $codebase,
+                $reference['class'],
+                $reference['target'],
+                $reference['returnUsed'],
             );
         }
 
@@ -162,16 +191,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             // trait declaration even though its appearing ID is the consuming class).
             self::$fileReferences[strtolower((string) $method['declaring'])] = $method['declaring'];
 
-            foreach ($method['storage']->params as $parameter) {
-                $constructor = self::injectedConstructor($codebase, $parameter);
-                if ($constructor instanceof \Psalm\Internal\MethodIdentifier) {
-                    self::queueConstructorReference(
-                        $codebase,
-                        $entrypoint,
-                        $constructor,
-                    );
-                }
-            }
+            self::queueInjectedConstructors($codebase, $entrypoint, $method['storage']);
         }
 
         // A concrete class is constructed only as part of a discoverable entrypoint. Use that
@@ -180,6 +200,140 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         if ($constructor instanceof \Psalm\Internal\MethodIdentifier && $entrypoint !== null) {
             self::queueConstructorReference($codebase, $entrypoint, $constructor);
         }
+    }
+
+    /**
+     * Laravel calls these methods by convention, so Psalm sees no caller. Each edge is sourced at the
+     * class, never at an entry method: a method-sourced edge would need the (equally unseen) entry
+     * method to be alive first, and a class-sourced one still lets an unreferenced class stay dead.
+     */
+    private static function queueConventionReferences(Codebase $codebase, ClassLikeStorage $storage): void
+    {
+        $methods = [];
+        foreach (self::declaredAndInheritedMethods($codebase, $storage) as $method) {
+            if ($method['visibility'] === ClassLikeAnalyzer::VISIBILITY_PUBLIC && !$method['storage']->is_static) {
+                $methods[$method['name']] = $method;
+            }
+        }
+
+        // Entry method => [Laravel uses its return value, Laravel injects its parameters].
+        $entries = [];
+        $invokable = isset($methods['__invoke']);
+        if ($invokable) {
+            $entries['__invoke'] = [true, true];
+        }
+
+        // Pipeline calls `$pipe->handle($passable, $next)`. A native `Closure` on `$next` is the only
+        // thing telling a pipe apart from any other class with a public handle(); a docblock does not count.
+        $pipe = isset($methods['handle']) && self::isNativeClosure($methods['handle']['storage']->params[1] ?? null);
+        if ($pipe) {
+            $entries['handle'] = [true, false];
+            if (isset($methods['terminate'])) {
+                $entries['terminate'] = [false, false];
+            }
+        }
+
+        $dispatchable = self::usesTrait($codebase, $storage, [BusDispatchable::class]);
+        if (
+            $dispatchable
+            || ClassLineage::isA($codebase, $storage->name, ShouldQueue::class)
+            || self::usesTrait($codebase, $storage, [BusQueueable::class, FoundationQueueable::class])
+        ) {
+            if (isset($methods['handle'])) {
+                $entries['handle'] = [true, true];
+            }
+
+            if (isset($methods['failed'])) {
+                $entries['failed'] = [false, false];
+            }
+        }
+
+        foreach ($entries as $name => [$returnUsed, $injected]) {
+            self::queueClassReference($storage->name, $methods[$name]['declaring'], $returnUsed);
+            if ($injected) {
+                self::queueInjectedConstructors($codebase, $methods[$name]['declaring'], $methods[$name]['storage']);
+            }
+        }
+
+        $constructor = $methods['__construct']['declaring'] ?? null;
+        if (!$constructor instanceof MethodIdentifier) {
+            return;
+        }
+
+        if ($invokable || $pipe) {
+            self::queueConstructorReference($codebase, $storage->name, $constructor);
+        }
+
+        // `Dispatchable::dispatch()` builds the job with `new static(...)` inside vendor code.
+        if ($dispatchable) {
+            self::queueClassReference($storage->name, $constructor, false);
+        }
+    }
+
+    private static function queueInjectedConstructors(
+        Codebase $codebase,
+        MethodIdentifier $calling,
+        MethodStorage $method,
+    ): void {
+        foreach ($method->params as $parameter) {
+            $constructor = self::injectedConstructor($codebase, $parameter);
+            if ($constructor instanceof MethodIdentifier) {
+                self::queueConstructorReference($codebase, $calling, $constructor);
+            }
+        }
+    }
+
+    private static function queueClassReference(string $className, MethodIdentifier $target, bool $returnUsed): void
+    {
+        self::$classReferences[strtolower($className) . '>' . strtolower((string) $target)] = [
+            'class' => $className,
+            'target' => $target,
+            'returnUsed' => $returnUsed,
+        ];
+    }
+
+    /**
+     * Psalm records only the directly declared traits, so a trait composed of other traits and a
+     * parent class's traits are walked here.
+     *
+     * @param non-empty-list<class-string> $traits
+     * @psalm-mutation-free
+     */
+    private static function usesTrait(Codebase $codebase, ClassLikeStorage $storage, array $traits): bool
+    {
+        $wanted = \array_map(\strtolower(...), $traits);
+        $pending = [$storage->name, ...\array_values($storage->parent_classes)];
+        $seen = [];
+        while ($pending !== []) {
+            $name = \array_pop($pending);
+            if (isset($seen[\strtolower($name)])) {
+                continue;
+            }
+
+            $seen[\strtolower($name)] = true;
+            foreach (ClassLineage::storage($codebase, $name)->used_traits ?? [] as $traitLc => $trait) {
+                if (\in_array($traitLc, $wanted, true)) {
+                    return true;
+                }
+
+                $pending[] = $trait;
+            }
+        }
+
+        return false;
+    }
+
+    /** @psalm-mutation-free */
+    private static function isNativeClosure(?FunctionLikeParameter $parameter): bool
+    {
+        $type = $parameter?->signature_type;
+        if (!$type instanceof Union || \count($type->getAtomicTypes()) !== 1) {
+            return false;
+        }
+
+        $atomic = \array_values($type->getAtomicTypes())[0];
+
+        return $atomic instanceof TNamedObject && \strtolower($atomic->value) === 'closure';
     }
 
     /**
@@ -310,7 +464,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
      */
     private static function queueConstructorReference(
         Codebase $codebase,
-        MethodIdentifier $calling,
+        MethodIdentifier|string $calling,
         MethodIdentifier $target,
         array &$seen = [],
     ): void {
@@ -320,7 +474,11 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         }
 
         $seen[$targetKey] = true;
-        self::queueMethodReference($calling, $target);
+        if ($calling instanceof MethodIdentifier) {
+            self::queueMethodReference($calling, $target);
+        } else {
+            self::queueClassReference($calling, $target, false);
+        }
 
         try {
             $classStorage = $codebase->classlike_storage_provider->get($target->fq_class_name);
