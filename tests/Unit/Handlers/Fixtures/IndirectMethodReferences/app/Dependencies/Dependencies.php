@@ -181,3 +181,11 @@ final class PromotedPipeDependency
         \assert(\class_exists(self::class));
     }
 }
+
+final class ListenerEvent
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}

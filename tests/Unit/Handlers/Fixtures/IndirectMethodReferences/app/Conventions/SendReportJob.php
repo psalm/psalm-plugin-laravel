@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace IndirectMethodReferencesFixture\Conventions;
 
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use IndirectMethodReferencesFixture\Dependencies\JobHandleDependency;
 
 final class SendReportJob implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(
         private readonly string $reportId,
         private readonly string $failureNote,

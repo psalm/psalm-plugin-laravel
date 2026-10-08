@@ -73,6 +73,9 @@ final class IndirectMethodReferencesTest extends TestCase
             'Conventions\DispatchedJob',              // Bus Dispatchable: dispatch() builds it via `new static`
             'Dependencies\PromotedPipeDependency',    // pipe handle() promoted to public by the parent's trait adaptation
             'Conventions\PromotedPipe::',             // ... so the container-built concrete class is alive through it
+            'Conventions\PrivateConstructorJob',      // dispatch() runs `new static` in class scope: a private ctor is fine
+            'Conventions\NullableNextMiddleware',     // native ?Closure $next is still a pipe
+            'Conventions\QueuedListener',             // ShouldQueue still roots handle(), just without injection
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -89,6 +92,7 @@ final class IndirectMethodReferencesTest extends TestCase
             'Models\User::ordinaryUnused',                       // plain model method
             'Conventions\UntypedNextMiddleware::handle',         // $next is not a native Closure: not a pipe
             'Conventions\PlainHandleClass::handle',              // a bare handle() is no contract
+            'Dependencies\ListenerEvent',                        // queued listener: event is passed positionally, not injected
         ] as $marker) {
             $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }

@@ -25,6 +25,7 @@ use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
@@ -234,13 +235,12 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         }
 
         $dispatchable = self::usesTrait($codebase, $storage, [BusDispatchable::class]);
-        if (
-            $dispatchable
-            || ClassLineage::isA($codebase, $storage->name, ShouldQueue::class)
-            || self::usesTrait($codebase, $storage, [BusQueueable::class, FoundationQueueable::class])
-        ) {
+        // Only a bus job is called through `Dispatcher::dispatchNow()`'s `Container::call()`; a queued
+        // listener (also ShouldQueue) gets its event passed positionally by CallQueuedListener.
+        $busJob = $dispatchable || self::usesTrait($codebase, $storage, [BusQueueable::class, FoundationQueueable::class]);
+        if ($busJob || ClassLineage::isA($codebase, $storage->name, ShouldQueue::class)) {
             if (isset($methods['handle'])) {
-                $entries['handle'] = [true, true];
+                $entries['handle'] = [true, $busJob];
             }
 
             if (isset($methods['failed'])) {
@@ -256,17 +256,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         }
 
         $constructor = $methods['__construct']['declaring'] ?? null;
-        if (!$constructor instanceof MethodIdentifier) {
-            return;
-        }
-
-        if ($invokable || $pipe) {
+        if (($invokable || $pipe) && $constructor instanceof MethodIdentifier) {
             self::queueConstructorReference($codebase, $storage->name, $constructor);
         }
 
-        // `Dispatchable::dispatch()` builds the job with `new static(...)` inside vendor code.
-        if ($dispatchable) {
-            self::queueClassReference($storage->name, $constructor, false);
+        // `Dispatchable::dispatch()` runs `new static(...)` in the job's own scope, so unlike
+        // container construction it also reaches a private or protected constructor.
+        $dispatched = $dispatchable ? ($storage->declaring_method_ids['__construct'] ?? null) : null;
+        if ($dispatched instanceof MethodIdentifier) {
+            self::queueClassReference($storage->name, $dispatched, false);
         }
     }
 
@@ -311,12 +309,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             }
 
             $seen[\strtolower($name)] = true;
-            foreach (ClassLineage::storage($codebase, $name)->used_traits ?? [] as $traitLc => $trait) {
-                if (\in_array($traitLc, $wanted, true)) {
+            foreach (ClassLineage::storage($codebase, $name)->used_traits ?? [] as $trait) {
+                // Psalm keys used_traits by the spelling written in `use`, so a class_alias()ed trait
+                // only matches once resolved to its canonical storage name.
+                $canonical = ClassLineage::storage($codebase, $trait)->name ?? $trait;
+                if (\in_array(\strtolower($canonical), $wanted, true)) {
                     return true;
                 }
 
-                $pending[] = $trait;
+                $pending[] = $canonical;
             }
         }
 
@@ -327,13 +328,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     private static function isNativeClosure(?FunctionLikeParameter $parameter): bool
     {
         $type = $parameter?->signature_type;
-        if (!$type instanceof Union || \count($type->getAtomicTypes()) !== 1) {
+        if (!$type instanceof Union) {
             return false;
         }
 
-        $atomic = \array_values($type->getAtomicTypes())[0];
+        // Native `?Closure` is Closure|null; Laravel passes a Closure either way.
+        $atomics = \array_filter($type->getAtomicTypes(), static fn($atomic): bool => !$atomic instanceof TNull);
+        $atomic = \array_values($atomics)[0] ?? null;
 
-        return $atomic instanceof TNamedObject && \strtolower($atomic->value) === 'closure';
+        return \count($atomics) === 1 && $atomic instanceof TNamedObject && \strtolower($atomic->value) === 'closure';
     }
 
     /**
