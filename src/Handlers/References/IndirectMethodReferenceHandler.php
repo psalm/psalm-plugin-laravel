@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\References;
 
 use Illuminate\Bus\Queueable as BusQueueable;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -70,14 +71,16 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         'queued' => [
             'entries' => ['handle' => [true, false], 'failed' => [false, false]],
             'hooks' => [
-                'middleware', 'uniqueId', 'uniqueVia', 'uniqueFor', 'backoff', 'retryUntil', 'tries', 'displayName',
-                'viaConnection', 'viaQueue', 'shouldQueue', 'debounceId', 'debounceVia', 'deduplicationId', 'messageGroup',
+                'middleware', 'backoff', 'retryUntil', 'tries', 'displayName', 'viaConnection', 'viaQueue',
+                'shouldQueue', 'debounceId', 'debounceVia', 'deduplicationId', 'messageGroup',
             ],
             'properties' => [
                 'tries', 'maxExceptions', 'timeout', 'failOnTimeout', 'backoff', 'deleteWhenMissingModels',
-                'uniqueFor', 'shouldBeEncrypted',
+                'shouldBeEncrypted',
             ],
         ],
+        // Laravel reads these only for ShouldBeUnique (PendingDispatch, Events\Dispatcher, Queue, CallQueuedHandler).
+        'unique' => ['hooks' => ['uniqueId', 'uniqueVia', 'uniqueFor'], 'properties' => ['uniqueFor']],
         // Only a bus job goes through `Dispatcher::dispatchNow()`'s `Container::call()`; a queued
         // listener gets its event passed positionally by CallQueuedListener.
         'busJob' => ['entries' => ['handle' => [true, true]]],
@@ -261,6 +264,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             'busJob' => $dispatchable || isset($traits[\strtolower(BusQueueable::class)]),
         ];
         $active['queued'] = $active['busJob'] || ClassLineage::isA($codebase, $storage->name, ShouldQueue::class);
+        $active['unique'] = $active['queued'] && ClassLineage::isA($codebase, $storage->name, ShouldBeUnique::class);
 
         foreach (self::RULES as $rule => $config) {
             if (!($active[$rule] ?? false)) {

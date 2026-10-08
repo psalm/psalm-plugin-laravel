@@ -71,6 +71,7 @@ final class IndirectMethodReferencesTest extends TestCase
             'Conventions\SendReportJob',              // queued bus job: handle, failed, hook members
             'Conventions\JobHandleDependency',        // handle() parameter
             'Conventions\PrivateConstructorJob',      // dispatch() runs `new static` in class scope: a private ctor is fine
+            'Conventions\QueuedListener::',           // ShouldQueue alone roots handle(), so the private property it reads is alive
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -87,6 +88,8 @@ final class IndirectMethodReferencesTest extends TestCase
             'Models\User::ordinaryUnused',                       // plain model method
             'Conventions\NotAPipe::handle',                      // $next has no native Closure type: not a pipe
             'NotAPipe::$tries',                                  // hook-named property, but the class is not queued
+            'NonUniqueQueuedJob::uniqueId',                      // uniqueness hooks are read only for ShouldBeUnique
+            'QueuedListenerEvent::__construct',                  // ShouldQueue-only handle() parameters are not injected
         ] as $marker) {
             $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }
@@ -124,6 +127,7 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertStringNotContainsString('function show(', $deadReturns, 'Expected the controller action return value to read as used.');
         $this->assertStringNotContainsString('function __invoke(InvokeParamDependency', $deadReturns, 'Expected the invokable return value to read as used.');
         $this->assertStringNotContainsString('function handle(string $request, \Closure $next)', $deadReturns, 'Expected the middleware return value to read as used.');
+        $this->assertStringNotContainsString('function uniqueId(): string', $deadReturns, 'Expected a queue hook return value to read as used.');
         $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
     }
 

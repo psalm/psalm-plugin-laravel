@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace IndirectMethodReferencesFixture\Conventions;
 
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
 /** The `make:job` scaffold trait composes Dispatchable, and `dispatch()` is the only caller of the constructor. */
-final class SendReportJob implements ShouldQueue
+final class SendReportJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -37,6 +38,25 @@ final class SendReportJob implements ShouldQueue
 }
 
 final class JobHandleDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}
+
+/** ShouldQueue without a bus trait is shaped like a listener: Laravel passes the event positionally, nothing is injected. */
+final class QueuedListener implements ShouldQueue
+{
+    public function __construct(private readonly string $label = 'listener') {}
+
+    public function handle(QueuedListenerEvent $event): void
+    {
+        \assert($this->label !== "" && $event::class !== "");
+    }
+}
+
+final class QueuedListenerEvent
 {
     public function __construct()
     {

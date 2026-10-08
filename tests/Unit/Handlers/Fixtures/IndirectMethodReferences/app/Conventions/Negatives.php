@@ -60,3 +60,17 @@ final class DemotedPipeDependency
         \assert(\class_exists(self::class));
     }
 }
+
+/** Laravel reads uniqueId() only for ShouldBeUnique jobs, so on a plain queued job it is an ordinary unused method. */
+final class NonUniqueQueuedJob implements ShouldQueue
+{
+    public function uniqueId(): int
+    {
+        return 1;
+    }
+
+    public function handle(): void
+    {
+        \assert(true);
+    }
+}
