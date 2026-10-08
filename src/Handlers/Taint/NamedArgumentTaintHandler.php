@@ -28,68 +28,23 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\TaintKind;
 
 /**
- * Strips taint from a named-argument VALUE that Psalm binds to the callee's VARIADIC parameter.
+ * Strips taint from a named-argument value that Psalm binds to the callee's variadic parameter.
  *
- * Why, two Psalm 7.0.0-rc1 defects that both surface as spurious reports:
+ * Two Psalm 7.0.0-rc1 bugs misreport such an argument: an unpacked argument is mapped onto every
+ * parameter ignoring string keys (vimeo/psalm#12252, the `run(...$args)` -> `handle(...$args)`
+ * shape, #1395), and `getParameterOffset()` keys a variadic by its written offset, colliding with
+ * the fixed parameter declared there (vimeo/psalm#12251). Every other named argument is already
+ * attributed correctly (vimeo/psalm#11923 is fixed) and is left to Psalm.
  *
- * - Re-spread (vimeo/psalm#12252, `ArgumentsAnalyzer` unpacking). A variadic that forwards its
- *   arguments (`function run(string ...$arguments)` calling `handle(...$arguments)`, the
- *   `AsAction::run()` shape of lorisleiva/laravel-actions) makes Psalm map the unpacked argument
- *   onto EVERY parameter of `handle()` from its offset to the end, ignoring the array's string
- *   keys. `run(page: $input)` therefore reports against `handle()`'s first parameter (a spurious
- *   `TaintedFile` for `File::files($directory)`) although `$input` only reaches `$page` (#1395).
- * - Written-offset key (vimeo/psalm#12251, `DataFlowNode::getParameterOffset()`). For a variadic
- *   parameter it returns the argument's WRITTEN offset, so a named argument bound to the variadic
- *   collides with whatever fixed parameter is declared at that offset. This needs no re-spread:
- *   `v(zzz: $input)` on `v(string $a = '', string ...$rest)` reports against `$a`'s sink.
+ * The strip is only applied when the callee is resolved and the dispatch is exact (so an
+ * abstract or interface method is never stripped), and never inside a trait body: see
+ * {@see isExactDispatch()} and {@see isInsideTrait()}.
  *
- * Everything else is PRESERVED. Psalm keys a named argument's taint node by the parameter's
- * DECLARED index (`getParameterOffset()`, vimeo/psalm#11923 fixed), so reordered, skipped,
- * inherited and `self::`/`parent::` named arguments already reach the right sink. Not handled
- * here, all left to Psalm: first-class callables of plain functions (vimeo/psalm#12249), CallMap
- * return flows read by written offset (#12248) and `HtmlFunctionTainter` reading `flags`
- * positionally (#12250). Stubbed variadic builtins (`sprintf`, `array_merge`) do resolve storage
- * and are stripped; PHP rejects unknown named arguments to them anyway, so no real finding is lost.
+ * Accepted trade: the strip drops the argument's whole flow ({@see TaintKind::ALL_INPUT}), so a
+ * genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (pinned
+ * by `TaintedNamedArgumentVariadicKnownLimitation.phpt`; rationale in decisions.md).
  *
- * Binding mirrors `ArgumentsAnalyzer::checkArgumentsMatch()`: the FIRST declared parameter
- * satisfying `name === $arg->name || is_variadic` takes the argument, so the variadic captures
- * both an unmatched name and an argument naming the variadic itself. Anything binding to a
- * non-variadic parameter, even one declared before a variadic, is preserved.
- *
- * SCOPE: only a callee resolved here AND provably the one the call reaches is covered: a function
- * name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a plain `$var` receiver
- * already typed as exactly one non-intersection class. Instance calls, `static::` and
- * `new static` are late-bound, so they count only when the class is final (or an enum) or the
- * method is final (or private, for an instance call); otherwise a subclass may override with fixed parameters in front of
- * a trailing variadic and the parent's variadic signature says nothing about where the argument
- * lands. A chained (`Action::make()->run(page: $x)`) or property (`$this->action->run(...)`)
- * receiver is not resolved, so the #1395 false positive stays visible there. Abstract and
- * interface methods are skipped (no body, nothing to re-spread), and so is any call written
- * inside a trait method: Psalm analyses the trait body once per using class over the same AST
- * nodes and shares expression-internal taint edges (`source() . 'x'`) between those visits, so a
- * strip for one user would erase a genuine finding of another.
- *
- * KNOWN LIMITATIONS (accepted trade). The strip is kind-agnostic ({@see TaintKind::ALL_INPUT})
- * and kills the argument's whole source flow at the call site, so versus plain Psalm it loses
- * genuine findings; it only equals the handler this replaced. `ALL_INPUT` excludes secret and
- * project-defined kinds, which are not stripped. Each loss is pinned by a fixture:
- *
- * - a genuine sink behind the re-spread (`handle()`'s `$page` really reaches a sink):
- *   `TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation.phpt`;
- * - a sink in the variadic's own body (`foreach ($rest as $r) system($r)`) for `zzz:` or an
- *   argument naming the variadic: `TaintedNamedArgumentVariadicBodySinkKnownLimitation.phpt`;
- * - the unresolved chained/property receiver above:
- *   `TaintedNamedArgumentChainedReceiverVariadicRespreadKnownLimitation.phpt`.
- *
- * The exact-dispatch and trait declines have the opposite cost, a retained false positive
- * (`TaintedNamedArgumentNonExactInstanceDispatchReports.phpt`,
- * `TaintedNamedArgumentTraitConcatReentrantReports.phpt`): the #1395 suppression does not apply to
- * a re-spread call on a non-final receiver, nor to a call site written inside a trait.
- *
- * The rejected alternative, dropping the strip and reporting the false positive, is recorded in
- * decisions.md: Psalm offers no hook that removes only the mis-attributed flows.
- *
- * Retirement: delete once BOTH vimeo/psalm#12251 and #12252 are fixed.
+ * Retirement: delete once both vimeo/psalm#12251 and #12252 are fixed.
  */
 final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterface, RemoveTaintsInterface
 {
@@ -117,8 +72,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * Records the value node of every named argument that binds to the callee's variadic.
-     * Never short-circuits.
+     * Records named-argument values bound to a variadic. Each visit rewrites its own verdict so a
+     * re-analysis of the same node under another callee cannot leave a stale strip. Never
+     * short-circuits.
      */
     #[\Override]
     public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
@@ -173,10 +129,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * True when Psalm binds a named argument to the VARIADIC: its matcher scans in declaration
-     * order and breaks on the first parameter with `name === $arg->name || is_variadic`, so the
-     * variadic wins both when no earlier parameter carries the name and when the argument names
-     * the variadic itself (`w(rest: 'X')` really yields `$rest === ['rest' => 'X']` at runtime).
+     * Mirrors Psalm's matcher: the first parameter with `name === $arg->name || is_variadic` takes
+     * the argument, so the variadic captures an unmatched name and one naming the variadic itself.
      *
      * @param list<FunctionLikeParameter> $params
      *
@@ -194,17 +148,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * True when Psalm's own core separately dispatches `AddRemoveTaintsEvent` against this very
-     * node for a reason unrelated to it being a named-argument value. The `\WeakMap` matches by
-     * node IDENTITY ({@see removeTaints}), so recording one of these would make the strip fire
-     * on that unrelated dispatch too and erase a genuine, independent finding
-     * (`v(zzz: eval($input))` would lose `TaintedEval`).
-     *
-     * `Eval_`/`Include_` are the vulnerability themselves, and a `FuncCall`/`New_` whose
-     * callee/class expression is dynamic carries a `TaintKind::INPUT_CALLABLE` sink keyed to the
-     * whole call node: all four dispatch on the node itself. `StaticCall` is deliberately
-     * absent: its dispatch only applies the method's own `conditionally_removed_taints` to its
-     * own return value, which is the value the strip means to remove anyway.
+     * Psalm separately dispatches `AddRemoveTaintsEvent` on these nodes for their own sinks
+     * (`eval`, `include`, a dynamic callee or class), and the WeakMap matches by node identity, so
+     * recording one would erase its genuine `TaintedEval`/`TaintedInclude`/`TaintedCallable`.
      *
      * @psalm-mutation-free
      */
@@ -222,11 +168,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * The callee's declared params, or `null` when the callee stays unresolvable: a dynamic
-     * call/class, a receiver that is not one known class, a name none of whose candidates
-     * resolve, an abstract or interface method (no body to re-spread), or a callee without
-     * `FunctionLikeStorage` (a CallMap-only builtin or a facade `@method` pseudo-method).
-     * `null` preserves every named argument on the call.
+     * The callee's params, or null (leave the call to Psalm) when it is unresolvable, a CallMap
+     * builtin or facade pseudo-method (no storage), written in a trait, or inexact.
      *
      * @return list<FunctionLikeParameter>|null
      */
@@ -248,12 +191,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
                 continue;
             }
 
-            // An abstract or interface method has no body that could re-spread the variadic, so
-            // there is no spread false positive to silence, while a concrete override with fixed
-            // parameters can hold a genuine sink for the very same argument.
-            if ($storage instanceof MethodStorage
-                && (self::isBodiless($storage, $event) || !self::isExactDispatch($expr, $functionId, $storage, $event))
-            ) {
+            // An abstract or interface method is only ever reached through an inexact call (a
+            // final class cannot be abstract), so the exactness check also covers it.
+            if ($storage instanceof MethodStorage && !self::isExactDispatch($expr, $functionId, $storage, $event)) {
                 return null;
             }
 
@@ -264,15 +204,11 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * True when the resolved class and method are provably the ones the call reaches at runtime.
-     * A receiver typed as one concrete class is only an upper bound for an instance call, and
-     * `static::`/`new static` are late-bound: a subclass can override the method with fixed
-     * parameters in front of a trailing variadic, and the variadic signature read here then
-     * says nothing about where the argument lands. Exact means a final class (an enum is
-     * implicitly final), a final method, or, for an INSTANCE call only, a private method (PHP
-     * resolves it in the calling scope). A private method does not pin `static::`: PHP dispatches
-     * it to the late-bound class's own public method of that name. An explicit `Class::m()`,
-     * `self::`, `parent::` or `new Class` names the class and is always exact.
+     * True when the call provably reaches the resolved method. An instance call or `static::`
+     * only has an upper bound (a subclass may override with fixed parameters before the
+     * variadic), so it counts for a final class, enum or final method, or a private method on an
+     * instance call (a private method does not pin `static::`: PHP dispatches it to the
+     * late-bound class's public method). `Class::`, `self::`, `parent::` and `new Class` are exact.
      *
      * @param non-empty-string $functionId
      *
@@ -314,11 +250,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * True when the call is written inside a trait method (including a closure within one).
-     * Psalm analyses a trait body once per using class over the SAME AST nodes, and an
-     * expression-internal taint edge (`source() . 'x'` feeding the argument) is shared between
-     * those visits, so a strip recorded for one using class also removes taint from the visit of
-     * a class whose fixed parameter holds a genuine sink.
+     * True when the call is written inside a trait method. Psalm analyses a trait body once per
+     * using class over the same AST nodes and shares expression-internal taint edges between
+     * those visits, so a strip for one user erases a genuine finding of another.
      */
     private static function isInsideTrait(StatementsAnalyzer $statementsSource): bool
     {
@@ -337,35 +271,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * Psalm leaves `MethodStorage::$abstract` false for an interface method, so the declaring
-     * class is consulted as well.
-     *
-     * @psalm-mutation-free
-     */
-    private static function isBodiless(MethodStorage $storage, BeforeExpressionAnalysisEvent $event): bool
-    {
-        if ($storage->abstract) {
-            return true;
-        }
-
-        if ($storage->defining_fqcln === null) {
-            return false;
-        }
-
-        try {
-            return $event->getCodebase()->classlike_storage_provider->get($storage->defining_fqcln)->is_interface;
-        } catch (\InvalidArgumentException) {
-            return false;
-        }
-    }
-
-    /**
-     * Candidate callee ids for a `FuncCall`'s function name or a `StaticCall`/`New_`'s
-     * "Class::method" id, most-likely-correct first, or an empty list for anything not
-     * statically nameable (a dynamic function/class expression, an anonymous class). A
-     * `StaticCall`/`New_` class name always gets an eager `resolvedName`
-     * ({@see resolveClassNamePart}'s docblock) so it yields at most one candidate; a `FuncCall`'s
-     * function name can need up to three (see {@see functionNameCandidates}).
+     * Callee ids ("Class::method" or function names), most-likely first; empty when the callee
+     * is not statically nameable (dynamic name, anonymous class).
      *
      * @return list<non-empty-string>
      */
@@ -404,17 +311,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * The single class a method call's receiver is known to hold, or null. Only a plain
-     * `$var` receiver already in scope resolves: the argument types are not inferred yet at
-     * this pre-pass, but the receiver VARIABLE's own type is, because it was assigned by an
-     * earlier statement, and it is the same type `MethodCallAnalyzer` resolves the call against,
-     * so the two cannot disagree. A union or non-object receiver declines, per the house rule
-     * that narrowing on anything but exactly one known class turns into false positives.
-     *
-     * A CHAINED (`Storage::disk('local')->put(path: ...)`) or property (`$this->disk->put(...)`)
-     * receiver is not a `Variable` and has no entry to read, so it declines and the call is left
-     * to Psalm. A nullsafe call is the exception: Psalm re-dispatches it as a `MethodCall` on a
-     * virtual variable that holds the receiver's type, so it can resolve like a plain variable.
+     * The single class a `$var` receiver holds, or null. The variable's type is already in scope
+     * at this pre-pass (argument types are not). A chained or property receiver has no entry and
+     * declines; a nullsafe call resolves because Psalm re-dispatches it on a virtual variable.
      *
      * @psalm-mutation-free
      */
@@ -436,11 +335,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
 
         $atomic = $receiver->getSingleAtomic();
 
-        // An intersection is ONE union member whose other components live in `extra_types`, so
-        // `isSingle()` passes while `getSingleAtomic()` answers with the primary component alone.
-        // Trusting that component's variadic would strip the shared argument node and erase a
-        // sibling component's correctly attributed finding; Psalm's choice of primary component
-        // is not the written order, so declining is the only stable answer.
+        // An intersection is one union member whose other components live in `extra_types`;
+        // trusting the primary component alone would erase a sibling component's finding.
         if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
             return null;
         }
@@ -449,16 +345,9 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * A function name's candidate ids, most-confident first. An unqualified, unaliased call
-     * inside a namespace is ambiguous until runtime (PHP tries the current namespace, then the
-     * global function), so `SimpleNameResolver` leaves `resolvedName` unset and records the
-     * in-namespace candidate under `namespacedName` instead. Neither alone is enough:
-     * `namespacedName` misses every global function called unqualified from a namespace, and the
-     * raw name alone would prefer the global over a real in-namespace function of the same short
-     * name. {@see resolveDeclaredParams} tries each in turn.
-     *
-     * Not `@psalm-mutation-free`: `Name::getAttribute()` is stubbed impure (PHP-Parser nodes are
-     * mutable), even though this method never mutates anything.
+     * An unqualified call inside a namespace is ambiguous until runtime, so `resolvedName` is
+     * unset and the in-namespace candidate sits in `namespacedName`; the global name is the last
+     * resort. Not `@psalm-mutation-free`: `Name::getAttribute()` is stubbed impure.
      *
      * @return list<non-empty-string>
      */
@@ -482,12 +371,8 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * Resolves a class `Name` to an FQCN, handling `self`/`static`/`parent` against the
-     * enclosing scope. Mirrors
-     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler::resolveStaticClassName}.
-     * Unlike a function name, an unqualified class name always gets an eager `resolvedName`
-     * (classes have no runtime namespaced-then-global fallback), so no `namespacedName` fallback
-     * is needed here.
+     * `self`/`static`/`parent` resolve against the enclosing scope; an unqualified class name
+     * always has an eager `resolvedName`, so no `namespacedName` fallback is needed.
      */
     private static function resolveClassNamePart(Name $name, BeforeExpressionAnalysisEvent $event): ?string
     {
@@ -506,8 +391,7 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
     }
 
     /**
-     * Removes every INPUT taint kind from a recorded variadic-captured value node. The removal is
-     * kind-agnostic because a mis-attributed node can resurface as any kind at any sink.
+     * Kind-agnostic: a mis-attributed node can resurface as any kind at any sink.
      */
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int

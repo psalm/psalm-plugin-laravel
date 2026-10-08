@@ -178,27 +178,17 @@ Document every workaround with a comment linking to the upstream issue.
 
 ### `NamedArgumentTaintHandler` strips only named arguments bound to a variadic
 
-**Decision:** The handler strips taint (`TaintKind::ALL_INPUT`) from a named-argument value only when Psalm's own declaration-order matcher (`ArgumentsAnalyzer`: first parameter with `name === $arg->name || is_variadic`) binds it to the callee's variadic parameter. Every other named argument is left to Psalm.
+**Decision:** Strip taint from a named-argument value only when Psalm binds it to the callee's variadic and the callee resolves exactly. Everything else is left to Psalm.
 
-**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1: argument taint nodes are keyed by the DECLARED parameter index (`DataFlowNode::getParameterOffset()`), so the earlier "strip everything we cannot prove" handler only hid true positives. Two separate rc1 bugs remain, both about variadics:
+**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1, so the old strip-everything handler only hid true positives. Two variadic bugs remain:
+- vimeo/psalm#12252: an unpacked argument is mapped onto every parameter and string keys are ignored, so `run(...$args)` forwarding to `handle(...$args)` reports `run(page: $x)` against `handle()`'s first parameter (#1395).
+- vimeo/psalm#12251: a variadic is keyed by its written offset, so `v(zzz: $x)` collides with the fixed parameter declared there.
 
-- vimeo/psalm#12252: `ArgumentsAnalyzer` maps an unpacked argument onto every parameter from its offset to the end and ignores string keys, so `run(string ...$arguments) { handle(...$arguments); }` (`AsAction::run()` -> `handle()`) reports `run(page: $x)` against `handle()`'s first parameter (#1395, a spurious `TaintedFile` for `File::files()`). Vanilla rc1 reproduces it with no named argument at all (`handle(...['page' => $x])`).
-- vimeo/psalm#12251: `getParameterOffset()` returns the WRITTEN offset for a variadic, so `v(zzz: $x)` on `v(string $a = '', string ...$rest)` reports against `$a`'s sink with no re-spread involved. This is why the strip fires on a variadic capture itself, not only on forwarders.
+Deleting the handler would bring the #1395 false positive back, so it shrank to this one rule. Retire it when both bugs are fixed.
 
-Not handled and left to Psalm (all filed upstream): first-class callables of plain functions keyed by written offset (#12249), CallMap return flows read by written offset (#12248), `HtmlFunctionTainter` reading `flags` positionally (#12250). Stubbed variadic builtins (`sprintf`, `array_merge`) do resolve storage and are stripped; PHP rejects unknown named arguments to them, so no real finding is lost.
+**Accepted limitation:** the strip drops the whole flow, so a genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (`TaintedNamedArgumentVariadicKnownLimitation`). `AddRemoveTaintsEvent` names neither the parameter nor the destination, so no narrower strip exists.
 
-**Accepted limitations:** the strip kills the argument's whole source flow at the call site, so versus plain Psalm it loses genuine findings. It only equals the handler it replaces; it does not improve on it. Each loss has a `*KnownLimitation.phpt`:
-
-- a genuine sink behind the re-spread (`TaintedNamedArgumentVariadicRespreadGenuineDestinationKnownLimitation`);
-- a sink in the variadic's own body, for an unknown name or `rest:` naming the variadic (`TaintedNamedArgumentVariadicBodySinkKnownLimitation`);
-
-Psalm offers no hook that removes only the mis-attributed flows: `AddRemoveTaintsEvent` names neither the parameter nor the destination.
-
-**Scope of the #1395 suppression:** only a callee the handler resolves and can prove exact: a function name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a plain `$var` receiver typed as exactly one non-intersection class. Instance calls, `static::` and `new static` are late-bound (a single receiver class is only an upper bound, and a subclass may override with fixed parameters in front of a trailing variadic), so they count only for a final class, an enum, or a final method (or a private one, for an instance call only: PHP dispatches `static::` to the late-bound class's own public method, `TaintedNamedArgumentPrivateParentStaticDispatchReports`); the rest keep the false positive and every genuine finding (`TaintedNamedArgumentNonExactInstanceDispatchReports`). A call written inside a trait method is skipped too: Psalm re-analyses the trait body per using class over the same nodes and shares expression-internal taint edges between the visits, so a strip on a concatenation argument for the variadic user erased the fixed user's finding (`TaintedNamedArgumentTraitConcatReentrantReports`). A chained (`Action::make()->run(page: $x)`) or property (`$this->action->run(...)`) receiver is not resolved and the false positive stays visible, as in plain Psalm; a nullsafe call is the exception, because Psalm re-dispatches it on a virtual variable that holds the receiver's type (`TaintedNamedArgumentChainedReceiverVariadicRespreadKnownLimitation`). Retirement: delete the handler once both #12251 and #12252 are fixed.
-
-**Rejected (draft PR #1579):** strip only when the written offset collides with a non-variadic parameter, and preserve the rest. It keeps the genuine destination finding, but it reopens the reported #1395 false positive, because there the named argument sits at the variadic's own declared index and is "keyed correctly". Trading the reported false positive on the real laravel-actions shape for a finding that needs a sink behind a variadic forwarder was judged the worse deal.
-
-**Guards the single rule still needs (each pinned by a fixture):** a value that Psalm separately dispatches `AddRemoveTaintsEvent` against (`eval`, `include`, a dynamic callee or class) is never recorded, or the strip would erase its own `TaintedEval`/`TaintedInclude`/`TaintedCallable`; an intersection receiver is not resolved, because Psalm's primary component is not the written order and one component's variadic would erase the other's finding; an abstract or interface method is skipped, because it has no body to re-spread while a concrete override with fixed parameters can hold a genuine sink; every visit rewrites the node's verdict, because trait bodies are analysed once per using class and the same AST node sees different callees (`TaintedNamedArgumentReentrantTraitCallSiteReports`). Unresolvable callees, CallMap-only builtins and facade pseudo-methods are left to Psalm.
+**Rejected (draft PR #1579):** strip only when the written offset collides with a fixed parameter. It keeps the genuine finding but reopens the reported #1395 false positive, which sits at the variadic's own offset.
 
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 

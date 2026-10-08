@@ -27,10 +27,9 @@ final class FixedWriter
 }
 
 /**
- * Loop analysis visits the same call node more than once while the receiver's type widens:
- * `VariadicWriter` on the first pass (the handler records the strip), `VariadicWriter|FixedWriter`
- * on the next, which is not one known class. The second visit must clear the first one's record,
- * or the genuine `TaintedShell` at `FixedWriter::go()` is lost.
+ * The loop re-visits the call with the receiver widened to `VariadicWriter|FixedWriter` (no longer
+ * one known class); that visit must clear the first pass's strip or `FixedWriter::go()` loses its
+ * genuine `TaintedShell`.
  */
 function receiverTypeChangesBetweenLoopPasses(int $times): void
 {

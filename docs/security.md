@@ -95,31 +95,11 @@ no coverage relative to running without the plugin.
 
 ### Known limitation: named arguments captured by a variadic
 
-Two Psalm bugs misreport a named argument that a variadic parameter captures:
-[vimeo/psalm#12252](https://github.com/vimeo/psalm/issues/12252) (an unpacked argument is mapped
-onto every parameter and string keys are ignored, so `run(string ...$arguments)` forwarding to
-`handle(...$arguments)` reports `run(page: $input)` against the wrong parameter, for example a
-spurious `TaintedFile`, #1395) and [vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251)
-(a named argument bound to a variadic is keyed by its written position, so it collides with the
-fixed parameter declared there). To keep those false positives silent, the plugin drops the taint
-from a named argument that Psalm binds to a callee's variadic.
-
-The trade: versus plain Psalm this loses genuine findings, because the whole flow is dropped.
-Not reported: a sink behind the re-spread (`handle()`'s own parameter), a sink in the variadic's
-own body for an unknown or variadic-naming argument (`foreach ($rest as $r) system($r)` called as
-`f(zzz: $input)`). The suppression only covers a callee the plugin resolves and can prove exact:
-a function name, an explicit `Class::`/`self::`/`parent::` call, `new Class`, or a `$variable`
-receiver of one known class whose class or method is final (or, for an instance call, private, or
-an enum). Instance calls and `static::` on a non-final class are late-bound (a subclass may
-override with fixed parameters in front of a trailing variadic; a private method does not pin
-`static::`), so they keep full detection and the re-spread false positive; so do a chained or
-property receiver (`Action::make()->run(page: $input)`, `$this->action->run(...)`) and any call
-written inside a trait method. The exception is a nullsafe call (`$maybe?->run(zzz: $input)`),
-which Psalm rewrites onto a virtual variable holding the receiver's type, so it resolves and is
-stripped even for a chained receiver. Abstract and interface
-methods are not stripped. Every other named-argument call (reordered or skipped arguments, methods, static
-calls, constructors, facades) keeps full detection, and passing the argument positionally always
-reports.
+Two Psalm bugs ([vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251),
+[#12252](https://github.com/vimeo/psalm/issues/12252)) misattribute a named argument bound to a
+variadic parameter. The plugin drops the taint of such an argument when the callee resolves
+exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a
+re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps full detection.
 
 ### Timing-unsafe secret comparison (CWE-208)
 
