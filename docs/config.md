@@ -151,10 +151,30 @@ Namespaced package keys (e.g., `vendor::file.key`) are also skipped.
 
 See [MissingTranslation](issues/MissingTranslation.md) for details.
 
+### `keys`
+
+**default**: `all`
+
+| Value | Reports |
+|---|---|
+| `all` | Every literal key that is not found, including JSON-style sentence keys such as `__('Online courses - more coming up!')`. |
+| `short` | Only Laravel "short keys" (`group.key`, e.g. `validation.attributes.email`, `admin/users.title`). |
+
+A short key has at least two non-empty dot-separated segments and no whitespace. `short` therefore skips sentences with whitespace (`Online courses - more coming up!`), keys with an empty segment (`Done.`, `e.g.`), and keys without a dot (`Dashboard`). Keys such as `example.com` or `1.5` look like short keys and are still checked.
+
+Use `short` when the application writes the source-language text directly in `__('...')` calls: such a key is looked up in `lang/{locale}.json`, and a miss is expected, because Laravel falls back to the key itself.
+It only affects which missing keys are reported; type narrowing of `__()` / `trans()` results is the same in both modes.
+
+Known limits:
+
+- A call that passes a whole group, e.g. `__('auth')`, has no dot and is skipped in `short` mode.
+- `short` is correct only when the analyzed `app.locale` (together with `fallback_locale`) is the language of the source text used in code. If `app.locale` is `be` while sentence keys are written in English, a sentence missing from `lang/be.json` is a real missing translation, and `short` hides it. Use `all` in that case.
+
 ### Example
 
 ```xml
-<findMissingTranslations value="true" />
+<!-- keys="all" is the default; "short" skips sentence-style keys -->
+<findMissingTranslations value="true" keys="short" />
 ```
 
 ## `findMissingViews`

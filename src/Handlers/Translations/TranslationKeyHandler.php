@@ -9,6 +9,7 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Config\TranslationKeys;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\MissingTranslation;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
@@ -87,6 +88,9 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
     /** Whether to emit MissingTranslation issues for keys not found in language files */
     private static bool $reportMissing = false;
 
+    /** Which keys are eligible for MissingTranslation when $reportMissing is on (emission only, not narrowing) */
+    private static TranslationKeys $translationKeys = TranslationKeys::All;
+
     /**
      * Cached translation resolution results.
      *
@@ -109,13 +113,15 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
     {
         self::$translator = null;
         self::$reportMissing = false;
+        self::$translationKeys = TranslationKeys::All;
         self::$resolvedKeys = [];
     }
 
-    public static function init(Translator $translator, bool $reportMissing): void
+    public static function init(Translator $translator, bool $reportMissing, TranslationKeys $translationKeys): void
     {
         self::$translator = $translator;
         self::$reportMissing = $reportMissing;
+        self::$translationKeys = $translationKeys;
         self::$resolvedKeys = [];
         self::$zeroArgTransUnions = [];
     }
@@ -435,7 +441,7 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Key does not exist — emit the issue only when findMissingTranslations
         // is enabled, then fall through to TransHandler for the fallback type
-        if (self::$reportMissing && $emitMissingTranslation) {
+        if (self::$reportMissing && $emitMissingTranslation && self::$translationKeys->shouldReport($translationKey)) {
             IssueBuffer::accepts(
                 new MissingTranslation(
                     "Translation key '{$translationKey}' not found in language files",

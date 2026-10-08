@@ -10,10 +10,12 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\ColumnFallback;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\TranslationKeys;
 use Psalm\LaravelPlugin\Plugin;
 
 #[CoversClass(PluginConfig::class)]
 #[CoversClass(ColumnFallback::class)]
+#[CoversClass(TranslationKeys::class)]
 #[CoversClass(Plugin::class)]
 final class PluginConfigTest extends TestCase
 {
@@ -55,6 +57,7 @@ final class PluginConfigTest extends TestCase
         $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
+        $this->assertSame(TranslationKeys::All, $config->findMissingTranslationsKeys);
         $this->assertFalse($config->findMissingViews);
         $this->assertFalse($config->findUnconfiguredFilesystemDisks);
         $this->assertFalse($config->findUnregisteredRouteNames);
@@ -223,6 +226,44 @@ final class PluginConfigTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid findMissingTranslations value 'yes'");
+
+        PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_missing_translations_keys_defaults_to_all(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" /></pluginClass>');
+
+        $this->assertSame(TranslationKeys::All, PluginConfig::fromXml($xml)->findMissingTranslationsKeys);
+    }
+
+    #[Test]
+    public function find_missing_translations_keys_all(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" keys="all" /></pluginClass>');
+
+        $this->assertSame(TranslationKeys::All, PluginConfig::fromXml($xml)->findMissingTranslationsKeys);
+    }
+
+    #[Test]
+    public function find_missing_translations_keys_short(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" keys="short" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findMissingTranslations);
+        $this->assertSame(TranslationKeys::Short, $config->findMissingTranslationsKeys);
+    }
+
+    #[Test]
+    public function invalid_find_missing_translations_keys_throws(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" keys="foo" /></pluginClass>');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findMissingTranslations keys value 'foo'. Valid values: 'all', 'short'.");
 
         PluginConfig::fromXml($xml);
     }

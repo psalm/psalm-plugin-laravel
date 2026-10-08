@@ -49,9 +49,19 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 </plugins>
 ```
 
+By default every literal key is checked, including JSON-style sentence keys (`__('Welcome back!')`). If your code uses the source-language text as the key, limit the check to `group.key` keys:
+
+```xml
+<findMissingTranslations value="true" keys="short" />
+```
+
+See [`findMissingTranslations`](../config.md#findmissingtranslations) for the exact rule and the `app.locale` caveat.
+
 ## Limitations
 
 - Only string literal keys are checked -- dynamic or concatenated keys are skipped
 - Namespaced package keys (e.g., `pagination::pages.next`) are skipped
 - Only `__()` and `trans()` are checked -- `trans_choice()`, `Lang::get()`, and Blade `@lang` directives are not detected
 - Uses Laravel's Translator to resolve keys, which respects the configured locale and fallback locale
+- With `keys="short"`, sentence keys, keys with an empty segment (`Done.`), and keys without a dot (`Dashboard`, or a whole group such as `__('auth')`) are never reported
+- `keys="short"` hides real missing sentence translations when the analyzed `app.locale` is not the language of the source text in code (e.g. `app.locale=be` with English sentence keys)
