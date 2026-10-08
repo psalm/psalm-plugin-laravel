@@ -207,6 +207,7 @@ Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
 - Add a type test in `tests/Type/tests/` to prevent regression
 - For taint annotations, see [Taint Analysis Stubs](taint-analysis.md)
+- A closure parameter whose callback runs bound to another object (`Artisan::command('x', function () { $this->comment(); })`) is typed with `@param-closure-this \Foo $callback` on the stubbed method, not a handler. A facade needs a real static method in its stub for this: `@method static` cannot carry the tag, and `FacadeStubPrecedenceHandler` drops the generated pseudo-method when the stub declares a real one. A `static` closure stays `InvalidScope`, which matches runtime.
 
 ### The `laravel/ai` integration gate
 
