@@ -69,6 +69,7 @@ groups:
 flags:
   "--blade": Analyse Blade templates, overriding psalm.xml
   "--no-blade": Skip Blade templates, overriding psalm.xml
+  "--find-dead-code": Report unused code, overriding psalm.xml
 
 apps:
   - name: monica
