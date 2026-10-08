@@ -194,6 +194,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Application\ContainerResolver::reset();
         Handlers\Auth\AuthConfigAnalyzer::reset();
         Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();

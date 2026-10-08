@@ -154,6 +154,15 @@ This is acceptable — the handlers gracefully handle any Model subclass.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
 Registration order is preserved (relationship > factory > accessor > column).
 
+### `Request::user()` overrides: per-subclass registration, explicit guard only
+
+**Decision:** `RequestHandler::afterCodebasePopulated()` registers the `Request::user()` return-type closure on every `Request` subclass whose `user()` resolves to an override (own, inherited from an overriding parent, or trait-imported), e.g. Laravel Nova's `NovaRequest`.
+
+- **Why per subclass:** Psalm dispatches a return-type provider for the called class or the declaring class only (`MethodCallReturnTypeFetcher`), never an intermediate ancestor, so the `Request` registration never fires for an override and calls stay `mixed`. A trait override is dispatched under the trait, hence registration on the using class and its descendants rather than relying on the declaring-class fallback.
+- **Forwarding bet:** an override is assumed to forward an explicit guard to `parent::user($guard)`. Only an explicit literal string or string-backed enum case guard narrows; dynamic, unknown, or unpacked guards decline.
+- **No-arg and `null` decline on overrides:** the override may pick its own default (Nova reads `config('nova.guard')`), so the app's `auth.defaults.guard` is not provable there. Plain `Request` keeps the default-guard narrowing.
+- **Declared return type wins, decided by Psalm itself:** registration takes every override; at call time, after the argument-shape bails, the handler asks Psalm for its own return type of the called class's `user()` and declines unless it is `mixed` (or unresolved). The call is `Methods::getMethodReturnType()` with the event's `StatementsAnalyzer`, the same call `MethodCallReturnTypeFetcher` makes, minus template lower bounds (an unresolved template param is never mixed, so this can only decline), so typed, docblock-typed, trait-aliased, and documented-by-a-typed-ancestor overrides all keep Psalm's answer and an untyped `{@inheritDoc}` override (documented by `Request::user()`'s `mixed`) narrows. Rejected: a registration-time gate mirroring Psalm's documenting/overridden-method resolution from storage, which diverged on trait aliases, child re-aliases, and a `: mixed` child under a docblock-typed parent. `Codebase::getMethodReturnType()` is not a substitute either: it passes no source analyzer, so `Methods::getMethodReturnType()` returns the documenting `mixed` over an override's own `?Admin`.
+
 ## Performance
 
 ### Performance budget for handlers
