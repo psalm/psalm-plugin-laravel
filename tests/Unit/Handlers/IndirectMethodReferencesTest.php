@@ -32,7 +32,7 @@ final class IndirectMethodReferencesTest extends TestCase
     private const FIXTURE = __DIR__ . '/Fixtures/IndirectMethodReferences';
 
     /** @var list<string> */
-    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass', 'UnusedProperty'];
+    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass', 'UnusedProperty', 'PossiblyUnusedProperty'];
 
     /** @var list<string> */
     private const DEAD_RETURNS = ['PossiblyUnusedReturnValue', 'UnusedReturnValue'];
@@ -76,6 +76,13 @@ final class IndirectMethodReferencesTest extends TestCase
             'Conventions\PrivateConstructorJob',      // dispatch() runs `new static` in class scope: a private ctor is fine
             'Conventions\NullableNextMiddleware',     // native ?Closure $next is still a pipe
             'Conventions\QueuedListener',             // ShouldQueue still roots handle(), just without injection
+            // Properties and methods the queue reads off the job object itself; the class is alive, so
+            // they are rooted too. `$tries` also covers listeners (ShouldQueue without a bus trait).
+            'HookedJob::$tries',
+            'HookedJob::$timeout',
+            'HookedJob::middleware',
+            'HookedJob::uniqueId',
+            'HookedJob::retryUntil',
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -93,6 +100,8 @@ final class IndirectMethodReferencesTest extends TestCase
             'Conventions\UntypedNextMiddleware::handle',         // $next is not a native Closure: not a pipe
             'Conventions\PlainHandleClass::handle',              // a bare handle() is no contract
             'Dependencies\ListenerEvent',                        // queued listener: event is passed positionally, not injected
+            'HookedJob::$notAHook',                              // a public property no queue hook reads
+            'NonQueuedHookNames::$tries',                        // hook-named property, but the class is not queued
         ] as $marker) {
             $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }
@@ -132,6 +141,7 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertStringNotContainsString('function __invoke(InvokeParamDependency', $deadReturns, 'Expected the invokable return value to read as used.');
         $this->assertStringNotContainsString('function handle(string $request, \Closure $next)', $deadReturns, 'Expected the middleware return value to read as used.');
         $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
+        $this->assertStringNotContainsString('function uniqueId(', $deadReturns, 'Expected a queue hook return value to read as used.');
     }
 
     /**
@@ -170,6 +180,7 @@ final class IndirectMethodReferencesTest extends TestCase
                 '/app/Models/User.php',
                 '/app/Conventions/SendReportJob.php',
                 '/app/Conventions/AddHeaderMiddleware.php',
+                '/app/Conventions/HookedJob.php',
             ] as $changed) {
                 $this->assertNotFalse(
                     \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
@@ -203,6 +214,11 @@ final class IndirectMethodReferencesTest extends TestCase
                 'Conventions\AddHeaderMiddleware',
                 $deadCode,
                 'Expected the middleware entry edges to be replayed after the middleware file changed.',
+            );
+            $this->assertStringNotContainsString(
+                'HookedJob::$tries',
+                $deadCode,
+                'Expected the queue hook property edge to be replayed after the job file changed.',
             );
             // The relationship edge is anchored to the plugin file (recordFileReference()), which is
             // never re-analyzed, so its "return value used" half must survive the model file's own

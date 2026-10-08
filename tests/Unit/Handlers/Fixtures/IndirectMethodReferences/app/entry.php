@@ -11,6 +11,8 @@ use IndirectMethodReferencesFixture\Controllers\InvocableController;
 use IndirectMethodReferencesFixture\Conventions\AddHeaderMiddleware;
 use IndirectMethodReferencesFixture\Conventions\DemotedPipe;
 use IndirectMethodReferencesFixture\Conventions\DispatchedJob;
+use IndirectMethodReferencesFixture\Conventions\HookedJob;
+use IndirectMethodReferencesFixture\Conventions\NonQueuedHookNames;
 use IndirectMethodReferencesFixture\Conventions\NullableNextMiddleware;
 use IndirectMethodReferencesFixture\Conventions\PlainHandleClass;
 use IndirectMethodReferencesFixture\Conventions\PlainInvokable;
@@ -57,5 +59,7 @@ function consume(): array
         PrivateConstructorJob::dispatch('payload'),
         new QueuedListener(),
         NullableNextMiddleware::class,
+        new HookedJob(),
+        new NonQueuedHookNames(),
     ];
 }

@@ -70,6 +70,35 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
     /** @var array<string, array{class: string, target: MethodIdentifier, returnUsed: bool}> */
     private static array $classReferences = [];
 
+    /** @var array<string, array{class: string, declaring: string, property: string}> */
+    private static array $propertyReferences = [];
+
+    /**
+     * What Laravel reads off a queued job or listener object, each verified in vendor:
+     * Queue::createObjectPayload()/getJobTries()/getJobBackoff()/getJobExpiration()/jobShouldBeEncrypted(),
+     * Bus\UniqueLock, and Events\Dispatcher::propagateListenerOptions() (properties, via
+     * ReadsClassAttributes::getAttributeValue()).
+     *
+     * @var list<non-empty-string>
+     */
+    private const QUEUED_HOOK_PROPERTIES = [
+        'tries', 'maxExceptions', 'timeout', 'failOnTimeout', 'backoff', 'deleteWhenMissingModels',
+        'uniqueFor', 'shouldBeEncrypted',
+    ];
+
+    /**
+     * Called through `method_exists()` + call. Sources: Queue::createObjectPayload(),
+     * CallQueuedHandler::dispatchThroughMiddleware(), Bus\UniqueLock, Bus\DebounceLock, SqsQueue,
+     * Events\Dispatcher (handlerWantsToBeQueued/queueHandler/propagateListenerOptions) and
+     * Events\CallQueuedListener (uniqueVia/debounceVia).
+     *
+     * @var list<non-empty-string>
+     */
+    private const QUEUED_HOOK_METHODS = [
+        'middleware', 'uniqueId', 'uniqueVia', 'uniqueFor', 'backoff', 'retryUntil', 'tries', 'displayName',
+        'viaConnection', 'viaQueue', 'shouldQueue', 'debounceId', 'debounceVia', 'deduplicationId', 'messageGroup',
+    ];
+
     private static bool $recorded = false;
 
     public static function reset(): void
@@ -77,6 +106,7 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
         self::$methodReferences = [];
         self::$fileReferences = [];
         self::$classReferences = [];
+        self::$propertyReferences = [];
         self::$recorded = false;
     }
 
@@ -139,6 +169,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
                 $reference['class'],
                 $reference['target'],
                 $reference['returnUsed'],
+            );
+        }
+
+        foreach (self::$propertyReferences as $reference) {
+            IndirectMethodReferenceRecorder::recordClassPropertyReference(
+                $codebase,
+                $reference['class'],
+                $reference['declaring'],
+                $reference['property'],
             );
         }
 
@@ -246,6 +285,15 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             if (isset($methods['failed'])) {
                 $entries['failed'] = [false, false];
             }
+
+            foreach (self::QUEUED_HOOK_METHODS as $hook) {
+                $declaring = $methods[\strtolower($hook)]['declaring'] ?? null;
+                if ($declaring instanceof MethodIdentifier && ClassLineage::storage($codebase, $declaring->fq_class_name)?->user_defined === true) {
+                    $entries[\strtolower($hook)] = [true, false];
+                }
+            }
+
+            self::queueQueuedHookProperties($codebase, $storage);
         }
 
         foreach ($entries as $name => [$returnUsed, $injected]) {
@@ -288,6 +336,35 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             'target' => $target,
             'returnUsed' => $returnUsed,
         ];
+    }
+
+    /**
+     * Queue edges to the hook properties the queue reads off the job object. Laravel reads them from
+     * outside the class (`isset($job->tries)`), so only public non-static ones count, and only those
+     * the project declares: a vendor trait's `$connection`/`$queue` is never reported anyway.
+     */
+    private static function queueQueuedHookProperties(Codebase $codebase, ClassLikeStorage $storage): void
+    {
+        foreach (self::QUEUED_HOOK_PROPERTIES as $name) {
+            $declaringClass = $storage->declaring_property_ids[$name] ?? null;
+            $declaring = $declaringClass === null ? null : ClassLineage::storage($codebase, $declaringClass);
+            $property = $declaring?->properties[$name] ?? null;
+            if (!$declaring instanceof \Psalm\Storage\ClassLikeStorage
+                || !$declaring->user_defined
+                || $property === null
+                || $property->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC
+                || $property->is_static
+            ) {
+                continue;
+            }
+
+            // The node must be the declaring class's: that is the one Psalm checks for unused properties.
+            self::$propertyReferences[strtolower($storage->name) . '::$' . $name] = [
+                'class' => $storage->name,
+                'declaring' => $declaring->name,
+                'property' => $name,
+            ];
+        }
     }
 
     /**

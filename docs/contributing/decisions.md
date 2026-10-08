@@ -342,6 +342,10 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Boundaries:** Concrete user classes only; the target is the declaring method, public and non-static. A pipe is recognised only by a *native* `Closure` type on `handle()`'s second parameter. Route actions on non-controller classes, auto-discovered listeners and the remaining `SuppressHandler` convention entries are not migrated yet.
 
+**Queue hooks:** a queued class (`ShouldQueue` or a bus trait) also roots the public non-static properties and methods the queue reads off the job object itself (`$tries`, `$timeout`, `middleware()`, `uniqueId()`, `retryUntil()`, ...; the lists live in `IndirectMethodReferenceHandler`), when the project declares them. Without this, a queued job that becomes alive starts reporting them as unused.
+
+**Accepted imprecision:** a `ShouldQueue`-only class (no bus trait) gets no `handle` method injection, because it may be a queued listener and `CallQueuedListener` passes the event data positionally. `make:job` always adds `Queueable`, so real jobs are covered.
+
 ## Handler Registration Order
 
 ### Property handler priority: relationship > factory > accessor > column

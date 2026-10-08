@@ -73,6 +73,26 @@ final class IndirectMethodReferenceRecorder
     }
 
     /**
+     * Property counterpart of {@see recordClassReference()}: "the class is alive, so Laravel reads this
+     * property off its instances". The node is the declaring class's, which is what Psalm checks.
+     */
+    public static function recordClassPropertyReference(
+        Codebase $codebase,
+        string $className,
+        string $declaringClass,
+        string $property,
+    ): void {
+        if ($codebase->find_unused_code === null) {
+            return;
+        }
+
+        $context = new Context();
+        $context->self = $className;
+
+        $codebase->addReferenceToProperty(\strtolower($declaringClass), $property, true, null, $context);
+    }
+
+    /**
      * Record an indirect call without inventing a calling method. The plugin file is a stable,
      * non-analyzed source for this synthetic edge, so it is not removed when an application file
      * is re-analyzed during an incremental run. With no context, the graph falls back to this
