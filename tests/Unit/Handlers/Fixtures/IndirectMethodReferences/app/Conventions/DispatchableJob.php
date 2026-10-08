@@ -6,6 +6,7 @@ namespace IndirectMethodReferencesFixture\Conventions;
 
 use Illuminate\Foundation\Bus\Dispatchable;
 
+/** `dispatch()` runs `new static()` in the job's own scope, so a private constructor is valid. */
 final class PrivateConstructorJob
 {
     use Dispatchable;

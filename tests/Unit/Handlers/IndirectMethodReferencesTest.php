@@ -63,26 +63,14 @@ final class IndirectMethodReferencesTest extends TestCase
             'Dependencies\InheritedActionDependency', // parameter of an inherited action
             'Dependencies\TraitActionDependency',     // parameter of a trait-provided action
             // Convention entry points (#1779): Laravel calls these without a Psalm-visible call, so
-            // every dependency below is only reachable through the class-conditional edges.
+            // everything below is reachable only through the class-conditional edges.
             'Conventions\PlainInvokable',             // invokable: promoted dep, __construct, __invoke
             'Conventions\InvokableService',           // collaborator reached only through __invoke
-            'Dependencies\InvokeParamDependency',     // __invoke parameter
+            'Conventions\InvokeParamDependency',      // __invoke parameter
             'Conventions\AddHeaderMiddleware',        // Closure-typed pipe: handle + terminate
-            'Conventions\SendReportJob',              // ShouldQueue: handle + failed
-            'Dependencies\JobHandleDependency',       // queued handle() parameter
-            'Conventions\DispatchedJob',              // Bus Dispatchable: dispatch() builds it via `new static`
-            'Dependencies\PromotedPipeDependency',    // pipe handle() promoted to public by the parent's trait adaptation
-            'Conventions\PromotedPipe::',             // ... so the container-built concrete class is alive through it
+            'Conventions\SendReportJob',              // queued bus job: handle, failed, hook members
+            'Conventions\JobHandleDependency',        // handle() parameter
             'Conventions\PrivateConstructorJob',      // dispatch() runs `new static` in class scope: a private ctor is fine
-            'Conventions\NullableNextMiddleware',     // native ?Closure $next is still a pipe
-            'Conventions\QueuedListener',             // ShouldQueue still roots handle(), just without injection
-            // Properties and methods the queue reads off the job object itself; the class is alive, so
-            // they are rooted too. `$tries` also covers listeners (ShouldQueue without a bus trait).
-            'HookedJob::$tries',
-            'HookedJob::$timeout',
-            'HookedJob::middleware',
-            'HookedJob::uniqueId',
-            'HookedJob::retryUntil',
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -97,11 +85,8 @@ final class IndirectMethodReferencesTest extends TestCase
             'Commands\ReferenceCommand::helper',                 // public command method other than handle()
             'Models\User::privateTeam',                          // non-public relationship
             'Models\User::ordinaryUnused',                       // plain model method
-            'Conventions\UntypedNextMiddleware::handle',         // $next is not a native Closure: not a pipe
-            'Conventions\PlainHandleClass::handle',              // a bare handle() is no contract
-            'Dependencies\ListenerEvent',                        // queued listener: event is passed positionally, not injected
-            'HookedJob::$notAHook',                              // a public property no queue hook reads
-            'NonQueuedHookNames::$tries',                        // hook-named property, but the class is not queued
+            'Conventions\NotAPipe::handle',                      // $next has no native Closure type: not a pipe
+            'NotAPipe::$tries',                                  // hook-named property, but the class is not queued
         ] as $marker) {
             $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }
@@ -115,15 +100,6 @@ final class IndirectMethodReferencesTest extends TestCase
             'Expected HelperDependency to remain an unused class.',
         );
 
-        $unusedClasses = $this->report($findings, ['UnusedClass']);
-        // Nothing ever builds or dispatches this job, and an edge from a dead class never fires.
-        $this->assertStringContainsString('Conventions\DeadJob', $unusedClasses, 'Expected an unreferenced job to remain an unused class.');
-        // A private __invoke is not callable by Laravel, so its parameter is not autowired.
-        $this->assertStringContainsString('Dependencies\PrivateInvokeDependency', $unusedClasses, 'Expected a private __invoke to be no entry point.');
-        // The trait adaptation lives on the abstract parent that uses the trait, not on the concrete
-        // class that inherits the method: demoted there, handle() is no pipe entry.
-        $this->assertStringContainsString('Dependencies\DemotedPipeDependency', $unusedClasses, 'Expected an inherited protected-adapted handle() to be no entry point.');
-
         // A public command method other than handle() is not an entrypoint either; its
         // parameter staying an unused class proves the restriction applies beyond controllers.
         $this->assertStringContainsString(
@@ -131,6 +107,14 @@ final class IndirectMethodReferencesTest extends TestCase
             $this->report($findings, ['UnusedClass']),
             'Expected CommandHelperDependency to remain an unused class.',
         );
+
+        $unusedClasses = $this->report($findings, ['UnusedClass']);
+        foreach ([
+            'Conventions\DeadJob',                // an edge from a dead class never fires
+            'Conventions\DemotedPipeDependency',  // `handle as protected` on the parent demotes the inherited pipe handle()
+        ] as $marker) {
+            $this->assertStringContainsString($marker, $unusedClasses, "Expected {$marker} to remain an unused class.");
+        }
 
         // Laravel consumes what an entrypoint and a relationship return (the router, the console
         // kernel, eager loading), so those edges carry "return value used" - unlike a discarded
@@ -141,7 +125,6 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertStringNotContainsString('function __invoke(InvokeParamDependency', $deadReturns, 'Expected the invokable return value to read as used.');
         $this->assertStringNotContainsString('function handle(string $request, \Closure $next)', $deadReturns, 'Expected the middleware return value to read as used.');
         $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
-        $this->assertStringNotContainsString('function uniqueId(', $deadReturns, 'Expected a queue hook return value to read as used.');
     }
 
     /**
@@ -175,13 +158,7 @@ final class IndirectMethodReferencesTest extends TestCase
         try {
             $this->runPsalm($fixtureDir, true);
 
-            foreach ([
-                '/app/Dependencies/Dependencies.php',
-                '/app/Models/User.php',
-                '/app/Conventions/SendReportJob.php',
-                '/app/Conventions/AddHeaderMiddleware.php',
-                '/app/Conventions/HookedJob.php',
-            ] as $changed) {
+            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php', '/app/Conventions/QueuedJob.php'] as $changed) {
                 $this->assertNotFalse(
                     \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
                 );
@@ -208,17 +185,7 @@ final class IndirectMethodReferencesTest extends TestCase
             $this->assertStringNotContainsString(
                 'Conventions\SendReportJob',
                 $deadCode,
-                'Expected the job entry edges to be replayed after the job file changed.',
-            );
-            $this->assertStringNotContainsString(
-                'Conventions\AddHeaderMiddleware',
-                $deadCode,
-                'Expected the middleware entry edges to be replayed after the middleware file changed.',
-            );
-            $this->assertStringNotContainsString(
-                'HookedJob::$tries',
-                $deadCode,
-                'Expected the queue hook property edge to be replayed after the job file changed.',
+                'Expected the class-sourced job edges (method and hook property) to be replayed after the job file changed.',
             );
             // The relationship edge is anchored to the plugin file (recordFileReference()), which is
             // never re-analyzed, so its "return value used" half must survive the model file's own

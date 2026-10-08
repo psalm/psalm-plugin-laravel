@@ -45,16 +45,17 @@ final class IndirectMethodReferenceRecorder
     }
 
     /**
-     * Record "the class is alive, so this convention method is called". Psalm 7 resolves dead code by
-     * reachability, and an edge sourced at the class node only fires once the class itself is reached,
-     * so an unreferenced job or invokable stays an UnusedClass. No file path is passed: addReference()
-     * would pin the class node to it and break invalidation of that node when its own file changes.
-     * Unlike {@see record()}, the caller states whether Laravel consumes the method's return value.
+     * Record "the class is alive, so Laravel calls this method / reads this property". An edge sourced
+     * at the class node fires only once the class itself is reached, so an unreferenced job stays an
+     * UnusedClass. No file path: addReference() would pin the class node to it and break its
+     * invalidation when the class's own file changes.
+     *
+     * @param MethodIdentifier|array{0: string, 1: string} $target a method, or [declaring class, property]
      */
     public static function recordClassReference(
         Codebase $codebase,
         string $className,
-        MethodIdentifier $methodId,
+        MethodIdentifier|array $target,
         bool $isReturnValueUsed,
     ): void {
         if ($codebase->find_unused_code === null) {
@@ -64,32 +65,11 @@ final class IndirectMethodReferenceRecorder
         $context = new Context();
         $context->self = $className;
 
-        $codebase->addReferenceToFunctionLike(
-            \strtolower((string) $methodId),
-            null,
-            $context,
-            $isReturnValueUsed,
-        );
-    }
-
-    /**
-     * Property counterpart of {@see recordClassReference()}: "the class is alive, so Laravel reads this
-     * property off its instances". The node is the declaring class's, which is what Psalm checks.
-     */
-    public static function recordClassPropertyReference(
-        Codebase $codebase,
-        string $className,
-        string $declaringClass,
-        string $property,
-    ): void {
-        if ($codebase->find_unused_code === null) {
-            return;
+        if ($target instanceof MethodIdentifier) {
+            $codebase->addReferenceToFunctionLike(\strtolower((string) $target), null, $context, $isReturnValueUsed);
+        } else {
+            $codebase->addReferenceToProperty(\strtolower($target[0]), $target[1], true, null, $context);
         }
-
-        $context = new Context();
-        $context->self = $className;
-
-        $codebase->addReferenceToProperty(\strtolower($declaringClass), $property, true, null, $context);
     }
 
     /**

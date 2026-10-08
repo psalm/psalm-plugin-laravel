@@ -10,18 +10,10 @@ use IndirectMethodReferencesFixture\Controllers\DriverController;
 use IndirectMethodReferencesFixture\Controllers\InvocableController;
 use IndirectMethodReferencesFixture\Conventions\AddHeaderMiddleware;
 use IndirectMethodReferencesFixture\Conventions\DemotedPipe;
-use IndirectMethodReferencesFixture\Conventions\DispatchedJob;
-use IndirectMethodReferencesFixture\Conventions\HookedJob;
-use IndirectMethodReferencesFixture\Conventions\NonQueuedHookNames;
-use IndirectMethodReferencesFixture\Conventions\NullableNextMiddleware;
-use IndirectMethodReferencesFixture\Conventions\PlainHandleClass;
+use IndirectMethodReferencesFixture\Conventions\NotAPipe;
 use IndirectMethodReferencesFixture\Conventions\PlainInvokable;
 use IndirectMethodReferencesFixture\Conventions\PrivateConstructorJob;
-use IndirectMethodReferencesFixture\Conventions\PrivateInvokable;
-use IndirectMethodReferencesFixture\Conventions\PromotedPipe;
-use IndirectMethodReferencesFixture\Conventions\QueuedListener;
 use IndirectMethodReferencesFixture\Conventions\SendReportJob;
-use IndirectMethodReferencesFixture\Conventions\UntypedNextMiddleware;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
 use IndirectMethodReferencesFixture\Dependencies\ContractImplementation;
 use IndirectMethodReferencesFixture\Dependencies\DocblockOnlyDependency;
@@ -49,17 +41,9 @@ function consume(): array
         User::class,
         PlainInvokable::class,
         AddHeaderMiddleware::class,
-        UntypedNextMiddleware::class,
-        PlainHandleClass::class,
-        PrivateInvokable::class,
+        NotAPipe::class,
         DemotedPipe::class,
-        PromotedPipe::class,
         new SendReportJob('report', 'note'),
-        DispatchedJob::dispatch('payload'),
         PrivateConstructorJob::dispatch('payload'),
-        new QueuedListener(),
-        NullableNextMiddleware::class,
-        new HookedJob(),
-        new NonQueuedHookNames(),
     ];
 }

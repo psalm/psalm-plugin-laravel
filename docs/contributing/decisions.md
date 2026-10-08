@@ -330,21 +330,21 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 ### Dead code on Psalm 7: edges, not suppressions, for convention entry points
 
-**Decision:** Methods Laravel calls by convention (invokable `__invoke`, pipe/middleware `handle`/`terminate`, queued/bus job `handle`/`failed`, `Dispatchable` job constructors) are rooted by class-conditional edges recorded in `IndirectMethodReferenceHandler` ("class is alive => this method is alive"), not by `SuppressHandler` entries. The edge is sourced at the class node (`Context::$self`, no file path), so an unreferenced job or invokable is still reported as `UnusedClass`.
+**Decision:** Methods Laravel calls by convention (invokable `__invoke`, pipe `handle`/`terminate`, queued/bus job `handle`/`failed`, `Dispatchable` constructors) and the hooks the queue reads off a job (`$tries`, `middleware()`, `uniqueId()`, ...) are rooted by class-conditional edges ("class is alive => this member is alive") in `IndirectMethodReferenceHandler::RULES`, not by `SuppressHandler` entries. The edge is sourced at the class node (`Context::$self`, no file path), so an unreferenced job stays `UnusedClass`.
 
-**Why:** Psalm 7 resolves dead code by reachability over the code-use graph, so an uncalled entry method is never alive and its private dependencies cascade into error-level `UnusedProperty`/`UnusedMethod`. A suppression hides only the entry point's own issue and adds no edge.
+**Why:** Psalm 7 resolves dead code by reachability, so an uncalled entry method is never alive and its private dependencies cascade into error-level `UnusedProperty`/`UnusedMethod`. A suppression hides only the entry point's own issue and adds no edge.
 
 **Probed dead ends:**
-- Suppression: adds no edge, so the cascade stays.
-- Mutating `MethodStorage::$public_api`: an unconditional root (even for dead classes) that mutates Psalm storage instead of using the reference API.
-- Call-site AST hooks on `Route::*` / `dispatch()`: too many syntactic forms, and string aliases (`'Plain@show'`) need a booted app.
-- Roots derived from the booted router: deferred; it needs a trusted boot and goes stale with route caching and env.
+- Suppression: adds no edge.
+- Mutating `MethodStorage::$public_api`: an unconditional root, even for dead classes, and it mutates Psalm storage.
+- Call-site AST hooks on `Route::*` / `dispatch()`: too many syntactic forms; string aliases (`'Plain@show'`) need a booted app.
+- Roots from the booted router: deferred; needs a trusted boot and goes stale with route caching and env.
 
-**Boundaries:** Concrete user classes only; the target is the declaring method, public and non-static. A pipe is recognised only by a *native* `Closure` type on `handle()`'s second parameter. Route actions on non-controller classes, auto-discovered listeners and the remaining `SuppressHandler` convention entries are not migrated yet.
+**Boundaries:** concrete user classes; public non-static members (the `Dispatchable` constructor at any visibility); a pipe needs a *native* `Closure` (or `?Closure`) on `handle()`'s second parameter. Not covered: route actions on non-controller classes, auto-discovered listeners, the remaining `SuppressHandler` convention entries.
 
-**Queue hooks:** a queued class (`ShouldQueue` or a bus trait) also roots the public non-static properties and methods the queue reads off the job object itself (`$tries`, `$timeout`, `middleware()`, `uniqueId()`, `retryUntil()`, ...; the lists live in `IndirectMethodReferenceHandler`), when the project declares them. Without this, a queued job that becomes alive starts reporting them as unused.
-
-**Accepted imprecision:** a `ShouldQueue`-only class (no bus trait) gets no `handle` method injection, because it may be a queued listener and `CallQueuedListener` passes the event data positionally. `make:job` always adds `Queueable`, so real jobs are covered.
+**Known limitations (accepted):**
+- A `ShouldQueue`-only class (no bus trait) gets no `handle` parameter injection: it may be a listener, and `CallQueuedListener` passes the event positionally. `make:job` always adds `Queueable`.
+- Used traits are read from the class and its parents only, not from traits composed of other traits, and a `class_alias()`ed trait is not recognised.
 
 ## Handler Registration Order
 

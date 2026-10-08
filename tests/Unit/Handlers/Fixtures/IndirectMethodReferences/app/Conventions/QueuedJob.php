@@ -6,11 +6,13 @@ namespace IndirectMethodReferencesFixture\Conventions;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use IndirectMethodReferencesFixture\Dependencies\JobHandleDependency;
 
 final class SendReportJob implements ShouldQueue
 {
     use Queueable;
+
+    /** Read off the job by the queue, not by user code. */
+    public int $tries = 3;
 
     public function __construct(
         private readonly string $reportId,
@@ -25,5 +27,18 @@ final class SendReportJob implements ShouldQueue
     public function failed(\Throwable $exception): void
     {
         \assert($this->failureNote !== '' && $exception->getMessage() !== '');
+    }
+
+    public function uniqueId(): string
+    {
+        return $this->reportId;
+    }
+}
+
+final class JobHandleDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
     }
 }
