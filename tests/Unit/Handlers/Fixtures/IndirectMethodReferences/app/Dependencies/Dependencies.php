@@ -165,3 +165,19 @@ final class PrivateInvokeDependency
         \assert(\class_exists(self::class));
     }
 }
+
+final class DemotedPipeDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}
+
+final class PromotedPipeDependency
+{
+    public function __construct()
+    {
+        \assert(\class_exists(self::class));
+    }
+}

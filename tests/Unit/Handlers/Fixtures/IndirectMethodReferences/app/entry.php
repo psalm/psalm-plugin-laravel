@@ -9,10 +9,12 @@ use IndirectMethodReferencesFixture\Controllers\ConcreteController;
 use IndirectMethodReferencesFixture\Controllers\DriverController;
 use IndirectMethodReferencesFixture\Controllers\InvocableController;
 use IndirectMethodReferencesFixture\Conventions\AddHeaderMiddleware;
+use IndirectMethodReferencesFixture\Conventions\DemotedPipe;
 use IndirectMethodReferencesFixture\Conventions\DispatchedJob;
 use IndirectMethodReferencesFixture\Conventions\PlainHandleClass;
 use IndirectMethodReferencesFixture\Conventions\PlainInvokable;
 use IndirectMethodReferencesFixture\Conventions\PrivateInvokable;
+use IndirectMethodReferencesFixture\Conventions\PromotedPipe;
 use IndirectMethodReferencesFixture\Conventions\SendReportJob;
 use IndirectMethodReferencesFixture\Conventions\UntypedNextMiddleware;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
@@ -45,6 +47,8 @@ function consume(): array
         UntypedNextMiddleware::class,
         PlainHandleClass::class,
         PrivateInvokable::class,
+        DemotedPipe::class,
+        PromotedPipe::class,
         new SendReportJob('report', 'note'),
         DispatchedJob::dispatch('payload'),
     ];

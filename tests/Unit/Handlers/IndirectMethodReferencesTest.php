@@ -71,6 +71,8 @@ final class IndirectMethodReferencesTest extends TestCase
             'Conventions\SendReportJob',              // ShouldQueue: handle + failed
             'Dependencies\JobHandleDependency',       // queued handle() parameter
             'Conventions\DispatchedJob',              // Bus Dispatchable: dispatch() builds it via `new static`
+            'Dependencies\PromotedPipeDependency',    // pipe handle() promoted to public by the parent's trait adaptation
+            'Conventions\PromotedPipe::',             // ... so the container-built concrete class is alive through it
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -85,7 +87,6 @@ final class IndirectMethodReferencesTest extends TestCase
             'Commands\ReferenceCommand::helper',                 // public command method other than handle()
             'Models\User::privateTeam',                          // non-public relationship
             'Models\User::ordinaryUnused',                       // plain model method
-            'Dependencies\DocblockOnlyDependency::__construct',  // docblock-only type: invisible to the container
             'Conventions\UntypedNextMiddleware::handle',         // $next is not a native Closure: not a pipe
             'Conventions\PlainHandleClass::handle',              // a bare handle() is no contract
         ] as $marker) {
@@ -106,6 +107,9 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertStringContainsString('Conventions\DeadJob', $unusedClasses, 'Expected an unreferenced job to remain an unused class.');
         // A private __invoke is not callable by Laravel, so its parameter is not autowired.
         $this->assertStringContainsString('Dependencies\PrivateInvokeDependency', $unusedClasses, 'Expected a private __invoke to be no entry point.');
+        // The trait adaptation lives on the abstract parent that uses the trait, not on the concrete
+        // class that inherits the method: demoted there, handle() is no pipe entry.
+        $this->assertStringContainsString('Dependencies\DemotedPipeDependency', $unusedClasses, 'Expected an inherited protected-adapted handle() to be no entry point.');
 
         // A public command method other than handle() is not an entrypoint either; its
         // parameter staying an unused class proves the restriction applies beyond controllers.

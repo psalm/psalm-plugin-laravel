@@ -528,12 +528,18 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
                 continue;
             }
 
+            // A `use T { f as protected; }` adaptation is stored on the class that uses the trait,
+            // which for an inherited method is the appearing class (the parent), not this one.
+            $appearingStorage = $appearing->fq_class_name === $storage->name
+                ? $storage
+                : ClassLineage::storage($codebase, $appearing->fq_class_name);
+
             yield [
                 'name' => $name,
                 'appearing' => $appearing,
                 'declaring' => $declaring,
                 'storage' => $method,
-                'visibility' => $storage->trait_visibility_map[$name] ?? $method->visibility,
+                'visibility' => $appearingStorage?->trait_visibility_map[$name] ?? $method->visibility,
             ];
         }
     }
