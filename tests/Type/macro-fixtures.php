@@ -178,3 +178,8 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
     'testMailFacadeMacro',
     static fn(string $to): string => "queued:{$to}",
 );
+
+// Morph-map alias for RelationCallbackParamsHandler (#1676): `whereHasMorph('reportable', ['damaged-vehicle'], ...)`
+// must resolve the alias to the model exactly as Laravel's `Relation::getMorphedModel()` does at runtime.
+// Registered as a plain string, so nothing is loaded ahead of Psalm's scan order.
+\Illuminate\Database\Eloquent\Relations\Relation::morphMap(['damaged-vehicle' => 'App\Models\Vehicle']);
