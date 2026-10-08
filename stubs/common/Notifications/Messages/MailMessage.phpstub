@@ -21,6 +21,42 @@ class MailMessage extends SimpleMessage implements Renderable
     public $view;
 
     /**
+     * The view data for the message.
+     *
+     * Passed to Blade as named variables, so keys are strings.
+     *
+     * @var array<string, mixed>
+     */
+    public $viewData = [];
+
+    /**
+     * Set the view for the mail message.
+     *
+     * @param  array<array-key, mixed>|string  $view
+     * @param  array<string, mixed>  $data
+     * @return $this
+     */
+    public function view($view, array $data = []) {}
+
+    /**
+     * Set the plain text view for the mail message.
+     *
+     * @param  string  $textView
+     * @param  array<string, mixed>  $data
+     * @return $this
+     */
+    public function text($textView, array $data = []) {}
+
+    /**
+     * Set the Markdown template for the notification.
+     *
+     * @param  string  $view
+     * @param  array<string, mixed>  $data
+     * @return $this
+     */
+    public function markdown($view, array $data = []) {}
+
+    /**
      * The "from" information for the message.
      *
      * The name is optional: MailChannel reads it with Arr::get($from, 1). The address may be an array,

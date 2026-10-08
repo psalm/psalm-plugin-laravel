@@ -41,8 +41,8 @@ final class AnonymousClassNameDetectorTest extends TestCase
     {
         // Real-world example from Algolia\ScoutExtended (motivating case for this fix).
         yield 'algolia scout aggregator' => [
-            'Algolia\\ScoutExtended\\Searchable\\_Users_alies_code_IxDF_IxDF_web_vendor_algolia_scout_extended_src_Searchable_Aggregator_php_279_6842',
-            '/Users/alies/code/IxDF/IxDF-web/vendor/algolia/scout-extended/src/Searchable/Aggregator.php',
+            'Algolia\\ScoutExtended\\Searchable\\_home_app_vendor_algolia_scout_extended_src_Searchable_Aggregator_php_279_6842',
+            '/home/app/vendor/algolia/scout-extended/src/Searchable/Aggregator.php',
         ];
 
         yield 'namespaced unix path' => [
