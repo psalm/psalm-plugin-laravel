@@ -41,6 +41,19 @@ final class PreludeBuilder
         'attributes' => true, 'slot' => true, 'component' => true,
     ];
 
+    /**
+     * `@session`/`@context` push an outer `$value` with `if (isset($value)) { $__sessionPrevious[] =
+     * $value; }` and pop it back in `@endsession`/`@endcontext` (CompilesSessions, CompilesContexts).
+     * Left undeclared, the push reports PossiblyUndefinedGlobalVariable; declared `mixed`, a nested
+     * `@endsession`'s `!empty()` reports RiskyTruthyFalsyComparison under the default config, and the
+     * `array_pop()` and a nested push report Mixed* (#1722). Declared only when the compiled output
+     * contains that push, so an author's own same-named variable keeps the base behavior.
+     */
+    private const SAVE_STACK_TYPES = [
+        '__sessionPrevious' => 'list<mixed>',
+        '__contextPrevious' => 'list<mixed>',
+    ];
+
     private const COMPONENT_ATTRIBUTES_TYPE = '\Illuminate\View\ComponentAttributeBag';
 
     private const COMPONENT_SLOT_TYPE = '\Illuminate\View\ComponentSlot';
@@ -73,8 +86,8 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        foreach ($this->undeclaredVariables($compiled, $declared) as $name) {
-            $lines[] = "/** @var mixed \${$name} */";
+        foreach ($this->undeclaredVariables($compiled, $declared) as $name => $type) {
+            $lines[] = "/** @var {$type} \${$name} */";
         }
 
         return "<?php\n" . \implode("\n", $lines) . "\n?>\n";
@@ -182,7 +195,7 @@ final class PreludeBuilder
 
     /**
      * @param array<string, string> $declared
-     * @return list<string> variable names (without $), sorted, deduplicated
+     * @return array<string, string> variable name (without $) => type, sorted by name
      */
     private function undeclaredVariables(string $compiled, array $declared): array
     {
@@ -208,6 +221,9 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $written = [];
 
+            /** @var array<string, true> roots of an `if (isset($value)) { $root[] = $value; }` push */
+            public array $valuePushed = [];
+
             /**
              * @psalm-external-mutation-free
              */
@@ -225,6 +241,22 @@ final class PreludeBuilder
                     $this->markWritten($node->var);
                 }
 
+                if ($node instanceof Node\Stmt\If_
+                    && $node->cond instanceof Node\Expr\Isset_
+                    && \count($node->cond->vars) === 1
+                    && $this->isValue($node->cond->vars[0])
+                    && \count($node->stmts) === 1
+                    && $node->stmts[0] instanceof Node\Stmt\Expression
+                    && $node->stmts[0]->expr instanceof Node\Expr\Assign
+                    && $this->isValue($node->stmts[0]->expr->expr)
+                    && $node->stmts[0]->expr->var instanceof Node\Expr\ArrayDimFetch
+                    && !$node->stmts[0]->expr->var->dim instanceof \PhpParser\Node\Expr
+                    && $node->stmts[0]->expr->var->var instanceof Node\Expr\Variable
+                    && \is_string($node->stmts[0]->expr->var->var->name)
+                ) {
+                    $this->valuePushed[$node->stmts[0]->expr->var->var->name] = true;
+                }
+
                 if ($node instanceof Node\Stmt\Foreach_) {
                     $this->markWritten($node->valueVar);
 
@@ -234,6 +266,12 @@ final class PreludeBuilder
                 }
 
                 return null;
+            }
+
+            /** @psalm-mutation-free */
+            private function isValue(Node\Expr $expr): bool
+            {
+                return $expr instanceof Node\Expr\Variable && $expr->name === 'value';
             }
 
             /**
@@ -276,19 +314,27 @@ final class PreludeBuilder
                 continue;
             }
 
-            // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping (Blade's
-            // `@session`/`@context` append to `$__sessionPrevious`/`$__contextPrevious` without a
-            // whole assignment); declaring it `mixed` widens the append result and turns the
-            // compiler's own `!empty()` epilogue into a RiskyTruthyFalsyComparison on the template
-            // line. Only a read-only `__` name is a host-app shared global (#1558).
+            // Keyed on the compiler's push shape, not the name. Accepted residual: an author who
+            // also writes `@session`/`@context` in the same template gets their own same-named
+            // variable typed `list<mixed>` too.
+            if (isset(self::SAVE_STACK_TYPES[$name], $visitor->valuePushed[$name])) {
+                $names[$name] = self::SAVE_STACK_TYPES[$name];
+
+                continue;
+            }
+
+            // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping; declaring
+            // an append target `mixed` widens the append result and turns an `!empty()` check on it
+            // into a RiskyTruthyFalsyComparison. Only a read-only `__` name is a host-app shared
+            // global (#1558).
             if (\str_starts_with($name, '__') && isset($visitor->written[$name])) {
                 continue;
             }
 
-            $names[] = $name;
+            $names[$name] = 'mixed';
         }
 
-        \sort($names);
+        \ksort($names);
 
         return $names;
     }

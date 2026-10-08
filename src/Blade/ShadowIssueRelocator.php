@@ -20,7 +20,6 @@ use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
-use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -182,19 +181,6 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        // `@session`/`@context` save an outer `$value` with `if (isset($value)) {
-        // $__sessionPrevious[] = $value; }` and read the stack back behind `isset()`
-        // (CompilesSessions, CompilesContexts), so Psalm sees a conditionally created global.
-        // Gated rather than declared in the prelude: a declared list would only move the noise onto
-        // the compiler's own `isset()` guards (PreludeBuilder::undeclaredVariables(), #1558).
-        // Exact-name, so an author's own conditionally assigned `$__`-prefixed local still reports.
-        if (
-            $issue instanceof PossiblyUndefinedGlobalVariable
-            && \preg_match('/^Possibly undefined global variable \$__(?:session|context)Previous,/', $issue->message) === 1
-        ) {
-            return false;
-        }
-
         // Laravel's own compiled guards on `$attributes`/`$component`/`$slot` (`isset()`, `??=`,
         // `instanceof`) exist to check what {@see PreludeBuilder::componentTypesFor()} now
         // declares as guaranteed inside a component view — most visibly when that view itself
@@ -289,14 +275,16 @@ final class ShadowIssueRelocator
             // matches the whole family by prefix rather than enumerating each name, unlike
             // `component`/`errors`/`attributes`/`slot` above. Except for `$__env` (excluded below,
             // same reason as `$errors`), a `$__`-prefixed name the prelude declares gets only the
-            // generic `@var mixed` fallback ({@see PreludeBuilder::undeclaredVariables()}, #1558),
-            // never a real type (contract types never reach the prelude,
-            // {@see BladeBootstrapper}). A guard on one usually renders the INFERRED wording
-            // (narrowing `mixed` drops `from_docblock`), but falsy reconciliation preserves
-            // docblock provenance (`Docblock-defined type empty-mixed ... is always falsy`), so
-            // both branches occur and the wide `isAmbientGuardName()` (not the docblock-narrowed
-            // `isAmbientDocblockGuardName()`) is the correct matcher here, and unconditional: unlike `attributes`/`slot`, the bookkeeping compiles
-            // identically whether or not the enclosing view is itself a component.
+            // generic `@var mixed` fallback ({@see PreludeBuilder::undeclaredVariables()}, #1558)
+            // or the `@session`/`@context` save stacks' `list<mixed>` (#1722), never a class type
+            // (contract types never reach the prelude, {@see BladeBootstrapper}). A guard on one
+            // usually renders the INFERRED wording (narrowing `mixed` drops `from_docblock`), but
+            // falsy reconciliation preserves docblock provenance (`Docblock-defined type
+            // empty-mixed ... is always falsy`), so both branches occur and the wide
+            // `isAmbientGuardName()` (not the docblock-narrowed `isAmbientDocblockGuardName()`) is
+            // the correct matcher here, and unconditional: unlike `attributes`/`slot`, the
+            // bookkeeping compiles identically whether or not the enclosing view is itself a
+            // component.
             //
             // Trade-off: an author who writes their own `$__`-prefixed local inside `@php`
             // (`$__myFlag = ...`), a name Blade's own compiled output never happens to collide with
