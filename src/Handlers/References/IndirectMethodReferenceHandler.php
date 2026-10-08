@@ -249,16 +249,16 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             $traits += ClassLineage::storage($codebase, $parent)->used_traits ?? [];
         }
 
-        $dispatchable = isset($traits[\strtolower(BusDispatchable::class)]);
+        // `Foundation\Queue\Queueable` (the `make:job` scaffold) composes Bus `Dispatchable` and `Queueable`.
+        $dispatchable = isset($traits[\strtolower(BusDispatchable::class)])
+            || isset($traits[\strtolower(FoundationQueueable::class)]);
         $active = [
             'invokable' => isset($methods['__invoke']),
             // A native `Closure` on `$next` is all that tells a pipe from any other class with a
             // public handle(); a docblock does not count.
             'pipe' => isset($methods['handle']) && self::isNativeClosure($methods['handle']['storage']->params[1] ?? null),
             'dispatchable' => $dispatchable,
-            'busJob' => $dispatchable
-                || isset($traits[\strtolower(BusQueueable::class)])
-                || isset($traits[\strtolower(FoundationQueueable::class)]),
+            'busJob' => $dispatchable || isset($traits[\strtolower(BusQueueable::class)]),
         ];
         $active['queued'] = $active['busJob'] || ClassLineage::isA($codebase, $storage->name, ShouldQueue::class);
 

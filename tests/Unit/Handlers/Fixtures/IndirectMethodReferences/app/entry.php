@@ -43,7 +43,7 @@ function consume(): array
         AddHeaderMiddleware::class,
         NotAPipe::class,
         DemotedPipe::class,
-        new SendReportJob('report', 'note'),
+        SendReportJob::dispatch('report', 'note'),
         PrivateConstructorJob::dispatch('payload'),
     ];
 }

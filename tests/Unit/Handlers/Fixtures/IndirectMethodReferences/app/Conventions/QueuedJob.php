@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace IndirectMethodReferencesFixture\Conventions;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
 
+/** The `make:job` scaffold trait composes Dispatchable, and `dispatch()` is the only caller of the constructor. */
 final class SendReportJob implements ShouldQueue
 {
     use Queueable;
