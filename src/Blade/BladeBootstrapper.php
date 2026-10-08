@@ -233,22 +233,21 @@ final class BladeBootstrapper
      */
     private function warnUntrustedEnvironment(array $reasons): void
     {
-        $shown = 3;
-        $lines = \array_map(
-            static fn(string $reason): string => '  - ' . $reason,
-            \array_slice($reasons, 0, $shown),
+        $count = \count($reasons);
+
+        // Short by default: the trigger is often a vendor package the user cannot change, and the
+        // cost is speed only. The per-input list goes to --debug.
+        $this->output->warning(
+            'Laravel plugin: Blade shadow cache skipped for this run (' . $count . ' compiler '
+            . ($count === 1 ? 'input' : 'inputs') . ' cannot be fingerprinted): every template is recompiled. '
+            . 'Slower only; analysis results are unaffected. Run with --debug to list the inputs.',
         );
 
-        if (\count($reasons) > $shown) {
-            $lines[] = '  (+' . (\count($reasons) - $shown) . ' more)';
-        }
-
-        $this->output->warning(
-            'Laravel plugin: Blade shadow cache skipped for this run: every template is recompiled '
-            . '(slower; analysis results are unaffected). Cannot fingerprint the Blade compiler environment:' . "\n"
-            . \implode("\n", $lines) . "\n"
+        $this->output->debug(
+            "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
+            . \implode('', \array_map(static fn(string $reason): string => '  - ' . $reason . "\n", $reasons))
             . 'To restore caching, declare such callbacks `static fn` / `static function`, '
-            . "or register a static method (`[Foo::class, 'bar']`).",
+            . "or register a static method (`[Foo::class, 'bar']`).\n",
         );
     }
 

@@ -1072,7 +1072,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
         $this->assertStringContainsString('Blade shadow cache skipped for this run', $this->progress->warningText());
-        $this->assertStringContainsString("\n  - directive \"shout\": internal function strtoupper() has no source file", $this->progress->warningText());
+        $this->assertStringContainsString("\n  - directive \"shout\": internal function strtoupper() has no source file", \implode('', $this->progress->debugMessages));
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1092,7 +1092,7 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     #[Test]
-    public function the_untrusted_environment_warning_lists_at_most_three_reasons_and_the_fix(): void
+    public function the_untrusted_environment_warning_is_short_and_the_reasons_go_to_debug(): void
     {
         $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
 
@@ -1108,9 +1108,13 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $warning = $this->progress->warningText();
-        $this->assertSame(3, \substr_count($warning, "\n  - "));
-        $this->assertStringContainsString("\n  (+2 more)\n", $warning);
+        $this->assertStringContainsString('(5 compiler inputs cannot be fingerprinted)', $warning);
         $this->assertStringContainsString('analysis results are unaffected', $warning);
-        $this->assertStringEndsWith("register a static method (`[Foo::class, 'bar']`).", $warning);
+        $this->assertStringContainsString('--debug', $warning);
+        $this->assertStringNotContainsString("\n", $warning, 'the per-input list belongs to --debug');
+
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertSame(5, \substr_count($debug, "\n  - directive \""));
+        $this->assertStringContainsString("register a static method (`[Foo::class, 'bar']`).", $debug);
     }
 }
