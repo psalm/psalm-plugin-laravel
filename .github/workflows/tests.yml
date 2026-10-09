@@ -68,10 +68,10 @@ jobs:
           - php: '8.4'
             laravel: '13.3.0'
           - php: '8.2'
-            laravel: '12.14.0'
+            laravel: '12.20.0'
           # Highest 12.x: the enum $connection path is live since 12.28.
           - php: '8.2'
-            laravel: '^12.14'
+            laravel: '^12.20'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -149,7 +149,7 @@ jobs:
         # TEMPORARY upper bound on the 13.x cell: laravel/framework v13.32.0 crashes Psalm's
         # scan phase outright. Restore this to ^13.3 once Psalm parses the tag.
         # @see https://github.com/vimeo/psalm/issues/11958
-        laravel: [ '>=13.3 <13.32', ^12.14 ]
+        laravel: [ '>=13.3 <13.32', ^12.20 ]
         dependencies: [ highest ]
         exclude:
           - php: 8.2
@@ -181,13 +181,11 @@ jobs:
       - name: Run Psalm/Type tests
         run: composer test:type
 
-  # This job doubles as the Phase 1 "drift canary" for the laravel/ai integration.
-  # The version range in Plugin::optionalIntegrationStubs() has no upper ceiling
-  # below 1.0 (a future minor's coverage must never be silently dropped just to
-  # dodge a rare drift-caused false positive), so every run here installs
-  # whatever laravel/ai release is newest, and the weekly schedule plus
-  # workflow_dispatch trigger (inherited from the workflow-level `on:` block above)
-  # already exercise that install on a cadence independent of PHP-file changes.
+  # This job verifies the laravel/ai stubs. The plugin supports laravel/ai
+  # `>=1.0.0 <2.0.0` only; the exact 1.0.0 floor leg proves the lower bound
+  # while the floating leg catches drift in newer 1.x releases. The weekly
+  # schedule and workflow_dispatch trigger (inherited from the workflow-level
+  # `on:` block above) exercise those installs independently of PHP-file changes.
   #
   # What this catches: laravel/ai failing to install; a stubbed class being
   # renamed/removed (every PromptInjection phpt SKIPIFs on class presence, so
@@ -203,12 +201,12 @@ jobs:
     name: Type test (laravel/ai ${{ matrix.laravel_ai_version }})
     runs-on: ubuntu-latest
     strategy:
-      # Keep the exact floor and floating stable legs independently visible.
+      # Keep the exact 1.0.0 floor and the floating stable leg independently visible.
       fail-fast: false
       matrix:
         include:
-          - laravel_ai_version: '0.11.0'
-          - laravel_ai_version: '>=0.11.0 <1.0.0'
+          - laravel_ai_version: '1.0.0'
+          - laravel_ai_version: '>=1.0.0 <2.0.0'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -244,18 +242,18 @@ jobs:
 
       # laravel/ai is optional (not a root composer.json dependency, see #937) and requires PHP
       # ^8.3, so it is installed here rather than in composer.json to keep it off the PHP 8.2
-      # lanes. Both stable matrix legs run the PromptInjection PHPT suite.
+      # lanes. Every leg exercises the 1.x stubs.
       - name: Install optional laravel/ai integration
         run: composer require --dev "laravel/ai:${{ matrix.laravel_ai_version }}" --no-interaction --no-progress
 
       - name: Run laravel/ai parity checker unit test
         run: vendor/bin/phpunit tests/Unit/Ci/LaravelAiStubParityCheckerTest.php
 
-      - name: Verify pinned laravel/ai release
-        if: matrix.laravel_ai_version == '0.11.0'
+      - name: Verify pinned laravel/ai 1.0.0 release
+        if: matrix.laravel_ai_version == '1.0.0'
         run: >-
           php -r 'require "vendor/autoload.php";
-          exit(Composer\InstalledVersions::getPrettyVersion("laravel/ai") === "v0.11.0" ? 0 : 1);'
+          exit(Composer\InstalledVersions::getPrettyVersion("laravel/ai") === "v1.0.0" ? 0 : 1);'
 
       - name: Check laravel/ai stub-vs-vendor signature parity
         # Psalm's registered stubs win over the real vendor class during analysis
@@ -272,18 +270,19 @@ jobs:
       - name: Run Psalm/Type tests
         run: composer test:type -- --log-junit=/tmp/type-tests-junit.xml --no-progress
 
-      - name: Report type-test failure against the newest laravel/ai
-        # The type-test suite failed while running against the newest installed
-        # laravel/ai release. This may be a plugin regression, or a stubbed class
-        # renamed/removed upstream (the SKIPIF guard below would also catch that).
-        # A stubbed method's native signature drifting is covered separately by the
-        # parity check above, not by this suite: Psalm resolves calls here against
-        # the stub, not the vendor, so this particular failure is not that.
-        # Scroll up to the psalm-tester diff for the exact failing issue/class/line.
+      - name: Report type-test failure against the selected laravel/ai constraint
+        # The type-test suite failed under this leg's resolved laravel/ai release.
+        # This may be a plugin regression, or a stubbed class renamed/removed
+        # upstream (the SKIPIF guard below would also catch that). A stubbed method's
+        # native signature drifting is covered separately by the parity check above,
+        # not by this suite: Psalm resolves calls here against the registered
+        # stubs, not the vendor source. Scroll up to the psalm-tester
+        # diff for the exact failing issue/class/line.
         if: failure()
         run: |
-          echo "::error::Type-test suite failed against the newest installed laravel/ai release." \
-            "See the psalm-tester diff above for the exact failure. Reproduce locally with:" \
+          echo "::error::Type-test suite failed against laravel/ai constraint" \
+            "'${{ matrix.laravel_ai_version }}'. See the psalm-tester diff above for the exact failure." \
+            "Reproduce locally with:" \
             "composer require --dev 'laravel/ai:${{ matrix.laravel_ai_version }}' && composer test:type"
 
       - name: Verify the PromptInjection phpt suite actually ran
@@ -296,12 +295,12 @@ jobs:
         # running phpunit a second time.
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-junit.xml PromptInjection
 
-  # This intentionally separate job avoids evaluating a matrix-dependent job
-  # condition before GitHub has expanded the matrix. It is visible only on the
-  # scheduled/manual workflow paths and never blocks a change when unreleased
-  # laravel/ai APIs drift ahead of the stable 0.11 contract.
+  # This intentionally separate job is visible only on the scheduled/manual
+  # workflow paths and never blocks a change when unreleased laravel/ai APIs
+  # drift ahead of the stable 1.x contract. It tracks the `1.x-dev` branch, i.e.
+  # what the next 1.x release will look like, so drift surfaces before it ships.
   type_tests_laravel_ai_dev:
-    name: Type test (laravel/ai 0.x-dev canary)
+    name: Type test (laravel/ai 1.x-dev canary)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
     runs-on: ubuntu-latest
@@ -339,13 +338,13 @@ jobs:
           --no-interaction --no-progress --prefer-dist
 
       - name: Install unreleased laravel/ai canary
-        run: composer require --dev 'laravel/ai:0.x-dev' --no-interaction --no-progress
+        run: composer require --dev "laravel/ai:1.x-dev" --no-interaction --no-progress
 
       - name: Check laravel/ai stub-vs-vendor signature parity
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
       - name: Run Psalm/Type tests
-        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-dev-junit.xml --no-progress
+        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-1.x-dev-junit.xml --no-progress
 
       - name: Verify the PromptInjection phpt suite actually ran
-        run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-dev-junit.xml PromptInjection
+        run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-1.x-dev-junit.xml PromptInjection

@@ -5,11 +5,12 @@ namespace Laravel\Ai\Responses;
 use Illuminate\Support\Collection;
 use Laravel\Ai\Approvals\PendingApproval;
 use Laravel\Ai\Messages\Message;
+use Laravel\Ai\Responses\Concerns\HasRawResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Step;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
-use Laravel\Ai\Responses\Data\Usage;
 
 /**
  * LLM-generated text is untrusted. The model is downstream of every
@@ -19,9 +20,9 @@ use Laravel\Ai\Responses\Data\Usage;
  * way back out: passing it to sinks like SQL, shell, or HTML yields the
  * standard Tainted* findings.
  *
- * Property reads (`$response->text`) are tainted programmatically by
- * Handlers\Ai\LlmOutputTaintHandler — `@psalm-taint-source` on a
- * property is not honored by Psalm.
+ * Property reads (`$response->text` and `$response->reasoning`) are tainted
+ * programmatically by Handlers\Ai\LlmOutputTaintHandler —
+ * `@psalm-taint-source` on a property is not honored by Psalm.
  *
  * Member list mirrors `vendor/laravel/ai/src/Responses/TextResponse.php`
  * verbatim: Psalm merges an omitted member in from the real class rather
@@ -33,9 +34,9 @@ use Laravel\Ai\Responses\Data\Usage;
  *
  * @psalm-api
  */
-class TextResponse
+class TextResponse implements \Stringable
 {
-    use Concerns\HasRawResponse;
+    use HasRawResponse;
 
     /** @var Collection<int, Message> */
     public Collection $messages;
@@ -52,7 +53,9 @@ class TextResponse
     /** @var Collection<int, PendingApproval> */
     public Collection $pendingApprovals;
 
-    public function __construct(public string $text, public Usage $usage, public Meta $meta) {}
+    public string $reasoning = '';
+
+    public function __construct(public string $text, public TextUsage $usage, public Meta $meta) {}
 
     /** @param Collection<int, Message> $messages */
     public function withMessages(Collection $messages): self {}
@@ -63,11 +66,14 @@ class TextResponse
      */
     public function withToolCallsAndResults(Collection $toolCalls, Collection $toolResults): self {}
 
+    /** @psalm-taint-source input */
+    public function withReasoning(string $reasoning): self {}
+
     /** @param Collection<int, Step> $steps */
     public function withSteps(Collection $steps): self {}
 
     /** @param Collection<int, PendingApproval> $pendingApprovals */
-    public function withPendingApprovals(Collection $pendingApprovals): self {}
+    public function withPendingApprovals(Collection $pendingApprovals): static {}
 
     public function hasPendingApprovals(): bool {}
 

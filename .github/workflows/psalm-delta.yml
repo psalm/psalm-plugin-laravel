@@ -5,8 +5,9 @@ name: Psalm delta
 # comment with per-app issue deltas. Informational only, never fails the PR (a
 # delta is often intended: fixing FPs REMOVES issues, new narrowing ADDS some).
 #
-# `/psalm-delta [group|app ...]` (grammar: bin/ci/delta-select-apps.php, groups:
-# bin/ci/test-apps.yml); `help`/unknown tokens get a reply and start no run.
+# `/psalm-delta [group|app|--flag ...]` (grammar: bin/ci/delta-select-apps.php,
+# groups + allowed flags: bin/ci/test-apps.yml); `help`/unknown tokens get a
+# reply and start no run. Flags go to `psalm-laravel analyze` on both sides.
 #
 # Architecture:
 #   prepare — resolve the app selection + refs, emit the filtered app matrix
@@ -77,6 +78,7 @@ jobs:
       matrix: ${{ steps.select.outputs.matrix }}
       apps_csv: ${{ steps.select.outputs.apps_csv }}
       label: ${{ steps.select.outputs.label }}
+      flags: ${{ steps.select.outputs.flags }}
       base_sha: ${{ steps.refs.outputs.base_sha }}
       head_sha: ${{ steps.refs.outputs.head_sha }}
       base_label: ${{ steps.refs.outputs.base_label }}
@@ -116,6 +118,7 @@ jobs:
             core.setOutput('matrix', JSON.stringify(selection.matrix));
             core.setOutput('apps_csv', selection.apps_csv);
             core.setOutput('label', selection.label);
+            core.setOutput('flags', selection.flags);
 
       - name: Reply with help or the selector error
         if: steps.select.outputs.status == 'help' || steps.select.outputs.status == 'error'
@@ -163,8 +166,17 @@ jobs:
             const headRepo = pr.head.repo ? pr.head.repo.full_name : null;
             const isFork = headRepo !== expectedRepo;
             core.setOutput('is_fork', isFork ? 'true' : 'false');
-            const baseSha = pr.base.sha;
+            // Base = merge-base, not pr.base.sha: the base-branch tip includes commits
+            // the PR branch lacks, so every 4.x change since the fork point would show
+            // up inverted as PR delta. Matches bin/ci/delta.sh's merge-base default.
             const headSha = pr.head.sha;
+            const { data: cmp } = await github.rest.repos.compareCommitsWithBasehead({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              basehead: `${pr.base.sha}...${headSha}`,
+              per_page: 1,
+            });
+            const baseSha = cmp.merge_base_commit.sha;
             core.setOutput('base_sha', baseSha);
             core.setOutput('head_sha', headSha);
             core.setOutput('base_label', `base-${baseSha.substring(0, 8)}`);
@@ -227,8 +239,7 @@ jobs:
           tools: composer:v2
 
       # Cache installed app source (clone + vendor) keyed on the immutable ref, so
-      # steady-state runs skip the cold composer install (dominant cost). Workspace
-      # path is stable, so the plugin path-repo symlink in vendor stays valid.
+      # steady-state runs skip the cold composer install (dominant cost).
       #
       # hashFiles(plugin-base/composer.json) namespaces the key by the measured
       # plugin's deps (superset of delta-app.sh's plugin_dep_sig, which determines
@@ -255,27 +266,27 @@ jobs:
           NAME: ${{ matrix.name }}
           REPO: ${{ matrix.repo }}
           REF: ${{ matrix.ref }}
-          PHP: ${{ matrix.php }}
           PROJECT_DIR: ${{ matrix.project_dir }}
-          PRIME: ${{ matrix.prime }}
+          BEFORE_INSTALL: ${{ matrix.before_install }}
           PSALM_ARGS: ${{ matrix.psalm_args }}
+          FLAGS: ${{ needs.prepare.outputs.flags }}
           BASE_LABEL: ${{ needs.prepare.outputs.base_label }}
           HEAD_LABEL: ${{ needs.prepare.outputs.head_label }}
         run: |
           mkdir -p out
           args=(
-            --app "$NAME" --repo "$REPO" --ref "$REF" --php "$PHP"
+            --app "$NAME" --repo "$REPO" --ref "$REF"
             --plugin-base "$GITHUB_WORKSPACE/plugin-base"
             --plugin-head "$GITHUB_WORKSPACE/plugin-pr"
             --out "$GITHUB_WORKSPACE/out"
             --base-label "$BASE_LABEL"
             --head-label "$HEAD_LABEL"
             --app-src "$GITHUB_WORKSPACE/app-cache/$NAME"
-            --date-marker cache
           )
           [ -n "$PROJECT_DIR" ] && args+=(--project-dir "$PROJECT_DIR")
-          [ -n "$PRIME" ] && args+=(--prime "$PRIME")
+          [ -n "$BEFORE_INSTALL" ] && args+=(--before-install "$BEFORE_INSTALL")
           [ -n "$PSALM_ARGS" ] && args+=(--psalm-args "$PSALM_ARGS")
+          [ -n "$FLAGS" ] && args+=(--flags "$FLAGS")
           # Harness (default branch) owns measurement; the PR cannot alter it.
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
 
@@ -365,6 +376,7 @@ jobs:
           HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
           APPS: ${{ needs.prepare.outputs.apps_csv }}
           SELECTION: ${{ needs.prepare.outputs.label }}
+          FLAGS: ${{ needs.prepare.outputs.flags }}
         run: |
           MARKER='<!-- psalm-delta-report -->'
 
@@ -372,13 +384,13 @@ jobs:
             printf '%s\n' "$MARKER"
             php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
               --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
-              --date-marker=cache --details --selection="$SELECTION" \
+              --details --selection="$SELECTION" --flags="$FLAGS" \
               || echo "Delta failed to produce a report. Check the workflow logs."
           } > comment.md
           # Quoted heredoc: literal backticks for the inline code span, no expansion.
           cat >> comment.md <<'FOOTER'
 
-          <sub>Informational only — never fails the PR. Pick apps with `/psalm-delta <group|app> ...` (`/psalm-delta help` lists them). Reproduce locally: `bash bin/ci/delta.sh --apps "<group|app> ..." <pr-branch>`.</sub>
+          <sub>Informational only — never fails the PR. Pick apps with `/psalm-delta <group|app> ...`, add `--blade`-style flags (`/psalm-delta help` lists both). Reproduce locally: `bash bin/ci/delta.sh --apps "<group|app|--flag> ..." <pr-branch>`.</sub>
           FOOTER
 
           # Sticky: edit existing delta comment if present, else create.

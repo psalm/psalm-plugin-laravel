@@ -118,7 +118,7 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
     public function newQueryWithoutScope($scope) {}
 
     /**
-     * @param  array|int  $ids
+     * @param  array|int|string  $ids
      * @return \Illuminate\Database\Eloquent\Builder<$this>
      */
     public function newQueryForRestoration($ids) {}

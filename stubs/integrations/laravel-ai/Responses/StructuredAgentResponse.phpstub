@@ -7,7 +7,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use JsonSerializable;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 
 /**
  * Structured-output sibling of AgentResponse. `$text` is already covered by
@@ -35,7 +35,7 @@ class StructuredAgentResponse extends AgentResponse implements Arrayable, ArrayA
     /**
      * @param array<array-key, mixed> $structured
      */
-    public function __construct(string $invocationId, array $structured, string $text, Usage $usage, Meta $meta) {}
+    public function __construct(string $invocationId, array $structured, string $text, TextUsage $usage, Meta $meta) {}
 
     /**
      * @return array<array-key, mixed>

@@ -712,6 +712,115 @@ class Builder implements BuilderContract
      */
     public function count($columns = '*') {}
 
+    // Eloquent\Builder::$passthru methods: at runtime these return toBase()->{$method}(),
+    // so they belong to Query\Builder. They are re-declared here because Psalm follows a
+    // single @mixin hop: relations (@mixin Eloquent\Builder) would otherwise never see the
+    // Query\Builder signatures; Relation::__call then yields mixed for these non-fluent
+    // results (MethodForwardingHandler only resolves fluent ones). Types and taint sinks
+    // mirror stubs/common/Database/Query/Builder.phpstub (taint sinks must live in this file
+    // too, or Eloquent\Builder receivers lose them). See #1734.
+    // Not declared: count (above), sum/avg/average/min/max (Relation stub), aggregate,
+    // existsOr, doesntExistOr (mixed upstream), dump/dumpRawSql.
+
+    /** @return bool */
+    public function exists() {}
+
+    /** @return bool */
+    public function doesntExist() {}
+
+    /** @return string */
+    public function toSql() {}
+
+    /** @return string */
+    public function toRawSql() {}
+
+    /** @return never */
+    public function dd() {}
+
+    /** @return never */
+    public function ddRawSql() {}
+
+    /** @return \Illuminate\Support\Collection */
+    public function explain() {}
+
+    /** @return list<mixed> */
+    public function getBindings() {}
+
+    /** @return array{select: list<mixed>, from: list<mixed>, join: list<mixed>, where: list<mixed>, groupBy: list<mixed>, having: list<mixed>, order: list<mixed>, union: list<mixed>, unionOrder: list<mixed>} */
+    public function getRawBindings() {}
+
+    /** @return \Illuminate\Database\ConnectionInterface */
+    public function getConnection() {}
+
+    /** @return \Illuminate\Database\Query\Grammars\Grammar */
+    public function getGrammar() {}
+
+    /**
+     * @param  array  $columns
+     * @return int<0, max>
+     */
+    public function getCountForPagination($columns = ['*']) {}
+
+    /**
+     * @param  string  $column
+     * @param  string  $glue
+     * @return string
+     */
+    public function implode($column, $glue = '') {}
+
+    /** @return bool */
+    public function insert(array $values) {}
+
+    /**
+     * @param  array  $values
+     * @param  string|null  $sequence
+     * @return int
+     */
+    public function insertGetId(array $values, $sequence = null) {}
+
+    /** @return int<0, max> */
+    public function insertOrIgnore(array $values) {}
+
+    /**
+     * @param  array  $columns
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @return int
+     * @psalm-taint-sink sql $columns
+     * @psalm-taint-sink sql $query
+     */
+    public function insertUsing(array $columns, $query) {}
+
+    /**
+     * @param  array  $columns
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @return int
+     * @psalm-taint-sink sql $columns
+     * @psalm-taint-sink sql $query
+     */
+    public function insertOrIgnoreUsing(array $columns, $query) {}
+
+    /**
+     * @param  string  $function
+     * @param  array  $columns
+     * @return float|int
+     */
+    public function numericAggregate($function, $columns = ['*']) {}
+
+    /**
+     * @param  mixed  $value
+     * @return \Illuminate\Database\Query\Expression
+     * @psalm-taint-sink sql $value
+     */
+    public function raw($value) {}
+
+    /**
+     * @param  string  $expression
+     * @param  array  $bindings
+     * @return mixed
+     * @psalm-taint-sink sql $expression
+     */
+    public function rawValue(string $expression, array $bindings = []) {}
+
     /**
      * Add a basic "where not" clause to the query.
      *
