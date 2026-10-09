@@ -16,10 +16,14 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\NonStaticSelfCall;
+use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
+use Psalm\Issue\ReferenceReusedFromConfusingScope;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
@@ -168,6 +172,167 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(CodeIssue::class, $relocated);
         $this->assertSame(1, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1723: Psalm prints the line of the first mention INSIDE the message. That number is a shadow
+     * line, so it must be rewritten through the issue's own line map, not left naming the shadow.
+     */
+    #[Test]
+    public function a_first_seen_line_reference_names_the_template_line(): void
+    {
+        $issue = new PossiblyUndefinedGlobalVariable(
+            'Possibly undefined global variable $__authorLocal, first seen on line 31',
+            $this->shadowLocation(40),
+            '$__authorLocal',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
+
+        $this->assertInstanceOf(PossiblyUndefinedGlobalVariable::class, $relocated);
+        $this->assertSame('Possibly undefined global variable $__authorLocal, first seen on line 2', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+        $this->assertSame('$__authorlocal', $relocated->var_name);
+    }
+
+    /** The function and closure scope wording, emitted by a different class with a two-argument constructor. */
+    #[Test]
+    public function a_first_seen_line_reference_on_a_possibly_undefined_variable_names_the_template_line(): void
+    {
+        $issue = new PossiblyUndefinedVariable(
+            'Possibly undefined variable $x, first seen on line 31',
+            $this->shadowLocation(40),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
+
+        $this->assertInstanceOf(PossiblyUndefinedVariable::class, $relocated);
+        $this->assertSame('Possibly undefined variable $x, first seen on line 2', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    #[Test]
+    public function a_parse_error_line_reference_names_the_template_line(): void
+    {
+        $issue = new ParseError('Syntax error, unexpected T_ENDIF on line 23', $this->shadowLocation(23));
+
+        $relocated = $this->relocate($issue, $this->entry([23 => 3]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Syntax error, unexpected T_ENDIF on line 3', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** A reference into the compiler-generated prelude has no template line: omit it rather than invent one. */
+    #[Test]
+    public function a_first_seen_reference_into_the_prelude_drops_the_clause(): void
+    {
+        $issue = new PossiblyUndefinedGlobalVariable(
+            'Possibly undefined global variable $__authorLocal, first seen on line 2',
+            $this->shadowLocation(40),
+            '$__authorLocal',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0, 40 => 3]));
+
+        $this->assertInstanceOf(PossiblyUndefinedGlobalVariable::class, $relocated);
+        $this->assertSame('Possibly undefined global variable $__authorLocal', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** The clause is dropped BEFORE the `(unmapped)` suffix is appended, so the suffix is not part of the anchor. */
+    #[Test]
+    public function an_unmapped_parse_error_drops_the_clause_and_keeps_the_unmapped_suffix(): void
+    {
+        $issue = new ParseError('Syntax error, unexpected T_ENDIF on line 2', $this->shadowLocation(2));
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Syntax error, unexpected T_ENDIF (unmapped)', $relocated->message);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+    }
+
+    /** The class key is the gate: an identical-looking wording on any other class stays untouched. */
+    #[Test]
+    public function a_line_reference_on_an_unlisted_class_is_left_alone(): void
+    {
+        $issue = new UndefinedVariable('Cannot find referenced variable $x on line 31', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
+
+        $this->assertInstanceOf(UndefinedVariable::class, $relocated);
+        $this->assertSame('Cannot find referenced variable $x on line 31', $relocated->message);
+    }
+
+    #[Test]
+    public function a_parse_error_without_the_line_suffix_is_left_alone(): void
+    {
+        $issue = new ParseError('Interfaces cannot have properties', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([40 => 3]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Interfaces cannot have properties', $relocated->message);
+    }
+
+    /** End anchor: quoted parser text that looks like the suffix must not be rewritten, only the real tail. */
+    #[Test]
+    public function only_the_trailing_line_reference_of_a_parse_error_is_rewritten(): void
+    {
+        $issue = new ParseError('Syntax error, unexpected identifier "x on line 31" on line 23', $this->shadowLocation(23));
+
+        $relocated = $this->relocate($issue, $this->entry([23 => 3, 31 => 2]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Syntax error, unexpected identifier "x on line 31" on line 3', $relocated->message);
+    }
+
+    /**
+     * #1723: `ReferenceReusedFromConfusingScope` embeds `CodeLocation::getShortSummary()`
+     * (`<shadow file name>:<line>:<column>`) in its message. The descriptor must name the template,
+     * with the line resolved through the same map and the column kept.
+     */
+    #[Test]
+    public function a_location_descriptor_inside_a_message_names_the_template(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope(
+            '$x is possibly a reference defined at shadow.php:31:64. Reusing this variable may cause the referenced value to change.',
+            $this->shadowLocation(40),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame(
+            '$x is possibly a reference defined at resources/views/profile.blade.php:3:64. Reusing this variable may cause the referenced value to change.',
+            $relocated->message,
+        );
+        $this->assertSame(2, $relocated->code_location->getLineNumber());
+    }
+
+    /** The journey convention: a descriptor into the prelude clamps to line 1. */
+    #[Test]
+    public function a_location_descriptor_into_the_prelude_clamps_to_line_one(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at shadow.php:5:9.', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 0, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame('$x is possibly a reference defined at resources/views/profile.blade.php:1:9.', $relocated->message);
+    }
+
+    /** Only the issue's own shadow is rewritten; another file's descriptor is ordinary text. */
+    #[Test]
+    public function a_descriptor_naming_another_file_is_left_alone(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at app/Other.php:31:64.', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame('$x is possibly a reference defined at app/Other.php:31:64.', $relocated->message);
     }
 
     /**

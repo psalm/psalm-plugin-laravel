@@ -103,6 +103,24 @@ final class BladeIssueRemapTest extends TestCase
         return $lines;
     }
 
+    /**
+     * @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues
+     *
+     * @return list<string> the messages the issue type was reported with for that template
+     */
+    private function messagesFor(array $issues, string $type, string $template): array
+    {
+        $messages = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === $type && \str_ends_with($issue['file_path'], $template)) {
+                $messages[] = $issue['message'];
+            }
+        }
+
+        return $messages;
+    }
+
     #[Test]
     public function suppressions_cover_issues_inside_their_own_docblock(): void
     {
@@ -811,6 +829,13 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+
+        // #1723: "first seen on line N" names the template line of the assignment (7), not the
+        // shadow line Psalm counted.
+        $this->assertSame(
+            ['Possibly undefined global variable $__authorLocal, first seen on line 7'],
+            $this->messagesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+        );
     }
 
     /** #1694: the `@context` twin of the `@session` stack above (`$__contextPrevious`). */
@@ -1224,6 +1249,12 @@ final class BladeIssueRemapTest extends TestCase
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
 
+        // #1723: php-parser's trailing " on line N" names the template line too.
+        $this->assertSame(
+            ['Syntax error, unexpected T_ENDIF on line 3'],
+            $this->messagesFor($issues, 'ParseError', $template),
+        );
+
         // Guard against a vacuous pass: a well-formed `<x-alert />` alone already emits several
         // `endif;` lines as part of its own save/restore bookkeeping, so a bare substring check for
         // "endif" cannot fail. `renderComponent()` is only ever emitted once per genuinely opened
@@ -1241,6 +1272,27 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'UnusedForeachValue', 'resources/views/foreach-unused-value.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #1723: the message of `ReferenceReusedFromConfusingScope` embeds a `file:line:column`
+     * descriptor of the reference's definition (template line 4), which must not name the shadow.
+     */
+    #[Test]
+    public function a_location_descriptor_inside_a_message_names_the_template(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/reference-reused.blade.php';
+
+        $this->assertSame(
+            [8],
+            $this->linesFor($issues, 'ReferenceReusedFromConfusingScope', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $messages = $this->messagesFor($issues, 'ReferenceReusedFromConfusingScope', $template);
+        $this->assertCount(1, $messages);
+        $this->assertMatchesRegularExpression('#^\$row is possibly a reference defined at \S*reference-reused\.blade\.php:4:\d+\. #', $messages[0]);
     }
 
     /**
