@@ -194,6 +194,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Application\ContainerResolver::reset();
         Handlers\Auth\AuthConfigAnalyzer::reset();
         Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
@@ -207,6 +208,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelPropertyHandler::reset();
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\RelationCallbackParamsHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
@@ -412,6 +414,9 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -526,8 +531,6 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
-        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
-        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);

@@ -12,4 +12,17 @@ class Artisan extends Facade
      * @return array<array-key, \Symfony\Component\Console\Command\Command>
      */
     public static function all() {}
+
+    /**
+     * Register a Closure based command with the application.
+     *
+     * Needs a real method: `@method static` cannot carry `@param-closure-this`, and
+     * FacadeStubPrecedenceHandler drops the generated pseudo-method in favour of this one. At
+     * runtime ClosureCommand::execute() binds the callback to the command instance, so `$this`
+     * inside the closure is the ClosureCommand.
+     *
+     * @param-closure-this \Illuminate\Foundation\Console\ClosureCommand $callback
+     * @return \Illuminate\Foundation\Console\ClosureCommand
+     */
+    public static function command(string $signature, \Closure $callback) {}
 }
