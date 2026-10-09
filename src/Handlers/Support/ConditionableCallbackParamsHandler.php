@@ -20,6 +20,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\AssertionReconciler;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
+use Psalm\LaravelPlugin\Internal\CallStash;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -95,13 +96,11 @@ final class ConditionableCallbackParamsHandler implements
     BeforeExpressionAnalysisInterface
 {
     /**
-     * when()/unless() calls awaiting their params lookup, keyed by the call's first Arg (the only
-     * call-identifying object the provider event exposes). Both ends are weak: the call owns its Arg, so a
-     * strong value would keep the key alive and the entry would outlive its AST.
+     * when()/unless() calls awaiting their params lookup, keyed by the call's first Arg.
      *
-     * @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>>|null
+     * @psalm-var CallStash<MethodCall|NullsafeMethodCall>|null
      */
-    private static ?\WeakMap $calls = null;
+    private static ?CallStash $calls = null;
 
     /**
      * Hosts already registered, so a repeated population does not stack closures. Psalm's
@@ -170,7 +169,7 @@ final class ConditionableCallbackParamsHandler implements
         $args = $expr->getArgs();
 
         if (($method === 'when' || $method === 'unless') && \count($args) >= 2) {
-            (self::$calls ??= self::newCallMap())->offsetSet($args[0], \WeakReference::create($expr));
+            (self::$calls ??= new CallStash())->put($args[0], $expr);
         }
 
         return null;
@@ -196,8 +195,8 @@ final class ConditionableCallbackParamsHandler implements
         }
 
         $literals = [
-            'callback' => self::closureLiteral(ArgUtil::boundTo($args, 'callback', 1)),
-            'default' => self::closureLiteral(ArgUtil::boundTo($args, 'default', 2)),
+            'callback' => ArgUtil::closureLiteral(ArgUtil::boundTo($args, 'callback', 1)),
+            'default' => ArgUtil::closureLiteral(ArgUtil::boundTo($args, 'default', 2)),
         ];
         if ($literals['callback'] === null && $literals['default'] === null) {
             return null;
@@ -213,7 +212,7 @@ final class ConditionableCallbackParamsHandler implements
         $source = $event->getStatementsSource();
         $context = $event->getContext();
         // A stash miss (static or forwarded call) leaves no receiver node to read.
-        $call = (self::$calls[$args[0]] ?? null)?->get();
+        $call = self::$calls?->get($args[0]);
         if (!$source instanceof StatementsAnalyzer || !$context instanceof Context || $call === null) {
             return null;
         }
@@ -254,21 +253,6 @@ final class ConditionableCallbackParamsHandler implements
         }
 
         return $result;
-    }
-
-    /**
-     * The slot's Closure/ArrowFunction literal, unless its first param is variadic.
-     *
-     * @psalm-mutation-free
-     */
-    private static function closureLiteral(?Arg $arg): Closure|ArrowFunction|null
-    {
-        $value = $arg?->value;
-        if (!$value instanceof Closure && !$value instanceof ArrowFunction) {
-            return null;
-        }
-
-        return isset($value->params[0]) && $value->params[0]->variadic ? null : $value;
     }
 
     /**
@@ -520,17 +504,5 @@ final class ConditionableCallbackParamsHandler implements
 
         // traverse() returns false exactly when enterNode() stopped the traversal.
         return !$visitor->traverse($type);
-    }
-
-    /**
-     * @return \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>>
-     * @psalm-pure
-     */
-    private static function newCallMap(): \WeakMap
-    {
-        /** @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>> $map */
-        $map = new \WeakMap();
-
-        return $map;
     }
 }

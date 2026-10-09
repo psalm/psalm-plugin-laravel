@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ArrowFunction;
+use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Identifier;
 use Psalm\StatementsSource;
 use Psalm\Type\Union;
@@ -86,6 +88,22 @@ final class Arg
         }
 
         return null;
+    }
+
+    /**
+     * The argument's Closure/ArrowFunction literal, unless its first param is variadic (Psalm fills every element of
+     * a variadic from the receiver slot alone). A passed-through callable or first-class callable is not a literal.
+     *
+     * @psalm-mutation-free
+     */
+    public static function closureLiteral(?\PhpParser\Node\Arg $arg): Closure|ArrowFunction|null
+    {
+        $value = $arg?->value;
+        if (!$value instanceof Closure && !$value instanceof ArrowFunction) {
+            return null;
+        }
+
+        return isset($value->params[0]) && $value->params[0]->variadic ? null : $value;
     }
 
     /**

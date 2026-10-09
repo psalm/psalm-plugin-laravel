@@ -8,13 +8,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
-use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\ClassConstFetch;
-use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Expr\StaticCall;
@@ -29,6 +26,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
+use Psalm\LaravelPlugin\Internal\CallStash;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
@@ -130,12 +128,11 @@ final class RelationCallbackParamsHandler implements
     ];
 
     /**
-     * Calls awaiting their params lookup, keyed by the call's first Arg. Both ends are weak: the call owns its Arg,
-     * so a strong value would keep the key alive and the entry would outlive its AST.
+     * Calls awaiting their params lookup, keyed by the call's first Arg.
      *
-     * @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall|StaticCall>>|null
+     * @psalm-var CallStash<MethodCall|NullsafeMethodCall|StaticCall>|null
      */
-    private static ?\WeakMap $calls = null;
+    private static ?CallStash $calls = null;
 
     /**
      * Builder classes already registered. Psalm's MethodParamsProvider constructor clears its handlers per
@@ -181,13 +178,7 @@ final class RelationCallbackParamsHandler implements
         $args = $expr->isFirstClassCallable() ? [] : $expr->getArgs();
 
         if ($args !== [] && $expr->name instanceof Identifier && isset(self::SLOTS[$expr->name->toLowerString()])) {
-            if (!self::$calls instanceof \WeakMap) {
-                /** @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall|StaticCall>> $fresh */
-                $fresh = new \WeakMap();
-                self::$calls = $fresh;
-            }
-
-            self::$calls->offsetSet($args[0], \WeakReference::create($expr));
+            (self::$calls ??= new CallStash())->put($args[0], $expr);
         }
 
         return null;
@@ -215,13 +206,12 @@ final class RelationCallbackParamsHandler implements
         }
 
         [$position, $paramName, $kind] = $slot;
-        $literal = ArgUtil::boundTo($args, $paramName, $position)?->value;
+        $literal = ArgUtil::closureLiteral(ArgUtil::boundTo($args, $paramName, $position));
         $relation = ArgUtil::boundTo($args, 'relation', 0)?->value;
-        $call = (self::$calls[$args[0]] ?? null)?->get();
+        $call = self::$calls?->get($args[0]);
         $source = $event->getStatementsSource();
 
-        if ((!$literal instanceof Closure && !$literal instanceof ArrowFunction)
-            || ($literal->params[0]->variadic ?? false)
+        if ($literal === null
             || !$relation instanceof String_
             || $call === null
             || !$source instanceof StatementsAnalyzer
