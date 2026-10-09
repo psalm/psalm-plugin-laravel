@@ -16,12 +16,16 @@ declare(strict_types=1);
  *   /psalm-delta all        every app
  *   /psalm-delta help       reply with groups and syntax, start no run (`help`
  *                           with other tokens is an error)
+ *   /psalm-delta ... --flag a token starting with `-` is a flag for
+ *                           `psalm-laravel analyze` on both sides; it must be
+ *                           declared verbatim under `flags:` in the registry
  *
  * Prints one JSON object: {status: run|help|error|ignore, apps_csv, label,
- * matrix: {include: [...]}, reply}. The comment body is untrusted input from a
- * privileged workflow, so every output except `reply` is built only from
+ * flags, matrix: {include: [...]}, reply}. The comment body is untrusted input
+ * from a privileged workflow, so every output except `reply` is built only from
  * registry values, and `reply` echoes a user token only when it is plain
- * [a-z0-9_-]. Exit 2 = malformed registry.
+ * [a-z0-9_-] (a flag: the same behind a leading `-`/`--`, plus `.` and `=`).
+ * Exit 2 = malformed registry.
  */
 
 $fail = static function (string $message): never {
@@ -49,6 +53,17 @@ if (!isset($groups['default'])) {
     $fail('the `default` group must be declared');
 }
 
+// Flags pass to `psalm-laravel analyze` on both sides of every selected app. The workflow
+// runs PR code with them, so only exact declared strings get through.
+/** @var array<string, string> $flags flag => description */
+$flags = [];
+foreach ((array) ($registry['flags'] ?? []) as $flag => $description) {
+    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[a-z0-9._-]{1,40})?$/', $flag) !== 1) {
+        $fail('invalid flag: ' . var_export($flag, true));
+    }
+    $flags[$flag] = (string) $description;
+}
+
 /** @var array<string, array<string, mixed>> $apps name => registry entry */
 $apps = [];
 $members = array_fill_keys(array_keys($groups), []);
@@ -72,11 +87,13 @@ foreach ($registry['apps'] as $app) {
     $apps[$name] = $app;
 }
 
-$emit = static function (string $status, array $names = [], string $label = '', string $reply = '') use ($apps): never {
+/** @param list<string> $runFlags */
+$emit = static function (string $status, array $names = [], string $label = '', string $reply = '', array $runFlags = []) use ($apps): never {
     echo json_encode([
         'status' => $status,
         'apps_csv' => implode(',', $names),
         'label' => $label,
+        'flags' => implode(' ', $runFlags),
         'matrix' => ['include' => array_map(static fn(string $n): array => $apps[$n], $names)],
         'reply' => $reply,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "\n";
@@ -100,6 +117,8 @@ if ($tokens === ['help']) {
         '',
         '`/psalm-delta [token ...]` benchmarks the `default` group plus each token: a group tag or an app name, separated by spaces or commas. `/psalm-delta all` runs every app; `/psalm-delta help` shows this message.',
         '',
+        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade`. A flag the base plugin does not know crashes the base side.',
+        '',
         '| Group | Description | Apps |',
         '|---|---|---|',
     ];
@@ -110,11 +129,23 @@ if ($tokens === ['help']) {
         $lines[] = '';
         $lines[] = 'Apps in no group (select by name or `all`): ' . implode(', ', $ungrouped) . '.';
     }
+    if ($flags !== []) {
+        $lines[] = '';
+        $lines[] = '| Flag | Description |';
+        $lines[] = '|---|---|';
+        foreach ($flags as $flag => $description) {
+            $lines[] = "| `{$flag}` | {$description} |";
+        }
+    }
     $emit('help', reply: implode("\n", $lines) . "\n");
 }
 
+$isFlag = static fn(string $token): bool => str_starts_with($token, '-');
+$runFlags = array_values(array_filter($tokens, $isFlag));
+$tokens = array_values(array_filter($tokens, static fn(string $token): bool => !$isFlag($token)));
+
 $valid = [...array_keys($groups), ...array_keys($apps), 'all'];
-$unknown = array_values(array_unique(array_diff($tokens, $valid)));
+$unknown = array_values(array_unique([...array_diff($tokens, $valid), ...array_diff($runFlags, array_keys($flags))]));
 if ($unknown !== []) {
     $lines = [];
     // Capped so a huge comment can't push the reply past GitHub's 65,536-char limit.
@@ -123,13 +154,24 @@ if ($unknown !== []) {
             $lines[] = '- `help` works only on its own: `/psalm-delta help`';
             continue;
         }
-        if (preg_match($safe, $token) !== 1) {
+        if ($isFlag($token)) {
+            if (preg_match('/^--?[a-z0-9][a-z0-9_.=-]{0,39}$/', $token) !== 1) {
+                $lines[] = '- a flag with characters outside `[a-z0-9_.=-]` (not echoed)';
+                continue;
+            }
+            $candidates = array_keys($flags);
+        } elseif (preg_match($safe, $token) !== 1) {
             $lines[] = '- a token with characters outside `[a-z0-9_-]` (not echoed)';
             continue;
+        } else {
+            $candidates = $valid;
         }
-        $distances = array_map(static fn(string $v): int => levenshtein($token, $v), $valid);
-        $best = (int) array_search(min($distances), $distances, true);
-        $hint = $distances[$best] <= max(2, intdiv(strlen($token), 3)) ? " Did you mean `{$valid[$best]}`?" : '';
+        $hint = '';
+        if ($candidates !== []) {
+            $distances = array_map(static fn(string $v): int => levenshtein($token, $v), $candidates);
+            $best = (int) array_search(min($distances), $distances, true);
+            $hint = $distances[$best] <= max(2, intdiv(strlen($token), 3)) ? " Did you mean `{$candidates[$best]}`?" : '';
+        }
         $lines[] = "- `{$token}`{$hint}";
     }
     if (count($unknown) > 10) {
@@ -142,12 +184,14 @@ if ($unknown !== []) {
         '',
         'Groups: ' . $code(array_keys($groups)) . '.',
         'Apps: ' . $code(array_keys($apps)) . '.',
+        'Flags: ' . ($flags === [] ? 'none declared' : $code(array_keys($flags))) . '.',
         'Also: `all`, `help`.',
     ]) . "\n");
 }
 
+// Every flag here matched a declared key exactly, so it is a registry value.
 if (in_array('all', $tokens, true)) {
-    $emit('run', array_keys($apps), 'all');
+    $emit('run', array_keys($apps), 'all', runFlags: $runFlags);
 }
 
 $picked = ['default' => true];
@@ -158,4 +202,4 @@ foreach ($tokens as $token) {
         $selected[$name] = true;
     }
 }
-$emit('run', array_keys(array_intersect_key($apps, $selected)), implode(' + ', array_keys($picked)));
+$emit('run', array_keys(array_intersect_key($apps, $selected)), implode(' + ', array_keys($picked)), runFlags: $runFlags);

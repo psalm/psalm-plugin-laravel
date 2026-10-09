@@ -1,0 +1,25 @@
+<?php
+
+namespace Laravel\Ai\Classification;
+
+use Laravel\Ai\Contracts\Question;
+
+/**
+ * The instructions and the $levels (the level descriptions) are serialized into the classification request in
+ * `vendor/laravel/ai/src/Classification/Score.php`; `AnswersQuestions::mapQuestion()` sends
+ * the structural array to the provider as the question's `criteria`, so its keys and
+ * values are prompt text exactly like `$instructions`.
+ */
+final readonly class Score implements Question
+{
+    /**
+     * @psalm-taint-sink llm_prompt $instructions
+     * @psalm-taint-sink llm_prompt $levels
+     */
+    public function __construct(
+        public string|array $instructions,
+        public array $levels,
+    ) {}
+
+    public function toArray(): array {}
+}

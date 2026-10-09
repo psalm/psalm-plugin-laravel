@@ -238,7 +238,7 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function model_without_class_attributes_survives_warm_up_on_laravel_12(): void
     {
-        // Regression for #1254: Laravel 12.14 has none of the four configuration attributes, while
+        // Regression for #1254: the Laravel 12.x floor has none of the four configuration attributes, while
         // mergeHidden()/mergeVisible()/mergeAppends() are also unavailable. Attribute replay must be
         // a no-op instead of calling one of those missing helpers with an empty list.
         $codebase = $this->makeCodebase();
@@ -1261,7 +1261,7 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         // The #[Initialize] attribute and the bootTraits branch reading it arrive in Laravel 12.22; below
         // that the framework ignores the tag, so the replay stays convention-only and `via_attr` is absent
-        // (the plugin is correct there — the CI 12.14 floor exercises exactly this).
+        // (the plugin is correct there — the CI 12.20 floor exercises exactly this).
         if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Initialize::class)) {
             self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
         }
@@ -1559,6 +1559,8 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function attribute_scope_keys_by_bare_name_and_keeps_extra_params(): void
     {
+        $this->requireDispatchableScopeAttribute();
+
         $codebase = $this->makeCodebase();
         $storage = $this->registerStorage(Customer::class);
         // #[Scope] published(Builder $query, int $minViews) → key 'published', params [int $minViews].
@@ -1583,6 +1585,8 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         // Laravel's Model::callNamedScope checks #[Scope] methods before legacy scopeXxx, so an
         // attribute scope must win when both spell the same key. Mirrors insertAccessor precedence.
+        $this->requireDispatchableScopeAttribute();
+
         $codebase = $this->makeCodebase();
         $storage = $this->registerStorage(Customer::class);
         $this->defineAppearingMethod($storage, 'scopeActive', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()]);
@@ -1599,6 +1603,8 @@ final class ModelMetadataRegistryTest extends TestCase
         // `#[Scope] scopePublished()` is dispatchable both as ->scopePublished() (the attribute,
         // keyed by the bare name) and ->published() (the legacy strip) — Laravel's callNamedScope
         // resolves each form independently, so the registry keeps both entries.
+        $this->requireDispatchableScopeAttribute();
+
         $codebase = $this->makeCodebase();
         $storage = $this->registerStorage(Customer::class);
         $this->defineAppearingMethod(
@@ -1620,7 +1626,10 @@ final class ModelMetadataRegistryTest extends TestCase
     public function private_attribute_scope_is_not_registered(): void
     {
         // A private #[Scope] cannot dispatch on any supported Laravel (EloquentModelMethods::hasScopeAttribute
-        // rejects it), so it must not appear in the scope map.
+        // rejects it), so it must not appear in the scope map. Gated because where the attribute is not
+        // dispatchable at all, no visibility would register either and the assertion proves nothing.
+        $this->requireDispatchableScopeAttribute();
+
         $codebase = $this->makeCodebase();
         $storage = $this->registerStorage(Customer::class);
         $this->defineAppearingMethod(
@@ -1915,6 +1924,21 @@ final class ModelMetadataRegistryTest extends TestCase
     private function queryParam(): FunctionLikeParameter
     {
         return new FunctionLikeParameter('query', false, new Union([new TNamedObject(Builder::class)]));
+    }
+
+    /**
+     * Skip when Eloquent does not dispatch `#[Scope]`-attributed methods as query scopes.
+     *
+     * {@see scopeAttributeStorage} fabricates the marker by FQCN, so it is built even where the
+     * attribute class is absent and the registry would then (correctly) classify nothing —
+     * {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods::hasScopeAttribute}
+     * declines there. Probing the attribute class is the capability behind that behaviour.
+     */
+    private function requireDispatchableScopeAttribute(): void
+    {
+        if (!\class_exists(Scope::class)) {
+            self::markTestSkipped('Eloquent does not dispatch #[Scope]-attributed methods as query scopes on this Laravel.');
+        }
     }
 
     /**
