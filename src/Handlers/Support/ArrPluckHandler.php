@@ -21,7 +21,7 @@ use Psalm\Type\Union;
  * ({@see ModelPropertyResolver::extractModelFromIterableValueType()}) instead of a
  * template parameter.
  *
- * `Arr::pluck()` is not stubbed (`stubs/common/Support/Arr.phpstub` is an empty class),
+ * `Arr::pluck()` is not stubbed (no `Arr.phpstub` under `stubs/` declares it),
  * so without this handler Psalm falls back to reflection's plain `@return array`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1379
