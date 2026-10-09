@@ -185,6 +185,20 @@ Document every workaround with a comment linking to the upstream issue.
 
 **Why:** Workarounds accumulate tech debt and can mask the root cause. They also break silently when the upstream behavior changes. But waiting indefinitely for upstream fixes blocks real users.
 
+### `NamedArgumentTaintHandler` strips only named arguments bound to a variadic
+
+**Decision:** Strip taint from a named-argument value only when Psalm binds it to the callee's variadic and the callee resolves exactly. Everything else is left to Psalm.
+
+**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1, so the old strip-everything handler only hid true positives. Two variadic bugs remain:
+- vimeo/psalm#12252: an unpacked argument is mapped onto every parameter and string keys are ignored, so `run(...$args)` forwarding to `handle(...$args)` reports `run(page: $x)` against `handle()`'s first parameter (#1395).
+- vimeo/psalm#12251: a variadic is keyed by its written offset, so `v(zzz: $x)` collides with the fixed parameter declared there.
+
+Deleting the handler would bring the #1395 false positive back, so it shrank to this one rule. Retire it when both bugs are fixed.
+
+**Accepted limitation:** the strip drops the whole flow, so a genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (`TaintedNamedArgumentVariadicKnownLimitation`). `AddRemoveTaintsEvent` names neither the parameter nor the destination, so no narrower strip exists.
+
+**Rejected (draft PR #1579):** strip only when the written offset collides with a fixed parameter. It keeps the genuine finding but reopens the reported #1395 false positive, which sits at the variadic's own offset.
+
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 
 **Decision:** The `\Closure(self<TModel>): mixed` arm on `Builder::where`, `firstWhere`, `whereNot`, `orWhereNot` is intentionally non-`static`. Users subclassing `Builder` and writing `$this->where(static fn (self $q) => ...)` should type the closure parameter as base `\Illuminate\Database\Eloquent\Builder`, not `self`.
@@ -353,6 +367,16 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Decision:** When registering property handlers per model in `ModelRegistrationHandler`, the order is: relationship properties first, then factory, then accessor, then migration columns. The first handler that returns a non-null result wins.
 
 **Why:** A method named `posts()` that returns a `HasMany` relation should always be treated as a relationship property, even if a migration column named `posts` also exists. Similarly, an accessor `getFullNameAttribute()` should take priority over a `full_name` column. The order reflects specificity: relationships and accessors are explicit code the developer wrote; columns are inferred from migrations and serve as the fallback.
+
+## Facades
+
+### First-party facade `mixed` pseudo-methods get per-method stubs, not root-signature promotion
+
+**Decision:** When Laravel's generated facade `@method` tag returns `mixed` but the underlying root method is templated (and would infer a precise type), add a real static method to `stubs/<layer>/Support/Facades/<Facade>.phpstub` copying the root signature. `FacadeStubPrecedenceHandler` then drops the pseudo-method, so Psalm uses the typed stub. Covered: `Cache::remember`, `rememberForever`, `flexible`, `sear`; `Cookie::queued`; `Context::scope` (#1368, #1737).
+
+**Why:** A targeted stub is surgical and safe. The rejected alternative — generically promoting the root's `MethodStorage` over any `mixed` pseudo in `FacadeMethodHandler` or via `AtomicStaticCallAnalyzer::checkPseudoMethod()` — was probed in #1737 and ruled out for two reasons: (a) a full census of first-party facade `@method` tags found only four `mixed` pseudos with a more-precise templated root (all four are now stubbed); the remaining `mixed` pseudos are `mixed` in the root too, so generic promotion changes nothing for them; (b) root params are often narrower than pseudo params — `Cache::get`'s pseudo accepts `\UnitEnum|array|string $key` while the root is untyped — so swapping them would introduce new false-positive `ArgumentTypeCoercion` errors. `FacadeMethodHandler` is also not an alternative: it is wired only for app facades and returns the raw declared return without template inference.
+
+**Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
 ## Producer Return Narrowing
 
