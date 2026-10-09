@@ -28,6 +28,7 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
@@ -69,11 +70,16 @@ use Psalm\Type\Union;
  *  - Only a Closure/ArrowFunction literal gets the typed slot; a passed-through callable or first-class
  *    callable keeps the stub (it may declare other params, which Psalm would reject).
  *
- * Declines (Psalm's stub signature stands) on: union receivers (a closure is re-analyzed per atomic, last
- * one wins), a receiver whose model cannot be resolved, `static`/`self`/`parent`/dynamic static classes,
- * unpacked args, a non-literal relation name, an unresolvable or intermediate-morphTo dot segment, a
- * morph method on a non-MorphTo (and the reverse), and a `$types` list that is not made of literal
- * class-strings/aliases (`'*'` included).
+ * Declines (Psalm's stub signature stands) on:
+ *  - receivers: unions (a closure is re-analyzed per atomic, last one wins), a model that cannot be read from the
+ *    receiver's own type params, `static`/`self`/`parent`/dynamic static classes;
+ *  - call shape: unpacked args, a non-literal relation name, a `$types` list that is not made of literal model
+ *    class-strings/aliases (`'*'` included);
+ *  - relations: an unresolvable segment, a declared union of relations, a MorphTo on a dot path or under a plain
+ *    method (and a morph method on a non-MorphTo), a parsed related model that is an ancestor of the receiver (the
+ *    parser pins `static::class` to the declaring class), an eager-load slot with no parsed Relation type;
+ *  - signature: a userland override of the method on the dispatched class, a trait other than Laravel's, or, for
+ *    static and Relation receivers, on the model's own builder.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
  */
@@ -124,9 +130,10 @@ final class RelationCallbackParamsHandler implements
     ];
 
     /**
-     * Calls awaiting their params lookup, keyed by the call's first Arg. Weakly keyed: entries die with the AST.
+     * Calls awaiting their params lookup, keyed by the call's first Arg. Both ends are weak: the call owns its Arg,
+     * so a strong value would keep the key alive and the entry would outlive its AST.
      *
-     * @psalm-var \WeakMap<Arg, MethodCall|NullsafeMethodCall|StaticCall>|null
+     * @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall|StaticCall>>|null
      */
     private static ?\WeakMap $calls = null;
 
@@ -175,12 +182,12 @@ final class RelationCallbackParamsHandler implements
 
         if ($args !== [] && $expr->name instanceof Identifier && isset(self::SLOTS[$expr->name->toLowerString()])) {
             if (!self::$calls instanceof \WeakMap) {
-                /** @psalm-var \WeakMap<Arg, MethodCall|NullsafeMethodCall|StaticCall> $fresh */
+                /** @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall|StaticCall>> $fresh */
                 $fresh = new \WeakMap();
                 self::$calls = $fresh;
             }
 
-            self::$calls->offsetSet($args[0], $expr);
+            self::$calls->offsetSet($args[0], \WeakReference::create($expr));
         }
 
         return null;
@@ -191,10 +198,13 @@ final class RelationCallbackParamsHandler implements
     {
         $method = $event->getMethodNameLowercase();
         $slot = self::SLOTS[$method] ?? null;
-        $args = $event->getCallArgs();
-        $source = $event->getStatementsSource();
 
-        if ($slot === null || $args === null || $args === [] || !$source instanceof StatementsAnalyzer) {
+        if ($slot === null) {
+            return null;
+        }
+
+        $args = $event->getCallArgs();
+        if ($args === null || $args === []) {
             return null;
         }
 
@@ -205,47 +215,57 @@ final class RelationCallbackParamsHandler implements
         }
 
         [$position, $paramName, $kind] = $slot;
-        $literal = self::findArg($args, $paramName, $position)?->value;
-        $relation = self::findArg($args, 'relation', 0)?->value;
-        $call = self::$calls[$args[0]] ?? null;
+        $literal = ArgUtil::boundTo($args, $paramName, $position)?->value;
+        $relation = ArgUtil::boundTo($args, 'relation', 0)?->value;
+        $call = (self::$calls[$args[0]] ?? null)?->get();
+        $source = $event->getStatementsSource();
 
         if ((!$literal instanceof Closure && !$literal instanceof ArrowFunction)
             || ($literal->params[0]->variadic ?? false)
             || !$relation instanceof String_
             || $call === null
+            || !$source instanceof StatementsAnalyzer
         ) {
             return null;
         }
 
-        $codebase = $source->getCodebase();
-        $dispatched = $event->getFqClasslikeName();
-        $morphTypes = $kind === self::MORPH ? self::morphTypes($source, self::findArg($args, 'types', 1)?->value) : null;
-        $receiver = self::receiverModel($source, $call, $dispatched);
+        $morphClasses = $kind === self::MORPH ? self::morphClasses($source, ArgUtil::boundTo($args, 'types', 1)?->value) : null;
+        if ($kind === self::MORPH && $morphClasses === null) {
+            return null;
+        }
 
-        if ($receiver === null || ($kind === self::MORPH && $morphTypes === null)) {
+        $dispatched = $event->getFqClasslikeName();
+        $receiver = self::receiverModel($source, $call, $dispatched);
+        if ($receiver === null) {
             return null;
         }
 
         [$model, $forwards] = $receiver;
+        $codebase = $source->getCodebase();
 
         // Only Laravel's own signature is rewritten: a userland override (a builder that wraps the callback, or
         // one whose params Psalm inherits from the parent) keeps its own contract. A static or relation-forwarded
         // call dispatches through the base Builder but runs on the model's own builder, so that class is checked too.
         $declaring = self::laravelDeclaring($codebase, $dispatched, $method);
-        if (!$declaring instanceof \Psalm\Internal\MethodIdentifier
-            || ($forwards && !self::laravelDeclaring($codebase, ModelMethodHandler::resolvedBuilderTypeFor($model, $codebase)->value, $method) instanceof \Psalm\Internal\MethodIdentifier)
+        if (!$declaring instanceof MethodIdentifier
+            || ($forwards && !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), $method) instanceof MethodIdentifier)
         ) {
             return null;
         }
 
         $name = $method === 'withwherehas' ? \explode(':', $relation->value, 2)[0] : $relation->value;
-        $resolved = self::resolveRelation($codebase, $model, $name, $kind);
 
-        if ($resolved === null) {
-            return null;
+        if ($morphClasses !== null) {
+            $morphModels = self::isDirectMorphTo($codebase, $model, $name) ? self::morphModels($codebase, $morphClasses) : null;
+            $slots = $morphModels === null ? null : self::morphSlots($codebase, $morphModels);
+        } else {
+            $resolved = self::resolveRelation($codebase, $model, $name, $kind === self::EAGER);
+            $slots = $resolved === null ? null : self::relationSlots($codebase, $resolved[0], $resolved[1]);
         }
 
-        $callback = new TClosure(self::callbackParams($codebase, $resolved[0], $resolved[1], $morphTypes), Type::getMixed());
+        if ($slots === null) {
+            return null;
+        }
 
         try {
             $params = $codebase->methods->getStorage($declaring)->params;
@@ -253,9 +273,10 @@ final class RelationCallbackParamsHandler implements
             return null;
         }
 
+        $callback = new Union([new TClosure(self::queryParams($slots), Type::getMixed())]);
         $result = [];
         foreach ($params as $param) {
-            $result[] = $param->name === $paramName ? $param->setType(new Union([$callback])) : $param;
+            $result[] = $param->name === $paramName ? $param->setType($callback) : $param;
         }
 
         return $result;
@@ -274,7 +295,7 @@ final class RelationCallbackParamsHandler implements
         $declaring = $codebase->getDeclaringMethodId($class . '::' . $method);
         $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
 
-        return $declaring instanceof \Psalm\Internal\MethodIdentifier
+        return $declaring instanceof MethodIdentifier
             && \in_array(\strtolower($declaring->fq_class_name), self::LARAVEL_DECLARING_CLASSES, true)
             && !self::traitOverrides($codebase, $class, $method)
             ? $declaring
@@ -377,38 +398,43 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Walk the dot path from `$model`; the callback applies to the LAST segment. Null declines.
+     * Whether `$name` is a direct (undotted) MorphTo of `$model`: a morph method on anything else is a runtime error.
      *
      * @param class-string<Model> $model
-     * @return array{class-string<Model>, ?TGenericObject}|null the last segment's related model and, for an
-     *         eager-load slot, its Relation type
      */
-    private static function resolveRelation(Codebase $codebase, string $model, string $name, int $kind): ?array
+    private static function isDirectMorphTo(Codebase $codebase, string $model, string $name): bool
+    {
+        if (\str_contains($name, '.')) {
+            return false;
+        }
+
+        $class = self::relationClass($codebase, $model, $name, self::relationType($codebase, $model, $name));
+
+        return $class !== null && ClassLineage::isA($codebase, $class, MorphTo::class);
+    }
+
+    /**
+     * Walk the dot path from `$model`; the callback applies to the LAST segment, which for an eager-load slot must
+     * also yield its Relation type. A MorphTo has no single related model, so none may appear on the path.
+     *
+     * @param class-string<Model> $model
+     * @return array{class-string<Model>, ?TGenericObject}|null the last segment's related model and, when eager, its
+     *         Relation type; null declines
+     */
+    private static function resolveRelation(Codebase $codebase, string $model, string $name, bool $eager): ?array
     {
         $segments = \explode('.', $name);
         $last = \array_key_last($segments);
-        $morph = $kind === self::MORPH;
         $relation = null;
-
-        if ($morph && $last !== 0) {
-            return null;
-        }
 
         foreach ($segments as $index => $segment) {
             // The type the plugin's return provider gives a call of this method: a parsed body reads the exact
             // related model, also for a relation inherited from a parent or hosted by a trait.
             $type = self::relationType($codebase, $model, $segment);
-            $class = $type instanceof TGenericObject ? $type->value : self::relationClass($codebase, $model, $segment);
+            $class = self::relationClass($codebase, $model, $segment, $type);
 
-            // A MorphTo is only valid as the sole target of a morph method: an intermediate or plain one has
-            // no single related model, and a morph method on anything else is a runtime error.
-            if ($class === null || ClassLineage::isA($codebase, $class, MorphTo::class) !== ($morph && $index === $last)) {
+            if ($class === null || ClassLineage::isA($codebase, $class, MorphTo::class)) {
                 return null;
-            }
-
-            // A morph callback's builders come from the literal types, so the relation's own model is unused.
-            if ($morph) {
-                return [$model, null];
             }
 
             // Body unparseable: fall back to the declared generic. relationClass() already declined a union.
@@ -426,7 +452,7 @@ final class RelationCallbackParamsHandler implements
             }
 
             // The slot embeds the Relation itself, which only the factory-call parser can type exactly.
-            if ($kind === self::EAGER && $index === $last) {
+            if ($eager && $index === $last) {
                 if (!$type instanceof TGenericObject) {
                     return null;
                 }
@@ -441,14 +467,16 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * The Relation class a relation method returns when the body cannot be typed: the parsed factory call, else
-     * the declared native or docblock return type. Kept apart from related-model inference, which a `morphTo()`
-     * has none of. A declared union of Relations (`HasMany<A>|HasOne<B>`) names no single class or model: null.
-     *
-     * @return class-string<Relation>|null
+     * The Relation class of a relation method: the parsed call's (`$type`), else the declared native or docblock
+     * return type, which a `morphTo()` has no related model for. A declared union of Relations
+     * (`HasMany<A>|HasOne<B>`) names no single class or model: null.
      */
-    private static function relationClass(Codebase $codebase, string $model, string $method): ?string
+    private static function relationClass(Codebase $codebase, string $model, string $method, ?TGenericObject $type): ?string
     {
+        if ($type instanceof TGenericObject) {
+            return $type->value;
+        }
+
         $methodId = \strtolower($method);
         $selfClass = $model;
 
@@ -538,34 +566,14 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * One `Closure` param per slot. A morph callback gets one builder per literal type plus the class-string.
+     * The callback's params, one per slot type.
      *
-     * @param non-empty-list<class-string<Model>>|null $morphTypes
-     * @return non-empty-list<FunctionLikeParameter>
+     * @param list<Union> $slots
+     * @return list<FunctionLikeParameter>
+     * @psalm-pure
      */
-    private static function callbackParams(
-        Codebase $codebase,
-        string $related,
-        ?TGenericObject $relation,
-        ?array $morphTypes,
-    ): array {
-        if ($morphTypes !== null) {
-            $slots = [
-                new Union(\array_map(
-                    static fn(string $type): TNamedObject => ModelMethodHandler::resolvedBuilderTypeFor($type, $codebase),
-                    $morphTypes,
-                )),
-                new Union(\array_map(
-                    static fn(string $type): TClassString => new TClassString($type, new TNamedObject($type)),
-                    $morphTypes,
-                )),
-            ];
-        } else {
-            $builder = ModelMethodHandler::resolvedBuilderTypeFor($related, $codebase);
-            // The eager-load constraint of withWhere*() runs the same closure with the Relation.
-            $slots = [new Union($relation instanceof \Psalm\Type\Atomic\TGenericObject ? [$builder, $relation] : [$builder])];
-        }
-
+    private static function queryParams(array $slots): array
+    {
         return \array_map(
             static fn(Union $slot): FunctionLikeParameter => new FunctionLikeParameter('query', false, $slot, $slot, is_optional: false),
             $slots,
@@ -573,66 +581,93 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * The literal `$types` of a morph call as model FQCNs (aliases resolved through the morph map), or null
-     * when any entry is not a literal class-string/alias of a model (`'*'`, a variable, `static::class`).
+     * `($q)`: the related model's builder, plus the Relation for an eager-load slot, whose constraint runs the same
+     * closure with it.
      *
-     * @return non-empty-list<class-string<Model>>|null
+     * @param class-string<Model> $related
+     * @return list<Union>
      */
-    private static function morphTypes(StatementsAnalyzer $source, ?Expr $expr): ?array
+    private static function relationSlots(Codebase $codebase, string $related, ?TGenericObject $relation): array
     {
-        $values = [];
+        $builder = ModelMethodHandler::resolvedBuilderTypeFor($related, $codebase);
+
+        return [new Union($relation instanceof TGenericObject ? [$builder, $relation] : [$builder])];
+    }
+
+    /**
+     * `($q, $type)`: one builder and one class-string per literal type.
+     *
+     * @param non-empty-list<class-string<Model>> $types
+     * @return list<Union>
+     */
+    private static function morphSlots(Codebase $codebase, array $types): array
+    {
+        return [
+            new Union(\array_map(
+                static fn(string $type): TNamedObject => ModelMethodHandler::resolvedBuilderTypeFor($type, $codebase),
+                $types,
+            )),
+            new Union(\array_map(
+                static fn(string $type): TClassString => new TClassString($type, new TNamedObject($type)),
+                $types,
+            )),
+        ];
+    }
+
+    /**
+     * The literal `$types` of a morph call as written (strings and `Foo::class`), or null when any entry is
+     * something else (`'*'`, a variable, `static::class`, a spread).
+     *
+     * @return non-empty-list<string>|null
+     */
+    private static function morphClasses(StatementsAnalyzer $source, ?Expr $expr): ?array
+    {
+        $classes = [];
+
         foreach ($expr instanceof Array_ ? $expr->items : [$expr] as $item) {
             if ($item instanceof ArrayItem && ($item->unpack || $item->byRef)) {
                 return null;
             }
 
-            $values[] = $item instanceof ArrayItem ? $item->value : $item;
-        }
+            $value = $item instanceof ArrayItem ? $item->value : $item;
 
-        $types = [];
-
-        foreach ($values as $value) {
             if ($value instanceof String_ && $value->value !== '*') {
-                $class = \ltrim($value->value, '\\');
+                $classes[] = \ltrim($value->value, '\\');
             } elseif ($value instanceof ClassConstFetch
                 && $value->class instanceof Name
                 && $value->name instanceof Identifier
                 && $value->name->toLowerString() === 'class'
             ) {
-                $class = ClassLikeAnalyzer::getFQCLNFromNameObject($value->class, $source->getAliases());
+                $classes[] = ClassLikeAnalyzer::getFQCLNFromNameObject($value->class, $source->getAliases());
             } else {
                 return null;
             }
-
-            // Laravel resolves every type through the morph map, whether it was written as an alias or a class name.
-            $class = Relation::getMorphedModel($class) ?? $class;
-
-            if (!ClassLineage::isA($source->getCodebase(), $class, Model::class)) {
-                return null;
-            }
-
-            $types[\strtolower($class)] = $class;
         }
 
-        $list = \array_values($types);
-
-        return $list === [] ? null : $list;
+        return $classes === [] ? null : $classes;
     }
 
     /**
-     * The arg bound to a parameter: by name when named, else by position among the leading positional args.
+     * The models behind literal morph types. Laravel resolves every type through the morph map, whether it was
+     * written as an alias or a class name; an entry that is not a model declines.
      *
-     * @param list<Arg> $args
-     * @psalm-mutation-free
+     * @param non-empty-list<string> $classes
+     * @return non-empty-list<class-string<Model>>|null
      */
-    private static function findArg(array $args, string $name, int $position): ?Arg
+    private static function morphModels(Codebase $codebase, array $classes): ?array
     {
-        foreach ($args as $offset => $arg) {
-            if ($arg->name instanceof Identifier ? $arg->name->name === $name : $offset === $position) {
-                return $arg;
+        $models = [];
+
+        foreach ($classes as $class) {
+            $class = Relation::getMorphedModel($class) ?? $class;
+
+            if (!ClassLineage::isA($codebase, $class, Model::class)) {
+                return null;
             }
+
+            $models[\strtolower($class)] = $class;
         }
 
-        return null;
+        return \array_values($models);
     }
 }

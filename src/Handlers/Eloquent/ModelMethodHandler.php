@@ -140,8 +140,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Get the builder class for a model — custom builder if registered, base Builder otherwise.
+     *
+     * @internal Used by {@see RelationCallbackParamsHandler} to find the builder a model's queries run on
      */
-    private static function getBuilderClassForModel(string $modelClass): string
+    public static function getBuilderClassForModel(string $modelClass): string
     {
         return self::$customBuilderMap[$modelClass] ?? Builder::class;
     }
