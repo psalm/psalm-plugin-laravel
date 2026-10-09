@@ -8,6 +8,14 @@ use IndirectMethodReferencesFixture\Commands\ReferenceCommand;
 use IndirectMethodReferencesFixture\Controllers\ConcreteController;
 use IndirectMethodReferencesFixture\Controllers\DriverController;
 use IndirectMethodReferencesFixture\Controllers\InvocableController;
+use IndirectMethodReferencesFixture\Conventions\AddHeaderMiddleware;
+use IndirectMethodReferencesFixture\Conventions\DemotedPipe;
+use IndirectMethodReferencesFixture\Conventions\NonUniqueQueuedJob;
+use IndirectMethodReferencesFixture\Conventions\NotAPipe;
+use IndirectMethodReferencesFixture\Conventions\PlainInvokable;
+use IndirectMethodReferencesFixture\Conventions\PrivateConstructorJob;
+use IndirectMethodReferencesFixture\Conventions\QueuedListener;
+use IndirectMethodReferencesFixture\Conventions\SendReportJob;
 use IndirectMethodReferencesFixture\Dependencies\AbstractDependency;
 use IndirectMethodReferencesFixture\Dependencies\ContractImplementation;
 use IndirectMethodReferencesFixture\Dependencies\DocblockOnlyDependency;
@@ -33,5 +41,13 @@ function consume(): array
         AbstractDependency::class,
         DocblockOnlyDependency::class,
         User::class,
+        PlainInvokable::class,
+        AddHeaderMiddleware::class,
+        NotAPipe::class,
+        new NonUniqueQueuedJob(),
+        new QueuedListener(),
+        DemotedPipe::class,
+        SendReportJob::dispatch('report', 'note'),
+        PrivateConstructorJob::dispatch('payload'),
     ];
 }
