@@ -37,6 +37,29 @@ class LocalOwner extends Customer
     }
 }
 
+/** The parser pins `static::class` to the declaring class; a delegating relation inherits that pin. */
+class PeerBase extends \Illuminate\Database\Eloquent\Model
+{
+    public function peers(): HasMany
+    {
+        return $this->peerHelper();
+    }
+
+    protected function peerHelper(): HasMany
+    {
+        return $this->hasMany(static::class);
+    }
+}
+
+final class PeerChild extends PeerBase
+{
+    /** A child-declared wrapper around the inherited, delegating relation. */
+    public function wrappedPeers(): HasMany
+    {
+        return $this->peers();
+    }
+}
+
 /** A body the parser cannot read, declared as two alternatives that target different models. */
 class AmbiguousOwner extends Customer
 {
@@ -80,15 +103,18 @@ function test_trait_hosted_relation(): void
     });
 }
 
-/** A trait composed by a PARENT binds `self` to that parent, and the receiver's own class is the Relation's parent model. */
-function test_trait_on_parent_model(): void
+/**
+ * A trait composed by a PARENT binds `self` to that parent. On a subclass receiver that related model (an
+ * ancestor of the receiver) is indistinguishable from a `static::class` leak, so it declines.
+ */
+function test_trait_on_parent_model_declines(): void
 {
     Contract::query()->whereHas('revisions', function ($q): void {
-        /** @psalm-check-type-exact $q = Builder<AbstractDocument> */
+        /** @psalm-check-type-exact $q = mixed */
         $q->where('id', 1);
     });
     Contract::query()->withWhereHas('revisions', function ($q): void {
-        /** @psalm-check-type-exact $q = Builder<AbstractDocument>|HasMany<AbstractDocument, Contract> */
+        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model> */
         $q->where('id', 1);
     });
 }
@@ -113,6 +139,19 @@ function test_native_only_relation_inherited_from_parent(): void
 function test_declared_union_of_relations_declines(): void
 {
     AmbiguousOwner::query()->whereHas('either', function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        $q->where('id', 1);
+    });
+}
+
+/** A related model that is an ancestor of a subclass receiver may be a `static::class` leak, however it is reached. */
+function test_ancestor_related_model_declines_on_delegation(): void
+{
+    PeerChild::query()->whereHas('peers', function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        $q->where('id', 1);
+    });
+    PeerChild::query()->whereHas('wrappedPeers', function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         $q->where('id', 1);
     });
@@ -159,6 +198,12 @@ function test_eager_load_without_a_parsed_relation_type_declines(): void
 }
 ?>
 --EXPECTF--
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
 MissingClosureParamType on line %d: Parameter $q has no provided type

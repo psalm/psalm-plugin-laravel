@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
@@ -22,7 +21,6 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
-use PhpParser\NodeFinder;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
@@ -30,7 +28,6 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
-use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
@@ -227,6 +224,7 @@ final class RelationCallbackParamsHandler implements
         // one whose params Psalm inherits from the parent) keeps its own contract.
         if ($declaring === null
             || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), self::LARAVEL_DECLARING_CLASSES, true)
+            || self::traitOverrides($codebase, $event->getFqClasslikeName(), $method)
         ) {
             return null;
         }
@@ -298,33 +296,31 @@ final class RelationCallbackParamsHandler implements
         }
 
         if (ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
-            return $isBuilderDispatch && $atomic instanceof TGenericObject
-                ? ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[0] ?? null, $codebase)
-                : null;
+            return $isBuilderDispatch ? self::projectedModel($codebase, $atomic, Relation::class, 'TRelatedModel') : null;
         }
 
         if (\strtolower($atomic->value) !== \strtolower($dispatched)) {
             return null;
         }
 
-        return self::builderModel($codebase, $atomic);
+        return self::projectedModel($codebase, $atomic, Builder::class, 'TModel');
     }
 
     /**
-     * The model of a Builder receiver, read through the subclass's `@extends Builder<...>` argument: a concrete
-     * model (`final class InvoiceBuilder extends Builder<Invoice>`) or the subclass's own template, mapped to
-     * its position among the receiver's type params (`MultiBuilder<TExtra, TModel> extends Builder<TModel>`).
-     * Anything else (a template of another class, a computed type) names no model.
+     * The model a receiver binds an ancestor's template to (`Builder::TModel`, `Relation::TRelatedModel`): the ancestor's
+     * own argument, a concrete model the subclass extends it with, or the receiver's type param at the position of the
+     * template it forwards, matched by the defining class (a name match alone would read another slot). Anything else
+     * names no model.
      *
+     * @param class-string $ancestor
      * @return class-string<Model>|null
      * @psalm-capabilities read-props
      */
-    private static function builderModel(Codebase $codebase, TNamedObject $atomic): ?string
+    private static function projectedModel(Codebase $codebase, TNamedObject $atomic, string $ancestor, string $template): ?string
     {
-        if (\strtolower($atomic->value) === \strtolower(Builder::class)) {
-            return $atomic instanceof TGenericObject
-                ? ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[0] ?? null, $codebase)
-                : null;
+        $typeParams = $atomic instanceof TGenericObject ? $atomic->type_params : [];
+        if (\strtolower($atomic->value) === \strtolower($ancestor)) {
+            return ModelPropertyResolver::extractExactlyOneModelFromUnion($typeParams[0] ?? null, $codebase);
         }
 
         try {
@@ -333,20 +329,26 @@ final class RelationCallbackParamsHandler implements
             return null;
         }
 
-        $extended = $storage->template_extended_params[Builder::class]['TModel'] ?? null;
-        $concrete = ModelPropertyResolver::extractExactlyOneModelFromUnion($extended, $codebase);
-        if ($concrete !== null || !$extended instanceof Union || !$extended->isSingle()) {
-            return $concrete;
+        // `template_extended_params` states each ancestor's template in its DIRECT child's terms, so a forwarded
+        // template (`TRelatedModel:HasOneOrMany`) is followed up the chain until the receiver's own template.
+        $value = $storage->template_extended_params[$ancestor][$template] ?? null;
+        for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
+            $concrete = ModelPropertyResolver::extractExactlyOneModelFromUnion($value, $codebase);
+            $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
+            if ($concrete !== null || !$forwarded instanceof TTemplateParam) {
+                return $concrete;
+            }
+
+            if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
+                $position = \array_search($forwarded->param_name, \array_keys($storage->template_types ?? []), true);
+
+                return $position === false ? null : ModelPropertyResolver::extractExactlyOneModelFromUnion($typeParams[$position] ?? null, $codebase);
+            }
+
+            $value = $storage->template_extended_params[$forwarded->defining_class][$forwarded->param_name] ?? null;
         }
 
-        $template = $extended->getSingleAtomic();
-        $position = $template instanceof TTemplateParam
-            ? \array_search($template->param_name, \array_keys($storage->template_types ?? []), true)
-            : false;
-
-        return $position !== false && $atomic instanceof TGenericObject
-            ? ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[$position] ?? null, $codebase)
-            : null;
+        return null;
     }
 
     /**
@@ -384,16 +386,17 @@ final class RelationCallbackParamsHandler implements
                 return [$model, null];
             }
 
-            // A parsed `static::class` is pinned to the declaring class, but at runtime it is the receiver's.
-            if ($type instanceof TGenericObject && self::bindsLateStatic($codebase, $model, $segment)) {
-                return null;
-            }
-
             // Body unparseable: fall back to the declared generic. relationClass() already declined a union.
             $related = $type instanceof TGenericObject
                 ? ModelPropertyResolver::extractExactlyOneModelFromUnion($type->type_params[0] ?? null, $codebase)
                 : RelationResolver::relatedModel($codebase, $model, $segment);
             if ($related === null || !ClassLineage::isA($codebase, $related, Model::class)) {
+                return null;
+            }
+
+            // The parser pins `static::class` to the declaring class, so a parsed related model that is a proper
+            // ancestor of the receiver may be that leak, however the relation is reached (`self::class` declines too).
+            if ($type instanceof TGenericObject && \strcasecmp($related, $model) !== 0 && ClassLineage::isA($codebase, $model, $related)) {
                 return null;
             }
 
@@ -410,40 +413,6 @@ final class RelationCallbackParamsHandler implements
         }
 
         return [$model, $relation];
-    }
-
-    /**
-     * Whether the relation method is inherited (or trait-hosted for another class) and its body names
-     * `static::class`: {@see RelationMethodParser} resolves that to the declaring class, which is the wrong
-     * related model when the receiver is a subclass. Unreadable bodies count as late-static.
-     */
-    private static function bindsLateStatic(Codebase $codebase, string $model, string $method): bool
-    {
-        $methodId = MethodIdentifier::wrap($model . '::' . \strtolower($method));
-
-        try {
-            $appearing = $codebase->methods->getAppearingMethodId($methodId);
-            $declaring = $codebase->methods->getDeclaringMethodId($methodId);
-        } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
-            return true;
-        }
-
-        if (!$appearing instanceof MethodIdentifier || !$declaring instanceof MethodIdentifier) {
-            return true;
-        }
-
-        if (\strcasecmp($appearing->fq_class_name, $model) === 0) {
-            return false;
-        }
-
-        $stmts = ClassMethodResolver::resolve($codebase, $declaring)['classMethod']->stmts ?? null;
-
-        return $stmts === null || (new NodeFinder())->findFirst(
-            $stmts,
-            static fn(Node $node): bool => $node instanceof ClassConstFetch
-                && $node->class instanceof Name
-                && $node->class->toLowerString() === 'static',
-        ) instanceof \PhpParser\Node;
     }
 
     /**
@@ -488,16 +457,12 @@ final class RelationCallbackParamsHandler implements
         $methodId = \strtolower($method);
 
         try {
-            $appearing = $codebase->methods->getAppearingMethodId(MethodIdentifier::wrap($model . '::' . $methodId));
+            $appearing = $codebase->methods->getAppearingMethodId(MethodIdentifier::wrap($model . '::' . $methodId))->fq_class_name ?? null;
         } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
             return null;
         }
 
-        if (!$appearing instanceof MethodIdentifier) {
-            return null;
-        }
-
-        $type = ModelRelationReturnTypeHandler::relationType($codebase, $appearing->fq_class_name, $model, $methodId, false);
+        $type = $appearing === null ? null : ModelRelationReturnTypeHandler::relationType($codebase, $appearing, $model, $methodId, false);
 
         foreach ($type instanceof Union ? $type->getAtomicTypes() : [] as $atomic) {
             if ($atomic instanceof TGenericObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
@@ -506,6 +471,45 @@ final class RelationCallbackParamsHandler implements
         }
 
         return null;
+    }
+
+    /**
+     * Whether a trait other than Laravel's `QueriesRelationships` declares the method on the class or an ancestor.
+     * Psalm ignores `insteadof` (vimeo/psalm#12113), so such an override still reports Laravel's trait as the
+     * declaring one. Unknown classes count as overridden.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function traitOverrides(Codebase $codebase, string $class, string $method): bool
+    {
+        $provider = $codebase->classlike_storage_provider;
+        $seen = [];
+
+        try {
+            foreach ([$class, ...\array_values($provider->get($class)->parent_classes)] as $name) {
+                $queue = \array_values($provider->get($name)->used_traits);
+                while (($trait = \array_pop($queue)) !== null) {
+                    if (isset($seen[\strtolower($trait)])) {
+                        continue;
+                    }
+
+                    $seen[\strtolower($trait)] = true;
+                    $traitStorage = $provider->get($trait);
+
+                    if (isset($traitStorage->methods[$method])) {
+                        if (\strtolower($trait) !== self::LARAVEL_DECLARING_CLASSES[1]) {
+                            return true;
+                        }
+                    } else {
+                        \array_push($queue, ...\array_values($traitStorage->used_traits));
+                    }
+                }
+            }
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
