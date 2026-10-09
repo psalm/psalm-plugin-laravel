@@ -9,12 +9,20 @@ use Illuminate\Support\Str;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Analyzer\Statements\Expression\Call\ClassTemplateParamCollector;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TemplateInferredTypeReplacer;
+use Psalm\Internal\Type\TemplateResult;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\Internal\TypeVisitor\TemplateTypeCollector;
 use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -26,11 +34,21 @@ use Psalm\Type\Union;
  * `driver()` itself shadows this handler (accepted FN, see
  * ManagerDriverOverrideShadowKnownLimitation.phpt).
  *
+ * When the name cannot be resolved statically (non-literal argument, config-driven
+ * default), the result falls back to the union of every `create{X}Driver()` the
+ * receiver declares or inherits — sound on the stock dispatch path, where
+ * Manager::createDriver() calls one of them or throws. A RESOLVED name whose creator
+ * is missing still declines (likely an `extend()`'d driver).
+ *
  * Accepted runtime imprecision that stays OUT of scope: `Manager::extend()`
  * registering a custom creator closure, and the `$this->drivers[$name]` cache
  * pre-populated some other way, both take precedence over `create{X}Driver()` at
  * runtime and neither is statically provable from the call site — narrowing here
- * assumes the stock creator-method dispatch path Laravel documents.
+ * assumes the stock creator-method dispatch path Laravel documents. Likewise, a
+ * subclass of a non-final receiver may declare extra creators the union does not see,
+ * and a trait visibility adaptation (`use T { createXDriver as private; }`) is not
+ * read: the creator keeps the trait method's original visibility
+ * (see ManagerDriverTraitVisibilityAdaptationKnownLimitation.phpt).
  *
  * @internal
  */
@@ -68,12 +86,65 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         }
 
         $driverName = self::resolveDriverName($codebase, $receiver, $event);
+        $typeParams = $event->getTemplateTypeParameters();
+        $receiverType = $typeParams === null ? new TNamedObject($receiver) : new TGenericObject($receiver, $typeParams);
 
-        if ($driverName === null) {
+        if ($driverName !== null) {
+            // A resolved name with no matching creator is likely an extend()'d driver — decline, never fall back.
+            return self::creatorReturnType($codebase, $receiverType, \strtolower('create' . Str::studly($driverName) . 'Driver'));
+        }
+
+        return self::creatorUnion($codebase, $receiverType);
+    }
+
+    /**
+     * Union of every `create{X}Driver()` the receiver declares or inherits, for a name
+     * that cannot be resolved statically. ANY creator without a usable declared type
+     * (void/never/untyped, private, or with an unbound template) makes the whole union
+     * unprovable, so it declines. Static and param-taking creators are included too:
+     * over-approximating is sound.
+     */
+    private static function creatorUnion(Codebase $codebase, TNamedObject $receiver): ?Union
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($receiver->value));
+
+            // A parent's PRIVATE creator is absent from the receiver's method table, yet
+            // method_exists() finds it at runtime and Manager forwards it through __call().
+            foreach (\array_keys($storage->parent_classes) as $parent) {
+                foreach ($codebase->classlike_storage_provider->get($parent)->declaring_method_ids as $name => $id) {
+                    if (self::isCreatorName($name) && $codebase->methods->getStorage($id)->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
+                        return null;
+                    }
+                }
+            }
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return null;
         }
 
-        $creator = \strtolower('create' . Str::studly($driverName) . 'Driver');
+        $types = [];
+
+        foreach (\array_keys($storage->declaring_method_ids) as $methodName) {
+            if (!self::isCreatorName($methodName)) {
+                continue;
+            }
+
+            $type = self::creatorReturnType($codebase, $receiver, $methodName);
+
+            if (!$type instanceof Union) {
+                return null;
+            }
+
+            $types[] = $type;
+        }
+
+        return $types === [] ? null : Type::combineUnionTypeArray($types, $codebase);
+    }
+
+    /** @param lowercase-string $creator */
+    private static function creatorReturnType(Codebase $codebase, TNamedObject $receiverType, string $creator): ?Union
+    {
+        $receiver = $receiverType->value;
         $creatorId = self::declaringMethodId($codebase, $receiver, $creator);
 
         if (!$creatorId instanceof MethodIdentifier) {
@@ -81,8 +152,24 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         }
 
         try {
-            $returnType = $codebase->methods->getStorage($creatorId)->return_type;
-        } catch (\UnexpectedValueException) {
+            $creatorStorage = $codebase->methods->getStorage($creatorId);
+            $receiverStorage = $codebase->classlike_storage_provider->get(\strtolower($receiver));
+            $templateParams = ClassTemplateParamCollector::collect(
+                $codebase,
+                $codebase->methods->getClassLikeStorageForMethod($creatorId),
+                $receiverStorage,
+                $creator,
+                $receiverType,
+            );
+        } catch (\InvalidArgumentException|\UnexpectedValueException|\AssertionError) {
+            return null;
+        }
+
+        $returnType = $creatorStorage->return_type;
+
+        // Manager::createDriver() calls `$this->$method()` from Manager's scope: a private
+        // creator on a subclass/trait is unreachable there, so PHP routes it to __call().
+        if ($creatorStorage->visibility === ClassLikeAnalyzer::VISIBILITY_PRIVATE) {
             return null;
         }
 
@@ -100,7 +187,7 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
         // collapses to the plain class rather than an open-ended intersection.
         $selfClass = self::appearingMethodId($codebase, $receiver, $creator)?->fq_class_name ?? $creatorId->fq_class_name;
 
-        return TypeExpander::expandUnion(
+        $expanded = TypeExpander::expandUnion(
             $codebase,
             $returnType,
             $selfClass,
@@ -108,11 +195,31 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
             null,
             final: true,
         );
+
+        // Inherited `@return T`: bind the receiver's `@extends` arguments like a direct
+        // call would; a template that stays unbound (at any depth, e.g. `list<U>`)
+        // proves nothing, so decline.
+        if ($templateParams !== null) {
+            $expanded = TemplateInferredTypeReplacer::replace($expanded, new TemplateResult([], $templateParams), $codebase);
+        }
+
+        $templates = new TemplateTypeCollector();
+        $templates->traverse($expanded);
+
+        return $templates->getTemplateTypes() === [] ? $expanded : null;
+    }
+
+    /** @psalm-pure */
+    private static function isCreatorName(string $methodNameLower): bool
+    {
+        // Longer than `create` + `driver` (12): a non-empty middle, so `createDriver()` itself is excluded.
+        return \strlen($methodNameLower) > 12 && \str_starts_with($methodNameLower, 'create') && \str_ends_with($methodNameLower, 'driver');
     }
 
     /**
      * A literal string argument wins; a present-but-non-literal argument (dynamic
-     * name, `\UnitEnum` instance) declines; a genuinely MISSING argument falls
+     * name, `\UnitEnum` instance) is unresolvable: null, which means "fall back to
+     * the creator union", not "decline". A genuinely MISSING argument falls
      * through to the manager's own default driver. Laravel resolves the argument
      * with `enum_value($driver) ?: $this->getDefaultDriver()`: a FALSY literal
      * (`''` or `'0'`) is therefore "no driver given" too, not a literal name.
@@ -141,7 +248,7 @@ final class ManagerDriverHandler implements MethodReturnTypeProviderInterface
      * `return '...'` statement is knowable statically. Anything else — a
      * conditional, extra statements, a second reachable return — means a
      * DIFFERENT literal can come back depending on state we cannot see, so
-     * that whole shape declines rather than picking one branch to trust.
+     * that whole shape is unresolvable (creator-union fallback, not a literal).
      */
     private static function defaultDriverLiteral(Codebase $codebase, string $receiver): ?string
     {

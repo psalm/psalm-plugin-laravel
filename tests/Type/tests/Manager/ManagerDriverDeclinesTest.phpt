@@ -34,22 +34,6 @@ class NoCreatorManager extends Manager
     }
 }
 
-class ComputedDefaultManager extends Manager
-{
-    protected string $fallback = 'foo';
-
-    #[\Override]
-    public function getDefaultDriver()
-    {
-        return $this->fallback;
-    }
-
-    protected function createFooDriver(): DeclineFooDriver
-    {
-        return new DeclineFooDriver();
-    }
-}
-
 class UHasFooDriver
 {
 }
@@ -75,28 +59,6 @@ class UNoFoo extends Manager
     public function getDefaultDriver()
     {
         return 'foo';
-    }
-}
-
-// A conditional body reaches 'ups' when $useUps is true; only a SINGLE
-// unconditional `return '<literal>';` body is knowable statically.
-class ConditionalDefaultManager extends Manager
-{
-    protected bool $useUps = false;
-
-    #[\Override]
-    public function getDefaultDriver()
-    {
-        if ($this->useUps) {
-            return 'ups';
-        }
-
-        return 'foo';
-    }
-
-    protected function createFooDriver(): DeclineFooDriver
-    {
-        return new DeclineFooDriver();
     }
 }
 
@@ -135,12 +97,6 @@ class OverriddenCreateDriverManager extends Manager
     }
 }
 
-function dynamic_name(DeclineManager $manager, string $name): void
-{
-    $_dynamic = $manager->driver($name);
-    /** @psalm-check-type-exact $_dynamic = mixed */
-}
-
 function missing_creator(DeclineManager $manager): void
 {
     $_missing = $manager->driver('bar');
@@ -153,28 +109,199 @@ function no_creator_at_all(NoCreatorManager $manager): void
     /** @psalm-check-type-exact $_none = mixed */
 }
 
-function computed_default(ComputedDefaultManager $manager): void
-{
-    $_computed = $manager->driver();
-    /** @psalm-check-type-exact $_computed = mixed */
-}
-
-function conditional_default(ConditionalDefaultManager $manager): void
-{
-    $_conditional = $manager->driver();
-    /** @psalm-check-type-exact $_conditional = mixed */
-}
-
 function void_creator(VoidCreatorManager $manager): void
 {
     $_void = $manager->driver('foo');
     /** @psalm-check-type-exact $_void = mixed */
 }
 
-function create_driver_overridden(OverriddenCreateDriverManager $manager): void
+function create_driver_overridden(OverriddenCreateDriverManager $manager, string $name): void
 {
     $_overridden = $manager->driver('foo');
     /** @psalm-check-type-exact $_overridden = mixed */
+
+    // The override guard runs before the creator-union fallback too.
+    $_overriddenDynamic = $manager->driver($name);
+    /** @psalm-check-type-exact $_overriddenDynamic = mixed */
+}
+
+// Non-literal default: the creator-union fallback runs, but one `: void` creator
+// among typed ones makes the whole union unprovable.
+class VoidAmongTypedManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    protected function createBarDriver(): void
+    {
+    }
+}
+
+class UntypedCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    protected function createBarDriver()
+    {
+        return new DeclineFooDriver();
+    }
+}
+
+function fallback_void_creator(VoidAmongTypedManager $manager): void
+{
+    $_fallbackVoid = $manager->driver();
+    /** @psalm-check-type-exact $_fallbackVoid = mixed */
+}
+
+function fallback_untyped_creator(UntypedCreatorManager $manager): void
+{
+    $_fallbackUntyped = $manager->driver();
+    /** @psalm-check-type-exact $_fallbackUntyped = mixed */
+}
+
+// A private creator is invoked from Manager's scope: PHP routes the call to
+// Manager::__call(), so its declared return type proves nothing about the result.
+class PrivateCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    private function createSecretDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+}
+
+class NoCreatorDynamicManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+}
+
+class NeverCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+
+    protected function createBarDriver(): never
+    {
+        throw new \LogicException();
+    }
+}
+
+function private_creator(PrivateCreatorManager $manager): void
+{
+    $_privateFallback = $manager->driver();
+    /** @psalm-check-type-exact $_privateFallback = mixed */
+
+    $_privateLiteral = $manager->driver('secret');
+    /** @psalm-check-type-exact $_privateLiteral = mixed */
+}
+
+function fallback_no_creator(NoCreatorDynamicManager $manager): void
+{
+    $_fallbackNone = $manager->driver();
+    /** @psalm-check-type-exact $_fallbackNone = mixed */
+}
+
+function fallback_never_creator(NeverCreatorManager $manager): void
+{
+    $_fallbackNever = $manager->driver();
+    /** @psalm-check-type-exact $_fallbackNever = mixed */
+}
+
+// PHP's method_exists() still finds a PRIVATE creator declared on an ancestor (the
+// child's own method table omits it), and Manager forwards the call via __call().
+abstract class PrivateCreatorParentManager extends Manager
+{
+    private function createSecretDriver(): string
+    {
+        return 'secret';
+    }
+}
+
+final class AncestorPrivateCreatorManager extends PrivateCreatorParentManager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return (string) $this->config->get('x');
+    }
+
+    protected function createFooDriver(): DeclineFooDriver
+    {
+        return new DeclineFooDriver();
+    }
+}
+
+// Templates nested inside the return type (`list<U>`) are still unbound.
+class NestedTemplateCreatorManager extends Manager
+{
+    #[\Override]
+    public function getDefaultDriver()
+    {
+        return 'foo';
+    }
+
+    /**
+     * @template U of DeclineFooDriver
+     * @return list<U>
+     */
+    protected function createFooDriver(): array
+    {
+        return [];
+    }
+}
+
+function ancestor_private_creator(AncestorPrivateCreatorManager $manager, string $name): void
+{
+    $_ancestorPrivate = $manager->driver($name);
+    /** @psalm-check-type-exact $_ancestorPrivate = mixed */
+}
+
+function nested_template_creator(NestedTemplateCreatorManager $manager, string $name): void
+{
+    $_nestedLiteral = $manager->driver('foo');
+    /** @psalm-check-type-exact $_nestedLiteral = mixed */
+
+    $_nestedFallback = $manager->driver($name);
+    /** @psalm-check-type-exact $_nestedFallback = mixed */
 }
 
 /**
@@ -215,3 +342,4 @@ function union_receiver(UHasFoo|UNoFoo $manager): void
 }
 ?>
 --EXPECTF--
+MissingReturnType on line %d: Method UntypedCreatorManager::createBarDriver does not have a return type, expecting DeclineFooDriver
