@@ -163,7 +163,7 @@ See [MissingTranslation](issues/MissingTranslation.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin checks that a view name passed to `view()`, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()` (and the `View` facade), `ResponseFactory::view()`/`response()->view()` (and the `Response` facade), `Router::view()` (and the `Route` facade), `MailMessage::view()`/`markdown()`, or `TestResponse::assertViewIs()` references a Blade template that exists on disk.
+When enabled, the plugin checks that a view name passed to `view()`, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()` (and the `View` facade), `ResponseFactory::view()`/`response()->view()` (and the `Response` facade), `Router::view()` (and the `Route` facade), `MailMessage::view()`/`markdown()`/`text()` (including the array form of `view()`), or `TestResponse::assertViewIs()` references a Blade template that exists on disk.
 Only string literal view names are validated — dynamic names and namespaced views (e.g., `mail::html.header`) are skipped.
 
 See [MissingView](issues/MissingView.md) for details.
