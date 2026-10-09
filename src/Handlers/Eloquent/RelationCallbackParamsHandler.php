@@ -218,21 +218,21 @@ final class RelationCallbackParamsHandler implements
         }
 
         $codebase = $source->getCodebase();
-        $declaring = $codebase->getDeclaringMethodId($event->getFqClasslikeName() . '::' . $method);
+        $dispatched = $event->getFqClasslikeName();
+        $morphTypes = $kind === self::MORPH ? self::morphTypes($source, self::findArg($args, 'types', 1)?->value) : null;
+        $model = self::receiverModel($source, $call, $dispatched);
 
-        // Only Laravel's own signature is rewritten: a userland override (a builder that wraps the callback, or
-        // one whose params Psalm inherits from the parent) keeps its own contract.
-        if ($declaring === null
-            || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), self::LARAVEL_DECLARING_CLASSES, true)
-            || self::traitOverrides($codebase, $event->getFqClasslikeName(), $method)
-        ) {
+        if ($model === null || ($kind === self::MORPH && $morphTypes === null)) {
             return null;
         }
 
-        $morphTypes = $kind === self::MORPH ? self::morphTypes($source, self::findArg($args, 'types', 1)?->value) : null;
-        $model = self::receiverModel($source, $call, $event->getFqClasslikeName());
-
-        if ($model === null || ($kind === self::MORPH && $morphTypes === null)) {
+        // Only Laravel's own signature is rewritten: a userland override (a builder that wraps the callback, or
+        // one whose params Psalm inherits from the parent) keeps its own contract. A static or relation-forwarded
+        // call dispatches through the base Builder but runs on the model's own builder, so that class is checked too.
+        $declaring = self::laravelDeclaring($codebase, $dispatched, $method);
+        if (!$declaring instanceof \Psalm\Internal\MethodIdentifier
+            || !self::laravelDeclaring($codebase, ModelMethodHandler::resolvedBuilderTypeFor($model, $codebase)->value, $method) instanceof \Psalm\Internal\MethodIdentifier
+        ) {
             return null;
         }
 
@@ -246,7 +246,7 @@ final class RelationCallbackParamsHandler implements
         $callback = new TClosure(self::callbackParams($codebase, $resolved[0], $resolved[1], $morphTypes), Type::getMixed());
 
         try {
-            $params = $codebase->methods->getStorage(MethodIdentifier::wrap($declaring))->params;
+            $params = $codebase->methods->getStorage($declaring)->params;
         } catch (\UnexpectedValueException|\InvalidArgumentException) {
             return null;
         }
@@ -257,6 +257,26 @@ final class RelationCallbackParamsHandler implements
         }
 
         return $result;
+    }
+
+    /**
+     * The declaring method of `$class::$method` when it is Laravel's own: declared by Eloquent's Builder or its
+     * `QueriesRelationships` trait, and not replaced by another trait. Psalm ignores `insteadof`
+     * (vimeo/psalm#12113), so such an override still reports Laravel's trait as the declaring one. Unknown
+     * classes decline.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function laravelDeclaring(Codebase $codebase, string $class, string $method): ?MethodIdentifier
+    {
+        $declaring = $codebase->getDeclaringMethodId($class . '::' . $method);
+        $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
+
+        return $declaring instanceof \Psalm\Internal\MethodIdentifier
+            && \in_array(\strtolower($declaring->fq_class_name), self::LARAVEL_DECLARING_CLASSES, true)
+            && !self::traitOverrides($codebase, $class, $method)
+            ? $declaring
+            : null;
     }
 
     /**
