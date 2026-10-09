@@ -59,4 +59,4 @@ function with_where_has_callback(Builder $q): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::withWhereHas expects Closure[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>|Illuminate\Database\Eloquent\Relations\Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed>):mixed|null, but Closure[pure](Illuminate\Database\Eloquent\Builder):Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model> provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::withWhereHas expects Closure[impure](Illuminate\Database\Eloquent\Builder<Tests\Psalm\LaravelPlugin\Sandbox\RelQueryComment>|Illuminate\Database\Eloquent\Relations\HasMany<Tests\Psalm\LaravelPlugin\Sandbox\RelQueryComment, Tests\Psalm\LaravelPlugin\Sandbox\RelQueryPost>):mixed, but Closure[pure](Illuminate\Database\Eloquent\Builder):Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model> provided
