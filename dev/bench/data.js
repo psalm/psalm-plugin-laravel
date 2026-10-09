@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791527466488,
+  "lastUpdate": 1791533006523,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12875,6 +12875,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "994d98a86bcf09775b448da5f104ee1b96909ad8",
+          "message": "Root Laravel convention entry points (`__invoke`, middleware `handle`, queued jobs) in Psalm 7 dead-code detection (#1781)\n\n* feat(dead-code): root Laravel convention entry points with class-conditional edges\n\nUnder Psalm 7 reachability, methods Laravel calls by convention (invokable\n__invoke, middleware handle/terminate, queued/bus job handle/failed,\nDispatchable job constructors) were never alive, so their private\ndependencies cascaded into error-level UnusedProperty/UnusedMethod.\n\nRecord \"class alive => entry method alive\" edges sourced at the class node, so\nan unreferenced job or invokable is still reported as UnusedClass. Drop the\nSuppressHandler handle suppressions the edges supersede.\n\nRefs #1779\n\n* fix(dead-code): read inherited trait visibility from the appearing class\n\nA `use T { f as protected; }` adaptation is stored on the class that uses the\ntrait. For an inherited method that is the abstract parent, not the concrete\nsubclass, so declaredAndInheritedMethods() accepted demoted entry points and\nmissed promoted ones. Resolve the overlay through the appearing class, like\nPsalm's MethodVisibilityAnalyzer.\n\nRefs #1779\n\n* fix(dead-code): narrow queued-job injection, widen Dispatchable ctor and ?Closure pipes\n\n- Method injection on handle() applies only to bus jobs (Bus Dispatchable,\n  Bus Queueable, Foundation Queueable). A queued listener is also ShouldQueue\n  but CallQueuedListener passes the event positionally, so it fabricated an\n  event constructor edge. handle()/failed() stay rooted for every queued class.\n- Dispatchable::dispatch() runs `new static` in the job's own scope, so its\n  constructor is resolved regardless of visibility; container-built classes\n  keep requiring a public constructor.\n- A native `?Closure $next` is still a pipe (Closure|null); docblock-only and\n  other unions are still rejected.\n- Match used traits by canonical storage name, so a class_alias()ed trait still\n  counts (no fixture: Psalm needs a runtime class_alias the fixture autoloader\n  cannot cheaply provide).\n\nRefs #1779\n\n* fix(dead-code): root queue-read hook properties and methods of alive queued classes\n\nMaking a queued job or listener alive (#1779) unhides its framework-read\nhooks that were previously folded into UnusedClass: $tries, $timeout,\nmiddleware(), uniqueId(), retryUntil() and friends now surface as\nPossiblyUnusedProperty/PossiblyUnusedMethod.\n\nFor every class that gets the queued handle/failed edges, add class-sourced\nedges to the public non-static hooks the project declares itself. Names come\nfrom two constant lists, each verified against the vendor sources that read\nthem off the job object (Queue::createObjectPayload, CallQueuedHandler,\nBus\\UniqueLock/DebounceLock, Events\\Dispatcher, SqsQueue). The property edge\ntargets the declaring class's node, the one Psalm checks.\n\nAlso records the ShouldQueue-only `handle` injection imprecision in decisions.md.\n\nRefs #1779\n\n* refactor(dead-code): simplify convention entry-point rules\n\nCollapse the invokable/pipe/queued/bus-job/Dispatchable rules, the queue hook\nlists and constructor ownership into one RULES table walked by a single loop,\nmerge the class-sourced recorder methods, and drop the custom nested/aliased\ntrait walk (used traits are read from the class and its parents). Behavior is\nunchanged except the two limitations recorded in decisions.md.\n\nTrim the fixture to one case per rule plus one negatives file, and the test to\nthe markers that fail when a rule is removed.\n\nRefs #1779\n\n* fix(dead-code): treat Foundation Queueable as Dispatchable again\n\nFoundation\\Queue\\Queueable (the make:job scaffold) composes Bus Dispatchable\nand Bus Queueable. The simplified trait lookup reads only the class's and its\nparents' direct traits, so a scaffolded job lost its dispatch() constructor\nedge. Name that one vendor composite explicitly, and have the fixture job use\nit and be built only through dispatch() so the regression is covered.\n\nRefs #1779\n\n* fix(dead-code): gate uniqueness hooks on ShouldBeUnique, pin listener and return-value rules\n\nLaravel reads uniqueId()/uniqueVia()/uniqueFor() and $uniqueFor only for\nShouldBeUnique jobs and listeners (PendingDispatch, Events\\Dispatcher, Queue,\nCallQueuedHandler), so they get their own RULES group instead of riding the\nqueued rule.\n\nPin three behaviors in the existing fixture files: a ShouldQueue-only listener\nkeeps handle() alive without injecting its event, a uniqueId() on a\nnon-unique queued job stays reportable, and queue hook return values read as\nused.\n\nRefs #1779",
+          "timestamp": "2026-10-09T09:59:55+02:00",
+          "tree_id": "dddaa822bbc3ab264d9c6af57aed95a7ea0454a4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/994d98a86bcf09775b448da5f104ee1b96909ad8"
+        },
+        "date": 1791533004924,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.27,
+            "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1373,
             "unit": "MB"
           }
         ]
