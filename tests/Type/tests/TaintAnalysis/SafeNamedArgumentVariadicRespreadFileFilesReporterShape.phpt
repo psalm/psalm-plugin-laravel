@@ -35,10 +35,8 @@ final class ListChangelogEntriesAction
 }
 
 /**
- * `run(page: ...)` names its ONLY written argument `page`, at offset 0 — but `run`'s only
- * declared parameter is the variadic `$arguments`, not `$page`, so NamedArgumentTaintHandler
- * strips the value here at the call site, before it can ever re-spread into `handle()`'s
- * `$directory` and mis-report TaintedFile (#1395).
+ * #1395: `run(page: ...)` is captured by the variadic and re-spread onto `handle()`, where plain
+ * Psalm also reports it against `$directory` (vimeo/psalm#12252, TaintedFile). Must stay silent.
  */
 function controllerAction(Request $request): mixed
 {

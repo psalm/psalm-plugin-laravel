@@ -338,7 +338,7 @@ final class Plugin implements PluginEntryPointInterface
         bool $bladeActive,
         ?Blade\Annotate\AnnotateRequest $annotate,
     ): void {
-        // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
+        // Global stop-gap for vimeo/psalm#12251 and #12252 (named arguments bound to a variadic).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
