@@ -23,8 +23,7 @@ use Psalm\Type\Union;
  * receiver, so the two spellings — identical in semantics — diverge in inference. Rewriting native
  * to docblock can only make `static` resolve more precisely, never widen it. `signature_return_type`
  * stays native (it feeds MethodComparator). `: self` is not late-static-bound and must NOT be
- * rewritten. Retire once TypeExpander carries `is_static` through the rebuild
- * (cf. ConsoleClosureScopeHandler, another auto-retiring upstream stopgap).
+ * rewritten. Retire once TypeExpander carries `is_static` through the rebuild.
  *
  * Scoped to every class transitively extending Eloquent\Builder (matches
  * {@see BuilderSubclassQueryMixinHandler}), which also catches abstract intermediate builders no

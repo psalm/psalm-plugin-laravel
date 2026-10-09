@@ -1,0 +1,22 @@
+<?php
+
+namespace Laravel\Ai\Responses\Data;
+
+class ChoiceAnswer extends Answer
+{
+    public function __construct(
+        public readonly string $choice,
+        public readonly array $probabilities,
+        public readonly ?float $confidence = null,
+    ) {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function probabilityOf(string $option): float {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+}

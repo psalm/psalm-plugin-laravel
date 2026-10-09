@@ -11,7 +11,12 @@ namespace App\Services;
  * a public method not listed in the facade's `@method` catalogue (getReport)
  * resolves via the runtime probe, a public method whose signature conflicts with
  * `@method` (isCritical) verifies `@method` precedence, and a protected method
- * (internalCheck) must NOT be surfaced on the facade.
+ * (internalCheck) must NOT be surfaced on the facade. Methods forwarded through
+ * `__call` and documented with class-level `@method` tags (listParts, isMinor)
+ * resolve through the root's pseudo-methods.
+ *
+ * @method list<string> listParts(int $vehicleId)
+ * @method int isMinor()
  */
 class DiagnosticService
 {
@@ -24,6 +29,12 @@ class DiagnosticService
     public function isCritical(): string
     {
         return 'critical';
+    }
+
+    /** @param list<mixed> $arguments */
+    public function __call(string $method, array $arguments): mixed
+    {
+        return null;
     }
 
     protected function internalCheck(): bool
