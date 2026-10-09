@@ -84,5 +84,13 @@ function test_plain_stringable_works_everywhere(SomeStringable $s): void
     str($s);
     Schema::hasTable($s);
 }
+
+// e() has no type declaration on $value in Laravel source; htmlspecialchars()
+// coerces at runtime, so a \Stringable is accepted and correctly escaped.
+// See https://github.com/psalm/psalm-plugin-laravel/issues/1534
+function test_e_accepts_stringable(SomeStringable $s): string
+{
+    return e($s);
+}
 ?>
 --EXPECTF--

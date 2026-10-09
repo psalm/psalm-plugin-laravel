@@ -19,7 +19,7 @@ function logTranscriptCast(\Laravel\Ai\Responses\TranscriptionResponse $transcri
 function transcriptSurfaceSurvivesRedeclaration(\Laravel\Ai\Responses\TranscriptionResponse $transcription): int {
     // The stub re-declares the class, which resets its member list. Reading the
     // members it is not annotating proves the restatement is complete.
-    return $transcription->segments->count() + $transcription->usage->promptTokens;
+    return $transcription->segments->count() + \strlen($transcription->text) + \strlen((string) $transcription) + (int) ($transcription->meta instanceof \Laravel\Ai\Responses\Data\Meta);
 }
 ?>
 --EXPECTF--

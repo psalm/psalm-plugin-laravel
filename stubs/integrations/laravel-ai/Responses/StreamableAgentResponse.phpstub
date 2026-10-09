@@ -7,7 +7,8 @@ use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Support\Collection;
 use IteratorAggregate;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
+use Laravel\Ai\Streaming\Protocols\StreamProtocol;
 use Symfony\Component\HttpFoundation\Response;
 use Traversable;
 
@@ -19,9 +20,9 @@ use Traversable;
  *
  * Hierarchy + member list copied from
  * `vendor/laravel/ai/src/Responses/StreamableAgentResponse.php` so the
- * stub re-declaration keeps `implements IteratorAggregate, Responsable`
- * and the `CanStreamUsingVercelProtocol` trait surface intact. `$text` is
- * `?string` because it is populated only after the stream is drained.
+ * stub re-declaration preserves `implements IteratorAggregate, Responsable`
+ * and the v1 protocol configuration without restoring the removed
+ * `CanStreamUsingVercelProtocol` trait.
  *
  * No `__toString()` here, deliberately. Unlike every other response class this
  * one does not define it, so declaring it in the stub taught Psalm that
@@ -34,23 +35,30 @@ use Traversable;
  */
 class StreamableAgentResponse implements IteratorAggregate, Responsable
 {
-    use Concerns\CanStreamUsingVercelProtocol;
 
     public ?string $text = null;
 
-    public ?Usage $usage = null;
+    public ?TextUsage $usage = null;
 
     public Collection $events;
+
+    public Collection $citations;
 
     public ?string $conversationId = null;
 
     public ?object $conversationUser = null;
 
+    public ?string $userMessageId = null;
+
+    public ?string $assistantMessageId = null;
+
+    public string $reasoning = '';
+
     protected array $thenCallbacks = [];
 
-    protected bool $usesVercelProtocol = false;
+    protected array $catchCallbacks = [];
 
-    protected ?string $vercelProtocolMessageId = null;
+    protected ?StreamProtocol $protocol = null;
 
     protected ?StreamedAgentResponse $streamedResponse = null;
 
@@ -60,13 +68,19 @@ class StreamableAgentResponse implements IteratorAggregate, Responsable
 
     public function each(callable $callback): self {}
 
+    public function catch(callable $callback): self {}
+
     public function then(callable $callback): self {}
 
     public function withinConversation(?string $conversationId, ?object $conversationUser = null): self {}
 
     public function adoptStateFrom(StreamedAgentResponse $response): self {}
 
-    public function usingVercelDataProtocol(bool $value = true, ?string $messageId = null): self {}
+    public function usingProtocol(StreamProtocol $protocol): self {}
+
+    public function usingVercelDataProtocol(?string $messageId = null): self {}
+
+    public function usingAgentUserInteractionProtocol(?string $threadId = null, ?string $runId = null): self {}
 
     public function toResponse($request): Response {}
 

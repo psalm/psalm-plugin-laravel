@@ -289,7 +289,7 @@ final class SchemaAggregator
             return;
         }
 
-        $table_name = $this->resolveTableName($call->args[0]->value);
+        $table_name = $this->resolveStringArgument($call->args[0]->value);
         if ($table_name === null) {
             return;
         }
@@ -332,7 +332,7 @@ final class SchemaAggregator
             return;
         }
 
-        $table_name = $this->resolveTableName($call->args[0]->value);
+        $table_name = $this->resolveStringArgument($call->args[0]->value);
         if ($table_name === null) {
             return;
         }
@@ -353,7 +353,7 @@ final class SchemaAggregator
             return;
         }
 
-        $table_name = $this->resolveTableName($call->args[0]->value);
+        $table_name = $this->resolveStringArgument($call->args[0]->value);
         if ($table_name === null) {
             return;
         }
@@ -365,13 +365,17 @@ final class SchemaAggregator
         $table = $this->tables[$table_name];
         $columns_arg = $call->args[1]->value;
 
-        if ($columns_arg instanceof PhpParser\Node\Scalar\String_) {
-            $table->dropColumn($columns_arg->value);
-        } elseif ($columns_arg instanceof PhpParser\Node\Expr\Array_) {
+        if ($columns_arg instanceof PhpParser\Node\Expr\Array_) {
             foreach ($columns_arg->items as $item) {
-                if ($item !== null && $item->value instanceof PhpParser\Node\Scalar\String_) {
-                    $table->dropColumn($item->value->value);
+                $item_name = $item !== null ? $this->resolveStringArgument($item->value) : null;
+                if ($item_name !== null) {
+                    $table->dropColumn($item_name);
                 }
+            }
+        } else {
+            $column_name = $this->resolveStringArgument($columns_arg);
+            if ($column_name !== null) {
+                $table->dropColumn($column_name);
             }
         }
     }
@@ -386,8 +390,8 @@ final class SchemaAggregator
             return;
         }
 
-        $old_table_name = $this->resolveTableName($call->args[0]->value);
-        $new_table_name = $this->resolveTableName($call->args[1]->value);
+        $old_table_name = $this->resolveStringArgument($call->args[0]->value);
+        $new_table_name = $this->resolveStringArgument($call->args[1]->value);
         if ($old_table_name === null || $new_table_name === null) {
             return;
         }
@@ -525,39 +529,64 @@ final class SchemaAggregator
                 continue; // foreach
             }
 
+            // foreignIdFor()/foreignUuidFor()/foreignUlidFor() with class reference: $table->foreignIdFor(User::class).
+            // Handled before name resolution because `User::class` is a class constant fetch that would
+            // otherwise resolve to the FQCN string and be mistaken for a column name.
+            // foreignUuidFor()/foreignUlidFor() take only a model (class name or instance), never a column name
+            // first, so any other first argument must register nothing instead of a bogus column.
+            $is_always_string_foreign_for = $first_method_name_lc === 'foreignuuidfor'
+                || $first_method_name_lc === 'foreignulidfor';
+
+            if (
+                $is_always_string_foreign_for
+                || (
+                    $first_arg instanceof PhpParser\Node\Expr\ClassConstFetch
+                    && $first_method_name_lc === 'foreignidfor'
+                )
+            ) {
+                $column = $this->resolveForeignKeyColumn(
+                    $first_arg,
+                    $second_arg,
+                    $nullable,
+                    $default,
+                    always_string: $is_always_string_foreign_for,
+                );
+                if ($column instanceof SchemaColumn) {
+                    $table->setColumn($column);
+                }
+
+                continue;
+            }
+
             if ($first_method_call->args === []) {
                 if (\array_key_exists($first_method_name_lc, self::METHODS_HAVE_DEFAULT_COLUMN_NAME)) {
                     $column_name = self::METHODS_HAVE_DEFAULT_COLUMN_NAME[$first_method_name_lc];
                 } else {
                     continue; // unknown type [method call without args] :/
                 }
-            } elseif ($first_arg instanceof PhpParser\Node\Scalar\String_) {
-                $column_name = $first_arg->value;
             } elseif ($first_arg instanceof PhpParser\Node\Expr\Array_) {
                 // Handle dropColumn/removeColumn with array argument: $table->dropColumn(['col1', 'col2'])
                 if (\in_array($first_method_name_lc, ['dropcolumn', 'removecolumn'], true)) {
                     foreach ($first_arg->items as $item) {
-                        if ($item !== null && $item->value instanceof PhpParser\Node\Scalar\String_) {
-                            $table->dropColumn($item->value->value);
+                        $item_name = $item !== null ? $this->resolveStringArgument($item->value) : null;
+
+                        if ($item_name !== null) {
+                            $table->dropColumn($item_name);
                         }
                     }
-
-                    continue;
                 }
 
                 continue;
             } else {
-                // foreignIdFor() with class reference: $table->foreignIdFor(User::class)
-                if ($first_method_name_lc === 'foreignidfor') {
-                    $column = $this->resolveForeignIdForColumn($first_arg, $second_arg, $nullable, $default);
-                    if ($column instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn) {
-                        $table->setColumn($column);
-                    }
+                $resolved_column_name = $first_arg instanceof PhpParser\Node\Expr
+                    ? $this->resolveStringArgument($first_arg)
+                    : null;
 
-                    continue;
+                if ($resolved_column_name === null) {
+                    continue; // unknown type [method call with unknown argument type] :/
                 }
 
-                continue; // unknown type [method call with unknown argument type] :/
+                $column_name = $resolved_column_name;
             }
 
             $second_arg_array = null;
@@ -576,10 +605,17 @@ final class SchemaAggregator
             if (
                 $first_method_name_lc === 'addcolumn'
                 && $first_arg instanceof PhpParser\Node\Scalar\String_
-                && $second_arg instanceof PhpParser\Node\Scalar\String_
+                && $second_arg instanceof PhpParser\Node\Expr
             ) {
+                $added_column_name = $this->resolveStringArgument($second_arg);
+
+                // An unresolvable name must not fall through: the type string would be registered as the column name.
+                if ($added_column_name === null) {
+                    continue;
+                }
+
                 $first_method_name_lc = \strtolower($first_arg->value);
-                $column_name = $second_arg->value;
+                $column_name = $added_column_name;
                 $second_arg = null;
                 $second_arg_array = null;
             }
@@ -778,8 +814,12 @@ final class SchemaAggregator
                     break;
 
                 case 'renamecolumn':
-                    if ($second_arg instanceof PhpParser\Node\Scalar\String_) {
-                        $table->renameColumn($column_name, $second_arg->value);
+                    $new_column_name = $second_arg instanceof PhpParser\Node\Expr
+                        ? $this->resolveStringArgument($second_arg)
+                        : null;
+
+                    if ($new_column_name !== null) {
+                        $table->renameColumn($column_name, $new_column_name);
                     }
 
                     break;
@@ -872,7 +912,7 @@ final class SchemaAggregator
 
         // Fall back to subclass check for custom Schema facades.
         // is_a() with allow_string=true may trigger autoloading, which is acceptable
-        // here — same pattern as resolveForeignIdForColumn() using reflection.
+        // here — same pattern as resolveForeignKeyColumn() using reflection.
         try {
             return \is_a($class_name, Schema::class, true);
         } catch (\Exception) {
@@ -883,11 +923,16 @@ final class SchemaAggregator
         }
     }
 
+    private function isNullLiteral(PhpParser\Node\Expr $expr): bool
+    {
+        return $expr instanceof PhpParser\Node\Expr\ConstFetch && $expr->name->toLowerString() === 'null';
+    }
+
     /**
-     * Resolve a table name from a call argument expression.
+     * Resolve a table or column name from a call argument expression.
      * Supports string literals ('users') and class constant fetches (User::TABLE).
      */
-    private function resolveTableName(PhpParser\Node\Expr $expr): ?string
+    private function resolveStringArgument(PhpParser\Node\Expr $expr): ?string
     {
         if ($expr instanceof PhpParser\Node\Scalar\String_) {
             return $expr->value;
@@ -906,7 +951,7 @@ final class SchemaAggregator
      *
      * Uses constant() which requires the class to be autoloadable — acceptable here
      * because the Laravel app is booted via Testbench before schema aggregation runs.
-     * Same autoloading pattern as resolveForeignIdForColumn() which uses reflection.
+     * Same autoloading pattern as resolveForeignKeyColumn() which uses reflection.
      */
     private function resolveClassConstantString(PhpParser\Node\Expr\ClassConstFetch $node): ?string
     {
@@ -981,18 +1026,21 @@ final class SchemaAggregator
     }
 
     /**
-     * Resolve a SchemaColumn for foreignIdFor() when called with a class reference.
+     * Resolve a SchemaColumn for foreignIdFor()/foreignUuidFor()/foreignUlidFor() when called
+     * with a class reference.
      *
      * foreignIdFor(User::class) resolves to 'user_id' (based on model's foreign key convention).
-     * The column type is determined by looking up the referenced model's primary key in the
-     * already-parsed schema: if the PK is a string (e.g., uuid/ulid), the FK column is also
-     * a string; otherwise it defaults to unsigned int.
+     * For foreignIdFor() the column type is determined by looking up the referenced model's primary
+     * key in the already-parsed schema: if the PK is a string (e.g., uuid/ulid), the FK column is
+     * also a string; otherwise it defaults to unsigned int. foreignUuidFor()/foreignUlidFor() pass
+     * $always_string and always produce a string column.
      */
-    private function resolveForeignIdForColumn(
+    private function resolveForeignKeyColumn(
         ?PhpParser\Node\Expr $first_arg,
         ?PhpParser\Node\Expr $second_arg,
         bool $nullable,
         ?SchemaColumnDefault $default,
+        bool $always_string = false,
     ): ?SchemaColumn {
         if (!$first_arg instanceof PhpParser\Node\Expr\ClassConstFetch) {
             return null;
@@ -1029,10 +1077,23 @@ final class SchemaAggregator
             return null;
         }
 
-        // Resolve column name: custom override from second arg, or model's foreign key convention
-        $column_name = $second_arg instanceof PhpParser\Node\Scalar\String_
-            ? $second_arg->value
-            : $instance->getForeignKey();
+        // Column name: omitted (or literal null) uses the model's foreign key convention. An explicit
+        // argument that can't be resolved statically (self::X, variable, call) names an unknown column,
+        // so register nothing rather than overwrite the conventional column with the wrong type.
+        if (!$second_arg instanceof \PhpParser\Node\Expr || $this->isNullLiteral($second_arg)) {
+            $column_name = $instance->getForeignKey();
+        } else {
+            $column_name = $this->resolveStringArgument($second_arg);
+
+            if ($column_name === null || $column_name === '') {
+                return null;
+            }
+        }
+
+        // foreignUuidFor()/foreignUlidFor() always create a string column, whatever the PK type.
+        if ($always_string) {
+            return new SchemaColumn($column_name, 'string', $nullable, default: $default);
+        }
 
         // Resolve type from the referenced model's primary key in the parsed schema.
         // If the PK column is a string (uuid, ulid, etc.), the FK should also be string.

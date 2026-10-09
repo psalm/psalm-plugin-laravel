@@ -126,7 +126,7 @@ $_avgCanary = collect([1, 2, 3])->avg();
 /** @psalm-check-type-exact $_avgCanary = float|int|null */
 
 // An enum that ALSO implements JsonSerializable must still wrap as [0 => $enumCase]: with the
-// 12.14+ Laravel floor (see composer.json), Arr::wrap() checks UnitEnum FIRST, unconditionally,
+// 12.20+ Laravel floor (see composer.json), Arr::wrap() checks UnitEnum FIRST, unconditionally,
 // regardless of what else the enum implements (issue #808 review).
 enum SerializableSuit: string implements \JsonSerializable
 {
