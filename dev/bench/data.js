@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791585862198,
+  "lastUpdate": 1791586340852,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13185,6 +13185,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.84,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1378,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b11c4f071d6eea8ad5ab178ab280e9c12a04d04c",
+          "message": "Adapt taint flows to Psalm 7.0.0-rc2 superglobal and literal-type rules (#1798)\n\n* fix(bootstrap): read base-path env overrides through literal superglobal keys\n\nPsalm 7.0.0-rc2 (vimeo/psalm#12086) treats `$_SERVER[$dynamicKey]` as a\nclient-controlled source, so the base-path override reached\n`file_get_contents` as TaintedSSRF/TaintedFile.\n\nRefs #1796\n\n* test(taint): keep the FormRequest write-then-read probe tainted under Psalm rc2\n\nPsalm rc2 strips input taint from literal-typed values, so after\n`$req->email = 'literal'` the read narrows to the literal and is\ncorrectly clean. Write an untainted non-literal instead.\n\nRefs #1796",
+          "timestamp": "2026-10-10T00:49:30+02:00",
+          "tree_id": "d873db55b182aa47ef4e81878e93a10c7238cff4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b11c4f071d6eea8ad5ab178ab280e9c12a04d04c"
+        },
+        "date": 1791586339002,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.7,
+            "range": "± 0.3",
             "unit": "s"
           },
           {
