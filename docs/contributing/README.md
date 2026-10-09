@@ -36,6 +36,7 @@ flowchart TD
 
     I["Psalm scans all project files"] -.->|afterCodebasePopulated| J["ModelRegistrationHandler"]
     I -.->|afterCodebasePopulated| K["Eloquent Builder subclass fix-ups:\nBuilderSubclassQueryMixinHandler (restores dropped Query Builder @mixin)\nBuilderNativeStaticReturnTypeHandler (native ': static' return becomes docblock 'static')"]
+    I -.->|afterCodebasePopulated| RCP["RelationCallbackParamsHandler (registers a params provider per Eloquent Builder subclass, #1676)"]
     I -.->|afterCodebasePopulated| FMB["FactoryModelBindingHandler (injects @extends Factory&lt;TModel&gt; on bare factory subclasses, #780)"]
     I -.->|afterCodebasePopulated| FSP["FacadeStubPrecedenceHandler (drops conflicting facade @method pseudos when the plugin ships a real stubbed static method)"]
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
@@ -284,6 +285,12 @@ Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 `ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
+`RelationCallbackParamsHandler` types the closure-literal callback of Eloquent relation-query methods (`whereHas()`, `has()`, `whereRelation()`, `withWhereHas()`, `whereHasMorph()`, ...):
+
+- Registration and receiver: a params provider per Eloquent `Builder` subclass (params providers dispatch on the called class and carry no receiver). The receiver's model is recovered from the call node via a `beforeExpressionAnalysis` stash keyed by the first arg, as in `ConditionableCallbackParamsHandler`, for builder, custom-builder, static (`Model::whereHas()`) and Relation receivers.
+- Contracts: plain slots get the related model's builder (its custom builder when it has one); `withWhere*()` slots get `Builder|Relation` (the closure also runs as the eager-load constraint); morph slots get `($q, $type)` over the literal types.
+- Declines: anything not provably one model's builder keeps the stub signature (union receivers, userland overrides, non-literal names or types, MorphTo on a dot path, a possible `static::class` leak, ...); the handler docblock lists them.
+
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
 
 ### Experimental issue lifecycle
