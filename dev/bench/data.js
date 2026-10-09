@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791480067239,
+  "lastUpdate": 1791527466488,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12840,6 +12840,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1369,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42d93e6854df3d2849991bdc83c8375dfdde478a",
+          "message": "Add `--experimental` and `--no-migrations` run flags and four `/psalm-delta` flags (#1787)\n\n* feat(cli): add experimental and columnFallback run overrides\n\nPSALM_LARAVEL_OPTIONS gains `experimental=true|false` and\n`columnFallback=migrations|none`, resolved like their XML elements\n(explicit per-rule XML values still win over `experimental`).\n`psalm-laravel analyze --experimental` and `--no-migrations` append them,\nfollowing the `--blade` handling.\n\n* ci(delta): allow four more psalm-delta flags\n\nMeasure on real apps what the default run never sees: redundant\nsuppressions (--find-unused-psalm-suppress), unused variables\n(--find-unused-variables), experimental-rule false positives\n(--experimental) and model typing without migration parsing\n(--no-migrations).",
+          "timestamp": "2026-10-09T08:27:18+02:00",
+          "tree_id": "c0395ab5263ec8f9319f3f2db559c955bbac1142",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/42d93e6854df3d2849991bdc83c8375dfdde478a"
+        },
+        "date": 1791527465028,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.02,
+            "range": "± 1.44",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1371,
             "unit": "MB"
           }
         ]
