@@ -496,7 +496,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         }
 
         if ($methodNameLower === 'view') {
-            $arg = self::argByNameOrPosition($callArgs, 0, 'view');
+            $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'view');
 
             if ($arg instanceof Arg && $arg->value instanceof Array_) {
                 self::checkMailViewArray($arg->value, $source->getNodeTypeProvider(), $codeLocation, $suppressedIssues);
