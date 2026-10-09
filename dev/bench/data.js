@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791549527279,
+  "lastUpdate": 1791585862198,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13155,6 +13155,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1372,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c6ff603bf972580c6e121cbfb12dd17619112e9",
+          "message": "fix(stubs): accept null values in Arr::toCssClasses() (#1795)\n\nLaravel's docblock rejects null list items and null string-key constraints that the runtime accepts, so @class(['a', $maybe]) reported InvalidArgument. The precise conditional return is left to upstream.\n\nRefs #1775",
+          "timestamp": "2026-10-10T00:41:06+02:00",
+          "tree_id": "61b64da72a9689a8ab637d1bd7f392d035a1a538",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8c6ff603bf972580c6e121cbfb12dd17619112e9"
+        },
+        "date": 1791585860672,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.84,
+            "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1378,
             "unit": "MB"
           }
         ]
