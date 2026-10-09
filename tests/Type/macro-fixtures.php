@@ -183,3 +183,7 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
 // must resolve the alias to the model exactly as Laravel's `Relation::getMorphedModel()` does at runtime.
 // Registered as a plain string, so nothing is loaded ahead of Psalm's scan order.
 \Illuminate\Database\Eloquent\Relations\Relation::morphMap(['damaged-vehicle' => 'App\Models\Vehicle']);
+
+// A morph-map KEY that is itself a class name: Laravel resolves every `$types` entry through the map, so
+// `whereHasMorph(..., [Secret::class])` runs against Receipt, never Secret.
+\Illuminate\Database\Eloquent\Relations\Relation::morphMap(['App\Models\Secret' => 'App\Models\Receipt']);
