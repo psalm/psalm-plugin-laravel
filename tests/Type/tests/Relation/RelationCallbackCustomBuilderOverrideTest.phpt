@@ -14,6 +14,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
  */
 
+/**
+ * A builder that is not the model's own: the model's overriding builder is never involved in these calls.
+ *
+ * @template T of \Illuminate\Database\Eloquent\Model
+ * @extends Builder<T>
+ */
+final class ReportingBuilder extends Builder {}
+
 final class WrapperOwner
 {
     /** @return HasMany<WrappedModel, \Illuminate\Database\Eloquent\Model> */
@@ -41,6 +49,20 @@ function test_query_call_keeps_the_custom_builder_contract(): void
 {
     WrappedModel::query()->whereHas('parts', function (Builder $q, string $label): void {
         $q->where('label', $label);
+    });
+}
+
+/**
+ * A direct custom-builder receiver runs on that builder, not on the model's default one, so the model's overriding
+ * builder does not matter and the callback is typed.
+ *
+ * @param ReportingBuilder<WrappedModel> $builder
+ */
+function test_direct_builder_receiver_ignores_the_models_own_builder(ReportingBuilder $builder): void
+{
+    $builder->whereHas('parts', function ($q): void {
+        /** @psalm-check-type-exact $q = Builder<Part> */
+        $q->where('id', 1);
     });
 }
 

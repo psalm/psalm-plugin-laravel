@@ -220,18 +220,20 @@ final class RelationCallbackParamsHandler implements
         $codebase = $source->getCodebase();
         $dispatched = $event->getFqClasslikeName();
         $morphTypes = $kind === self::MORPH ? self::morphTypes($source, self::findArg($args, 'types', 1)?->value) : null;
-        $model = self::receiverModel($source, $call, $dispatched);
+        $receiver = self::receiverModel($source, $call, $dispatched);
 
-        if ($model === null || ($kind === self::MORPH && $morphTypes === null)) {
+        if ($receiver === null || ($kind === self::MORPH && $morphTypes === null)) {
             return null;
         }
+
+        [$model, $forwards] = $receiver;
 
         // Only Laravel's own signature is rewritten: a userland override (a builder that wraps the callback, or
         // one whose params Psalm inherits from the parent) keeps its own contract. A static or relation-forwarded
         // call dispatches through the base Builder but runs on the model's own builder, so that class is checked too.
         $declaring = self::laravelDeclaring($codebase, $dispatched, $method);
         if (!$declaring instanceof \Psalm\Internal\MethodIdentifier
-            || !self::laravelDeclaring($codebase, ModelMethodHandler::resolvedBuilderTypeFor($model, $codebase)->value, $method) instanceof \Psalm\Internal\MethodIdentifier
+            || ($forwards && !self::laravelDeclaring($codebase, ModelMethodHandler::resolvedBuilderTypeFor($model, $codebase)->value, $method) instanceof \Psalm\Internal\MethodIdentifier)
         ) {
             return null;
         }
@@ -280,16 +282,18 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * The model the receiver's relations belong to: a single-atomic Builder of exactly the dispatched
-     * class, a Relation (it forwards to `Builder`) via its TRelatedModel, or the named model of a static call.
+     * The model the receiver's relations belong to, and whether the call forwards through that model's own builder
+     * (a static call, or a Relation) rather than running on the receiver itself: a single-atomic Builder of exactly
+     * the dispatched class, a Relation (it forwards to `Builder`) via its TRelatedModel, or the named model of a
+     * static call.
      *
-     * @return class-string<Model>|null
+     * @return array{class-string<Model>, bool}|null
      */
     private static function receiverModel(
         StatementsAnalyzer $source,
         MethodCall|NullsafeMethodCall|StaticCall $call,
         string $dispatched,
-    ): ?string {
+    ): ?array {
         $codebase = $source->getCodebase();
         $isBuilderDispatch = \strtolower($dispatched) === \strtolower(Builder::class);
 
@@ -301,7 +305,7 @@ final class RelationCallbackParamsHandler implements
             return $isBuilderDispatch
                 && $class !== null
                 && ClassLineage::isA($codebase, $class, Model::class)
-                ? $class
+                ? [$class, true]
                 : null;
         }
 
@@ -315,15 +319,16 @@ final class RelationCallbackParamsHandler implements
             return null;
         }
 
-        if (ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
-            return $isBuilderDispatch ? self::projectedModel($codebase, $atomic, Relation::class, 'TRelatedModel') : null;
-        }
-
-        if (\strtolower($atomic->value) !== \strtolower($dispatched)) {
+        $forwards = ClassLineage::isA($codebase, $atomic->value, Relation::class);
+        if (!$forwards && \strtolower($atomic->value) !== \strtolower($dispatched)) {
             return null;
         }
 
-        return self::projectedModel($codebase, $atomic, Builder::class, 'TModel');
+        $model = $forwards
+            ? ($isBuilderDispatch ? self::projectedModel($codebase, $atomic, Relation::class, 'TRelatedModel') : null)
+            : self::projectedModel($codebase, $atomic, Builder::class, 'TModel');
+
+        return $model === null ? null : [$model, $forwards];
     }
 
     /**
