@@ -6,7 +6,6 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
@@ -19,13 +18,11 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationFacts;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationQueryReceiver;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\CallStash;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
@@ -268,13 +265,7 @@ final class RelationCallbackParamsHandler implements
      */
     private static function isDirectMorphTo(Codebase $codebase, string $model, string $name): bool
     {
-        if (\str_contains($name, '.')) {
-            return false;
-        }
-
-        $class = self::relationClass($codebase, $model, $name, self::relationType($codebase, $model, $name));
-
-        return $class !== null && ClassLineage::isA($codebase, $class, MorphTo::class);
+        return !\str_contains($name, '.') && RelationFacts::of($codebase, $model, $name)?->isMorphTo === true;
     }
 
     /**
@@ -292,102 +283,25 @@ final class RelationCallbackParamsHandler implements
         $relation = null;
 
         foreach ($segments as $index => $segment) {
-            // The type the plugin's return provider gives a call of this method: a parsed body reads the exact
-            // related model, also for a relation inherited from a parent or hosted by a trait.
-            $type = self::relationType($codebase, $model, $segment);
-            $class = self::relationClass($codebase, $model, $segment, $type);
+            $facts = RelationFacts::of($codebase, $model, $segment);
 
-            if ($class === null || ClassLineage::isA($codebase, $class, MorphTo::class)) {
-                return null;
-            }
-
-            // Body unparseable: fall back to the declared generic. relationClass() already declined a union.
-            $related = $type instanceof TGenericObject
-                ? ModelPropertyResolver::extractExactlyOneModelFromUnion($type->type_params[0] ?? null, $codebase)
-                : RelationResolver::relatedModel($codebase, $model, $segment);
-            if ($related === null || !ClassLineage::isA($codebase, $related, Model::class)) {
-                return null;
-            }
-
-            // The parser pins `static::class` to the declaring class, so a parsed related model that is a proper
-            // ancestor of the receiver may be that leak, however the relation is reached (`self::class` declines too).
-            if ($type instanceof TGenericObject && \strcasecmp($related, $model) !== 0 && ClassLineage::isA($codebase, $model, $related)) {
+            if (!$facts instanceof RelationFacts || $facts->isMorphTo || $facts->relatedModel === null) {
                 return null;
             }
 
             // The slot embeds the Relation itself, which only the factory-call parser can type exactly.
             if ($eager && $index === $last) {
-                if (!$type instanceof TGenericObject) {
+                if (!$facts->type instanceof TGenericObject) {
                     return null;
                 }
 
-                $relation = $type;
+                $relation = $facts->type;
             }
 
-            $model = $related;
+            $model = $facts->relatedModel;
         }
 
         return [$model, $relation];
-    }
-
-    /**
-     * The Relation class of a relation method: the parsed call's (`$type`), else the declared native or docblock
-     * return type, which a `morphTo()` has no related model for. A declared union of Relations
-     * (`HasMany<A>|HasOne<B>`) names no single class or model: null.
-     */
-    private static function relationClass(Codebase $codebase, string $model, string $method, ?TGenericObject $type): ?string
-    {
-        if ($type instanceof TGenericObject) {
-            return $type->value;
-        }
-
-        $methodId = \strtolower($method);
-        $selfClass = $model;
-
-        try {
-            $declared = $codebase->getMethodReturnType($model . '::' . $methodId, $selfClass);
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            return null;
-        }
-
-        $relations = [];
-        foreach ($declared instanceof Union ? $declared->getAtomicTypes() : [] as $atomic) {
-            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
-                $relations[] = $atomic->value;
-            }
-        }
-
-        if (\count($relations) > 1) {
-            return null;
-        }
-
-        return RelationMethodParser::parse($codebase, $model, $methodId)['relationClass'] ?? $relations[0] ?? null;
-    }
-
-    /**
-     * The type the plugin's return provider gives a call of the relation method (null: no parseable factory
-     * call). The method's APPEARING class is the one that reads the body: a trait-hosted relation has none of
-     * its own storage and binds `self` to the class that composes the trait.
-     */
-    private static function relationType(Codebase $codebase, string $model, string $method): ?TGenericObject
-    {
-        $methodId = \strtolower($method);
-
-        try {
-            $appearing = $codebase->methods->getAppearingMethodId(MethodIdentifier::wrap($model . '::' . $methodId))->fq_class_name ?? null;
-        } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
-            return null;
-        }
-
-        $type = $appearing === null ? null : ModelRelationReturnTypeHandler::relationType($codebase, $appearing, $model, $methodId, false);
-
-        foreach ($type instanceof Union ? $type->getAtomicTypes() : [] as $atomic) {
-            if ($atomic instanceof TGenericObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
-                return $atomic;
-            }
-        }
-
-        return null;
     }
 
     /**
