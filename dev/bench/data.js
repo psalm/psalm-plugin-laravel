@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791548836699,
+  "lastUpdate": 1791549527279,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13115,6 +13115,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.1,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1372,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3b3dbd7f353517892e0e910bdf188478d982a2e",
+          "message": "Accept `Relation` instances in `Builder` relation queries, widen `PendingRequest` params, gate `incrementEach()` to Laravel 13.3 (#1684)\n\n* fix(stubs): accept Relation instances and Expression counts in Builder relation queries\n\nFixes #1668\n\n* fix(stubs): widen PendingRequest body, query and options params to Laravel's\n\nRefs #1669\n\n* fix(stubs): gate incrementEach() to Laravel 13.3, add *EachQuietly(), return int|false from cancellable increments\n\nFixes #1670\n\n* test: align relation-callback tests with widened Builder relation params after merging 4.x\n\nThe withWhereHas callback receives a Relation during eager loading, so the decline-path closure type is Builder|Relation; an override of whereHas() must accept the Relation form Laravel accepts.",
+          "timestamp": "2026-10-09T14:33:40+02:00",
+          "tree_id": "07b53a7639fc42077103b47e511810be5d76ffa0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f3b3dbd7f353517892e0e910bdf188478d982a2e"
+        },
+        "date": 1791549525950,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.18,
+            "range": "± 0.47",
             "unit": "s"
           },
           {
