@@ -5,12 +5,16 @@ namespace Illuminate\Database\Schema;
 use Illuminate\Support\Fluent;
 
 /**
- * Only lock() is stubbed; every other fluent method resolves from the class-level @method tags
+ * Only lock() and length() are stubbed; every other fluent method resolves from the class-level @method tags
  * in Laravel's source (kept when Psalm merges this declaration into the reflected class).
  *
  * Laravel documents lock() with the same four-literal union, but Psalm does not enforce an
  * @method param union of 4+ literals (3 are enforced): https://github.com/vimeo/psalm/issues/12247
  * A real method is checked, so lock() is declared here until that is fixed upstream.
+ *
+ * length() is missing from Laravel's @method list, yet it works: Fluent::__call() stores the
+ * `length` attribute that the grammars read for string and char columns. The @method tags seal
+ * the class, so without this declaration `->length(50)` reports UndefinedMagicMethod.
  */
 class ColumnDefinition extends Fluent
 {
@@ -20,4 +24,7 @@ class ColumnDefinition extends Fluent
      * @param 'none'|'shared'|'default'|'exclusive' $value
      */
     public function lock(string $value): static {}
+
+    /** Set the column length (string and char columns). */
+    public function length(int $length): static {}
 }

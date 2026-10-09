@@ -21,6 +21,10 @@ function fluentChains(ColumnDefinition $c, ForeignKeyDefinition $f): void {
     $_lockThenNullable = $c->lock('none')->nullable();
     /** @psalm-check-type-exact $_lockThenNullable = ColumnDefinition&static */
 
+    // length() is undocumented in vendor @method but works through Fluent::__call(); stubbed.
+    $_lengthThenNullable = $c->length(50)->nullable();
+    /** @psalm-check-type-exact $_lengthThenNullable = ColumnDefinition&static */
+
     $_on = $f->on('t');
     /** @psalm-check-type-exact $_on = ForeignKeyDefinition */
 
