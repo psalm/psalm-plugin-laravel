@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791545702146,
+  "lastUpdate": 1791547018579,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13050,6 +13050,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1370,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cda7ac5299660b4ad0e4f3bdd6e48768b94d75c4",
+          "message": "Narrow `NamedArgumentTaintHandler` to named arguments captured by a variadic (#1773)\n\n* refactor(taint): shrink NamedArgumentTaintHandler to variadic capture\n\nPsalm 7.0.0-rc1 keys named-argument taint nodes by the declared parameter\nindex, so the handler's mismatch strip only hid true positives. Keep the one\nremaining rule: strip a named argument that Psalm binds to the callee's\nvariadic (the `run(...$arguments)` -> `handle(...$arguments)` re-spread shape),\nand drop the sink-subject-agnostic strip, CallMap and pseudo-method fallbacks\nand per-file flush.\n\nThe strip also hides a genuine finding at the re-spread destination; that\naccepted trade is pinned by a KnownLimitation fixture and documented.\n\nRefs #1758\n\n* fix(taint): decline abstract variadics and pin NamedArgumentTaintHandler limits\n\nSkip abstract and interface methods: with no body there is nothing to\nre-spread, and a concrete override with fixed parameters can hold a genuine\nsink for the same argument.\n\nPin the accepted losses (variadic body sink, static:: override of a variadic\nparent, unresolved chained/property receiver) as KnownLimitation fixtures,\npin the re-entrant trait visit, and cite the upstream issues\n(vimeo/psalm#12248-#12252) in the handler docblock and docs.\n\nRefs #1758\n\n* refactor(taint): mark NamedArgumentTaintHandler::isBodiless() mutation-free\n\n* fix(taint): strip variadic named args only on exact, non-trait dispatch\n\nA receiver typed as one concrete class is only an upper bound for an\ninstance call, `static::` is late-bound, and a trait body is analysed once\nper using class over shared AST nodes and shared taint edges. In each case\nthe strip erased a genuine finding. Strip only for a final class, enum,\nfinal or private method, or an explicit class-named call, and never for a\ncall written inside a trait method.\n\nAlso give the intersection-receiver fixture a concrete variadic component so\nremoving the guard turns it red, and pin the loop receiver-change visit.\n\nRefs #1758\n\n* refactor(taint): mark NamedArgumentTaintHandler::isExactDispatch() mutation-free\n\n* fix(taint): do not treat a private method as exact for static:: dispatch\n\nPHP dispatches `static::m()` to the late-bound class's own public `m()`,\nso a private parent method does not pin it. Private still pins an instance\ncall, which PHP resolves in the calling scope.\n\nDocument the nullsafe exception for chained receivers and pin it.\n\nRefs #1758\n\n* refactor(taint): condense NamedArgumentTaintHandler docs and fixtures\n\nMerge the named-argument fixtures by theme (30 files to 9), drop the\nisBodiless() decline that the exact-dispatch check already subsumes, and\ntrim the handler docblocks and docs to the essentials. No behavior change.",
+          "timestamp": "2026-10-09T13:53:09+02:00",
+          "tree_id": "986d76654c91bfb5d1d7386ea345a0e190c0b5d5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cda7ac5299660b4ad0e4f3bdd6e48768b94d75c4"
+        },
+        "date": 1791547016815,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.03,
+            "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1373,
             "unit": "MB"
           }
         ]
