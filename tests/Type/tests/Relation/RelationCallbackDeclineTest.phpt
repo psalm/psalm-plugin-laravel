@@ -97,14 +97,13 @@ function test_passed_through_callable_keeps_today_behaviour(): void
     Vehicle::query()->whereHas('workOrders', $typed);
 }
 
-/** Unpacked args cannot be mapped to parameters. */
+/** Unpacked args cannot be mapped to parameters, even with a literal relation name and closure. */
 function test_unpacked_args_decline(): void
 {
-    $args = ['vehicles', static function ($q): void {
+    Customer::query()->whereHas('vehicles', static function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         $q->whereElectric();
-    }];
-    Customer::query()->whereHas(...$args);
+    }, ...['>=', 1]);
 }
 
 /** A model instance forwards via `__call`: its receiver is not a Builder or Relation. */

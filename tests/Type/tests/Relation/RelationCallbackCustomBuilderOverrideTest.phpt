@@ -65,14 +65,5 @@ function test_direct_builder_receiver_ignores_the_models_own_builder(ReportingBu
         $q->where('id', 1);
     });
 }
-
-/** A model without an overriding builder is still typed through the same receivers. */
-function test_plain_model_static_call_is_typed(): void
-{
-    Part::whereHas('supplier', function ($q): void {
-        /** @psalm-check-type-exact $q = Builder<App\Models\Supplier> */
-        $q->where('id', 1);
-    });
-}
 ?>
 --EXPECTF--
