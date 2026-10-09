@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791547018579,
+  "lastUpdate": 1791548836699,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13085,6 +13085,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1373,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7ea7205146b9b9e5daf6b3dc0e6524de7afba090",
+          "message": "Type `Cache::flexible()`, `Cache::sear()`, `Cookie::queued()` and `Context::scope()` through their facades (#1741)\n\n* fix(stubs): type Cache::flexible/sear(), Cookie::queued() and Context::scope() through their facades #1737\n\n* docs(decisions): record per-method facade stubs over root-signature promotion",
+          "timestamp": "2026-10-09T14:23:55+02:00",
+          "tree_id": "47ac3e89a2735d8b74171e8a74dc1cbd45321db3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7ea7205146b9b9e5daf6b3dc0e6524de7afba090"
+        },
+        "date": 1791548835233,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.1,
+            "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1372,
             "unit": "MB"
           }
         ]
