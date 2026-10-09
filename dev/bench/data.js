@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791540454495,
+  "lastUpdate": 1791544552827,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12980,6 +12980,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1374,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f3ab39f607fd1e4247dd59940bb37ef8ca431e0",
+          "message": "Type `chunk()`/`each()` callbacks on `BelongsToMany` and through relations, accept string keys in `newQueryForRestoration()`, type `Connection::getQueryLog()` (#1682)\n\n* fix(stubs): type chunk and each callbacks on BelongsToMany and through relations\n\nFixes #1674\n\n* fix(stubs): accept string keys in Model::newQueryForRestoration()\n\nRefs #1675\n\n* fix(stubs): type Connection::getQueryLog() like DB::getQueryLog()\n\nRefs #1675",
+          "timestamp": "2026-10-09T13:12:27+02:00",
+          "tree_id": "ffce1bd4b6928ac9c6bafa5a14061f8b00976ddd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5f3ab39f607fd1e4247dd59940bb37ef8ca431e0"
+        },
+        "date": 1791544551186,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.39,
+            "range": "± 0.37",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1371,
             "unit": "MB"
           }
         ]
