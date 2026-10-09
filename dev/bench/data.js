@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791533006523,
+  "lastUpdate": 1791533887995,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12910,6 +12910,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1373,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a9f2c107e6d1bea05dc488a1280be5a74582bb46",
+          "message": "Type the closure parameter of `whereHas()` and other relation-query callbacks (#1791)\n\n* refactor(eloquent): expose the relation method's call-site type\n\nExtract ModelRelationReturnTypeHandler::relationType() from getReturnType() so other handlers can ask for the Relation type a relation method returns for a given binding class, with the same cache and parser path. No behavior change. First step of #1676.\n\n* feat(eloquent): type the closure param of relation-query callbacks\n\nClosure literals passed to whereHas(), has(), whereRelation(), withWhereHas(), whereHasMorph() and their siblings now receive the related model's builder (its custom builder when it has one), on Builder, custom-builder, static and Relation receivers. withWhere*() callbacks are typed Builder|Relation since the closure also runs as the eager-load constraint; morph callbacks get one builder per literal type plus the class-string $type. Anything not provably one model's builder declines to the stub signature.\n\nParams providers dispatch on the called class and carry no receiver, so the handler registers per Builder subclass after population and reads the receiver from a call-node stash, like ConditionableCallbackParamsHandler.\n\nRefs #1676\n\n* fix(eloquent): bind relation-callback receivers to the model Laravel runs against\n\nFour review findings on the relation-callback typing (#1676):\n- a generic custom builder maps its own template position onto Builder's TModel instead of reading the first type param;\n- only Laravel's own relation-query signature is rewritten, so a userland override of whereHas() keeps its contract and Psalm's inherited param types;\n- a relation body naming static::class declines when the receiver model differs from the class that declares it, because the parser pins static to the declaring class (the relation return provider has the same pin; left alone);\n- morph types written as Model::class go through Relation::getMorphedModel() like aliases do.\n\n* fix(eloquent): tighten template projection, delegation and override guards in relation-callback typing\n\nFour external review findings on #1676:\n- Builder::TModel and Relation::TRelatedModel are projected by one helper that follows a forwarded template up the @extends chain by its defining class, instead of matching the template by name (an intermediate class's TModel read the wrong slot) or assuming slot 0 for custom Relation receivers;\n- a parsed related model that is a proper ancestor of the receiver model declines, which covers a static::class pinned by the parser through delegation or a child wrapper and replaces the body scan;\n- a trait other than QueriesRelationships that declares the method on the receiver or an ancestor declines, since Psalm ignores insteadof (vimeo/psalm#12113) and still names Laravel's trait as the declaring one.\n\n* fix(eloquent): check the model's own builder for a whereHas override\n\nA static Model::whereHas() and a call forwarded by a Relation dispatch through the base Eloquent Builder but run on the model's custom builder, so an override there (a callback wrapped with extra arguments) escaped the Laravel-signature guard. The guard now also runs against the receiver model's effective builder class and declines when that class overrides the method. Refs #1676.\n\n* fix(eloquent): limit the model-builder override check to forwarded calls\n\nA direct Builder or custom-builder receiver runs on itself, never on the model's default builder, so only static Model:: calls and Relation receivers also check the model's own builder for a whereHas override. Refs #1676.\n\n* refactor(support): share call-arg lookup and hold stashed calls weakly\n\nMove the exact-name findArg() into Internal\\Arg::boundTo() for both callback-params handlers. Their call stashes mapped a weak Arg key to a strong call value, and the call owns the Arg, so entries were never collected before reset(); store a WeakReference to the call instead. Refs #1676.\n\n* refactor(eloquent): simplify relation-callback params resolution\n\nResolve morph types in one pass and split the literal check from the morph-map resolution, return before the codebase work on cheap gates, separate plain/eager/morph slot construction from the relation walk, and look up the model's builder class directly. The handler docblock lists the full decline set and the README paragraph shrinks to a summary. No behavior change. Refs #1676.\n\n* test(eloquent): exercise the unpack guard and drop a duplicate case\n\nThe unpack case now has a literal relation name and closure so only the unpack guard can decline it; the plain static-call case is covered by RelationCallbackParamTypesTest. Refs #1676.",
+          "timestamp": "2026-10-09T10:14:36+02:00",
+          "tree_id": "0fdf2ccf9eaf87136605703f5ed67d277f139274",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a9f2c107e6d1bea05dc488a1280be5a74582bb46"
+        },
+        "date": 1791533886522,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.15,
+            "range": "± 1.32",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1374,
             "unit": "MB"
           }
         ]
