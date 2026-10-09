@@ -359,6 +359,12 @@ function compareClassLike(Findings $findings, Node\Stmt\ClassLike $classLike, st
             continue;
         }
 
+        // A method the older release already has but whose signature a later minor changed (an appended
+        // parameter): skipped whole while installed < tag. Like a gated class, it isn't counted as compared.
+        if ($findings->gatedBySince($method->getDocComment(), "{$key}()")) {
+            continue;
+        }
+
         $findings->comparedSignatures++;
         diffSignature($findings, $key, $method, $reflectionClass->getMethod($methodName), $fqcn);
     }
