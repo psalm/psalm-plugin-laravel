@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791544552827,
+  "lastUpdate": 1791545702146,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13015,6 +13015,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1371,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "899936c585b2834810dbcdb1d6b4010d927c4125",
+          "message": "Slim `ColumnDefinition` and `ForeignKeyDefinition` stubs to their literal narrowing (#1771)\n\n* chore(deps): require vimeo/psalm ^7.0.0-rc1\n\n* refactor(stubs): slim ColumnDefinition and ForeignKeyDefinition to literal narrowing\n\nPsalm 7 resolves Laravel's class-level @method tags through __call, so only\nlock() (4-literal @method union is not enforced) and the ForeignKeyDefinition\nonDelete()/onUpdate() narrowing stay stubbed.\n\nRefs #1761\n\n* docs(stubs): link vimeo/psalm#12247 from the lock() narrowing note\n\n* fix(schema): declare ColumnDefinition::length()\n\nVendor @method tags seal ColumnDefinition, so the undocumented but working\nlength() setter (read by the string/char grammars) reported UndefinedMagicMethod.",
+          "timestamp": "2026-10-09T13:31:23+02:00",
+          "tree_id": "7e069240894a932792b5095838b914ea96a0674a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/899936c585b2834810dbcdb1d6b4010d927c4125"
+        },
+        "date": 1791545700747,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.14,
+            "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1370,
             "unit": "MB"
           }
         ]
