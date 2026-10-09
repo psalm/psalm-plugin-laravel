@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.
@@ -20,9 +21,16 @@ class Diagnostics
 {
     private const PLUGIN_PACKAGE = 'psalm/plugin-laravel';
 
-    public function collect(): Report
+    /**
+     * @param list<string> $cliOptions `KEY=VALUE` tokens from `--plugin-option` / `--blade`, in command-line order.
+     */
+    public function collect(array $cliOptions = []): Report
     {
         $bootstrapErrors = [];
+
+        // Read before the boot: Laravel's Dotenv loader can putenv() the project's `.env` entries, but the
+        // plugin resolves its settings before the app boots and never sees them.
+        $envOptions = \getenv(PluginOverrides::ENV_VAR);
 
         try {
             ApplicationProvider::bootApp();
@@ -49,7 +57,18 @@ class Diagnostics
         $cwd = \getcwd();
         $projectRoot = \is_string($cwd) ? $cwd : null;
 
-        [$analysisVersion, $analysisSource] = $this->resolveAnalysisPhpVersion($projectRoot);
+        // Invalid input is a hard failure with the message, not an exception that escapes as a stack trace.
+        $psalmXml = null;
+        $pluginSettings = [];
+
+        try {
+            $psalmXml = $projectRoot === null ? null : $this->readPsalmXml($projectRoot);
+            $pluginSettings = PluginSettings::resolve($psalmXml, \is_string($envOptions) ? $envOptions : null, $cliOptions);
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $hardFailures[] = 'Plugin settings: ' . $invalidArgumentException->getMessage();
+        }
+
+        [$analysisVersion, $analysisSource] = $this->resolveAnalysisPhpVersion($psalmXml);
 
         return new Report(
             pluginVersion: $this->safePrettyVersion(self::PLUGIN_PACKAGE),
@@ -63,6 +82,7 @@ class Diagnostics
             bootstrapErrors: $bootstrapErrors,
             hardFailures: $hardFailures,
             loadedProviders: $this->collectLoadedProviders(),
+            pluginSettings: $pluginSettings,
         );
     }
 
@@ -94,38 +114,30 @@ class Diagnostics
      * `phpVersion=` attribute is a concrete version; otherwise we fall back
      * to the runtime.
      *
-     * We parse `psalm.xml` directly with SimpleXML instead of
-     * `Config::getConfigForPath()` because the latter eagerly validates every
-     * entry in `$argv` as a filesystem path (see Psalm's
-     * {@see \Psalm\Internal\CliUtils::getPathsToCheck()}) and `exit(1)`s on
-     * `bin/psalm-laravel diagnose` — its Symfony bypass only spares the `psalm-plugin` binary.
-     *
      * @return array{string, 'runtime'|'psalm.xml'}
      */
-    private function resolveAnalysisPhpVersion(?string $projectRoot): array
+    private function resolveAnalysisPhpVersion(?\SimpleXMLElement $psalmXml): array
     {
-        if ($projectRoot !== null) {
-            $fromXml = $this->readPsalmXmlPhpVersion($projectRoot);
-            if ($fromXml !== null) {
-                return [$fromXml, 'psalm.xml'];
-            }
-        }
+        $fromXml = (string) ($psalmXml['phpVersion'] ?? '');
 
-        return [\PHP_VERSION, 'runtime'];
+        return $fromXml === '' ? [\PHP_VERSION, 'runtime'] : [$fromXml, 'psalm.xml'];
     }
 
     /**
-     * Read the `phpVersion` attribute from `<projectRoot>/psalm.xml`. We don't
-     * walk parent directories — diagnose is intended for the project root.
+     * Read `<projectRoot>/psalm.xml`, or null when there is none. We don't walk parent directories —
+     * diagnose is intended for the project root.
+     *
+     * We parse it directly with SimpleXML instead of `Config::getConfigForPath()` because the latter
+     * eagerly validates every entry in `$argv` as a filesystem path (see Psalm's
+     * {@see \Psalm\Internal\CliUtils::getPathsToCheck()}) and `exit(1)`s on
+     * `bin/psalm-laravel diagnose` — its Symfony bypass only spares the `psalm-plugin` binary.
+     *
+     * @throws \InvalidArgumentException When the file exists but is not well-formed XML.
      */
-    private function readPsalmXmlPhpVersion(string $projectRoot): ?string
+    private function readPsalmXml(string $projectRoot): ?\SimpleXMLElement
     {
         $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        if (!\is_file($path)) {
-            return null;
-        }
-
-        $contents = \file_get_contents($path);
+        $contents = \is_file($path) ? \file_get_contents($path) : false;
         if ($contents === false) {
             return null;
         }
@@ -133,21 +145,20 @@ class Diagnostics
         // Toggle libxml's internal error buffer so a malformed psalm.xml never
         // bubbles a warning to STDOUT and breaks the diagnose report layout.
         $previous = \libxml_use_internal_errors(true);
-        $xml = \simplexml_load_string($contents);
+        // Psalm expands XIncludes (an include's fallback can hold plugin settings); relative hrefs resolve
+        // against the working directory, which is `$projectRoot` here as it is for Psalm's own load.
+        $dom = new \DOMDocument();
+        $xml = null;
+
+        if ($contents !== '' && $dom->loadXML($contents, \LIBXML_NONET)) {
+            $dom->xinclude(\LIBXML_NOWARNING | \LIBXML_NONET);
+            $xml = \simplexml_import_dom($dom);
+        }
+
         \libxml_clear_errors();
         \libxml_use_internal_errors($previous);
 
-        if (!$xml instanceof \SimpleXMLElement) {
-            return null;
-        }
-
-        $attr = $xml['phpVersion'] ?? null;
-        if (!$attr instanceof \SimpleXMLElement) {
-            return null;
-        }
-
-        $value = (string) $attr;
-        return $value === '' ? null : $value;
+        return $xml instanceof \SimpleXMLElement ? $xml : throw new \InvalidArgumentException('psalm.xml is not well-formed XML.');
     }
 
     private function safePrettyVersion(string $package): ?string

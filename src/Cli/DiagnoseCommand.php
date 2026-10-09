@@ -39,10 +39,13 @@ final class DiagnoseCommand extends Command
      *                                        feed a deterministic in-memory report without booting Laravel.
      * @param TipsProvider|null $tipsProvider Override the tips source — exposed for tests so they can
      *                                        inject deterministic hints without touching the real PHP environment.
+     * @param list<string>|null $argvOverride Override the raw argv the override flags are read from;
+     *                                        defaults to the process argv. Exposed for tests.
      */
     public function __construct(
         private readonly ?Diagnostics $diagnostics = null,
         private readonly ?TipsProvider $tipsProvider = null,
+        private readonly ?array $argvOverride = null,
     ) {
         parent::__construct();
     }
@@ -64,12 +67,24 @@ final class DiagnoseCommand extends Command
             InputOption::VALUE_NONE,
             'List every service provider the booted kernel registered (the default report shows only the count).',
         );
+
+        // Declared for validation and --help only: Symfony loses the relative order of the two, and
+        // the last one must win, so execute() reads the overrides from raw argv like `analyze` does.
+        $this->addOption('blade', null, InputOption::VALUE_NEGATABLE, 'Shorthand for --plugin-option blade=true (--blade) or blade=false (--no-blade).');
+        $this->addOption(
+            'plugin-option',
+            null,
+            InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
+            'Show the settings as if analysed with this override (KEY=VALUE, repeatable), as `analyze --plugin-option` would apply it.',
+        );
     }
 
     #[\Override]
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $report = ($this->diagnostics ?? new Diagnostics())->collect();
+        $report = ($this->diagnostics ?? new Diagnostics())->collect(
+            (new AnalyzeCommand())->scanArguments($this->argvOverride)['options'],
+        );
         $tips = (bool) $input->getOption('tips') ? ($this->tipsProvider ?? new TipsProvider())->collect() : [];
         $io = new SymfonyStyle($input, $output);
 
@@ -96,6 +111,8 @@ final class DiagnoseCommand extends Command
             'Runtime' => $report->phpRuntimeVersion,
             'Analysis' => $report->phpAnalysisVersion . ' (from ' . $report->phpAnalysisSource . ')',
         ]);
+
+        $this->renderPluginSettings($io, $report->pluginSettings);
 
         if ($report->bootMode === null) {
             $this->renderSection($io, 'Boot mode', ['Status' => '<error>FAILED</error>']);
@@ -137,6 +154,25 @@ final class DiagnoseCommand extends Command
 
             $io->newLine();
         }
+    }
+
+    /**
+     * @param list<array{key: string, value: string, source: string}> $settings
+     */
+    private function renderPluginSettings(SymfonyStyle $io, array $settings): void
+    {
+        if ($settings === []) {
+            return;
+        }
+
+        $width = \max(\array_map(static fn(array $setting): int => \strlen($setting['value']), $settings));
+        $rows = [];
+
+        foreach ($settings as $setting) {
+            $rows[$setting['key']] = \sprintf('%-' . $width . 's  (%s)', $setting['value'], $setting['source']);
+        }
+
+        $this->renderSection($io, 'Plugin settings', $rows);
     }
 
     /**

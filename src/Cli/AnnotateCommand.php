@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Cli;
 
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotateRequest;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -102,6 +103,18 @@ final class AnnotateCommand extends Command
             . \DIRECTORY_SEPARATOR . 'bin'
             . \DIRECTORY_SEPARATOR . 'psalm';
 
+        $overrides = $this->rejectedOverrides();
+
+        if ($overrides !== []) {
+            $io->error(\sprintf(
+                'blade:annotate does not accept per-run plugin overrides (%s): it always runs with Blade analysis on.',
+                \implode(', ', $overrides),
+            ));
+            $io->writeln('  Set the plugin in psalm.xml, or use `psalm-laravel analyze --plugin-option KEY=VALUE`.');
+
+            return Command::FAILURE;
+        }
+
         $pathLimiting = $this->pathLimitingArguments();
 
         if ($pathLimiting !== []) {
@@ -150,6 +163,8 @@ final class AnnotateCommand extends Command
         // getenv() with no argument so the child keeps the caller's whole environment: proc_open
         // REPLACES it rather than extending it, and Psalm reads PATH and XDG_CACHE_HOME from there.
         $env = \getenv();
+        // Only `analyze` may set the private CLI layer; an inherited one would bypass validation.
+        unset($env[PluginOverrides::CLI_ENV_VAR]);
         $env[AnnotateRequest::ENV_VAR] = $controlFile;
 
         $process = \proc_open($command, [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR], $pipes, $cwd, $env);
@@ -250,6 +265,33 @@ final class AnnotateCommand extends Command
             : \sprintf('%d template(s) annotated.', \count($changed)));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * The override flags of `analyze`, spelled as given. Refused rather than forwarded: psalm dies on
+     * them, and a spaced `--plugin-option x=y` would otherwise be misread by the path check as a path.
+     *
+     * Public (not private) so it is unit-testable: CommandTester cannot set argv.
+     *
+     * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
+     *
+     * @return list<string>
+     */
+    public function rejectedOverrides(?array $argv = null): array
+    {
+        $rejected = [];
+
+        foreach ($this->rawTokens($argv) as $token) {
+            if ($token === '--') {
+                break; // everything after is positional, as in psalm's own option parsing
+            }
+
+            if (in_array($token, ['--blade', '--no-blade', '--plugin-option'], true) || \str_starts_with($token, '--plugin-option=')) {
+                $rejected[] = \explode('=', $token, 2)[0];
+            }
+        }
+
+        return \array_values(\array_unique($rejected));
     }
 
     /**

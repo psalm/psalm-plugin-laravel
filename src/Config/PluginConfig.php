@@ -133,6 +133,43 @@ final readonly class PluginConfig
         );
     }
 
+    /**
+     * A schema key's effective value as `diagnose` prints it; the schema and this match must list the same keys.
+     *
+     * @psalm-mutation-free
+     */
+    public function display(string $key): string
+    {
+        return match ($key) {
+            'modelProperties.columnFallback' => $this->modelPropertiesColumnFallback->value,
+            'configDirectory' => $this->configDirectories === [] ? "(none: the app's config path)" : \implode(', ', $this->configDirectories),
+            'resolveDynamicWhereClauses' => $this->flag($this->resolveDynamicWhereClauses),
+            'resolveConfigReturnTypes' => $this->flag($this->resolveConfigReturnTypes),
+            'reportImplicitQueryBuilderCalls' => $this->flag($this->reportImplicitQueryBuilderCalls),
+            'findMissingTranslations' => $this->flag($this->findMissingTranslations),
+            'findMissingViews' => $this->flag($this->findMissingViews),
+            'findUnconfiguredFilesystemDisks' => $this->flag($this->findUnconfiguredFilesystemDisks),
+            'findUnregisteredRouteNames' => $this->flag($this->findUnregisteredRouteNames),
+            'findSerializedQueuedModels' => $this->flag($this->findSerializedQueuedModels),
+            'findOctaneIncompatibleBinding' => $this->flag($this->findOctaneIncompatibleBinding),
+            'findPromptInjection' => $this->flag($this->findPromptInjection),
+            'blade' => $this->flag($this->bladeEnabled),
+            'blade.cacheDir' => $this->bladeCacheDir,
+            'blade.validateViewData' => $this->flag($this->bladeValidateViewData),
+            'blade.reportUnusedViewData' => $this->flag($this->bladeReportUnusedViewData),
+            'blade.reportMixedIssues' => $this->flag($this->bladeReportMixedIssues),
+            'experimental' => $this->flag($this->experimental),
+            'failOnInternalError' => $this->flag($this->failOnInternalError),
+            default => throw new \LogicException("No display value for setting '{$key}'."),
+        };
+    }
+
+    /** @psalm-pure */
+    private function flag(?bool $value): string
+    {
+        return $value === null ? 'auto' : ($value ? 'true' : 'false');
+    }
+
     /** @psalm-mutation-free */
     public function shouldUseMigrations(): bool
     {
