@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791533887995,
+  "lastUpdate": 1791540454495,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -12940,6 +12940,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.15,
             "range": "± 1.32",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1374,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c83e46ed79fb9010799d2d9157b5cfae94a6b2e6",
+          "message": "Remap line numbers inside relocated Blade issue messages (#1751)\n\n* fix(blade): remap line references inside relocated issue messages\n\n`first seen on line N` (PossiblyUndefinedGlobalVariable, PossiblyUndefinedVariable)\nand php-parser's trailing ` on line N` (ParseError) named a shadow line even\nthough the issue itself was already positioned on the template. Rewrite them\nthrough ShadowTarget::templateLineFor(), keyed by exact issue class and\nend-anchored. A reference into the prelude drops the clause instead of\nclamping to line 1; a regex failure keeps Psalm's original message.\n\nRefs #1723.\n\n* fix(blade): remap location descriptors inside relocated issue messages\n\nReferenceReusedFromConfusingScope embeds CodeLocation::getShortSummary()\n(`<shadow file>:<line>:<column>`) in its message, so a relocated issue still\nnamed the shadow. Rewrite the issue's own shadow descriptors through\nJourneyRemapper::rewriteLocationSummaries(), extracted from rewriteText() so\nthe journey text and the message share one substitution (journey behavior\nunchanged). A prelude line clamps to 1 like a journey step; a regex failure\nkeeps Psalm's message.\n\nRefs #1723.",
+          "timestamp": "2026-10-09T12:05:08+02:00",
+          "tree_id": "09b8fc8e287a7bfd87356cb67d4847e58fcf26bd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c83e46ed79fb9010799d2d9157b5cfae94a6b2e6"
+        },
+        "date": 1791540452823,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.39,
+            "range": "± 0.24",
             "unit": "s"
           },
           {
