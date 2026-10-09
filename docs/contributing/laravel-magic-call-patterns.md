@@ -477,7 +477,7 @@ resolve(Foo::class) // → resolves to Foo
 app()->make(Bar::class) // → resolves to Bar
 ```
 
-**Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). Bindings are discovered by booting the real Laravel app at plugin init and iterating the container's registered bindings. Also uses `AfterClassLikeVisit` to queue bound classes for Psalm scanning so resolved types are known before analysis.
+**Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). Bindings are discovered by booting the real Laravel app at plugin init and iterating the container's registered bindings. `Plugin::__invoke()` also calls `ContainerResolver::queueBoundClassesForScanning()` once at the end of plugin init: it instantiates every binding and queues the resolved classes for Psalm scanning (`store_failure: false`), so resolved types are known before analysis. This is not a scan-phase hook: the former `AfterClassLikeVisit` hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run) and queued the classes while stubs were registering, so Psalm scanned them as stubs. The resolver narrows to an object's class only when Psalm has its storage, otherwise it falls back like an unbound abstract.
 
 
 ## Summary: The Forwarding Chain
@@ -700,7 +700,7 @@ flowchart TD
 
         src --> storage
         stubs --> storage
-        stubs -. "AfterClassLikeVisit fires per-class<br/><i>during both source and stub scanning</i><br/>removes pseudo static methods,<br/>queues container bindings,<br/>adds issue suppressions" .-> storage
+        stubs -. "AfterClassLikeVisit fires per-class<br/><i>during both source and stub scanning</i><br/>removes pseudo static methods,<br/>adds issue suppressions" .-> storage
     end
 
     subgraph analysis["ANALYSIS PHASE — first non-null wins"]

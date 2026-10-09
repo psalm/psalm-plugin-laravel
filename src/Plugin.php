@@ -119,6 +119,12 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Last: make()ing every binding runs provider and binding closures, so it must follow every other
+            // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
+            if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+                Handlers\Application\ContainerResolver::queueBoundClassesForScanning($registration->codebase);
+            }
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }

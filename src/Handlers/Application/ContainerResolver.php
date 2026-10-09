@@ -19,8 +19,10 @@ use Psalm\Type\Union;
 final class ContainerResolver
 {
     /**
-     * map of abstract to concrete class fqn
-     * @psalm-var array<string, class-string|string>
+     * Abstract => [concrete class fqn or string, whether the container resolved an object].
+     * The flag keeps an object's class from being read back as a literal string.
+     *
+     * @psalm-var array<string, array{string, bool}>
      */
     private static array $cache = [];
 
@@ -30,9 +32,32 @@ final class ContainerResolver
     }
 
     /**
-     * @psalm-return class-string|string|null
+     * Instantiates every container binding once and queues each resolved class for scanning, so Psalm
+     * has storage for every class `app()` can return (a class nothing else references crashed analysis
+     * with "Could not get class storage", vimeo/psalm#3196). Runs once at plugin init, outside stub
+     * registration. The previous scan hook on the Application/Container interfaces re-ran every make() on
+     * each visit (2-5 times per run) and queued classes while stubs were registering, so Psalm scanned
+     * them as stubs.
+     *
+     * `store_failure: false`: a class Psalm cannot locate is not recorded as missing.
      */
-    private static function resolveFromApplicationContainer(string $abstract): ?string
+    public static function queueBoundClassesForScanning(Codebase $codebase): void
+    {
+        foreach (\array_keys(ApplicationProvider::getApp()->getBindings()) as $abstract) {
+            $resolved = self::resolveFromApplicationContainer((string) $abstract);
+
+            if ($resolved === null || !$resolved[1] || \str_contains($resolved[0], '@anonymous')) {
+                continue;
+            }
+
+            $codebase->queueClassLikeForScanning($resolved[0], store_failure: false);
+        }
+    }
+
+    /**
+     * @return array{string, bool}|null [class fqn or string, resolved to an object]
+     */
+    private static function resolveFromApplicationContainer(string $abstract): ?array
     {
         if (\array_key_exists($abstract, self::$cache)) {
             return self::$cache[$abstract];
@@ -52,10 +77,10 @@ final class ContainerResolver
 
         if (\is_string($concrete)) {
             // some path-helpers actually return a string when being resolved
-            $concreteClass = $concrete;
+            $resolved = [$concrete, false];
         } elseif (\is_object($concrete)) {
             // normally we have an object resolved
-            $concreteClass = $concrete::class;
+            $resolved = [$concrete::class, true];
         } else {
             // Some Laravel bindings (e.g. Authenticatable on a fresh Testbench app
             // with no authenticated user) resolve to null. The previous assert-based
@@ -64,9 +89,9 @@ final class ContainerResolver
             return null;
         }
 
-        self::$cache[$abstract] = $concreteClass;
+        self::$cache[$abstract] = $resolved;
 
-        return $concreteClass;
+        return $resolved;
     }
 
     /**
@@ -104,9 +129,15 @@ final class ContainerResolver
 
     private static function resolveFromLiteralString(Codebase $codebase, string $abstract): ?Union
     {
-        $concrete = self::resolveFromApplicationContainer($abstract);
+        $resolved = self::resolveFromApplicationContainer($abstract);
 
-        if ($concrete === null) {
+        // An object's class is named only when Psalm has its storage: the container instantiated it,
+        // but nothing guarantees Psalm scanned its file. Otherwise treat the resolution as failed.
+        if ($resolved !== null && $resolved[1] && !self::hasClassStorage($codebase, $resolved[0])) {
+            $resolved = null;
+        }
+
+        if ($resolved === null) {
             // Container resolution failed: either the abstract is unbound, or the
             // plugin's booted app (Orchestra Testbench, when analysing a Laravel
             // *package* rather than an app) lacks the provider that would register
@@ -133,8 +164,10 @@ final class ContainerResolver
             return null;
         }
 
+        [$concrete, $isObject] = $resolved;
+
         // A binding can resolve to a class-name string (`fn () => Foo::class`) as well as to a path.
-        if (self::isKnownClass($codebase, $concrete)) {
+        if ($isObject || self::isKnownClass($codebase, $concrete)) {
             return new Union([
                 new TNamedObject($concrete),
             ]);
@@ -159,10 +192,12 @@ final class ContainerResolver
      */
     private static function isKnownClass(Codebase $codebase, string $class): bool
     {
-        if (\class_exists($class, false)) {
-            return true;
-        }
+        return \class_exists($class, false) || self::hasClassStorage($codebase, $class);
+    }
 
+    /** @psalm-mutation-free */
+    private static function hasClassStorage(Codebase $codebase, string $class): bool
+    {
         $storage = ClassLineage::storage($codebase, $class);
 
         return $storage instanceof ClassLikeStorage && !$storage->is_interface && !$storage->is_trait;
