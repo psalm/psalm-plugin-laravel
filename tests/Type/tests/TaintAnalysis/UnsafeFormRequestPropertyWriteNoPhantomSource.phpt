@@ -39,10 +39,11 @@ final class PropertyWriteProbeRequest extends FormRequest
     }
 }
 
-function writeThenRead(PropertyWriteProbeRequest $req): void {
-    // RHS is a literal, so it carries no taint of its own — any TaintedHtml
+function writeThenRead(PropertyWriteProbeRequest $req, string $safe): void {
+    // RHS is an untainted non-literal: Psalm 7 drops input taint from literal-typed
+    // values, so a literal write would make the read genuinely clean. Any TaintedHtml
     // below must come from the read's re-source, never from this write.
-    $req->email = 'literal';
+    $req->email = $safe;
     echo $req->email;
 }
 ?>
