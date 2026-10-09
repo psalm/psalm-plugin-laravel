@@ -35,7 +35,7 @@ $_string = Collection::make('str');
 /** @psalm-check-type-exact $_string = Collection<0, 'str'>&static */
 
 $_array = Collection::make([1, 2, 3]);
-/** @psalm-check-type-exact $_array = Collection<int<0, 2>, 1|2|3> */
+/** @psalm-check-type-exact $_array = Collection<int, 1|2|3>&static */
 
 /** @var Collection<int, string> $existing */
 $existing = new Collection(['x']);
