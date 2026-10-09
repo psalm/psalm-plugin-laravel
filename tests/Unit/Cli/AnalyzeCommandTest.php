@@ -237,6 +237,28 @@ final class AnalyzeCommandTest extends TestCase
     }
 
     #[Test]
+    public function experimental_and_no_migrations_are_shorthands_in_the_same_ordered_list(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertSame(
+            [
+                'forwarded' => ['--threads=1', 'src', '--', '--experimental'],
+                'options' => ['modelProperties.columnFallback=migrations', 'experimental=true', 'modelProperties.columnFallback=none', 'experimental=false'],
+            ],
+            $command->scanArguments([
+                'psalm-laravel', 'analyze', '--threads=1',
+                '--plugin-option', 'modelProperties.columnFallback=migrations', '--experimental', 'src',
+                '--no-migrations', '--plugin-option=experimental=false', '--', '--experimental',
+            ]),
+        );
+        $this->assertSame(
+            ['--experimental=true', '--no-experimental', '--migrations', '--no-migrations-x'],
+            $command->scanArguments(['psalm-laravel', 'analyze', '--experimental=true', '--no-experimental', '--migrations', '--no-migrations-x'])['forwarded'],
+        );
+    }
+
+    #[Test]
     public function tokens_after_the_double_dash_boundary_are_forwarded_untouched(): void
     {
         $command = new AnalyzeCommand();

@@ -154,6 +154,15 @@ This is acceptable — the handlers gracefully handle any Model subclass.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
 Registration order is preserved (relationship > factory > accessor > column).
 
+### `Request::user()` overrides: per-subclass registration, explicit guard only
+
+**Decision:** `RequestHandler::afterCodebasePopulated()` registers the `Request::user()` return-type closure on every `Request` subclass whose `user()` resolves to an override (own, inherited from an overriding parent, or trait-imported), e.g. Laravel Nova's `NovaRequest`.
+
+- **Why per subclass:** Psalm dispatches a return-type provider for the called class or the declaring class only (`MethodCallReturnTypeFetcher`), never an intermediate ancestor, so the `Request` registration never fires for an override and calls stay `mixed`. A trait override is dispatched under the trait, hence registration on the using class and its descendants rather than relying on the declaring-class fallback.
+- **Forwarding bet:** an override is assumed to forward an explicit guard to `parent::user($guard)`. Only an explicit literal string or string-backed enum case guard narrows; dynamic, unknown, or unpacked guards decline.
+- **No-arg and `null` decline on overrides:** the override may pick its own default (Nova reads `config('nova.guard')`), so the app's `auth.defaults.guard` is not provable there. Plain `Request` keeps the default-guard narrowing.
+- **Declared return type wins, decided by Psalm itself:** registration takes every override; at call time, after the argument-shape bails, the handler asks Psalm for its own return type of the called class's `user()` and declines unless it is `mixed` (or unresolved). The call is `Methods::getMethodReturnType()` with the event's `StatementsAnalyzer`, the same call `MethodCallReturnTypeFetcher` makes, minus template lower bounds (an unresolved template param is never mixed, so this can only decline), so typed, docblock-typed, trait-aliased, and documented-by-a-typed-ancestor overrides all keep Psalm's answer and an untyped `{@inheritDoc}` override (documented by `Request::user()`'s `mixed`) narrows. Rejected: a registration-time gate mirroring Psalm's documenting/overridden-method resolution from storage, which diverged on trait aliases, child re-aliases, and a `: mixed` child under a docblock-typed parent. `Codebase::getMethodReturnType()` is not a substitute either: it passes no source analyzer, so `Methods::getMethodReturnType()` returns the documenting `mixed` over an override's own `?Admin`.
+
 ## Performance
 
 ### Performance budget for handlers
@@ -175,6 +184,20 @@ Registration order is preserved (relationship > factory > accessor > column).
 Document every workaround with a comment linking to the upstream issue.
 
 **Why:** Workarounds accumulate tech debt and can mask the root cause. They also break silently when the upstream behavior changes. But waiting indefinitely for upstream fixes blocks real users.
+
+### `NamedArgumentTaintHandler` strips only named arguments bound to a variadic
+
+**Decision:** Strip taint from a named-argument value only when Psalm binds it to the callee's variadic and the callee resolves exactly. Everything else is left to Psalm.
+
+**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1, so the old strip-everything handler only hid true positives. Two variadic bugs remain:
+- vimeo/psalm#12252: an unpacked argument is mapped onto every parameter and string keys are ignored, so `run(...$args)` forwarding to `handle(...$args)` reports `run(page: $x)` against `handle()`'s first parameter (#1395).
+- vimeo/psalm#12251: a variadic is keyed by its written offset, so `v(zzz: $x)` collides with the fixed parameter declared there.
+
+Deleting the handler would bring the #1395 false positive back, so it shrank to this one rule. Retire it when both bugs are fixed.
+
+**Accepted limitation:** the strip drops the whole flow, so a genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (`TaintedNamedArgumentVariadicKnownLimitation`). `AddRemoveTaintsEvent` names neither the parameter nor the destination, so no narrower strip exists.
+
+**Rejected (draft PR #1579):** strip only when the written offset collides with a fixed parameter. It keeps the genuine finding but reopens the reported #1395 false positive, which sits at the variadic's own offset.
 
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 
@@ -269,36 +292,12 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 - `new Illuminate\Http\Response(...)` is a second route to the same sink. Its journey tail (dumped empirically) matches `make()`'s shape, so the matcher trusts the label and needs no class gate.
 - A safe `Content-Type` is proven by a denylist, not the whitelist the issue proposed: deny types containing `html`, `xml` (an XML document can carry an XHTML-namespaced script) or `script` (the WHATWG JavaScript group; `application/postscript` is accepted collateral), plus `multipart/*` and the sniffing escapes `unknown/unknown` and `application/unknown`. Every other well-formed literal type is exempt, so vendor download types need no maintenance list.
 
-**Second application (#1435, `PromptGuardTaintHandler`):** the same mechanism exempts a
-`TaintedLlmPrompt` at a `laravel/ai` `prompt()` / `stream()` call site. Two facts made it cheaper
-than #1348:
+**Second application (#1435, `PromptGuardTaintHandler`):** the same mechanism exempts a `TaintedLlmPrompt` at a `laravel/ai` `prompt()` / `stream()` call site. Two facts made it cheaper than #1348:
 
-- The journey tail label carries the RECEIVER class, not the declaring trait or base
-  (`Internal/Codebase/Methods::getCasedMethodId()` returns the original fq class name unless it is
-  all-lowercase). Dumped empirically on 7.0.0-beta19 with a child class inheriting `middleware()`
-  from an abstract base: the label named the child. So the class is free at emission time, no AST
-  read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
-- The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s
-  declared return type (as an object, a `class-string<Guard>`, or a `Guard::class` literal) whose
-  dispatched method populates `FunctionLikeStorage::$removed_taints` with
-  `TaintKind::INPUT_LLM_PROMPT`, which is what `@psalm-taint-escape llm_prompt` already writes.
+- The journey tail label carries the RECEIVER class, not the declaring trait or base (`Internal/Codebase/Methods::getCasedMethodId()` returns the original fq class name unless it is all-lowercase; dumped on 7.0.0-beta19 with a child inheriting `middleware()` from an abstract base). The class is free at emission time, with no AST read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
+- The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s declared return type (object, `class-string<Guard>`, or `Guard::class` literal) whose dispatched method has `TaintKind::INPUT_LLM_PROMPT` in `FunctionLikeStorage::$removed_taints`, which is what `@psalm-taint-escape llm_prompt` already writes. Which method is dispatched: [taint-analysis.md](taint-analysis.md#how-the-prompt-guard-exemption-reads-an-escape-annotation).
 
-**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision, not a fixed `handle`.**
-`Pipeline::carry()` tests `is_callable($pipe)` before `method_exists($pipe, 'handle')`, so an object
-entry with `__invoke` never reaches its own `handle()`, while a class-string entry is not callable,
-takes the container branch, and lands on `handle()` even when `__invoke` exists. The handler mirrors
-both orders per candidate rather than assuming one, and consults only the first method that exists:
-runtime has no fallthrough to the other one, so neither does the exemption. Confirmed against PHP's
-`is_callable()` semantics directly. A closure entry is unprovable by construction and always keeps
-the finding.
-
-**Trust the tag, do not prove the body.** An AST proof of `middleware()`'s body was designed and
-rejected: it would hardcode one guard vendor's FQN and constructor parameter names (a pre-1.0
-signature that has already moved), it could not distinguish a blocking guard from a logging one
-anyway, and it would exempt nothing for an app-local or second-vendor guard. Reading an escape
-annotation instead keeps the plugin package-agnostic and makes the exemption opt-in by the guard
-author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
-records that a mitigation is attached, not that a payload is neutralised.
+**Trust the tag, do not prove the body.** The exemption is opt-in by the guard author and names no guard package. Rejected: an AST proof of `middleware()`'s body, which would hardcode one vendor's FQN and constructor parameters, could not tell a blocking guard from a logging one, and would exempt nothing for an app-local guard. The cost is an accepted caveat documented in `docs/security.md`: the annotation records that a mitigation is attached, not that a payload is neutralised.
 
 ## Breaking Changes
 
@@ -342,6 +341,24 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - Only suppress issues that are *always* false positives for the given Laravel base class or trait
 - Prefer parent-class/trait matching over FQCN matching (FQCN breaks for custom namespaces)
 - Never suppress issues that *could* be legitimate bugs (e.g. don't suppress `InvalidReturnType` just because it's common)
+
+### Dead code on Psalm 7: edges, not suppressions, for convention entry points
+
+**Decision:** Methods Laravel calls by convention (invokable `__invoke`, pipe `handle`/`terminate`, queued/bus job `handle`/`failed`, `Dispatchable` constructors) and the hooks the queue reads off a job (`$tries`, `middleware()`, `uniqueId()`, ...) are rooted by class-conditional edges ("class is alive => this member is alive") in `IndirectMethodReferenceHandler::RULES`, not by `SuppressHandler` entries. The edge is sourced at the class node (`Context::$self`, no file path), so an unreferenced job stays `UnusedClass`.
+
+**Why:** Psalm 7 resolves dead code by reachability, so an uncalled entry method is never alive and its private dependencies cascade into error-level `UnusedProperty`/`UnusedMethod`. A suppression hides only the entry point's own issue and adds no edge.
+
+**Probed dead ends:**
+- Suppression: adds no edge.
+- Mutating `MethodStorage::$public_api`: an unconditional root, even for dead classes, and it mutates Psalm storage.
+- Call-site AST hooks on `Route::*` / `dispatch()`: too many syntactic forms; string aliases (`'Plain@show'`) need a booted app.
+- Roots from the booted router: deferred; needs a trusted boot and goes stale with route caching and env.
+
+**Boundaries:** concrete user classes; public non-static members (the `Dispatchable` constructor at any visibility); a pipe needs a *native* `Closure` (or `?Closure`) on `handle()`'s second parameter. Not covered: route actions on non-controller classes, auto-discovered listeners, the remaining `SuppressHandler` convention entries.
+
+**Known limitations (accepted):**
+- A `ShouldQueue`-only class (no bus trait) gets no `handle` parameter injection: it may be a listener, and `CallQueuedListener` passes the event positionally. `make:job` always adds `Queueable`.
+- Used traits are read from the class and its parents only, not from traits composed of other traits, and a `class_alias()`ed trait is not recognised.
 
 ## Handler Registration Order
 

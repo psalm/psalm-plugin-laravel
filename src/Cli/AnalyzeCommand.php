@@ -29,6 +29,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'analyze', description: 'Run Psalm analysis on the current project.', aliases: ['analyse'])]
 final class AnalyzeCommand extends Command
 {
+    /** Shorthand flags and the override token each stands for. */
+    private const SHORTHANDS = [
+        '--blade' => 'blade=true',
+        '--no-blade' => 'blade=false',
+        '--experimental' => 'experimental=true',
+        '--no-migrations' => 'modelProperties.columnFallback=none',
+    ];
+
     /**
      * @param string|null $workingDirectory Override the target directory; defaults to the process CWD.
      *                                      Exposed for tests.
@@ -55,13 +63,25 @@ final class AnalyzeCommand extends Command
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
         );
 
-        // The two overrides below are declared for `analyze --help` only: scanArguments() consumes them
+        // The overrides below are declared for `analyze --help` only: scanArguments() consumes them
         // from raw argv and the plugin in the child psalm applies them, because psalm rejects unknown flags.
         $this->addOption(
             'blade',
             null,
             InputOption::VALUE_NEGATABLE,
             'Shorthand for --plugin-option blade=true (--blade) or blade=false (--no-blade).',
+        );
+        $this->addOption(
+            'experimental',
+            null,
+            InputOption::VALUE_NONE,
+            'Shorthand for --plugin-option experimental=true.',
+        );
+        $this->addOption(
+            'no-migrations',
+            null,
+            InputOption::VALUE_NONE,
+            'Shorthand for --plugin-option modelProperties.columnFallback=none (skip migration-based column inference).',
         );
         $this->addOption(
             'plugin-option',
@@ -163,8 +183,8 @@ final class AnalyzeCommand extends Command
     /**
      * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run plugin
      * overrides, as ordered `KEY=VALUE` tokens: `--plugin-option KEY=VALUE` / `--plugin-option=KEY=VALUE`
-     * verbatim, `--blade` / `--no-blade` as `blade=true|false`, so the last one wins whichever spelling it
-     * used. One scan yields both, so the stripped tokens and the overrides cannot drift apart.
+     * verbatim, the shorthands as their KEY=VALUE (see SHORTHANDS), so the last one wins whichever
+     * spelling it used. One scan yields both, so the stripped tokens and the overrides cannot drift apart.
      *
      * Raw argv, not parsed input: with ignoreValidationErrors one bad option makes Symfony drop ALL
      * parsed options, and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
@@ -207,8 +227,8 @@ final class AnalyzeCommand extends Command
                 return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'options' => $options];
             }
 
-            if ($token === '--blade' || $token === '--no-blade') {
-                $options[] = 'blade=' . ($token === '--blade' ? 'true' : 'false');
+            if (isset(self::SHORTHANDS[$token])) {
+                $options[] = self::SHORTHANDS[$token];
             } elseif (\str_starts_with($token, '--plugin-option=')) {
                 $options[] = \substr($token, \strlen('--plugin-option='));
             } elseif ($token === '--plugin-option') {

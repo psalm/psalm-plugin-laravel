@@ -103,6 +103,24 @@ final class BladeIssueRemapTest extends TestCase
         return $lines;
     }
 
+    /**
+     * @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues
+     *
+     * @return list<string> the messages the issue type was reported with for that template
+     */
+    private function messagesFor(array $issues, string $type, string $template): array
+    {
+        $messages = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === $type && \str_ends_with($issue['file_path'], $template)) {
+                $messages[] = $issue['message'];
+            }
+        }
+
+        return $messages;
+    }
+
     #[Test]
     public function suppressions_cover_issues_inside_their_own_docblock(): void
     {
@@ -793,6 +811,143 @@ final class BladeIssueRemapTest extends TestCase
         }
     }
 
+    /**
+     * #1694: `@session` compiles a conditional `$__sessionPrevious[] = $value` save and later reads
+     * behind `isset()`, so Psalm reports the bookkeeping array as a possibly undefined global on
+     * the directive line. The author's own conditionally assigned `$__authorLocal` on line 9 must
+     * keep reporting: the gate is exact-name.
+     */
+    #[Test]
+    public function session_previous_value_stack_is_not_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-previous.blade.php';
+
+        $this->assertStringContainsString('$__sessionPrevious[] = $value', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [9],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // #1723: "first seen on line N" names the template line of the assignment (7), not the
+        // shadow line Psalm counted.
+        $this->assertSame(
+            ['Possibly undefined global variable $__authorLocal, first seen on line 7'],
+            $this->messagesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+        );
+    }
+
+    /** #1694: the `@context` twin of the `@session` stack above (`$__contextPrevious`). */
+    #[Test]
+    public function context_previous_value_stack_is_not_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'context-previous.blade.php';
+
+        $this->assertStringContainsString('$__contextPrevious[] = $value', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
+     * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
+     * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`
+     * (line 2) and a nullable one (line 7) here, `false`/`0`/`true`/`[]` and mixed lists in
+     * `aware-scalar-default`. The author's own calls with literal arguments keep reporting.
+     */
+    #[Test]
+    public function non_string_aware_defaults_do_not_report_against_the_generated_list_form_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        // Guard against a vacuous pass: the list-form arm must still be compiled.
+        $this->assertStringContainsString('$__env->getConsumableComponentData($__value', $this->shadowSourceFor('components/aware-scalar-default.blade.php'));
+
+        $template = 'components/aware-null-default.blade.php';
+        $this->assertSame([5], $this->linesFor($issues, 'NullArgument', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyNullArgument', $template), $json);
+
+        $template = 'components/aware-scalar-default.blade.php';
+        $this->assertSame([7, 8], $this->linesFor($issues, 'InvalidArgument', $template), $json);
+        $this->assertSame([8], $this->linesFor($issues, 'InvalidCast', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyFalseArgument', $template), $json);
+    }
+
+    /**
+     * #1695: the gate declines when the template itself contains the generated call text, so an
+     * author-written `getConsumableComponentData($__value)` with a null `$__value` keeps reporting.
+     */
+    #[Test]
+    public function an_author_written_list_form_call_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            2,
+            $this->linesFor($issues, 'NullArgument', 'components/aware-author-list-call.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * The keyed-arm mirror of #1695: an all-int-key list (`@aware(['color'])`, lines 1 and 2)
+     * narrows `$__key` to `never` inside `is_string($__key) ? ...getConsumableComponentData($__key,
+     * ...)`, which Psalm reports as `NoValue`. Mixed lists (lines 3 and 4) keep a string key and
+     * never reported.
+     */
+    #[Test]
+    public function list_form_aware_does_not_report_no_value_against_the_generated_keyed_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        // Guard against a vacuous pass: the keyed arm must still be compiled.
+        $this->assertStringContainsString('$__env->getConsumableComponentData($__key, $__value)', $this->shadowSourceFor('components/aware-list-form.blade.php'));
+
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], 'components/aware-list-form.blade.php'))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * A marker between the attribute lines of a multi-line `<x-...>` tag leaves the opening tag
+     * uncompiled while `</x-alert>` still compiles, and its orphan `endif` is a `ParseError`. The
+     * `->`/`=>` inside the tag's `{{ }}` and `@class()` attributes must not end the skip early.
+     */
+    #[Test]
+    public function a_multiline_component_tag_compiles_without_a_parse_error(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/multiline-tag.blade.php';
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+
+        // The opening tag compiled rather than surviving as literal text.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString('->renderComponent()', $shadow);
+        $this->assertStringNotContainsString('<x-alert', $shadow);
+    }
+
+    /** The keyed-arm gate declines when the template itself contains the generated call text. */
+    #[Test]
+    public function an_author_written_keyed_call_keeps_reporting_no_value(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            2,
+            $this->linesFor($issues, 'NoValue', 'components/aware-author-keyed-call.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     #[Test]
     public function attributes_stays_non_null_after_a_nested_tag_in_a_bare_mention_component_view(): void
     {
@@ -1094,6 +1249,12 @@ final class BladeIssueRemapTest extends TestCase
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
 
+        // #1723: php-parser's trailing " on line N" names the template line too.
+        $this->assertSame(
+            ['Syntax error, unexpected T_ENDIF on line 3'],
+            $this->messagesFor($issues, 'ParseError', $template),
+        );
+
         // Guard against a vacuous pass: a well-formed `<x-alert />` alone already emits several
         // `endif;` lines as part of its own save/restore bookkeeping, so a bare substring check for
         // "endif" cannot fail. `renderComponent()` is only ever emitted once per genuinely opened
@@ -1111,6 +1272,27 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'UnusedForeachValue', 'resources/views/foreach-unused-value.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #1723: the message of `ReferenceReusedFromConfusingScope` embeds a `file:line:column`
+     * descriptor of the reference's definition (template line 4), which must not name the shadow.
+     */
+    #[Test]
+    public function a_location_descriptor_inside_a_message_names_the_template(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/reference-reused.blade.php';
+
+        $this->assertSame(
+            [8],
+            $this->linesFor($issues, 'ReferenceReusedFromConfusingScope', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $messages = $this->messagesFor($issues, 'ReferenceReusedFromConfusingScope', $template);
+        $this->assertCount(1, $messages);
+        $this->assertMatchesRegularExpression('#^\$row is possibly a reference defined at \S*reference-reused\.blade\.php:4:\d+\. #', $messages[0]);
     }
 
     /**

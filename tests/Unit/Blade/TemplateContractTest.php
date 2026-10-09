@@ -19,7 +19,6 @@ final class TemplateContractTest extends TestCase
         $contract = new TemplateContract(
             ['user' => new ContractVar('user', '\App\Models\User', 1, false)],
             [],
-            [],
             false,
         );
 
@@ -29,7 +28,7 @@ final class TemplateContractTest extends TestCase
     #[Test]
     public function contract_vars_is_empty_for_an_empty_contract(): void
     {
-        $contract = new TemplateContract([], [], [], false);
+        $contract = new TemplateContract([], [], false);
 
         $this->assertSame([], $contract->contractVars());
     }

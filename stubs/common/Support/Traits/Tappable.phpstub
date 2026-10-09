@@ -3,31 +3,28 @@
 namespace Illuminate\Support\Traits;
 
 /**
- * Refine the return type of Tappable::tap().
+ * Laravel's real signature types `$callback` as `(callable($this): mixed)|null`; we keep it a
+ * plain `callable|null`. The typed form makes Psalm return the union of both branches for typed
+ * closures and first-class callables, and an untyped closure param inferred from `$this` stays a
+ * literal `static`. `$this` and `static` in the return infer identically here (probed on rc1 for
+ * Stringable, Response, paginators, Router and userland hosts), so the signature mirrors Laravel.
  *
- * Laravel's real signature is conditional: a `null` callback returns a
- * {@see \Illuminate\Support\HigherOrderTapProxy} that forwards every call back to the
- * target; a real callback runs it and returns the target ($this).
+ * The unused `@template` is a workaround for vimeo/psalm#11837: a conditional return in a stub
+ * that re-declares a reflected method collapses to a single branch (here: always
+ * `HigherOrderTapProxy`). A method-level template routes around that code path. Drop it once
+ * the fix (vimeo/psalm#11840) lands.
  *
- * We cannot express that split in this stub. A conditional return type
- * (`($callback is null ? HigherOrderTapProxy<static> : static)`) does NOT discriminate when
- * it overrides a reflected trait method — Psalm collapses every call to the null branch
- * regardless of the argument (verified on both stubbed and un-stubbed Tappable users). So the
- * stub declares only the safe fallback `@return $this` (the callback branch), and
- * {@see \Psalm\LaravelPlugin\Handlers\Support\TappableTapHandler} supplies the precise
- * `HigherOrderTapProxy<static>` for the no-argument higher-order form. The proxy is stubbed
- * generic ({@see \Illuminate\Support\HigherOrderTapProxy}) so a proxied call threads the
- * target type natively through `__call` — no proxy handler needed.
- *
- * @see https://github.com/psalm/psalm-plugin-laravel/issues/1110
+ * @see https://github.com/vimeo/psalm/issues/11837
  */
 trait Tappable
 {
     /**
-     * Call the given Closure with this instance then return the instance.
+     * Call the given Closure with this instance then return the instance, or, with no
+     * callback, a proxy that runs each method called on it against this instance.
      *
+     * @template TUnused
      * @param  callable|null  $callback
-     * @return $this
+     * @return ($callback is null ? \Illuminate\Support\HigherOrderTapProxy<$this> : $this)
      */
     public function tap($callback = null) {}
 }

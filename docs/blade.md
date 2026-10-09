@@ -17,13 +17,7 @@ Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports 
 
 ## Enabling it
 
-Install the Blade parser the analysis depends on. It is optional so projects without Blade analysis do not pull it (and `laravel/framework` with it) in:
-
-```bash
-composer require --dev stillat/blade-parser
-```
-
-Then add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
+Add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 
 ```xml
 <plugins>
@@ -33,7 +27,7 @@ Then add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 </plugins>
 ```
 
-**default**: disabled. The element's presence turns analysis on, and every setting below goes on the same element. Omit it, or write `<blade value="false" />`, to turn analysis off. Without `stillat/blade-parser` installed, the analysis turns itself off for the run with one warning.
+**default**: disabled. The element's presence turns analysis on, and every setting below goes on the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
 
 ### `cacheDir`
 
@@ -147,6 +141,7 @@ One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 ru
 {!! request()->input('q') !!} {{-- unescaped: TaintedHtml --}}
 ```
 
+* **Positions inside a message name the template.** The `first seen on line 7` of `Possibly undefined variable $x`, the trailing `on line 7` of a `ParseError`, and the `file:line:column` of a reference's definition in a `ReferenceReusedFromConfusingScope` all count the template, not the compiled shadow. A `first seen` reference into compiler-generated code has no template line, so that clause is omitted.
 * **`e()` accepts `\Stringable` by design.** Laravel's `e()` has no type declaration on its `$value` parameter; `htmlspecialchars()` coerces it to string at runtime regardless of caller strictness, so passing a `\Stringable` is safe everywhere, not only at echo positions. `{{ $stringable }}` and an explicit `e($stringable)` call anywhere, including inside `@php`, no longer report `ImplicitToStringCast`. Other `ImplicitToStringCast` sites are unchanged: a `\Stringable` passed to a plain function such as `strlen()`, or used in a concatenation under `strict_binary_operands`, still reports.
 * **Helper functions and constants the booted application defines are resolvable from a template.** A package-style monorepo typically `include`s its helper file from a service provider's `register()`, so no project file ever `require`s it — and Psalm resolves a bare `foo()` only through the calling file's own transitive requires. A compiled template requires nothing, so every such helper used to report `UndefinedFunction … consider enabling the allFunctionsGlobal config option`, and `define()`d constants in the same files reported `UndefinedConstant`. The plugin now captures which files the boot declared global functions in and makes exactly those visible to templates, with their real signatures: passing the wrong number of arguments still reports. A function nothing defines still reports too, and the capture never reaches into the Composer install root, where the plugin's own stubs are the better source. Ordinary PHP files are unchanged — Psalm's `allFunctionsGlobal` remains the (project-wide, and therefore blunt) escape hatch for those.
 * **`old()` accepts any `$default`.** Its runtime special-cases only `Model` defaults (resolved via `getAttribute()`) and otherwise forwards the value unconstrained to `Arr::get($input, $key, $default)`, so `{{ old('qty', 0) }}` and `{{ old('active', false) }}` are honest code even though Laravel's own `@param` lists only `Model|string|array|null`. The return type is left at `string|array|null`; see the echo-position gate below for what that union does in `{{ }}`.
@@ -192,7 +187,7 @@ Nothing in the pipeline needs a single process, and that is checked rather than 
 `psalm-laravel blade:annotate` is the one exception, and forces `--threads=1` on the Psalm run it drives (see [Annotating templates](#annotating-templates)). That restriction is about the producer types the command collects, not about analysis.
 ## Degradation
 
-Blade analysis never fails a run. If `stillat/blade-parser` is not installed, the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
+Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
 
 Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata) and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
 

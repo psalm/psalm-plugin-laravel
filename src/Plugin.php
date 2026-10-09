@@ -195,6 +195,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Application\ContainerResolver::reset();
         Handlers\Auth\AuthConfigAnalyzer::reset();
         Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
@@ -208,6 +209,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelPropertyHandler::reset();
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\RelationCallbackParamsHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
@@ -297,9 +299,9 @@ final class Plugin implements PluginEntryPointInterface
      * Stubs for optional first/third-party AI packages. Each entry guards on
      * Composer's runtime metadata so absent packages contribute zero stubs and
      * we avoid triggering the project autoloader for a class lookup. The
-     * version constraint additionally protects against a future major bump
-     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
-     * renamed classes.
+     * version constraint additionally keeps the stubs off a laravel/ai release
+     * whose declarations they no longer match (see
+     * LaravelAiIntegration::CONSTRAINT).
      *
      * @return list<string>
      */
@@ -318,8 +320,8 @@ final class Plugin implements PluginEntryPointInterface
      * Single gate for every laravel/ai call site (stubs, LlmOutputTaintHandler,
      * PromptInjectionIssuePolicy). They must move in lockstep: a stub loaded
      * without its handler, or an issue policy applied without the stubs that
-     * feed it, is a silent half-integration. The version range has no ceiling
-     * below 1.0 because disabling coverage on every minor is worse than the
+     * feed it, is a silent half-integration. The range has no ceiling below the
+     * next major, because disabling coverage on every minor is worse than the
      * rare drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
      */
     private function laravelAiIntegrationEnabled(): bool
@@ -337,7 +339,7 @@ final class Plugin implements PluginEntryPointInterface
         bool $bladeActive,
         ?Blade\Annotate\AnnotateRequest $annotate,
     ): void {
-        // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
+        // Global stop-gap for vimeo/psalm#12251 and #12252 (named arguments bound to a variadic).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
@@ -413,6 +415,9 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -517,9 +522,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
 
-        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
-        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
-
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
@@ -527,8 +529,6 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
-        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
-        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
@@ -654,9 +654,8 @@ final class Plugin implements PluginEntryPointInterface
 
             // Exempts prompt()/stream() call sites whose receiver declares a middleware
             // stack containing a guard that annotates `@psalm-taint-escape llm_prompt` on
-            // whichever method Illuminate's Pipeline dispatches to it (__invoke for an
-            // object entry that has one, handle otherwise). Emission-time only, never a
-            // graph write.
+            // its handle() method (the only one laravel/ai 1.x dispatches). Emission-time
+            // only, never a graph write.
             require_once __DIR__ . '/Handlers/Ai/PromptGuardTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\PromptGuardTaintHandler::class);
         }

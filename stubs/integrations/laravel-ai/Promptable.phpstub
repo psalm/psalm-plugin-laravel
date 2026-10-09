@@ -6,29 +6,39 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Queue\SerializesModels;
 use Closure;
 use Laravel\Ai\Approvals\Decisions;
+use Laravel\Ai\Contracts\AgentInput;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Messages\Message;
+use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\QueuedAgentResponse;
 use Laravel\Ai\Responses\StreamableAgentResponse;
-use Laravel\Ai\Gateway\FakeTextGateway;
+use Laravel\SerializableClosure\SerializableClosure;
 
 /**
  * Trait used by every user-defined agent class.
  *
- * Every method below routes the $prompt string into the LLM provider, so each
- * is a sink for the `llm_prompt` taint kind. Taint propagating from
+ * Prompt-family methods below route their prompt input into the LLM provider,
+ * so each is a sink for the `llm_prompt` taint kind. Taint propagating from
  * `Request::input()`, `Http::*->body()`, `Storage::get()`, or any other source
  * the plugin marks as `@psalm-taint-source input` ends here.
  *
  * `use SerializesModels` and the `make()` factory are restated verbatim from
  * `vendor/laravel/ai/src/Promptable.php` because re-declaring this trait to
  * add taint annotations would otherwise erase them from every user agent
- * class (see "Stub merging" in `docs/contributing/README.md`). The
- * remaining provider/failover internals (`getTimeout`, `withModelFailover`,
- * `iterateProvidersWithFailover`, …) are intentionally left to the
- * reflected source — they take no taint annotations, are framework-private,
- * and inflating the stub would only add maintenance drift.
+ * class (see "Stub merging" in `docs/contributing/README.md`). The remaining
+ * private provider/failover internals (`withModelFailover`,
+ * `iterateProvidersWithFailover`, …) are intentionally left to reflected
+ * source — they take no taint annotations, and inflating the stub would only
+ * add maintenance drift.
+ *
+ * The test-double surface is the one waived family; every other member must stay restated so a new sink or
+ * source fails CI (policy: "Stub merging" in `docs/contributing/README.md`).
+ *
+ * @stub-waive assert*()  test-double assertions; recorded calls, never model-facing text
+ * @stub-waive fake()     test double; swaps the gateway, carries no prompt text
+ * @stub-waive isFaked()  no parameters; a boolean over whether the gateway is swapped
  *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  */
@@ -36,13 +46,25 @@ trait Promptable
 {
     use SerializesModels;
 
-    public static function make(mixed ...$arguments): static {}
+    /**
+     * The ad-hoc message history to send ahead of the next prompt.
+     *
+     * @var list<Message>|null
+     */
+    protected ?array $adHocMessages = null;
+
+    /**
+     * The runtime tool override, replacing the tools the agent declares.
+     */
+    protected ?SerializableClosure $runtimeTools = null;
+
+    public static function make(...$arguments): static {}
 
     /**
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function prompt(
-        Decisions|string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -53,7 +75,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function stream(
-        Decisions|string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -64,7 +86,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function queue(
-        Decisions|string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -74,7 +96,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcast(
-        Decisions|string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         bool $now = false,
@@ -86,7 +108,7 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcastNow(
-        Decisions|string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         Lab|array|string|null $provider = null,
@@ -97,34 +119,28 @@ trait Promptable
      * @psalm-taint-sink llm_prompt $prompt
      */
     public function broadcastOnQueue(
-        Decisions|string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         Channel|array $channels,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
     ): QueuedAgentResponse {}
 
+    /**
+     * @psalm-taint-sink llm_prompt $messages
+     */
+    public function withMessages(iterable $messages): static {}
+
+    /**
+     * No sink: `$tools` transports Tool instances; model-visible descriptions are return values Psalm cannot target.
+     */
+    public function withTools(Closure|iterable $tools): static {}
+
+    protected function resolveAgentTools(): ?array {}
+
     protected function getProvidersAndModels(Lab|array|string|null $provider, ?string $model): array {}
 
     protected function getDefaultModelFor(TextProvider $provider): string {}
 
     protected function getTimeout(?int $timeout): int {}
-
-    public static function fake(Closure|array $responses = []): FakeTextGateway {}
-
-    public static function assertPrompted(Closure|string $callback): void {}
-
-    public static function assertPromptedTimes(int $times = 1): void {}
-
-    public static function assertNotPrompted(Closure|string $callback): void {}
-
-    public static function assertNeverPrompted(): void {}
-
-    public static function assertQueued(Closure|string $callback): void {}
-
-    public static function assertNotQueued(Closure|string $callback): void {}
-
-    public static function assertNeverQueued(): void {}
-
-    public static function isFaked(): bool {}
 }

@@ -55,6 +55,8 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 - `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
+For one run without editing `psalm.xml`, use `psalm-laravel analyze --no-migrations` or `PSALM_LARAVEL_OPTIONS='modelProperties.columnFallback=none'` (see [Per-run overrides](#per-run-overrides)).
+
 ## `resolveDynamicWhereClauses`
 
 **default**: `true`
@@ -243,17 +245,13 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 **default**: `auto`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt (`Agent::prompt()`, `stream()`, `queue()`, `broadcast*()`, and the other sinks listed in [Security checks](security.md)). It is only relevant when the supported `laravel/ai` integration is installed; the plugin leaves the level alone otherwise.
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt sink. See [LLM prompt injection](security.md#llm-prompt-injection-owasp-llm012025) for what is covered and for when the integration loads (`laravel/ai >=1.0.0 <2.0.0` only).
 
-- element omitted (`auto`): enforced when the supported `laravel/ai` integration is installed (`>=0.11.0 <1.0.0`). The plugin leaves the issue at Psalm's normal error level.
-- `value="false"`: explicit opt-out. Only `TaintedLlmPrompt` is suppressed; model-output taint sources and their ordinary SQL/HTML/shell findings remain errors.
-- `value="true"`: enforced inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
+- element omitted (`auto`): enforced when the supported integration is installed, at Psalm's normal error level.
+- `value="false"`: explicit opt-out. Suppresses only `TaintedLlmPrompt`; model-output taint sources keep their ordinary `Tainted*` findings.
+- `value="true"`: enforced, but only inside the same integration gate. It does not enable the rule when `laravel/ai` is absent or unsupported.
 
-If your agents already run prompt-injection middleware, annotate the guard instead of opting out globally: [Marking prompt-guard middleware as trusted](security.md#marking-prompt-guard-middleware-as-trusted).
-
-Use the explicit opt-out only where direct prompt flows are intentional. In security-sensitive applications, the default auto mode reports prompts assembled from data the user did not knowingly submit (retrieved documents, scraped pages, webhook bodies, tool results). An explicit `<TaintedLlmPrompt errorLevel="..." />` in your `issueHandlers` always wins over this setting.
-
-This governs the prompt sink direction only. Model output as a taint source (an agent's answer reaching SQL, HTML, a shell command, a header, or a file path) is reported as the usual `Tainted*` issues at their usual levels, on by default, because those findings do have an ordinary fix.
+An explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` always wins over this setting. If your agents already run a prompt guard, annotate the guard (see the link above) instead of opting out globally.
 
 ### Example
 
@@ -265,7 +263,7 @@ This governs the prompt sink direction only. Model output as a taint source (an 
 
 See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, [tuning template findings](blade.md#tuning-template-findings), ambient variables, taint reporting, and known limits).
 
-**default**: off. The element's presence turns analysis on; the settings below are attributes of the same element. Omit it, or write `<blade value="false" />`, to turn analysis off. Requires `composer require --dev stillat/blade-parser`; without it the analysis turns itself off with one warning.
+**default**: off. The element's presence turns analysis on; the settings below are attributes of the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
 
 ```xml
 <blade />
@@ -362,7 +360,7 @@ PSALM_LARAVEL_OPTIONS='experimental=true modelProperties.columnFallback=none' ve
 * Keys mirror the XML names; nested settings use a dot: `modelProperties.columnFallback`, `blade.cacheDir`, `blade.validateViewData`, and so on. `psalm-laravel analyze --help` lists every key with its type and default. `cachePath` is not a key.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules): an override can force them on or off, but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`. Paths are taken verbatim, with the same meaning as the XML attribute. A relative path resolves against Psalm's working directory: the directory of the config file by default, but the directory you launched Psalm from when `resolveFromConfigFile="false"` is set. It is never the directory you typed it in unless that is where Psalm runs from.
 * `configDirectory` is a list: repeat the key (`--plugin-option configDirectory=a --plugin-option configDirectory=b`). Repeats accumulate within one layer, and a higher layer replaces the lower layer's list entirely.
-* Precedence per key: `--plugin-option` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. A repeated scalar key is last-wins. `--blade` / `--no-blade` are shorthand for `--plugin-option blade=true|false` and share its ordering.
+* Precedence per key: `--plugin-option` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. A repeated scalar key is last-wins. Shorthands share that ordering: `--blade` / `--no-blade` for `--plugin-option blade=true|false`, `--experimental` for `experimental=true`, `--no-migrations` for `modelProperties.columnFallback=none`.
 * `experimental` is applied after the layers are merged: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless a layer sets one of them explicitly.
 * `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
 * `PSALM_LARAVEL_OPTIONS` is whitespace-separated `KEY=VALUE` tokens with no quoting, so a value cannot contain whitespace (use `psalm.xml` or `analyze --plugin-option` for those). A value starting with `"` is rejected: it is reserved for future quoting. It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
@@ -426,6 +424,8 @@ An explicit `<PluginIssue>` entry takes complete ownership of that issue (base l
 ```
 
 Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
+
+For one run without editing `psalm.xml`, use `psalm-laravel analyze --experimental` or `PSALM_LARAVEL_OPTIONS='experimental=true'` (see [Per-run overrides](#per-run-overrides)).
 
 ## `failOnInternalError`
 

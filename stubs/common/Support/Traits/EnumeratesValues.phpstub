@@ -41,7 +41,7 @@ trait EnumeratesValues
      * @template TMakeValue
      *
      * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0 (now the 13.x floor
-     * - see composer.json), and on the 12.x floor (12.14+) PHP silently ignores excess call-site
+     * - see composer.json), and on the 12.x floor (12.20+) PHP silently ignores excess call-site
      * arguments beyond the native parameter list, so the wider claim is harmless there too.
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<TMakeKey, TMakeValue>|iterable<TMakeKey, TMakeValue>|scalar|\UnitEnum|object|null  $items

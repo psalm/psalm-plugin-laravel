@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use PhpParser\Node\Expr;
+use PhpParser\Node\Identifier;
 use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
@@ -61,6 +62,25 @@ final class Arg
 
         foreach ($args as $arg) {
             if ($arg->name !== null && $arg->name->toLowerString() === $paramName) {
+                return $arg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The Arg bound to a parameter: by exact name when named, else by position among the leading positional args.
+     *
+     * Unlike {@see self::byNameOrPosition()} the name is compared as written, not lowercased.
+     *
+     * @param list<\PhpParser\Node\Arg> $args
+     * @psalm-mutation-free
+     */
+    public static function boundTo(array $args, string $name, int $position): ?\PhpParser\Node\Arg
+    {
+        foreach ($args as $offset => $arg) {
+            if ($arg->name instanceof Identifier ? $arg->name->name === $name : $offset === $position) {
                 return $arg;
             }
         }

@@ -4,23 +4,28 @@ namespace Laravel\Ai\PendingResponses;
 
 use Illuminate\Support\Traits\Conditionable;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\PendingResponses\Concerns\ResolvesProviderOptions;
 use Laravel\Ai\Responses\RerankingResponse;
 
 /**
  * Pending reranking request. The query is supplied to the reranking model and
- * is therefore an LLM prompt boundary; retain the complete v0.11 public
- * surface while adding that one taint annotation.
+ * is therefore an LLM prompt boundary; retain the complete v1 public surface
+ * while adding that one taint annotation.
+ *
+ * @stub-waive limit() an int cap on returned documents; carries no text to the model
+ * @stub-waive timeout() an int number of seconds; carries no text to the model
  */
 class PendingReranking
 {
     use Conditionable;
+    use ResolvesProviderOptions;
 
     protected ?int $limit = null;
 
+    protected int $timeout = 30;
+
     /** @param array<int, string> $documents */
     public function __construct(protected array $documents) {}
-
-    public function limit(?int $limit): self {}
 
     /** @psalm-taint-sink llm_prompt $query */
     public function rerank(string $query, Lab|array|string|null $provider = null, ?string $model = null): RerankingResponse {}

@@ -9,14 +9,20 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
+use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
+use Psalm\Issue\NoValue;
+use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
@@ -51,6 +57,18 @@ use Psalm\Issue\UnusedVariable;
 final class ShadowIssueRelocator
 {
     private const UNMAPPED_SUFFIX = ' (unmapped)';
+
+    /**
+     * Message wordings that name a shadow line, keyed by exact (final) issue class so no other
+     * wording is touched. Capture 1 is the clause prefix, capture 2 the line. End-anchored with `\z`
+     * (`$` also matches before a trailing newline) so quoted parser text cannot fake the suffix.
+     */
+    private const MESSAGE_LINE_REFERENCES = [
+        PossiblyUndefinedGlobalVariable::class => '/(, first seen on line )(\d++)\z/',
+        PossiblyUndefinedVariable::class => '/(, first seen on line )(\d++)\z/',
+        // php-parser's `Error::updateMessage()` appends ' on line N' to the raw message
+        ParseError::class => '/( on line )(\d++)\z/',
+    ];
 
     /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
@@ -174,6 +192,19 @@ final class ShadowIssueRelocator
         if (
             $issue instanceof InvalidArrayOffset
             && \str_starts_with($issue->message, "Cannot access value on variable \$__errorArgs using offset value of '1', expecting ")
+        ) {
+            return false;
+        }
+
+        // `@session`/`@context` save an outer `$value` with `if (isset($value)) {
+        // $__sessionPrevious[] = $value; }` and read the stack back behind `isset()`
+        // (CompilesSessions, CompilesContexts), so Psalm sees a conditionally created global.
+        // Gated rather than declared in the prelude: a declared list would only move the noise onto
+        // the compiler's own `isset()` guards (PreludeBuilder::undeclaredVariables(), #1558).
+        // Exact-name, so an author's own conditionally assigned `$__`-prefixed local still reports.
+        if (
+            $issue instanceof PossiblyUndefinedGlobalVariable
+            && \preg_match('/^Possibly undefined global variable \$__(?:session|context)Previous,/', $issue->message) === 1
         ) {
             return false;
         }
@@ -330,6 +361,19 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // `@aware` compiles to a `foreach` over its literal array whose body picks
+        // `getConsumableComponentData($__key, $__value)` or the list-form
+        // `getConsumableComponentData($__value)` by `is_string($__key)` (CompilesComponents::
+        // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
+        // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
+        // which only runs for an int key (#1695). Every argument issue on that selection is the
+        // same artifact, plus the string casts Psalm reports alongside it. The mirror image: an
+        // all-int-key list (`@aware(['color'])`) narrows `$__key` to `never` in the keyed arm, and
+        // Psalm reports `NoValue` on it.
+        if (self::isGeneratedAwareArgument($issue, $target)) {
+            return false;
+        }
+
         // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
         // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
         // by default, both on a mapped template line and on the prelude's own unmapped lines below.
@@ -338,7 +382,7 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = $issue->message;
+        $message = self::remapMessage($issue, $target);
 
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
@@ -402,6 +446,41 @@ final class ShadowIssueRelocator
         }
 
         return self::rebuild($issue, $overrides);
+    }
+
+    /**
+     * Rewrites the shadow positions an issue message names onto the template, through the same
+     * {@see ShadowTarget::templateLineFor()} the location and the journey use: `first seen on line N`
+     * (see MESSAGE_LINE_REFERENCES) and the `file:line:column` descriptor of the issue's own shadow
+     * that a few messages embed. Unlike {@see JourneyRemapper}'s clamp-to-1, a `first seen` line
+     * inside the prelude drops the clause (a clamped number would read as a claim), while a
+     * descriptor still clamps because it has no clause to drop. A regex failure keeps Psalm's
+     * message instead of declining: this rewrite is cosmetic and must never lose the issue.
+     *
+     * @psalm-mutation-free
+     */
+    private static function remapMessage(CodeIssue $issue, ShadowTarget $target): string
+    {
+        $message = $issue->message;
+        // Widened: Psalm rejects a `class-string` offset into the literal-keyed constant.
+        /** @psalm-var array<string, non-empty-string> $patterns */
+        $patterns = self::MESSAGE_LINE_REFERENCES;
+        $pattern = $patterns[$issue::class] ?? null;
+
+        if ($pattern !== null) {
+            $message = \preg_replace_callback(
+                $pattern,
+                /** @param array<array-key, string> $matches */
+                static function (array $matches) use ($target): string {
+                    $templateLine = $target->templateLineFor((int) $matches[2]);
+
+                    return $templateLine >= 1 ? $matches[1] . $templateLine : '';
+                },
+                $message,
+            ) ?? $message;
+        }
+
+        return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
     }
 
     /**
@@ -521,6 +600,52 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * Whether an issue points at an argument of a call `@aware`'s compiled loop makes: an argument
+     * or string-cast issue on `$__value` in the list-form call, or `NoValue` on `$__key` in the
+     * keyed call. The call text cut out of the shadow must be absent from the template, the same
+     * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
+     * same arguments inside `@php` keeps reporting.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedAwareArgument(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        if ($issue instanceof NoValue) {
+            if (!\str_starts_with($issue->message, 'All possible types for this argument ')) {
+                return false;
+            }
+
+            $argument = '$__key';
+        } elseif ($issue instanceof ArgumentIssue) {
+            if (
+                $issue->function_id !== 'illuminate\\view\\factory::getconsumablecomponentdata'
+                || !\str_starts_with($issue->message, 'Argument 1 ')
+            ) {
+                return false;
+            }
+
+            $argument = '$__value';
+        } elseif ($issue instanceof InvalidCast || $issue instanceof ImplicitToStringCast) {
+            $argument = '$__value';
+        } else {
+            return false;
+        }
+
+        $selection = ShadowSelection::of($issue->code_location);
+        $call = '$__env->getConsumableComponentData(' . $argument;
+
+        if (
+            !$selection instanceof ShadowSelection
+            || $selection->end - $selection->start !== \strlen($argument)
+            || !TemplateSnippetMatcher::endsAt($selection->snippet, $selection->end, $call)
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
      * The enclosing `$callee(` plus the argument an issue points at, and that argument on its own,
      * read out of the shadow; null to decline. Same fail-open contract as
      * {@see self::callExpression()}.
@@ -531,21 +656,16 @@ final class ShadowIssueRelocator
      */
     private static function echoArgumentSlice(CodeLocation $location, string $callee): ?array
     {
-        try {
-            $snippet = $location->getSnippet();
-            [$selectionStart, $selectionEnd] = $location->getSelectionBounds();
-            [$snippetStart] = $location->getSnippetBounds();
-        } catch (\Throwable) {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection) {
             return null;
         }
 
-        $argumentStart = $selectionStart - $snippetStart;
-        $argumentEnd = $selectionEnd - $snippetStart;
+        $call = TemplateSnippetMatcher::enclosingCallAt($selection->snippet, $selection->start, $selection->end, $callee);
 
-        $call = TemplateSnippetMatcher::enclosingCallAt($snippet, $argumentStart, $argumentEnd, $callee);
-
-        // A non-null call means enclosingCallAt() already validated the bounds against $snippet.
-        return $call === null ? null : [$call, \substr($snippet, $argumentStart, $argumentEnd - $argumentStart)];
+        // A non-null call means enclosingCallAt() already validated the bounds against the snippet.
+        return $call === null ? null : [$call, \substr($selection->snippet, $selection->start, $selection->end - $selection->start)];
     }
 
     /**
@@ -588,15 +708,13 @@ final class ShadowIssueRelocator
      */
     private static function callExpression(CodeLocation $location): ?string
     {
-        try {
-            $snippet = $location->getSnippet();
-            [$selectionStart] = $location->getSelectionBounds();
-            [$snippetStart] = $location->getSnippetBounds();
-        } catch (\Throwable) {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection) {
             return null;
         }
 
-        // No marker stripping HERE, because every offset below indexes into $snippet: the snippet is
+        // No marker stripping HERE, because every offset below indexes into the snippet: it is
         // the WHOLE shadow line (`calculateRealLocation()` resets `preview_start` to the line start,
         // overwriting the node's own `startFilePos` the constructor put there), and cutting bytes
         // out of it would shift the selection offset off its own token.
@@ -609,7 +727,7 @@ final class ShadowIssueRelocator
         // ({@see MarkerComment::prefixFor()}), which a bare `blade:N` would not have been.
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
-        return TemplateSnippetMatcher::callExpressionAt($snippet, $selectionStart - $snippetStart);
+        return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
     }
 
     /**

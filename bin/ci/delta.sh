@@ -4,21 +4,25 @@
 # (delta-app.sh) and comparator (delta-report.php) the GitHub workflow uses, so
 # a contributor can reproduce the PR delta locally with one command.
 #
-# Unlike the /psalm-delta skill it does NOT checkout refs in the working tree:
-# it spins up two throwaway git worktrees (base + head) and leaves your checkout
-# untouched. Apps come from bin/ci/test-apps.yml (requires `yq`).
+# It does NOT checkout refs in the working tree: it spins up two throwaway git
+# worktrees (base + head) and leaves your checkout untouched. Apps come from
+# bin/ci/test-apps.yml, or the registry file in $REGISTRY (requires `yq`).
 #
 # Usage:
 #   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(4.x, head)
 #   bash bin/ci/delta.sh <base-ref> vs <head-ref>   # explicit base + head
 #   bash bin/ci/delta.sh --apps "octane,vito" <head-ref>   # default group + octane + vito
+#   bash bin/ci/delta.sh --apps "blade --blade" <head-ref> # + blade apps, Blade analysis on
 #
 # --apps takes the `/psalm-delta` comment grammar without the prefix (resolved by
 # bin/ci/delta-select-apps.php): group tags and app names add to the `default` group,
-# `all` selects every app, `help` lists groups. Omitted = `default`.
+# `all` selects every app, `help` lists groups, and `--flag` tokens declared under
+# `flags:` in the registry go to `psalm-laravel analyze` on both sides. Omitted = `default`.
 #
 # Output: markdown delta report on stdout; raw JSON cached under
-#   .cache/psalm-delta-ci/<BASE_SHA>--<HEAD_SHA>/ (gitignored, reused on rerun).
+#   .cache/psalm-delta-ci/<BASE_SHA>--<HEAD_SHA>[+<flag>...]/ (gitignored, reused on rerun).
+# Installed apps are cached per pinned ref under .cache/psalm-delta-apps/ and
+# shared by every SHA pair.
 
 set -euo pipefail
 
@@ -52,6 +56,7 @@ case "$(yq -p=json '.status' <<< "$SELECTION")" in
     *) yq -p=json '.reply' <<< "$SELECTION" >&2; exit 2 ;;
 esac
 SELECTION_LABEL=$(yq -p=json '.label' <<< "$SELECTION")
+RUN_FLAGS=$(yq -p=json '.flags' <<< "$SELECTION")
 IFS=',' read -ra RUN_APPS <<< "$(yq -p=json '.apps_csv' <<< "$SELECTION")"
 
 # --- Resolve base / head refs ------------------------------------------------
@@ -76,7 +81,13 @@ fi
 BASE_LABEL="base-${BASE_SHA}"
 HEAD_LABEL="pr-${HEAD_SHA}"
 
-OUT="${PLUGIN_DIR}/.cache/psalm-delta-ci/${BASE_SHA}--${HEAD_SHA}"
+# Flags change the results, so they key the cache too: `--blade` -> `+blade`.
+# Registry flags are [a-z0-9._=-] only, so the unquoted split is glob-safe.
+FLAGS_SUFFIX=""
+for flag in $RUN_FLAGS; do
+    FLAGS_SUFFIX+="+${flag#--}"
+done
+OUT="${PLUGIN_DIR}/.cache/psalm-delta-ci/${BASE_SHA}--${HEAD_SHA}${FLAGS_SUFFIX}"
 mkdir -p "$OUT"
 
 echo "Base: $BASE_REF ($BASE_SHA)   Head: $HEAD_REF ($HEAD_SHA)" >&2
@@ -101,35 +112,37 @@ trap cleanup EXIT
 
 # --- Loop apps ---------------------------------------------------------------
 
-# Local PHP major.minor, for the registry-mismatch warning below. --php is the
-# caller's concern locally (delta-app.sh ignores it), so a registry app pinned to
-# a different minor than the system php can fail Composer in confusing ways.
 LOCAL_PHP=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
 
-for app in "${RUN_APPS[@]}"; do
-    # $app comes from the registry itself (trusted, filename-safe), so embedding
-    # it in the yq expression is safe. `// ""` supplies defaults for optional keys.
-    repo=$(yq ".apps[] | select(.name == \"$app\") | .repo" "$REGISTRY")
-    ref=$(yq ".apps[] | select(.name == \"$app\") | .ref" "$REGISTRY")
-    php_ver=$(yq ".apps[] | select(.name == \"$app\") | .php // \"8.3\"" "$REGISTRY")
-    pdir=$(yq ".apps[] | select(.name == \"$app\") | .project_dir // \"\"" "$REGISTRY")
-    prime=$(yq ".apps[] | select(.name == \"$app\") | .prime // \"\"" "$REGISTRY")
-    psalm_args=$(yq ".apps[] | select(.name == \"$app\") | .psalm_args // \"\"" "$REGISTRY")
+# Registry entry field for one selected app ("" when absent). App names are
+# registry values ([a-z0-9_-]), so embedding one in the expression is safe.
+app_field() {
+    yq -p=json ".matrix.include[] | select(.name == \"$1\") | .$2 // \"\"" <<< "$SELECTION"
+}
 
-    # Warn (don't block) when the system php differs from the app's pinned minor:
-    # Composer installs under the local binary, so a mismatch can fail oddly.
+for app in "${RUN_APPS[@]}"; do
+    ref=$(app_field "$app" ref)
+    pdir=$(app_field "$app" project_dir)
+    before_install=$(app_field "$app" before_install)
+    psalm_args=$(app_field "$app" psalm_args)
+
+    # Composer installs under the local binary, so a minor other than the app's
+    # pinned one can fail in ways CI does not.
+    php_ver=$(app_field "$app" php)
     if [[ "$php_ver" != "$LOCAL_PHP" ]]; then
         echo "WARN: $app pins php $php_ver but local php is $LOCAL_PHP; install may differ from CI." >&2
     fi
 
     args=(
-        --app "$app" --repo "$repo" --ref "$ref" --php "$php_ver"
+        --app "$app" --repo "$(app_field "$app" repo)" --ref "$ref"
         --plugin-base "$WT_BASE" --plugin-head "$WT_HEAD"
         --out "$OUT" --base-label "$BASE_LABEL" --head-label "$HEAD_LABEL"
+        --app-src "${PLUGIN_DIR}/.cache/psalm-delta-apps/${app}-${ref}"
     )
     [[ -n "$pdir"  ]] && args+=(--project-dir "$pdir")
-    [[ -n "$prime" ]] && args+=(--prime "$prime")
+    [[ -n "$before_install" ]] && args+=(--before-install "$before_install")
     [[ -n "$psalm_args" ]] && args+=(--psalm-args "$psalm_args")
+    [[ -n "$RUN_FLAGS" ]] && args+=(--flags "$RUN_FLAGS")
 
     echo "=== $app ===" >&2
     bash "${PLUGIN_DIR}/bin/ci/delta-app.sh" "${args[@]}" || echo "WARN: $app runner failed" >&2
@@ -141,8 +154,8 @@ echo "" >&2
 APPS_CSV=$(IFS=,; echo "${RUN_APPS[*]}")
 php -d memory_limit=-1 "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
     --apps="$APPS_CSV" --base-ref="$BASE_REF" --head-ref="$HEAD_REF" \
-    --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" --date-marker=cache \
-    --selection="$SELECTION_LABEL"
+    --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
+    --selection="$SELECTION_LABEL" --flags="$RUN_FLAGS"
 
 echo "" >&2
 echo "Raw data: $OUT (reused on rerun for this SHA pair; rm -rf to force clean)" >&2
