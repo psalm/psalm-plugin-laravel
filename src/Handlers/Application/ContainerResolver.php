@@ -39,19 +39,36 @@ final class ContainerResolver
      * each visit (2-5 times per run) and queued classes while stubs were registering, so Psalm scanned
      * them as stubs.
      *
+     * A binding closure can register further bindings while it runs, so the keys are re-read until a
+     * round visits nothing new; each abstract is still resolved once.
+     *
      * `store_failure: false`: a class Psalm cannot locate is not recorded as missing.
      */
     public static function queueBoundClassesForScanning(Codebase $codebase): void
     {
-        foreach (\array_keys(ApplicationProvider::getApp()->getBindings()) as $abstract) {
-            $resolved = self::resolveFromApplicationContainer((string) $abstract);
+        $visited = [];
 
-            if ($resolved === null || !$resolved[1] || \str_contains($resolved[0], '@anonymous')) {
-                continue;
+        do {
+            $foundNew = false;
+
+            foreach (\array_keys(ApplicationProvider::getApp()->getBindings()) as $abstract) {
+                $abstract = (string) $abstract;
+
+                if (isset($visited[$abstract])) {
+                    continue;
+                }
+
+                $visited[$abstract] = true;
+                $foundNew = true;
+                $resolved = self::resolveFromApplicationContainer($abstract);
+
+                if ($resolved === null || !$resolved[1] || \str_contains($resolved[0], '@anonymous')) {
+                    continue;
+                }
+
+                $codebase->queueClassLikeForScanning($resolved[0], store_failure: false);
             }
-
-            $codebase->queueClassLikeForScanning($resolved[0], store_failure: false);
-        }
+        } while ($foundNew);
     }
 
     /**
@@ -133,7 +150,7 @@ final class ContainerResolver
 
         // An object's class is named only when Psalm has its storage: the container instantiated it,
         // but nothing guarantees Psalm scanned its file. Otherwise treat the resolution as failed.
-        if ($resolved !== null && $resolved[1] && !self::hasClassStorage($codebase, $resolved[0])) {
+        if ($resolved !== null && $resolved[1] && !self::isKnownClass($codebase, $resolved[0])) {
             $resolved = null;
         }
 
@@ -185,18 +202,14 @@ final class ContainerResolver
     }
 
     /**
-     * A class (not an interface or trait) that is loaded or that Psalm scanned. Never autoloads: a
-     * class whose load raises a deprecation would crash the run under Psalm's error handler, here
-     * where nothing catches it (#1652). A class Container::build() reflected is already loaded; one
-     * whose binding threw first, or that a binding only names as a string, is known from storage.
+     * A class (not an interface or trait) Psalm has storage for. Storage only, not `class_exists()`: a
+     * class loaded at runtime (a `class_alias()` of an anonymous class, an unscannable named class) can
+     * lack storage, and naming it reports UndefinedClass. Never autoloads: a class whose load raises a
+     * deprecation would crash the run under Psalm's error handler, here where nothing catches it (#1652).
+     *
+     * @psalm-mutation-free
      */
     private static function isKnownClass(Codebase $codebase, string $class): bool
-    {
-        return \class_exists($class, false) || self::hasClassStorage($codebase, $class);
-    }
-
-    /** @psalm-mutation-free */
-    private static function hasClassStorage(Codebase $codebase, string $class): bool
     {
         $storage = ClassLineage::storage($codebase, $class);
 
