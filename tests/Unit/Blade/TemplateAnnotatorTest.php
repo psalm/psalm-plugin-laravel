@@ -372,7 +372,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
 
         $this->assertNotNull($result, 'a verbatim body is literal text, not a contract');
-        $this->assertSame(['{{-- @var App\\User $user --}}'], $result[2]);
+        $this->assertSame(['@var App\\User $user'], $result[2]);
     }
 
     #[Test]
@@ -383,11 +383,11 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
 
         $this->assertNotNull($result, 'an @php body is PHP source, not a contract');
-        $this->assertSame(['{{-- @var App\\User $user --}}'], $result[2]);
+        $this->assertSame(['@var App\\User $user'], $result[2]);
     }
 
     #[Test]
-    public function inserts_after_the_live_comment_not_after_one_inside_a_verbatim_block(): void
+    public function a_live_comment_declares_its_name_and_one_inside_a_verbatim_block_does_not(): void
     {
         $source = "{{-- @var A \$a --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n";
 
@@ -395,7 +395,7 @@ final class TemplateAnnotatorTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame(
-            "{{-- @var A \$a --}}\n{{-- @var C \$c --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n",
+            "<?php\n/**\n * @var C \$c\n */\n?>\n{{-- @var A \$a --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n",
             $result[0],
         );
     }
@@ -408,7 +408,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['x' => 'X']);
 
         $this->assertNotNull($result, 'the parser reads one comment here, and its text is not a declaration');
-        $this->assertSame("{{-- @var X \$x --}}\n{{-- note {{-- @var X \$x --}}\n<p>x</p>\n", $result[0]);
+        $this->assertSame("<?php\n/**\n * @var X \$x\n */\n?>\n{{-- note {{-- @var X \$x --}}\n<p>x</p>\n", $result[0]);
     }
 
     #[Test]

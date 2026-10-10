@@ -782,4 +782,26 @@ final class ContractParserTest extends TestCase
         $this->assertSame('string', $contract->vars['title']->typeString);
         $this->assertSame('Closure(Foo $f): Bar', $contract->vars['cb']->typeString);
     }
+
+    #[Test]
+    public function a_blade_comment_declaration_is_optional_on_the_same_terms_as_a_raw_one(): void
+    {
+        $source = "{{-- @var int|null \$a --}}\n{{-- @var mixed \$b --}}\n{{-- @var string \$c --}}\n{{-- @var string \$d --}}\n{{ \$c ?? 'x' }}@isset(\$d){{ \$d }}@endisset\n{{-- @var string \$e --}}\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        foreach (['a', 'b', 'c', 'd'] as $name) {
+            $this->assertTrue($vars[$name]->optional ?? null, $name);
+        }
+
+        $this->assertFalse($vars['e']->optional ?? null);
+    }
+
+    #[Test]
+    public function an_upper_case_open_tag_still_declares_a_raw_contract(): void
+    {
+        $contract = $this->dataContract("<?PHP /** @var string \$title */ ?>\n{{ \$title }}\n");
+
+        $this->assertSame(['title'], \array_keys($contract->vars));
+    }
 }

@@ -377,6 +377,12 @@ final class ViewContractValidationTest extends TestCase
     }
 
     #[Test]
+    public function a_components_public_render_leaves_the_data_set_open(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'ComponentRenderPublic.php'));
+    }
+
+    #[Test]
     public function the_check_is_off_unless_the_config_flag_opts_in(): void
     {
         $this->assertSame([], $this->contractIssues('psalm-validation-off.xml'));

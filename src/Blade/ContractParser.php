@@ -79,7 +79,7 @@ final class ContractParser
         [$vars, $propsUnknown] = $this->parseSource($source);
         [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
-        $vars += $this->rawContractVars($source, $compiled, $localVariables);
+        $vars += $this->rawContractVars($source, $localVariables);
 
         // What is left is consumed-only: a raw declaration of a name the template binds for itself,
         // a Blade-owned name, a non-docblock comment, or a name-first `@var $x T`.
@@ -112,7 +112,7 @@ final class ContractParser
         }
 
         return new ViewDataContract(
-            $declarations->vars + $this->rawContractVars($source, $compiled, $this->parseReads($compiled)[2]),
+            $declarations->vars + $this->rawContractVars($source, $this->parseReads($compiled)[2]),
             $declarations->propsUnknown,
         );
     }
@@ -156,7 +156,7 @@ final class ContractParser
      *
      * @psalm-mutation-free
      */
-    private function rawContractVars(string $source, string $compiled, array $locals): array
+    private function rawContractVars(string $source, array $locals): array
     {
         $vars = [];
 
@@ -165,28 +165,37 @@ final class ContractParser
                 continue;
             }
 
-            $optional = $this->isGuarded($name, $compiled);
-
-            foreach ($this->topLevelAlternatives($type) as $alternative) {
-                $optional = $optional
-                    || \in_array(\strtolower($alternative), ['null', 'mixed'], true)
-                    || \str_starts_with($alternative, '?');
-            }
-
             // A later declaration of the same name wins, as in a document-order walk.
-            $vars[$name] = new ContractVar($name, $type, $line, $optional, true);
+            $vars[$name] = new ContractVar($name, $type, $line, $this->isOptional($name, $type, $source), true);
         }
 
         return $vars;
     }
 
+    /**
+     * Whether a declaration states the template copes without the value, the way a `@props` default
+     * does: its type includes `null` or is `mixed`, or the template guards the name itself.
+     *
+     * @psalm-mutation-free
+     */
+    private function isOptional(string $name, string $type, string $source): bool
+    {
+        foreach ($this->topLevelAlternatives($type) as $alternative) {
+            if (\in_array(\strtolower($alternative), ['null', 'mixed'], true) || \str_starts_with($alternative, '?')) {
+                return true;
+            }
+        }
+
+        return $this->isGuarded($name, $source);
+    }
+
     /** @psalm-pure */
-    private function isGuarded(string $name, string $compiled): bool
+    private function isGuarded(string $name, string $source): bool
     {
         $quoted = \preg_quote($name, '/');
         $end = '(?![a-zA-Z0-9_\x80-\xff])';
 
-        return \preg_match("/\\\${$quoted}{$end}\\s*\\?\\?|isset\\s*\\([^)]*\\\${$quoted}{$end}/", $compiled) === 1;
+        return \preg_match("/\\\${$quoted}{$end}\\s*\\?\\?|isset\\s*\\([^)]*\\\${$quoted}{$end}/", $source) === 1;
     }
 
     /**
@@ -352,7 +361,7 @@ final class ContractParser
 
             if ($declared !== null && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$declared[0]])) {
                 $line = 1 + SourceLines::breaksIn($source, 0, $offset);
-                $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, false)];
+                $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, $this->isOptional($declared[0], $declared[1], $source))];
             }
         }
 

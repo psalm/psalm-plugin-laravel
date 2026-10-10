@@ -26,6 +26,9 @@ final class ContractRegistry
      */
     private static array $contracts = [];
 
+    /** @var array<string, true> */
+    private static array $composed = [];
+
     /**
      * @param array{0: list<string>, 1: bool}|null $dataIncludes view names the template hands its
      *        whole scope to, and whether one of them could not be resolved; null when the collection
@@ -58,8 +61,20 @@ final class ContractRegistry
         return self::$contracts[$viewName][2] ?? null;
     }
 
+    /** A composer or creator is registered for the view, so it may be handed data no call site shows. */
+    public static function markComposed(string $viewName): void
+    {
+        self::$composed[$viewName] = true;
+    }
+
+    public static function isComposed(string $viewName): bool
+    {
+        return isset(self::$composed[$viewName]);
+    }
+
     public static function reset(): void
     {
         self::$contracts = [];
+        self::$composed = [];
     }
 }
