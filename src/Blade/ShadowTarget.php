@@ -31,6 +31,7 @@ final class ShadowTarget
      *                                 of the template, and $templateSource is read at relocation
      *                                 time, so a template edited since the compile would yield a
      *                                 prefix matching nothing in the shadow.
+     * @param bool   $thisUnbound      {@see ShadowEntry::thisUnbound()}
      */
     public function __construct(
         public readonly ShadowEntry $entry,
@@ -38,6 +39,7 @@ final class ShadowTarget
         public readonly string $templateName,
         public readonly bool $isComponentView,
         private readonly string $markerPrefix,
+        public readonly bool $thisUnbound = false,
     ) {}
 
     public function markerPrefix(): string

@@ -147,12 +147,10 @@ final class ShadowIssueRelocator
         // dropped — the relocator has only the message and location, never scope info, so the two
         // cannot be told apart there either.
         //
-        // Except in a view a class component's render() is proven to render (#1804): Laravel
-        // evaluates it in a `static` closure (Filesystem::getRequire()), so `$this`/`self::` there
-        // is a runtime Error, not a convention. Livewire binds its own views and maps none.
-        $classComponentView = $target->entry->rendersComponentClass();
-
-        if ($issue instanceof InvalidScope && $issue->message === 'Use of $this in non-class context' && !$classComponentView) {
+        // Except where `$this` is proven unbound (#1804): Laravel evaluates a class component's view
+        // in a `static` closure (Filesystem::getRequire()), unless Livewire is installed and binds
+        // it for any view rendered inside one of its components ({@see ShadowTarget::$thisUnbound}).
+        if ($issue instanceof InvalidScope && $issue->message === 'Use of $this in non-class context' && !$target->thisUnbound) {
             return false;
         }
 
@@ -171,7 +169,7 @@ final class ShadowIssueRelocator
         // this message shape, so it is untouched.
         if (
             $issue instanceof NonStaticSelfCall
-            && !$classComponentView
+            && !$target->thisUnbound
             && \preg_match('/^Cannot use (?:self|static) outside class context$/i', $issue->message) === 1
         ) {
             return false;

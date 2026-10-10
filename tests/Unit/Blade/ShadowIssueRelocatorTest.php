@@ -65,8 +65,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         ShadowEntry $entry,
         bool $reportMixed = false,
         bool $isComponentView = false,
+        bool $livewireInstalled = true,
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor(self::TEMPLATE_SOURCE));
+        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor(self::TEMPLATE_SOURCE), $entry->thisUnbound($livewireInstalled));
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
@@ -1156,15 +1157,25 @@ final class ShadowIssueRelocatorTest extends TestCase
     /**
      * #1804: a view a class component's render() renders is evaluated in a `static` closure, so
      * `$this`/`self::` in it is a runtime Error and keeps reporting; the drops above stay for
-     * every other view (positive halves: the two tests above, whose maps carry no render data).
+     * every other view (the two tests above, whose maps carry no render data).
      */
     #[Test]
-    public function this_and_self_keep_reporting_in_a_class_component_view(): void
+    public function this_and_self_keep_reporting_in_a_class_component_view_without_livewire(): void
     {
         $entry = $this->entry([2 => ShadowEntry::RENDER_DATA_LINE, 9 => 3]);
 
-        $this->assertInstanceOf(InvalidScope::class, $this->relocate(new InvalidScope('Use of $this in non-class context', $this->shadowLocation(9)), $entry));
-        $this->assertInstanceOf(NonStaticSelfCall::class, $this->relocate(new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9)), $entry));
+        $this->assertInstanceOf(InvalidScope::class, $this->relocate(new InvalidScope('Use of $this in non-class context', $this->shadowLocation(9)), $entry, livewireInstalled: false));
+        $this->assertInstanceOf(NonStaticSelfCall::class, $this->relocate(new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9)), $entry, livewireInstalled: false));
+    }
+
+    /** Livewire binds `$this` for any view rendered inside one of its components, nested class component views included. */
+    #[Test]
+    public function this_and_self_stay_dropped_in_a_class_component_view_with_livewire(): void
+    {
+        $entry = $this->entry([2 => ShadowEntry::RENDER_DATA_LINE, 9 => 3]);
+
+        $this->assertFalse($this->relocate(new InvalidScope('Use of $this in non-class context', $this->shadowLocation(9)), $entry, livewireInstalled: true));
+        $this->assertFalse($this->relocate(new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9)), $entry, livewireInstalled: true));
     }
 
     /**

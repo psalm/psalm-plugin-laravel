@@ -33,11 +33,13 @@ final class ShadowEntry
     ) {}
 
     /**
-     * Whether the prelude copied a class component's render() data, i.e. the view is proven to be a
-     * Blade class-component view, which Laravel evaluates inside a `static` closure.
+     * Whether `$this`/`self::` in the view is a proven runtime Error: the prelude copied a class
+     * component's render() data, so Laravel evaluates the view inside a `static` closure
+     * (Filesystem::getRequire()). Never with Livewire installed: its ExtendedCompilerEngine binds
+     * `$this` for every view evaluated while one of its components renders, nested ones included.
      */
-    public function rendersComponentClass(): bool
+    public function thisUnbound(bool $livewireInstalled): bool
     {
-        return \in_array(self::RENDER_DATA_LINE, $this->lineMap, true);
+        return !$livewireInstalled && \in_array(self::RENDER_DATA_LINE, $this->lineMap, true);
     }
 }

@@ -791,7 +791,7 @@ final class Plugin implements PluginEntryPointInterface
         // init() already ran in initBladeAnalysis(), where the boot's own capture is in scope.
         if ($bladeActive) {
             require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
-            Blade\BladeIssueRemapHandler::init($pluginConfig->bladeReportMixedIssues);
+            Blade\BladeIssueRemapHandler::init($pluginConfig->bladeReportMixedIssues, \class_exists('Livewire\\Livewire'));
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
             require_once __DIR__ . '/Blade/RuntimeHelperVisibility.php';
             $registration->registerHooksFromClass(Blade\RuntimeHelperVisibility::class);

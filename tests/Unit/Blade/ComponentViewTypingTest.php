@@ -129,6 +129,27 @@ final class ComponentViewTypingTest extends TestCase
         $this->assertSame(3, $tainted[0]['line'], $this->report());
     }
 
+    /**
+     * A class component's view runs in a `static` closure, so `$this` there is a runtime Error. This
+     * repository installs no Livewire, which would bind it; a page no component renders keeps the
+     * #1559 drop.
+     */
+    #[Test]
+    public function this_reports_in_a_class_component_view_only(): void
+    {
+        $scopeIssues = static fn(array $issues): array => \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => $issue['type'] === 'InvalidScope',
+        ));
+
+        $this->assertSame(
+            [['type' => 'InvalidScope', 'line' => 3, 'message' => 'Use of $this in non-class context']],
+            $scopeIssues($this->issuesFor('components/card.blade.php')),
+            $this->report(),
+        );
+        $this->assertSame([], $scopeIssues($this->issuesFor('page.blade.php')), $this->report());
+    }
+
     #[Test]
     public function nothing_reports_on_the_copied_render_array(): void
     {

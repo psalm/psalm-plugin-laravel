@@ -46,6 +46,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
     private static bool $reportMixedIssues = false;
 
+    private static bool $livewireInstalled = true;
+
     /**
      * @var array<string, ShadowTarget|null> resolved shadows, negatives included: target() is asked
      *      once per issue and again per taint journey hop, over the same handful of paths, and both
@@ -53,15 +55,22 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      */
     private static array $targets = [];
 
-    public static function init(bool $reportMixedIssues): void
+    /**
+     * @param bool $livewireInstalled Livewire's ExtendedCompilerEngine binds `$this` for every view
+     *                                evaluated while a Livewire component renders, nested class
+     *                                component views included
+     */
+    public static function init(bool $reportMixedIssues, bool $livewireInstalled = true): void
     {
         self::$reportMixedIssues = $reportMixedIssues;
+        self::$livewireInstalled = $livewireInstalled;
     }
 
     public static function reset(): void
     {
         self::$remapping = false;
         self::$reportMixedIssues = false;
+        self::$livewireInstalled = true;
         self::$targets = [];
     }
 
@@ -256,6 +265,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             // Falling back to the live bytes only when boot recorded nothing: no worse than having
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
+            $entry->thisUnbound(self::$livewireInstalled),
         );
     }
 }
