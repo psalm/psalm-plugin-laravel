@@ -1214,6 +1214,37 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringContainsString('GenuineMiss::missing', $reported[0]['message'], $encoded);
     }
 
+    /**
+     * `self`/`static` need an enclosing class, which a shadow has none of: Psalm crashes on `self`
+     * ("Could not get class storage for self") and reports an empty class name for `static`.
+     */
+    #[Test]
+    public function a_class_relative_contract_type_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-class-relative.blade.php';
+
+        $this->assertStringNotContainsString('@var self', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** A type carrying a docblock terminator would close its prelude line and turn the template into a ParseError. */
+    #[Test]
+    public function a_contract_type_carrying_a_comment_terminator_keeps_the_templates_findings(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-comment-terminator.blade.php';
+        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), $encoded);
+        $this->assertSame([2], $this->linesFor($issues, 'InvalidScalarArgument', $template), $encoded);
+    }
+
     /** A contract naming a missing class reports on the comment that declared it, not as unmapped. */
     #[Test]
     public function a_contract_naming_an_unknown_class_reports_on_its_comment_line(): void

@@ -517,7 +517,8 @@ final class BladeBootstrapperTest extends TestCase
 
     /**
      * A contract type reaches the prelude, and its class is queued on BOTH a fresh compile and a
-     * warm-manifest run: the prelude names it only in a stacked docblock Psalm's scanner never reads.
+     * warm-manifest run. Psalm's scanner reads the contract line itself (the last comment on its own
+     * statement); the queue keeps the class scanned should that line ever be stacked again.
      */
     #[Test]
     public function a_contract_var_types_the_prelude_and_queues_its_class_on_fresh_and_warm_runs(): void
@@ -547,6 +548,12 @@ final class BladeBootstrapperTest extends TestCase
         yield 'short class name' => ['User', "'User' is not a fully qualified class name"];
         yield 'short class name inside a generic' => ['list<User>', "'User' is not a fully qualified class name"];
         yield 'unparseable type' => ['array<int', 'does not parse'];
+        yield 'self' => ['self', 'refers to an enclosing class'];
+        yield 'self inside a generic' => ['list<self>', 'refers to an enclosing class'];
+        yield 'static' => ['static', 'refers to an enclosing class'];
+        yield '$this' => ['$this', 'refers to an enclosing class'];
+        yield 'parent' => ['Parent', 'refers to an enclosing class'];
+        yield 'comment terminator in a literal' => ["'a*/b'|\\App\\Models\\User", 'would end the docblock'];
     }
 
     #[Test]

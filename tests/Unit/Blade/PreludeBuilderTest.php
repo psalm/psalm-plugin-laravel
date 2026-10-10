@@ -241,6 +241,8 @@ final class PreludeBuilderTest extends TestCase
         yield 'callable parameter names' => ['callable(string $user): \App\User', ['\App\User']];
         yield 'closure' => ['Closure(int): string', ['Closure']];
         yield 'unparseable' => ['array<int $m', null];
+        yield 'class-relative names' => ['self|list<static>|Parent', ['self', 'Parent', 'static']];
+        yield '$this' => ['$this', ['static']];
     }
 
     /**

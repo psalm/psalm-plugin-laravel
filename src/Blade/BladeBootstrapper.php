@@ -325,7 +325,8 @@ final class BladeBootstrapper
 
     /**
      * The contract `@var` declarations the prelude types the template body with. One whose type does
-     * not parse, or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
+     * not parse, would end its prelude docblock early, names `self`/`static`/`parent` (a template has
+     * no enclosing class), or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
      * `use` import, so the namespace-less shadow would resolve `User` to a global class the author
      * never meant. A qualified name with or without its leading `\` resolves identically there.
      *
@@ -342,9 +343,23 @@ final class BladeBootstrapper
             }
 
             $classNames = PreludeBuilder::classNamesIn($var->typeString);
-            $reason = $classNames === null ? 'its type does not parse' : null;
+            $reason = match (true) {
+                // Printed verbatim into a `/** */` prelude line, it would end the comment early and
+                // turn the whole shadow into a ParseError.
+                \str_contains($var->typeString, '*/') => 'its type would end the docblock it is declared in',
+                $classNames === null => 'its type does not parse',
+                default => null,
+            };
 
             foreach ($classNames ?? [] as $className) {
+                // A shadow has no enclosing class: Psalm crashes on `self` and reports an empty
+                // class name for `static`.
+                if (isset(PreludeBuilder::CLASS_RELATIVE_NAMES[\strtolower($className)])) {
+                    $reason = 'its type refers to an enclosing class (self, static, $this, parent), which a template does not have';
+
+                    break;
+                }
+
                 if (!$this->resolvesInShadow($className)) {
                     $reason = "'{$className}' is not a fully qualified class name";
 

@@ -357,6 +357,34 @@ final class ShadowIssueRelocatorTest extends TestCase
         );
     }
 
+    /** Another file's absolute `path:line` is ordinary text. */
+    #[Test]
+    public function an_absolute_path_and_line_naming_another_file_is_left_alone(): void
+    {
+        $issue = new InvalidDocblock('Bad type (in /tmp/other.php:5)', $this->shadowLocation(5));
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 2]));
+
+        $this->assertInstanceOf(InvalidDocblock::class, $relocated);
+        $this->assertSame('Bad type (in /tmp/other.php:5)', $relocated->message);
+    }
+
+    /**
+     * The shadow's own `path:line:column` is a descriptor, left to the descriptor rewrite: it
+     * replaces only the `shadow.php:5:12` tail, so the leading directory survives. A `path:line`
+     * rewrite that swallowed it would drop that directory.
+     */
+    #[Test]
+    public function an_absolute_path_with_a_column_is_left_to_the_descriptor_rewrite(): void
+    {
+        $issue = new InvalidDocblock('Bad type (in ' . self::SHADOW . ':5:12)', $this->shadowLocation(5));
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 2]));
+
+        $this->assertInstanceOf(InvalidDocblock::class, $relocated);
+        $this->assertSame('Bad type (in /tmp/resources/views/profile.blade.php:2:12)', $relocated->message);
+    }
+
     /**
      * #1545: `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
      * against a `VirtualMethodCall` Psalm synthesizes to model the magic call, and reports this

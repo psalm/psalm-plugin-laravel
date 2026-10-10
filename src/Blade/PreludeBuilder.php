@@ -186,6 +186,12 @@ final class PreludeBuilder
     }
 
     /**
+     * Names that resolve against an enclosing class; Psalm tokenizes `$this` to `static`. Psalm
+     * reserves `self` and `static`, so {@see self::classNamesIn()} lets these three through by name.
+     */
+    public const CLASS_RELATIVE_NAMES = ['self' => true, 'static' => true, 'parent' => true];
+
+    /**
      * The class names a `{{-- @var --}}` type names, as written, or null when the type does not
      * parse. Read off Psalm's syntax tree alone: `Type::parseString()` needs a live
      * ProjectAnalyzer, and resolving names against a codebase not yet scanned adds nothing here.
@@ -215,7 +221,7 @@ final class PreludeBuilder
             $keyword = \strtolower($name);
 
             if (\preg_match('/^\\\\?[a-zA-Z_\x80-\xff]/', $name) === 1
-                && !isset(TypeTokenizer::PSALM_RESERVED_WORDS[$keyword])
+                && (!isset(TypeTokenizer::PSALM_RESERVED_WORDS[$keyword]) || isset(self::CLASS_RELATIVE_NAMES[$keyword]))
                 && $keyword !== 'min'
                 && $keyword !== 'max'
             ) {
