@@ -55,6 +55,8 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 - `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
+For one run without editing `psalm.xml`, use `psalm-laravel analyze --no-migrations` or `PSALM_LARAVEL_OPTIONS='columnFallback=none'` (see [Per-run overrides](#per-run-overrides)).
+
 ## `resolveDynamicWhereClauses`
 
 **default**: `true`
@@ -347,13 +349,19 @@ Psalm's `--no-progress` installs a progress implementation that discards warning
 The `PSALM_LARAVEL_OPTIONS` environment variable overrides plugin settings for one run, without touching `psalm.xml`. `vendor/bin/psalm` rejects flags it does not know, so a per-run switch has to travel through the environment.
 
 ```bash
-PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm
+PSALM_LARAVEL_OPTIONS='blade=true experimental=true columnFallback=none' vendor/bin/psalm
 ```
 
 * Grammar: whitespace-separated `KEY=VALUE` tokens, keys named as in the XML. No quoting. A repeated key is last-wins.
-* Supported keys: `blade` (`true` or `false`), which switches [Blade analysis](blade.md#per-run-toggle) on or off. Other `<blade>` settings keep coming from the XML.
-* Precedence per key: command-line flag > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. `psalm-laravel analyze --blade` / `--no-blade` is that command-line flag: it appends `blade=true|false` to the variable for the Psalm process it launches.
-* An unknown key, a token without `=` or with an empty value, or a value other than `true`/`false` aborts the run with a non-zero exit and a message naming the problem.
+* Supported keys:
+  * `blade` (`true` or `false`) switches [Blade analysis](blade.md#per-run-toggle) on or off. Other `<blade>` settings keep coming from the XML.
+  * `experimental` (`true` or `false`) acts like [`<experimental value="..."/>`](#experimental). An explicit per-rule XML value, such as `<findUnregisteredRouteNames value="false" />`, still wins over it.
+  * `columnFallback` (`migrations` or `none`) acts like [`<modelProperties columnFallback="..."/>`](#modelproperties).
+* Precedence per key: command-line flag > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. `psalm-laravel analyze` provides the command-line flags, each appending a token to the variable for the Psalm process it launches:
+  * `--blade` / `--no-blade` appends `blade=true|false`.
+  * `--experimental` appends `experimental=true`.
+  * `--no-migrations` appends `columnFallback=none`.
+* An unknown key, a token without `=` or with an empty value, or a value outside the key's valid values aborts the run with a non-zero exit and a message naming the problem.
 * It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
 * Psalm's result cache is keyed on the config file, so after changing an override between runs use `--no-cache` if results look stale.
 
@@ -407,6 +415,8 @@ An explicit `<PluginIssue>` entry takes complete ownership of that issue (base l
 ```
 
 Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
+
+For one run without editing `psalm.xml`, use `psalm-laravel analyze --experimental` or `PSALM_LARAVEL_OPTIONS='experimental=true'` (see [Per-run overrides](#per-run-overrides)).
 
 ## `failOnInternalError`
 
