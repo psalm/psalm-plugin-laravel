@@ -18,8 +18,12 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class ShadowEntry
 {
+    /** Line-map value of a prelude line copied from a component's `render()` ({@see ComponentViewMap}). */
+    public const RENDER_DATA_LINE = -1;
+
     /**
-     * @param array<int, int>         $lineMap      shadow line (1-based) => template line; 0 for prelude lines
+     * @param array<int, int>         $lineMap      shadow line (1-based) => template line; 0 for prelude
+     *                                              lines, {@see self::RENDER_DATA_LINE} for render() data
      * @param array<int, list<string>> $suppressions template line => suppressed issue types
      */
     public function __construct(
@@ -27,4 +31,13 @@ final class ShadowEntry
         public readonly array $lineMap,
         public readonly array $suppressions,
     ) {}
+
+    /**
+     * Whether the prelude copied a class component's render() data, i.e. the view is proven to be a
+     * Blade class-component view, which Laravel evaluates inside a `static` closure.
+     */
+    public function rendersComponentClass(): bool
+    {
+        return \in_array(self::RENDER_DATA_LINE, $this->lineMap, true);
+    }
 }

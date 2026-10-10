@@ -67,4 +67,11 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
      */
     #[\Override]
     public function queueFilesForScanning(array $paths): void {}
+
+    /** No class components: a unit test drives the bootstrapper without a project to pair them from. */
+    #[\Override]
+    public function projectFiles(): array
+    {
+        return [];
+    }
 }

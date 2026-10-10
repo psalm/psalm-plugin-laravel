@@ -63,4 +63,36 @@ final class ProjectFileInjector
 
         return true;
     }
+
+    /**
+     * The same list, read: Psalm 7 has no public accessor for it either.
+     *
+     * @return list<string> empty on any of the failure modes {@see self::inject()} guards against
+     */
+    public static function projectFiles(object $projectAnalyzer): array
+    {
+        try {
+            /** @psalm-var mixed $projectFiles */
+            $projectFiles = \property_exists($projectAnalyzer, self::PROPERTY)
+                ? (new \ReflectionProperty($projectAnalyzer, self::PROPERTY))->getValue($projectAnalyzer)
+                : null;
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if (!\is_array($projectFiles)) {
+            return [];
+        }
+
+        // Psalm keys the list by path (`$project_files[$path] = $path`).
+        $paths = [];
+
+        foreach (\array_keys($projectFiles) as $path) {
+            if (\is_string($path)) {
+                $paths[] = $path;
+            }
+        }
+
+        return $paths;
+    }
 }

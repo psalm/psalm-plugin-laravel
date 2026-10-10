@@ -155,6 +155,33 @@ final class ShadowManifestTest extends TestCase
     }
 
     /**
+     * #1804: a component view's prelude copies render() from a PHP file the template source never
+     * sees, so an edit there must recompile the view; a view without one keeps its old fingerprint.
+     */
+    #[Test]
+    public function prelude_inputs_are_part_of_the_fingerprint(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract(), null, 'render v1');
+        $manifest->store('/app/views/bar.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $manifest->flush();
+
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $this->assertTrue($reloaded->isFresh('/app/views/foo.blade.php', 'source', 0, 'render v1'));
+        $this->assertFalse($reloaded->isFresh('/app/views/foo.blade.php', 'source', 0, 'render v2'));
+        $this->assertFalse($reloaded->isFresh('/app/views/foo.blade.php', 'source'));
+        $this->assertTrue($reloaded->isFresh('/app/views/bar.blade.php', 'source'));
+        $this->assertSame(
+            (new ShadowManifest($this->shadowDir))->shadowPathFor('/app/views/bar.blade.php', 'source'),
+            $reloaded->shadowPathFor('/app/views/bar.blade.php', 'source', ''),
+        );
+    }
+
+    /**
      * #1517: two manifests over the same directory that differ only in `$environment` (the
      * compiler-environment hash) must not consider each other's entries fresh — an application
      * whose Blade wiring changed between runs must recompile even though the template source did

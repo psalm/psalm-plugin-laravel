@@ -1,0 +1,29 @@
+<?php
+
+namespace Psalm\LaravelPlugin\Blade;
+
+/**
+ * Analysis-only helper that a component view's shadow prelude uses to evaluate its component's
+ * `render()` data in class scope (#1804); it exists in no runtime. `$this`, `self`, and private or
+ * protected members resolve inside the closure, and nowhere else in the shadow.
+ *
+ * The bound class is a CLASS template read off the receiver's `@var`, never a method template
+ * inferred from a sibling argument: Psalm resolves `@param-closure-this` only for the former.
+ * `bind()` hands the closure back unchanged and the caller invokes it, so render() data keeps its
+ * taint into the template; a stub returning the closure's result would cut that flow.
+ *
+ * @template TComponent of object
+ */
+final class ComponentScope
+{
+    /**
+     * @template TData of \Closure
+     *
+     * @param TData $data
+     *
+     * @param-closure-this TComponent $data
+     *
+     * @return TData
+     */
+    public function bind(\Closure $data): \Closure {}
+}

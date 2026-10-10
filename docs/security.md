@@ -34,7 +34,7 @@ that boundary separately.
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
-Blade template scanning is opt-in: enable it with `<blade />` to also get `TaintedHtml` findings on unescaped `{!! !!}` output inside `.blade.php` files. See [Blade template analysis](blade.md).
+Blade template scanning is opt-in: enable it with `<blade />` to also get `TaintedHtml` findings on unescaped `{!! !!}` output inside `.blade.php` files, including request data a class component's `render()` passes to its own view. See [Blade template analysis](blade.md).
 
 ### `ResponseFactory::make()` and `new Response()` HTML responses
 

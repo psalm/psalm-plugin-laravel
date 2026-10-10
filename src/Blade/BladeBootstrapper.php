@@ -139,7 +139,8 @@ final class BladeBootstrapper
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
         $manifest->load();
 
-        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
+        $components = $this->componentViews($templates, $roots, ComponentViewMap::build($this->registrar->projectFiles()));
+        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment, $components);
 
         if ($templatesFullyDiscovered) {
             $manifest->prune($templates);
@@ -239,6 +240,8 @@ final class BladeBootstrapper
      *                                                     not resolve every compiler input, so the
      *                                                     freshness check is skipped and every template
      *                                                     recompiles this run regardless of the manifest
+     * @param array<string, array{class: string, keys: list<string>, scope: string}> $components template path =>
+     *                                                     the class component rendering it
      *
      * @return array<string, string> template path => shadow path
      */
@@ -249,6 +252,7 @@ final class BladeBootstrapper
         array $roots,
         array &$failures,
         bool $trustedEnvironment,
+        array $components = [],
     ): array {
         $shadows = [];
         $parser = new ContractParser();
@@ -269,8 +273,12 @@ final class BladeBootstrapper
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
-            if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
-                $shadowPath = $manifest->shadowPathFor($template, $source);
+            $component = $components[$template] ?? null;
+            // The scope statement copies render() from a PHP file, so it is part of the fingerprint.
+            $preludeInputs = $component['scope'] ?? '';
+
+            if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots, $preludeInputs)) {
+                $shadowPath = $manifest->shadowPathFor($template, $source, $preludeInputs);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract(
                     $template,
@@ -285,7 +293,7 @@ final class BladeBootstrapper
 
             // NOT fed into compile(): contract types in the prelude would change the shadow's
             // fingerprint. Built AFTER compile so the read set comes off compiled output.
-            $shadow = $compiler->compile($template, $source);
+            $shadow = $compiler->compile($template, $source, [], $component);
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
@@ -294,16 +302,19 @@ final class BladeBootstrapper
                 continue;
             }
 
+            // The copied render() data is the component's code: its writes are not template locals.
+            $templateCode = $component === null ? $shadow->contents : \str_replace($component['scope'], '', $shadow->contents);
+
             $contract = $this->collectDataIncludes
-                ? $parser->parseDataContract($source, $shadow->contents)
+                ? $parser->parseDataContract($source, $templateCode)
                 : $parser->parseDeclarations($source);
 
             // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
             // from "collected nothing".
-            $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+            $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($templateCode) : null;
 
             try {
-                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes, $preludeInputs);
                 $shadows[$template] = $shadowPath;
                 $this->registerContract($template, $roots, $contract, $dataIncludes);
 
@@ -316,6 +327,40 @@ final class BladeBootstrapper
         return $shadows;
     }
 
+
+    /**
+     * The template each mapped view name resolves to, with Laravel's lowest-root-wins precedence the
+     * registries apply: only the template that actually renders under the name gets the component.
+     *
+     * @param list<string>                           $templates
+     * @param list<array{0: string, 1: string|null}> $roots
+     *
+     * @return array<string, array{class: string, keys: list<string>, scope: string}> template path => component view
+     */
+    private function componentViews(array $templates, array $roots, ComponentViewMap $map): array
+    {
+        $owners = [];
+
+        foreach ($templates as $template) {
+            foreach (ViewName::resolve($template, $roots) as [$rootIndex, $viewName]) {
+                if ($map->get($viewName) !== null
+                    && (!isset($owners[$viewName]) || $rootIndex < $owners[$viewName][0])
+                    && $this->templateOwnsName($viewName, $template)
+                ) {
+                    // The name rides along: a numeric view name comes back from the key as an int.
+                    $owners[$viewName] = [$rootIndex, $template, $viewName];
+                }
+            }
+        }
+
+        $components = [];
+
+        foreach ($owners as [, $template, $viewName]) {
+            $components[$template] = $map->get($viewName);
+        }
+
+        return \array_filter($components);
+    }
 
     /**
      * Realpaths, deduped by (path, namespace): a published override's directory is both the

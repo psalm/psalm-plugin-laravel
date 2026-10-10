@@ -31,6 +31,7 @@ flowchart TD
         stubs/common/ (types + taint annotations)
         versioned dirs, ascending (e.g. stubs/12.42.0/, stubs/13.5.0/, stubs/13.8.0/)
         stubs/integrations/carbon/ (gated on installed nesbot/carbon version)
+        stubs/blade/ (only when Blade analysis is active)
         aliases.phpstub (generated here from AliasLoader)
     "]
 
@@ -54,6 +55,8 @@ Bootstrap failures are a special case: `ApplicationProvider` swallows a `bootstr
 ### Blade shadow files
 
 Behind [`<blade />`](../config.md#blade), `Plugin::initBladeAnalysis()` compiles every `*.blade.php` file under the booted app's view paths into a PHP shadow file (`src/Blade/`) and registers the result with the run. `Blade\ContractParser` reads `@var`/`@props` declarations from the template source using `MarkerPrePass` masking and nikic/php-parser. `BladeBootstrapper::run()` degrades the feature with one warning when the compiler or view finder cannot be resolved, never runs with contracts silently empty. It is synchronous inside `__invoke` on purpose: a file can only still join the analysis while `Config::initializePlugins()` is on the stack, which Psalm calls after queueing the project files and before scanning them.
+
+A class component's own view (#1804): `Blade\ComponentViewMap` reads `ProjectAnalyzer::$project_files` (the same reflected list, read side), parses only files that declare a `render` function, and pairs a literal view name with the component whose `render()` returns it. The prelude then opens with that array, copied verbatim, inside a closure passed to `ComponentScope::bind()` (`stubs/blade/ComponentScope.phpstub`). Psalm binds `$this` from `@param-closure-this` only through a CLASS template read off the receiver's `@var`; a method template inferred from a sibling argument stays unbound on Psalm 7, so the class name goes on the receiver. The copy is part of the shadow fingerprint (`ShadowManifest::isFresh()`'s `$preludeInputs`), and its prelude lines map to `ShadowEntry::RENDER_DATA_LINE`, which is how the relocator drops findings that belong to `render()`.
 
 The registrations, deliberately asymmetric (`Blade\PsalmShadowRegistrar`):
 
@@ -203,6 +206,7 @@ Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
 - `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work
+- `stubs/blade/`: analysis-only helpers that compiled Blade shadows call, registered only when Blade analysis is active (`Plugin::registerStubs()`). Nothing outside a shadow may name them.
 - `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
 
 Rules:

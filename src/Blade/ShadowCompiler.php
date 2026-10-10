@@ -29,8 +29,9 @@ final class ShadowCompiler
 
     /**
      * @param array<string, string> $contractVars variable name (without $) => FQCN
+     * @param array{class: string, keys: list<string>, scope: string}|null $component
      */
-    public function compile(string $templatePath, string $source, array $contractVars = []): ShadowResult|BladeCompileError
+    public function compile(string $templatePath, string $source, array $contractVars = [], ?array $component = null): ShadowResult|BladeCompileError
     {
         // The prefix is absent from author text, including real PHP comments.
         $markerPrefix = MarkerComment::prefixFor($source);
@@ -47,11 +48,18 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
-        $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
+        $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source, $component);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");
         $lineMap = LineMapBuilder::build($content, $preludeLines, $markerPrefix);
+
+        // The scope statement right after `<?php` is render()'s own code, not the template's.
+        $scopeLines = $component === null ? 0 : \substr_count($component['scope'], "\n");
+
+        for ($line = 2; $line <= $scopeLines + 1; ++$line) {
+            $lineMap[$line] = ShadowEntry::RENDER_DATA_LINE;
+        }
 
         $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
         $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);

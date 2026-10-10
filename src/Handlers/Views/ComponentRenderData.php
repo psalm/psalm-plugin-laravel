@@ -181,9 +181,12 @@ final class ComponentRenderData
     }
 
     /**
+     * `Component::shouldIgnore()`: a name `data()` never exposes. Shared with
+     * {@see \Psalm\LaravelPlugin\Blade\ComponentViewMap}, which applies the same rule to reflection.
+     *
      * @psalm-pure
      */
-    private static function ignored(string $name): bool
+    public static function ignored(string $name): bool
     {
         return \str_starts_with($name, '__') || \in_array(\strtolower($name), self::IGNORED, true);
     }

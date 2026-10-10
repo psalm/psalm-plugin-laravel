@@ -146,7 +146,13 @@ final class ShadowIssueRelocator
         // still emits the FLOODING `Use of $this in non-class context` message and is still
         // dropped — the relocator has only the message and location, never scope info, so the two
         // cannot be told apart there either.
-        if ($issue instanceof InvalidScope && $issue->message === 'Use of $this in non-class context') {
+        //
+        // Except in a view a class component's render() is proven to render (#1804): Laravel
+        // evaluates it in a `static` closure (Filesystem::getRequire()), so `$this`/`self::` there
+        // is a runtime Error, not a convention. Livewire binds its own views and maps none.
+        $classComponentView = $target->entry->rendersComponentClass();
+
+        if ($issue instanceof InvalidScope && $issue->message === 'Use of $this in non-class context' && !$classComponentView) {
             return false;
         }
 
@@ -165,6 +171,7 @@ final class ShadowIssueRelocator
         // this message shape, so it is untouched.
         if (
             $issue instanceof NonStaticSelfCall
+            && !$classComponentView
             && \preg_match('/^Cannot use (?:self|static) outside class context$/i', $issue->message) === 1
         ) {
             return false;
@@ -382,6 +389,14 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
+
+        // The prelude's copy of a component's render() data (#1804): the same expressions are
+        // analyzed, and reported, in the component class itself. Gated on the line the prelude
+        // builder recorded for its own statement, never on a name the template could also write.
+        if ($templateLine === ShadowEntry::RENDER_DATA_LINE) {
+            return false;
+        }
+
         $message = self::remapMessage($issue, $target);
 
         if ($templateLine < 1) {

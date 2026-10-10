@@ -72,4 +72,14 @@ interface ShadowRegistrar
      * @psalm-impure
      */
     public function queueFilesForScanning(array $paths): void;
+
+    /**
+     * The PHP files the run analyzes, read before scanning starts: the only place a class component
+     * can be paired with the view its `render()` names ({@see ComponentViewMap}).
+     *
+     * @return list<string> absolute paths; empty when Psalm's internal list cannot be read
+     *
+     * @psalm-impure
+     */
+    public function projectFiles(): array;
 }

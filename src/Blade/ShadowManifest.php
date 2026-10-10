@@ -317,13 +317,16 @@ final class ShadowManifest
      * @param int-mask-of<self::SLOT_*> $requiredSlots slots whose collection pass must have run for
      *        the entry to count as fresh; an entry written with that pass disabled forces a recompile
      *        so the collector actually runs for it.
+     * @param string $preludeInputs what the prelude derives from outside the template (the
+     *        component-scope statement, {@see ComponentViewMap}); '' when nothing does, which keeps
+     *        such a template's fingerprint what it was before the input existed
      */
-    public function isFresh(string $templatePath, string $source, int $requiredSlots = 0): bool
+    public function isFresh(string $templatePath, string $source, int $requiredSlots = 0, string $preludeInputs = ''): bool
     {
-        $shadowPath = $this->shadowPath($templatePath, $source);
+        $shadowPath = $this->shadowPath($templatePath, $source, $preludeInputs);
         $entry = $this->entries[$shadowPath] ?? null;
 
-        if ($entry === null || $entry[3] !== $this->fingerprint($source) || !\is_file($shadowPath)) {
+        if ($entry === null || $entry[3] !== $this->fingerprint($source, $preludeInputs) || !\is_file($shadowPath)) {
             return false;
         }
 
@@ -340,9 +343,9 @@ final class ShadowManifest
      * Where a template's shadow lives, whether or not it has been compiled yet. A caller that
      * skipped recompiling a fresh template still has to register the shadow with Psalm.
      */
-    public function shadowPathFor(string $templatePath, string $source): string
+    public function shadowPathFor(string $templatePath, string $source, string $preludeInputs = ''): string
     {
-        return $this->shadowPath($templatePath, $source);
+        return $this->shadowPath($templatePath, $source, $preludeInputs);
     }
 
     /**
@@ -376,10 +379,11 @@ final class ShadowManifest
      * @param array{0: list<string>, 1: bool}|null $dataIncludes the subset of references the shadow
      *        hands its whole scope to (`@include`, `@extends`, ...); null when that pass is disabled,
      *        distinct from "collected, found none" and making the read set decline
+     * @param string $preludeInputs {@see self::isFresh()}
      */
-    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $dataIncludes = null): string
+    public function store(string $templatePath, string $source, ShadowResult $shadow, ViewDataContract $contract, ?array $dataIncludes = null, string $preludeInputs = ''): string
     {
-        $shadowPath = $this->shadowPath($templatePath, $source);
+        $shadowPath = $this->shadowPath($templatePath, $source, $preludeInputs);
         $pid = \getmypid();
         $tmpPath = $shadowPath . '.tmp.' . ($pid !== false ? $pid : 'unknown');
 
@@ -411,7 +415,7 @@ final class ShadowManifest
             $templatePath,
             $shadow->lineMap,
             $shadow->extendsLine,
-            $this->fingerprint($source),
+            $this->fingerprint($source, $preludeInputs),
             $shadow->suppressions,
             [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
             $dataIncludes,
@@ -478,9 +482,9 @@ final class ShadowManifest
         }
     }
 
-    private function shadowPath(string $templatePath, string $source): string
+    private function shadowPath(string $templatePath, string $source, string $preludeInputs): string
     {
-        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '-' . $this->fingerprint($source) . '.php';
+        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '-' . $this->fingerprint($source, $preludeInputs) . '.php';
     }
 
     /** The OS-level reason for the most recently suppressed warning, if any, as ": <message>". */
@@ -499,13 +503,13 @@ final class ShadowManifest
         return $this->shadowDir . \DIRECTORY_SEPARATOR . self::MANIFEST_FILE;
     }
 
-    private function fingerprint(string $source): string
+    private function fingerprint(string $source, string $preludeInputs): string
     {
         // Everything but the source is fixed for the process, and the plugin version costs a
         // Composer lookup, so the suffix is built once rather than per template.
         $this->fingerprintSuffix ??= '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|'
             . (InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown') . '|' . $this->environment;
 
-        return \hash('xxh128', $source . $this->fingerprintSuffix);
+        return \hash('xxh128', $source . $this->fingerprintSuffix . ($preludeInputs === '' ? '' : "\0" . $preludeInputs));
     }
 }

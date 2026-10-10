@@ -118,7 +118,7 @@ final class Plugin implements PluginEntryPointInterface
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
-            $this->registerStubs($registration, $pluginConfig, $output);
+            $this->registerStubs($registration, $pluginConfig, $output, $bladeActive);
 
             // Last: make()ing every binding runs provider and binding closures, so it must follow every other
             // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
@@ -251,6 +251,7 @@ final class Plugin implements PluginEntryPointInterface
         RegistrationInterface $registration,
         PluginConfig $pluginConfig,
         \Psalm\Progress\Progress $output,
+        bool $bladeActive,
     ): void {
         $stubsRoot = __DIR__ . '/../stubs';
 
@@ -258,6 +259,8 @@ final class Plugin implements PluginEntryPointInterface
             StubFileFinder::commonStubs($stubsRoot, $output),
             StubFileFinder::stubsForLaravelVersion($stubsRoot, Application::VERSION, $output),
             $this->optionalIntegrationStubs($stubsRoot, $output),
+            // Analysis-only helpers the shadow preludes call; nothing else may name them.
+            $bladeActive ? StubFileFinder::findIn($stubsRoot . '/blade', $output) : [],
         );
 
         foreach ($stubs as $stubFilePath) {

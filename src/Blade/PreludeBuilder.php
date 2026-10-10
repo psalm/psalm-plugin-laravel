@@ -49,17 +49,22 @@ final class PreludeBuilder
 
     /**
      * @param array<string, string> $contractVars variable name (without $) => FQCN
+     * @param array{class: string, keys: list<string>, scope: string}|null $component the class
+     *        component that renders this view ({@see ComponentViewMap}); its scope statement opens
+     *        the prelude, ahead of every docblock line, so the ambient types and a raw `@var` in the
+     *        template both still win over it
      */
-    public function build(string $compiled, array $contractVars, string $source): string
+    public function build(string $compiled, array $contractVars, string $source, ?array $component = null): string
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
             static fn(?string $type): bool => $type !== null,
         );
 
-        $declared = self::AMBIENT_TYPES + $componentTypes + $contractVars;
+        $declared = self::AMBIENT_TYPES + $componentTypes + $contractVars
+            + \array_fill_keys($component['keys'] ?? [], 'mixed');
 
-        $lines = [];
+        $lines = $component === null ? [] : [\rtrim($component['scope'], "\n")];
 
         foreach (self::AMBIENT_TYPES as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";

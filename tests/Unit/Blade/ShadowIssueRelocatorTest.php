@@ -163,6 +163,27 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame('Cannot find referenced variable $x (unmapped)', $relocated->message);
     }
 
+    /** #1804: the prelude's copy of a component's render() data is reported in the class itself. */
+    #[Test]
+    public function an_issue_on_the_copied_render_data_is_dropped(): void
+    {
+        $issue = new UndefinedMethod('Method Foo::bar does not exist', $this->shadowLocation(2), 'Foo::bar');
+
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => ShadowEntry::RENDER_DATA_LINE, 3 => 0])));
+    }
+
+    /** The same issue one line further down, on the prelude's own docblocks, keeps reporting. */
+    #[Test]
+    public function the_render_data_drop_does_not_reach_other_prelude_lines(): void
+    {
+        $issue = new UndefinedMethod('Method Foo::bar does not exist', $this->shadowLocation(3), 'Foo::bar');
+
+        $relocated = $this->relocate($issue, $this->entry([2 => ShadowEntry::RENDER_DATA_LINE, 3 => 0]));
+
+        $this->assertInstanceOf(UndefinedMethod::class, $relocated);
+        $this->assertSame('Method Foo::bar does not exist (unmapped)', $relocated->message);
+    }
+
     #[Test]
     public function a_shadow_line_missing_from_the_map_is_treated_as_unmapped(): void
     {
@@ -1130,6 +1151,20 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * #1804: a view a class component's render() renders is evaluated in a `static` closure, so
+     * `$this`/`self::` in it is a runtime Error and keeps reporting; the drops above stay for
+     * every other view (positive halves: the two tests above, whose maps carry no render data).
+     */
+    #[Test]
+    public function this_and_self_keep_reporting_in_a_class_component_view(): void
+    {
+        $entry = $this->entry([2 => ShadowEntry::RENDER_DATA_LINE, 9 => 3]);
+
+        $this->assertInstanceOf(InvalidScope::class, $this->relocate(new InvalidScope('Use of $this in non-class context', $this->shadowLocation(9)), $entry));
+        $this->assertInstanceOf(NonStaticSelfCall::class, $this->relocate(new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9)), $entry));
     }
 
     /**

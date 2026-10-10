@@ -87,6 +87,13 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         }
     }
 
+    /** @inheritDoc */
+    #[\Override]
+    public function projectFiles(): array
+    {
+        return ProjectFileInjector::projectFiles($this->projectAnalyzer);
+    }
+
     /**
      * Whether Psalm could resolve `$candidate` to a file WITHOUT this method's own queueing being
      * the reason it can. Neither arm below triggers autoloading (`class_exists()` etc. are always
