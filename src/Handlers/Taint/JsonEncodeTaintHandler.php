@@ -23,9 +23,12 @@ use Psalm\Type\Union;
  * - `JSON_HEX_TAG` removes html. `JSON_HEX_APOS` plus `JSON_HEX_QUOT` removes has_quotes; without
  *   HEX_APOS a `'` stays raw, without HEX_QUOT a `"` becomes `\"` (a backslash escapes nothing in HTML).
  * - Known gap: the encoder's own `"` delimiters still close a double-quoted attribute
- *   (`data-x="@json($v)"`). Accepted because such markup is visibly broken for every value, so it does
- *   not survive manual testing; single-quoted attributes and `<script>` are safe with these flags.
+ *   (`data-x="@json($v)"`). Accepted because such markup is visibly broken for every string, array or
+ *   object value, so it rarely survives manual testing (ints, bools and null encode bare and render fine).
+ *   Single-quoted attributes and `<script>` are safe with these flags.
  * - Flags are the literal node type, AND-ed across a literal union. Anything else declines.
+ * - Only the written name `json_encode` is matched, so `use function json_encode as enc; enc($v, 15)`
+ *   keeps its findings (accepted false positive).
  * - The removal lands on the stub's own argument-to-return edge, which is per call only while Psalm
  *   specializes `json_encode()` per call site. A project stub re-declaring it without specialization
  *   shares that edge between all calls, so the handler declines there.
@@ -44,11 +47,11 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
         if (!$expr instanceof FuncCall
             || !$expr->name instanceof Name
             || \strtolower($expr->name->getLast()) !== 'json_encode'
+            || $expr->isFirstClassCallable()
         ) {
             return 0;
         }
 
-        // A first-class callable `json_encode(...)` never reaches here with its type unset.
         $source = $event->getStatementsSource();
         if (!$source instanceof StatementsAnalyzer || $source->node_data->getType($expr) instanceof Union) {
             return 0;

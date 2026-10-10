@@ -45,10 +45,18 @@ function unionWithoutHexTag(\Illuminate\Http\Request $request): void {
     echo json_encode($v, $request->boolean('b') ? 15 : 0);
 }
 
-/** Invoking a first-class callable is a call through an expression, never a `json_encode` name. */
+/** Not a json_encode-named call: the invocation goes through an expression. */
 function firstClassCallable(\Illuminate\Http\Request $request): void {
     $encode = json_encode(...);
     echo $encode((string) $request->input('v'), 15);
+}
+
+/** Quote flags never clear html: APOS|QUOT keeps only TaintedHtml, QUOT alone keeps both. */
+function quoteFlagsWithoutHexTag(\Illuminate\Http\Request $request): void {
+    $v = (string) $request->input('v');
+
+    echo json_encode($v, JSON_HEX_APOS | JSON_HEX_QUOT);
+    echo json_encode($v, JSON_HEX_QUOT);
 }
 ?>
 --EXPECTF--
@@ -66,5 +74,8 @@ TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
