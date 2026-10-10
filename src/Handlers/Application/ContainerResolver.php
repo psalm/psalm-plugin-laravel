@@ -135,8 +135,21 @@ final class ContainerResolver
             return null;
         }
 
-        if ($firstArgType->isSingleStringLiteral()) {
-            return self::resolveFromLiteralString($codebase, $firstArgType->getSingleStringLiteral()->value);
+        // Every atomic is a string literal (a lone literal is the one-element case). One
+        // unresolvable element declines the whole call: a partial union would be unsound.
+        $literals = $firstArgType->getLiteralStrings();
+        if ($literals !== [] && \count($literals) === \count($firstArgType->getAtomicTypes())) {
+            $resolved = [];
+            foreach ($literals as $literal) {
+                $resolvedLiteral = self::resolveFromLiteralString($codebase, $literal->value);
+                if (!$resolvedLiteral instanceof Union) {
+                    return null;
+                }
+
+                $resolved[] = $resolvedLiteral;
+            }
+
+            return Type::combineUnionTypeArray($resolved, $codebase);
         }
 
         if (!$firstArgType->isSingle()) {
