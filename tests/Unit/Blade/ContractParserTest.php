@@ -157,6 +157,23 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function a_var_comment_after_an_escaped_php_directive_is_still_read(): void
+    {
+        $contract = $this->parse("@@php\n{{-- @var int \$n --}}\n@endphp\n");
+
+        $this->assertArrayHasKey('n', $contract->vars);
+        $this->assertSame('int', $contract->vars['n']->typeString);
+    }
+
+    #[Test]
+    public function a_var_comment_after_an_escaped_verbatim_directive_is_still_read(): void
+    {
+        $contract = $this->parse("@@verbatim\n{{-- @var int \$n --}}\n@endverbatim\n");
+
+        $this->assertArrayHasKey('n', $contract->vars);
+    }
+
+    #[Test]
     public function a_closing_paren_inside_a_props_string_does_not_close_the_argument_list_early(): void
     {
         $contract = $this->parse("@props(['a' => ')'])\n<div>{{ \$a }}</div>\n");
