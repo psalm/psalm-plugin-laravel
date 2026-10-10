@@ -1337,8 +1337,13 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'RedundantCondition', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
-        // Plain PHP leaves the docblock sibling of the re-analyzed arm condition suppressed.
-        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template));
+        // The re-analysis reports the docblock sibling too (line 70). Line 25 is the accepted
+        // residual: the suppressed first pass raised it, and its location equals the second's.
+        $this->assertSame(
+            [25, 70],
+            $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**

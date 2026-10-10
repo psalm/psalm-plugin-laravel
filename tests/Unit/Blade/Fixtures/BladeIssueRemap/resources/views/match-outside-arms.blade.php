@@ -61,5 +61,14 @@ $byNamedClass = match (\stdClass::class) {
     (is_int($n) ? 'x' : 'y') => 'a',
     'z' => 'b',
 };
-echo $upperTrue, $byClass, $byCount, $byGetClass, $lowerTrue, $byCallArg, $byNamedClass;
+
+$k = random_int(1, 10);
+$s = (string) $k;
+/** @var 'long' $expected */
+$expected = 'long';
+$byDocblock = match ($k) {
+    (substr($s, 0, 1) !== $expected ? 1 : 2) => 'a',
+    4 => 'b',
+};
+echo $upperTrue, $byClass, $byCount, $byGetClass, $lowerTrue, $byCallArg, $byNamedClass, $byDocblock;
 ?>

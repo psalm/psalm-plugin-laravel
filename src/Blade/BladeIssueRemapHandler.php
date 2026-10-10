@@ -235,9 +235,18 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      * `RedundantConditionGivenDocblockType` added to the analyzer's runtime suppression list, which
      * `BeforeAddIssueEvent` omits (upstream gap). Mirrored by AST shape so a template stays as quiet
      * as plain PHP (#1801). The window covers the arms only: the subject, and a `match` used as an
-     * operand (the finding spans the whole expression), keep reporting. With no default arm
-     * and a subject Psalm tracks (see {@see self::matchSubjectIsTracked()}), the arm conditions are analyzed again after the window closes, so they keep reporting
-     * `RedundantCondition`; the docblock sibling stays suppressed, as it is on plain PHP.
+     * operand (the finding spans the whole expression), keep reporting. With no default arm and a
+     * subject Psalm tracks (see {@see self::matchSubjectIsTracked()}), the arm conditions are
+     * analyzed again after the window closes, with both suppressions removed, so nothing is
+     * suppressed there.
+     *
+     * Accepted residuals, all in the extra-report direction (never silencing what Psalm reports):
+     * - The first pass of a re-analyzed condition can raise a docblock finding the second pass does
+     *   not, and both share one location, so it reports.
+     * - A subject written as an assignment (`match ($k = expr)`) is re-analyzed inside the
+     *   suppressed ternaries, so its findings can report where Psalm stays silent.
+     * - An arm body that aborts analysis (an empty inner `match ($n) {}`) skips the re-analysis, so
+     *   its conditions can report `RedundantCondition`.
      *
      * @return list<string>
      */
@@ -269,8 +278,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return [];
         }
 
-        if (!$hasDefault && self::matchSubjectIsTracked($match->cond) && $inReanalyzedCondition) {
-            return ['RedundantConditionGivenDocblockType'];
+        if (!$hasDefault && $inReanalyzedCondition && self::matchSubjectIsTracked($match->cond)) {
+            return [];
         }
 
         return ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
