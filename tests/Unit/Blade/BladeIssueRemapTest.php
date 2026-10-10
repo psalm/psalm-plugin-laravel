@@ -1198,6 +1198,22 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /** A raw PHP `@var` docblock below a contract retypes the variable from that point on. */
+    #[Test]
+    public function a_raw_var_docblock_overrides_the_contract_type(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-raw-override.blade.php';
+        $reported = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template) && $issue['type'] === 'UndefinedMethod',
+        ));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([3], \array_column($reported, 'line_from'), $encoded);
+        $this->assertStringContainsString('GenuineMiss::missing', $reported[0]['message'], $encoded);
+    }
+
     /** A contract naming a missing class reports on the comment that declared it, not as unmapped. */
     #[Test]
     public function a_contract_naming_an_unknown_class_reports_on_its_comment_line(): void
