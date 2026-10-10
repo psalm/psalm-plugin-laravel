@@ -12,5 +12,14 @@ function appHelperDoesNotMatchAliasClassCaseInsensitively(): mixed
     /** @psalm-check-type-exact $schema = mixed */
     return $schema;
 }
+
+// A namespaced abstract keeps the lenient match: PHP builds `Illuminate\Validation\Rules\enum` as
+// `Enum` (unbound, constructor needs a scalar, so make() throws and the fallback applies).
+function appHelperKeepsMisCasedNamespacedClass(): object
+{
+    $rule = app('Illuminate\Validation\Rules\enum');
+    /** @psalm-check-type-exact $rule = Illuminate\Validation\Rules\enum */
+    return $rule;
+}
 ?>
 --EXPECTF--

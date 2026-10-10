@@ -175,13 +175,11 @@ final class ContainerResolver
             // symmetrical with resolveFromClassString() (#750), which already returns
             // a TNamedObject for `class-string<Foo>` without touching the container.
             //
-            // Container keys are case-sensitive but Psalm's storage lookup is not, so the name must match
-            // the storage's spelling: `app('hash')` must not name the `Hash` facade alias class.
             // isKnownClass() never autoloads (see there). Interfaces and traits stay mixed — we
             // never claim an unresolvable contract resolves to itself. We only ever return the
             // abstract itself, a supertype of whatever the runtime would build, so this cannot
             // introduce a false-positive on a member that genuinely exists.
-            if (self::isKnownClass($codebase, $abstract, exactCase: true)) {
+            if (self::isKnownClass($codebase, $abstract)) {
                 return new Union([
                     new TNamedObject($abstract),
                 ]);
@@ -216,18 +214,24 @@ final class ContainerResolver
      * lack storage, and naming it reports UndefinedClass. Never autoloads: a class whose load raises a
      * deprecation would crash the run under Psalm's error handler, here where nothing catches it (#1652).
      *
-     * $exactCase additionally requires $class to be spelled as the storage's canonical name.
+     * Psalm's storage lookup is case-insensitive but container keys are not: an un-namespaced `hash` or
+     * `schema` is a service key that must not match the global `Hash` / `Schema` facade alias class, so it
+     * has to be spelled exactly as the storage name. A namespaced name keeps the lenient match. A
+     * global-namespace `class_alias()` whose name differs from its target therefore stays unknown.
      *
      * @psalm-mutation-free
      */
-    private static function isKnownClass(Codebase $codebase, string $class, bool $exactCase = false): bool
+    private static function isKnownClass(Codebase $codebase, string $class): bool
     {
         $storage = ClassLineage::storage($codebase, $class);
 
-        return $storage instanceof ClassLikeStorage
-            && !$storage->is_interface
-            && !$storage->is_trait
-            && (!$exactCase || $storage->name === \ltrim($class, '\\'));
+        if (!$storage instanceof ClassLikeStorage || $storage->is_interface || $storage->is_trait) {
+            return false;
+        }
+
+        $class = \ltrim($class, '\\');
+
+        return \str_contains($class, '\\') || $storage->name === $class;
     }
 
     /**
