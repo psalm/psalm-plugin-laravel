@@ -29,7 +29,7 @@ final class ShadowCompiler
 
     /**
      * @param array<string, string> $contractVars variable name (without $) => FQCN
-     * @param array{class: string, keys: list<string>, scope: string}|null $component
+     * @param array{keys: list<string>, scope: string}|null $component {@see PreludeBuilder::componentScope()}
      */
     public function compile(string $templatePath, string $source, array $contractVars = [], ?array $component = null): ShadowResult|BladeCompileError
     {

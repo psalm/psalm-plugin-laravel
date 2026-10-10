@@ -16,7 +16,6 @@ use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter\Standard;
-use Psalm\LaravelPlugin\Handlers\Views\ComponentRenderData;
 
 /**
  * Pairs a literal view name with the class component whose `render()` renders it, so that view's
@@ -35,11 +34,14 @@ use Psalm\LaravelPlugin\Handlers\Views\ComponentRenderData;
  */
 final class ComponentViewMap
 {
+    /** The `Component` methods that decide which view renders and which keys `data()` merges over it. */
+    private const DATA_PATH_METHODS = ['data', 'extractPublicProperties', 'extractPublicMethods', 'shouldIgnore', 'ignoredMethods', 'resolveView'];
+
     /** Functions that read or write the calling scope's variables by name, which the copy cannot keep. */
     private const SCOPE_FUNCTIONS = ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg', 'func_num_args'];
 
     /**
-     * @param array<string, array{class: string, keys: list<string>, scope: string}> $views view name => component view
+     * @param array<string, array{class: string, keys: list<string>, data: string}> $views view name => component view
      *
      * @psalm-mutation-free
      */
@@ -53,15 +55,29 @@ final class ComponentViewMap
     {
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
         $finder = new NodeFinder();
-        /** @var array<string, list<array{class: string, keys: list<string>, scope: string}|null>> $candidates */
+        /** @var array<string, list<array{0: array{class: string, keys: list<string>, data: string}|null, 1: ?string}>> $candidates view name => [renderer, lowercase short name a subclass would extend] */
         $candidates = [];
+        /** @var array<lowercase-string, true> $extended lowercase short names any project class extends */
+        $extended = [];
 
         foreach ($phpFiles as $file) {
             $code = @\file_get_contents($file);
 
+            if ($code === false) {
+                continue;
+            }
+
+            // A subclass inheriting render() can add public members that collide with its keys, so
+            // every extended short name is recorded; an aliased import is not seen.
+            if (\preg_match_all('/\\bextends\\s+\\\\?(?:\\w+\\\\)*(\\w+)/i', $code, $matches) > 0) {
+                foreach ($matches[1] as $shortName) {
+                    $extended[\strtolower($shortName)] = true;
+                }
+            }
+
             // Parsing dominates the cost, so a file must name both halves of the shape first.
-            if ($code === false || \stripos($code, 'function render') === false
-                || (\stripos($code, 'view(') === false && \stripos($code, 'View::make(') === false)
+            if (\preg_match('/\\bfunction\\s+&?\\s*render\\b/i', $code) !== 1
+                || \preg_match('/\\bview\\s*\\(|\\bView\\s*::\\s*make\\b/i', $code) !== 1
             ) {
                 continue;
             }
@@ -74,16 +90,22 @@ final class ComponentViewMap
             }
 
             foreach ($finder->findInstanceOf($ast, Node\Stmt\Class_::class) as $class) {
-                $statements = $class->namespacedName instanceof Name ? $class->getMethod('render')?->stmts : null;
+                $render = $class->getMethod('render');
+                $statements = $render?->stmts;
 
-                if ($statements === null || !$class->namespacedName instanceof Name) {
+                if ($render === null || $statements === null || !$class->namespacedName instanceof Name) {
                     continue;
                 }
 
-                $call = self::renderCall($statements);
+                // PHP rejects a private, protected, or static render() on a Component subclass with a
+                // fatal no catch survives, so only a loadable declaration may reach autoloading.
+                $call = $render->isPublic() && !$render->isStatic() && !$class->isAbstract() ? self::renderCall($statements) : null;
 
                 if ($call !== null) {
-                    $candidates[LaravelViewName::normalize($call[0])][] = self::componentView($class->namespacedName->toString(), $call[1]);
+                    $candidates[LaravelViewName::normalize($call[0])][] = [
+                        self::componentView($class->namespacedName->toString(), $call[1]),
+                        $class->isFinal() ? null : \strtolower($class->namespacedName->getLast()),
+                    ];
 
                     continue;
                 }
@@ -94,7 +116,7 @@ final class ComponentViewMap
                     $view = $factoryCall instanceof Expr\CallLike && !$factoryCall->isFirstClassCallable() ? ($factoryCall->getArgs()[0] ?? null)?->value : null;
 
                     if ($view instanceof Node\Scalar\String_) {
-                        $candidates[LaravelViewName::normalize($view->value)][] = null;
+                        $candidates[LaravelViewName::normalize($view->value)][] = [null, null];
                     }
                 }
             }
@@ -103,8 +125,10 @@ final class ComponentViewMap
         $views = [];
 
         foreach ($candidates as $view => $renderers) {
-            if (\count($renderers) === 1 && $renderers[0] !== null) {
-                $views[$view] = $renderers[0];
+            [$renderer, $shortName] = $renderers[0];
+
+            if (\count($renderers) === 1 && $renderer !== null && ($shortName === null || !isset($extended[$shortName]))) {
+                $views[$view] = $renderer;
             }
         }
 
@@ -112,7 +136,34 @@ final class ComponentViewMap
     }
 
     /**
-     * @return array{class: string, keys: list<string>, scope: string}|null
+     * The component for each template, declining a template two mapped names resolve to with
+     * different components (a published override is `vendor.pkg.card` and `pkg::card` at once).
+     *
+     * @param list<array{0: string, 1: string}> $owners view name, the template that renders under it
+     *
+     * @return array<string, array{class: string, keys: list<string>, data: string}> template path => component view
+     *
+     * @psalm-mutation-free
+     */
+    public function forTemplates(array $owners): array
+    {
+        $components = [];
+
+        foreach ($owners as [$viewName, $template]) {
+            $component = $this->views[$viewName] ?? null;
+
+            if ($component !== null) {
+                $components[$template] = \array_key_exists($template, $components) && $components[$template] !== $component
+                    ? null
+                    : $component;
+            }
+        }
+
+        return \array_filter($components);
+    }
+
+    /**
+     * @return array{class: string, keys: list<string>, data: string}|null
      *
      * @psalm-mutation-free
      */
@@ -179,7 +230,7 @@ final class ComponentViewMap
     }
 
     /**
-     * @return array{class: string, keys: list<string>, scope: string}|null
+     * @return array{class: string, keys: list<string>, data: string}|null
      */
     private static function componentView(string $className, Expr\Array_ $data): ?array
     {
@@ -255,25 +306,14 @@ final class ComponentViewMap
             }
         }))->traverse([$data]);
 
-        $targets = \implode(', ', \array_map(
-            static fn(string $key): string => \var_export($key, true) . ' => $' . $key,
-            $declared,
-        ));
-
-        // A CLASS template on the receiver, not a method template: Psalm binds `$this` from
-        // `@param-closure-this` only through the former (stubs/blade/ComponentScope.phpstub).
-        $scope = "/** @var \\Psalm\\LaravelPlugin\\Blade\\ComponentScope<\\{$className}> \$__laravelComponentScope */\n"
-            . "[{$targets}] = (\$__laravelComponentScope->bind(function () { return "
-            . (new Standard())->prettyPrintExpr($data) . "; }))();\n";
-
-        return ['class' => $className, 'keys' => $declared, 'scope' => $scope];
+        return ['class' => $className, 'keys' => $declared, 'data' => (new Standard())->prettyPrintExpr($data)];
     }
 
     /**
      * The names `Component::data()` (and the slots) can merge over render()'s array, by reflection on
-     * the booted class: `ComponentRenderData`'s exposure rule, which works on Psalm storage that does
-     * not exist yet at boot. Null declines: not an autoloadable concrete component, or a `data()`
-     * override that can add any key.
+     * the booted class: every public property and method, exact case, a superset of what `data()`
+     * exposes. Null declines: not an autoloadable concrete component, or an override anywhere on the
+     * path that picks the view or its `data()` keys.
      *
      * @return array<string, true>|null
      */
@@ -286,8 +326,14 @@ final class ComponentViewMap
 
             $class = new \ReflectionClass($className);
 
-            if ($class->isAbstract() || $class->getMethod('data')->getDeclaringClass()->getName() !== Component::class) {
+            if ($class->isAbstract()) {
                 return null;
+            }
+
+            foreach (self::DATA_PATH_METHODS as $method) {
+                if ($class->getMethod($method)->getDeclaringClass()->getName() !== Component::class) {
+                    return null;
+                }
             }
 
             $exposed = ['slot' => true];
@@ -297,9 +343,7 @@ final class ComponentViewMap
             ];
 
             foreach ($members as $member) {
-                if (!ComponentRenderData::ignored($member->getName())) {
-                    $exposed[$member->getName()] = true;
-                }
+                $exposed[$member->getName()] = true;
             }
 
             return $exposed;

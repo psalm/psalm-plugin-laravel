@@ -49,8 +49,8 @@ final class PreludeBuilder
 
     /**
      * @param array<string, string> $contractVars variable name (without $) => FQCN
-     * @param array{class: string, keys: list<string>, scope: string}|null $component the class
-     *        component that renders this view ({@see ComponentViewMap}); its scope statement opens
+     * @param array{keys: list<string>, scope: string}|null $component {@see self::componentScope()}
+     *        for the class component that renders this view; its scope statement opens
      *        the prelude, ahead of every docblock line, so the ambient types and a raw `@var` in the
      *        template both still win over it
      */
@@ -83,6 +83,45 @@ final class PreludeBuilder
         }
 
         return "<?php\n" . \implode("\n", $lines) . "\n?>\n";
+    }
+
+    /**
+     * The prelude statement that evaluates a class component's render() data with `$this` bound to
+     * the class, and destructures it into the template's variables. A key the template names in a
+     * live `@props`/`@aware` directive is left to that directive: `@props` defaults and `@aware`
+     * parent values overwrite render()'s at runtime. Any quoted occurrence of the name counts, a
+     * superset of the directive's own entries. Null when no key remains.
+     *
+     * @param array{class: string, keys: list<string>, data: string} $component {@see ComponentViewMap}
+     *
+     * @return array{keys: list<string>, scope: string}|null
+     *
+     * @psalm-pure
+     */
+    public static function componentScope(array $component, string $source): ?array
+    {
+        $source = MarkerPrePass::blankInertText($source);
+        $directive = \preg_match('/(?<!@)@(?:props|aware)\s*\(/i', $source) === 1;
+        $keys = \array_values(\array_filter(
+            $component['keys'],
+            static fn(string $key): bool => !$directive || \preg_match('/([\'"])' . \preg_quote($key, '/') . '\1/', $source) !== 1,
+        ));
+
+        if ($keys === []) {
+            return null;
+        }
+
+        $targets = \implode(', ', \array_map(
+            static fn(string $key): string => \var_export($key, true) . ' => $' . $key,
+            $keys,
+        ));
+
+        // A CLASS template on the receiver, not a method template: Psalm binds `$this` from
+        // `@param-closure-this` only through the former (stubs/blade/ComponentScope.phpstub).
+        $scope = "/** @var \\Psalm\\LaravelPlugin\\Blade\\ComponentScope<\\{$component['class']}> \$__laravelComponentScope */\n"
+            . "[{$targets}] = (\$__laravelComponentScope->bind(function () { return {$component['data']}; }))();\n";
+
+        return ['keys' => $keys, 'scope' => $scope];
     }
 
     /**

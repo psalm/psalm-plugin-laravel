@@ -314,4 +314,24 @@ final class PreludeBuilderTest extends TestCase
         $this->assertSame(1, \substr_count($prelude, '<?php'));
         $this->assertSame(1, \substr_count($prelude, '?>'));
     }
+
+    /** #1804: a name `@props`/`@aware` declares is the directive's to type, not render()'s. */
+    #[\PHPUnit\Framework\Attributes\DataProvider('directiveSources')]
+    #[Test]
+    public function a_directive_named_key_keeps_its_own_typing(string $source, ?array $expected): void
+    {
+        $scope = PreludeBuilder::componentScope(['class' => 'App\\Alert', 'keys' => ['title', 'count'], 'data' => "['title' => 't', 'count' => 1]"], $source);
+
+        $this->assertSame($expected, $scope['keys'] ?? null);
+    }
+
+    /** @return iterable<string, array{0: string, 1: list<string>|null}> */
+    public static function directiveSources(): iterable
+    {
+        yield 'no directive' => ['<p>{{ $title }}</p>', ['title', 'count']];
+        yield '@props' => ["@props(['title' => 'x'])\n<p>{{ \$title }}</p>", ['count']];
+        yield '@aware' => ["@aware(['count'])", ['title']];
+        yield 'both named' => ["@props(['title', \"count\"])", null];
+        yield 'escaped directive' => ["@@props(['title'])", ['title', 'count']];
+    }
 }

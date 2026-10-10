@@ -240,7 +240,7 @@ final class BladeBootstrapper
      *                                                     not resolve every compiler input, so the
      *                                                     freshness check is skipped and every template
      *                                                     recompiles this run regardless of the manifest
-     * @param array<string, array{class: string, keys: list<string>, scope: string}> $components template path =>
+     * @param array<string, array{class: string, keys: list<string>, data: string}> $components template path =>
      *                                                     the class component rendering it
      *
      * @return array<string, string> template path => shadow path
@@ -273,7 +273,7 @@ final class BladeBootstrapper
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
-            $component = $components[$template] ?? null;
+            $component = isset($components[$template]) ? PreludeBuilder::componentScope($components[$template], $source) : null;
             // The scope statement copies render() from a PHP file, so it is part of the fingerprint.
             $preludeInputs = $component['scope'] ?? '';
 
@@ -335,7 +335,7 @@ final class BladeBootstrapper
      * @param list<string>                           $templates
      * @param list<array{0: string, 1: string|null}> $roots
      *
-     * @return array<string, array{class: string, keys: list<string>, scope: string}> template path => component view
+     * @return array<string, array{class: string, keys: list<string>, data: string}> template path => component view
      */
     private function componentViews(array $templates, array $roots, ComponentViewMap $map): array
     {
@@ -353,13 +353,10 @@ final class BladeBootstrapper
             }
         }
 
-        $components = [];
-
-        foreach ($owners as [, $template, $viewName]) {
-            $components[$template] = $map->get($viewName);
-        }
-
-        return \array_filter($components);
+        return $map->forTemplates(\array_values(\array_map(
+            static fn(array $owner): array => [$owner[2], $owner[1]],
+            $owners,
+        )));
     }
 
     /**

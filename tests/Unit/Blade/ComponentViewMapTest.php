@@ -29,16 +29,19 @@ final class ComponentViewMapTest extends TestCase
      *
      * @return string the file path
      */
-    private function componentFile(string $classBody, string $extends = '\Illuminate\View\Component', string $uses = ''): string
+    private function componentFile(string $classBody, string $extends = '\Illuminate\View\Component', string $uses = '', bool $final = true, bool $declare = true): string
     {
         static $counter = 0;
         $namespace = 'ComponentViewMapTest' . \getmypid() . '_' . ++$counter;
         $file = \sys_get_temp_dir() . "/{$namespace}.php";
+        $modifier = $final ? 'final ' : '';
 
-        \file_put_contents($file, "<?php\nnamespace {$namespace};\n{$uses}\nfinal class Widget extends {$extends}\n{\n{$classBody}\n}\n");
+        \file_put_contents($file, "<?php\nnamespace {$namespace};\n{$uses}\n{$modifier}class Widget extends {$extends}\n{\n{$classBody}\n}\n");
         $this->files[] = $file;
 
-        require $file;
+        if ($declare) {
+            require $file;
+        }
 
         return $file;
     }
@@ -56,7 +59,91 @@ final class ComponentViewMapTest extends TestCase
 
         $this->assertNotNull($view);
         $this->assertSame(['title'], $view['keys']);
-        $this->assertStringContainsString("['title' => \$title] = (\$__laravelComponentScope->bind(function () { return ['title' => \$this->title()", $view['scope']);
+        $this->assertStringStartsWith("['title' => \$this->title()", $view['data']);
+    }
+
+    /** Exact-case superset: every public member name collides, even one `data()` itself ignores. */
+    #[Test]
+    public function every_public_member_name_collides(): void
+    {
+        $file = $this->componentFile("public function render() { return view('v', ['data' => 1, 'render' => 2, 'a' => 3]); }");
+
+        $this->assertSame(['a'], ComponentViewMap::build([$file])->get('v')['keys'] ?? null);
+    }
+
+    #[Test]
+    public function whitespace_around_the_factory_call_still_reaches_the_parser(): void
+    {
+        $spaced = $this->componentFile("public function render() { return view ('spaced', ['a' => 1]); }");
+        $facade = $this->componentFile("public function render() { return View :: make ('facade', ['a' => 1]); }", uses: 'use Illuminate\Support\Facades\View;');
+
+        $map = ComponentViewMap::build([$spaced, $facade]);
+
+        $this->assertNotNull($map->get('spaced'));
+        $this->assertNotNull($map->get('facade'));
+    }
+
+    /**
+     * A render() PHP itself rejects (private, static, on an abstract class) fatals on autoload, which
+     * no catch survives: it must decline from the AST, before anything asks for the class.
+     */
+    #[Test]
+    public function an_unloadable_render_declines_without_autoloading(): void
+    {
+        $requested = [];
+        $recorder = static function (string $class) use (&$requested): void {
+            $requested[] = $class;
+        };
+        \spl_autoload_register($recorder);
+
+        try {
+            foreach ([
+                "private function render() { return view('v', ['a' => 1]); }",
+                "public static function render() { return view('v', ['a' => 1]); }",
+            ] as $body) {
+                $this->assertNull(ComponentViewMap::build([$this->componentFile($body, declare: false)])->get('v'));
+            }
+
+            $abstract = \str_replace('class Widget', 'abstract class Widget', (string) \file_get_contents($this->componentFile(
+                "public function render() { return view('v', ['a' => 1]); }",
+                final: false,
+                declare: false,
+            )));
+            \file_put_contents($this->files[\count($this->files) - 1], $abstract);
+            $this->assertNull(ComponentViewMap::build([$this->files[\count($this->files) - 1]])->get('v'));
+        } finally {
+            \spl_autoload_unregister($recorder);
+        }
+
+        $this->assertSame([], \array_values(\array_filter($requested, static fn(string $class): bool => \str_starts_with($class, 'ComponentViewMapTest'))));
+    }
+
+    /** A project subclass inherits render() and can add public members that collide with its keys. */
+    #[Test]
+    public function a_non_final_component_a_project_class_extends_declines(): void
+    {
+        $parent = $this->componentFile("public function render() { return view('v', ['a' => 1]); }", final: false);
+        $child = \sys_get_temp_dir() . '/ComponentViewMapTestChild' . \getmypid() . '.php';
+        \file_put_contents($child, "<?php\nnamespace Elsewhere;\nuse Some\\Widget as Base;\nfinal class Special extends \\Some\\Widget {}\n");
+        $this->files[] = $child;
+
+        $this->assertNotNull(ComponentViewMap::build([$parent])->get('v'));
+        $this->assertNull(ComponentViewMap::build([$parent, $child])->get('v'));
+    }
+
+    /** `vendor.pkg.card` and `pkg::card` can name one file; two components for it decline it. */
+    #[Test]
+    public function a_template_two_mapped_names_resolve_to_declines(): void
+    {
+        $map = ComponentViewMap::build([
+            $this->componentFile("public function render() { return view('vendor.pkg.card', ['a' => 1]); }"),
+            $this->componentFile("public function render() { return view('pkg::card', ['a' => 2]); }"),
+            $this->componentFile("public function render() { return view('solo', ['a' => 3]); }"),
+        ]);
+
+        $resolved = $map->forTemplates([['vendor.pkg.card', '/t/card.blade.php'], ['pkg::card', '/t/card.blade.php'], ['solo', '/t/solo.blade.php']]);
+
+        $this->assertSame(['/t/solo.blade.php'], \array_keys($resolved));
     }
 
     #[Test]
@@ -87,6 +174,12 @@ final class ComponentViewMapTest extends TestCase
         yield 'a scope function' => ["public function render() { return view('v', ['a' => \\compact('b')]); }"];
         yield 'a magic constant' => ["public function render() { return view('v', ['a' => __CLASS__]); }"];
         yield 'a data() override' => ["public function render() { return view('v', ['a' => 1]); }\npublic function data() { return []; }"];
+
+        foreach (['extractPublicProperties', 'extractPublicMethods', 'shouldIgnore', 'ignoredMethods'] as $method) {
+            yield "a {$method}() override" => ["public function render() { return view('v', ['a' => 1]); }\nprotected function {$method}(\$name = null) { return parent::{$method}(...\\func_get_args()); }"];
+        }
+
+        yield 'a resolveView() override' => ["public function render() { return view('v', ['a' => 1]); }\npublic function resolveView() { return parent::resolveView(); }"];
     }
 
     #[Test]
