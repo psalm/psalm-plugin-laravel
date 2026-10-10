@@ -68,8 +68,11 @@ final class PreludeBuilder
 
         // Each its own empty statement, first: Psalm reports a docblock's fault (an unknown class)
         // on the statement the comment is attached to, and this line is the one ShadowCompiler maps
-        // back to the template comment. Stacked onto the closing tag, it would be unmapped.
+        // back to the template comment. Stacked onto the closing tag, it would be unmapped. The
+        // `mixed` line ahead of it keeps the name declared when Psalm drops a type that parses but
+        // is invalid (`array<int, string, bool>`); a valid contract type overrides it.
         foreach ($contractVars as $name => $type) {
+            $lines[] = "/** @var mixed \${$name} */";
             $lines[] = "/** @var {$type} \${$name} */;";
         }
 

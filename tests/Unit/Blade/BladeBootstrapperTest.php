@@ -529,7 +529,7 @@ final class BladeBootstrapperTest extends TestCase
         $shadow = (string) \file_get_contents($first->analyzedShadows[0]);
         $this->assertStringContainsString("/** @var \\App\\Models\\User|null \$user */;\n", $shadow);
         $this->assertStringContainsString("/** @var int \$count */;\n", $shadow);
-        $this->assertStringNotContainsString('@var mixed $user', $shadow);
+        $this->assertSame(2, \substr_count($shadow, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
 
         $second = new RecordingShadowRegistrar();
         $this->bootstrapper($this->app(), $second)->boot();

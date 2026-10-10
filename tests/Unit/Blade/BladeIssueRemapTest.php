@@ -1229,6 +1229,24 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * A type that parses but is not valid (`array<int, string, bool>`) is dropped by Psalm with an
+     * InvalidDocblock on the comment line. The read below it must not cascade into an
+     * UndefinedGlobalVariable, and the message must not carry the shadow cache path.
+     */
+    #[Test]
+    public function an_invalid_contract_type_reports_once_on_its_comment_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-invalid-type.blade.php';
+        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame(['InvalidDocblock'], \array_column($reported, 'type'), $encoded);
+        $this->assertSame(2, $reported[0]['line_from'], $encoded);
+        $this->assertStringEndsWith('in ' . $template . ':2)', $reported[0]['message'], $encoded);
+    }
+
+    /**
      * A Blade comment cannot carry a `use` import, so a short class name would resolve against the
      * global namespace in the shadow. It stays `mixed` (and silent) rather than report a class the
      * author never meant.

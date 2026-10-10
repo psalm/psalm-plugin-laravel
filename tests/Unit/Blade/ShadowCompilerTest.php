@@ -325,7 +325,7 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertStringContainsString('@var \App\Models\User $user */', $result->contents);
-        $this->assertStringNotContainsString('@var mixed $user', $result->contents);
+        $this->assertSame(2, \substr_count($result->contents, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
     }
 
     /** Psalm reports a contract type's own fault (an unknown class) on the prelude line declaring it. */
