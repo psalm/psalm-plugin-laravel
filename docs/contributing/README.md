@@ -36,6 +36,7 @@ flowchart TD
 
     I["Psalm scans all project files"] -.->|afterCodebasePopulated| J["ModelRegistrationHandler"]
     I -.->|afterCodebasePopulated| K["Eloquent Builder subclass fix-ups:\nBuilderSubclassQueryMixinHandler (restores dropped Query Builder @mixin)\nBuilderNativeStaticReturnTypeHandler (native ': static' return becomes docblock 'static')"]
+    I -.->|afterCodebasePopulated| RCP["RelationCallbackParamsHandler (registers a params provider per Eloquent Builder subclass, #1676)"]
     I -.->|afterCodebasePopulated| FMB["FactoryModelBindingHandler (injects @extends Factory&lt;TModel&gt; on bare factory subclasses, #780)"]
     I -.->|afterCodebasePopulated| FSP["FacadeStubPrecedenceHandler (drops conflicting facade @method pseudos when the plugin ships a real stubbed static method)"]
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
@@ -92,6 +93,7 @@ Neither registration makes a finding visible by itself: an issue Psalm raises in
 - The rebuild walks the constructor reflectively. 97 of Psalm 7's 320 concrete issue classes declare a required third parameter, so `new $class($message, $location)` throws for them, and inside an event handler that is a finding lost without a trace. A parameter that cannot be resolved declines with `null` (Psalm keeps the shadow-path original, invisible but not swallowed) rather than dropping the issue.
 - `accepts()` is handed the suppressions recorded for the mapped template line, which is what makes `{{-- @psalm-suppress X --}}` work: the event carries the issue but not the suppressed-issue list Psalm was about to check it against. An `<issueHandlers>` suppression scoped to the view directory needs nothing extra, because `accepts()` consults `Config::reportIssueInFile()` on the new path itself.
 - A shadow line that maps to no template line (the prelude) is re-emitted on line 1 with an ` (unmapped)` suffix. `Mixed*` issues are dropped instead, because the prelude types every unresolved template variable as `mixed` and those findings say nothing about the template.
+- Some Psalm messages embed a shadow position of their own, and `ShadowIssueRelocator::remapMessage()` rewrites them through the same `ShadowTarget::templateLineFor()` the location uses. Two shapes exist. `first seen on line N` (`PossiblyUndefinedGlobalVariable`, `PossiblyUndefinedVariable`) and php-parser's ` on line N` suffix on `ParseError` are matched by exact issue class and end-anchored, so no other message is touched. A reference into the prelude drops that clause instead of clamping, because in a message a clamped number reads as a claim about line 1. The `file:line:column` descriptor of the issue's own shadow (`ReferenceReusedFromConfusingScope`) goes through `JourneyRemapper::rewriteLocationSummaries()`, the same substitution the journey text uses, so it clamps a prelude line to 1 like a journey step does.
 - A taint flow graph is not a reason to decline: Psalm 7 runs taint by default and emits type and taint issues from the same run, so both kinds have to be relocated. (The `3.x` pipeline does decline there, because Psalm 6 runs taint exclusively and `IssueBuffer::add()` discards non-`Tainted*` issues anyway.)
 - A `TaintedInput` carries two further constructor arguments describing how the taint travelled, and both are remapped by `Blade\JourneyRemapper` before the rebuild. The journey ARRAY holds the source chain, each step repositioned onto the template its shadow came from; the journey TEXT also spells out the sink-side hops the array stops short of, so it is rewritten by substituting `file:line:column` descriptors rather than regenerated. A journey crosses files, so the remap resolves a shadow per step (and for the issue's own path) instead of reusing one; steps in ordinary application code are left untouched. A shadow step whose template has no such line declines the whole issue with `null` — a half-remapped journey is worse than none.
 
@@ -181,7 +183,7 @@ Maintainers can comment `/psalm-delta` on a PR to run the plugin's base and head
 - `/psalm-delta` runs the `default` group.
 - `/psalm-delta octane vito` adds group tags and app names to `default` (spaces or commas). Pick the groups that exercise your change, e.g. `ai` for `laravel/ai` stubs, `blade` for view resolution or view taint, or `filament` for Filament-heavy code.
 - `/psalm-delta all` runs every app; `/psalm-delta help` replies with the groups and their apps.
-- A token starting with `--` is a flag for `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade` runs `default` plus the `blade` group with Blade template analysis on. Only flags declared under `flags:` in `bin/ci/test-apps.yml` are accepted; add one there to allow it. A flag the base plugin predates crashes the base side.
+- A token starting with `--` is a flag for `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade` runs `default` plus the `blade` group with Blade template analysis on, and `/psalm-delta --find-dead-code` reports unused code (`UnusedClass`, `PossiblyUnusedMethod`, ...) that `psalm.xml` disables. `--find-unused-psalm-suppress` and `--find-unused-variables` likewise turn on Psalm reports that `psalm.xml` disables (suppressions made redundant, unused variables and params). `--experimental` enables the [experimental opt-in rules](../config.md#experimental) to measure their false-positive rate, and `--no-migrations` sets `columnFallback="none"` to show how much model typing depends on migration parsing. Only flags declared under `flags:` in `bin/ci/test-apps.yml` are accepted; add one there to allow it. A flag the base plugin predates crashes the base side.
 
 To reproduce locally (needs `yq`), run `bash bin/ci/delta.sh --apps "octane vito" <pr-branch>` (flags go in the same string: `--apps "blade --blade"`).
 
@@ -200,13 +202,14 @@ composer rector # run rector refactoring
 Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
-- `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work; currently `stubs/12.42.0/`, `stubs/13/`, `stubs/13.5.0/`, and `stubs/13.8.0/` exist
+- `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work
 - `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
 - Add a type test in `tests/Type/tests/` to prevent regression
 - For taint annotations, see [Taint Analysis Stubs](taint-analysis.md)
+- A closure parameter whose callback runs bound to another object (`Artisan::command('x', function () { $this->comment(); })`) is typed with `@param-closure-this \Foo $callback` on the stubbed method, not a handler. A facade needs a real static method in its stub for this: `@method static` cannot carry the tag, and `FacadeStubPrecedenceHandler` drops the generated pseudo-method when the stub declares a real one. A `static` closure stays `InvalidScope`, which matches runtime.
 
 ### The `laravel/ai` integration gate
 
@@ -223,16 +226,17 @@ A new gated site calls `laravelAiIntegrationEnabled()` instead of copying the ve
 
 When **multiple stub files declare the same method on the same class**, Psalm reuses a single MethodStorage object and re-applies docblock parsing. The merging rules differ by annotation kind:
 
-- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`)
-- **Taint annotations** (`@psalm-taint-*`): all files accumulate (bitwise OR `|=`)
+- **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`).
+- **Parameter-level taint annotations** (`@psalm-taint-sink`, `@psalm-assert-untainted`): last-loaded file wins. Each re-declaration rebuilds the parameter storages (`FunctionLikeNodeScanner` calls `setParams([])`), so sinks from an earlier file are dropped, not OR-ed. Verified on Psalm 7.0.0-rc1: an `html` sink in one stub plus an `sql` sink on the same parameter in a later stub reports only `TaintedSql`.
+- **Method-level taint annotations** (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`): all files accumulate (bitwise OR `|=` on the reused MethodStorage).
 
-This means splitting type and taint annotations for the same method across two stub files is fragile -- the type that "wins" depends on file loading order. Always put both in the same file.
+Splitting annotations for the same method across two stub files is therefore fragile: which type and which sinks survive depends on load order. Always put all of them in the same file, and have an override restate every `@psalm-taint-sink` of the declaration it replaces.
 
 When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
 Registration order (`Plugin::registerStubs()`): all `common` files, then version dirs ascending (`array_merge`). Since type annotations are last-loaded-wins, this order (not alphabetical path) decides overrides.
 
-A stub that re-declares a class merges into the class's vendor file only when Psalm scans the vendor file first. Psalm records a scanned stub as the class's file and then never queues the vendor file. A class that nothing names before stubs load therefore ends up with only its stubbed members (#1616, upstream vimeo/psalm#12075). `Plugin::registerStubs()` queues every class a plugin stub declares (`StubFileFinder::declaredClassLikes()`) during plugin init, which runs before Psalm's main scan, so a partial stub can rely on its unstubbed vendor members resolving.
+A stub that re-declares a class merges into the class's vendor file only when Psalm scans the vendor file first. Psalm records a scanned stub as the class's file and then never queues the vendor file. A class that nothing names before stubs load therefore ends up with only its stubbed members (#1616, upstream vimeo/psalm#12075). `Plugin::registerStubs()` queues every class a plugin stub declares (`StubFileFinder::declaredClassLikes()`) during plugin init, which runs before Psalm's main scan, so a partial stub can rely on its unstubbed vendor members resolving. The same init window queues the classes the container's bindings resolve to (`ContainerResolver::queueBoundClassesForScanning()`, once, after stub registration, results discarded so analysis reads the live container), because `app()` narrowing names them; the former scan hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run) and queued the classes while stubs were registering, so Psalm scanned them as stubs.
 
 #### `laravel/ai` parity checker, `@since` and `@stub-waive`
 
@@ -243,7 +247,7 @@ Psalm cannot see stub-versus-vendor drift ([why](taint-analysis.md#optional-thir
 - Properties need no gate: a stub property the installed class lacks is never reported, and a trait-provided property is covered by mirroring the class's `use` clause (see `Tools/SimilaritySearch.phpstub`).
 - A real member the stub omits fails the run unless the class docblock waives it with `@stub-waive` (below); nothing is allow-listed in the script.
 
-**`@since X.Y.Z`** tags anything a 1.x minor added after the `1.0.0` floor, so the checker skips it while the installed release is older. Method: tag its docblock. `implements` / interface `extends` entry: one `@since X.Y.Z implements \Fully\Qualified\Interface` line per interface in the class docblock. Whole class: a standalone `@since X.Y.Z` line in its class docblock (reported as version-gated, not compared). A name or class the installed release lacks, or a class with no tag, is still reported.
+**`@since X.Y.Z`** tags anything a 1.x minor added after the `1.0.0` floor, so the checker skips it while the installed release is older. Method: tag its docblock. The tag also gates a method the older release already has but whose signature a later minor changed (e.g. an appended parameter): the checker skips that method's whole signature diff, and does not count it as compared, while installed < tag. `implements` / interface `extends` entry: one `@since X.Y.Z implements \Fully\Qualified\Interface` line per interface in the class docblock. Whole class: a standalone `@since X.Y.Z` line in its class docblock (reported as version-gated, not compared). A name or class the installed release lacks, or a class with no tag, is still reported.
 
 **`@stub-waive`** lets a stub leave out a member that carries no taint or type value instead of restating it. In the class docblock, one line per member: `@stub-waive withMaxTokens() <reason>`, `@stub-waive $runtimeTools <reason>` or `@stub-waive implements \Fully\Qualified\Interface <reason>`. A trailing `*` waives a family by name prefix: `@stub-waive assert*() <reason>` (or `$prefix*` for properties). The `*` is a prefix marker only at the very end of a name (`*Timeout()` and `get*Timeout()` are not targets), and a bare `*` is an error, because a blanket waiver would delete the tripwire this tag exists to keep. Wildcards belong to the class docblock; in a docblock of a member the stub does declare, a bare `@stub-waive <reason>` instead waives drift of that member's own signature. The reason is mandatory (a tag without one fails the run), every waived member is still printed on its own line with its reason under "Waived by @stub-waive" (also when a wildcard covered it), and a waiver or wildcard that matches nothing (the member reappeared in the stub or left the vendor class) is reported as a `::warning::` so it gets deleted.
 
@@ -256,8 +260,8 @@ A file in a version dir (`stubs/13.16.0/...`, loaded when installed Laravel `>=`
 Authoring an override:
 
 - Declare only the changed methods; the rest merge from `common`.
-- Copy the full class header (`extends`/`implements` + `use`) verbatim, because a class re-declaration resets Psalm's interface list and silently strips contracts (see stub-authoring rules).
-- Types replace, taints accumulate (OR), so keep both for a method in one file.
+- Repeat the `implements` clause (interface stubs: the `extends` list) verbatim, because a re-declaration resets Psalm's `class_implements` / `parent_interfaces` and silently strips contracts. Class `extends` and trait `use` survive, but copy the full header anyway to stay diffable against Laravel source.
+- Types and parameter sinks replace, method-level taints accumulate (see "Stub merging"), so restate every `@psalm-taint-sink` of the method you override.
 
 **Common vs version dir.** Return narrowing that holds across all versions (Laravel only improved its annotation) goes in `common`. A parameter widened by behavior present only in a newer Laravel (e.g. `firstOrNew`'s `values` taking `\Closure|array` only on 13) must go in the version dir: widening `common` would tell Psalm a call is valid that fatals at runtime on older versions (silent false negative).
 
@@ -282,6 +286,15 @@ Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 `ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
+Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#12251).
+`Tappable::tap()` has no handler: its `$callback is null` conditional return lives in `stubs/common/Support/Traits/Tappable.phpstub`. A conditional return in a stub that re-declares a reflected method collapses to a single branch (vimeo/psalm#11837) unless the method carries a `@template` tag, so that stub keeps an unused one; drop it once the upstream fix lands.
+
+`RelationCallbackParamsHandler` types the closure-literal callback of Eloquent relation-query methods (`whereHas()`, `has()`, `whereRelation()`, `withWhereHas()`, `whereHasMorph()`, ...):
+
+- Registration and receiver: a params provider per Eloquent `Builder` subclass (params providers dispatch on the called class and carry no receiver). The receiver's model is recovered from the call node via a `beforeExpressionAnalysis` stash keyed by the first arg, as in `ConditionableCallbackParamsHandler`, for builder, custom-builder, static (`Model::whereHas()`) and Relation receivers.
+- Contracts: plain slots get the related model's builder (its custom builder when it has one); `withWhere*()` slots get `Builder|Relation` (the closure also runs as the eager-load constraint); morph slots get `($q, $type)` over the literal types.
+- Declines: anything not provably one model's builder keeps the stub signature (union receivers, userland overrides, non-literal names or types, MorphTo on a dot path, a possible `static::class` leak, ...); the handler docblock lists them.
+
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
 
 ### Experimental issue lifecycle

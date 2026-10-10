@@ -9,8 +9,8 @@ namespace Illuminate\Support;
  *
  * Laravel's real class is NOT generic (`@var mixed $target`, `__call(): mixed`). We re-declare
  * it WITH a `@template TClass` so the target binding survives the chain:
- * {@see \Psalm\LaravelPlugin\Handlers\Support\TappableTapHandler} types `Tappable::tap()` as
- * `HigherOrderTapProxy<static>`, and `__call` returns `TClass`. Every proxied call yields the
+ * {@see \Illuminate\Support\Traits\Tappable} (our stub) types the no-callback `tap()` as
+ * `HigherOrderTapProxy<$this>`, and `__call` returns `TClass`. Every proxied call yields the
  * same target type, so a single `@return TClass` covers it — no proxy handler needed (the
  * `__call` stub also satisfies `sealAllMethods`).
  *

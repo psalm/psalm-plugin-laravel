@@ -1,0 +1,18 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+class Cookie extends Facade
+{
+    /**
+     * Get a queued cookie instance.
+     *
+     * @template TQueuedDefault
+     *
+     * @param  string  $key
+     * @param  TQueuedDefault|(\Closure(): TQueuedDefault)  $default
+     * @param  string|null  $path
+     * @return \Symfony\Component\HttpFoundation\Cookie|TQueuedDefault
+     */
+    public static function queued($key, $default = null, $path = null) {}
+}

@@ -125,17 +125,19 @@ class Builder implements BuilderContract
     public function orWhere($column, $operator = null, $value = null) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  \Closure|null  $callback
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
      */
     public function whereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
     /**
-     * @param  string  $relation
-     * @param  \Closure|string|array<mixed>|\Illuminate\Database\Query\Expression  $column
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
+     * @param  \Closure|string|array<array-key, mixed>|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return $this
@@ -150,8 +152,9 @@ class Builder implements BuilderContract
     public function chunk($count, $callback) {}
 
     /**
-     * @param  string  $relation
-     * @param  \Closure|string|array<int, string>|\Illuminate\Database\Query\Expression  $column
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
+     * @param  \Closure|string|array<array-key, mixed>|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return $this
@@ -159,10 +162,11 @@ class Builder implements BuilderContract
     public function orWhereRelation($relation, $column, $operator = null, $value = null) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  \Closure|null  $callback
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
      */
     public function orWhereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
@@ -173,7 +177,7 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
      * @return $this
@@ -186,7 +190,7 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
      */
     public function orHasMorph($relation, $types, $operator = '>=', $count = 1) {}
@@ -218,7 +222,7 @@ class Builder implements BuilderContract
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
      */
     public function whereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
@@ -230,7 +234,7 @@ class Builder implements BuilderContract
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
      */
     public function orWhereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
@@ -262,14 +266,16 @@ class Builder implements BuilderContract
     public function mergeConstraintsFrom(\Illuminate\Database\Eloquent\Builder $from) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  \Closure|null  $callback
      * @return $this
      */
     public function orWhereDoesntHave($relation, \Closure $callback = null) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  \Closure|null  $callback
      * @return $this
      */
@@ -450,7 +456,7 @@ class Builder implements BuilderContract
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @param  string  $boolean
      * @param  \Closure|null  $callback
      * @return $this
@@ -460,15 +466,17 @@ class Builder implements BuilderContract
     public function has($relation, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  string  $operator
-     * @param  int  $count
+     * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
      */
     public function orHas($relation, $operator = '>=', $count = 1) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  string  $boolean
      * @param  \Closure|null  $callback
      * @return $this
@@ -476,7 +484,8 @@ class Builder implements BuilderContract
     public function doesntHave($relation, $boolean = 'and', \Closure $callback = null) {}
 
     /**
-     * @param  string  $relation
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @return $this
      */
     public function orDoesntHave($relation) {}
@@ -702,6 +711,115 @@ class Builder implements BuilderContract
      * @return int<0, max>
      */
     public function count($columns = '*') {}
+
+    // Eloquent\Builder::$passthru methods: at runtime these return toBase()->{$method}(),
+    // so they belong to Query\Builder. They are re-declared here because Psalm follows a
+    // single @mixin hop: relations (@mixin Eloquent\Builder) would otherwise never see the
+    // Query\Builder signatures; Relation::__call then yields mixed for these non-fluent
+    // results (MethodForwardingHandler only resolves fluent ones). Types and taint sinks
+    // mirror stubs/common/Database/Query/Builder.phpstub (taint sinks must live in this file
+    // too, or Eloquent\Builder receivers lose them). See #1734.
+    // Not declared: count (above), sum/avg/average/min/max (Relation stub), aggregate,
+    // existsOr, doesntExistOr (mixed upstream), dump/dumpRawSql.
+
+    /** @return bool */
+    public function exists() {}
+
+    /** @return bool */
+    public function doesntExist() {}
+
+    /** @return string */
+    public function toSql() {}
+
+    /** @return string */
+    public function toRawSql() {}
+
+    /** @return never */
+    public function dd() {}
+
+    /** @return never */
+    public function ddRawSql() {}
+
+    /** @return \Illuminate\Support\Collection */
+    public function explain() {}
+
+    /** @return list<mixed> */
+    public function getBindings() {}
+
+    /** @return array{select: list<mixed>, from: list<mixed>, join: list<mixed>, where: list<mixed>, groupBy: list<mixed>, having: list<mixed>, order: list<mixed>, union: list<mixed>, unionOrder: list<mixed>} */
+    public function getRawBindings() {}
+
+    /** @return \Illuminate\Database\ConnectionInterface */
+    public function getConnection() {}
+
+    /** @return \Illuminate\Database\Query\Grammars\Grammar */
+    public function getGrammar() {}
+
+    /**
+     * @param  array  $columns
+     * @return int<0, max>
+     */
+    public function getCountForPagination($columns = ['*']) {}
+
+    /**
+     * @param  string  $column
+     * @param  string  $glue
+     * @return string
+     */
+    public function implode($column, $glue = '') {}
+
+    /** @return bool */
+    public function insert(array $values) {}
+
+    /**
+     * @param  array  $values
+     * @param  string|null  $sequence
+     * @return int
+     */
+    public function insertGetId(array $values, $sequence = null) {}
+
+    /** @return int<0, max> */
+    public function insertOrIgnore(array $values) {}
+
+    /**
+     * @param  array  $columns
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @return int
+     * @psalm-taint-sink sql $columns
+     * @psalm-taint-sink sql $query
+     */
+    public function insertUsing(array $columns, $query) {}
+
+    /**
+     * @param  array  $columns
+     * @param  \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder|string  $query
+     * @return int
+     * @psalm-taint-sink sql $columns
+     * @psalm-taint-sink sql $query
+     */
+    public function insertOrIgnoreUsing(array $columns, $query) {}
+
+    /**
+     * @param  string  $function
+     * @param  array  $columns
+     * @return float|int
+     */
+    public function numericAggregate($function, $columns = ['*']) {}
+
+    /**
+     * @param  mixed  $value
+     * @return \Illuminate\Database\Query\Expression
+     * @psalm-taint-sink sql $value
+     */
+    public function raw($value) {}
+
+    /**
+     * @param  string  $expression
+     * @param  array  $bindings
+     * @return mixed
+     * @psalm-taint-sink sql $expression
+     */
+    public function rawValue(string $expression, array $bindings = []) {}
 
     /**
      * Add a basic "where not" clause to the query.

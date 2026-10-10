@@ -475,9 +475,10 @@ to `mixed` signatures.
 app('auth')      // → resolves to AuthManager via container bindings
 resolve(Foo::class) // → resolves to Foo
 app()->make(Bar::class) // → resolves to Bar
+app($flag ? 'cache' : 'db') // → CacheManager|DatabaseManager (every literal must resolve, else mixed)
 ```
 
-**Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). Bindings are discovered by booting the real Laravel app at plugin init and iterating the container's registered bindings. Also uses `AfterClassLikeVisit` to queue bound classes for Psalm scanning so resolved types are known before analysis.
+**Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). Bindings are discovered by booting the real Laravel app at plugin init and iterating the container's registered bindings. `Plugin::__invoke()` also calls `ContainerResolver::queueBoundClassesForScanning()` once at the end of plugin init: it instantiates every binding and queues the resolved classes for Psalm scanning (`store_failure: false`), so resolved types are known before analysis. The pass's results are then discarded (a later binding's closure can rebind an abstract it already resolved), so analysis-time resolution reads the live container. This is not a scan-phase hook: the former `AfterClassLikeVisit` hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run) and queued the classes while stubs were registering, so Psalm scanned them as stubs. The resolver narrows to an object's class only when Psalm has its storage, otherwise it falls back like an unbound abstract.
 
 
 ## Summary: The Forwarding Chain
@@ -596,6 +597,13 @@ When Psalm encounters `$obj->method()` during analysis, it follows PHP's own met
      are already in Builder's declaring_method_ids (declared explicitly in the
      plugin's stubs — @mixin never populates declaring_method_ids).
      The mixin resolves one hop, finding the method on Builder.
+     Consequence: Query\Builder methods NOT re-declared on the Eloquent\Builder stub
+     are invisible to relations and fall to Relation::__call. MethodForwardingHandler
+     still resolves the fluent ones (returning the relation), but non-fluent results
+     (bool, string, int, ...) stay `mixed`. The Eloquent\Builder::$passthru methods
+     (exists, toSql, insert, raw, ...) are all non-fluent, so they are re-declared on
+     stubs/common/Database/Eloquent/Builder.phpstub with the Query\Builder return
+     types and taint sinks (#1734).
 
 4. __call / __callStatic (three-step process, not just a type lookup)
    a. Psalm first fires MethodReturnTypeProvider with the ORIGINAL method_id
@@ -693,7 +701,7 @@ flowchart TD
 
         src --> storage
         stubs --> storage
-        stubs -. "AfterClassLikeVisit fires per-class<br/><i>during both source and stub scanning</i><br/>removes pseudo static methods,<br/>queues container bindings,<br/>adds issue suppressions" .-> storage
+        stubs -. "AfterClassLikeVisit fires per-class<br/><i>during both source and stub scanning</i><br/>removes pseudo static methods,<br/>adds issue suppressions" .-> storage
     end
 
     subgraph analysis["ANALYSIS PHASE — first non-null wins"]
@@ -801,7 +809,7 @@ but the handler ensures template params propagate correctly.
 | Pattern                    | Psalm mechanism                                              | Known limitations                                                    |
 |----------------------------|--------------------------------------------------------------|----------------------------------------------------------------------|
 | Relation → Builder fluent  | Relation stubs + `MethodForwardingHandler` + related custom-builder storage resolution | Instance-local builder macros that have no static metadata remain unresolved |
-| Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | Same mixin issue, but less impactful                                 |
+| Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | `$passthru` re-declared on Eloquent\Builder for relations (#1734)    |
 | Facade → Service           | Generated alias stubs                                        | Taint annotations lost through `__callStatic`                        |
 | Model → Builder static     | `ModelMethodHandler`                                         | Scopes need `@mixin` or scope handler                                |
 | Model scopes               | `BuilderScopeHandler`                                        | Resolves scope calls on Builder to model scope methods               |

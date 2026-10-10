@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Application\ContainerResolver;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Encryption\EncrypterTaintHandler;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
@@ -31,6 +32,7 @@ use Symfony\Component\Process\Process;
  * stubs that stay: the plugin queues every stubbed class before Psalm's main scan so its vendor
  * file is scanned and the stub merges into it.
  */
+#[CoversClass(ContainerResolver::class)]
 #[CoversClass(EncrypterTaintHandler::class)]
 #[CoversClass(GuardTaintHandler::class)]
 #[CoversClass(StubFileFinder::class)]
@@ -95,6 +97,25 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
             [],
             $typeMismatches,
             "app('events')->hasListeners() must resolve against the real Dispatcher, got:\n" . \implode("\n", $typeMismatches),
+        );
+    }
+
+    #[Test]
+    public function it_queues_a_bound_class_that_nothing_else_references(): void
+    {
+        // The plugin instantiates the container's bindings once at init and queues each resolved class.
+        // 'composer' resolves to a class no stub and no source names, so it narrows only if queued.
+        $findings = $this->findings('BoundClassResolution');
+        $problems = [
+            ...$this->messagesOfType($findings, 'CheckType'),
+            ...$this->messagesOfType($findings, 'MixedMethodCall'),
+            ...$this->messagesOfType($findings, 'UndefinedClass'),
+        ];
+
+        $this->assertSame(
+            [],
+            $problems,
+            "app('composer')->dumpAutoloads() must resolve against Illuminate\\Support\\Composer, got:\n" . \implode("\n", $problems),
         );
     }
 

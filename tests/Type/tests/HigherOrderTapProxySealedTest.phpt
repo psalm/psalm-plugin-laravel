@@ -16,10 +16,10 @@ use Illuminate\Support\Stringable;
 function tap_proxy_sealed_chain(): void
 {
     $_proxy = (new Stringable('x'))->tap();
-    /** @psalm-check-type-exact $_proxy = HigherOrderTapProxy<Stringable> */
+    /** @psalm-check-type-exact $_proxy = HigherOrderTapProxy<Stringable&static> */
 
     $_target = (new Stringable('x'))->tap()->upper();
-    /** @psalm-check-type-exact $_target = Stringable */
+    /** @psalm-check-type-exact $_target = Stringable&static */
 }
 ?>
 --EXPECTF--
