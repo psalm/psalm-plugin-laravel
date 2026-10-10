@@ -21,7 +21,9 @@ use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
@@ -205,6 +207,18 @@ final class ShadowIssueRelocator
         if (
             $issue instanceof PossiblyUndefinedGlobalVariable
             && \preg_match('/^Possibly undefined global variable \$__(?:session|context)Previous,/', $issue->message) === 1
+        ) {
+            return false;
+        }
+
+        // A `Collection|array` `@foreach`/`@forelse` subject: Psalm types the loop through a
+        // synthetic `getIterator()`/`current()`/`key()` call on `$__currentLoopData` and suppresses
+        // these two classes around it (ForeachAnalyzer.php), but `BeforeAddIssue` fires before that
+        // suppression is checked, and the re-emit cannot carry it (#1810). The synthetic call takes
+        // the subject variable's position; a real call is positioned on its method name.
+        if (
+            ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
+            && self::selectedText($issue->code_location) === '$__currentLoopData'
         ) {
             return false;
         }
@@ -736,6 +750,20 @@ final class ShadowIssueRelocator
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+    }
+
+    /**
+     * The source text an issue's location selects in the shadow, or null when unreadable.
+     *
+     * @psalm-mutation-free
+     */
+    private static function selectedText(CodeLocation $location): ?string
+    {
+        $selection = ShadowSelection::of($location);
+
+        return $selection instanceof ShadowSelection
+            ? \substr($selection->snippet, $selection->start, $selection->end - $selection->start)
+            : null;
     }
 
     /**
