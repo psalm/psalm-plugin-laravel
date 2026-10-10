@@ -119,6 +119,12 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Last: make()ing every binding runs provider and binding closures, so it must follow every other
+            // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
+            if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+                Handlers\Application\ContainerResolver::queueBoundClassesForScanning($registration->codebase);
+            }
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
@@ -194,6 +200,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Application\ContainerResolver::reset();
         Handlers\Auth\AuthConfigAnalyzer::reset();
         Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
@@ -207,6 +214,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelPropertyHandler::reset();
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\RelationCallbackParamsHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
@@ -336,7 +344,7 @@ final class Plugin implements PluginEntryPointInterface
         bool $bladeActive,
         ?Blade\Annotate\AnnotateRequest $annotate,
     ): void {
-        // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
+        // Global stop-gap for vimeo/psalm#12251 and #12252 (named arguments bound to a variadic).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
@@ -417,6 +425,9 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -521,9 +532,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
 
-        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
-        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
-
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
@@ -531,8 +539,6 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
-        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
-        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);

@@ -6,8 +6,8 @@ use Illuminate\Support\HigherOrderTapProxy;
 use Illuminate\Support\Stringable;
 
 /**
- * The no-arg higher-order form of Tappable::tap() — typed by TappableTapHandler as a generic
- * HigherOrderTapProxy over the target, with `__call` threading the target type back.
+ * The no-arg higher-order form of Tappable::tap() — typed by the Tappable stub's conditional
+ * return as a generic HigherOrderTapProxy over the target, with `__call` threading the target type back.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1110
  */
@@ -16,25 +16,25 @@ use Illuminate\Support\Stringable;
 function tap_proxy_noarg(): void
 {
     $_r = (new Stringable('x'))->tap();
-    /** @psalm-check-type-exact $_r = HigherOrderTapProxy<Stringable> */
+    /** @psalm-check-type-exact $_r = HigherOrderTapProxy<Stringable&static> */
 }
 
 /** A proxied call returns the TARGET, not the called method's own return — and never errors. */
 function tap_proxy_chained_returns_target(): void
 {
     $_fluent = (new Stringable('x'))->tap()->upper();
-    /** @psalm-check-type-exact $_fluent = Stringable */
+    /** @psalm-check-type-exact $_fluent = Stringable&static */
 
     // isEmpty() normally returns bool; through the proxy it returns the target instead.
     $_nonFluent = (new Stringable('x'))->tap()->isEmpty();
-    /** @psalm-check-type-exact $_nonFluent = Stringable */
+    /** @psalm-check-type-exact $_nonFluent = Stringable&static */
 }
 
 /** The proxy exposes the target via $target. */
 function tap_proxy_target_property(): void
 {
     $_r = (new Stringable('x'))->tap()->target;
-    /** @psalm-check-type-exact $_r = Stringable */
+    /** @psalm-check-type-exact $_r = Stringable&static */
 }
 
 /** tap() with a callback still returns the instance — no proxy. */
@@ -50,31 +50,30 @@ function tap_proxy_with_callback(): void
 function tap_proxy_on_response(Response $response): void
 {
     $_proxy = $response->tap();
-    /** @psalm-check-type-exact $_proxy = HigherOrderTapProxy<Response> */
+    /** @psalm-check-type-exact $_proxy = HigherOrderTapProxy<Response&static> */
 
     $_target = $response->tap()->status();
-    /** @psalm-check-type-exact $_target = Response */
+    /** @psalm-check-type-exact $_target = Response&static */
 }
 
 /** A nullable callable could be either branch at runtime → union of proxy and instance. */
 function tap_proxy_nullable_callback(?callable $cb): void
 {
     $_r = (new Stringable('x'))->tap($cb);
-    /** @psalm-check-type-exact $_r = HigherOrderTapProxy<Stringable>|Stringable */
+    /** @psalm-check-type-exact $_r = HigherOrderTapProxy<Stringable&static>|Stringable&static */
 }
 
 /** An explicit literal `null` is the same as the no-arg form — the proxy, not the instance. */
 function tap_proxy_explicit_null(): void
 {
     $_r = (new Stringable('x'))->tap(null);
-    /** @psalm-check-type-exact $_r = HigherOrderTapProxy<Stringable> */
+    /** @psalm-check-type-exact $_r = HigherOrderTapProxy<Stringable&static> */
 }
 
 /**
- * Regression for the load-bearing `static` strip in the handler: when the receiver is `$this`
- * (the only call site that carries `static`), the proxy template arg must NOT keep `static`, or
- * a chained call re-binds it to the proxy and yields a bogus `TapHost&HigherOrderTapProxy<...>`
- * intersection instead of the target.
+ * `$this` as the receiver (the one call site that carries a literal `static`): the proxy's
+ * template arg keeps `static`, and a chained call still resolves to the target rather than
+ * re-binding to the proxy as a `TapHost&HigherOrderTapProxy<...>` intersection.
  */
 class TapHost
 {
@@ -88,11 +87,29 @@ class TapHost
     public function probe(): void
     {
         $_self = $this->tap();
-        /** @psalm-check-type-exact $_self = HigherOrderTapProxy<TapHost> */
+        /** @psalm-check-type-exact $_self = HigherOrderTapProxy<TapHost&static> */
 
         $_target = $this->tap()->name();
-        /** @psalm-check-type-exact $_target = TapHost */
+        /** @psalm-check-type-exact $_target = TapHost&static */
     }
+}
+
+/**
+ * Callback shapes that must NOT select the proxy branch: typed / parameterless / static closures,
+ * arrow fns and first-class callables all return the instance.
+ */
+function tap_proxy_callback_shapes_return_instance(): void
+{
+    $s = new Stringable('x');
+
+    $_typed = $s->tap(static fn (Stringable $x): string => (string) $x);
+    /** @psalm-check-type-exact $_typed = Stringable&static */
+
+    $_noParams = $s->tap(static function (): void {});
+    /** @psalm-check-type-exact $_noParams = Stringable&static */
+
+    $_firstClass = $s->tap(strlen(...));
+    /** @psalm-check-type-exact $_firstClass = Stringable&static */
 }
 ?>
 --EXPECTF--

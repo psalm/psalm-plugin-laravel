@@ -215,6 +215,28 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ['declares Laravel\Ai\Contracts\Approvable'],
         ];
 
+        // `@since` on a method the installed release already has gates its whole signature diff, not only a
+        // method the release lacks: a stub that appends a parameter the older release doesn't declare. The
+        // appended `$appended` makes the stub drift from every installed release, so the verdict hangs on the tag.
+        $appended = static fn(string $tag): string => self::replaceIn(
+            self::mutate('Classification', 'array $attachments = []): PendingClassification', 'array $attachments = [], int $appended = 0): PendingClassification'),
+            '@since 1.2.0',
+            $tag,
+        );
+
+        yield '@since existing method ahead skips the signature diff' => [
+            $appended('@since 999.0.0'),
+            0,
+            ['Version-gated', 'Laravel\Ai\Classification::of() (@since 999.0.0)'],
+            ['Classification::of(): stub declares'],
+        ];
+        yield '@since existing method due still reports drift' => [
+            $appended('@since 0.0.1'),
+            1,
+            ['Classification::of(): stub declares 3 parameter(s)'],
+            ['Classification::of() (@since'],
+        ];
+
         // A class absent from the installed release is skipped before reflection and not counted when gated.
         yield '@since class ahead' => [
             self::missingClassStub('@since 999.0.0'),
