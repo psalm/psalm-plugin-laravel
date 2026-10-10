@@ -1112,6 +1112,30 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1701: `$component` is Blade's own local inside a template that writes a `<x-...>` tag, and
+     * a class-component tag types it as the tag's class for the length of its slot
+     * (`$component = Chip::resolve(...)`). A method the class has stays silent; one it lacks
+     * reports an UndefinedMethod naming the class, which only happens if the slot sees the class
+     * type rather than `mixed`.
+     */
+    #[Test]
+    public function component_is_typed_as_the_tags_class_inside_its_slot(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/class-component-slot.blade.php';
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'UndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $messages = $this->messagesFor($issues, 'UndefinedMethod', $template);
+        $this->assertStringContainsString('App\\View\\Components\\Chip::missingMethod', $messages[0]);
+        $this->assertStringNotContainsString('::label', $messages[0]);
+    }
+
+    /**
      * #1553: an empty bound component attribute (`:value=""`) compiles to a dangling `'value' =>`
      * in the component's data array (here `'value' => ]`; with a sibling attribute, `'value' => ,`
      * as in the original report), a syntax error mid-shadow. Before the fix,

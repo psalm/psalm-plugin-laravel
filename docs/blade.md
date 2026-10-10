@@ -129,6 +129,12 @@ Only markers Blade actually compiles count. One inside a `{{-- --}}` comment or 
 
 Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so a typo in a variable name will not be caught this way.
 
+### `$component` belongs to Blade
+
+In any template containing a `<x-...>` tag, `$component` is Blade's variable, not yours. Every tag compiles to a save, `$component = Some\Component::resolve(...)`, and restore sequence in the **calling** template's own scope (`CompilesComponents::compileClassComponentOpening()` / `compileEndComponentClass()`), and Laravel documents `$component` as API inside a tag's slot ([Scoped Slots](https://laravel.com/docs/13.x/blade#scoped-slots)): `{{ $component->someMethod() }}` there is typed as the tag's class, so a missing method reports an `UndefinedMethod` naming it.
+
+Passing your own view data named `component` (`view('page', ['component' => $thing])`) collides with that. After the first tag Psalm sees `Thing|AnonymousComponent`, because it cannot correlate the `isset($component)`-gated save and restore, so a member only `Thing` has can report as possibly undefined. Pass the value under a descriptive name instead (`$card`, `$widget`).
+
 ## What gets reported
 
 One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
