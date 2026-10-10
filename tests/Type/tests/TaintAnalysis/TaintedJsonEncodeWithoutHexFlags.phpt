@@ -44,8 +44,16 @@ function unionWithoutHexTag(\Illuminate\Http\Request $request): void {
 
     echo json_encode($v, $request->boolean('b') ? 15 : 14);
 }
+
+/** Invoking a first-class callable is a call through an expression, never a `json_encode` name. */
+function firstClassCallable(\Illuminate\Http\Request $request): void {
+    $encode = json_encode(...);
+    echo $encode((string) $request->input('v'), 15);
+}
 ?>
 --EXPECTF--
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
