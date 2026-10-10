@@ -1296,6 +1296,28 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1801: Psalm analyzes a `match` as a desugared ternary and drops two families of findings
+     * on plain PHP: the positionless `TypeDoesNotContainType` of the synthesized `UnhandledMatchError`
+     * branch, and `RedundantCondition*` inside the arms (MatchAnalyzer suppresses them at runtime,
+     * which `BeforeAddIssue` does not carry). The same condition outside the match, and the
+     * unsuppressed sibling classes, must keep reporting.
+     */
+    #[Test]
+    public function a_match_reports_only_what_psalm_reports_on_plain_php(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-bool.blade.php';
+        $context = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $context);
+        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $context);
+        // Line 19 is an author `elseif` outside the match with byte-identical wording to the arm finding.
+        $this->assertSame([19], $this->linesFor($issues, 'RedundantCondition', $template), $context);
+        $this->assertSame([13], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $context);
+        $this->assertSame([14], $this->linesFor($issues, 'ParadoxicalCondition', $template), $context);
+    }
+
+    /**
      * #1559: `$this`/`self::` in a plain template (no enclosing `@php class`) is classless global
      * scope from Psalm's point of view, so every mention floods `InvalidScope`/`NonStaticSelfCall` —
      * conventions Livewire/Filament templates lean on heavily. Neither issue type may appear on this

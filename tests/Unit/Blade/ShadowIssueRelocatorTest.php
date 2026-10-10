@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node\Expr\Throw_;
+use PhpParser\Node\Expr\Variable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Aliases;
+use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
+use Psalm\FileSource;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\InvalidArrayOffset;
@@ -378,6 +383,70 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function an_unmapped_undefined_this_property_assignment_is_still_reported_on_line_one(): void
     {
         $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+        $this->assertSame('Instance property Foo::$bar is not defined (unmapped)', $relocated->message);
+    }
+
+    /**
+     * A location built from a node Psalm synthesized (a desugared `match` arm's `VirtualThrow`)
+     * carries no attributes, so its line is Psalm's positionless `-1`.
+     */
+    private function positionlessLocation(): CodeLocation
+    {
+        $source = new class implements FileSource {
+            public function getFileName(): string
+            {
+                return 'shadow.php';
+            }
+
+            public function getFilePath(): string
+            {
+                return '/tmp/shadow.php';
+            }
+
+            public function getRootFileName(): string
+            {
+                return 'shadow.php';
+            }
+
+            public function getRootFilePath(): string
+            {
+                return '/tmp/shadow.php';
+            }
+
+            public function getAliases(): Aliases
+            {
+                return new Aliases();
+            }
+        };
+
+        $location = new CodeLocation($source, new Throw_(new Variable('e')));
+        $this->assertSame(-1, $location->getLineNumber());
+
+        return $location;
+    }
+
+    /**
+     * #1801: Psalm itself drops a positionless issue (IssueBuffer::isSuppressed()), so re-emitting it
+     * on template line 1 as `(unmapped)` only leaks what plain PHP never reports.
+     */
+    #[Test]
+    public function a_positionless_issue_is_declined(): void
+    {
+        $issue = new TypeDoesNotContainType('Type never does not contain never', $this->positionlessLocation(), 'never');
+
+        $this->assertNull($this->relocate($issue, $this->entry([2 => 0])));
+    }
+
+    /** The #1545 trade-off holds for the positionless shape too: it can be the only diagnostic. */
+    #[Test]
+    public function a_positionless_undefined_this_property_assignment_is_still_reported_on_line_one(): void
+    {
+        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->positionlessLocation(), 'Foo::$bar');
 
         $relocated = $this->relocate($issue, $this->entry([2 => 0]));
 

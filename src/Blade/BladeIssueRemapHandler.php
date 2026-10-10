@@ -197,11 +197,23 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         // a sibling's docblock must never become a template-wide suppression. A type issue can
         // point inside the enclosing node's own docblock, before its first code token.
         $enclosing = (new NodeFinder())->find($statements, static fn(Node $node): bool
-            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike)
+            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike || $node instanceof Node\Expr\Match_)
             && ($node->getDocComment()?->getStartFilePos() ?? $node->getStartFilePos()) <= $location->raw_file_start
             && $node->getEndFilePos() >= $location->raw_file_end);
         $rules = [];
         foreach ($enclosing as $node) {
+            // MatchAnalyzer suppresses these two for the whole desugared ternary (every arm condition
+            // and body, never the subject) via the analyzer's runtime list, which the event omits
+            // (upstream gap), so plain PHP stays silent where the shadow would report (#1801).
+            if ($node instanceof Node\Expr\Match_) {
+                if ($node->cond->getStartFilePos() > $location->raw_file_start || $node->cond->getEndFilePos() < $location->raw_file_end) {
+                    $rules[] = 'RedundantCondition';
+                    $rules[] = 'RedundantConditionGivenDocblockType';
+                }
+
+                continue;
+            }
+
             foreach ($node->getComments() as $comment) {
                 if (!$comment instanceof Doc) {
                     continue;
