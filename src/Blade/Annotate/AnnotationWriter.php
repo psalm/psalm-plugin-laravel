@@ -13,14 +13,14 @@ use SebastianBergmann\Diff\Differ;
 use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
 
 /**
- * Turns what {@see AnnotationCollector} saw into `{{-- @var --}}` declarations on disk.
+ * Turns what {@see AnnotationCollector} saw into native `@var` declarations on disk.
  *
  * Runs in AfterAnalysis, never from a per-statement hook: mid-analysis the template's shadow is
  * already parsed and cached, so rewriting the source then would put the run and the file out of
  * step. By AfterAnalysis every call site has been seen, which is also what makes the
  * every-producer-agrees rule answerable at all.
  *
- * Insertion only. A variable the template already declares is never rewritten, in either spelling —
+ * Insertion only (see {@see TemplateAnnotator} for where). A variable the template already declares is never rewritten, in either spelling —
  * narrowing a declaration a human wrote needs a containment check this release does not make.
  *
  * @internal
@@ -153,9 +153,9 @@ final class AnnotationWriter implements AfterAnalysisInterface
         // name used at all") and must never be declared: declaring it reports MissingViewVariable
         // at every correct call site, which is the check this codemod exists to feed.
         //
-        // A name declared by a raw `<?php` docblock joins them: `TemplateAnnotator` reads that
-        // spelling back, so planning one produces no insertion anyway, and reporting it as changed
-        // would be a lie.
+        // A name declared by a raw docblock that is not a contract var (a local's type hint) joins
+        // them: `TemplateAnnotator` reads that spelling back, so planning one produces no insertion
+        // anyway, and reporting it as changed would be a lie.
         $localNames = \array_fill_keys($contract->localVariables, true)
             + \array_fill_keys($contract->rawDeclaredVariables, true);
 

@@ -324,9 +324,62 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'NoContract.php'));
         // A spread shifts every position after it, so no argument can be read by position.
         $this->assertSame([], $this->forFile($issues, 'SpreadArgs.php'));
-        // A raw `<?php` docblock types a local the template assigns itself; it counts
-        // as declared for UnusedViewData and is never a contract a call site has to satisfy.
+        // A raw `<?php` docblock types a local the template assigns itself, so it is never a
+        // contract a call site has to satisfy.
         $this->assertSame([], $this->forFile($issues, 'RawLocalHint.php'));
+    }
+
+    /**
+     * A raw `@var` is a contract wherever it sits (a `<?php` block or `@php`), unless the name is one
+     * the template binds itself. The nullable one is optional, like a `@props` default.
+     */
+    #[Test]
+    public function a_raw_var_for_view_data_is_a_contract_and_a_nullable_one_is_optional(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $missing = $this->forFile($issues, 'RawMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+        $this->assertStringContainsString("'title'", $missing[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'RawOptional.php'), 'the nullable `$count` may be omitted');
+
+        $wrong = $this->forFile($issues, 'RawWrongType.php');
+        $this->assertCount(1, $wrong, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrong[0]['type']);
+        $this->assertStringContainsString('$title', $wrong[0]['message']);
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_loop_alias_is_not_a_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawLoopAlias.php'));
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_blade_owned_name_a_guarded_name_or_a_plain_comment_is_no_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawNotContracts.php'));
+    }
+
+    /** The template's own `use` alias is invisible to the contract: the type check declines, the presence check stays. */
+    #[Test]
+    public function a_short_class_name_declines_the_type_check_but_keeps_the_presence_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawShortName.php'), \var_export($issues, true));
+
+        $missing = $this->forFile($issues, 'RawShortNameMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+    }
+
+    #[Test]
+    public function a_components_public_render_leaves_the_data_set_open(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'ComponentRenderPublic.php'));
     }
 
     #[Test]

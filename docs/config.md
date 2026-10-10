@@ -301,7 +301,7 @@ The default deliberately sits outside your project tree. A shadow file that one 
 
 Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
 
-A template declares its variables with `{{-- @var \App\Models\User $user --}}` comments and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
+A template declares its variables with `{{-- @var \App\Models\User $user --}}` comments, raw `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (a nullable or `mixed` type, or a `??` / `isset()` guard in the template, makes the variable optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
 
 Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
 

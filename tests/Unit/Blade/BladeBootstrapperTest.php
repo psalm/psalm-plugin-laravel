@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -537,6 +540,73 @@ final class BladeBootstrapperTest extends TestCase
         foreach ([$first, $second] as $registrar) {
             $this->assertSame([...PreludeBuilder::ambientClassNames(), '\App\Models\User'], $registrar->queuedClassLikes);
         }
+    }
+
+    /**
+     * A raw docblock is already in the body, where Psalm reads it itself: it is a contract for the
+     * call-site checks, but emitting it into the prelude too would declare the name twice.
+     */
+    #[Test]
+    public function a_raw_var_contract_is_not_emitted_into_the_prelude_on_fresh_or_warm_runs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<?php /** @var \\App\\Models\\User \$user */ ?>\n<p>{{ \$user->name }}</p>\n");
+
+        foreach ([new RecordingShadowRegistrar(), new RecordingShadowRegistrar()] as $registrar) {
+            $this->bootstrapper($this->app(), $registrar)->boot();
+
+            $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
+            $this->assertStringNotContainsString("/** @var \\App\\Models\\User \$user */;", $shadow);
+            $this->assertSame(1, \substr_count($shadow, '@var \\App\\Models\\User $user'), 'the raw docblock itself, once');
+            $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+        }
+    }
+
+    private function appWithViewFactory(): Container
+    {
+        $app = $this->app();
+        $app->instance('view', new Factory(new EngineResolver(), $app->make('view.finder'), new Dispatcher()));
+
+        return $app;
+    }
+
+    /** `$app` is shared into every view by the framework, so no call site passes it: it is no contract. */
+    #[Test]
+    public function framework_shared_data_is_never_a_contract_but_stays_declared(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate(
+            'profile.blade.php',
+            "<?php /** @var \\Illuminate\\Foundation\\Application \$app */ ?>\n{{-- @var string \$siteName --}}\n{{-- @var int \$count --}}\n<p>{{ \$count }}</p>\n",
+        );
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $contract = ContractRegistry::contractFor('profile');
+        $this->assertNotNull($contract);
+        $this->assertSame(['count'], \array_keys($contract->vars));
+        $this->assertContains('siteName', $contract->rawDeclaredVariables);
+    }
+
+    #[Test]
+    public function a_view_with_a_composer_creator_or_wildcard_composer_is_marked_composed(): void
+    {
+        $app = $this->appWithViewFactory();
+        $events = $app->make('view')->getDispatcher();
+        $events->listen('composing: composed', static fn(): null => null);
+        $events->listen('creating: created', static fn(): null => null);
+        $events->listen('composing: admin.*', static fn(): null => null);
+
+        foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "{{-- @var int \$n --}}\n<p>{{ \$n }}</p>\n");
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertTrue(ContractRegistry::isComposed('composed'));
+        $this->assertTrue(ContractRegistry::isComposed('created'));
+        $this->assertTrue(ContractRegistry::isComposed('admin.page'), 'a wildcard composer reaches it');
+        $this->assertFalse(ContractRegistry::isComposed('plain'));
     }
 
     /**

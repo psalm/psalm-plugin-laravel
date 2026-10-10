@@ -190,8 +190,9 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     ): void {
         // `optional` is a @props entry with a literal default, which Blade fills in itself.
         // `propsUnknown` means the declared set is a lower bound, so absence proves nothing about
-        // what the template needs; and an open data set proves nothing about what was passed.
-        if ($var->optional || $contract->propsUnknown || !$chain->complete) {
+        // what the template needs; an open data set proves nothing about what was passed; and a
+        // composer or creator registered for the view supplies data no call site shows.
+        if ($var->optional || $contract->propsUnknown || !$chain->complete || ContractRegistry::isComposed($chain->viewName)) {
             return;
         }
 
@@ -224,6 +225,14 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
         if (!$declared instanceof Type\Union || $declared->hasMixed()) {
             return;
+        }
+
+        // A short class name may be a `use` alias in the template's own PHP block, which the type
+        // string cannot carry: comparing against the global class of that name would be a guess.
+        foreach (PreludeBuilder::classNamesIn($var->typeString) ?? [] as $className) {
+            if (!PreludeBuilder::resolvesWithoutImport($className)) {
+                return;
+            }
         }
 
         if ($source->getCodebase()->isTypeContainedByType($supplied, $declared)) {

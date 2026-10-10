@@ -27,13 +27,13 @@ final class ShadowManifest
      * docblock), so this is the only lever that self-invalidates plugin-side derived facts such as
      * the {@see ViewDataContract} cached in slot 5.
      */
-    private const MARKER_PASS_VERSION = 6;
+    private const MARKER_PASS_VERSION = 7;
 
     /** {@see self::isFresh()}: the data-includes slot must have been collected for the entry to count as fresh. */
     public const SLOT_DATA_INCLUDES = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool, 3: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
      *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract,
      *      dataIncludes]. The final slot is null when its collection pass was disabled.
      */
@@ -86,7 +86,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool, 3: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
      *
      * @psalm-mutation-free
      */
@@ -194,7 +194,7 @@ final class ShadowManifest
      * An entry written by a plugin version with a different slot count is dropped rather than
      * migrated, which recompiles the template — the cheap, correct answer for a derived cache.
      *
-     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}|null
+     * @return array{0: array<string, array{0: string, 1: int, 2: bool, 3: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}|null
      *         null when the shape is wrong, which drops the entry
      *
      * @psalm-mutation-free
@@ -225,17 +225,17 @@ final class ShadowManifest
 
         /** @psalm-suppress MixedAssignment untyped data straight from an included file */
         foreach ($vars as $name => $var) {
-            if (!\is_string($name) || !\is_array($var) || \count($var) !== 3) {
+            if (!\is_string($name) || !\is_array($var) || \count($var) !== 4) {
                 return null;
             }
 
-            [$typeString, $line, $optional] = \array_values($var);
+            [$typeString, $line, $optional, $raw] = \array_values($var);
 
-            if (!\is_string($typeString) || !\is_int($line) || !\is_bool($optional)) {
+            if (!\is_string($typeString) || !\is_int($line) || !\is_bool($optional) || !\is_bool($raw)) {
                 return null;
             }
 
-            $validVars[$name] = [$typeString, $line, $optional];
+            $validVars[$name] = [$typeString, $line, $optional, $raw];
         }
 
         return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLocals, $validRaw];
@@ -363,8 +363,8 @@ final class ShadowManifest
 
         $contractVars = [];
 
-        foreach ($vars as $name => [$typeString, $line, $optional]) {
-            $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional);
+        foreach ($vars as $name => [$typeString, $line, $optional, $raw]) {
+            $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional, $raw);
         }
 
         return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared);
@@ -403,7 +403,7 @@ final class ShadowManifest
         $vars = [];
 
         foreach ($contract->vars as $name => $var) {
-            $vars[$name] = [$var->typeString, $var->declarationLine, $var->optional];
+            $vars[$name] = [$var->typeString, $var->declarationLine, $var->optional, $var->raw];
         }
 
         $this->activeGenerations[$templatePath] = $shadowPath;
