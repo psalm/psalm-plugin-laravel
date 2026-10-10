@@ -160,7 +160,10 @@ Registration order is preserved (relationship > factory > accessor > column).
 
 - **Why init:** plugins initialize before Psalm's scan and before stub registration, so the classes are scanned as ordinary vendor files, not as stubs (vimeo/psalm#12313). The former `AfterClassLikeVisit` hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run).
 - **Rejected, lazy only** (drop the queue, keep the resolver's storage guard): `app('encrypter')`, `app('cache')` and other string aliases become `mixed` whenever nothing else scans the concrete. The probe found 152 of 201 bound concretes that nothing else scans; `ContainerNarrowedMethodResolutionTest` fails.
-- **Rejected, targeted pre-scan** (queue only classes whose literal abstracts the project names): needs a scan-time AST walk, misses literals outside classes (routes, function files), and needs `referenced_classlikes` for workers and the cache. Largest diff. Revisit it if single-file cost matters (#1797 reports 574-668 extra classes per single-file run on a 19k-file app).
+- **Rejected, targeted pre-scan** (queue only classes whose literal abstracts the project names): the only scan-time hook, `AfterClassLikeVisit`, misses file-scope files and goes stale on cache replay after a binding changes. The workable form is an init-time AST pass over `ProjectAnalyzer::$project_files` (private, read by reflection) with a single-file/whole-run gate.
+  - unopim (Laravel 13, 2331 files), single file: 4881 -> 4164-4319 scanned files, 8.8 -> 8.0-8.2 s cold; warm cache is slower (3.9 -> 4.4 s). Whole run: within noise.
+  - Without also queuing alias-binding concretes, single-file results diverge, e.g. `Password::broker()` gives a false `InvalidReturnType`. Literals reached via variables, class constants or concatenation drop to `mixed`.
+  - Cost: about 250 src and 350 test lines. Revisit only if PhpStorm warm-cache runs show a real cost (#1797 reports 574-668 extra classes per single-file run on a 19k-file app).
 - **Rejected, non-instantiating discovery** (`getClosure()`'s captured `$concrete`, `$instances`): covers only 75 of 201 concretes. Core services (cache, encrypter, log) are bound with provider closures and need `make()`.
 
 ### `Request::user()` overrides: per-subclass registration, explicit guard only
