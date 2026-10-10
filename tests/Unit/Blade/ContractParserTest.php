@@ -598,8 +598,88 @@ final class ContractParserTest extends TestCase
     #[Test]
     public function reads_a_declaration_with_a_non_ascii_variable_name(): void
     {
-        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$men\u{00fc} --}}\n");
+        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$men\u{00fc} --}}\n", '');
 
         $this->assertArrayHasKey("men\u{00fc}", $contract->vars);
+    }
+
+    #[Test]
+    public function a_raw_var_for_view_data_is_a_contract_wherever_it_sits(): void
+    {
+        $source = "<h1>Hi</h1>\n<?php /** @var string \$title */ ?>\n@php\n/** @var int|null \$count */\n@endphp\n{{ \$title }}{{ \$count }}\n";
+
+        $contract = $this->dataContract($source);
+
+        $this->assertSame('string', $contract->vars['title']->typeString ?? null);
+        $this->assertSame(2, $contract->vars['title']->declarationLine ?? null);
+        $this->assertFalse($contract->vars['title']->optional ?? null);
+        $this->assertSame('int|null', $contract->vars['count']->typeString ?? null);
+        $this->assertSame(4, $contract->vars['count']->declarationLine ?? null);
+        $this->assertTrue($contract->vars['count']->optional ?? null);
+    }
+
+    #[Test]
+    public function every_nullable_spelling_is_optional_and_a_nested_null_is_not(): void
+    {
+        $source = "<?php\n/**\n * @var ?int \$a\n * @var null|Foo \$b\n * @var array<int, null> \$c\n * @var mixed \$d\n */\n?>\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        $this->assertTrue($vars['a']->optional ?? null);
+        $this->assertTrue($vars['b']->optional ?? null);
+        $this->assertFalse($vars['c']->optional ?? null);
+        $this->assertFalse($vars['d']->optional ?? null);
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_name_the_template_binds_itself_stays_consumed_only(): void
+    {
+        $source = "@foreach (\$members as \$member)\n<?php /** @var Member \$member */ ?>\n{{ \$member }}\n@endforeach\n"
+            . "<?php /** @var string \$alias */ \$alias = 'x'; ?>\n{{ \$alias }}\n";
+
+        $contract = $this->dataContract($source);
+
+        $this->assertArrayNotHasKey('member', $contract->vars);
+        $this->assertArrayNotHasKey('alias', $contract->vars);
+        $this->assertSame(['member', 'alias'], $contract->rawDeclaredVariables);
+    }
+
+    #[Test]
+    public function a_blade_comment_declaration_wins_over_a_raw_one_for_the_same_name(): void
+    {
+        $source = "<?php /** @var string \$title */ ?>\n{{-- @var int \$title --}}\n{{ \$title }}\n";
+
+        $contract = $this->dataContract($source);
+
+        $this->assertSame('int', $contract->vars['title']->typeString ?? null);
+        $this->assertSame([], $contract->rawDeclaredVariables, 'declared once, not twice');
+    }
+
+    #[Test]
+    public function a_raw_var_with_a_trailing_description_is_not_a_contract(): void
+    {
+        $contract = $this->dataContract("<?php /** @var int \$count the number of \$items */ ?>\n{{ \$count }}\n");
+
+        $this->assertSame([], \array_keys($contract->vars));
+    }
+
+    #[Test]
+    public function a_raw_var_inside_a_blade_comment_or_verbatim_body_is_not_a_declaration(): void
+    {
+        $source = "{{-- <?php /** @var string \$a */ ?> --}}\n@verbatim\n<?php /** @var string \$b */ ?>\n@endverbatim\n";
+
+        $contract = $this->dataContract($source);
+
+        $this->assertSame([], \array_keys($contract->vars));
+        $this->assertSame([], $contract->rawDeclaredVariables);
+    }
+
+    #[Test]
+    public function declarations_only_walks_the_body_to_filter_raw_vars(): void
+    {
+        $source = "@foreach (\$rows as \$row)\n<?php /** @var Row \$row */ ?>\n@endforeach\n<?php /** @var string \$title */ ?>\n";
+        $contract = $this->parser->parseDeclarations($source, $this->compiler->compileString($source));
+
+        $this->assertSame(['title'], \array_keys($contract->vars));
     }
 }

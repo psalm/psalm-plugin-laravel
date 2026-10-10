@@ -35,12 +35,12 @@ final class ViewDataContract
      *                                                  template use this name" is the right question
      *                                                  for UnusedViewData; they are not something a
      *                                                  call site is expected to pass.
-     * @param list<string>               $rawDeclaredVariables names declared by a raw `<?php` docblock
-     *                                                  inside the template. Consumed-only: they make
-     *                                                  a passed key count as used, but never become
-     *                                                  contract types, because in a template that
-     *                                                  spelling is as often a local type hint after
-     *                                                  an assignment as a stated interface.
+     * @param list<string>               $rawDeclaredVariables names declared by a raw `@var`
+     *                                                  docblock that did not become a contract var:
+     *                                                  one for a name the template binds itself (a
+     *                                                  type hint on a local), or one too loose to
+     *                                                  read a name from. Consumed-only: they make a
+     *                                                  passed key count as used and nothing more.
      */
     public function __construct(
         public readonly array $vars,

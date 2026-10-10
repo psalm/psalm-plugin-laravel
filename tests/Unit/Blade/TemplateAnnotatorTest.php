@@ -181,6 +181,14 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function skips_a_name_already_declared_in_an_at_php_block(): void
+    {
+        $source = "@php\n/** @var \\App\\Models\\User \$user */\n@endphp\n<h1>{{ \$user->name }}</h1>\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['user' => 'App\\Models\\User']));
+    }
+
+    #[Test]
     public function preserves_the_dominant_crlf_line_ending(): void
     {
         $source = "<h1>{{ \$title }}</h1>\r\n<p>{{ \$body }}</p>\r\n";

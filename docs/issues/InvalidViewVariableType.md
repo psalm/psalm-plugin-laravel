@@ -7,7 +7,7 @@ nav_order: 12
 # InvalidViewVariableType
 
 Emitted when the value a call site passes for a Blade template variable does not satisfy the type
-that template declares for it in a `{{-- @var --}}` comment.
+that template declares for it in a `{{-- @var --}}` comment or a raw `@var` docblock.
 
 ## Why this is a problem
 

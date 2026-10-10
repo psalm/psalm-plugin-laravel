@@ -8,12 +8,15 @@ nav_order: 12
 
 Emitted when a Blade template declares a variable that the call site rendering it never passes.
 
-A template declares its variables two ways, both read by [Blade template analysis](../blade.md):
+A template declares its variables three ways, all read by [Blade template analysis](../blade.md):
 
 ```blade
 {{-- @var \App\Models\User $user --}}
+<?php /** @var int $count */ ?>
 @props(['title' => 'Untitled', 'subtitle'])
 ```
+
+A raw `@var` declaring a nullable type (`int|null`) is optional, so a call site may omit it. A raw `@var` for a name the template binds itself (a `@foreach` alias, an assignment target) is not a declaration at all.
 
 ## Why this is a problem
 
@@ -44,8 +47,8 @@ view('profile', ['name' => 'Ada'])->with('age', 36);
 ## How to fix
 
 1. Pass the declared variable at the call site.
-2. Give it a default in the template's `@props([...])` if it is genuinely optional (`@props(['subtitle' => ''])`).
-3. Drop the `{{-- @var --}}` declaration if the template no longer reads that variable.
+2. Give it a default in the template's `@props([...])`, or a nullable raw `@var` type (`int|null`), if it is genuinely optional.
+3. Drop the declaration if the template no longer reads that variable.
 
 ## Configuration
 

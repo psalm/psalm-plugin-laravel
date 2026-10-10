@@ -303,7 +303,7 @@ final class BladeBootstrapper
             // Built AFTER compile so the read set comes off compiled output.
             $contract = $this->collectDataIncludes
                 ? $parser->parseDataContract($source, $shadow->contents)
-                : $declarations;
+                : $parser->withRawDeclarations($declarations, $source, $shadow->contents);
 
             // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
             // from "collected nothing".
@@ -336,8 +336,9 @@ final class BladeBootstrapper
         $types = [];
 
         foreach ($contract->vars as $name => $var) {
-            // `@props` entries are `mixed`, and the prelude already types Blade's own names.
-            if ($var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
+            // `@props` entries are `mixed`, the prelude already types Blade's own names, and a raw
+            // docblock is already in the body, where Psalm reads it itself.
+            if ($var->raw || $var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
                 continue;
             }
 

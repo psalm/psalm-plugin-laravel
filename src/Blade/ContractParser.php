@@ -12,7 +12,8 @@ use PhpParser\ParserFactory;
 
 /**
  * Extracts a {@see TemplateContract} from a Blade template: `@var`
- * declarations, `@props` entries, and the set of top-level variables the
+ * declarations (`{{-- --}}` comments, and raw docblocks for names the template does not bind itself),
+ * `@props` entries, and the set of top-level variables the
  * compiled body reads. Read-only; wiring the result into shadow compilation
  * is a separate step.
  *
@@ -36,9 +37,6 @@ final class ContractParser
     /** PHP's own variable-name grammar, as bytes. */
     public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
-    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling a template declares in. */
-    private const RAW_PHP_BLOCK = '/<\?php\b.*?(?:\?>|\z)/s';
-
     /**
      * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
      * same (last) name {@see self::VAR_PATTERN} does; per line, because one block can hold several
@@ -46,6 +44,13 @@ final class ContractParser
      * with that pattern, so `$menü` binds whole rather than as its ASCII prefix.
      */
     private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . self::IDENTIFIER . ')/';
+
+    /**
+     * A raw `@var T $name` strict enough to be a contract: the name ends its line (a closing `*\/`
+     * aside). A trailing description (`@var int $x the `$y` count`) is not one, since the name it
+     * binds could be the description's.
+     */
+    private const RAW_PHP_CONTRACT_VAR = '/@var\h+(.+)\h+\$(' . self::IDENTIFIER . ')\h*(?:\*\/\h*)?\r?$/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
@@ -87,9 +92,10 @@ final class ContractParser
         [$vars, $propsUnknown] = $this->parseSource($source);
         [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
-        // Raw declarations are consumed-only, never contract types: in a template a raw `@var` is as
-        // often a local type hint after an assignment as a stated interface, and promoting one into
-        // $vars would report MissingViewVariable at every call site that correctly omits it.
+        $vars += $this->rawContractVars($source, $localVariables);
+
+        // What is left is consumed-only: a raw declaration of a name the template binds for itself,
+        // or one too loose to bind a name from (see RAW_PHP_CONTRACT_VAR).
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
@@ -108,9 +114,27 @@ final class ContractParser
     }
 
     /**
-     * Names a template declares in the raw `<?php` docblock spelling, which
-     * {@see self::parseSource()} does not read: a raw PHP block reaches the shadow byte-for-byte,
-     * so its own docblocks never pass through the Blade-comment scan above.
+     * {@see self::parseDeclarations()} plus the raw `@var` docblocks, for a run that does not
+     * collect the read set. Raw declarations need the compiled body to tell view data from a type
+     * hint on a local, so it is only walked when the source mentions a `@var` at all.
+     */
+    public function withRawDeclarations(ViewDataContract $declarations, string $source, string $compiled): ViewDataContract
+    {
+        if (!\str_contains($source, '@var')) {
+            return $declarations;
+        }
+
+        return new ViewDataContract(
+            $declarations->vars + self::rawContractVars($source, $this->parseReads($compiled)[2]),
+            $declarations->propsUnknown,
+        );
+    }
+
+    /**
+     * Names a template declares in the raw docblock spelling, which {@see self::parseSource()} does
+     * not read: a raw PHP block reaches the shadow byte-for-byte, so its own docblocks never pass
+     * through the Blade-comment scan above. Lenient: it binds a name even from a `@var` with a
+     * trailing description, which {@see self::rawContractVars()} refuses to treat as a contract.
      *
      * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND an
      * `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which is
@@ -126,29 +150,135 @@ final class ContractParser
      */
     public static function rawDeclaredNames(string $source): array
     {
-        if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) < 1) {
-            return [];
-        }
-
         $names = [];
 
-        foreach ($blocks[0] as $block) {
-            // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
-            // not parse, so that is fine; the @ is for the warning an unterminated string emits.
-            foreach (@\token_get_all($block) as $token) {
-                if (!\is_array($token) || ($token[0] !== \T_DOC_COMMENT && $token[0] !== \T_COMMENT)) {
-                    continue;
-                }
-
-                if (\preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
-                    foreach ($matched[1] as $name) {
-                        $names[] = $name;
-                    }
+        foreach (self::rawComments($source) as [$comment]) {
+            if (\preg_match_all(self::RAW_PHP_VAR, $comment, $matched) > 0) {
+                foreach ($matched[1] as $name) {
+                    $names[] = $name;
                 }
             }
         }
 
         return $names;
+    }
+
+    /**
+     * Every raw `@var T $name` in the template that is view data rather than a local: a template that
+     * writes one for a name it binds itself (`$member` after `@foreach ($members as $member)`) is
+     * typing a local, which no call site passes. A nullable type is optional, the way a `@props`
+     * default is: the template states it copes without the value.
+     *
+     * @param list<string> $locals names the template binds for itself, see {@see self::parseReads()}
+     *
+     * @return array<string, ContractVar>
+     *
+     * @psalm-mutation-free
+     */
+    private function rawContractVars(string $source, array $locals): array
+    {
+        $vars = [];
+
+        foreach (self::rawComments($source) as [$comment, $line]) {
+            if (\preg_match_all(self::RAW_PHP_CONTRACT_VAR, $comment, $matched, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
+                continue;
+            }
+
+            foreach ($matched as $match) {
+                $name = $match[2][0];
+
+                if (\in_array($name, $locals, true)) {
+                    continue;
+                }
+
+                $type = \rtrim($match[1][0]);
+                $alternatives = $this->topLevelAlternatives($type);
+
+                if ($alternatives === null) {
+                    continue;
+                }
+
+                $nullable = \array_filter(
+                    $alternatives,
+                    static fn(string $alternative): bool => \strtolower($alternative) === 'null' || \str_starts_with($alternative, '?'),
+                ) !== [];
+
+                // A later declaration of the same name wins, as in a document-order walk.
+                $vars[$name] = new ContractVar($name, $type, $line + SourceLines::breaksIn($comment, 0, $match[0][1]), $nullable, true);
+            }
+        }
+
+        return $vars;
+    }
+
+    /**
+     * The top-level `|` alternatives of a type string, null when a `$` sits outside every bracket.
+     * A valid type has none there; one that does is a `@var` whose trailing description ended in a
+     * `$name`, and the name it would bind is the description's.
+     *
+     * @return non-empty-list<string>|null
+     *
+     * @psalm-pure
+     */
+    private function topLevelAlternatives(string $typeString): ?array
+    {
+        $parts = [];
+        $current = '';
+        $depth = 0;
+
+        foreach (\str_split($typeString) as $char) {
+            if ($char === '$' && $depth === 0) {
+                return null;
+            }
+
+            $depth += \strpbrk($char, '([{<') !== false ? 1 : (\strpbrk($char, ')]}>') !== false ? -1 : 0);
+
+            if ($char === '|' && $depth === 0) {
+                $parts[] = $current;
+                $current = '';
+            } else {
+                $current .= $char;
+            }
+        }
+
+        $parts[] = $current;
+
+        return $parts;
+    }
+
+    /**
+     * The text of every comment inside a raw `<?php` block or an `@php ... @endphp` block, and the
+     * 1-based line it starts on. Ranges are the ones the Blade compiler itself leaves alone, so a
+     * `<?php` inside a Blade comment or `@verbatim` body is not read.
+     *
+     * @return list<array{0: string, 1: int}>
+     *
+     * @psalm-pure
+     */
+    private static function rawComments(string $source): array
+    {
+        $comments = [];
+
+        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
+            if (\str_starts_with($text, '@php')) {
+                // `@php` and `@endphp` are directives, not PHP: tokenize what sits between them.
+                $text = '<?php ' . \substr($text, 4, \str_ends_with($text, '@endphp') ? -7 : null);
+            } elseif (!\str_starts_with($text, '<?php')) {
+                continue;
+            }
+
+            $line = 1 + SourceLines::breaksIn($source, 0, $offset);
+
+            // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
+            // not parse, so that is fine; the @ is for the warning an unterminated string emits.
+            foreach (@\token_get_all($text) as $token) {
+                if (\is_array($token) && ($token[0] === \T_DOC_COMMENT || $token[0] === \T_COMMENT)) {
+                    $comments[] = [$token[1], $line + $token[2] - 1];
+                }
+            }
+        }
+
+        return $comments;
     }
 
     /**
