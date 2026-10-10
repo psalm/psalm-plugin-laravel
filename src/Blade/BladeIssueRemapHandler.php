@@ -236,7 +236,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      * `BeforeAddIssueEvent` omits (upstream gap). Mirrored by AST shape so a template stays as quiet
      * as plain PHP (#1801). The window covers the arms only: the subject, and a `match` used as an
      * operand (the finding spans the whole expression), keep reporting. With no default arm
-     * (`$last_arm->conds`) and a subject Psalm tracks (`$switch_var_id`: not `true`, not `X::class`),
+     * (`$last_arm->conds`) and a subject Psalm tracks (`$switch_var_id`, see {@see self::matchSubjectIsTracked()}),
      * the arm conditions are analyzed again after the window closes, so they keep reporting
      * `RedundantCondition`; the docblock sibling stays suppressed, as it is on plain PHP.
      *
@@ -270,17 +270,39 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return [];
         }
 
-        $subject = $match->cond;
-        $trackedSubject = (!$subject instanceof Node\Expr\ConstFetch || $subject->name->toLowerString() !== 'true')
-            && !($subject instanceof Node\Expr\ClassConstFetch
-                && $subject->name instanceof Node\Identifier
-                && $subject->name->toLowerString() === 'class');
-
-        if (!$hasDefault && $trackedSubject && $inReanalyzedCondition) {
+        if (!$hasDefault && self::matchSubjectIsTracked($match->cond) && $inReanalyzedCondition) {
             return ['RedundantConditionGivenDocblockType'];
         }
 
         return ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
+    }
+
+    /**
+     * Whether MatchAnalyzer gives the subject a `$switch_var_id`, mirroring its checks verbatim,
+     * including their case-sensitivity (`TRUE` and `Foo::CLASS` are tracked): an untracked subject
+     * skips the post-window re-analysis. A subject with a variable id (`$x`, `$x->y`, `Foo::class`)
+     * is tracked outright; the shapes below are the ones with none that stay untracked.
+     */
+    private static function matchSubjectIsTracked(Node\Expr $subject): bool
+    {
+        if ($subject instanceof Node\Expr\ConstFetch) {
+            return $subject->name->toString() !== 'true';
+        }
+
+        if ($subject instanceof Node\Expr\ClassConstFetch) {
+            return $subject->class instanceof Node\Name
+                || !$subject->name instanceof Node\Identifier
+                || $subject->name->toString() !== 'class';
+        }
+
+        if ($subject instanceof Node\Expr\FuncCall && $subject->name instanceof Node\Name) {
+            // A plain-variable argument is not rewritten into a temporary, so no id is assigned.
+            return !\in_array($subject->name->getParts(), [['get_class'], ['gettype'], ['get_debug_type'], ['count'], ['sizeof']], true)
+                || $subject->getArgs() === []
+                || !$subject->getArgs()[0]->value instanceof Node\Expr\Variable;
+        }
+
+        return true;
     }
 
     /** Null for any path that is not a registered shadow with a readable template. */
