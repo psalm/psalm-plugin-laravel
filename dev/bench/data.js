@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791624945806,
+  "lastUpdate": 1791666715577,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13295,6 +13295,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e89e35318c9c965f85682b992a639b350b1e784e",
+          "message": "fix(stubs): accept the View contract in e() (#1806)\n\nview(), Component::render() and View::with() are typed as the\nIlluminate\\Contracts\\View\\View contract, so {{ $view }} compiled to\ne($view) reported InvalidArgument. The only framework implementation is\nHtmlable, so e() takes the toHtml() branch at runtime.\n\nCloses #1776",
+          "timestamp": "2026-10-10T23:08:12+02:00",
+          "tree_id": "87a9e0aee311f1be78f251ad89322c85399776dc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e89e35318c9c965f85682b992a639b350b1e784e"
+        },
+        "date": 1791666714012,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.19,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
