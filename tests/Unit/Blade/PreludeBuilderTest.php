@@ -215,6 +215,15 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var \App\Models\User $user */', $prelude);
     }
 
+    /** A contract type Psalm rejects leaves the name declared, with the contract line overriding it. */
+    #[Test]
+    public function a_contract_var_is_declared_mixed_before_its_contract_type(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo $user; ?>', ['user' => '\App\Models\User'], '');
+
+        $this->assertStringContainsString("/** @var mixed \$user */\n/** @var \\App\\Models\\User \$user */;\n", $prelude);
+    }
+
     /**
      * @return iterable<string, array{string, list<string>|null}>
      */
