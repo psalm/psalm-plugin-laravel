@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791586340852,
+  "lastUpdate": 1791624806058,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13225,6 +13225,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1378,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85c6de4733ca8223949eb2477deee663aca44267",
+          "message": "Optimisation: Queue container-bound classes once at plugin init instead of on every `Application` stub visit (#1799)\n\n* perf(container): queue bound classes once at plugin init\n\nReplace the AfterClassLikeVisit hook on the Application/Container interfaces\nwith a single pass at the end of plugin init, outside stub registration. The\nhook re-ran make() on every binding on each visit (2-5 times per run) and\nqueued the classes while stubs were registering, so Psalm scanned them as\nstubs. The pass reuses ContainerResolver's cached make().\n\nThe resolver now names an object's class only when Psalm has its storage, so\nan unscanned or anonymous bound class falls back to the abstract instead of\nproducing a false UndefinedClass or a class@anonymous type.\n\nRefs #1797\n\n* fix(container): resolve nested bindings and name only scanned classes\n\nThe init pass re-reads the container's bindings until a round visits nothing\nnew, so a binding registered while another binding's closure runs is queued\ntoo. The abstract-itself fallback now requires Psalm storage rather than a\nruntime-loaded class, so a loaded but unscanned class stays mixed instead of\nreporting UndefinedClass at the use site.\n\nRefs #1797\n\n* fix(container): discard the init pass's results before analysis\n\nA binding closure can rebind an abstract the pass already resolved, so the\nprefilled cache served the stale concrete at analysis time. Clear the cache\nwhen the pass ends; analysis resolves from the live container as before, and\neach abstract is still made at most once within the pass.\n\nRefs #1797\n\n* docs(container): record container pre-scan design decision\n\nRefs #1797\n\n* fix(container): match the abstract fallback class name case-sensitively\n\nRefs #1797\n\n* docs(container): record targeted pre-scan measurements\n\nRefs #1797\n\n* fix(container): limit the case-sensitive fallback to un-namespaced abstracts\n\nRefs #1797\n\n* fix(container): name the canonical class in the resolver fallback\n\nRefs #1797",
+          "timestamp": "2026-10-10T11:30:10+02:00",
+          "tree_id": "e7039b7f326001fc53a4403c7de10b6f1339b2d8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/85c6de4733ca8223949eb2477deee663aca44267"
+        },
+        "date": 1791624805057,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.88,
+            "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
