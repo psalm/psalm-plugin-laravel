@@ -324,44 +324,61 @@ final class BladeBootstrapper
     }
 
     /**
-     * The contract `@var` types the prelude declares in the template body (variable name => type).
-     * A type naming a bare short class stays `mixed`: a Blade comment cannot carry a `use` import,
-     * so the namespace-less shadow would resolve it to a global class the author never meant. A
-     * qualified name with or without its leading `\` resolves identically there.
+     * The contract `@var` declarations the prelude types the template body with. One whose type does
+     * not parse, or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
+     * `use` import, so the namespace-less shadow would resolve `User` to a global class the author
+     * never meant. A qualified name with or without its leading `\` resolves identically there.
      *
-     * @return array<string, string>
+     * @return array<string, ContractVar>
      */
     private function bodyTypes(string $template, ViewDataContract $contract): array
     {
         $types = [];
 
         foreach ($contract->vars as $name => $var) {
-            // A `@props` entry is `mixed` too: the prelude's undeclared-variable pass covers it.
-            if ($var->typeString === 'mixed') {
+            // `@props` entries are `mixed`, and the prelude already types Blade's own names.
+            if ($var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
                 continue;
             }
 
             $classNames = PreludeBuilder::classNamesIn($var->typeString);
+            $reason = $classNames === null ? 'its type does not parse' : null;
 
-            foreach ($classNames as $className) {
-                if (!\str_contains($className, '\\')) {
-                    $this->output->debug(
-                        "Laravel plugin: Blade template '{$template}': \${$name} stays mixed in the template body, "
-                        . "'{$className}' is not a fully qualified class name\n",
-                    );
+            foreach ($classNames ?? [] as $className) {
+                if (!$this->resolvesInShadow($className)) {
+                    $reason = "'{$className}' is not a fully qualified class name";
 
-                    continue 2;
+                    break;
                 }
             }
 
-            foreach ($classNames as $className) {
+            if ($reason !== null) {
+                $this->output->debug(
+                    "Laravel plugin: Blade template '{$template}': \${$name} stays mixed in the template body, {$reason}\n",
+                );
+
+                continue;
+            }
+
+            foreach ($classNames ?? [] as $className) {
                 $this->bodyClassNames[$className] = true;
             }
 
-            $types[$name] = $var->typeString;
+            $types[$name] = $var;
         }
 
         return $types;
+    }
+
+    /** A name without a namespace is right only for PHP's own classes (`Closure`, `stdClass`). */
+    private function resolvesInShadow(string $className): bool
+    {
+        if (\str_contains($className, '\\')) {
+            return true;
+        }
+
+        return (\class_exists($className, false) || \interface_exists($className, false))
+            && (new \ReflectionClass($className))->isInternal();
     }
 
 

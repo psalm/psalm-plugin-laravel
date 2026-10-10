@@ -10,6 +10,9 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
+use Psalm\Exception\TypeParseTreeException;
+use Psalm\Internal\Type\ParseTree;
+use Psalm\Internal\Type\ParseTreeCreator;
 use Psalm\Internal\Type\TypeTokenizer;
 
 /**
@@ -49,7 +52,8 @@ final class PreludeBuilder
     private ?Parser $parser = null;
 
     /**
-     * @param array<string, string> $contractVars variable name (without $) => FQCN
+     * @param array<string, string> $contractVars variable name (without $) => type, from the
+     *                                            template's own `{{-- @var --}}` comments
      */
     public function build(string $compiled, array $contractVars, string $source): string
     {
@@ -62,15 +66,18 @@ final class PreludeBuilder
 
         $lines = [];
 
+        // Each its own empty statement, first: Psalm reports a docblock's fault (an unknown class)
+        // on the statement the comment is attached to, and this line is the one ShadowCompiler maps
+        // back to the template comment. Stacked onto the closing tag, it would be unmapped.
+        foreach ($contractVars as $name => $type) {
+            $lines[] = "/** @var {$type} \${$name} */;";
+        }
+
         foreach (self::AMBIENT_TYPES as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
         foreach ($componentTypes as $name => $type) {
-            $lines[] = "/** @var {$type} \${$name} */";
-        }
-
-        foreach ($contractVars as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
@@ -176,29 +183,44 @@ final class PreludeBuilder
     }
 
     /**
-     * The class names a `{{-- @var --}}` type names, as written. A Blade comment cannot carry a
-     * `use` import, so the caller treats a bare short name as unresolvable rather than emit it
-     * into a namespace-less shadow, where it would name a global class the author never meant.
+     * The class names a `{{-- @var --}}` type names, as written, or null when the type does not
+     * parse. Read off Psalm's syntax tree alone: `Type::parseString()` needs a live
+     * ProjectAnalyzer, and resolving names against a codebase not yet scanned adds nothing here.
      *
-     * @return list<string>
-     *
-     * @psalm-pure
+     * @return list<string>|null
      */
-    public static function classNamesIn(string $type): array
+    public static function classNamesIn(string $type): ?array
     {
-        // Literals go first; then an identifier is a class unless it is a shape key (`name:`), a
-        // `$param` name, a class constant after `::`, or one of Psalm's own type keywords.
-        $type = (string) \preg_replace('/\'[^\']*\'|"[^"]*"/', '', $type);
-        \preg_match_all(
-            '/(?<![\w$\\\\-])(?<!::)\\\\?[a-zA-Z_\x80-\xff][\w\x80-\xff-]*+(?:\\\\[a-zA-Z_\x80-\xff][\w\x80-\xff]*+)*+(?!\s*\??:(?!:))/',
-            $type,
-            $matches,
-        );
+        try {
+            $pending = [(new ParseTreeCreator(TypeTokenizer::tokenize($type)))->create()];
+        } catch (TypeParseTreeException) {
+            return null;
+        }
 
-        return \array_values(\array_filter(
-            $matches[0],
-            static fn(string $name): bool => !isset(TypeTokenizer::PSALM_RESERVED_WORDS[\strtolower($name)]),
-        ));
+        $names = [];
+
+        while (($node = \array_shift($pending)) !== null) {
+            \array_push($pending, ...$node->children);
+
+            // Shape keys and callable parameter names live on other node kinds; literals, numbers,
+            // `int<0, max>` bounds and Psalm's keywords are filtered by name.
+            if (!$node instanceof ParseTree\Value && !$node instanceof ParseTree\GenericTree && !$node instanceof ParseTree\CallableTree) {
+                continue;
+            }
+
+            $name = \explode('::', $node->value, 2)[0];
+            $keyword = \strtolower($name);
+
+            if (\preg_match('/^\\\\?[a-zA-Z_\x80-\xff]/', $name) === 1
+                && !isset(TypeTokenizer::PSALM_RESERVED_WORDS[$keyword])
+                && $keyword !== 'min'
+                && $keyword !== 'max'
+            ) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
     }
 
     /** One parser for every template in the pass: constructing one re-reads PHP's own token tables. */
