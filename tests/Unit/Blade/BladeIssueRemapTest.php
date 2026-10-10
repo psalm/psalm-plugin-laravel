@@ -1363,6 +1363,54 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1808: a `@var mixed` prelude declaration on a name the template assigns first breaks the
+     * correlation between a boolean flag and the variable it tests once any `if` intervenes, and
+     * every `<x-...>` tag compiles to several. The guarded dereference then reports a false
+     * PossiblyNullPropertyFetch. Covers a flag over a template-assigned value, a flag over an
+     * author-docblocked value that is only ever read, and the same shape inside `@section`.
+     */
+    #[Test]
+    public function a_template_assigned_flag_keeps_narrowing_across_a_component_tag(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        foreach (['resources/views/assigned-flag.blade.php', 'resources/views/assigned-flag-section.blade.php'] as $template) {
+            foreach (['PossiblyNullPropertyFetch', 'PossiblyNullReference', 'UndefinedGlobalVariable', 'PossiblyUndefinedGlobalVariable'] as $type) {
+                $this->assertSame([], $this->linesFor($issues, $type, $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+            }
+        }
+
+        // `$action` is first READ (inside the flag's own RHS), so it keeps its fallback declaration
+        // and the author's docblock still types it.
+        $shadow = $this->shadowSourceFor('resources/views/assigned-flag.blade.php');
+        $this->assertStringContainsString('@var mixed $action */', $shadow);
+        $this->assertStringNotContainsString('@var mixed $hasAction', $shadow);
+        $this->assertStringNotContainsString('@var mixed $item', $shadow);
+    }
+
+    /**
+     * #1808 negative: an assignment that is conditional (inside `@if`/`@foreach`) or reads its own
+     * name keeps the `@var mixed` declaration; without it the later read reports
+     * (Possibly)UndefinedGlobalVariable.
+     */
+    #[Test]
+    public function a_conditionally_assigned_or_self_reading_local_keeps_its_declaration(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/assigned-conditionally.blade.php';
+
+        foreach (['UndefinedGlobalVariable', 'PossiblyUndefinedGlobalVariable'] as $type) {
+            $this->assertSame([], $this->linesFor($issues, $type, $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        }
+
+        $shadow = $this->shadowSourceFor($template);
+
+        foreach (['picked', 'last', 'label'] as $name) {
+            $this->assertStringContainsString("@var mixed \${$name} */", $shadow);
+        }
+    }
+
     /** Every compiled shadow's source of that run, concatenated. */
     private function allShadowSources(string $config = 'psalm.xml'): string
     {

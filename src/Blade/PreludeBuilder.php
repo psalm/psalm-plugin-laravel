@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use PhpParser\ErrorHandler\Collecting;
 use PhpParser\Node;
+use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
@@ -208,12 +209,44 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $written = [];
 
+            /** @var array<string, Node\Expr> name => RHS of an unconditional top-level assignment preceding any other mention */
+            public array $assignedFirst = [];
+
+            /** @var array<int, true> spl_object_id of each Assign that is a whole top-level statement */
+            private array $topLevelAssigns = [];
+
+            /**
+             * @psalm-external-mutation-free
+             */
+            #[\Override]
+            public function beforeTraverse(array $nodes): null
+            {
+                foreach ($nodes as $stmt) {
+                    if ($stmt instanceof Node\Stmt\Expression && $stmt->expr instanceof Node\Expr\Assign) {
+                        $this->topLevelAssigns[\spl_object_id($stmt->expr)] = true;
+                    }
+                }
+
+                return null;
+            }
+
             /**
              * @psalm-external-mutation-free
              */
             #[\Override]
             public function enterNode(Node $node): null
             {
+                // Pre-order: the Assign is entered before its target and RHS, so `found` holds only
+                // earlier mentions.
+                if ($node instanceof Node\Expr\Assign
+                    && isset($this->topLevelAssigns[\spl_object_id($node)])
+                    && $node->var instanceof Node\Expr\Variable
+                    && \is_string($node->var->name)
+                    && !isset($this->found[$node->var->name])
+                ) {
+                    $this->assignedFirst[$node->var->name] = $node->expr;
+                }
+
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
                     $this->found[$node->name] = true;
                 }
@@ -276,6 +309,13 @@ final class PreludeBuilder
                 continue;
             }
 
+            // A name the template defines on every path before any read needs no fallback, and a
+            // `mixed` declaration on it breaks the correlation between a boolean flag and the
+            // variable it tests once any `if` intervenes (#1808).
+            if (isset($visitor->assignedFirst[$name]) && !$this->mayRead($visitor->assignedFirst[$name], $name)) {
+                continue;
+            }
+
             // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping (Blade's
             // `@session`/`@context` append to `$__sessionPrevious`/`$__contextPrevious` without a
             // whole assignment); declaring it `mixed` widens the append result and turns the
@@ -291,5 +331,18 @@ final class PreludeBuilder
         \sort($names);
 
         return $names;
+    }
+
+    /**
+     * Whether evaluating `$rhs` can read `$name` before the assignment defines it: a direct mention
+     * (closure `use`, arrow fn), a variable variable, or a scope-reading builtin.
+     */
+    private function mayRead(Node\Expr $rhs, string $name): bool
+    {
+        return (new NodeFinder())->findFirst($rhs, static fn(Node $node): bool
+            => ($node instanceof Node\Expr\Variable && (!\is_string($node->name) || $node->name === $name))
+            || ($node instanceof Node\Expr\FuncCall
+                && $node->name instanceof Node\Name
+                && \in_array($node->name->toLowerString(), ['compact', 'get_defined_vars'], true))) instanceof \PhpParser\Node;
     }
 }

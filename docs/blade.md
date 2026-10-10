@@ -129,6 +129,8 @@ Only markers Blade actually compiles count. One inside a `{{-- --}}` comment or 
 
 Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so a typo in a variable name will not be caught this way.
 
+A local the template assigns before any other mention is not declared `mixed`, so it keeps its inferred type. This covers an unconditional `$x = ...` statement at the top level of the template (in `@php`, a raw `<?php` block, or a `@section`/`@push` body) whose right side does not read `$x`. A flag such as `$hasAction = isset($action) && $action->isNotEmpty()` therefore still narrows `$action` inside a later `@if ($hasAction)`, even with a `<x-...>` tag in between (#1808). An assignment inside `@if`, `@foreach`, `@once`, or another wrapping directive, a compound one (`.=`, `[]=`, `??=`), or one whose right side reads the name (including `compact()`) keeps the `mixed` declaration.
+
 ## What gets reported
 
 One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
