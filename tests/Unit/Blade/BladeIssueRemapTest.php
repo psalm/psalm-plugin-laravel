@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -1171,6 +1172,159 @@ final class BladeIssueRemapTest extends TestCase
         $shadow = $this->shadowSourceFor($template);
         $this->assertStringContainsString('@var mixed $__themeViews', $shadow);
         $this->assertStringContainsString('$__componentOriginal', $shadow);
+    }
+
+    /**
+     * A template-assigned local is not view data: declaring it `@var mixed` ahead of its own
+     * assignment makes Psalm drop the `$hasAction` <-> `$action !== null` correlation after the
+     * next `if`, so the guarded `$action->attributes` read reported PossiblyNullPropertyFetch.
+     */
+    #[Test]
+    public function a_template_assigned_flag_keeps_guarding_the_nullable_it_was_derived_from(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/assigned-flag-guard.blade.php';
+
+        $this->assertStringNotContainsString('$hasAction */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** An assignment that reads its own target needs the incoming value declared. */
+    #[Test]
+    public function a_self_reading_assignment_keeps_its_mixed_declaration(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/self-reassigned.blade.php';
+
+        $this->assertStringContainsString('@var mixed $title */', $this->shadowSourceFor($template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedGlobalVariable', $template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedVariable', $template));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function branchAssignedLocals(): iterable
+    {
+        yield '@if' => ['locals/if.blade.php', 'label'];
+        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size'];
+        yield '@once' => ['locals/once.blade.php', 'label'];
+        yield '<x-…> slot' => ['locals/slot.blade.php', 'label'];
+    }
+
+    /**
+     * An assignment that can be skipped (a branch, `@once`, a component slot) leaves the incoming
+     * view value as the one read after it, a `@props` default or a parent's variable in a partial,
+     * so the name keeps its `mixed` declaration and the read is not possibly undefined.
+     */
+    #[Test]
+    #[DataProvider('branchAssignedLocals')]
+    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/' . $template;
+
+        $this->assertStringContainsString("@var mixed \${$name} */", $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function qualifiedContracts(): iterable
+    {
+        yield 'leading backslash' => ['contract-typed-body.blade.php'];
+        // What `blade:annotate` writes: resolves identically in the namespace-less shadow.
+        yield 'no leading backslash' => ['contract-unqualified.blade.php'];
+    }
+
+    /** A qualified `{{-- @var --}}` contract types the template body, not only its call sites. */
+    #[Test]
+    #[DataProvider('qualifiedContracts')]
+    public function a_contract_var_types_the_template_body(string $template): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UndefinedMethod', 'resources/views/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** A contract naming a missing class reports on the comment that declared it, not as unmapped. */
+    #[Test]
+    public function a_contract_naming_an_unknown_class_reports_on_its_comment_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-unknown-class.blade.php';
+        $reported = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template),
+        ));
+
+        $this->assertContains(2, $this->linesFor($issues, 'UndefinedDocblockClass', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertNotContains(1, \array_column($reported, 'line_from'), \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /** An unparseable contract type stays `mixed` in the body instead of an InvalidDocblock. */
+    #[Test]
+    public function an_unparseable_contract_type_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-unparseable.blade.php';
+
+        $this->assertStringContainsString('@var mixed $m */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * A type that parses but is not valid (`array<int, string, bool>`) is dropped by Psalm with an
+     * InvalidDocblock on the comment line. The read below it must not cascade into an
+     * UndefinedGlobalVariable, and the message must not carry the shadow cache path.
+     */
+    #[Test]
+    public function an_invalid_contract_type_reports_once_on_its_comment_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-invalid-type.blade.php';
+        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame(['InvalidDocblock'], \array_column($reported, 'type'), $encoded);
+        $this->assertSame(2, $reported[0]['line_from'], $encoded);
+        $this->assertStringEndsWith('in ' . $template . ':2)', $reported[0]['message'], $encoded);
+    }
+
+    /**
+     * A Blade comment cannot carry a `use` import, so a short class name would resolve against the
+     * global namespace in the shadow. It stays `mixed` (and silent) rather than report a class the
+     * author never meant.
+     */
+    #[Test]
+    public function a_short_class_name_in_a_contract_var_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-short-name.blade.php';
+
+        $this->assertStringContainsString('@var mixed $greeter */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**

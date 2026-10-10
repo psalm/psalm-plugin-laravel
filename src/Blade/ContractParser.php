@@ -80,8 +80,7 @@ final class ContractParser
      * {@see self::parseDeclarations()} plus the read set, for the UnusedViewData rule: a key the
      * call site passes that neither `$vars` nor `$readVariables` mentions is passed for nothing.
      *
-     * Same side-channel rule as parseDeclarations(): the compiled output is read here, never fed
-     * back into it.
+     * The compiled output is only read here, never fed back into it.
      */
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
@@ -97,11 +96,9 @@ final class ContractParser
     }
 
     /**
-     * The declaration half of {@see self::parse()}, from the template source alone.
-     *
-     * A side channel for call-site validation: it must not touch the compiled output, because
-     * feeding contract types into shadow compilation would change every shadow's content and
-     * fingerprint, which is a separate decision from reading the declarations.
+     * The declaration half of {@see self::parse()}, from the template source alone, so it can run
+     * before compilation: its `@var` types also seed the shadow prelude
+     * ({@see BladeBootstrapper::bodyTypes()}).
      */
     public function parseDeclarations(string $source): ViewDataContract
     {
