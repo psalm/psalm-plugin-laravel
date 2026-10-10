@@ -202,14 +202,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             && $node->getEndFilePos() >= $location->raw_file_end);
         $rules = [];
         foreach ($enclosing as $node) {
-            // MatchAnalyzer suppresses these two for the whole desugared ternary (every arm condition
-            // and body, never the subject) via the analyzer's runtime list, which the event omits
-            // (upstream gap), so plain PHP stays silent where the shadow would report (#1801).
             if ($node instanceof Node\Expr\Match_) {
-                if ($node->cond->getStartFilePos() > $location->raw_file_start || $node->cond->getEndFilePos() < $location->raw_file_end) {
-                    $rules[] = 'RedundantCondition';
-                    $rules[] = 'RedundantConditionGivenDocblockType';
-                }
+                \array_push($rules, ...self::matchSuppressions($node, $location));
 
                 continue;
             }
@@ -234,6 +228,59 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         }
 
         return $rules;
+    }
+
+    /**
+     * MatchAnalyzer analyzes a `match` as a desugared ternary with `RedundantCondition` and
+     * `RedundantConditionGivenDocblockType` added to the analyzer's runtime suppression list, which
+     * `BeforeAddIssueEvent` omits (upstream gap). Mirrored by AST shape so a template stays as quiet
+     * as plain PHP (#1801). The window covers the arms only: the subject, and a `match` used as an
+     * operand (the finding spans the whole expression), keep reporting. With no default arm
+     * (`$last_arm->conds`) and a subject Psalm tracks (`$switch_var_id`: not `true`, not `X::class`),
+     * the arm conditions are analyzed again after the window closes, so they keep reporting
+     * `RedundantCondition`; the docblock sibling stays suppressed, as it is on plain PHP.
+     *
+     * @return list<string>
+     */
+    private static function matchSuppressions(Node\Expr\Match_ $match, CodeLocation $location): array
+    {
+        $contains = static fn(Node $node): bool => $node->getStartFilePos() <= $location->raw_file_start
+            && $node->getEndFilePos() >= $location->raw_file_end;
+        $hasDefault = false;
+        $inReanalyzedCondition = false;
+        $inArm = false;
+
+        foreach ($match->arms as $arm) {
+            if ($arm->conds === null) {
+                $hasDefault = true;
+            }
+
+            if (!$contains($arm)) {
+                continue;
+            }
+
+            $inArm = true;
+
+            foreach ($arm->conds ?? [] as $cond) {
+                $inReanalyzedCondition = $inReanalyzedCondition || $contains($cond);
+            }
+        }
+
+        if (!$inArm) {
+            return [];
+        }
+
+        $subject = $match->cond;
+        $trackedSubject = (!$subject instanceof Node\Expr\ConstFetch || $subject->name->toLowerString() !== 'true')
+            && !($subject instanceof Node\Expr\ClassConstFetch
+                && $subject->name instanceof Node\Identifier
+                && $subject->name->toLowerString() === 'class');
+
+        if (!$hasDefault && $trackedSubject && $inReanalyzedCondition) {
+            return ['RedundantConditionGivenDocblockType'];
+        }
+
+        return ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
     }
 
     /** Null for any path that is not a registered shadow with a readable template. */

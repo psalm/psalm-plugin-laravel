@@ -1318,6 +1318,27 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. A `match`
+     * used as a condition operand (the finding sits on the whole expression) and the arm conditions
+     * of a `match` with no default arm (analyzed again after the suppression window closes) both
+     * keep reporting on plain PHP, so they must keep reporting in a template.
+     */
+    #[Test]
+    public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-outside-arms.blade.php';
+
+        $this->assertSame(
+            [5, 12, 17, 23],
+            $this->linesFor($issues, 'RedundantCondition', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        // Plain PHP leaves the docblock sibling of the re-analyzed arm condition suppressed.
+        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template));
+    }
+
+    /**
      * #1559: `$this`/`self::` in a plain template (no enclosing `@php class`) is classless global
      * scope from Psalm's point of view, so every mention floods `InvalidScope`/`NonStaticSelfCall` —
      * conventions Livewire/Filament templates lean on heavily. Neither issue type may appear on this
