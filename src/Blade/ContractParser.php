@@ -9,6 +9,7 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
+use Psalm\Internal\Analyzer\CommentAnalyzer;
 
 /**
  * Extracts a {@see TemplateContract} from a Blade template: `@var`
@@ -22,35 +23,21 @@ use PhpParser\ParserFactory;
 final class ContractParser
 {
     /**
-     * The `{{-- @var T $name --}}` spelling, matched against a comment's inner content. Greedy on
-     * the type, so the name it binds is the LAST `$name` in the comment — `@var Closure(Foo $f): Bar
-     * $callback` declares `$callback`, not `$f`.
+     * The `{{-- @var T $name --}}` spelling, matched against a comment's inner content; group 1 is
+     * what follows `@var`, for {@see self::splitVar()}. One line, as it always was.
      *
-     * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises:
-     * a declaration it reads differently is one it appends a duplicate for, forever.
-     *
-     * The name is matched as PHP matches an identifier, bytes >= 0x80 included (`$menü` is a legal
-     * variable), not as `\w`, which is ASCII-only under this pattern.
+     * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises.
      */
-    public const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(' . self::IDENTIFIER . ')\s*$/';
+    public const VAR_PATTERN = '/^\s*@var\s+([^\r\n]+?)\s*$/';
 
     /** PHP's own variable-name grammar, as bytes. */
     public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
     /**
-     * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
-     * same (last) name {@see self::VAR_PATTERN} does; per line, because one block can hold several
-     * docblocks and a pattern greedy across them would see only the last. The name grammar is shared
-     * with that pattern, so `$menü` binds whole rather than as its ASCII prefix.
+     * What follows `@var` on one line of a comment inside a raw PHP block, minus a closing `*\/`.
+     * Per line, because one block can hold several docblocks.
      */
-    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . self::IDENTIFIER . ')/';
-
-    /**
-     * A raw `@var T $name` strict enough to be a contract: the name ends its line (a closing `*\/`
-     * aside). A trailing description (`@var int $x the `$y` count`) is not one, since the name it
-     * binds could be the description's.
-     */
-    private const RAW_PHP_CONTRACT_VAR = '/@var\h+(.+)\h+\$(' . self::IDENTIFIER . ')\h*(?:\*\/\h*)?\r?$/m';
+    private const RAW_PHP_VAR = '/@var\h+(.+?)\h*(?:\*\/)?\h*\r?$/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
@@ -94,8 +81,7 @@ final class ContractParser
 
         $vars += $this->rawContractVars($source, $localVariables);
 
-        // What is left is consumed-only: a raw declaration of a name the template binds for itself,
-        // or one too loose to bind a name from (see RAW_PHP_CONTRACT_VAR).
+        // What is left is consumed-only: a raw declaration of a name the template binds for itself.
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
@@ -125,7 +111,7 @@ final class ContractParser
         }
 
         return new ViewDataContract(
-            $declarations->vars + self::rawContractVars($source, $this->parseReads($compiled)[2]),
+            $declarations->vars + $this->rawContractVars($source, $this->parseReads($compiled)[2]),
             $declarations->propsUnknown,
         );
     }
@@ -133,8 +119,7 @@ final class ContractParser
     /**
      * Names a template declares in the raw docblock spelling, which {@see self::parseSource()} does
      * not read: a raw PHP block reaches the shadow byte-for-byte, so its own docblocks never pass
-     * through the Blade-comment scan above. Lenient: it binds a name even from a `@var` with a
-     * trailing description, which {@see self::rawContractVars()} refuses to treat as a contract.
+     * through the Blade-comment scan above.
      *
      * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND an
      * `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which is
@@ -150,17 +135,7 @@ final class ContractParser
      */
     public static function rawDeclaredNames(string $source): array
     {
-        $names = [];
-
-        foreach (self::rawComments($source) as [$comment]) {
-            if (\preg_match_all(self::RAW_PHP_VAR, $comment, $matched) > 0) {
-                foreach ($matched[1] as $name) {
-                    $names[] = $name;
-                }
-            }
-        }
-
-        return $names;
+        return \array_column(self::rawDeclarations($source), 0);
     }
 
     /**
@@ -179,58 +154,98 @@ final class ContractParser
     {
         $vars = [];
 
-        foreach (self::rawComments($source) as [$comment, $line]) {
-            if (\preg_match_all(self::RAW_PHP_CONTRACT_VAR, $comment, $matched, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
+        foreach (self::rawDeclarations($source) as [$name, $type, $line]) {
+            if (\in_array($name, $locals, true)) {
                 continue;
             }
 
-            foreach ($matched as $match) {
-                $name = $match[2][0];
+            $nullable = false;
 
-                if (\in_array($name, $locals, true)) {
-                    continue;
-                }
-
-                $type = \rtrim($match[1][0]);
-                $alternatives = $this->topLevelAlternatives($type);
-
-                if ($alternatives === null) {
-                    continue;
-                }
-
-                $nullable = \array_filter(
-                    $alternatives,
-                    static fn(string $alternative): bool => \strtolower($alternative) === 'null' || \str_starts_with($alternative, '?'),
-                ) !== [];
-
-                // A later declaration of the same name wins, as in a document-order walk.
-                $vars[$name] = new ContractVar($name, $type, $line + SourceLines::breaksIn($comment, 0, $match[0][1]), $nullable, true);
+            foreach ($this->topLevelAlternatives($type) as $alternative) {
+                $nullable = $nullable || \strtolower($alternative) === 'null' || \str_starts_with($alternative, '?');
             }
+
+            // A later declaration of the same name wins, as in a document-order walk.
+            $vars[$name] = new ContractVar($name, $type, $line, $nullable, true);
         }
 
         return $vars;
     }
 
     /**
-     * The top-level `|` alternatives of a type string, null when a `$` sits outside every bracket.
-     * A valid type has none there; one that does is a `@var` whose trailing description ended in a
-     * `$name`, and the name it would bind is the description's.
+     * The `T $name [description]` after a `@var`, split the way Psalm splits it: the type is the
+     * first bracket- and quote-balanced token, the name is the `$identifier` right after it, and the
+     * rest is a description, whose own `$names` bind nothing (`@var Closure(Foo $f): Bar $cb` binds
+     * `$cb`, not `$f`). Null when it does not read that way: no name, a name-first `@var $x T`,
+     * unbalanced brackets.
      *
-     * @return non-empty-list<string>|null
+     * Public because {@see Annotate\TemplateAnnotator} must bind the same name the contract does:
+     * one that read it differently would append a duplicate declaration for it, forever.
+     *
+     * @return array{0: string, 1: string}|null name (without `$`), type string
      *
      * @psalm-pure
      */
-    private function topLevelAlternatives(string $typeString): ?array
+    public static function splitVar(string $declaration): ?array
+    {
+        try {
+            $parts = CommentAnalyzer::splitDocLine(\trim($declaration));
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (!isset($parts[1]) || \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) !== 1) {
+            return null;
+        }
+
+        return [$name[1], $parts[0]];
+    }
+
+    /**
+     * Each `@var T $name [description]` line in the raw blocks, split the way Psalm splits it: the
+     * type is the first bracket- and quote-balanced token, the name is the `$identifier` right after
+     * it, and the rest is a description, whose own `$names` bind nothing. A line that does not read
+     * that way (no name, a name-first `@var $x T`, unbalanced brackets) declares nothing.
+     *
+     * @return list<array{0: string, 1: string, 2: int}> name, type string, 1-based line
+     *
+     * @psalm-pure
+     */
+    private static function rawDeclarations(string $source): array
+    {
+        $declarations = [];
+
+        foreach (self::rawComments($source) as [$comment, $line]) {
+            if (\preg_match_all(self::RAW_PHP_VAR, $comment, $matched, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
+                continue;
+            }
+
+            foreach ($matched as $match) {
+                $declared = self::splitVar($match[1][0]);
+
+                if ($declared !== null) {
+                    $declarations[] = [$declared[0], $declared[1], $line + SourceLines::breaksIn($comment, 0, $match[0][1])];
+                }
+            }
+        }
+
+        return $declarations;
+    }
+
+    /**
+     * The top-level `|` alternatives of a type string.
+     *
+     * @return non-empty-list<string>
+     *
+     * @psalm-pure
+     */
+    private function topLevelAlternatives(string $typeString): array
     {
         $parts = [];
         $current = '';
         $depth = 0;
 
         foreach (\str_split($typeString) as $char) {
-            if ($char === '$' && $depth === 0) {
-                return null;
-            }
-
             $depth += \strpbrk($char, '([{<') !== false ? 1 : (\strpbrk($char, ')]}>') !== false ? -1 : 0);
 
             if ($char === '|' && $depth === 0) {
@@ -303,11 +318,11 @@ final class ContractParser
 
             $inner = \substr($text, 4, -4);
 
-            if (\preg_match(self::VAR_PATTERN, $inner, $matches) === 1) {
-                // Greedy capture keeps a separator space when several precede the
-                // variable name; the type string must not carry it.
+            $declared = \preg_match(self::VAR_PATTERN, $inner, $matches) === 1 ? self::splitVar($matches[1]) : null;
+
+            if ($declared !== null) {
                 $line = 1 + SourceLines::breaksIn($source, 0, $offset);
-                $declarations[] = [$offset, $matches[2], new ContractVar($matches[2], \rtrim($matches[1]), $line, false)];
+                $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, false)];
             }
         }
 

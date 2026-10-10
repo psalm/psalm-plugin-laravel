@@ -153,9 +153,9 @@ final class AnnotationWriter implements AfterAnalysisInterface
         // name used at all") and must never be declared: declaring it reports MissingViewVariable
         // at every correct call site, which is the check this codemod exists to feed.
         //
-        // A name declared by a raw docblock that is not a contract var (a local's type hint, or a
-        // `@var` too loose to read) joins them: `TemplateAnnotator` reads that spelling back, so
-        // planning one produces no insertion anyway, and reporting it as changed would be a lie.
+        // A name declared by a raw docblock that is not a contract var (a local's type hint) joins
+        // them: `TemplateAnnotator` reads that spelling back, so planning one produces no insertion
+        // anyway, and reporting it as changed would be a lie.
         $localNames = \array_fill_keys($contract->localVariables, true)
             + \array_fill_keys($contract->rawDeclaredVariables, true);
 

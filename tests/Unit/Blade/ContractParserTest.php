@@ -656,11 +656,54 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_raw_var_with_a_trailing_description_is_not_a_contract(): void
+    public function a_raw_var_binds_the_first_name_after_its_type_and_ignores_the_description(): void
     {
-        $contract = $this->dataContract("<?php /** @var int \$count the number of \$items */ ?>\n{{ \$count }}\n");
+        $source = "<?php\n/**\n * @var string \$title The title/label for the \$other statistic\n * @var int \$count\n */\n?>\n{{ \$title }}{{ \$count }}\n";
 
-        $this->assertSame([], \array_keys($contract->vars));
+        $contract = $this->dataContract($source);
+
+        $this->assertSame(['title', 'count'], \array_keys($contract->vars));
+        $this->assertSame('string', $contract->vars['title']->typeString);
+        $this->assertSame(['title', 'count'], ContractParser::rawDeclaredNames($source), 'the lenient reader agrees');
+    }
+
+    #[Test]
+    public function a_raw_var_type_with_spaces_inside_brackets_is_read_whole(): void
+    {
+        $source = "<?php\n/**\n"
+            . " * @var \\Illuminate\\Support\\Collection<int, \\App\\Models\\User> \$users The users\n"
+            . " * @var array{id: int, name: string} \$row A \$row\n"
+            . " * @var Closure(Foo \$f): Bar \$callback Called later\n"
+            . " */\n?>\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        $this->assertSame('\Illuminate\Support\Collection<int, \App\Models\User>', $vars['users']->typeString ?? null);
+        $this->assertSame('array{id: int, name: string}', $vars['row']->typeString ?? null);
+        $this->assertSame('Closure(Foo $f): Bar', $vars['callback']->typeString ?? null);
+        $this->assertSame(['users', 'row', 'callback'], \array_keys($vars));
+    }
+
+    #[Test]
+    public function a_nullable_raw_var_with_a_description_is_optional(): void
+    {
+        $source = "<?php\n/**\n * @var ?int \$a The a\n * @var int|null \$b The b\n * @var null|Foo \$c\n * @var int \$d The d\n */\n?>\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        $this->assertTrue($vars['a']->optional ?? null);
+        $this->assertTrue($vars['b']->optional ?? null);
+        $this->assertTrue($vars['c']->optional ?? null);
+        $this->assertFalse($vars['d']->optional ?? null);
+    }
+
+    #[Test]
+    public function a_raw_var_without_a_name_after_its_type_declares_nothing(): void
+    {
+        $source = "<?php\n/**\n * @var int the count\n * @var \$name string\n * @var array<int \$x\n */\n?>\n";
+
+        $this->assertSame([], \array_keys($this->dataContract($source)->vars));
+        $this->assertSame([], ContractParser::rawDeclaredNames($source));
     }
 
     #[Test]

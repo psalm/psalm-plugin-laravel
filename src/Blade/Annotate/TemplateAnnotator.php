@@ -185,8 +185,12 @@ final class TemplateAnnotator
         $declared = [];
 
         foreach (self::liveContractComments($source) as [, , $innerContent]) {
-            if (\preg_match(ContractParser::VAR_PATTERN, $innerContent, $matched) === 1) {
-                $declared[$matched[2]] = true;
+            $split = \preg_match(ContractParser::VAR_PATTERN, $innerContent, $matched) === 1
+                ? ContractParser::splitVar($matched[1])
+                : null;
+
+            if ($split !== null) {
+                $declared[$split[0]] = true;
             }
         }
 
