@@ -250,9 +250,9 @@ final class PreludeBuilderTest extends TestCase
     }
 
     #[Test]
-    public function a_local_first_seen_as_a_plain_assignment_is_not_declared(): void
+    public function a_local_first_seen_as_a_root_level_assignment_is_not_declared(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php if ($c) { $flag = $item !== null; } echo $flag; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php $flag = $item !== null; if ($flag) { echo $item; } ?>', [], '');
 
         $this->assertStringNotContainsString('$flag */', $prelude);
         $this->assertStringContainsString('@var mixed $item */', $prelude);
@@ -269,11 +269,15 @@ final class PreludeBuilderTest extends TestCase
         yield 'the first mention is a closure use' => ['<?php $f = function () use ($title) {}; $title = 2; ?>'];
         yield 'the first write is not a plain assignment' => ['<?php $title .= "x"; ?>'];
         yield 'the first write is a foreach target' => ['<?php foreach ($rows as $title) {} ?>'];
+        yield 'the assignment sits in a branch' => ['<?php if ($c): ?><?php $title = 1; ?><?php endif; ?><?php echo $title; ?>'];
+        yield 'the assignment sits in a loop' => ['<?php foreach ($rows as $row) { $title = $row; } echo $title; ?>'];
+        yield 'the assignment sits in try' => ['<?php try { $title = f(); } catch (\Throwable) {} echo $title; ?>'];
+        yield 'the assignment is nested in an expression' => ['<?php $c && ($title = 1); echo $title; ?>'];
     }
 
     #[Test]
     #[DataProvider('stillDeclaredAssignments')]
-    public function a_name_whose_first_mention_is_not_a_fresh_file_scope_assignment_stays_declared(string $compiled): void
+    public function a_name_whose_first_mention_is_not_a_root_level_assignment_stays_declared(string $compiled): void
     {
         $prelude = (new PreludeBuilder())->build($compiled, [], '');
 

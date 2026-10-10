@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -1205,18 +1206,31 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * A local assigned in one branch only and read after it reports possibly undefined: the
-     * template's own first mention of `$label` is that assignment, so it is left undeclared. A
-     * caller that also passes `$label` as view data hits the same finding (documented trade-off).
+     * @return iterable<string, array{string, string}>
+     */
+    public static function branchAssignedLocals(): iterable
+    {
+        yield '@if' => ['locals/if.blade.php', 'label'];
+        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size'];
+        yield '@once' => ['locals/once.blade.php', 'label'];
+        yield '<x-…> slot' => ['locals/slot.blade.php', 'label'];
+    }
+
+    /**
+     * An assignment that can be skipped (a branch, `@once`, a component slot) leaves the incoming
+     * view value as the one read after it, a `@props` default or a parent's variable in a partial,
+     * so the name keeps its `mixed` declaration and the read is not possibly undefined.
      */
     #[Test]
-    public function a_conditionally_assigned_local_read_after_the_branch_reports_possibly_undefined(): void
+    #[DataProvider('branchAssignedLocals')]
+    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name): void
     {
         $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/conditional-assign.blade.php';
+        $template = 'resources/views/' . $template;
 
+        $this->assertStringContainsString("@var mixed \${$name} */", $this->shadowSourceFor($template));
         $this->assertSame(
-            [4],
+            [],
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );

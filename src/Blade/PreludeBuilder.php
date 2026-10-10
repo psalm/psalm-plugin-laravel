@@ -232,37 +232,57 @@ final class PreludeBuilder
             return [];
         }
 
-        $visitor = new class extends NodeVisitorAbstract {
+        $finder = new NodeFinder();
+        /** @var array<int, string> $rootAssigns Assign node id => target name */
+        $rootAssigns = [];
+
+        // Only a statement of the file itself always runs. An assignment inside `@if`, `@once`, a
+        // `<x-…>` slot, a loop or `try` can be skipped, leaving the incoming view value (a `@props`
+        // default, a parent's variable in a partial) as the one read after it.
+        foreach ($ast as $statement) {
+            if ($statement instanceof Node\Stmt\Expression
+                && $statement->expr instanceof Node\Expr\Assign
+                && $statement->expr->var instanceof Node\Expr\Variable
+                && \is_string($name = $statement->expr->var->name)
+                && !$finder->findFirst(
+                    $statement->expr->expr,
+                    static fn(Node $read): bool => $read instanceof Node\Expr\Variable && $read->name === $name,
+                ) instanceof Node
+            ) {
+                $rootAssigns[\spl_object_id($statement->expr)] = $name;
+            }
+        }
+
+        $visitor = new class ($rootAssigns) extends NodeVisitorAbstract {
             /** @var array<string, true> */
             public array $found = [];
 
             /** @var array<string, true> */
             public array $written = [];
 
-            /** @var array<string, true> names first mentioned as a file-scope `$x = …` whose value never reads `$x` */
+            /** @var array<string, true> names first mentioned as a root-level `$x = …` whose value never reads `$x` */
             public array $assignedFirst = [];
 
-            private int $functionDepth = 0;
+            /**
+             * @param array<int, string> $rootAssigns
+             *
+             * @psalm-mutation-free
+             */
+            public function __construct(private readonly array $rootAssigns) {}
 
+            /**
+             * @psalm-external-mutation-free
+             */
             #[\Override]
             public function enterNode(Node $node): null
             {
-                if ($node instanceof Node\FunctionLike || $node instanceof Node\Stmt\ClassLike) {
-                    $this->functionDepth++;
-                }
-
                 // Checked before the target itself is recorded as found: Assign is entered first.
-                if ($this->functionDepth === 0
-                    && $node instanceof Node\Expr\Assign
-                    && $node->var instanceof Node\Expr\Variable
-                    && \is_string($name = $node->var->name)
-                    && !isset($this->found[$name])
-                    && !(new NodeFinder())->findFirst(
-                        $node->expr,
-                        static fn(Node $read): bool => $read instanceof Node\Expr\Variable && $read->name === $name,
-                    ) instanceof Node
-                ) {
-                    $this->assignedFirst[$name] = true;
+                if ($node instanceof Node\Expr\Assign) {
+                    $name = $this->rootAssigns[\spl_object_id($node)] ?? null;
+
+                    if ($name !== null && !isset($this->found[$name])) {
+                        $this->assignedFirst[$name] = true;
+                    }
                 }
 
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
@@ -282,19 +302,6 @@ final class PreludeBuilder
                     if ($node->keyVar instanceof \PhpParser\Node\Expr) {
                         $this->markWritten($node->keyVar);
                     }
-                }
-
-                return null;
-            }
-
-            /**
-             * @psalm-external-mutation-free
-             */
-            #[\Override]
-            public function leaveNode(Node $node): null
-            {
-                if ($node instanceof Node\FunctionLike || $node instanceof Node\Stmt\ClassLike) {
-                    $this->functionDepth--;
                 }
 
                 return null;
@@ -340,11 +347,10 @@ final class PreludeBuilder
                 continue;
             }
 
-            // A local the template creates itself is not view data. Declaring it ahead of its own
-            // assignment is not harmless: Psalm then drops the correlation between a flag and the
-            // value it was derived from (`$has = $x !== null; … @if ($has) $x->y`) after the next
-            // `if`. The cost: a branch-only first assignment of a name that ALSO arrives as view
-            // data now reports PossiblyUndefinedGlobalVariable on the read after the branch.
+            // A name the template assigns unconditionally before any other mention is a local:
+            // whatever view value it had is overwritten unread. Declaring it ahead of the assignment
+            // is not harmless: Psalm then drops the correlation between a flag and the value it was
+            // derived from (`$has = $x !== null; … @if ($has) $x->y`) after the next `if`.
             if (isset($visitor->assignedFirst[$name])) {
                 continue;
             }
