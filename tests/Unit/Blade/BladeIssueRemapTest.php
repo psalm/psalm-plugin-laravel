@@ -873,6 +873,24 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1696: `$loop->parent` stays nullable in the ambient loop shape, so a nested loop's
+     * `$loop->parent->iteration` (line 4) and `$loop->parent->parent->iteration` (line 6, one
+     * finding per level) reported PossiblyNullPropertyFetch. An author's own nullable `->parent`
+     * on another variable (line 11) keeps reporting: the match is anchored to `$loop`.
+     */
+    #[Test]
+    public function loop_parent_is_not_reported_as_possibly_null(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            ['Cannot get property on possibly null variable $node->parent of type null|object{iteration:int}'],
+            $this->messagesFor($issues, 'PossiblyNullPropertyFetch', 'loop-parent.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
      * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
      * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`

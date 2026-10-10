@@ -22,6 +22,7 @@ use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\PossiblyInvalidMethodCall;
+use Psalm\Issue\PossiblyNullPropertyFetch;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
@@ -219,6 +220,19 @@ final class ShadowIssueRelocator
         if (
             ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
             && self::selectedText($issue->code_location) === '$__currentLoopData'
+        ) {
+            return false;
+        }
+
+        // `$loop->parent` is the enclosing loop's frame and stays `|null` in the ambient shape (an
+        // outermost loop has none), but the prelude cannot see lexical nesting, so every nested
+        // read reported (#1696). InstancePropertyFetchAnalyzer.php is the only emitter naming the
+        // receiver chain. Trade-off: a depth-1 `$loop->parent->x`, which is a real null read, is
+        // silenced too. `PossiblyNullReference` is left alone: its message has no receiver, and a
+        // method call on the `stdClass` frame is a bug that also reports `PossiblyUndefinedMethod`.
+        if (
+            $issue instanceof PossiblyNullPropertyFetch
+            && \preg_match('/^Cannot get property on possibly null variable \$loop(?:->parent)+ of type /', $issue->message) === 1
         ) {
             return false;
         }
