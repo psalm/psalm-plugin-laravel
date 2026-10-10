@@ -855,6 +855,41 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1724: `@session`/`@context` save an outer `$value` behind a compiled `isset($value)`, which
+     * Psalm judged against the author's own `$value`: a foreach value (line 2), `null` (line 5,
+     * the `@context` twin) and a literal (line 8). The author's own `@if (isset($value))` on line
+     * 7 keeps reporting.
+     */
+    #[Test]
+    public function the_compiled_session_value_save_is_not_judged_against_an_author_value(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-value-save.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('if (isset($value)) { $__contextPrevious[] = $value; }', $this->shadowSourceFor($template));
+        $this->assertSame([7], $this->linesFor($issues, 'RedundantCondition', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $json);
+    }
+
+    /**
+     * #1724: the drop needs the save statement to be absent from the template, so an author who
+     * writes it verbatim (line 2) keeps the finding, and so does every compiled save in that
+     * template (line 3).
+     */
+    #[Test]
+    public function an_author_written_value_save_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2, 3],
+            $this->linesFor($issues, 'RedundantCondition', 'session-value-save-authored.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1810: a `Collection|array` `@foreach`/`@forelse` subject makes Psalm resolve the iterator
      * through a synthetic `$__currentLoopData->getIterator()` call that it suppresses in plain PHP
      * (ForeachAnalyzer.php), positioned on the variable: `PossiblyInvalidMethodCall` for the list

@@ -368,7 +368,7 @@ final class ShadowIssueRelocator
                 return false;
             }
 
-            if (self::isDeclaredVariableGuard($issue, $target)) {
+            if (self::isDeclaredVariableGuard($issue, $target) || self::isGeneratedValueSave($issue, $target)) {
                 return false;
             }
         }
@@ -777,6 +777,32 @@ final class ShadowIssueRelocator
 
         return \in_array($name, ContractParser::rawDeclaredNames($target->templateSource), true)
             || \array_key_exists($name, (new ContractParser())->parseDeclarations($target->templateSource)->vars);
+    }
+
+    /**
+     * Whether an issue sits on the `isset($value)` of the save `@session`/`@context` compile
+     * (`if (isset($value)) { $__sessionPrevious[] = $value; }`, CompilesSessions/CompilesContexts),
+     * which Psalm judges against whatever `$value` the author has in scope (#1724). The statement
+     * must be absent from the template, so an author who writes it keeps the finding; in that
+     * template every compiled save keeps it too.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedValueSave(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+        $ifLength = \strlen('if (');
+
+        // The statement must open exactly where the selection starts, less its `if (`.
+        if (
+            !$selection instanceof ShadowSelection
+            || $selection->start < $ifLength
+            || \preg_match('/\Gif \(isset\(\$value\)\) \{ \$__(?:session|context)Previous\[\] = \$value; \}/', $selection->snippet, $save, 0, $selection->start - $ifLength) !== 1
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($save[0], $target->templateSource, $target->markerPrefix());
     }
 
     /**
