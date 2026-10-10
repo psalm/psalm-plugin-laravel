@@ -33,7 +33,7 @@ final class ShadowEntry
     ) {}
 
     /**
-     * Whether `$this`/`self::` in the view is a proven runtime Error: the prelude copied a class
+     * Whether `$this` in the view is a proven runtime Error: the prelude copied a class
      * component's render() data, so Laravel evaluates the view inside a `static` closure
      * (Filesystem::getRequire()). Never with Livewire installed: its ExtendedCompilerEngine binds
      * `$this` for every view evaluated while one of its components renders, nested ones included.

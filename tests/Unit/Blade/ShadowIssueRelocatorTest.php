@@ -1156,16 +1156,16 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     /**
      * #1804: a view a class component's render() renders is evaluated in a `static` closure, so
-     * `$this`/`self::` in it is a runtime Error and keeps reporting; the drops above stay for
-     * every other view (the two tests above, whose maps carry no render data).
+     * `$this` in it is a runtime Error and keeps reporting; the drop above stays for every other
+     * view. `self::` does not: the static closure keeps Filesystem's class scope, so it resolves.
      */
     #[Test]
-    public function this_and_self_keep_reporting_in_a_class_component_view_without_livewire(): void
+    public function this_keeps_reporting_in_a_class_component_view_without_livewire_and_self_stays_dropped(): void
     {
         $entry = $this->entry([2 => ShadowEntry::RENDER_DATA_LINE, 9 => 3]);
 
         $this->assertInstanceOf(InvalidScope::class, $this->relocate(new InvalidScope('Use of $this in non-class context', $this->shadowLocation(9)), $entry, livewireInstalled: false));
-        $this->assertInstanceOf(NonStaticSelfCall::class, $this->relocate(new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9)), $entry, livewireInstalled: false));
+        $this->assertFalse($this->relocate(new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9)), $entry, livewireInstalled: false));
     }
 
     /** Livewire binds `$this` for any view rendered inside one of its components, nested class component views included. */
