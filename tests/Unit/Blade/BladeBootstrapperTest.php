@@ -540,6 +540,25 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
+     * A raw docblock is already in the body, where Psalm reads it itself: it is a contract for the
+     * call-site checks, but emitting it into the prelude too would declare the name twice.
+     */
+    #[Test]
+    public function a_raw_var_contract_is_not_emitted_into_the_prelude_on_fresh_or_warm_runs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<?php /** @var \\App\\Models\\User \$user */ ?>\n<p>{{ \$user->name }}</p>\n");
+
+        foreach ([new RecordingShadowRegistrar(), new RecordingShadowRegistrar()] as $registrar) {
+            $this->bootstrapper($this->app(), $registrar)->boot();
+
+            $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
+            $this->assertStringNotContainsString("/** @var \\App\\Models\\User \$user */;", $shadow);
+            $this->assertSame(1, \substr_count($shadow, '@var \\App\\Models\\User $user'), 'the raw docblock itself, once');
+            $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+        }
+    }
+
+    /**
      * @return iterable<string, array{string, string}>
      */
     public static function untypedContracts(): iterable

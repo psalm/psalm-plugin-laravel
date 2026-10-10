@@ -247,6 +247,15 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function recognises_a_declaration_followed_by_a_description_naming_another_variable(): void
+    {
+        $source = "{{-- @var string \$title The title above \$page --}}\n<p>x</p>\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['title' => 'string']));
+        $this->assertNotNull(TemplateAnnotator::annotate($source, ['page' => 'string']), '`$page` is description, not a declaration');
+    }
+
+    #[Test]
     public function recognises_a_raw_php_declaration_whose_type_contains_a_variable(): void
     {
         $source = "<?php /** @var Closure(Foo \$f): Bar \$callback */ ?>\n<p>x</p>\n";

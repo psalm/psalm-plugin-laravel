@@ -179,6 +179,10 @@ final class ContractParser
      * `$cb`, not `$f`). Null when it does not read that way: no name, a name-first `@var $x T`,
      * unbalanced brackets.
      *
+     * `$lenient` is for a Blade comment, which has no description convention and whose broken type
+     * (`array<int $x`) must still reach the call-site and prelude checks to be reported: a line the
+     * splitter cannot read falls back to binding its last `$name`.
+     *
      * Public because {@see Annotate\TemplateAnnotator} must bind the same name the contract does:
      * one that read it differently would append a duplicate declaration for it, forever.
      *
@@ -186,19 +190,25 @@ final class ContractParser
      *
      * @psalm-pure
      */
-    public static function splitVar(string $declaration): ?array
+    public static function splitVar(string $declaration, bool $lenient = false): ?array
     {
+        $declaration = \trim($declaration);
+
         try {
-            $parts = CommentAnalyzer::splitDocLine(\trim($declaration));
+            $parts = CommentAnalyzer::splitDocLine($declaration);
         } catch (\Throwable) {
-            return null;
+            $parts = [$declaration];
         }
 
-        if (!isset($parts[1]) || \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) !== 1) {
-            return null;
+        if (\count($parts) > 1 && \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) === 1) {
+            return [$name[1], $parts[0]];
         }
 
-        return [$name[1], $parts[0]];
+        if ($lenient && \preg_match('/^(.+)\s+\$(' . self::IDENTIFIER . ')\z/', $declaration, $last) === 1) {
+            return [$last[2], \rtrim($last[1])];
+        }
+
+        return null;
     }
 
     /**
@@ -318,7 +328,7 @@ final class ContractParser
 
             $inner = \substr($text, 4, -4);
 
-            $declared = \preg_match(self::VAR_PATTERN, $inner, $matches) === 1 ? self::splitVar($matches[1]) : null;
+            $declared = \preg_match(self::VAR_PATTERN, $inner, $matches) === 1 ? self::splitVar($matches[1], true) : null;
 
             if ($declared !== null) {
                 $line = 1 + SourceLines::breaksIn($source, 0, $offset);

@@ -598,7 +598,7 @@ final class ContractParserTest extends TestCase
     #[Test]
     public function reads_a_declaration_with_a_non_ascii_variable_name(): void
     {
-        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$men\u{00fc} --}}\n", '');
+        $contract = (new ContractParser())->parseDeclarations("{{-- @var string \$men\u{00fc} --}}\n");
 
         $this->assertArrayHasKey("men\u{00fc}", $contract->vars);
     }
@@ -718,11 +718,29 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function declarations_only_walks_the_body_to_filter_raw_vars(): void
+    public function raw_declarations_are_added_after_the_fact_and_marked_raw(): void
     {
-        $source = "@foreach (\$rows as \$row)\n<?php /** @var Row \$row */ ?>\n@endforeach\n<?php /** @var string \$title */ ?>\n";
-        $contract = $this->parser->parseDeclarations($source, $this->compiler->compileString($source));
+        $source = "{{-- @var int \$n --}}\n@foreach (\$rows as \$row)\n<?php /** @var Row \$row */ ?>\n@endforeach\n<?php /** @var string \$title */ ?>\n";
+        $declarations = $this->parser->parseDeclarations($source);
 
-        $this->assertSame(['title'], \array_keys($contract->vars));
+        $this->assertSame(['n'], \array_keys($declarations->vars), 'the source-only half sees Blade comments alone');
+
+        $contract = $this->parser->withRawDeclarations($declarations, $source, $this->compiler->compileString($source));
+
+        $this->assertSame(['n', 'title'], \array_keys($contract->vars));
+        $this->assertFalse($contract->vars['n']->raw);
+        $this->assertTrue($contract->vars['title']->raw);
+    }
+
+    #[Test]
+    public function a_blade_comment_declaration_binds_the_first_name_after_its_type(): void
+    {
+        $contract = $this->parser->parseDeclarations(
+            "{{-- @var string \$title The title shown above \$page --}}\n{{-- @var Closure(Foo \$f): Bar \$cb Called with \$x --}}\n",
+        );
+
+        $this->assertSame(['title', 'cb'], \array_keys($contract->vars));
+        $this->assertSame('string', $contract->vars['title']->typeString);
+        $this->assertSame('Closure(Foo $f): Bar', $contract->vars['cb']->typeString);
     }
 }
