@@ -251,8 +251,8 @@ final class ShadowIssueRelocator
         // gated, or a `@props` view with a nested tag keeps reporting the inferred-branch half.
         //
         // Gated on the MESSAGE, not the class: `RedundantCondition` on an author's OWN
-        // `@if(isset($range))` under their own docblock must keep reporting, and a message-only
-        // gate cannot tell that apart from this shape by class alone.
+        // `@if(isset($range))` under their own `@php` docblock must keep reporting, and a
+        // message-only gate cannot tell that apart from this shape by class alone.
         //
         // `$component`, unlike `$attributes`/`$slot`, is never given a type by
         // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
@@ -365,6 +365,10 @@ final class ShadowIssueRelocator
             }
 
             if (self::isAmbientDocblockGuardName($issue->message, '__env')) {
+                return false;
+            }
+
+            if (self::isDeclaredVariableGuard($issue, $target)) {
                 return false;
             }
         }
@@ -733,6 +737,46 @@ final class ShadowIssueRelocator
     {
         return \preg_match('/^Docblock-defined type .+ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
             || \preg_match('/^Cannot resolve types for \$(?:' . $names . ') - docblock-defined type/', $message) === 1;
+    }
+
+    /**
+     * Whether an issue is the docblock-branch null finding on a `$x ?? …`, `$x ??= …` or
+     * `isset($x)` guard over a variable the template declares (a `{{-- @var --}}` contract or a raw
+     * `<?php` docblock, {@see ContractParser}). The guard is how a template marks a view variable
+     * optional, which a docblock type cannot say (#1697). The inferred-type wording is never
+     * matched, so a guard after the author reassigns the variable keeps reporting.
+     *
+     * The guard is looked for on the whole shadow line, not at the selection: an `isset()`
+     * ternary's contradiction selects its else arm. So a non-guard check on `$x` (`!is_null($x)`)
+     * is silenced too when the same line also guards `$x`, and a guard split across lines is not
+     * recognised. Trade-off: a genuinely redundant guard on a declared variable that is always
+     * passed, or that the template assigns under its own docblock, is silenced too.
+     */
+    private static function isDeclaredVariableGuard(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $id = ContractParser::IDENTIFIER;
+
+        if (
+            \preg_match('/^Docblock-defined type .+ for \$(' . $id . ') is never null\z/', $issue->message, $matches) !== 1
+            && \preg_match('/^Cannot resolve types for \$(' . $id . ') - docblock-defined type .+ does not contain null\z/', $issue->message, $matches) !== 1
+        ) {
+            return false;
+        }
+
+        $name = $matches[1];
+        $selection = ShadowSelection::of($issue->code_location);
+        // Both branches require `??` or `,`/`)` right after the name, which already ends it.
+        $var = '(?<![>$:])\$' . $name;
+
+        if (
+            !$selection instanceof ShadowSelection
+            || \preg_match('/' . $var . '\s*\?\?|\bisset\s*\((?:[^()]|\([^()]*\))*?(?<=[(,\s])' . $var . '\s*[,)]/', $selection->snippet) !== 1
+        ) {
+            return false;
+        }
+
+        return \in_array($name, ContractParser::rawDeclaredNames($target->templateSource), true)
+            || \array_key_exists($name, (new ContractParser())->parseDeclarations($target->templateSource)->vars);
     }
 
     /**
