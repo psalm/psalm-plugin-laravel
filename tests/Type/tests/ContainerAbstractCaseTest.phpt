@@ -13,13 +13,15 @@ function appHelperDoesNotMatchAliasClassCaseInsensitively(): mixed
     return $schema;
 }
 
-// A namespaced abstract keeps the lenient match: PHP builds `Illuminate\Validation\Rules\enum` as
-// `Enum` (unbound, constructor needs a scalar, so make() throws and the fallback applies).
+// A namespaced abstract keeps the lenient match and names the canonical class: PHP builds
+// `Illuminate\Validation\Rules\enum` as `Enum` (unbound, constructor needs a scalar, so make()
+// throws and the fallback applies).
 function appHelperKeepsMisCasedNamespacedClass(): object
 {
     $rule = app('Illuminate\Validation\Rules\enum');
-    /** @psalm-check-type-exact $rule = Illuminate\Validation\Rules\enum */
+    /** @psalm-trace $rule */
     return $rule;
 }
 ?>
 --EXPECTF--
+Trace on line %d: $rule: Illuminate\Validation\Rules\Enum

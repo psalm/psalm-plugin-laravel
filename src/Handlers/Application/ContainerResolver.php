@@ -157,7 +157,9 @@ final class ContainerResolver
 
         // An object's class is named only when Psalm has its storage: the container instantiated it,
         // but nothing guarantees Psalm scanned its file. Otherwise treat the resolution as failed.
-        if ($resolved !== null && $resolved[1] && !self::isKnownClass($codebase, $resolved[0])) {
+        $concreteClass = $resolved === null ? null : self::knownClassName($codebase, $resolved[0]);
+
+        if ($resolved !== null && $resolved[1] && $concreteClass === null) {
             $resolved = null;
         }
 
@@ -175,27 +177,23 @@ final class ContainerResolver
             // symmetrical with resolveFromClassString() (#750), which already returns
             // a TNamedObject for `class-string<Foo>` without touching the container.
             //
-            // isKnownClass() never autoloads (see there). Interfaces and traits stay mixed — we
+            // knownClassName() never autoloads (see there). Interfaces and traits stay mixed — we
             // never claim an unresolvable contract resolves to itself. We only ever return the
             // abstract itself, a supertype of whatever the runtime would build, so this cannot
             // introduce a false-positive on a member that genuinely exists.
-            if (self::isKnownClass($codebase, $abstract)) {
-                return new Union([
-                    new TNamedObject($abstract),
-                ]);
-            }
+            $abstractClass = self::knownClassName($codebase, $abstract);
 
-            return null;
+            return $abstractClass === null ? null : new Union([new TNamedObject($abstractClass)]);
         }
-
-        [$concrete, $isObject] = $resolved;
 
         // A binding can resolve to a class-name string (`fn () => Foo::class`) as well as to a path.
-        if ($isObject || self::isKnownClass($codebase, $concrete)) {
+        if ($concreteClass !== null) {
             return new Union([
-                new TNamedObject($concrete),
+                new TNamedObject($concreteClass),
             ]);
         }
+
+        $concrete = $resolved[0];
 
         // The likes of publicPath, which returns a literal string. Use
         // Type::getAtomicStringFromLiteral() rather than TLiteralString::make(): a binding can
@@ -209,7 +207,7 @@ final class ContainerResolver
     }
 
     /**
-     * A class (not an interface or trait) Psalm has storage for. Storage only, not `class_exists()`: a
+     * The canonical name of a class (not an interface or trait) Psalm has storage for, else null. Storage only, not `class_exists()`: a
      * class loaded at runtime (a `class_alias()` of an anonymous class, an unscannable named class) can
      * lack storage, and naming it reports UndefinedClass. Never autoloads: a class whose load raises a
      * deprecation would crash the run under Psalm's error handler, here where nothing catches it (#1652).
@@ -221,17 +219,17 @@ final class ContainerResolver
      *
      * @psalm-mutation-free
      */
-    private static function isKnownClass(Codebase $codebase, string $class): bool
+    private static function knownClassName(Codebase $codebase, string $class): ?string
     {
         $storage = ClassLineage::storage($codebase, $class);
 
         if (!$storage instanceof ClassLikeStorage || $storage->is_interface || $storage->is_trait) {
-            return false;
+            return null;
         }
 
         $class = \ltrim($class, '\\');
 
-        return \str_contains($class, '\\') || $storage->name === $class;
+        return \str_contains($class, '\\') || $storage->name === $class ? $storage->name : null;
     }
 
     /**
