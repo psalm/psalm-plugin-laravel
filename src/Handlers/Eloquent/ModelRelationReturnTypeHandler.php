@@ -163,6 +163,29 @@ final class ModelRelationReturnTypeHandler
         // is less specific than a declared `HasMany<Post, $this>` (LessSpecificReturnStatement).
         $bindingIsStatic = self::isStaticReceiver($source, $event->getStmt(), $bindingClass);
 
+        return self::relationType(
+            $source->getCodebase(),
+            $declaringClass,
+            $bindingClass,
+            $methodName,
+            $bindingIsStatic,
+        );
+    }
+
+    /**
+     * The type a call of the relation method `$methodName` returns when its receiver binds to
+     * `$bindingClass`, or null when the method is not a resolvable relation factory. Shared with
+     * {@see RelationCallbackParamsHandler}, which needs the Relation an eager-load constraint receives.
+     *
+     * @internal
+     */
+    public static function relationType(
+        Codebase $codebase,
+        string $declaringClass,
+        string $bindingClass,
+        string $methodName,
+        bool $bindingIsStatic,
+    ): ?Union {
         // Cache keyed by the (declaring, binding, static) tuple — the Union returned for
         // BaseUser::posts dispatched on User differs from BaseUser::posts dispatched
         // on AdminUser, since each binds a different TDeclaringModel.
@@ -171,8 +194,6 @@ final class ModelRelationReturnTypeHandler
         if (\array_key_exists($cacheKey, self::$unionCache)) {
             return self::$unionCache[$cacheKey];
         }
-
-        $codebase = $source->getCodebase();
 
         try {
             $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName, $bindingClass);

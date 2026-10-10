@@ -21,7 +21,7 @@ use Psalm\Type\Union;
  * checked via `exists()` before any dot-split, then dot segments are walked one at a
  * time (`Illuminate\Support\Arr::get()`).
  *
- * `Arr::get()` is not stubbed (`stubs/common/Support/Arr.phpstub` is an empty class),
+ * `Arr::get()` is not stubbed (no `Arr.phpstub` under `stubs/` declares it),
  * so without this handler Psalm falls back to reflection's plain `@return mixed`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1387

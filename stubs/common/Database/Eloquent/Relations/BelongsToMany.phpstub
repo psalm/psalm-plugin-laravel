@@ -287,6 +287,49 @@ class BelongsToMany extends Relation
     public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null) {}
 
     /**
+     * Laravel hydrates the pivot relation on each chunk before invoking the callback.
+     *
+     * @param  int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>, int): mixed  $callback
+     * @return bool
+     */
+    public function chunk($count, callable $callback) {}
+
+    /**
+     * @param  int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>, int): mixed  $callback
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function chunkById($count, callable $callback, $column = null, $alias = null) {}
+
+    /**
+     * @param  int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>, int): mixed  $callback
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function chunkByIdDesc($count, callable $callback, $column = null, $alias = null) {}
+
+    /**
+     * @param  callable(TRelatedModel&object{pivot: TPivotModel}, int): mixed  $callback
+     * @param  int  $count
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function eachById(callable $callback, $count = 1000, $column = null, $alias = null) {}
+
+    /**
+     * @param  callable(TRelatedModel&object{pivot: TPivotModel}, int): mixed  $callback
+     * @param  int  $count
+     * @return bool
+     */
+    public function each(callable $callback, $count = 1000) {}
+
+    /**
      * Save an array of new models and attach them to the parent model.
      *
      * Laravel bounds TContainer by Collection<array-key, TRelatedModel>, but Collection's TKey

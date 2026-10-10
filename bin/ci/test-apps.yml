@@ -51,10 +51,9 @@ groups:
   livewire: Livewire components in the analysed code
   inertia: Requires inertiajs/inertia-laravel
   filament: Filament itself and apps built on it
-  # Both members lock laravel/ai v0.11.2, which is outside the plugin's
-  # >=1.0.0 gate, so they currently exercise the integration being OFF, not its
-  # stubs. Real-app coverage of the 1.x stubs is the type_tests_laravel_ai legs
-  # in tests.yml until an app pinning laravel/ai 1.x is added here.
+  # unopim, agent-fleet and relaticle lock laravel/ai 1.x, inside the plugin's
+  # >=1.0.0 gate, so they exercise the integration's stubs and handlers.
+  # m3u-editor still locks v0.11.2 and covers the integration being OFF.
   ai: Apps carrying laravel/ai, whether or not the locked version is inside LaravelAiIntegration::CONSTRAINT
   blade: Apps and packages with more than 100 Blade templates
   lib: Packages and monorepos rather than full apps
@@ -69,6 +68,11 @@ groups:
 flags:
   "--blade": Analyse Blade templates, overriding psalm.xml
   "--no-blade": Skip Blade templates, overriding psalm.xml
+  "--find-dead-code": Report unused code, overriding psalm.xml
+  "--find-unused-psalm-suppress": Report unused @psalm-suppress, overriding psalm.xml
+  "--find-unused-variables": Report unused variables and params, overriding psalm.xml
+  "--experimental": Enable experimental opt-in rules, overriding psalm.xml
+  "--no-migrations": Disable migration-based column inference, columnFallback=none
 
 apps:
   - name: monica
@@ -197,7 +201,7 @@ apps:
 
   - name: unopim
     repo: https://github.com/unopim/unopim.git
-    ref: 6a35666
+    ref: ab75e4b
     php: "8.4"
     groups: [ai, octane, blade, pest, laravel-13, sanctum]
     # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
@@ -228,7 +232,7 @@ apps:
     groups: [ai, livewire, phpunit, laravel-13, sanctum]
     # Agent-fleet manager: ~70 files import Laravel\Ai, so it exercises agents,
     # tools and streaming rather than a single prompt call. Its `^1.0` resolves
-    # inside the plugin's gate, unlike the 0.11-pinned apps above.
+    # inside the plugin's gate, unlike m3u-editor's 0.11 lock.
     # `artisan boost:update` runs in post-update-cmd and exits 1 without the
     # project's own config; the whole hook only publishes assets, which a
     # type-only analysis never reads.
