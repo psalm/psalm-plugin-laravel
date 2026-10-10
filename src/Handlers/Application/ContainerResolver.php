@@ -40,7 +40,10 @@ final class ContainerResolver
      * them as stubs.
      *
      * A binding closure can register further bindings while it runs, so the keys are re-read until a
-     * round visits nothing new; each abstract is still resolved once.
+     * round visits nothing new; each abstract is still resolved once within the pass.
+     *
+     * The results are discarded afterwards: a later binding's closure can rebind an abstract the pass
+     * already resolved, so analysis resolves from the live container, as it did before this pass existed.
      *
      * `store_failure: false`: a class Psalm cannot locate is not recorded as missing.
      */
@@ -48,27 +51,31 @@ final class ContainerResolver
     {
         $visited = [];
 
-        do {
-            $foundNew = false;
+        try {
+            do {
+                $foundNew = false;
 
-            foreach (\array_keys(ApplicationProvider::getApp()->getBindings()) as $abstract) {
-                $abstract = (string) $abstract;
+                foreach (\array_keys(ApplicationProvider::getApp()->getBindings()) as $abstract) {
+                    $abstract = (string) $abstract;
 
-                if (isset($visited[$abstract])) {
-                    continue;
+                    if (isset($visited[$abstract])) {
+                        continue;
+                    }
+
+                    $visited[$abstract] = true;
+                    $foundNew = true;
+                    $resolved = self::resolveFromApplicationContainer($abstract);
+
+                    if ($resolved === null || !$resolved[1] || \str_contains($resolved[0], '@anonymous')) {
+                        continue;
+                    }
+
+                    $codebase->queueClassLikeForScanning($resolved[0], store_failure: false);
                 }
-
-                $visited[$abstract] = true;
-                $foundNew = true;
-                $resolved = self::resolveFromApplicationContainer($abstract);
-
-                if ($resolved === null || !$resolved[1] || \str_contains($resolved[0], '@anonymous')) {
-                    continue;
-                }
-
-                $codebase->queueClassLikeForScanning($resolved[0], store_failure: false);
-            }
-        } while ($foundNew);
+            } while ($foundNew);
+        } finally {
+            self::reset();
+        }
     }
 
     /**
