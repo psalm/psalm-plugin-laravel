@@ -1072,6 +1072,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
         $this->assertStringContainsString('compiler environment', $this->progress->warningText());
+        $this->assertStringContainsString("Cause: directive 'shout' (internal function", $this->progress->warningText());
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1088,5 +1089,32 @@ final class BladeBootstrapperTest extends TestCase
             (string) \file_get_contents($second->analyzedShadows[0]),
             'an untrustworthy environment must force a recompile even though nothing else changed',
         );
+    }
+
+    /**
+     * #1693: the warning must name the input that disabled the cache, but a package registering
+     * many such callbacks must not flood it.
+     */
+    #[Test]
+    public function the_untrusted_environment_warning_names_at_most_three_inputs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $compiler->directive($name, 'strtoupper');
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $text = $this->progress->warningText();
+        $this->assertStringContainsString("directive 'a'", $text);
+        $this->assertStringContainsString("directive 'c'", $text);
+        $this->assertStringNotContainsString("directive 'd'", $text);
+        $this->assertStringContainsString('and 2 more', $text);
     }
 }

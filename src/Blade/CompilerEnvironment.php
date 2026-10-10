@@ -57,8 +57,9 @@ use Illuminate\View\Compilers\BladeCompiler;
 final class CompilerEnvironment
 {
     /**
-     * @return array{0: string, 1: bool} the environment hash, and whether every input that fed it
-     *         could be resolved deterministically
+     * @return array{0: string, 1: bool, 2: list<string>} the environment hash, whether every input
+     *         that fed it could be resolved deterministically, and the callable inputs that could not
+     *         (e.g. `directive 'ray' (closure bound to Foo)`), for the user-facing warning
      */
     public static function describe(BladeCompiler $compiler): array
     {
@@ -66,15 +67,17 @@ final class CompilerEnvironment
             $trustworthy = true;
             /** @var array<string, string> $fileHashes path => sha1_file(), cached within this call */
             $fileHashes = [];
+            /** @var list<string> $reasons */
+            $reasons = [];
 
             $descriptor = [
                 'class' => self::describeCompilerClass($compiler, $trustworthy),
-                'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), $compiler, $fileHashes, $trustworthy),
-                'extensions' => self::describeCallableMap($compiler->getExtensions(), $compiler, $fileHashes, $trustworthy),
-                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), $compiler, $fileHashes, $trustworthy),
-                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), $compiler, $fileHashes, $trustworthy),
+                'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), 'directive', $compiler, $fileHashes, $trustworthy, $reasons),
+                'extensions' => self::describeCallableMap($compiler->getExtensions(), 'extension', $compiler, $fileHashes, $trustworthy, $reasons),
+                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $trustworthy), 'condition', $compiler, $fileHashes, $trustworthy, $reasons),
+                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $trustworthy), 'precompiler', $compiler, $fileHashes, $trustworthy, $reasons),
+                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), 'string preparation callback', $compiler, $fileHashes, $trustworthy, $reasons),
+                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), 'echo handler', $compiler, $fileHashes, $trustworthy, $reasons),
                 'echoFormat' => self::describeValue(self::readProperty($compiler, 'echoFormat', $trustworthy), $trustworthy),
                 'encodingOptions' => self::describeValue(self::readProperty($compiler, 'encodingOptions', $trustworthy), $trustworthy),
                 'compilesComponentTags' => self::describeValue(self::readProperty($compiler, 'compilesComponentTags', $trustworthy), $trustworthy),
@@ -84,9 +87,9 @@ final class CompilerEnvironment
                 'anonymousComponentNamespaces' => self::describeValue($compiler->getAnonymousComponentNamespaces(), $trustworthy),
             ];
 
-            return [\hash('xxh128', \json_encode($descriptor, \JSON_THROW_ON_ERROR)), $trustworthy];
+            return [\hash('xxh128', \json_encode($descriptor, \JSON_THROW_ON_ERROR)), $trustworthy, $reasons];
         } catch (\Throwable) {
-            return ['', false];
+            return ['', false, []];
         }
     }
 
@@ -151,18 +154,25 @@ final class CompilerEnvironment
     /**
      * @param array<array-key, mixed> $map
      * @param array<string, string>   $fileHashes
+     * @param list<string>            $reasons    appended with one entry per entry of `$map` that cannot be trusted
      *
      * @return list<array{0: array-key, 1: array}> a LIST of `[key, description]` pairs rather than
      *         a re-keyed array: PHP would otherwise coalesce an int key and its string form
      *         (`5` and `'5'`) into the same slot, silently dropping one callable's descriptor.
      */
-    private static function describeCallableMap(array $map, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): array
+    private static function describeCallableMap(array $map, string $kind, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy, array &$reasons): array
     {
         $entries = [];
 
         // Keys, not values: a foreach over untyped compiler data binds a mixed local per element.
         foreach (\array_keys($map) as $key) {
-            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $trustworthy)];
+            $distrust = null;
+            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $distrust)];
+
+            if ($distrust !== null) {
+                $trustworthy = false;
+                $reasons[] = "{$kind} '{$key}' ({$distrust})";
+            }
         }
 
         return $entries;
@@ -187,13 +197,14 @@ final class CompilerEnvironment
      * scope are folded in alongside it.
      *
      * @param array<string, string> $fileHashes
+     * @param ?string               $distrust   set to why the callable cannot be trusted, when it cannot
      *
      * @return array{type: string, file?: string, hash?: string, name?: string, startLine?: int|false, endLine?: int|false, scope?: ?string, static?: array}
      */
-    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, bool &$trustworthy): array
+    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, ?string &$distrust): array
     {
         if (!\is_callable($callable)) {
-            $trustworthy = false;
+            $distrust = 'not callable';
 
             return ['type' => 'unresolvable'];
         }
@@ -202,7 +213,7 @@ final class CompilerEnvironment
             $closure = $callable instanceof \Closure ? $callable : \Closure::fromCallable($callable);
             $reflection = new \ReflectionFunction($closure);
         } catch (\Throwable) {
-            $trustworthy = false;
+            $distrust = 'cannot be reflected';
 
             return ['type' => 'unresolvable'];
         }
@@ -210,7 +221,7 @@ final class CompilerEnvironment
         $boundThis = $reflection->getClosureThis();
 
         if ($boundThis !== null && $boundThis !== $compiler && !$boundThis instanceof ServiceProvider) {
-            $trustworthy = false;
+            $distrust = ($callable instanceof \Closure ? 'closure' : 'callable') . ' bound to ' . self::normalizeClassName($boundThis::class);
 
             return ['type' => 'unresolvable'];
         }
@@ -220,7 +231,7 @@ final class CompilerEnvironment
         // Internal functions return `false`; an `eval()`'d closure returns a string ending in
         // "eval()'d code" rather than a real path — neither can be hashed as a file.
         if ($file === false || \str_contains($file, "eval()'d code")) {
-            $trustworthy = false;
+            $distrust = "internal function or eval()'d code";
 
             return ['type' => 'unresolvable'];
         }
@@ -229,7 +240,7 @@ final class CompilerEnvironment
             $hash = @\sha1_file($file);
 
             if ($hash === false) {
-                $trustworthy = false;
+                $distrust = 'source file unreadable';
 
                 return ['type' => 'unresolvable'];
             }
@@ -240,9 +251,16 @@ final class CompilerEnvironment
         try {
             $scopeClass = $reflection->getClosureScopeClass()?->getName();
         } catch (\Throwable) {
-            $trustworthy = false;
+            $distrust = 'scope class unresolvable';
 
             return ['type' => 'unresolvable'];
+        }
+
+        $staticVariablesTrusted = true;
+        $static = self::describeValue($reflection->getStaticVariables(), $staticVariablesTrusted);
+
+        if (!$staticVariablesTrusted) {
+            $distrust = 'captures an object or closure with use()';
         }
 
         return [
@@ -253,7 +271,7 @@ final class CompilerEnvironment
             'startLine' => $reflection->getStartLine(),
             'endLine' => $reflection->getEndLine(),
             'scope' => $scopeClass !== null ? self::normalizeClassName($scopeClass) : null,
-            'static' => self::describeValue($reflection->getStaticVariables(), $trustworthy),
+            'static' => $static,
         ];
     }
 

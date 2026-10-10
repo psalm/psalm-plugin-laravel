@@ -139,10 +139,27 @@ final class CompilerEnvironmentTest extends TestCase
         $compiler = $this->compiler();
         (new ProviderBoundDirectives(new Container()))->registerOn($compiler);
 
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
+        [$hash, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
 
         $this->assertTrue($trusted);
+        $this->assertSame([], $reasons);
         $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * The provider exemption is not "any bound object": the reason names the directive and the
+     * bound class so the user can find the input that disabled the cache.
+     */
+    #[Test]
+    public function a_directive_bound_to_another_object_is_untrusted_and_named(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', new MarkerDirective('V1'));
+
+        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
+        $this->assertSame(["directive 'mine' (callable bound to " . MarkerDirective::class . ')'], $reasons);
     }
 
     /**
