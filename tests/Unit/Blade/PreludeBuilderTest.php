@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node\Stmt\Nop;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -387,5 +389,30 @@ final class PreludeBuilderTest extends TestCase
 
         $this->assertSame(1, \substr_count($prelude, '<?php'));
         $this->assertSame(1, \substr_count($prelude, '?>'));
+    }
+
+    /**
+     * #1804: the prelude's closing tag parses to one `Stmt\Nop` that carries every `@var` docblock,
+     * on the prelude's last line (mapped to template line 0), whatever the compiled output starts
+     * with. ComponentViewSeedHandler seeds on it, after all of them are applied.
+     */
+    #[Test]
+    public function its_closing_tag_is_one_nop_carrying_every_docblock(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo $title, $body; ?>', ['label' => 'string'], '');
+        $docblocks = \substr_count($prelude, '/** @var ');
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+
+        $this->assertSame($docblocks + 2, \substr_count($prelude, "\n"));
+
+        foreach (['<div></div>', '<?php echo $title; ?>'] as $compiled) {
+            $stmts = $parser->parse($prelude . $compiled);
+
+            $this->assertIsArray($stmts);
+            $this->assertInstanceOf(Nop::class, $stmts[0]);
+            $this->assertCount($docblocks, $stmts[0]->getComments());
+            $this->assertSame($docblocks + 2, $stmts[0]->getStartLine());
+            $this->assertNotInstanceOf(Nop::class, $stmts[1] ?? null);
+        }
     }
 }

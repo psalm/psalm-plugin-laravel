@@ -242,6 +242,7 @@ final class Plugin implements PluginEntryPointInterface
         Blade\Annotate\AnnotationWriter::reset();
         Blade\BladeIssueRemapHandler::reset();
         Blade\ContractRegistry::reset();
+        Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
         Blade\ShadowRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
@@ -792,6 +793,10 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
             require_once __DIR__ . '/Blade/RuntimeHelperVisibility.php';
             $registration->registerHooksFromClass(Blade\RuntimeHelperVisibility::class);
+            // Types a class component's own view from its class (#1804). Needs the boot's shadow and
+            // tag facts, hence the same gate.
+            require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
+            $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports

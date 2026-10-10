@@ -72,6 +72,11 @@ final class BladeBootstrapper
     /** @var array<string, true> classes the contract types emitted into preludes name, see {@see bodyTypes()} */
     private array $bodyClassNames = [];
 
+    /** @var array<string, true> lowercased classes a compiled `<x-…>` tag renders, see {@see ComponentTagCollector} */
+    private array $tagRenderedClasses = [];
+
+    /** @var array<string, true> literal named-slot names any compiled template passes */
+    private array $namedSlots = [];
 
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
@@ -176,7 +181,8 @@ final class BladeBootstrapper
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
-        // result, so a warm-manifest run (which skips ShadowCompiler) is covered too.
+        // result, so a warm-manifest run (which skips ShadowCompiler) is covered too. The same
+        // tokens feed the class-component scan (#1804).
         $collector = new ClassLiteralCollector();
         $literalCandidates = [];
 
@@ -187,8 +193,20 @@ final class BladeBootstrapper
                 continue;
             }
 
-            foreach ($collector->collectFromSource($shadowSource) as $candidate) {
+            $tokens = \token_get_all($shadowSource);
+
+            foreach ($collector->collectFromTokens($tokens) as $candidate) {
                 $literalCandidates[$candidate] = true;
+            }
+
+            [$tagClasses, $slotNames] = ComponentTagCollector::collect($tokens);
+
+            foreach ($tagClasses as $tagClass) {
+                $this->tagRenderedClasses[$tagClass] = true;
+            }
+
+            foreach ($slotNames as $slotName) {
+                $this->namedSlots[$slotName] = true;
             }
         }
 
@@ -232,6 +250,7 @@ final class BladeBootstrapper
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
 
+        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots);
     }
 
     /**
