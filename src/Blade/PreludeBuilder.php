@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use PhpParser\ErrorHandler\Collecting;
 use PhpParser\Node;
+use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
@@ -208,12 +209,32 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $written = [];
 
-            /**
-             * @psalm-external-mutation-free
-             */
+            /** @var array<string, true> names first mentioned as a file-scope `$x = …` whose value never reads `$x` */
+            public array $assignedFirst = [];
+
+            private int $functionDepth = 0;
+
             #[\Override]
             public function enterNode(Node $node): null
             {
+                if ($node instanceof Node\FunctionLike || $node instanceof Node\Stmt\ClassLike) {
+                    $this->functionDepth++;
+                }
+
+                // Checked before the target itself is recorded as found: Assign is entered first.
+                if ($this->functionDepth === 0
+                    && $node instanceof Node\Expr\Assign
+                    && $node->var instanceof Node\Expr\Variable
+                    && \is_string($name = $node->var->name)
+                    && !isset($this->found[$name])
+                    && !(new NodeFinder())->findFirst(
+                        $node->expr,
+                        static fn(Node $read): bool => $read instanceof Node\Expr\Variable && $read->name === $name,
+                    ) instanceof Node
+                ) {
+                    $this->assignedFirst[$name] = true;
+                }
+
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
                     $this->found[$node->name] = true;
                 }
@@ -231,6 +252,19 @@ final class PreludeBuilder
                     if ($node->keyVar instanceof \PhpParser\Node\Expr) {
                         $this->markWritten($node->keyVar);
                     }
+                }
+
+                return null;
+            }
+
+            /**
+             * @psalm-external-mutation-free
+             */
+            #[\Override]
+            public function leaveNode(Node $node): null
+            {
+                if ($node instanceof Node\FunctionLike || $node instanceof Node\Stmt\ClassLike) {
+                    $this->functionDepth--;
                 }
 
                 return null;
@@ -273,6 +307,15 @@ final class PreludeBuilder
 
         foreach (\array_keys($visitor->found) as $name) {
             if (isset($declared[$name])) {
+                continue;
+            }
+
+            // A local the template creates itself is not view data. Declaring it ahead of its own
+            // assignment is not harmless: Psalm then drops the correlation between a flag and the
+            // value it was derived from (`$has = $x !== null; … @if ($has) $x->y`) after the next
+            // `if`. The cost: a branch-only first assignment of a name that ALSO arrives as view
+            // data now reports PossiblyUndefinedGlobalVariable on the read after the branch.
+            if (isset($visitor->assignedFirst[$name])) {
                 continue;
             }
 

@@ -129,6 +129,8 @@ Only markers Blade actually compiles count. One inside a `{{-- --}}` comment or 
 
 Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so a typo in a variable name will not be caught this way.
 
+A local the template creates itself is the exception: a name whose first mention is a plain `$x = ...` assignment (in `@php` or raw PHP, outside any closure or function) that does not read `$x` is left undeclared, so Psalm types it from the assignment alone. A `@var mixed` declared ahead of it would make Psalm forget that a flag like `$has = $x !== null` guards `$x` once it reaches the next `@if`. Consequence: a template that assigns such a name in only one branch and reads it after the branch gets `PossiblyUndefinedGlobalVariable`, even if a caller also passes that name as view data; read the incoming value first (`$x = $x ?? 'default'`) to keep it declared.
+
 ## What gets reported
 
 One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).

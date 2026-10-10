@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -220,6 +221,37 @@ final class PreludeBuilderTest extends TestCase
         $prelude = (new PreludeBuilder())->build('<?php echo $foo; ?>', [], '');
 
         $this->assertStringContainsString('@var mixed $foo */', $prelude);
+    }
+
+    #[Test]
+    public function a_local_first_seen_as_a_plain_assignment_is_not_declared(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php if ($c) { $flag = $item !== null; } echo $flag; ?>', [], '');
+
+        $this->assertStringNotContainsString('$flag */', $prelude);
+        $this->assertStringContainsString('@var mixed $item */', $prelude);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function stillDeclaredAssignments(): iterable
+    {
+        yield 'the assignment reads its own target' => ['<?php $title = strtoupper($title); ?>'];
+        yield 'a read comes first' => ['<?php echo $title; $title = 1; ?>'];
+        yield 'the first mention is inside a closure' => ['<?php $f = function () { $title = 1; }; $title = 2; ?>'];
+        yield 'the first mention is a closure use' => ['<?php $f = function () use ($title) {}; $title = 2; ?>'];
+        yield 'the first write is not a plain assignment' => ['<?php $title .= "x"; ?>'];
+        yield 'the first write is a foreach target' => ['<?php foreach ($rows as $title) {} ?>'];
+    }
+
+    #[Test]
+    #[DataProvider('stillDeclaredAssignments')]
+    public function a_name_whose_first_mention_is_not_a_fresh_file_scope_assignment_stays_declared(string $compiled): void
+    {
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringContainsString('@var mixed $title */', $prelude);
     }
 
     /**

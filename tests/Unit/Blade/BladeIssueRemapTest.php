@@ -1174,6 +1174,55 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * A template-assigned local is not view data: declaring it `@var mixed` ahead of its own
+     * assignment makes Psalm drop the `$hasAction` <-> `$action !== null` correlation after the
+     * next `if`, so the guarded `$action->attributes` read reported PossiblyNullPropertyFetch.
+     */
+    #[Test]
+    public function a_template_assigned_flag_keeps_guarding_the_nullable_it_was_derived_from(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/assigned-flag-guard.blade.php';
+
+        $this->assertStringNotContainsString('$hasAction */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** An assignment that reads its own target needs the incoming value declared. */
+    #[Test]
+    public function a_self_reading_assignment_keeps_its_mixed_declaration(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/self-reassigned.blade.php';
+
+        $this->assertStringContainsString('@var mixed $title */', $this->shadowSourceFor($template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedGlobalVariable', $template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedVariable', $template));
+    }
+
+    /**
+     * A local assigned in one branch only and read after it reports possibly undefined: the
+     * template's own first mention of `$label` is that assignment, so it is left undeclared. A
+     * caller that also passes `$label` as view data hits the same finding (documented trade-off).
+     */
+    #[Test]
+    public function a_conditionally_assigned_local_read_after_the_branch_reports_possibly_undefined(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/conditional-assign.blade.php';
+
+        $this->assertSame(
+            [4],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1554: a bound attribute followed by ANOTHER attribute on the same tag compiles to
      * `'value' => ,'label' => ...` (the `'value' => ]` shape #1553 pinned is the OTHER position: an
      * empty bound attribute with nothing after it on that tag). Both are genuine `ParseError`s
