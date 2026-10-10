@@ -16,10 +16,15 @@ use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
- * Treats `json_encode()` with a literal `JSON_HEX_TAG` flag as html-escaping (Blade `@json` compiles to
+ * Treats `json_encode()` with literal HEX flags as escaping (Blade `@json` compiles to
  * `json_encode($x, 15, 512)`). Core does this for `htmlspecialchars()` flags in `HtmlFunctionTainter`,
  * but has no `json_encode()` branch. Delete this handler once it has one.
  *
+ * - `JSON_HEX_TAG` removes html. `JSON_HEX_APOS` plus `JSON_HEX_QUOT` removes has_quotes; without
+ *   HEX_APOS a `'` stays raw, without HEX_QUOT a `"` becomes `\"` (a backslash escapes nothing in HTML).
+ * - Known gap: the encoder's own `"` delimiters still close a double-quoted attribute
+ *   (`data-x="@json($v)"`). Accepted because such markup is visibly broken for every value, so it does
+ *   not survive manual testing; single-quoted attributes and `<script>` are safe with these flags.
  * - Flags are the literal node type, AND-ed across a literal union. Anything else declines.
  * - The removal lands on the stub's own argument-to-return edge, which is per call only while Psalm
  *   specializes `json_encode()` per call site. A project stub re-declaring it without specialization
@@ -65,14 +70,19 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
             }
         }
 
-        if (!$flagsArg instanceof Arg || (self::provenFlagBits($source, $flagsArg) & \JSON_HEX_TAG) === 0) {
+        $flags = $flagsArg instanceof Arg ? self::provenFlagBits($source, $flagsArg) : 0;
+        $quoteFlags = \JSON_HEX_APOS | \JSON_HEX_QUOT;
+        $removed = (($flags & \JSON_HEX_TAG) !== 0 ? TaintKind::INPUT_HTML : 0)
+            | (($flags & $quoteFlags) === $quoteFlags ? TaintKind::INPUT_HAS_QUOTES : 0);
+
+        if ($removed === 0) {
             return 0;
         }
 
         // Same test as TaintFlowGraph::isCallSpecialized(). The core stub is always loaded, so storage exists.
         $storage = $codebase->functions->getStorage($source, 'json_encode');
 
-        return $storage->specialize_call || $storage->builtin ? TaintKind::INPUT_HTML : 0;
+        return $storage->specialize_call || $storage->builtin ? $removed : 0;
     }
 
     /** Mirrors FunctionCallAnalyzer: an unqualified, unaliased name falls back to the global function. */

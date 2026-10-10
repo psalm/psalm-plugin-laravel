@@ -67,8 +67,6 @@ namespace Relative {
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML

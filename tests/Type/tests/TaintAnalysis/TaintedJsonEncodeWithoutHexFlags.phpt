@@ -38,11 +38,11 @@ function spreadWithNamedFlags(\Illuminate\Http\Request $request): void {
     echo json_encode(...$args, flags: 15);
 }
 
-/** Every possible value must carry HEX_TAG: 14 does not, so the union proves nothing. */
+/** Every possible value must carry the flag: 0 does not, so the union proves nothing. */
 function unionWithoutHexTag(\Illuminate\Http\Request $request): void {
     $v = (string) $request->input('v');
 
-    echo json_encode($v, $request->boolean('b') ? 15 : 14);
+    echo json_encode($v, $request->boolean('b') ? 15 : 0);
 }
 
 /** Invoking a first-class callable is a call through an expression, never a `json_encode` name. */
