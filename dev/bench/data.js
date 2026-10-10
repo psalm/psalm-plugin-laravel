@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791666715577,
+  "lastUpdate": 1791674674056,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13330,6 +13330,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47f3720b71e9563ee72ffd994d6ffd4427c7773e",
+          "message": "Read only live `{{-- @var --}}` comments in `blade:annotate` (#1740)\n\n* fix(blade): read only live contract comments in the annotator\n\nA contract comment inside @verbatim, @php, raw PHP, or another Blade comment is literal text to the parser, but the annotator counted it as a declaration and anchored insertion to it. Keep only matches that start a top-level Blade comment range.\n\nRefs #1713\n\n* fix(blade): anchor the annotator's contract match at each live comment\n\nAn unanchored scan over the whole source consumed bytes of dead matches, so a dead comment inside @php could lazily run into a live comment's closing tag and hide it. Match once per top-level Blade comment range instead.\n\nRefs #1713\n\n* test(blade): pin the anchored contract match\n\nReplace the dead-match swallow test, which passed without the anchor, with a live non-matching comment followed by a verbatim declaration. Correct the anchor rationale in the docblocks.\n\nRefs #1713",
+          "timestamp": "2026-10-11T01:21:26+02:00",
+          "tree_id": "8418fd8bd3e2a9c68d4d38e4fb0503ac00ef3f4c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/47f3720b71e9563ee72ffd994d6ffd4427c7773e"
+        },
+        "date": 1791674672220,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.24,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
