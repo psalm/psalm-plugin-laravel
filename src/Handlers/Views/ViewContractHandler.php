@@ -226,6 +226,14 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return;
         }
 
+        // A short class name may be a `use` alias in the template's own PHP block, which the type
+        // string cannot carry: comparing against the global class of that name would be a guess.
+        foreach (PreludeBuilder::classNamesIn($var->typeString) ?? [] as $className) {
+            if (!PreludeBuilder::resolvesWithoutImport($className)) {
+                return;
+            }
+        }
+
         if ($source->getCodebase()->isTypeContainedByType($supplied, $declared)) {
             return;
         }

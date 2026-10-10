@@ -16,7 +16,7 @@ A template declares its variables three ways, all read by [Blade template analys
 @props(['title' => 'Untitled', 'subtitle'])
 ```
 
-A raw `@var` declaring a nullable type (`int|null`) is optional, so a call site may omit it. A raw `@var` for a name the template binds itself (a `@foreach` alias, an assignment target) is not a declaration at all.
+A raw `@var` declaring a nullable or `mixed` type, or one for a name the template guards (`??`, `??=`, `isset()`), is optional, so a call site may omit it. A name Blade supplies (`$errors`, `$slot`) is never a declaration. A raw `@var` for a name the template binds itself (a `@foreach` alias, an assignment target) is not a declaration at all.
 
 ## Why this is a problem
 

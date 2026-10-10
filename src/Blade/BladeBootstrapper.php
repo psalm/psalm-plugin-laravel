@@ -346,7 +346,7 @@ final class BladeBootstrapper
             $reason = $classNames === null ? 'its type does not parse' : null;
 
             foreach ($classNames ?? [] as $className) {
-                if (!$this->resolvesInShadow($className)) {
+                if (!PreludeBuilder::resolvesWithoutImport($className)) {
                     $reason = "'{$className}' is not a fully qualified class name";
 
                     break;
@@ -369,17 +369,6 @@ final class BladeBootstrapper
         }
 
         return $types;
-    }
-
-    /** A name without a namespace is right only for PHP's own classes (`Closure`, `stdClass`). */
-    private function resolvesInShadow(string $className): bool
-    {
-        if (\str_contains($className, '\\')) {
-            return true;
-        }
-
-        return (\class_exists($className, false) || \interface_exists($className, false))
-            && (new \ReflectionClass($className))->isInternal();
     }
 
 

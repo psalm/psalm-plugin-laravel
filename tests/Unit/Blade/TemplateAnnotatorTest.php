@@ -77,8 +77,43 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame("<?php /** Header. \n * @var string \$title\n */ ?>\n<p>{{ \$title }}</p>\n", $result[0]);
+        $this->assertSame("<?php /** Header.\n * @var string \$title\n */ ?>\n<p>{{ \$title }}</p>\n", $result[0]);
         $this->assertSame(2, $result[1]);
+    }
+
+    #[Test]
+    public function never_appends_into_a_docblock_of_a_function_or_closure_or_one_nested_in_braces(): void
+    {
+        foreach (
+            [
+                "<?php\n/** Does a thing. */\nfunction f() {}\n?>\n",
+                "<?php\n\$f = /** Closure. */ fn () => 1;\n?>\n",
+                "<?php\nif (true) {\n    /** Nested. */\n    \$a = 1;\n}\n?>\n",
+                "<?php\n/** Class. */\nfinal class A {}\n?>\n",
+            ] as $header
+        ) {
+            $result = TemplateAnnotator::annotate($header . "<p>{{ \$title }}</p>\n", ['title' => 'string']);
+
+            $this->assertNotNull($result);
+            $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result[0], $header);
+        }
+    }
+
+    #[Test]
+    public function recognises_an_upper_case_open_tag_as_the_header(): void
+    {
+        $source = "<?PHP\n/**\n * Header.\n */\n?>\n<p>{{ \$title }}</p>\n";
+
+        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+        $this->assertNotNull($result);
+        $this->assertSame("<?PHP\n/**\n * Header.\n * @var string \$title\n */\n?>\n<p>{{ \$title }}</p>\n", $result[0]);
+    }
+
+    #[Test]
+    public function a_name_first_raw_declaration_is_already_declared(): void
+    {
+        $this->assertNull(TemplateAnnotator::annotate("<?php /** @var \$x string */ ?>\n<p>{{ \$x }}</p>\n", ['x' => 'string']));
     }
 
     #[Test]

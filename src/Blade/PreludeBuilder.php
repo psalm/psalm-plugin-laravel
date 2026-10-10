@@ -190,6 +190,21 @@ final class PreludeBuilder
     }
 
     /**
+     * Whether a class name written in a template means the same thing there as anywhere: a Blade
+     * comment or the namespace-less shadow cannot carry a `use` import, so a name without a
+     * namespace is right only for PHP's own classes (`Closure`, `stdClass`).
+     */
+    public static function resolvesWithoutImport(string $className): bool
+    {
+        if (\str_contains($className, '\\')) {
+            return true;
+        }
+
+        return (\class_exists($className, false) || \interface_exists($className, false))
+            && (new \ReflectionClass($className))->isInternal();
+    }
+
+    /**
      * The class names a `{{-- @var --}}` type names, as written, or null when the type does not
      * parse. Read off Psalm's syntax tree alone: `Type::parseString()` needs a live
      * ProjectAnalyzer, and resolving names against a codebase not yet scanned adds nothing here.

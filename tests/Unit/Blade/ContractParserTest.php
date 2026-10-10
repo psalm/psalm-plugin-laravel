@@ -621,7 +621,7 @@ final class ContractParserTest extends TestCase
     #[Test]
     public function every_nullable_spelling_is_optional_and_a_nested_null_is_not(): void
     {
-        $source = "<?php\n/**\n * @var ?int \$a\n * @var null|Foo \$b\n * @var array<int, null> \$c\n * @var mixed \$d\n */\n?>\n";
+        $source = "<?php\n/**\n * @var ?int \$a\n * @var null|Foo \$b\n * @var array<int, null> \$c\n * @var int \$d\n * @var array<int|null> \$e\n * @var int|NULL \$f\n */\n?>\n";
 
         $vars = $this->dataContract($source)->vars;
 
@@ -629,6 +629,8 @@ final class ContractParserTest extends TestCase
         $this->assertTrue($vars['b']->optional ?? null);
         $this->assertFalse($vars['c']->optional ?? null);
         $this->assertFalse($vars['d']->optional ?? null);
+        $this->assertFalse($vars['e']->optional ?? null, 'a null inside a generic is not a nullable declaration');
+        $this->assertTrue($vars['f']->optional ?? null);
     }
 
     #[Test]
@@ -703,7 +705,44 @@ final class ContractParserTest extends TestCase
         $source = "<?php\n/**\n * @var int the count\n * @var \$name string\n * @var array<int \$x\n */\n?>\n";
 
         $this->assertSame([], \array_keys($this->dataContract($source)->vars));
-        $this->assertSame([], ContractParser::rawDeclaredNames($source));
+        $this->assertSame(['name'], ContractParser::rawDeclaredNames($source), 'a name-first line is no contract, but the name is stated');
+    }
+
+    #[Test]
+    public function a_blade_owned_name_is_never_a_contract_in_either_spelling(): void
+    {
+        $source = "{{-- @var \\Illuminate\\Support\\ViewErrorBag \$errors --}}\n<?php\n/**\n * @var \\Illuminate\\View\\ComponentSlot \$slot\n * @var object{index: int} \$loop\n * @var string \$title\n */\n?>\n{{ \$errors }}{{ \$slot }}{{ \$title }}\n";
+
+        $contract = $this->dataContract($source);
+
+        $this->assertSame(['title'], \array_keys($contract->vars));
+        $this->assertContains('slot', $contract->rawDeclaredVariables, 'still counts as declared');
+    }
+
+    #[Test]
+    public function only_a_docblock_is_a_contract_not_a_plain_comment(): void
+    {
+        $source = "@php\n/* @var int \$block */\n@endphp\n<?php // @var int \$line ?>\n<?php /** @var int \$doc */ ?>\n{{ \$block }}{{ \$line }}{{ \$doc }}\n";
+
+        $contract = $this->dataContract($source);
+
+        $this->assertSame(['doc'], \array_keys($contract->vars));
+        $this->assertEqualsCanonicalizing(['block', 'line'], $contract->rawDeclaredVariables, 'consumed-only, as before');
+    }
+
+    #[Test]
+    public function a_raw_var_the_template_guards_or_types_mixed_is_optional(): void
+    {
+        $source = "<?php\n/**\n * @var string \$page\n * @var string \$flag\n * @var string \$maybe\n * @var mixed \$any\n * @var string \$required\n */\n?>\n"
+            . "@php(\$page ??= 'x')\n{{ \$flag ?? 'no' }}\n@isset(\$maybe){{ \$maybe }}@endisset\n{{ \$any }}{{ \$required }}\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        foreach (['page', 'flag', 'maybe', 'any'] as $name) {
+            $this->assertTrue($vars[$name]->optional ?? null, $name);
+        }
+
+        $this->assertFalse($vars['required']->optional ?? null);
     }
 
     #[Test]

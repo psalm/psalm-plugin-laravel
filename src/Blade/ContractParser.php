@@ -79,9 +79,10 @@ final class ContractParser
         [$vars, $propsUnknown] = $this->parseSource($source);
         [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
-        $vars += $this->rawContractVars($source, $localVariables);
+        $vars += $this->rawContractVars($source, $compiled, $localVariables);
 
-        // What is left is consumed-only: a raw declaration of a name the template binds for itself.
+        // What is left is consumed-only: a raw declaration of a name the template binds for itself,
+        // a Blade-owned name, a non-docblock comment, or a name-first `@var $x T`.
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
@@ -111,7 +112,7 @@ final class ContractParser
         }
 
         return new ViewDataContract(
-            $declarations->vars + $this->rawContractVars($source, $this->parseReads($compiled)[2]),
+            $declarations->vars + $this->rawContractVars($source, $compiled, $this->parseReads($compiled)[2]),
             $declarations->propsUnknown,
         );
     }
@@ -139,10 +140,15 @@ final class ContractParser
     }
 
     /**
-     * Every raw `@var T $name` in the template that is view data rather than a local: a template that
-     * writes one for a name it binds itself (`$member` after `@foreach ($members as $member)`) is
-     * typing a local, which no call site passes. A nullable type is optional, the way a `@props`
-     * default is: the template states it copes without the value.
+     * Every raw `@var T $name` docblock in the template that is view data rather than a local: a
+     * template that writes one for a name it binds itself (`$member` after `@foreach ($members as
+     * $member)`) is typing a local, which no call site passes, and one for a Blade-owned name
+     * (`$errors`, `$slot`) is the IDE idiom for a variable Blade supplies. Only a `/** *\/` docblock
+     * counts, the one Psalm reads a `@var` from.
+     *
+     * A declaration is optional, the way a `@props` default is, when its type includes `null` or is
+     * `mixed`, or when the template guards the name itself (`$x ?? ...`, `$x ??= ...`, `isset($x)`):
+     * each states that the template copes without a value.
      *
      * @param list<string> $locals names the template binds for itself, see {@see self::parseReads()}
      *
@@ -150,26 +156,37 @@ final class ContractParser
      *
      * @psalm-mutation-free
      */
-    private function rawContractVars(string $source, array $locals): array
+    private function rawContractVars(string $source, string $compiled, array $locals): array
     {
         $vars = [];
 
-        foreach (self::rawDeclarations($source) as [$name, $type, $line]) {
-            if (\in_array($name, $locals, true)) {
+        foreach (self::rawDeclarations($source) as [$name, $type, $line, $isDoc]) {
+            if ($type === null || !$isDoc || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name]) || \in_array($name, $locals, true)) {
                 continue;
             }
 
-            $nullable = false;
+            $optional = $this->isGuarded($name, $compiled);
 
             foreach ($this->topLevelAlternatives($type) as $alternative) {
-                $nullable = $nullable || \strtolower($alternative) === 'null' || \str_starts_with($alternative, '?');
+                $optional = $optional
+                    || \in_array(\strtolower($alternative), ['null', 'mixed'], true)
+                    || \str_starts_with($alternative, '?');
             }
 
             // A later declaration of the same name wins, as in a document-order walk.
-            $vars[$name] = new ContractVar($name, $type, $line, $nullable, true);
+            $vars[$name] = new ContractVar($name, $type, $line, $optional, true);
         }
 
         return $vars;
+    }
+
+    /** @psalm-pure */
+    private function isGuarded(string $name, string $compiled): bool
+    {
+        $quoted = \preg_quote($name, '/');
+        $end = '(?![a-zA-Z0-9_\x80-\xff])';
+
+        return \preg_match("/\\\${$quoted}{$end}\\s*\\?\\?|isset\\s*\\([^)]*\\\${$quoted}{$end}/", $compiled) === 1;
     }
 
     /**
@@ -212,12 +229,12 @@ final class ContractParser
     }
 
     /**
-     * Each `@var T $name [description]` line in the raw blocks, split the way Psalm splits it: the
-     * type is the first bracket- and quote-balanced token, the name is the `$identifier` right after
-     * it, and the rest is a description, whose own `$names` bind nothing. A line that does not read
-     * that way (no name, a name-first `@var $x T`, unbalanced brackets) declares nothing.
+     * Each `@var T $name [description]` line in the raw blocks, split the way Psalm splits it (see
+     * {@see self::splitVar()}). A name-first `@var $x T` still declares `$x`, with a null type: it is
+     * no contract, but a name the template states, which the annotator must not add again.
      *
-     * @return list<array{0: string, 1: string, 2: int}> name, type string, 1-based line
+     * @return list<array{0: string, 1: string|null, 2: int, 3: bool}> name, type string (null when
+     *         name-first), 1-based line, whether it sits in a `/** *\/` docblock
      *
      * @psalm-pure
      */
@@ -225,16 +242,19 @@ final class ContractParser
     {
         $declarations = [];
 
-        foreach (self::rawComments($source) as [$comment, $line]) {
+        foreach (self::rawComments($source) as [$comment, $line, $isDoc]) {
             if (\preg_match_all(self::RAW_PHP_VAR, $comment, $matched, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
                 continue;
             }
 
             foreach ($matched as $match) {
                 $declared = self::splitVar($match[1][0]);
+                $at = $line + SourceLines::breaksIn($comment, 0, $match[0][1]);
 
                 if ($declared !== null) {
-                    $declarations[] = [$declared[0], $declared[1], $line + SourceLines::breaksIn($comment, 0, $match[0][1])];
+                    $declarations[] = [$declared[0], $declared[1], $at, $isDoc];
+                } elseif (\preg_match('/^\$(' . self::IDENTIFIER . ')(?![a-zA-Z0-9_\x80-\xff])/', $match[1][0], $first) === 1) {
+                    $declarations[] = [$first[1], null, $at, $isDoc];
                 }
             }
         }
@@ -276,7 +296,7 @@ final class ContractParser
      * 1-based line it starts on. Ranges are the ones the Blade compiler itself leaves alone, so a
      * `<?php` inside a Blade comment or `@verbatim` body is not read.
      *
-     * @return list<array{0: string, 1: int}>
+     * @return list<array{0: string, 1: int, 2: bool}> text, 1-based line, whether it is a docblock
      *
      * @psalm-pure
      */
@@ -288,7 +308,7 @@ final class ContractParser
             if (\str_starts_with($text, '@php')) {
                 // `@php` and `@endphp` are directives, not PHP: tokenize what sits between them.
                 $text = '<?php ' . \substr($text, 4, \str_ends_with($text, '@endphp') ? -7 : null);
-            } elseif (!\str_starts_with($text, '<?php')) {
+            } elseif (\stripos($text, '<?php') !== 0) {
                 continue;
             }
 
@@ -298,7 +318,7 @@ final class ContractParser
             // not parse, so that is fine; the @ is for the warning an unterminated string emits.
             foreach (@\token_get_all($text) as $token) {
                 if (\is_array($token) && ($token[0] === \T_DOC_COMMENT || $token[0] === \T_COMMENT)) {
-                    $comments[] = [$token[1], $line + $token[2] - 1];
+                    $comments[] = [$token[1], $line + $token[2] - 1, $token[0] === \T_DOC_COMMENT];
                 }
             }
         }
@@ -330,7 +350,7 @@ final class ContractParser
 
             $declared = \preg_match(self::VAR_PATTERN, $inner, $matches) === 1 ? self::splitVar($matches[1], true) : null;
 
-            if ($declared !== null) {
+            if ($declared !== null && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$declared[0]])) {
                 $line = 1 + SourceLines::breaksIn($source, 0, $offset);
                 $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, false)];
             }

@@ -358,6 +358,25 @@ final class ViewContractValidationTest extends TestCase
     }
 
     #[Test]
+    public function a_raw_var_for_a_blade_owned_name_a_guarded_name_or_a_plain_comment_is_no_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawNotContracts.php'));
+    }
+
+    /** The template's own `use` alias is invisible to the contract: the type check declines, the presence check stays. */
+    #[Test]
+    public function a_short_class_name_declines_the_type_check_but_keeps_the_presence_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawShortName.php'), \var_export($issues, true));
+
+        $missing = $this->forFile($issues, 'RawShortNameMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+    }
+
+    #[Test]
     public function the_check_is_off_unless_the_config_flag_opts_in(): void
     {
         $this->assertSame([], $this->contractIssues('psalm-validation-off.xml'));

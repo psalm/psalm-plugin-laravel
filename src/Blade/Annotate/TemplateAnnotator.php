@@ -117,32 +117,81 @@ final class TemplateAnnotator
      */
     private static function leadingPhpBlock(string $source, int $start): ?array
     {
-        if (\preg_match('/\G<\?php\s/', $source, offset: $start) !== 1) {
+        if (\preg_match('/\G<\?php\s/i', $source, offset: $start) !== 1) {
             return null;
         }
 
         $block = ['doc' => null, 'openEnd' => $start, 'closeEnd' => null];
-        $offset = $start;
 
         // Tokenizing does not parse, so a syntactically broken block is fine; the @ is for the
         // warning an unterminated string emits.
-        foreach (@\token_get_all(\substr($source, $start)) as $token) {
-            [$id, $text] = \is_array($token) ? $token : [null, $token];
+        $tokens = @\token_get_all(\substr($source, $start));
+        $offsets = [];
+        $offset = $start;
 
-            if ($id === \T_OPEN_TAG) {
-                $block['openEnd'] = $offset + \strlen($text);
-            } elseif ($id === \T_DOC_COMMENT && $block['doc'] === null && \str_ends_with($text, '*/')) {
-                $block['doc'] = [$offset, $text];
-            } elseif ($id === \T_CLOSE_TAG) {
-                $block['closeEnd'] = $offset + \strlen($text);
+        foreach ($tokens as $i => $token) {
+            $offsets[$i] = $offset;
+            $offset += \strlen(\is_array($token) ? $token[1] : $token);
+        }
 
-                break;
+        $depth = 0;
+
+        foreach ($tokens as $i => $token) {
+            if (!\is_array($token)) {
+                $depth += $token === '{' ? 1 : ($token === '}' ? -1 : 0);
+
+                continue;
             }
 
-            $offset += \strlen($text);
+            if ($token[0] === \T_CURLY_OPEN || $token[0] === \T_DOLLAR_OPEN_CURLY_BRACES) {
+                ++$depth;
+            } elseif ($token[0] === \T_OPEN_TAG) {
+                $block['openEnd'] = $offsets[$i] + \strlen($token[1]);
+            } elseif ($token[0] === \T_CLOSE_TAG) {
+                $block['closeEnd'] = $offsets[$i] + \strlen($token[1]);
+
+                break;
+            } elseif ($token[0] === \T_DOC_COMMENT
+                && $block['doc'] === null
+                && $depth === 0
+                && \str_ends_with($token[1], '*/')
+                && !self::attachesToDeclaration($tokens, $i + 1)
+            ) {
+                $block['doc'] = [$offsets[$i], $token[1]];
+            }
         }
 
         return $block;
+    }
+
+    /**
+     * Whether the doc comment ending before `$from` documents a function, class or closure: a
+     * `@var` there is not a variable declaration, and Psalm reports it as an unrecognised tag.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     *
+     * @psalm-pure
+     */
+    private static function attachesToDeclaration(array $tokens, int $from): bool
+    {
+        for ($i = $from, $n = \count($tokens); $i < $n; ++$i) {
+            $token = $tokens[$i];
+
+            if (!\is_array($token)) {
+                return false;
+            }
+
+            if ($token[0] === \T_WHITESPACE || $token[0] === \T_COMMENT) {
+                continue;
+            }
+
+            return \in_array($token[0], [
+                \T_FUNCTION, \T_FN, \T_CLASS, \T_INTERFACE, \T_TRAIT, \T_ENUM,
+                \T_ABSTRACT, \T_FINAL, \T_READONLY, \T_STATIC, \T_ATTRIBUTE,
+            ], true);
+        }
+
+        return false;
     }
 
     /**
@@ -161,6 +210,7 @@ final class TemplateAnnotator
     {
         [$offset, $text] = $doc;
         $head = \substr($text, 0, -2);
+        $bare = \rtrim($head);
 
         if (\preg_match('/[\r\n]([ \t]*)\z/', $head, $closing, \PREG_OFFSET_CAPTURE) === 1) {
             [$indent, $lineStart] = $closing[1];
@@ -168,7 +218,12 @@ final class TemplateAnnotator
             return [$offset + $lineStart, $indent . '* ' . \implode($eol . $indent . '* ', $declarations) . $eol];
         }
 
-        return [$offset + \strlen($head), $eol . ' * ' . \implode($eol . ' * ', $declarations) . $eol . ' '];
+        // Cut before the whitespace that preceded the delimiter, which then follows the new lines as
+        // the delimiter's own indent.
+        return [
+            $offset + \strlen($bare),
+            $eol . ' * ' . \implode($eol . ' * ', $declarations) . $eol . ($bare === $head ? ' ' : ''),
+        ];
     }
 
     /**
