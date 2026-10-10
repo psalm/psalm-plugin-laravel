@@ -854,6 +854,24 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1810: a `Collection|array` `@foreach`/`@forelse` subject makes Psalm resolve the iterator
+     * through a synthetic `$__currentLoopData->getIterator()` call that it suppresses in plain PHP
+     * (ForeachAnalyzer.php), positioned on the variable: `PossiblyInvalidMethodCall` for the list
+     * branch (line 8), `PossiblyUndefinedMethod` for the `ArrayIterator` branch (line 3). Line 11 is
+     * a real call on the same variable, positioned on the method name, and keeps reporting.
+     */
+    #[Test]
+    public function foreach_over_a_union_subject_does_not_report_the_synthetic_iterator_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'foreach-union-subject.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([11], $this->linesFor($issues, 'PossiblyInvalidMethodCall', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyUndefinedMethod', $template), $json);
+    }
+
+    /**
      * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
      * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
      * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`
