@@ -72,7 +72,7 @@ flags:
   "--find-unused-psalm-suppress": Report unused @psalm-suppress, overriding psalm.xml
   "--find-unused-variables": Report unused variables and params, overriding psalm.xml
   "--experimental": Enable experimental opt-in rules, overriding psalm.xml
-  "--no-migrations": Disable migration-based column inference, columnFallback=none
+  "--no-migrations": Disable migration-based column inference, modelProperties.columnFallback=none
 
 apps:
   - name: monica

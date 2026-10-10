@@ -42,6 +42,7 @@ Full matrix under [Versions & Dependencies](#versions--dependencies).
 * Want zero pre-release packages? The 3.x line runs on stable Psalm 6 and needs no stability flags at all: `composer require --dev psalm/plugin-laravel:^3`. It carries the same security checks, and additionally supports Laravel 11.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.
+* `analyze --plugin-option KEY=VALUE` (repeatable) overrides any plugin setting for one run, and `PSALM_LARAVEL_OPTIONS` does the same for a bare `vendor/bin/psalm`. See [per-run overrides](docs/config.md#per-run-overrides).
 
 On the 3.x line (Psalm 6) security scanning is a separate mode rather than an extra check: enabling it makes Psalm report `Tainted...` issues and suppress every type issue. Keep `runTaintAnalysis` out of your `psalm.xml` there, which is why `init` on 3.x omits it, and pass the flag only for the security pass. Putting it in the config turns every run taint-only, including the `--set-baseline` run below.
 
