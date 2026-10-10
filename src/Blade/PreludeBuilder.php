@@ -27,9 +27,12 @@ final class PreludeBuilder
     public const AMBIENT_TYPES = [
         '__env' => '\Illuminate\View\Factory',
         'errors' => '\Illuminate\Support\ViewErrorBag',
-        // Blade's loop cursor is a plain stdClass built from an array (ManagesLoops::getLastLoop()).
-        'loop' => 'object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}',
+        // Blade's loop cursor is a plain stdClass built from an array (ManagesLoops::getLastLoop()),
+        // `parent` the enclosing loop's own array cast the same way; shaped one level deep only.
+        'loop' => 'object{' . self::LOOP_FIELDS . ', parent: (\stdClass&object{' . self::LOOP_FIELDS . ', parent: object|null})|null}',
     ];
+
+    private const LOOP_FIELDS = 'index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int';
 
     /**
      * Every name Blade injects into a compiled view itself, declared or not (`$component` is

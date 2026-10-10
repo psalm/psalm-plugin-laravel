@@ -114,7 +114,7 @@ These template variables are typed automatically, in every compiled view, withou
 |-----------|------------------------------------------------------------------------------------------------------------------------------------------|
 | `$__env`  | `Illuminate\View\Factory`                                                                                                              |
 | `$errors` | `Illuminate\Support\ViewErrorBag`                                                                                                       |
-| `$loop`   | `object{index: int, iteration: int, remaining: int\|null, count: int\|null, first: bool, last: bool\|null, odd: bool, even: bool, depth: int, parent: object\|null}` |
+| `$loop`   | `object{index: int, iteration: int, remaining: int\|null, count: int\|null, first: bool, last: bool\|null, odd: bool, even: bool, depth: int, parent: (stdClass&object{...same fields..., parent: object\|null})\|null}`: `$loop->parent` is the enclosing loop with the same fields, `null` in an outermost loop |
 
 Two more are typed, but only inside a template the plugin recognises as a **component view**: one that itself writes `@props(...)`, `@aware(...)`, or mentions `$attributes` or `$slot`. A `<x-*>` tag's *caller* never writes any of those, so the check is exact for that side; a component view the plugin does not recognise this way (none of the four markers present) falls back to `mixed` for both names, silently, same as any other undeclared variable.
 
