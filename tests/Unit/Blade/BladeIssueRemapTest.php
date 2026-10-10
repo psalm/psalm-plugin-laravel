@@ -1322,8 +1322,9 @@ final class BladeIssueRemapTest extends TestCase
      * used as a condition operand (the finding sits on the whole expression) and the arm conditions
      * of a `match` with no default arm (analyzed again after the suppression window closes) both
      * keep reporting on plain PHP, so they must keep reporting in a template. MatchAnalyzer tracks
-     * the subject case-sensitively (`\TRUE` is tracked; `$obj::class`, `count($list)` and
-     * `get_class($obj)` over a plain variable are not), and the cases here mirror that.
+     * the subject case-sensitively (`\TRUE`, `\stdClass::class` and `count(\array_values($list))` are
+     * tracked; `true`, `$obj::class`, `count($list)` and `get_class($obj)` over a plain variable are
+     * not), and the cases here mirror that.
      */
     #[Test]
     public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
@@ -1332,7 +1333,7 @@ final class BladeIssueRemapTest extends TestCase
         $template = 'resources/views/match-outside-arms.blade.php';
 
         $this->assertSame(
-            [7, 14, 19, 25, 31],
+            [7, 14, 19, 25, 31, 56, 61],
             $this->linesFor($issues, 'RedundantCondition', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );

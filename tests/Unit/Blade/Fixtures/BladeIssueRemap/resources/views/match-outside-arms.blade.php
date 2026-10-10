@@ -46,5 +46,20 @@ $byGetClass = match (get_class($obj)) {
     (is_int($n) ? 'x' : 'y') => 'a',
     'z' => 'b',
 };
-echo $upperTrue, $byClass, $byCount, $byGetClass;
+
+$lowerTrue = match (true) {
+    (is_int($n) ? true : false) => 'a',
+    $f => 'b',
+};
+
+$byCallArg = match (count(\array_values($list))) {
+    (is_int($n) ? 1 : 2) => 'a',
+    3 => 'b',
+};
+
+$byNamedClass = match (\stdClass::class) {
+    (is_int($n) ? 'x' : 'y') => 'a',
+    'z' => 'b',
+};
+echo $upperTrue, $byClass, $byCount, $byGetClass, $lowerTrue, $byCallArg, $byNamedClass;
 ?>

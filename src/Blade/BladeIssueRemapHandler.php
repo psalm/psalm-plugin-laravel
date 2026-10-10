@@ -236,8 +236,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      * `BeforeAddIssueEvent` omits (upstream gap). Mirrored by AST shape so a template stays as quiet
      * as plain PHP (#1801). The window covers the arms only: the subject, and a `match` used as an
      * operand (the finding spans the whole expression), keep reporting. With no default arm
-     * (`$last_arm->conds`) and a subject Psalm tracks (`$switch_var_id`, see {@see self::matchSubjectIsTracked()}),
-     * the arm conditions are analyzed again after the window closes, so they keep reporting
+     * and a subject Psalm tracks (see {@see self::matchSubjectIsTracked()}), the arm conditions are analyzed again after the window closes, so they keep reporting
      * `RedundantCondition`; the docblock sibling stays suppressed, as it is on plain PHP.
      *
      * @return list<string>
