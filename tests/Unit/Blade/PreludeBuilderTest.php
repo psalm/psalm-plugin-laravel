@@ -353,6 +353,8 @@ final class PreludeBuilderTest extends TestCase
         yield 'list' => ['[$v, $w] = [1, 2];'];
         yield 'by reference' => ['$v = &$other;'];
         yield 'read first' => ['echo $v; $v = 1;'];
+        yield 'compact() before the assignment' => ['$a = compact(\'v\'); $v = 1;'];
+        yield 'compact() array argument before the assignment' => ['$a = COMPACT([\'w\', [\'v\']]); $v = 1;'];
         yield 'assignment as a condition' => ['if ($v = f()) {}'];
         yield 'assignment inside a larger expression' => ['($v = f()) && g();'];
     }

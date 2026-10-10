@@ -1411,6 +1411,23 @@ final class BladeIssueRemapTest extends TestCase
         }
     }
 
+    /**
+     * #1808 negative: `compact('total')` reads `$total` by name before the template assigns it, so
+     * the later assignment does not define it first and the declaration must stay.
+     */
+    #[Test]
+    public function a_local_read_by_compact_before_its_assignment_keeps_its_declaration(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/assigned-after-compact.blade.php';
+
+        foreach (['UndefinedGlobalVariable', 'PossiblyUndefinedGlobalVariable'] as $type) {
+            $this->assertSame([], $this->linesFor($issues, $type, $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        }
+
+        $this->assertStringContainsString('@var mixed $total */', $this->shadowSourceFor($template));
+    }
+
     /** Every compiled shadow's source of that run, concatenated. */
     private function allShadowSources(string $config = 'psalm.xml'): string
     {

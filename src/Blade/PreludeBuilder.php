@@ -215,6 +215,9 @@ final class PreludeBuilder
             /** @var array<int, true> spl_object_id of each Assign that is a whole top-level statement */
             private array $topLevelAssigns = [];
 
+            /** @var array<string, true> names a `compact()` string literal reads */
+            private array $compactRead = [];
+
             /**
              * @psalm-external-mutation-free
              */
@@ -243,8 +246,23 @@ final class PreludeBuilder
                     && $node->var instanceof Node\Expr\Variable
                     && \is_string($node->var->name)
                     && !isset($this->found[$node->var->name])
+                    && !isset($this->compactRead[$node->var->name])
                 ) {
                     $this->assignedFirst[$node->var->name] = $node->expr;
+                }
+
+                // `compact('x')` reads `$x` by name with no Variable node, e.g. an `@include` in an
+                // earlier loop body. Kept out of `found` so it vetoes the skip without adding a
+                // declaration for a name the template never mentions otherwise.
+                if ($node instanceof Node\Expr\FuncCall
+                    && $node->name instanceof Node\Name
+                    && \strtolower($node->name->name) === 'compact'
+                ) {
+                    foreach ($node->args as $arg) {
+                        if ($arg instanceof Node\Arg) {
+                            $this->markCompactRead($arg->value);
+                        }
+                    }
                 }
 
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
@@ -267,6 +285,28 @@ final class PreludeBuilder
                 }
 
                 return null;
+            }
+
+            /**
+             * `compact()` accepts names nested in arrays at any depth.
+             *
+             * @psalm-external-mutation-free
+             */
+            private function markCompactRead(Node\Expr $arg): void
+            {
+                if ($arg instanceof Node\Scalar\String_) {
+                    $this->compactRead[$arg->value] = true;
+
+                    return;
+                }
+
+                if ($arg instanceof Node\Expr\Array_) {
+                    foreach ($arg->items as $item) {
+                        if ($item !== null) {
+                            $this->markCompactRead($item->value);
+                        }
+                    }
+                }
             }
 
             /**
@@ -343,6 +383,6 @@ final class PreludeBuilder
             => ($node instanceof Node\Expr\Variable && (!\is_string($node->name) || $node->name === $name))
             || ($node instanceof Node\Expr\FuncCall
                 && $node->name instanceof Node\Name
-                && \in_array($node->name->toLowerString(), ['compact', 'get_defined_vars'], true))) instanceof \PhpParser\Node;
+                && \in_array($node->name->toLowerString(), ['compact', 'get_defined_vars'], true))) instanceof Node;
     }
 }
