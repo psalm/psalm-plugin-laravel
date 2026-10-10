@@ -475,6 +475,7 @@ to `mixed` signatures.
 app('auth')      // → resolves to AuthManager via container bindings
 resolve(Foo::class) // → resolves to Foo
 app()->make(Bar::class) // → resolves to Bar
+app($flag ? 'cache' : 'db') // → CacheManager|DatabaseManager (every literal must resolve, else mixed)
 ```
 
 **Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). Bindings are discovered by booting the real Laravel app at plugin init and iterating the container's registered bindings. Also uses `AfterClassLikeVisit` to queue bound classes for Psalm scanning so resolved types are known before analysis.
