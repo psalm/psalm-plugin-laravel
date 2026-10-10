@@ -515,6 +515,47 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
+     * A contract type reaches the prelude, and its class is queued on BOTH a fresh compile and a
+     * warm-manifest run: the prelude names it only in a stacked docblock Psalm's scanner never reads.
+     */
+    #[Test]
+    public function a_contract_var_types_the_prelude_and_queues_its_class_on_fresh_and_warm_runs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{-- @var \\App\\Models\\User|null \$user --}}\n{{-- @var int \$count --}}\n<p>{{ \$user }}</p>\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+
+        $shadow = (string) \file_get_contents($first->analyzedShadows[0]);
+        $this->assertStringContainsString("/** @var \\App\\Models\\User|null \$user */\n", $shadow);
+        $this->assertStringContainsString("/** @var int \$count */\n", $shadow);
+        $this->assertStringNotContainsString('@var mixed $user', $shadow);
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        foreach ([$first, $second] as $registrar) {
+            $this->assertSame([...PreludeBuilder::ambientClassNames(), '\App\Models\User'], $registrar->queuedClassLikes);
+        }
+    }
+
+    #[Test]
+    public function a_short_class_name_in_a_contract_var_stays_mixed_and_says_so_under_debug(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "{{-- @var User \$user --}}\n<p>{{ \$user }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
+        $this->assertStringContainsString('/** @var mixed $user */', $shadow);
+        $this->assertStringNotContainsString('@var User', $shadow);
+        $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString($template, $debug);
+        $this->assertStringContainsString('$user', $debug);
+    }
+
+    /**
      * #1505: a compiled shadow's PHP string literal naming a class (the shape a vendor directive
      * that writes `app('Vendor\Package\Class')::method()` compiles to) must be handed to the
      * registrar's speculative-queueing method, separate from the ambient list above.
