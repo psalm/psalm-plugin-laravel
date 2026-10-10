@@ -28,6 +28,7 @@ use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
+use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
@@ -420,6 +421,15 @@ final class ShadowIssueRelocator
             // (#1545 review; the corpus this issue was filed against was 100% the fetch shape).
             if ($issue instanceof UndefinedThisPropertyFetch) {
                 return false;
+            }
+
+            // Line -1 is Psalm's positionless sentinel (a location built from a synthesized,
+            // attribute-less node, e.g. the `UnhandledMatchError` branch of a desugared `match`).
+            // IssueBuffer::isSuppressed() drops such an issue on plain PHP, so decline and let Psalm
+            // do the same instead of parking it on line 1 (#1801). The assignment shape above keeps
+            // the #1545 trade-off.
+            if ($issue->code_location->getLineNumber() === -1 && !$issue instanceof UndefinedThisPropertyAssignment) {
+                return null;
             }
 
             $templateLine = 1;

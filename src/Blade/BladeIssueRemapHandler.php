@@ -197,11 +197,17 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         // a sibling's docblock must never become a template-wide suppression. A type issue can
         // point inside the enclosing node's own docblock, before its first code token.
         $enclosing = (new NodeFinder())->find($statements, static fn(Node $node): bool
-            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike)
+            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike || $node instanceof Node\Expr\Match_)
             && ($node->getDocComment()?->getStartFilePos() ?? $node->getStartFilePos()) <= $location->raw_file_start
             && $node->getEndFilePos() >= $location->raw_file_end);
         $rules = [];
         foreach ($enclosing as $node) {
+            if ($node instanceof Node\Expr\Match_) {
+                \array_push($rules, ...self::matchSuppressions($node, $location));
+
+                continue;
+            }
+
             foreach ($node->getComments() as $comment) {
                 if (!$comment instanceof Doc) {
                     continue;
@@ -222,6 +228,89 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         }
 
         return $rules;
+    }
+
+    /**
+     * MatchAnalyzer analyzes a `match` as a desugared ternary with `RedundantCondition` and
+     * `RedundantConditionGivenDocblockType` added to the analyzer's runtime suppression list, which
+     * `BeforeAddIssueEvent` omits (upstream gap). Mirrored by AST shape so a template stays as quiet
+     * as plain PHP (#1801). The window covers the arms only: the subject, and a `match` used as an
+     * operand (the finding spans the whole expression), keep reporting. With no default arm and a
+     * subject Psalm tracks (see {@see self::matchSubjectIsTracked()}), the arm conditions are
+     * analyzed again after the window closes, with both suppressions removed, so nothing is
+     * suppressed there.
+     *
+     * Accepted residuals, all in the extra-report direction (never silencing what Psalm reports):
+     * - The first pass of a re-analyzed condition can raise a docblock finding the second pass does
+     *   not, and both share one location, so it reports.
+     * - A subject written as an assignment (`match ($k = expr)`) is re-analyzed inside the
+     *   suppressed ternaries, so its findings can report where Psalm stays silent.
+     * - An arm body that aborts analysis (an empty inner `match ($n) {}`) skips the re-analysis, so
+     *   its conditions can report `RedundantCondition`.
+     *
+     * @return list<string>
+     */
+    private static function matchSuppressions(Node\Expr\Match_ $match, CodeLocation $location): array
+    {
+        $contains = static fn(Node $node): bool => $node->getStartFilePos() <= $location->raw_file_start
+            && $node->getEndFilePos() >= $location->raw_file_end;
+        $hasDefault = false;
+        $inReanalyzedCondition = false;
+        $inArm = false;
+
+        foreach ($match->arms as $arm) {
+            if ($arm->conds === null) {
+                $hasDefault = true;
+            }
+
+            if (!$contains($arm)) {
+                continue;
+            }
+
+            $inArm = true;
+
+            foreach ($arm->conds ?? [] as $cond) {
+                $inReanalyzedCondition = $inReanalyzedCondition || $contains($cond);
+            }
+        }
+
+        if (!$inArm) {
+            return [];
+        }
+
+        if (!$hasDefault && $inReanalyzedCondition && self::matchSubjectIsTracked($match->cond)) {
+            return [];
+        }
+
+        return ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
+    }
+
+    /**
+     * Whether MatchAnalyzer gives the subject a `$switch_var_id`, mirroring its checks verbatim,
+     * including their case-sensitivity (`TRUE` and `Foo::CLASS` are tracked): an untracked subject
+     * skips the post-window re-analysis. A subject with a variable id (`$x`, `$x->y`, `Foo::class`)
+     * is tracked outright; the shapes below are the ones with none that stay untracked.
+     */
+    private static function matchSubjectIsTracked(Node\Expr $subject): bool
+    {
+        if ($subject instanceof Node\Expr\ConstFetch) {
+            return $subject->name->toString() !== 'true';
+        }
+
+        if ($subject instanceof Node\Expr\ClassConstFetch) {
+            return $subject->class instanceof Node\Name
+                || !$subject->name instanceof Node\Identifier
+                || $subject->name->toString() !== 'class';
+        }
+
+        if ($subject instanceof Node\Expr\FuncCall && $subject->name instanceof Node\Name) {
+            // A plain-variable argument is not rewritten into a temporary, so no id is assigned.
+            return !\in_array($subject->name->getParts(), [['get_class'], ['gettype'], ['get_debug_type'], ['count'], ['sizeof']], true)
+                || $subject->getArgs() === []
+                || !$subject->getArgs()[0]->value instanceof Node\Expr\Variable;
+        }
+
+        return true;
     }
 
     /** Null for any path that is not a registered shadow with a readable template. */

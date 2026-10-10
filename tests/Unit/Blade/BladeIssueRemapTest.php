@@ -1296,6 +1296,57 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1801: Psalm analyzes a `match` as a desugared ternary and drops two families of findings
+     * on plain PHP: the positionless `TypeDoesNotContainType` of the synthesized `UnhandledMatchError`
+     * branch, and `RedundantCondition*` inside the arms (MatchAnalyzer suppresses them at runtime,
+     * which `BeforeAddIssue` does not carry). The same condition outside the match, and the
+     * unsuppressed sibling classes, must keep reporting.
+     */
+    #[Test]
+    public function a_match_reports_only_what_psalm_reports_on_plain_php(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-bool.blade.php';
+        $context = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $context);
+        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $context);
+        // Line 19 is an author `elseif` outside the match with byte-identical wording to the arm finding.
+        $this->assertSame([19], $this->linesFor($issues, 'RedundantCondition', $template), $context);
+        $this->assertSame([13], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $context);
+        $this->assertSame([14], $this->linesFor($issues, 'ParadoxicalCondition', $template), $context);
+    }
+
+    /**
+     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. A `match`
+     * used as a condition operand (the finding sits on the whole expression) and the arm conditions
+     * of a `match` with no default arm (analyzed again after the suppression window closes) both
+     * keep reporting on plain PHP, so they must keep reporting in a template. MatchAnalyzer tracks
+     * the subject case-sensitively (`\TRUE`, `\stdClass::class` and `count(\array_values($list))` are
+     * tracked; `true`, `$obj::class`, `count($list)` and `get_class($obj)` over a plain variable are
+     * not), and the cases here mirror that.
+     */
+    #[Test]
+    public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-outside-arms.blade.php';
+
+        $this->assertSame(
+            [7, 14, 19, 25, 31, 56, 61],
+            $this->linesFor($issues, 'RedundantCondition', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+        // The re-analysis reports the docblock sibling too (line 70). Line 25 is the accepted
+        // residual: the suppressed first pass raised it, and its location equals the second's.
+        $this->assertSame(
+            [25, 70],
+            $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1559: `$this`/`self::` in a plain template (no enclosing `@php class`) is classless global
      * scope from Psalm's point of view, so every mention floods `InvalidScope`/`NonStaticSelfCall` —
      * conventions Livewire/Filament templates lean on heavily. Neither issue type may appear on this
