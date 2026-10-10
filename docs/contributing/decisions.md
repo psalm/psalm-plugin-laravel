@@ -92,6 +92,19 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
 
+### A returned `$this->morphTo()` takes its related model from the enclosing method's declared return
+
+**Decision:** In a method declaring `@return MorphTo<X, …>`, a `$this->morphTo()` call that one of the method's own return statements yields, directly or as the root of a chain that keeps the relation (`->withTrashed()->withoutGlobalScopes()`), resolves to `MorphTo<X, receiver>` (`ModelRelationReturnTypeHandler::getEnclosingMorphToReturnType()`, #1091). The stub keeps `MorphTo<Model, static>`: the morph map picks the target at runtime, so nothing else can prove X, and without this a narrowed declaration raises MoreSpecificReturnType / LessSpecificReturnStatement (InvalidReturnType for `Model&Contract`).
+
+- **One closure on the `HasRelationships` trait**, registered at the top of `ModelRegistrationHandler::afterCodebasePopulated()`. Return-type providers fall back to the declaring trait, so it fires for every model, including the non-autoloadable ones the per-model loop skips. The per-model `getReturnType()` cannot carry it: it never registers for those models, and its `$unionCache` key has no enclosing method.
+- **Returned call only, matched by node identity.** The returns of the analyzed `ClassMethod` node (read off the `MethodAnalyzer` by reflection; Psalm has no getter) are walked with `BodyReturnCollectorVisitor` and `RelationMethodParser`'s chain walk, so returns in nested closures, arrow functions and anonymous classes do not count. A morphTo() that is assigned, passed on, or returned through a variable keeps the stub type: narrowing it would hide real errors (`onlyPost($this->morphTo('origin')->getRelated())` raises ArgumentTypeCoercion).
+- **Only slot 1 of the declaration is read.** Slot 2 can still be an unresolved `self` (trait methods) or `static`; the declaring slot is the receiver's own node type, template arguments and `&static` included, and declines unless that is a single named object of the called class.
+- **Declines:** any receiver other than `$this`; `parent::morphTo()`; `self::morphTo()` / `static::morphTo()` (Psalm analyzes them as a virtual `$this->morphTo()` node no return statement holds); closures and arrow functions (their own declaration applies); a chain call that replaces the relation (`->clone()`); any declaration other than exactly `MorphTo<X, …>` (parent or subclass relation, `|null`, native-only); and an X with an alternative that is not a named class or intersection of named classes including a Model subclass, or that has a `static` or template part.
+
+**Accepted unsoundness** (same trust as the external-call path's docblock read): X is the user's docblock, unverified. A declaration naming the wrong models is believed, inside the method and by its callers (`MorphToEnclosingDeclaredTypeKnownLimitation`).
+
+**Rejected:** a stub or variance change (`MorphTo<Model, static>` is all the stub can claim, and no variance makes `Model` fit a narrower X; #913); a morph-map-aware resolver (the map is runtime state and lists every morphable model, not the subset one relation targets).
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally

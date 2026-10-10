@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -25,7 +26,9 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\MethodStorage;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
@@ -725,6 +728,7 @@ final class RelationMethodParser
      * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
      * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
      * @param list<lowercase-string> $chain out-parameter: names of the calls above the factory, outermost first
+     * @param ?PhpParser\Node\Expr\MethodCall $factoryCall out-parameter: the factory call node, when found
      * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
      */
     private static function findRelationCallInExpr(
@@ -734,6 +738,7 @@ final class RelationMethodParser
         ?string &$pivotModel,
         ?string &$accessor,
         array &$chain,
+        ?PhpParser\Node\Expr\MethodCall &$factoryCall = null,
     ): ?array {
         if (!$expr instanceof PhpParser\Node\Expr\MethodCall) {
             return null;
@@ -749,6 +754,8 @@ final class RelationMethodParser
         $relationClass = self::FACTORY_TO_RELATION[$lowerName] ?? null;
 
         if ($relationClass !== null) {
+            $factoryCall = $expr;
+
             return [
                 'relationClass' => $relationClass,
                 'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
@@ -777,7 +784,7 @@ final class RelationMethodParser
 
         // Not a relationship call — try the inner expression (unwrap chain).
         // e.g. for $this->belongsTo(X::class)->withDefault(), $expr->var is $this->belongsTo(X::class)
-        return self::findRelationCallInExpr($expr->var, $declaringClass, $parentClass, $pivotModel, $accessor, $chain);
+        return self::findRelationCallInExpr($expr->var, $declaringClass, $parentClass, $pivotModel, $accessor, $chain, $factoryCall);
     }
 
     /**
@@ -926,6 +933,85 @@ final class RelationMethodParser
         }
 
         return $expr->class->toString();
+    }
+
+    /**
+     * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
+     * every alternative of X is a named class, or an intersection of named classes (`Model&Contract`),
+     * at least one of which is a Model subclass, with no `static` part and no template part.
+     *
+     * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
+     * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
+     * nullable or union return and a MorphTo subclass.
+     *
+     * @psalm-mutation-free
+     */
+    public static function declaredMorphToRelatedModelType(Codebase $codebase, ?Union $declaredReturn): ?Union
+    {
+        if (!$declaredReturn instanceof Union || !$declaredReturn->isSingle()) {
+            return null;
+        }
+
+        $relation = $declaredReturn->getSingleAtomic();
+        if (
+            !$relation instanceof TGenericObject
+            || \strtolower($relation->value) !== \strtolower(MorphTo::class)
+            || !isset($relation->type_params[0])
+        ) {
+            return null;
+        }
+
+        $related = $relation->type_params[0];
+        foreach ($related->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject) {
+                return null;
+            }
+
+            $isModel = false;
+            foreach ([$atomic, ...$atomic->extra_types] as $part) {
+                if (!$part instanceof TNamedObject || $part->is_static) {
+                    return null;
+                }
+
+                $isModel = $isModel || ClassLineage::isA($codebase, $part->value, Model::class);
+            }
+
+            if (!$isModel) {
+                return null;
+            }
+        }
+
+        return $related;
+    }
+
+    /**
+     * Whether $call is the factory call a return statement of $method yields: the returned expression
+     * itself, or the root of a returned chain whose calls keep the relation ({@see applyDirectChain()}).
+     * Returns inside nested closures, arrow functions and class methods belong to those, not to $method.
+     */
+    public static function isReturnedFactoryCall(
+        Codebase $codebase,
+        PhpParser\Node\Stmt\ClassMethod $method,
+        PhpParser\Node\Expr\MethodCall $call,
+        string $scopeClass,
+    ): bool {
+        $collector = new BodyReturnCollectorVisitor(bailOnBareReturn: false);
+        $traverser = new PhpParser\NodeTraverser();
+        $traverser->addVisitor($collector);
+        $traverser->traverse($method->stmts ?? []);
+
+        foreach ($collector->getReturnExpressions() as $expr) {
+            $pivotModel = null;
+            $accessor = null;
+            $chain = [];
+            $factoryCall = null;
+            $parsed = self::findRelationCallInExpr($expr, $scopeClass, null, $pivotModel, $accessor, $chain, $factoryCall);
+            if ($factoryCall === $call && $parsed !== null && self::applyDirectChain($codebase, $parsed, $chain, null, null) !== null) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
