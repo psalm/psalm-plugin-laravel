@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -304,6 +305,80 @@ final class PreludeBuilderTest extends TestCase
         $this->assertSame(1, \substr_count($prelude, '$__env'));
         $this->assertStringContainsString('@var \Illuminate\View\Factory $__env */', $prelude);
         $this->assertStringNotContainsString('@var mixed $__env', $prelude);
+    }
+
+    /**
+     * #1808: a `@var mixed` declaration on a name the template assigns first breaks Psalm's
+     * correlation between a boolean flag and the variable it tests once any `if` (every `<x-...>`
+     * tag, every `@if`) intervenes, so the guarded dereference reports PossiblyNull*.
+     */
+    #[Test]
+    public function a_name_first_assigned_at_top_level_is_not_declared(): void
+    {
+        $compiled = '<?php ($x = \Slot::maybe()); ?><?php ($has = $x !== null && $x->has()); ?>'
+            . '<?php if (c()): ?>tag<?php endif; ?><?php if ($has): ?><?php echo $x->name; ?><?php endif; ?>';
+
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringNotContainsString('$x', $prelude);
+        $this->assertStringNotContainsString('$has', $prelude);
+    }
+
+    /** The issue's shape: the flag is assigned first, the variable it tests is only ever read. */
+    #[Test]
+    public function a_flag_over_a_read_only_name_drops_only_the_flag(): void
+    {
+        $compiled = "<?php\n/** @var \\Slot|null \$action */\n?>\n<?php \$hasAction = isset(\$action) && \$action->has(); ?>";
+
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringContainsString('@var mixed $action */', $prelude);
+        $this->assertStringNotContainsString('$hasAction', $prelude);
+    }
+
+    /** @return \Iterator<string, array{string}> */
+    public static function declaredAssignmentProvider(): \Iterator
+    {
+        yield 'reads its own name' => ['$v = strtoupper($v);'];
+        yield 'compact()' => ['$v = compact(\'v\');'];
+        yield 'get_defined_vars()' => ['$v = GET_DEFINED_VARS();'];
+        yield 'closure use' => ['$v = function () use ($v) { return 1; };'];
+        yield 'arrow fn' => ['$v = fn() => $v;'];
+        yield 'variable variable' => ['$v = $$name;'];
+        yield 'nested in if' => ['if (c()) { $v = 1; }'];
+        yield 'nested in foreach' => ['foreach ([1] as $e) { $v = $e; }'];
+        yield 'concat assign' => ['$v .= \'x\';'];
+        yield 'coalesce assign' => ['$v ??= 1;'];
+        yield 'array append' => ['$v[] = 1;'];
+        yield 'list' => ['[$v, $w] = [1, 2];'];
+        yield 'by reference' => ['$v = &$other;'];
+        yield 'read first' => ['echo $v; $v = 1;'];
+        yield 'compact() before the assignment' => ['$a = compact(\'v\'); $v = 1;'];
+        yield 'compact() array argument before the assignment' => ['$a = COMPACT([\'w\', [\'v\']]); $v = 1;'];
+        yield 'computed compact() before the assignment' => ['$k = \'v\'; $a = compact($k); $v = 1;'];
+        yield 'concatenated compact() before the assignment' => ['$a = compact(\'v\' . \'\'); $v = 1;'];
+        yield 'constant compact() before the assignment' => ['$a = compact(NAME); $v = 1;'];
+        yield 'aliased compact()' => ['use function compact as pack; $v = pack(\'v\');'];
+        yield 'aliased compact() before the assignment' => ['use function compact as pack; $a = pack(\'v\'); $v = 1;'];
+        yield 'call_user_func()' => ['$v = call_user_func(\'compact\', \'v\');'];
+        yield 'call_user_func_array() before the assignment' => ['$a = call_user_func_array(\'compact\', [\'v\']); $v = 1;'];
+        yield 'dynamic call' => ['$f = \'compact\'; $v = $f(\'v\');'];
+        yield 'include' => ['$v = include \'f.php\';'];
+        yield 'require before the assignment' => ['require \'f.php\'; $v = 1;'];
+        yield 'eval' => ['$v = eval(\'return 1;\');'];
+        yield 'eval before the assignment' => ['eval(\'echo 1;\'); $v = 1;'];
+        yield 'assignment as a condition' => ['if ($v = f()) {}'];
+        yield 'assignment inside a larger expression' => ['($v = f()) && g();'];
+    }
+
+    /** Only an unconditional top-level `$v = <rhs not reading $v>` skips the declaration. */
+    #[Test]
+    #[DataProvider('declaredAssignmentProvider')]
+    public function an_assignment_that_does_not_define_the_name_first_keeps_the_declaration(string $code): void
+    {
+        $prelude = (new PreludeBuilder())->build("<?php {$code} echo \$v; ?>", [], '');
+
+        $this->assertStringContainsString('@var mixed $v */', $prelude);
     }
 
     #[Test]

@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use PhpParser\ErrorHandler\Collecting;
 use PhpParser\Node;
+use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
@@ -208,12 +209,68 @@ final class PreludeBuilder
             /** @var array<string, true> */
             public array $written = [];
 
+            /** @var array<string, Node\Expr> name => RHS of an unconditional top-level assignment preceding any other mention */
+            public array $assignedFirst = [];
+
+            /** @var array<int, true> spl_object_id of each Assign that is a whole top-level statement */
+            private array $topLevelAssigns = [];
+
+            /** @var array<string, true> names a `compact()` string literal reads */
+            private array $compactRead = [];
+
+            /** Whether an earlier node can read a variable by a name the parser cannot see. */
+            private bool $opaqueRead = false;
+
+            /**
+             * @psalm-external-mutation-free
+             */
+            #[\Override]
+            public function beforeTraverse(array $nodes): null
+            {
+                foreach ($nodes as $stmt) {
+                    if ($stmt instanceof Node\Stmt\Expression && $stmt->expr instanceof Node\Expr\Assign) {
+                        $this->topLevelAssigns[\spl_object_id($stmt->expr)] = true;
+                    }
+                }
+
+                return null;
+            }
+
             /**
              * @psalm-external-mutation-free
              */
             #[\Override]
             public function enterNode(Node $node): null
             {
+                // Pre-order: the Assign is entered before its target and RHS, so `found` holds only
+                // earlier mentions.
+                if ($node instanceof Node\Expr\Assign
+                    && isset($this->topLevelAssigns[\spl_object_id($node)])
+                    && $node->var instanceof Node\Expr\Variable
+                    && \is_string($node->var->name)
+                    && !isset($this->found[$node->var->name])
+                    && !isset($this->compactRead[$node->var->name])
+                    && !$this->opaqueRead
+                ) {
+                    $this->assignedFirst[$node->var->name] = $node->expr;
+                }
+
+                // `compact('x')` reads `$x` by name with no Variable node, e.g. an `@include` in an
+                // earlier loop body. Kept out of `found` so it vetoes the skip without adding a
+                // declaration for a name the template never mentions otherwise.
+                if (PreludeBuilder::readsByHiddenName($node)) {
+                    $this->opaqueRead = true;
+                } elseif ($node instanceof Node\Expr\FuncCall
+                    && $node->name instanceof Node\Name
+                    && \strtolower($node->name->name) === 'compact'
+                ) {
+                    foreach ($node->args as $arg) {
+                        if ($arg instanceof Node\Arg) {
+                            $this->markCompactRead($arg->value);
+                        }
+                    }
+                }
+
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
                     $this->found[$node->name] = true;
                 }
@@ -234,6 +291,28 @@ final class PreludeBuilder
                 }
 
                 return null;
+            }
+
+            /**
+             * `compact()` accepts names nested in arrays at any depth.
+             *
+             * @psalm-external-mutation-free
+             */
+            private function markCompactRead(Node\Expr $arg): void
+            {
+                if ($arg instanceof Node\Scalar\String_) {
+                    $this->compactRead[$arg->value] = true;
+
+                    return;
+                }
+
+                if ($arg instanceof Node\Expr\Array_) {
+                    foreach ($arg->items as $item) {
+                        if ($item !== null) {
+                            $this->markCompactRead($item->value);
+                        }
+                    }
+                }
             }
 
             /**
@@ -276,6 +355,13 @@ final class PreludeBuilder
                 continue;
             }
 
+            // A name the template defines on every path before any read needs no fallback, and a
+            // `mixed` declaration on it breaks the correlation between a boolean flag and the
+            // variable it tests once any `if` intervenes (#1808).
+            if (isset($visitor->assignedFirst[$name]) && !$this->mayRead($visitor->assignedFirst[$name], $name)) {
+                continue;
+            }
+
             // A `__`-prefixed name the compiled output WRITES is compiler bookkeeping (Blade's
             // `@session`/`@context` append to `$__sessionPrevious`/`$__contextPrevious` without a
             // whole assignment); declaring it `mixed` widens the append result and turns the
@@ -291,5 +377,90 @@ final class PreludeBuilder
         \sort($names);
 
         return $names;
+    }
+
+    /**
+     * Whether evaluating `$rhs` can read `$name` before the assignment defines it: a direct mention
+     * (closure `use`, arrow fn), a variable variable, a scope-reading builtin, or a hidden-name read.
+     */
+    private function mayRead(Node\Expr $rhs, string $name): bool
+    {
+        return (new NodeFinder())->findFirst($rhs, static fn(Node $node): bool
+            => ($node instanceof Node\Expr\Variable && (!\is_string($node->name) || $node->name === $name))
+            || ($node instanceof Node\Expr\FuncCall
+                && $node->name instanceof Node\Name
+                && \in_array($node->name->toLowerString(), ['compact', 'get_defined_vars'], true))
+            || self::readsByHiddenName($node)) instanceof Node;
+    }
+
+    /**
+     * Whether `$node` can read a caller-scope variable whose name is not a literal in the AST: an
+     * include or `eval`, a dynamic or `call_user_func*()` call, a `compact()` with a computed
+     * argument, or a `use function` import aliasing `compact`. Earlier `get_defined_vars()` is
+     * harmless (every `@include` compiles one): it reads only names already defined.
+     *
+     * @psalm-mutation-free
+     */
+    public static function readsByHiddenName(Node $node): bool
+    {
+        if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+            return true;
+        }
+
+        if ($node instanceof Node\Stmt\Use_ && $node->type === Node\Stmt\Use_::TYPE_FUNCTION) {
+            foreach ($node->uses as $use) {
+                if (\strtolower($use->name->name) === 'compact') {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (!$node instanceof Node\Expr\FuncCall) {
+            return false;
+        }
+
+        if (!$node->name instanceof Node\Name) {
+            return true;
+        }
+
+        $function = \strtolower($node->name->name);
+
+        if ($function === 'call_user_func' || $function === 'call_user_func_array') {
+            return true;
+        }
+
+        if ($function !== 'compact') {
+            return false;
+        }
+
+        foreach ($node->args as $arg) {
+            if (!$arg instanceof Node\Arg || !self::isLiteralNameList($arg->value)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @psalm-mutation-free */
+    private static function isLiteralNameList(Node\Expr $expr): bool
+    {
+        if ($expr instanceof Node\Scalar\String_) {
+            return true;
+        }
+
+        if (!$expr instanceof Node\Expr\Array_) {
+            return false;
+        }
+
+        foreach ($expr->items as $item) {
+            if ($item === null || !self::isLiteralNameList($item->value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
