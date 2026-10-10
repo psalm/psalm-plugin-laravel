@@ -52,7 +52,8 @@ final class ComponentViewTypingTest extends TestCase
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];
         yield 'inherited render() returning a view name' => ['notice.blade.php', ['$message: string']];
-        yield '$this->view()' => ['badge.blade.php', ['$count: int']];
+        // Seeded once, on the prelude's sentinel: a later empty statement must not re-seed a reassigned name.
+        yield '$this->view(); seeded once' => ['badge.blade.php', ["\$count: 'reassigned'", '$count: int']];
         yield 'no <x-sidebar> anywhere' => ['sidebar.blade.php', ['$heading: mixed']];
         yield 'two declaring classes' => ['banner.blade.php', ['$headline: mixed']];
         yield 'two concrete classes sharing one render()' => ['twin.blade.php', ['$tone: mixed']];
@@ -61,6 +62,10 @@ final class ComponentViewTypingTest extends TestCase
         yield 'data() override' => ['overridden.blade.php', ['$label: mixed']];
         yield 'inherited $this->view() under a view() override' => ['chip.blade.php', ['$tone: mixed']];
         yield 'a namespace function named view()' => ['ticket.blade.php', ['$code: mixed']];
+        yield 'a data argument that is not a literal array' => ['compacted.blade.php', ['$title: mixed']];
+        yield 'a ->with() link after the view call' => ['withed.blade.php', ['$title: mixed']];
+        yield 'named arguments' => ['named.blade.php', ['$title: mixed']];
+        yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
     }
 
     /**
@@ -91,13 +96,13 @@ final class ComponentViewTypingTest extends TestCase
             );
             $arguments = ['-c', 'psalm-cached.xml', '--threads=1', '--no-progress', '--output-format=json'];
 
-            $this->assertSame(['$count: int'], $this->tracesIn($this->runPsalm($copy, $arguments), 'badge.blade.php'));
+            $this->assertSame(['$message: string'], $this->tracesIn($this->runPsalm($copy, $arguments), 'notice.blade.php'));
             $this->assertDirectoryExists($copy . '/.cache/psalm', 'the first run wrote no Psalm cache, so the second proves nothing.');
 
-            $badge = $copy . '/app/View/Components/Badge.php';
-            \file_put_contents($badge, \str_replace('public int $count = 0;', "public string \$count = '';", (string) \file_get_contents($badge)));
+            $notice = $copy . '/app/View/Components/Notice.php';
+            \file_put_contents($notice, \str_replace("public string \$message = 'Saved';", 'public int $message = 1;', (string) \file_get_contents($notice)));
 
-            $this->assertSame(['$count: string'], $this->tracesIn($this->runPsalm($copy, $arguments), 'badge.blade.php'));
+            $this->assertSame(['$message: int'], $this->tracesIn($this->runPsalm($copy, $arguments), 'notice.blade.php'));
         } finally {
             self::deleteTree($copy);
         }

@@ -15,3 +15,8 @@
 <x-overridden/>
 <x-chip/>
 <x-shadowed.ticket/>
+<x-compacted/>
+<x-withed/>
+<x-named/>
+<x-included/>
+@include('components.included')

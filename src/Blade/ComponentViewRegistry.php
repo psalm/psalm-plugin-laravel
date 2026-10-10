@@ -34,6 +34,8 @@ use Psalm\Type\Union;
  *  - no other project or tagged component's `render()` outside that shape spells the same view name;
  *  - a compiled `<x-…>` tag somewhere renders that class ({@see ComponentTagCollector}): the
  *    `data()` keys only exist on that path, never on a manual `$component->render()`;
+ *  - no compiled template renders the view by name (`@include`, `@each`, `@extends`,
+ *    `@component('view')`), which hands it none of the `data()` keys;
  *  - the key set is knowable ({@see ComponentRenderData::guaranteedFor()}).
  *
  * Then each guaranteed key is seeded, except a key `render()` itself passes (path A and B disagree
@@ -59,6 +61,9 @@ final class ComponentViewRegistry
     /** @var array<array-key, true> literal named-slot names any compiled template passes */
     private static array $namedSlots = [];
 
+    /** @var array<array-key, true> view names any compiled template renders by name */
+    private static array $renderedByName = [];
+
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
@@ -68,11 +73,13 @@ final class ComponentViewRegistry
     /**
      * @param array<array-key, true> $tagRenderedClasses lowercased class => true
      * @param array<array-key, true> $namedSlots         slot name => true
+     * @param array<array-key, true> $renderedByName     view name => true
      */
-    public static function registerTagUsage(array $tagRenderedClasses, array $namedSlots): void
+    public static function registerTagUsage(array $tagRenderedClasses, array $namedSlots, array $renderedByName): void
     {
         self::$tagRendered = $tagRenderedClasses;
         self::$namedSlots = $namedSlots;
+        self::$renderedByName = $renderedByName;
     }
 
     /**
@@ -97,6 +104,15 @@ final class ComponentViewRegistry
         $byTemplate = [];
         /** @var array<string, true> $contested template path => true */
         $contested = [];
+
+        foreach (\array_keys(self::$renderedByName) as $viewName) {
+            $templatePath = $templates[$viewName] ?? null;
+
+            if ($templatePath !== null) {
+                $contested[$templatePath] = true;
+            }
+        }
+
         /** @var array<string, array{0: string, 1: array<array-key, true>, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
         $views = [];
 
@@ -183,6 +199,7 @@ final class ComponentViewRegistry
     {
         self::$tagRendered = [];
         self::$namedSlots = [];
+        self::$renderedByName = [];
         self::$seeds = [];
         self::$declaredFunctions = [];
     }

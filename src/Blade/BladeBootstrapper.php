@@ -78,6 +78,9 @@ final class BladeBootstrapper
     /** @var array<string, true> literal named-slot names any compiled template passes */
     private array $namedSlots = [];
 
+    /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
+    private array $viewsRenderedByName = [];
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
@@ -199,7 +202,7 @@ final class BladeBootstrapper
                 $literalCandidates[$candidate] = true;
             }
 
-            [$tagClasses, $slotNames] = ComponentTagCollector::collect($tokens);
+            [$tagClasses, $slotNames, $viewNames] = ComponentTagCollector::collect($tokens);
 
             foreach ($tagClasses as $tagClass) {
                 $this->tagRenderedClasses[$tagClass] = true;
@@ -207,6 +210,10 @@ final class BladeBootstrapper
 
             foreach ($slotNames as $slotName) {
                 $this->namedSlots[$slotName] = true;
+            }
+
+            foreach ($viewNames as $viewName) {
+                $this->viewsRenderedByName[$viewName] = true;
             }
         }
 
@@ -250,7 +257,7 @@ final class BladeBootstrapper
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
 
-        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots);
+        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
     }
 
     /**

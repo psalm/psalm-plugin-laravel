@@ -43,8 +43,30 @@ final class ComponentTagCollectorTest extends TestCase
     #[Test]
     public function collects_literal_named_slots_only(): void
     {
-        $php = "<?php \$__env->slot('footer', null, []); ?><?php \$__env->slot(\$name, null, []); ?><?php \$other->slot('x'); ?>";
+        $php = "<?php \$__env->slot('footer', null, []); ?><?php \$__env->slot(\"title\"); ?>"
+            . "<?php \$__env->slot(\$name, null, []); ?><?php \$other->slot('x'); ?>";
 
-        $this->assertSame(['footer'], ComponentTagCollector::collect(\token_get_all($php))[1]);
+        $this->assertSame(['footer', 'title'], ComponentTagCollector::collect(\token_get_all($php))[1]);
+    }
+
+    /**
+     * The by-name render directives, as Laravel 13 compiles them: every literal in the call's
+     * arguments counts, so an `@includeWhen` condition or `@includeFirst` list cannot hide a name.
+     */
+    #[Test]
+    public function collects_views_rendered_by_name(): void
+    {
+        $php = "<?php echo \$__env->make(\"a.include\", ['x' => 1], array_diff_key(get_defined_vars(), ['__data' => 1]))->render(); ?>"
+            . "<?php echo \$__env->renderWhen(\$f, 'a.when', []); ?>"
+            . "<?php echo \$__env->first(['a.first', 'a.second'], [])->render(); ?>"
+            . "<?php echo \$__env->renderEach('a.each', \$xs, 'x'); ?>"
+            . "<?php \$__env->startComponent('a.component'); ?>"
+            . "<?php \$__env->startComponent(\$component->resolveView(), \$component->data()); ?>"
+            . "<?php echo \$other->make('not.a.view'); ?>";
+
+        $this->assertSame(
+            ['a.include', 'x', '__data', 'a.when', 'a.first', 'a.second', 'a.each', 'a.component'],
+            ComponentTagCollector::collect(\token_get_all($php))[2],
+        );
     }
 }
