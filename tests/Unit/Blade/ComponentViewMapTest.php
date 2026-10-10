@@ -111,4 +111,22 @@ final class ComponentViewMapTest extends TestCase
 
         $this->assertNull(ComponentViewMap::build([$this->componentFile($body), $this->componentFile($body)])->get('shared'));
     }
+
+    /** A second renderer outside the copyable shape still passes other data to the view. */
+    #[Test]
+    public function a_view_another_render_names_outside_the_shape_declines(): void
+    {
+        $copyable = $this->componentFile("public function render() { return view('shared', ['a' => 'text']); }");
+
+        $this->assertNotNull(ComponentViewMap::build([$copyable])->get('shared'));
+
+        foreach ([
+            "public function render() { \$n = 42; return view('shared', ['a' => \$n]); }",
+            "public function render() { return \$this->ok() ? view()->make('shared', ['a' => 1]) : View::make('other'); }\nprivate function ok(): bool { return true; }",
+        ] as $body) {
+            $other = $this->componentFile($body, uses: 'use Illuminate\Support\Facades\View;');
+
+            $this->assertNull(ComponentViewMap::build([$copyable, $other])->get('shared'));
+        }
+    }
 }

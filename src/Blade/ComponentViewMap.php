@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Blade;
 use Illuminate\View\Component;
 use Illuminate\View\ViewName as LaravelViewName;
 use PhpParser\Node;
-use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Name;
 use PhpParser\Node\Name\FullyQualified;
@@ -75,12 +74,28 @@ final class ComponentViewMap
             }
 
             foreach ($finder->findInstanceOf($ast, Node\Stmt\Class_::class) as $class) {
-                $call = $class->namespacedName instanceof Name ? self::renderCall($class) : null;
+                $statements = $class->namespacedName instanceof Name ? $class->getMethod('render')?->stmts : null;
 
-                if ($call !== null && $class->namespacedName instanceof Name) {
-                    // Every class naming the view is kept, declined or not: a second renderer passes
-                    // other data, so the view is no longer one class's to type.
+                if ($statements === null || !$class->namespacedName instanceof Name) {
+                    continue;
+                }
+
+                $call = self::renderCall($statements);
+
+                if ($call !== null) {
                     $candidates[LaravelViewName::normalize($call[0])][] = self::componentView($class->namespacedName->toString(), $call[1]);
+
+                    continue;
+                }
+
+                // Every class naming the view is kept, declined or not: a second renderer passes
+                // other data, so the view is no longer one class's to type.
+                foreach ($finder->find($statements, static fn(Node $node): bool => self::isFactoryCall($node)) as $factoryCall) {
+                    $view = $factoryCall instanceof Expr\CallLike && !$factoryCall->isFirstClassCallable() ? ($factoryCall->getArgs()[0] ?? null)?->value : null;
+
+                    if ($view instanceof Node\Scalar\String_) {
+                        $candidates[LaravelViewName::normalize($view->value)][] = null;
+                    }
                 }
             }
         }
@@ -109,48 +124,53 @@ final class ComponentViewMap
     /**
      * The view name and data array of a render() that is a single `return` of a view factory call.
      *
+     * @param array<Node\Stmt> $statements render()'s body
+     *
      * @return array{0: string, 1: Expr\Array_}|null
      */
-    private static function renderCall(Node\Stmt\Class_ $class): ?array
+    private static function renderCall(array $statements): ?array
     {
-        $statements = $class->getMethod('render')?->stmts;
-
-        if ($statements === null || \count($statements) !== 1 || !$statements[0] instanceof Node\Stmt\Return_) {
+        if (\count($statements) !== 1 || !$statements[0] instanceof Node\Stmt\Return_) {
             return null;
         }
 
         $call = $statements[0]->expr;
 
-        if ($call instanceof Expr\FuncCall) {
-            $isFactoryCall = self::isViewFunction($call);
-        } elseif ($call instanceof Expr\MethodCall) {
-            $isFactoryCall = $call->var instanceof Expr\FuncCall
-                && self::isViewFunction($call->var)
-                && $call->var->args === []
-                && $call->name instanceof Node\Identifier
-                && $call->name->toLowerString() === 'make';
-        } elseif ($call instanceof Expr\StaticCall) {
-            $isFactoryCall = $call->class instanceof Name
-                && \in_array($call->class->toString(), ['Illuminate\Support\Facades\View', 'View'], true)
-                && $call->name instanceof Node\Identifier
-                && $call->name->toLowerString() === 'make';
-        } else {
+        if (!$call instanceof Expr\CallLike || !self::isFactoryCall($call) || $call->isFirstClassCallable() || \count($call->getArgs()) !== 2) {
             return null;
         }
 
-        if (!$isFactoryCall || \count($call->args) !== 2) {
-            return null;
-        }
+        [$view, $data] = $call->getArgs();
 
-        [$view, $data] = $call->args;
-
-        if (!$view instanceof Arg || !$data instanceof Arg || $view->unpack || $data->unpack || $view->name instanceof Node\Identifier || $data->name instanceof Node\Identifier
+        if ($view->unpack || $data->unpack || $view->name instanceof Node\Identifier || $data->name instanceof Node\Identifier
             || !$view->value instanceof Node\Scalar\String_ || !$data->value instanceof Expr\Array_
         ) {
             return null;
         }
 
         return [$view->value->value, $data->value];
+    }
+
+    /** `view(...)`, `view()->make(...)`, or `View::make(...)`. */
+    private static function isFactoryCall(Node $node): bool
+    {
+        if ($node instanceof Expr\FuncCall) {
+            return self::isViewFunction($node);
+        }
+
+        if ($node instanceof Expr\MethodCall) {
+            return $node->var instanceof Expr\FuncCall
+                && self::isViewFunction($node->var)
+                && $node->var->args === []
+                && $node->name instanceof Node\Identifier
+                && $node->name->toLowerString() === 'make';
+        }
+
+        return $node instanceof Expr\StaticCall
+            && $node->class instanceof Name
+            && \in_array($node->class->toString(), ['Illuminate\Support\Facades\View', 'View'], true)
+            && $node->name instanceof Node\Identifier
+            && $node->name->toLowerString() === 'make';
     }
 
     private static function isViewFunction(Expr\FuncCall $call): bool
