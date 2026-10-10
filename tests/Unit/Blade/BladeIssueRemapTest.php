@@ -1236,16 +1236,56 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
-    /** A fully qualified `{{-- @var --}}` contract types the template body, not only its call sites. */
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function qualifiedContracts(): iterable
+    {
+        yield 'leading backslash' => ['contract-typed-body.blade.php'];
+        // What `blade:annotate` writes: resolves identically in the namespace-less shadow.
+        yield 'no leading backslash' => ['contract-unqualified.blade.php'];
+    }
+
+    /** A qualified `{{-- @var --}}` contract types the template body, not only its call sites. */
     #[Test]
-    public function a_contract_var_types_the_template_body(): void
+    #[DataProvider('qualifiedContracts')]
+    public function a_contract_var_types_the_template_body(string $template): void
     {
         $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/contract-typed-body.blade.php';
 
         $this->assertSame(
             [2],
-            $this->linesFor($issues, 'UndefinedMethod', $template),
+            $this->linesFor($issues, 'UndefinedMethod', 'resources/views/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** A contract naming a missing class reports on the comment that declared it, not as unmapped. */
+    #[Test]
+    public function a_contract_naming_an_unknown_class_reports_on_its_comment_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-unknown-class.blade.php';
+        $reported = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template),
+        ));
+
+        $this->assertContains(2, $this->linesFor($issues, 'UndefinedDocblockClass', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertNotContains(1, \array_column($reported, 'line_from'), \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /** An unparseable contract type stays `mixed` in the body instead of an InvalidDocblock. */
+    #[Test]
+    public function an_unparseable_contract_type_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-unparseable.blade.php';
+
+        $this->assertStringContainsString('@var mixed $m */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }

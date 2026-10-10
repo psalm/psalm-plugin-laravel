@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeCompileError;
+use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\ShadowCompiler;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
@@ -319,12 +320,30 @@ final class ShadowCompilerTest extends TestCase
         $result = $this->compiler->compile(
             'view.blade.php',
             "Hello {{ \$user }}\n",
-            ['user' => '\App\Models\User'],
+            ['user' => new ContractVar('user', '\App\Models\User', 1, false)],
         );
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertStringContainsString('@var \App\Models\User $user */', $result->contents);
         $this->assertStringNotContainsString('@var mixed $user', $result->contents);
+    }
+
+    /** Psalm reports a contract type's own fault (an unknown class) on the prelude line declaring it. */
+    #[Test]
+    public function a_contract_vars_prelude_line_maps_to_its_declaration_line(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "line one\n{{-- @var \\App\\Missing \$user --}}\n{{ \$user }}\n",
+            ['user' => new ContractVar('user', '\App\Missing', 2, false)],
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $lines = \explode("\n", $result->contents);
+        $declaring = \array_search('/** @var \App\Missing $user */;', $lines, true);
+        $this->assertIsInt($declaring);
+        $this->assertSame(2, $result->lineMap[$declaring + 1]);
+        $this->assertSame(0, $result->lineMap[$declaring], 'the open tag before it stays unmapped');
     }
 
     #[Test]

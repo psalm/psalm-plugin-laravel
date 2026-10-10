@@ -216,7 +216,7 @@ final class PreludeBuilderTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, list<string>}>
+     * @return iterable<string, array{string, list<string>|null}>
      */
     public static function contractTypes(): iterable
     {
@@ -224,19 +224,22 @@ final class PreludeBuilderTest extends TestCase
         yield 'nullable' => ['?\App\User', ['\App\User']];
         yield 'qualified without the leading backslash' => ['App\Models\User|null', ['App\Models\User']];
         yield 'short name' => ['User', ['User']];
-        yield 'generic arguments' => ['array<int, \App\User>|\Illuminate\Support\Collection<int, User>', ['\App\User', '\Illuminate\Support\Collection', 'User']];
+        yield 'generic arguments' => ['array<int, \App\User>|\Illuminate\Support\Collection<int, User>', ['\Illuminate\Support\Collection', '\App\User', 'User']];
         yield 'shape keys are not classes' => ['array{name: string, user?: \App\User}', ['\App\User']];
-        yield 'keywords and literals' => ["non-empty-list<int>|'Draft'|\"Posted\"|positive-int|null", []];
+        yield 'keywords and literals' => ["non-empty-list<int>|'Draft'|\"Posted\"|positive-int|-1|null", []];
+        yield 'int range bounds' => ['int<0, max>|int<min, -1>', []];
         yield 'class constant' => ['\App\Status::DRAFT_*', ['\App\Status']];
         yield 'callable parameter names' => ['callable(string $user): \App\User', ['\App\User']];
+        yield 'closure' => ['Closure(int): string', ['Closure']];
+        yield 'unparseable' => ['array<int $m', null];
     }
 
     /**
-     * @param list<string> $expected
+     * @param list<string>|null $expected
      */
     #[Test]
     #[DataProvider('contractTypes')]
-    public function class_names_in_a_contract_type_are_read_as_written(string $type, array $expected): void
+    public function class_names_in_a_contract_type_are_read_as_written(string $type, ?array $expected): void
     {
         $this->assertSame($expected, PreludeBuilder::classNamesIn($type));
     }
