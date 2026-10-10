@@ -11,6 +11,7 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
+use Psalm\Internal\Type\TypeTokenizer;
 
 /**
  * Builds the leading `<?php … ?>` block of standalone one-line docblocks
@@ -175,6 +176,32 @@ final class PreludeBuilder
         return \array_values(\array_filter(
             $types,
             static fn(string $type): bool => $type[0] === '\\',
+        ));
+    }
+
+    /**
+     * The class names a `{{-- @var --}}` type names, as written. A Blade comment cannot carry a
+     * `use` import, so the caller treats a bare short name as unresolvable rather than emit it
+     * into a namespace-less shadow, where it would name a global class the author never meant.
+     *
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    public static function classNamesIn(string $type): array
+    {
+        // Literals go first; then an identifier is a class unless it is a shape key (`name:`), a
+        // `$param` name, a class constant after `::`, or one of Psalm's own type keywords.
+        $type = (string) \preg_replace('/\'[^\']*\'|"[^"]*"/', '', $type);
+        \preg_match_all(
+            '/(?<![\w$\\\\-])(?<!::)\\\\?[a-zA-Z_\x80-\xff][\w\x80-\xff-]*+(?:\\\\[a-zA-Z_\x80-\xff][\w\x80-\xff]*+)*+(?!\s*\??:(?!:))/',
+            $type,
+            $matches,
+        );
+
+        return \array_values(\array_filter(
+            $matches[0],
+            static fn(string $name): bool => !isset(TypeTokenizer::PSALM_RESERVED_WORDS[\strtolower($name)]),
         ));
     }
 

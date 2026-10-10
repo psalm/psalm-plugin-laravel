@@ -215,6 +215,32 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var \App\Models\User $user */', $prelude);
     }
 
+    /**
+     * @return iterable<string, array{string, list<string>}>
+     */
+    public static function contractTypes(): iterable
+    {
+        yield 'fully qualified' => ['\App\User', ['\App\User']];
+        yield 'nullable' => ['?\App\User', ['\App\User']];
+        yield 'qualified without the leading backslash' => ['App\Models\User|null', ['App\Models\User']];
+        yield 'short name' => ['User', ['User']];
+        yield 'generic arguments' => ['array<int, \App\User>|\Illuminate\Support\Collection<int, User>', ['\App\User', '\Illuminate\Support\Collection', 'User']];
+        yield 'shape keys are not classes' => ['array{name: string, user?: \App\User}', ['\App\User']];
+        yield 'keywords and literals' => ["non-empty-list<int>|'Draft'|\"Posted\"|positive-int|null", []];
+        yield 'class constant' => ['\App\Status::DRAFT_*', ['\App\Status']];
+        yield 'callable parameter names' => ['callable(string $user): \App\User', ['\App\User']];
+    }
+
+    /**
+     * @param list<string> $expected
+     */
+    #[Test]
+    #[DataProvider('contractTypes')]
+    public function class_names_in_a_contract_type_are_read_as_written(string $type, array $expected): void
+    {
+        $this->assertSame($expected, PreludeBuilder::classNamesIn($type));
+    }
+
     #[Test]
     public function undeclared_variable_gets_var_mixed(): void
     {

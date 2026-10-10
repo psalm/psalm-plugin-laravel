@@ -1222,6 +1222,39 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /** A fully qualified `{{-- @var --}}` contract types the template body, not only its call sites. */
+    #[Test]
+    public function a_contract_var_types_the_template_body(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-typed-body.blade.php';
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * A Blade comment cannot carry a `use` import, so a short class name would resolve against the
+     * global namespace in the shadow. It stays `mixed` (and silent) rather than report a class the
+     * author never meant.
+     */
+    #[Test]
+    public function a_short_class_name_in_a_contract_var_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-short-name.blade.php';
+
+        $this->assertStringContainsString('@var mixed $greeter */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
     /**
      * #1554: a bound attribute followed by ANOTHER attribute on the same tag compiles to
      * `'value' => ,'label' => ...` (the `'value' => ]` shape #1553 pinned is the OTHER position: an
