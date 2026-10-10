@@ -48,7 +48,7 @@ final class ComponentViewMap
 
     /**
      * @param list<string> $phpFiles the project files Psalm analyzes; only a file naming a
-     *                               `render` function is parsed
+     *                               `render` function and a view factory call is parsed
      */
     public static function build(array $phpFiles): self
     {
@@ -60,7 +60,10 @@ final class ComponentViewMap
         foreach ($phpFiles as $file) {
             $code = @\file_get_contents($file);
 
-            if ($code === false || \stripos($code, 'function render') === false) {
+            // Parsing dominates the cost, so a file must name both halves of the shape first.
+            if ($code === false || \stripos($code, 'function render') === false
+                || (\stripos($code, 'view(') === false && \stripos($code, 'View::make(') === false)
+            ) {
                 continue;
             }
 
