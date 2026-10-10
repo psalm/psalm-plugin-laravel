@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Compilers\BladeCompiler;
 
 /**
@@ -30,7 +31,7 @@ use Illuminate\View\Compilers\BladeCompiler;
  * - `ReflectionFunction::getStaticVariables()` never exposes a closure's bound `$this`, so an
  *   invokable object or array callable (`[$service, 'compile']`) contributes nothing but its class
  *   file, no matter what state the bound object holds — {@see self::describeCallable()} distrusts
- *   any bound object other than the compiler being described itself.
+ *   any bound object other than the compiler being described itself or a `ServiceProvider`.
  * - The file hash alone cannot tell two callables declared in the SAME file apart (e.g. selecting
  *   `Str::upper` versus `Str::lower`) — the reflected name, source line range, and declaring scope
  *   are folded in too.
@@ -175,7 +176,11 @@ final class CompilerEnvironment
      * object holds. `bindDirective()` is the one exception: it always binds to the `BladeCompiler`
      * instance being described (`BladeCompiler::directive($name, $handler, bind: true)`), which
      * carries no state of its own beyond what the rest of this class already hashes, so that case
-     * alone stays trusted.
+     * alone stays trusted. A closure bound to a `ServiceProvider` (a plain `Blade::directive()` /
+     * `Blade::if()` closure written in a provider's `boot()`, as laravel/pennant and
+     * spatie/laravel-ray do) is trusted too: its file (the provider) is hashed, and provider
+     * instance state read while compiling is accepted as unfingerprinted, the same trade
+     * documented for runtime `config()` reads in docs/blade.md.
      *
      * The file hash alone also cannot tell two callables declared in the SAME file apart (e.g.
      * `Str::upper` versus `Str::lower`), so the reflected name, source line range, and declaring
@@ -204,7 +209,7 @@ final class CompilerEnvironment
 
         $boundThis = $reflection->getClosureThis();
 
-        if ($boundThis !== null && $boundThis !== $compiler) {
+        if ($boundThis !== null && $boundThis !== $compiler && !$boundThis instanceof ServiceProvider) {
             $trustworthy = false;
 
             return ['type' => 'unresolvable'];
