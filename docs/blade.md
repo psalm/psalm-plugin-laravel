@@ -129,7 +129,13 @@ Only markers Blade actually compiles count. One inside a `{{-- --}}` comment or 
 
 Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so a typo in a variable name will not be caught this way.
 
-A local the template assigns before it reads it is not declared `mixed`, so it keeps its inferred type. This covers an unconditional `$x = ...` statement at the top level of the template (in `@php`, a raw `<?php` block, or a `@section`/`@push` body) whose right side does not read `$x`. A flag such as `$hasAction = isset($action) && $action->isNotEmpty()` therefore still narrows `$action` inside a later `@if ($hasAction)`, even with a `<x-...>` tag in between (#1808). The `mixed` declaration stays when the assignment sits inside `@if`, `@foreach`, `@once`, another wrapping directive, or the slot body of a `<x-...>` tag, when it is compound (`.=`, `[]=`, `??=`), or when the name is read earlier or on its own right side (including by `compact()`).
+A local the template assigns before it reads it is not declared `mixed`, so it keeps its inferred type. A flag such as `$hasAction = isset($action) && $action->isNotEmpty()` therefore still narrows `$action` inside a later `@if ($hasAction)`, even with a `<x-...>` tag in between (#1808). The check is syntactic and conservative. The declaration is skipped only for a plain `$x = ...` statement at the top level of the template (in `@php`, a raw `<?php` block, or a `@section`/`@push` body) when all of these hold:
+
+* nothing earlier in the template mentions `$x` or names it in a `compact()` string literal;
+* nothing earlier can read a variable by a computed name: `include`/`require`, `eval`, a dynamic or `call_user_func()` call, a `compact()` argument that is not a string literal, or a `use function` import of `compact`;
+* the right side contains none of those, no `$x`, no variable variable, and no `compact()` or `get_defined_vars()` call at all.
+
+Every other assignment keeps the `mixed` declaration: one inside `@if`, `@foreach`, `@once`, another wrapping directive, or the slot body of a `<x-...>` tag, and any compound one (`.=`, `[]=`, `??=`).
 
 ## What gets reported
 

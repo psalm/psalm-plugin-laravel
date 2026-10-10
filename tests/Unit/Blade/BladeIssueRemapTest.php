@@ -1428,6 +1428,20 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringContainsString('@var mixed $total */', $this->shadowSourceFor($template));
     }
 
+    /** #1808 negative: a computed `compact($key)` name is just as much a read as a literal one. */
+    #[Test]
+    public function a_local_read_by_a_computed_compact_before_its_assignment_keeps_its_declaration(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/assigned-after-computed-compact.blade.php';
+
+        foreach (['UndefinedGlobalVariable', 'PossiblyUndefinedGlobalVariable'] as $type) {
+            $this->assertSame([], $this->linesFor($issues, $type, $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        }
+
+        $this->assertStringContainsString('@var mixed $total */', $this->shadowSourceFor($template));
+    }
+
     /** Every compiled shadow's source of that run, concatenated. */
     private function allShadowSources(string $config = 'psalm.xml'): string
     {

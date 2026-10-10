@@ -218,6 +218,9 @@ final class PreludeBuilder
             /** @var array<string, true> names a `compact()` string literal reads */
             private array $compactRead = [];
 
+            /** Whether an earlier node can read a variable by a name the parser cannot see. */
+            private bool $opaqueRead = false;
+
             /**
              * @psalm-external-mutation-free
              */
@@ -247,6 +250,7 @@ final class PreludeBuilder
                     && \is_string($node->var->name)
                     && !isset($this->found[$node->var->name])
                     && !isset($this->compactRead[$node->var->name])
+                    && !$this->opaqueRead
                 ) {
                     $this->assignedFirst[$node->var->name] = $node->expr;
                 }
@@ -254,7 +258,9 @@ final class PreludeBuilder
                 // `compact('x')` reads `$x` by name with no Variable node, e.g. an `@include` in an
                 // earlier loop body. Kept out of `found` so it vetoes the skip without adding a
                 // declaration for a name the template never mentions otherwise.
-                if ($node instanceof Node\Expr\FuncCall
+                if (PreludeBuilder::readsByHiddenName($node)) {
+                    $this->opaqueRead = true;
+                } elseif ($node instanceof Node\Expr\FuncCall
                     && $node->name instanceof Node\Name
                     && \strtolower($node->name->name) === 'compact'
                 ) {
@@ -375,7 +381,7 @@ final class PreludeBuilder
 
     /**
      * Whether evaluating `$rhs` can read `$name` before the assignment defines it: a direct mention
-     * (closure `use`, arrow fn), a variable variable, or a scope-reading builtin.
+     * (closure `use`, arrow fn), a variable variable, a scope-reading builtin, or a hidden-name read.
      */
     private function mayRead(Node\Expr $rhs, string $name): bool
     {
@@ -383,6 +389,78 @@ final class PreludeBuilder
             => ($node instanceof Node\Expr\Variable && (!\is_string($node->name) || $node->name === $name))
             || ($node instanceof Node\Expr\FuncCall
                 && $node->name instanceof Node\Name
-                && \in_array($node->name->toLowerString(), ['compact', 'get_defined_vars'], true))) instanceof Node;
+                && \in_array($node->name->toLowerString(), ['compact', 'get_defined_vars'], true))
+            || self::readsByHiddenName($node)) instanceof Node;
+    }
+
+    /**
+     * Whether `$node` can read a caller-scope variable whose name is not a literal in the AST: an
+     * include or `eval`, a dynamic or `call_user_func*()` call, a `compact()` with a computed
+     * argument, or a `use function` import aliasing `compact`. Earlier `get_defined_vars()` is
+     * harmless (every `@include` compiles one): it reads only names already defined.
+     *
+     * @psalm-mutation-free
+     */
+    public static function readsByHiddenName(Node $node): bool
+    {
+        if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+            return true;
+        }
+
+        if ($node instanceof Node\Stmt\Use_ && $node->type === Node\Stmt\Use_::TYPE_FUNCTION) {
+            foreach ($node->uses as $use) {
+                if (\strtolower($use->name->name) === 'compact') {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (!$node instanceof Node\Expr\FuncCall) {
+            return false;
+        }
+
+        if (!$node->name instanceof Node\Name) {
+            return true;
+        }
+
+        $function = \strtolower($node->name->name);
+
+        if ($function === 'call_user_func' || $function === 'call_user_func_array') {
+            return true;
+        }
+
+        if ($function !== 'compact') {
+            return false;
+        }
+
+        foreach ($node->args as $arg) {
+            if (!$arg instanceof Node\Arg || !self::isLiteralNameList($arg->value)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @psalm-mutation-free */
+    private static function isLiteralNameList(Node\Expr $expr): bool
+    {
+        if ($expr instanceof Node\Scalar\String_) {
+            return true;
+        }
+
+        if (!$expr instanceof Node\Expr\Array_) {
+            return false;
+        }
+
+        foreach ($expr->items as $item) {
+            if ($item === null || !self::isLiteralNameList($item->value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

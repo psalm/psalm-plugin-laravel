@@ -355,6 +355,18 @@ final class PreludeBuilderTest extends TestCase
         yield 'read first' => ['echo $v; $v = 1;'];
         yield 'compact() before the assignment' => ['$a = compact(\'v\'); $v = 1;'];
         yield 'compact() array argument before the assignment' => ['$a = COMPACT([\'w\', [\'v\']]); $v = 1;'];
+        yield 'computed compact() before the assignment' => ['$k = \'v\'; $a = compact($k); $v = 1;'];
+        yield 'concatenated compact() before the assignment' => ['$a = compact(\'v\' . \'\'); $v = 1;'];
+        yield 'constant compact() before the assignment' => ['$a = compact(NAME); $v = 1;'];
+        yield 'aliased compact()' => ['use function compact as pack; $v = pack(\'v\');'];
+        yield 'aliased compact() before the assignment' => ['use function compact as pack; $a = pack(\'v\'); $v = 1;'];
+        yield 'call_user_func()' => ['$v = call_user_func(\'compact\', \'v\');'];
+        yield 'call_user_func_array() before the assignment' => ['$a = call_user_func_array(\'compact\', [\'v\']); $v = 1;'];
+        yield 'dynamic call' => ['$f = \'compact\'; $v = $f(\'v\');'];
+        yield 'include' => ['$v = include \'f.php\';'];
+        yield 'require before the assignment' => ['require \'f.php\'; $v = 1;'];
+        yield 'eval' => ['$v = eval(\'return 1;\');'];
+        yield 'eval before the assignment' => ['eval(\'echo 1;\'); $v = 1;'];
         yield 'assignment as a condition' => ['if ($v = f()) {}'];
         yield 'assignment inside a larger expression' => ['($v = f()) && g();'];
     }
