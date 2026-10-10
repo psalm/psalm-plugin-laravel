@@ -134,11 +134,12 @@ Every other variable a template uses without a type the plugin can prove gets `m
 One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
 
 * **Type analysis**: the same issue types Psalm reports anywhere else, at the template's file and line — except Psalm's `MixedIssue` family (`MixedArgument`, `MixedAssignment`, and the rest), which is suppressed by default because an undeclared template variable typing as `mixed` produces it constantly. Opt back in with [`reportMixedIssues`](config.md#reportmixedissues).
-* **Taint analysis**: `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged.
+* **Taint analysis**: `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged. `@json($value)` is not flagged either: its default flags include `JSON_HEX_TAG` (clears `TaintedHtml`) and both `JSON_HEX_APOS` and `JSON_HEX_QUOT` (clear `TaintedTextWithQuotes`). Your own flags keep each finding whose flags are missing: `@json($value, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES)` still reports `TaintedTextWithQuotes`, and flags without `JSON_HEX_TAG` report `TaintedHtml`. Keep the directive's arguments comma free: Blade splits them on every comma. Known gap: the encoder's own `"` delimiters close a double-quoted attribute, so `<div data-x="@json($value)">` is an unreported breakout. It renders visibly broken for every string, array or object value, but an int, bool or null encodes bare and renders fine. Use a single-quoted attribute, a `<script>` block, or `@js($value)` (a complete JavaScript expression, never wrapped in quotes) there. See [Security](security.md#what-it-detects).
 
 ```blade
 {{ request()->input('q') }}   {{-- escaped: not flagged --}}
 {!! request()->input('q') !!} {{-- unescaped: TaintedHtml --}}
+@json(request()->input('q'))  {{-- default HEX flags: not flagged --}}
 ```
 
 * **Positions inside a message name the template.** The `first seen on line 7` of `Possibly undefined variable $x`, the trailing `on line 7` of a `ParseError`, and the `file:line:column` of a reference's definition in a `ReferenceReusedFromConfusingScope` all count the template, not the compiled shadow. A `first seen` reference into compiler-generated code has no template line, so that clause is omitted.

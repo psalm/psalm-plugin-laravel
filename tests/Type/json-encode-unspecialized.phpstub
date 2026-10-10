@@ -1,0 +1,12 @@
+<?php
+
+// Intentionally redeclares the core function, so `php -l` fails here by design ("Cannot redeclare").
+
+/**
+ * A project stub re-declaring json_encode() without @psalm-taint-specialize or @psalm-pure: Psalm then
+ * shares one argument-to-return edge between every call site, so one call's removed taint would leak
+ * onto another call.
+ *
+ * @psalm-flow ($value) -> return
+ */
+function json_encode(mixed $value, int $flags = 0, int $depth = 512): string|false {}
