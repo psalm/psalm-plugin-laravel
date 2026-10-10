@@ -880,6 +880,28 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * KnownLimitation (#1725): the #1695 gate keys on the generated call text, not on the list
+     * item, so a non-string list item (`@aware([null])`, `@aware([$maybe])` with a nullable
+     * `$maybe`, a bare `null` next to a keyed pair) is dropped together with the artifact it is
+     * indistinguishable from. At runtime each is a bug (a null key); here none reports. Pins the
+     * silence; the caveat is on {@see ShadowIssueRelocator::isGeneratedAwareArgument()}.
+     */
+    #[Test]
+    public function a_non_string_aware_list_item_stays_silent_known_limitation(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/aware-non-string-item-known-limitation.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        // Guard against a vacuous pass: the list-form arm the gate drops must still be compiled.
+        $this->assertStringContainsString('$__env->getConsumableComponentData($__value', $this->shadowSourceFor($template));
+
+        foreach (['NullArgument', 'PossiblyNullArgument', 'InvalidArgument', 'NoValue'] as $family) {
+            $this->assertSame([], $this->linesFor($issues, $family, $template), $json);
+        }
+    }
+
+    /**
      * #1695: the gate declines when the template itself contains the generated call text, so an
      * author-written `getConsumableComponentData($__value)` with a null `$__value` keeps reporting.
      */
