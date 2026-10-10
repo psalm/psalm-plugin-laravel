@@ -154,6 +154,15 @@ This is acceptable — the handlers gracefully handle any Model subclass.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
 Registration order is preserved (relationship > factory > accessor > column).
 
+### Why container-bound classes are queued eagerly at plugin init
+
+**Decision:** `Plugin::__invoke()` calls `ContainerResolver::queueBoundClassesForScanning()` once, after `registerStubs()`: it `make()`s every binding and queues each resolved object class (`store_failure: false`) so `app('alias')` narrows to a class Psalm has storage for (#1797).
+
+- **Why init:** plugins initialize before Psalm's scan and before stub registration, so the classes are scanned as ordinary vendor files, not as stubs (vimeo/psalm#12313). The former `AfterClassLikeVisit` hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run).
+- **Rejected, lazy only** (drop the queue, keep the resolver's storage guard): `app('encrypter')`, `app('cache')` and other string aliases become `mixed` whenever nothing else scans the concrete. The probe found 152 of 201 bound concretes that nothing else scans; `ContainerNarrowedMethodResolutionTest` fails.
+- **Rejected, targeted pre-scan** (queue only classes whose literal abstracts the project names): needs a scan-time AST walk, misses literals outside classes (routes, function files), and needs `referenced_classlikes` for workers and the cache. Largest diff. Revisit it if single-file cost matters (#1797 reports 574-668 extra classes per single-file run on a 19k-file app).
+- **Rejected, non-instantiating discovery** (`getClosure()`'s captured `$concrete`, `$instances`): covers only 75 of 201 concretes. Core services (cache, encrypter, log) are bound with provider closures and need `make()`.
+
 ### `Request::user()` overrides: per-subclass registration, explicit guard only
 
 **Decision:** `RequestHandler::afterCodebasePopulated()` registers the `Request::user()` return-type closure on every `Request` subclass whose `user()` resolves to an override (own, inherited from an overriding parent, or trait-imported), e.g. Laravel Nova's `NovaRequest`.
