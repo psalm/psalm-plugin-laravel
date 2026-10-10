@@ -206,7 +206,7 @@ The check declines for a call site instead of guessing, and the gate that matter
 
 ## Annotating templates
 
-`psalm-laravel blade:annotate` writes the `{{-- @var --}}` declarations a template is missing, taking each type from the `view()` call sites that render it:
+`psalm-laravel blade:annotate` writes the `@var` declarations a template is missing, as native PHP docblock lines, taking each type from the `view()` call sites that render it:
 
 ```bash
 vendor/bin/psalm-laravel blade:annotate            # write them
@@ -220,19 +220,25 @@ The command is the only way in. An ordinary `vendor/bin/psalm` run never writes 
 What it declares, per variable the template reads:
 
 * the type itself when at least one call site was resolved, every resolved call site agreed on it, and none of them left the view's data set open (a spread, a dynamic key, a `$mergeData`) or was a rendering shape the plugin could not read at all (`$view = view(...)`). Literal precision is dropped, so two call sites passing `'draft'` and `'published'` declare `string` rather than fighting over which literal wins.
-* `mixed` rather than a type that would not mean the same thing once written: one that carries a generic's template parameter, or whose printed form would close the Blade comment early.
+* `mixed` rather than a type that would not mean the same thing once written: one that carries a generic's template parameter, or whose printed form would close the docblock early (it contains `*/`).
 * `mixed` otherwise, which still records that the template wants the variable.
 
 A rendering shape the plugin could not read is any expression the call-chain walk declines, not just `$view = view(...)`. `view(...)->render()`, a `view(...)` passed as an argument to something else, and a chain carrying a method the plugin does not model all qualify, because the walk starts at the outermost expression and refuses anything it does not fully understand. Every literal view name inside such an expression is marked unreadable for the whole run, so each template it names gets `mixed` for every variable, including at the call sites that did resolve cleanly.
 
 What it leaves alone:
 
-* a variable the template already declares, in either `{{-- @var --}}` or raw `<?php /** @var */ ?>` form. Existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
+* a variable the template already declares, in either `{{-- @var --}}` or raw `<?php /** @var */ ?>` form. Existing `{{-- @var --}}` comments are recognised but never rewritten or migrated, and existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
 * a variable the template binds itself: a `@foreach ($items as $item)` alias is the template's own, not something the call site passes, so `$items` is declared and `$item` is not. List destructuring (`as [$id, $name]`) binds both names the same way, and so do an assignment (`@php ($heading = 'Hello')`), a closure or arrow-function parameter (`fn ($item) => ...`), a `catch` variable, and a `static`/`global` declaration. A `use ($x)` clause is not one of them: it reads the enclosing `$x`.
 * a variable some call site provably renders the template without. That call site proves the template works without it (it is read guarded, `{{ $flag ?? false }}`), and declaring it would report [MissingViewVariable](issues/MissingViewVariable.md) there.
 * a template whose compiled body hides which names it reads. `@props` and `@aware` compile to `$$name`, so component templates are skipped whole rather than annotated in part.
 
-Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. New declarations join an existing contract block if there is one, otherwise they open one at the top of the file.
+Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. Where the lines go, in order of preference:
+
+1. the first doc comment of the `<?php` block the file opens with, appended before its closing `*/` and indented and line-ended like it, so the template keeps a single docblock (Psalm attaches only the last of two docblocks before one statement);
+2. a new `<?php /** ... */ ?>` block directly after that leading block, so a `declare(strict_types=1);` stays the first statement. A leading block that never closes gets a plain docblock after its open tag instead;
+3. a new `<?php /** ... */ ?>` block at the very top of the file, after any BOM.
+
+A one-line header docblock (`<?php /** Header. */ ?>`) is opened out: the lines land before its `*/`, which moves to a line of its own, so the diff modifies that one line. The `?>` of a new block swallows the line break after it, so the rendered output does not change.
 
 Array shapes are written as inferred, so a single call site passing `['a', 'b']` declares `list{string, string}` and a later call site passing three elements reports a type error on correct code. Widen such a declaration by hand, or delete it and re-run once both call sites exist.
 

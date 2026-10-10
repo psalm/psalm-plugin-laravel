@@ -101,7 +101,7 @@ final class AnnotationWriterTest extends TestCase
         $diff = AnnotationWriter::apply($path, ['title' => 'string'], false);
 
         $this->assertNotNull($diff);
-        $this->assertSame("{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n", \file_get_contents($path));
+        $this->assertSame("<?php\n/**\n * @var string \$title\n */\n?>\n<h1>{{ \$title }}</h1>\n", \file_get_contents($path));
     }
 
     #[Test]
@@ -114,8 +114,8 @@ final class AnnotationWriterTest extends TestCase
 
         $this->assertSame($before, \md5_file($path));
         $this->assertNotNull($diff);
-        $this->assertStringContainsString('@@ -1 +1,2 @@', $diff);
-        $this->assertStringContainsString("+{{-- @var string \$title --}}", $diff);
+        $this->assertStringContainsString('@@ -1 +1,6 @@', $diff);
+        $this->assertStringContainsString('+ * @var string $title', $diff);
     }
 
     #[Test]
@@ -162,7 +162,7 @@ final class AnnotationWriterTest extends TestCase
 
         AnnotationWriter::run($this->request());
 
-        $this->assertSame("{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n", \file_get_contents($path));
+        $this->assertSame("<?php\n/**\n * @var string \$title\n */\n?>\n<h1>{{ \$title }}</h1>\n", \file_get_contents($path));
         $this->assertArrayNotHasKey('error', $this->publishedResult());
     }
 
@@ -207,18 +207,18 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function the_dry_run_diff_for_an_unterminated_contract_line_matches_the_actual_byte_change(): void
+    public function the_dry_run_diff_for_an_opened_out_docblock_line_matches_the_actual_byte_change(): void
     {
-        // The template ends ON its existing contract comment with no trailing newline. Declaring a
-        // second name inserts a line break the file did not have, which modifies that final line —
-        // a hand-rolled "pure insertion" hunk header would lie about that.
-        $path = $this->template('{{-- @var string $title --}}');
+        // A one-line header docblock is opened out: the declaration lands before its `*/`, which
+        // moves to a line of its own. That modifies an existing line, so a hand-rolled "pure
+        // insertion" hunk header would lie about it.
+        $path = $this->template("<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n");
         $before = (string) \file_get_contents($path);
 
-        $diff = $this->applyFromProjectRoot(fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], true));
+        $diff = $this->applyFromProjectRoot(fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string'], true));
         $this->assertNotNull($diff);
 
-        AnnotationWriter::apply($path, ['title' => 'string', 'body' => 'string'], false);
+        AnnotationWriter::apply($path, ['title' => 'string'], false);
         $actual = (string) \file_get_contents($path);
 
         \file_put_contents($path, $before);

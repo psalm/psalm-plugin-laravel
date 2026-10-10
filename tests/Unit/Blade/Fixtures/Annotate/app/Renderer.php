@@ -28,6 +28,16 @@ final class Renderer
         return view('conflict', ['flag' => $this->post()]);
     }
 
+    public function headed(): View
+    {
+        return view('headed', ['title' => $this->title()]);
+    }
+
+    public function strict(): View
+    {
+        return view('strict', ['title' => $this->title()]);
+    }
+
     public function loop(): View
     {
         return view('loop', ['items' => $this->items()]);
