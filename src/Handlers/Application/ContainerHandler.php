@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Application;
 
-use Psalm\LaravelPlugin\Bootstrap\ApplicationInterfaceProvider;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
-use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
-use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -16,7 +13,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
-final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
+final class ContainerHandler implements FunctionReturnTypeProviderInterface, MethodReturnTypeProviderInterface
 {
     /**
      * @inheritDoc
@@ -102,49 +99,5 @@ final class ContainerHandler implements AfterClassLikeVisitInterface, FunctionRe
         $source = $event->getSource();
 
         return ContainerResolver::resolvePsalmTypeFromApplicationContainerViaArgs($source->getNodeTypeProvider(), $event->getCallArgs(), $source->getCodebase());
-    }
-
-    /**
-     * @see https://github.com/psalm/psalm-plugin-symfony/issues/25
-     * psalm needs to know about any classes that could be returned before analysis begins. This is a naive first approach
-     */
-    #[\Override]
-    public static function afterClassLikeVisit(AfterClassLikeVisitEvent $event): void
-    {
-        if (!\in_array($event->getStorage()->name, ApplicationInterfaceProvider::getApplicationInterfaceClassLikes(), true)) {
-            return;
-        }
-
-        $bindings = \array_keys(ApplicationProvider::getApp()->getBindings());
-
-        foreach ($bindings as $abstract) {
-            try {
-                if (!\is_string($abstract) && !\is_callable($abstract)) {
-                    continue;
-                }
-
-                $concrete = ApplicationProvider::getApp()->make($abstract);
-
-                if (!\is_object($concrete)) {
-                    continue;
-                }
-
-                $reflectionClass = new \ReflectionClass($concrete);
-
-                if ($reflectionClass->isAnonymous()) {
-                    continue;
-                }
-            } catch (\Throwable) {
-                // cannot just catch binding exception as the following error is emitted within laravel:
-                // Class 'Symfony\Component\Cache\Adapter\Psr16Adapter' not found
-                continue;
-            }
-
-            $className = $concrete::class;
-            $filePath = $event->getStatementsSource()->getFilePath();
-            $fileStorage = $event->getCodebase()->file_storage_provider->get($filePath);
-            $fileStorage->referenced_classlikes[\strtolower($className)] = $className;
-            $event->getCodebase()->queueClassLikeForScanning($className);
-        }
     }
 }

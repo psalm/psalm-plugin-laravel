@@ -314,20 +314,6 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function contract_vars_are_typed_in_the_prelude_instead_of_mixed(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "Hello {{ \$user }}\n",
-            ['user' => '\App\Models\User'],
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('@var \App\Models\User $user */', $result->contents);
-        $this->assertStringNotContainsString('@var mixed $user', $result->contents);
-    }
-
-    #[Test]
     public function suppress_comment_lands_inside_the_next_statements_php_block(): void
     {
         $result = $this->compiler->compile(

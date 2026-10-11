@@ -26,4 +26,29 @@ class Cache extends Facade
      * @return TCacheValue
      */
     public static function rememberForever($key, \Closure $callback) {}
+
+    /**
+     * Get an item from the cache, or execute the given Closure and store the result forever.
+     *
+     * @template TCacheValue
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  \Closure(): TCacheValue  $callback
+     * @return TCacheValue
+     */
+    public static function sear($key, \Closure $callback) {}
+
+    /**
+     * Retrieve an item from the cache by key, refreshing it in the background if it is stale.
+     *
+     * @template TCacheValue
+     *
+     * @param  \UnitEnum|string  $key
+     * @param  array{ 0: \DateTimeInterface|\DateInterval|int, 1: \DateTimeInterface|\DateInterval|int }  $ttl
+     * @param  (callable(): TCacheValue)  $callback
+     * @param  array{ seconds?: int, owner?: string }|null  $lock
+     * @param  bool  $alwaysDefer
+     * @return TCacheValue
+     */
+    public static function flexible($key, $ttl, $callback, $lock = null, $alwaysDefer = false) {}
 }

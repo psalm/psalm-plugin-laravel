@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\Container\Container;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Illuminate\View\Compilers\BladeCompiler;
@@ -126,6 +127,39 @@ final class CompilerEnvironmentTest extends TestCase
 
         $this->assertFalse($trusted);
         $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * #1693: a plain closure registered in a service provider is bound to the provider. Its file
+     * (the provider) is hashed, so it must not disable the cache.
+     */
+    #[Test]
+    public function closures_bound_to_a_service_provider_are_trusted(): void
+    {
+        $compiler = $this->compiler();
+        (new ProviderBoundDirectives(new Container()))->registerOn($compiler);
+
+        [$hash, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertTrue($trusted);
+        $this->assertSame([], $reasons);
+        $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * The provider exemption is not "any bound object": the reason names the directive and the
+     * bound class so the user can find the input that disabled the cache.
+     */
+    #[Test]
+    public function a_directive_bound_to_another_object_is_untrusted_and_named(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', new MarkerDirective('V1'));
+
+        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
+        $this->assertSame(["directive 'mine' (callable bound to " . MarkerDirective::class . ')'], $reasons);
     }
 
     /**

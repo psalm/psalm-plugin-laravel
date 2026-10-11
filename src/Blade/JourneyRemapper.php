@@ -152,18 +152,7 @@ final class JourneyRemapper
     private static function rewriteText(string $journeyText, array $targets): ?string
     {
         foreach ($targets as $fileName => $shadow) {
-            $target = $shadow['target'];
-
-            $rewritten = \preg_replace_callback(
-                PsalmBridge::locationSummaryPattern($fileName),
-                /** @param array<array-key, string> $matches */
-                static fn(array $matches): string => PsalmBridge::locationSummary(
-                    $target->templateName,
-                    \max(1, $target->templateLineFor((int) $matches[1])),
-                    (int) $matches[2],
-                ),
-                $journeyText,
-            );
+            $rewritten = self::rewriteLocationSummaries($journeyText, $fileName, $shadow['target']);
 
             if ($rewritten === null) {
                 return null;
@@ -173,5 +162,31 @@ final class JourneyRemapper
         }
 
         return $journeyText;
+    }
+
+    /**
+     * Substitutes every `file_name:line:column` descriptor of one shadow in a text with the template
+     * position it came from. A line with no template position (the prelude) clamps to line 1: the
+     * same file-level convention as the journey steps.
+     *
+     * Shared with {@see ShadowIssueRelocator}, because Psalm also embeds such a descriptor in a few
+     * issue messages (`ReferenceReusedFromConfusingScope`).
+     *
+     * @return string|null null when the substitution fails outright
+     *
+     * @psalm-mutation-free
+     */
+    public static function rewriteLocationSummaries(string $text, string $fileName, ShadowTarget $target): ?string
+    {
+        return \preg_replace_callback(
+            PsalmBridge::locationSummaryPattern($fileName),
+            /** @param array<array-key, string> $matches */
+            static fn(array $matches): string => PsalmBridge::locationSummary(
+                $target->templateName,
+                \max(1, $target->templateLineFor((int) $matches[1])),
+                (int) $matches[2],
+            ),
+            $text,
+        );
     }
 }

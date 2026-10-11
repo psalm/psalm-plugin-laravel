@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Repository rules come from AGENTS.md and .github/skills/code-review/SKILL.md,
+# which CodeRabbit auto-discovers; keep them there, not here.
+language: en-US
+
+reviews:
+  # Inline comments only for important findings; minor ones are grouped in the review summary.
+  profile: quiet
+  # Keep the PR description untouched and the walkthrough comment minimal.
+  high_level_summary: false
+  review_status: false
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  assess_linked_issues: false
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+  in_progress_fortune: false
+  auto_review:
+    enabled: true
+    drafts: false
+    # Review once per PR; re-run with `@coderabbitai review` after follow-up pushes.
+    auto_incremental_review: false
+    # 4.x is the default branch; 3.x receives backports.
+    base_branches:
+      - "3.x"
+  path_filters:
+    - "!tests/Application/laravel-test-psalm-baseline.xml"
+  path_instructions:
+    - path: "stubs/**/*.phpstub"
+      instructions: |
+        - Verify signatures against Laravel source in vendor/laravel/framework, not Laravel PHPDoc or other tools' stubs.
+        - A re-declared class must repeat its `implements` clause verbatim (for interfaces, the `extends` list).
+        - A version-dir override (stubs/<version>/) that redeclares a method must restate every `@psalm-taint-sink` of the earlier declaration.
+    - path: "src/Handlers/**/*.php"
+      instructions: |
+        - Handlers must return null when unsure; a non-null answer overrides Psalm's inference permanently.
+        - New handlers need a paired `require_once` in Plugin::registerHandlers().
+        - Narrowing must apply only to a receiver resolved to exactly one known class.
+    - path: "tests/Type/**/*.phpt"
+      instructions: |
+        - Taint and opt-in-rule tests need an `--ARGS--` section, otherwise they pass vacuously.
+        - Tests for stubs/<version>/ overrides need a `--SKIPIF--` with LaravelVersion::skipBelow().
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: "off"
+    description:
+      mode: "off"
+    issue_assessment:
+      mode: "off"
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    autofix:
+      enabled: false
+  tools:
+    # Style is enforced by php-cs-fixer and Rector; types by Psalm self-analysis.
+    phpstan:
+      enabled: false
+    phpcs:
+      enabled: false
+    phpmd:
+      enabled: false
+    languagetool:
+      enabled: false
+
+chat:
+  art: false

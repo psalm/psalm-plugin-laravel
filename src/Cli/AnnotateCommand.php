@@ -14,7 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Writes the `{{-- @var --}}` declarations a Blade template is missing, taking the types from the
+ * Writes the `@var` docblock declarations a Blade template is missing, taking the types from the
  * `view()` call sites that render it.
  *
  * Runs Psalm as a child process rather than doing its own parse: the call sites' types only exist
