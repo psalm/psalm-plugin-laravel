@@ -92,6 +92,11 @@ final class PreludeBuilder
             $lines[] = "/** @var mixed \${$name} */";
         }
 
+        // The closing tag is the prelude's sentinel: php-parser reads it as an empty statement and
+        // keeps it as one `Stmt\Nop` carrying every docblock after the contract statements, which
+        // Psalm applies before that statement's AfterStatementAnalysis ({@see ComponentViewSeedHandler}).
+        // It is the prelude's last statement and the only one on a line mapped to template line 0;
+        // code added before the closing tag would take those docblocks over and stop the seeding.
         return "<?php\n" . \implode("\n", $lines) . "\n?>\n";
     }
 
