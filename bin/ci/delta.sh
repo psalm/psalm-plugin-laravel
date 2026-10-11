@@ -81,7 +81,7 @@ fi
 BASE_LABEL="base-${BASE_SHA}"
 HEAD_LABEL="pr-${HEAD_SHA}"
 
-# Flags change the results, so they key the cache too: `--find-dead-code` -> `+find-dead-code`.
+# Flags change the results, so they key the cache too: `--blade` -> `+blade`.
 # Registry flags are [A-Za-z0-9._=-] only, so the unquoted split is glob-safe.
 FLAGS_SUFFIX=""
 for flag in $RUN_FLAGS; do
