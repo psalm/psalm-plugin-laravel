@@ -13,6 +13,7 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
@@ -37,7 +38,8 @@ use Psalm\Storage\ClassLikeStorage;
 final class ComposerKeyResolver
 {
     /** Read data by name, or reach the arguments without naming them. */
-    private const OPAQUE_FUNCTIONS = ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg'];
+    private const OPAQUE_FUNCTIONS = ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg',
+        'debug_backtrace', 'debug_print_backtrace', 'call_user_func', 'call_user_func_array'];
 
     public static function resolve(Codebase $codebase): void
     {
@@ -45,7 +47,10 @@ final class ComposerKeyResolver
         $methods = [];
 
         foreach (ContractRegistry::composerSources() as $viewName => $sources) {
+            // Written explicitly: a key set an earlier run recorded must not outlive the proof for it.
             if ($sources === null) {
+                ContractRegistry::registerComposedKeys((string) $viewName, null);
+
                 continue;
             }
 
@@ -59,6 +64,8 @@ final class ComposerKeyResolver
                 }
 
                 if ($methods[$id] === null) {
+                    ContractRegistry::registerComposedKeys((string) $viewName, null);
+
                     continue 2;
                 }
 
@@ -82,7 +89,7 @@ final class ComposerKeyResolver
             if (isset($storage->declaring_method_ids['__construct'])) {
                 $constructor = self::declaredMethod($codebase, $storage, '__construct');
 
-                if (!$constructor instanceof Stmt\ClassMethod || $constructor->stmts === null || self::hasOpaqueNode($constructor->stmts)) {
+                if (!$constructor instanceof Stmt\ClassMethod || $constructor->stmts === null || self::hasOpaqueNode($constructor->stmts) || self::hasOpaqueDefault($constructor)) {
                     return null;
                 }
             }
@@ -117,7 +124,30 @@ final class ComposerKeyResolver
             return null;
         }
 
-        return ClassMethodResolver::resolve($codebase, $declaring)['classMethod'] ?? null;
+        $resolved = ClassMethodResolver::resolve($codebase, $declaring);
+
+        // Laravel calls the method from outside the class, so anything but a public one lands in
+        // `__call()`. An `as protected` adaptation lives on the using class, not on the trait's method.
+        if ($resolved === null) {
+            return null;
+        }
+
+        $visibility = $codebase->classlike_storage_provider->get($appearing->fq_class_name)->trait_visibility_map[$method]
+            ?? $resolved['methodStorage']->visibility;
+
+        return $visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC ? $resolved['classMethod'] : null;
+    }
+
+    /** A default value is evaluated when the container builds the composer, and `new` runs a constructor. */
+    private static function hasOpaqueDefault(Stmt\ClassMethod $method): bool
+    {
+        foreach ($method->params as $parameter) {
+            if ($parameter->default instanceof Expr && (new NodeFinder())->findFirstInstanceOf($parameter->default, Expr\New_::class) instanceof Node) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -142,7 +172,7 @@ final class ComposerKeyResolver
             $view = $parameter->var->name;
         }
 
-        if (self::hasOpaqueNode($stmts)) {
+        if (self::hasOpaqueNode($stmts) || self::hasOpaqueDefault($method)) {
             return null;
         }
 
@@ -198,19 +228,37 @@ final class ComposerKeyResolver
     private static function isOpaque(Node $node): bool
     {
         return match (true) {
-            $node instanceof Expr\FuncCall => $node->name instanceof Name
-                && \in_array($node->name->toLowerString(), self::OPAQUE_FUNCTIONS, true),
+            $node instanceof Expr\FuncCall => !$node->name instanceof Name || self::isOpaqueFunction($node->name),
             // The parent constructor's body is never read, and it may share data.
             $node instanceof Expr\StaticCall && $node->class instanceof Name && $node->class->toLowerString() === 'parent'
                 && $node->name instanceof Identifier && $node->name->toLowerString() === '__construct' => true,
             // `View::share()` adds keys at render time that no `with()` shows (Factory::make merges them).
             $node instanceof Expr\MethodCall, $node instanceof Expr\NullsafeMethodCall, $node instanceof Expr\StaticCall
-                => $node->name instanceof Identifier && $node->name->toLowerString() === 'share',
+                => !$node->name instanceof Identifier || $node->name->toLowerString() === 'share',
             $node instanceof Expr\Variable => !\is_string($node->name),
             // An included or evaluated file runs in this method's scope, `$view` and all.
             $node instanceof Expr\Include_, $node instanceof Expr\Eval_ => true,
             default => false,
         };
+    }
+
+    /** Matches the imported or namespaced spelling too: `use function func_get_args as args`. */
+    private static function isOpaqueFunction(Name $name): bool
+    {
+        foreach (['resolvedName', 'namespacedName'] as $attribute) {
+            /** @psalm-var mixed $resolved */
+            $resolved = $name->getAttribute($attribute);
+
+            if ($resolved instanceof Name) {
+                $resolved = $resolved->toString();
+            }
+
+            if (\is_string($resolved) && \in_array(\strtolower(\ltrim($resolved, '\\')), self::OPAQUE_FUNCTIONS, true)) {
+                return true;
+            }
+        }
+
+        return \in_array($name->toLowerString(), self::OPAQUE_FUNCTIONS, true);
     }
 
     /**

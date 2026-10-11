@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use Illuminate\Contracts\Container\Container;
+use Illuminate\Container\Container;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Support\Str;
 use Illuminate\View\Factory;
@@ -25,7 +25,6 @@ final class ComposerSourceReader
 {
     /** @psalm-mutation-free */
     public function __construct(
-        private readonly Container $app,
         private readonly ?Factory $factory,
     ) {}
 
@@ -35,22 +34,25 @@ final class ComposerSourceReader
      */
     public function sourcesFor(string $viewName): ?array
     {
-        $events = $this->factory?->getDispatcher();
+        $factory = $this->factory;
+        $events = $factory?->getDispatcher();
 
-        if ($events === null) {
+        if (!$factory instanceof \Illuminate\View\Factory || $events === null) {
             return [];
         }
 
         try {
-            if (!$events instanceof Dispatcher) {
+            // Anything but Laravel's own classes can add listeners or behaviour the raw listener list
+            // does not show, so only the fact that a listener exists is known.
+            if ($events::class !== Dispatcher::class || $this->overridesDispatch($factory)) {
                 return $events->hasListeners("composing: {$viewName}") || $events->hasListeners("creating: {$viewName}") ? null : [];
             }
 
             $sources = [];
 
             foreach (["composing: {$viewName}", "creating: {$viewName}"] as $event) {
-                foreach ($this->listenersFor($events, $event) as $listener) {
-                    $source = $this->classMethodOf($listener);
+                foreach ($this->listenersFor($events, $event) as [$listener, $wildcard]) {
+                    $source = $this->classMethodOf($listener, $wildcard);
 
                     if ($source === null) {
                         return null;
@@ -66,14 +68,25 @@ final class ComposerSourceReader
         }
     }
 
+    private function overridesDispatch(Factory $factory): bool
+    {
+        foreach (['callComposer', 'callCreator'] as $method) {
+            if ((new \ReflectionMethod($factory, $method))->getDeclaringClass()->getName() !== Factory::class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
-     * @return list<\Closure|string>
+     * @return list<array{0: \Closure|string, 1: bool}> listener and whether a wildcard key holds it
      */
     private function listenersFor(Dispatcher $events, string $event): array
     {
         /** @var array<string, list<\Closure|string>> $raw */
         $raw = $events->getRawListeners();
-        $listeners = $raw[$event] ?? [];
+        $listeners = \array_map(static fn(\Closure|string $listener): array => [$listener, false], $raw[$event] ?? []);
 
         // The same test `Dispatcher::hasWildcardListeners()` applies; `$wildcards` has no getter.
         /** @var array<string, list<\Closure|string>> $wildcards */
@@ -81,7 +94,9 @@ final class ComposerSourceReader
 
         foreach ($wildcards as $pattern => $wildcard) {
             if (Str::is($pattern, $event)) {
-                \array_push($listeners, ...$wildcard);
+                foreach ($wildcard as $listener) {
+                    $listeners[] = [$listener, true];
+                }
             }
         }
 
@@ -91,18 +106,25 @@ final class ComposerSourceReader
     /**
      * @return array{0: string, 1: string}|null
      */
-    private function classMethodOf(\Closure|string $listener): ?array
+    private function classMethodOf(\Closure|string $listener, bool $wildcard): ?array
     {
         if (!$listener instanceof \Closure) {
             return null;
         }
 
-        // A wildcard view name wraps the class callback once more, in `addEventListener()`.
+        // A wildcard view name wraps the class callback once more, in `addEventListener()`, which
+        // turns the dispatcher's `(event, payload)` into the view. The same class callback registered
+        // raw under a wildcard key would read the event name instead, and an exact key never holds
+        // the wrapper.
         $wrapped = $this->capturedBy($listener, 'addEventListener') ?? [];
 
-        if (isset($wrapped['callback']) && \count($wrapped) === 1) {
-            $listener = $wrapped['callback'];
+        $unwrapped = isset($wrapped['callback']) && \count($wrapped) === 1 ? $wrapped['callback'] : null;
+
+        if ($wildcard !== ($unwrapped !== null)) {
+            return null;
         }
+
+        $listener = $unwrapped ?? $listener;
 
         $captured = $this->capturedBy($listener, 'buildClassEventCallback') ?? [];
 
@@ -110,14 +132,25 @@ final class ComposerSourceReader
             return null;
         }
 
-        // `make()` would resolve whatever the container maps the name to, not the class named here.
+        // `make()` would resolve whatever the factory's own container maps the name to, not the class
+        // named here.
         $class = \ltrim($captured['class'], '\\');
+        $container = $this->factory?->getContainer();
 
-        if ($this->app->bound($captured['class']) || $this->app->bound($class)) {
+        if (!$container instanceof Container
+            || $container->bound($captured['class']) || $container->bound($class)
+            || $this->extended($container, $captured['class']) || $this->extended($container, $class)
+        ) {
             return null;
         }
 
         return [$class, \strtolower($captured['method'])];
+    }
+
+    /** `Container::getExtenders()` is protected, and extenders rewrite the object `make()` returns. */
+    private function extended(Container $container, string $class): bool
+    {
+        return (new \ReflectionMethod($container, 'getExtenders'))->invoke($container, $class) !== [];
     }
 
     /**

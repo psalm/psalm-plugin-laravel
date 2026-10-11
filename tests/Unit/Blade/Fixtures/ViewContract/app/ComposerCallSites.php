@@ -63,6 +63,11 @@ final class ComposerCallSites
         view('composer-ctor', ['title' => 123]);
         // The parent constructor (called or inherited) shares `count`.
         view('composer-parent-ctor', ['title' => 123]);
+        // A protected `compose()` is reached through `__call()`, which supplies `count`.
+        view('composer-protected', ['title' => 123]);
+        view('composer-protected-trait', ['title' => 123]);
+        // A default value that constructs an object runs code the reader cannot see.
+        view('composer-ctor-default', ['title' => 123]);
         view('composer-inherited-ctor', ['title' => 123]);
         view('composer-unknown', ['title' => 123]);
     }

@@ -520,7 +520,10 @@ final class BladeBootstrapperTest extends TestCase
     private function appWithViewFactory(): Container
     {
         $app = $this->app();
-        $app->instance('view', new Factory(new EngineResolver(), $app->make('view.finder'), new Dispatcher()));
+        $factory = new Factory(new EngineResolver(), $app->make('view.finder'), new Dispatcher());
+        $factory->setContainer($app);
+
+        $app->instance('view', $factory);
 
         return $app;
     }
@@ -663,6 +666,85 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertTrue($this->bootstrapper($app, new RecordingShadowRegistrar())->boot());
         $this->assertSame(['123' => [['App\\NumberedComposer', 'compose']]], ContractRegistry::composerSources());
+    }
+
+    /** `make()` would run whatever an extender returns, which is not the class the listener names. */
+    #[Test]
+    public function a_composer_class_the_container_extends_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->extend('App\\Extended', static fn(object $composer): object => $composer);
+        $app->make('view')->composer('extended', 'App\\Extended');
+        $this->writeTemplate('extended.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame(['extended' => null], ContractRegistry::composerSources());
+    }
+
+    /** The composer is built by the container the factory holds, not by the one the reader was handed. */
+    #[Test]
+    public function a_binding_in_the_factorys_own_container_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $other = new Container();
+        $other->bind('App\\Swapped', static fn(): object => new \stdClass());
+
+        $factory = $app->make('view');
+        $factory->composer('swapped', 'App\\Swapped');
+        $factory->setContainer($other);
+        $this->writeTemplate('swapped.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame(['swapped' => null], ContractRegistry::composerSources());
+    }
+
+    /**
+     * A wildcard dispatcher key passes `(event, payload)`, which only `addEventListener()`'s adapter turns
+     * into the view: the same class callback registered raw under `*` reads another argument.
+     */
+    #[Test]
+    public function a_class_callback_registered_raw_under_a_wildcard_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $factory = $app->make('view');
+        $factory->composer('seed', 'App\\Seed');
+
+        $callback = $factory->getDispatcher()->getRawListeners()['composing: seed'][0];
+        $factory->getDispatcher()->listen('composing: raw.*', $callback);
+        $this->writeTemplate('raw/page.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame(['raw.page' => null], ContractRegistry::composerSources());
+    }
+
+    /** A subclass can add listeners or behaviour the raw listener list does not show. */
+    #[Test]
+    public function a_dispatcher_or_factory_subclass_leaves_a_listened_view_unknown(): void
+    {
+        $dispatcher = new class extends Dispatcher {};
+        $factory = new class (new EngineResolver(), $this->app()->make('view.finder'), $dispatcher) extends Factory {
+            public function callComposer(\Illuminate\Contracts\View\View $view): void
+            {
+                parent::callComposer($view);
+            }
+        };
+
+        foreach ([[$factory, new Dispatcher()], [new Factory(new EngineResolver(), $this->app()->make('view.finder'), $dispatcher), $dispatcher]] as [$candidate, $events]) {
+            $app = $this->app();
+            $candidate->setContainer($app);
+            $candidate->setDispatcher($events);
+            $candidate->composer('composed', 'App\\Composer');
+            $app->instance('view', $candidate);
+            $this->writeTemplate('composed.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+            ContractRegistry::reset();
+            $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+            $this->assertSame(['composed' => null], ContractRegistry::composerSources(), $candidate::class);
+        }
     }
 
     #[Test]
