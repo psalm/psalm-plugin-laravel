@@ -29,7 +29,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class AnalyzeCommand extends Command
 {
     /** Shorthand flags and the override token each stands for. */
-    private const SHORTHANDS = ['--blade' => 'blade=true', '--no-blade' => 'blade=false'];
+    private const SHORTHANDS = ['--blade' => 'blade=true', '--no-blade' => 'blade=false', '--experimental' => 'experimental=true'];
 
     /**
      * @param string|null $workingDirectory Override the target directory; defaults to the process CWD.
@@ -64,6 +64,12 @@ final class AnalyzeCommand extends Command
             null,
             InputOption::VALUE_NEGATABLE,
             'Shorthand for --plugin-option=blade=true (--blade) or blade=false (--no-blade).',
+        );
+        $this->addOption(
+            'experimental',
+            null,
+            InputOption::VALUE_NONE,
+            'Shorthand for --plugin-option=experimental=true.',
         );
         $this->addOption(
             'plugin-option',
