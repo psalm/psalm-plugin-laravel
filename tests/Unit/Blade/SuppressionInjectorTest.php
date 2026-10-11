@@ -84,6 +84,22 @@ final class SuppressionInjectorTest extends TestCase
     }
 
     #[Test]
+    public function resolve_counts_multi_byte_lines_before_the_suppression(): void
+    {
+        // Multi-byte characters before the comment must not drift the byte-offset-derived line
+        // count: SourceLines::breaksIn() counts terminators, not characters, so it is unaffected.
+        $shadow = "prelude\n<?php /* blade:3 */ ?><?php echo e(\$foo); ?>\n";
+        $bladeSource = "Héllo wörld with émoji 😀 and more unicode chars here\n"
+            . "{{-- @psalm-suppress UndefinedVariable --}}\n{{ \$foo }}\n";
+        $lineMap = [1 => 0, 2 => 3];
+
+        $this->assertSame(
+            [3 => ['UndefinedVariable']],
+            (new SuppressionInjector())->resolve($shadow, $bladeSource, $lineMap),
+        );
+    }
+
+    #[Test]
     public function resolve_drops_a_suppression_with_nothing_to_attach_to(): void
     {
         $shadow = "<?php /* blade:1 */ ?>content\n";

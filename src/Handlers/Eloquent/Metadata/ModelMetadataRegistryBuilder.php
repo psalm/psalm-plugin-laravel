@@ -1480,7 +1480,7 @@ final class ModelMetadataRegistryBuilder
         // honest; 'mixed' matches CastsMethodParser's own `$value ?? 'mixed'` convention.
         $merged = \array_map(self::asCastString(...), $merged);
 
-        // KNOWN DIVERGENCE (Laravel 12.14–12.21 only): when a user trait initializer mergeCasts() a key that
+        // KNOWN DIVERGENCE (Laravel 12.20–12.21 only): when a user trait initializer mergeCasts() a key that
         // casts() ALSO declares, runtime there runs casts() first (bootTraits walks class_uses_recursive
         // parents-first) then the user init, so the USER value wins; from 12.22+ the order flips and casts()
         // wins — which is what merging casts() last reproduces on every version. Making it version-aware needs

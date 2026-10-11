@@ -1,0 +1,33 @@
+<?php
+
+namespace Laravel\Ai\Responses\Data;
+
+class ScoreAnswer extends Answer
+{
+    public function __construct(
+        public readonly float $score,
+        public readonly array $probabilities,
+        public readonly array $legend,
+        public readonly ?float $confidence = null,
+    ) {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function level(): int {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function label(): string|array|null {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function normalized(): float {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+}

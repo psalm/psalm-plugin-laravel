@@ -1,0 +1,20 @@
+<?php
+
+namespace Laravel\Ai\Responses\Data;
+
+class BooleanAnswer extends Answer
+{
+    public function __construct(
+        public readonly float $probability,
+    ) {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function isTrue(float $threshold = 0.5): bool {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+}

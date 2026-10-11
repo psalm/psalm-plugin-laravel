@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\ColumnFallback;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Psalm\LaravelPlugin\Config\TranslationKeys;
 use Psalm\LaravelPlugin\Plugin;
 
@@ -21,17 +23,10 @@ final class PluginConfigTest extends TestCase
 {
     private ?string $originalEnv = null;
 
-    private ?string $originalOptionsEnv = null;
-
     protected function setUp(): void
     {
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
         $this->originalEnv = $env !== false ? $env : null;
-
-        $optionsEnv = \getenv(PluginConfig::OPTIONS_ENV_VAR);
-        $this->originalOptionsEnv = $optionsEnv !== false ? $optionsEnv : null;
-        // A developer's shell value must not leak into the unrelated config assertions.
-        \putenv(PluginConfig::OPTIONS_ENV_VAR);
     }
 
     protected function tearDown(): void
@@ -40,12 +35,6 @@ final class PluginConfigTest extends TestCase
             \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=' . $this->originalEnv);
         } else {
             \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
-        }
-
-        if ($this->originalOptionsEnv !== null) {
-            \putenv(PluginConfig::OPTIONS_ENV_VAR . '=' . $this->originalOptionsEnv);
-        } else {
-            \putenv(PluginConfig::OPTIONS_ENV_VAR);
         }
     }
 
@@ -730,114 +719,139 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function options_env_enables_blade_without_the_xml_element(): void
+    public function an_override_wins_over_xml_and_default(): void
     {
-        \putenv('PSALM_LARAVEL_OPTIONS=blade=true');
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="false" /></pluginClass>');
 
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass />'));
-
-        $this->assertTrue($config->bladeEnabled);
-        $this->assertTrue(PluginConfig::fromXml(null)->bladeEnabled);
+        $this->assertTrue(PluginConfig::fromXml(null)->resolveDynamicWhereClauses);
+        $this->assertFalse(PluginConfig::fromXml($xml)->resolveDynamicWhereClauses);
+        $this->assertTrue(PluginConfig::fromXml($xml, PluginOverrides::parse('resolveDynamicWhereClauses=true'))->resolveDynamicWhereClauses);
+        $this->assertFalse(PluginConfig::fromXml(null, PluginOverrides::parse('resolveDynamicWhereClauses=false'))->resolveDynamicWhereClauses);
+        // A key the overrides do not set keeps its XML value.
+        $this->assertFalse(PluginConfig::fromXml($xml, PluginOverrides::parse('blade=true'))->resolveDynamicWhereClauses);
     }
 
     #[Test]
-    public function options_env_enabling_blade_keeps_the_sub_settings_from_xml(): void
+    public function every_key_reaches_its_setting(): void
     {
-        \putenv('PSALM_LARAVEL_OPTIONS=blade=true');
+        $config = PluginConfig::fromXml(null, PluginOverrides::parse(\implode(' ', [
+            'modelProperties.columnFallback=none',
+            'resolveDynamicWhereClauses=false',
+            'resolveConfigReturnTypes=false',
+            'reportImplicitQueryBuilderCalls=true',
+            'findMissingTranslations=true',
+            'findMissingViews=true',
+            'findUnconfiguredFilesystemDisks=true',
+            'findUnregisteredRouteNames=true',
+            'findSerializedQueuedModels=true',
+            'findOctaneIncompatibleBinding=true',
+            'findPromptInjection=false',
+            'blade=true',
+            'blade.validateViewData=true',
+            'blade.reportUnusedViewData=true',
+            'blade.reportMixedIssues=true',
+            'experimental=true',
+            'failOnInternalError=true',
+        ])));
+
+        $this->assertSame(ColumnFallback::None, $config->modelPropertiesColumnFallback);
+        $this->assertFalse($config->resolveDynamicWhereClauses);
+        $this->assertFalse($config->resolveConfigReturnTypes);
+        $this->assertTrue($config->reportImplicitQueryBuilderCalls);
+        $this->assertTrue($config->findMissingTranslations);
+        $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
+        $this->assertTrue($config->findUnregisteredRouteNames);
+        $this->assertTrue($config->findSerializedQueuedModels);
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
+        $this->assertFalse($config->findPromptInjection);
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertTrue($config->bladeValidateViewData);
+        $this->assertTrue($config->bladeReportUnusedViewData);
+        $this->assertTrue($config->bladeReportMixedIssues);
+        $this->assertTrue($config->experimental);
+        $this->assertTrue($config->failOnInternalError);
+    }
+
+    #[Test]
+    public function an_override_flips_explicit_xml_in_either_direction(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><modelProperties columnFallback="none" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findOctaneIncompatibleBinding=true findPromptInjection=false'));
+
+        $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
+        $this->assertFalse($config->findPromptInjection);
+    }
+
+    #[Test]
+    public function experimental_derived_defaults_resolve_after_the_overrides(): void
+    {
+        $derived = static fn(PluginConfig $config): array => [
+            $config->findUnconfiguredFilesystemDisks,
+            $config->findSerializedQueuedModels,
+            $config->findUnregisteredRouteNames,
+        ];
+        $experimentalXml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        // An experimental override reaches rules nothing sets explicitly...
+        $this->assertSame([true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
+        // ...and switches them back off over an experimental XML...
+        $this->assertSame([false, false, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
+
+        // ...but an explicit per-rule value, in the XML or an override, still wins in both directions.
+        $explicitXml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="false" /></pluginClass>');
+        $this->assertSame([true, false, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([false, false, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
+    }
+
+    #[Test]
+    public function blade_override_switches_blade_either_way_and_keeps_xml_sub_settings(): void
+    {
+        $this->assertTrue(PluginConfig::fromXml(null, PluginOverrides::parse('blade=true'))->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'), PluginOverrides::parse('blade=false'))->bladeEnabled);
 
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" /></pluginClass>'),
+            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" cacheDir="from-xml" /></pluginClass>'),
+            PluginOverrides::parse('blade=true'),
         );
 
         $this->assertTrue($config->bladeEnabled);
         $this->assertTrue($config->bladeValidateViewData);
+        $this->assertSame('from-xml', $config->bladeCacheDir);
     }
 
     #[Test]
-    public function options_env_disables_an_xml_enabled_blade(): void
+    public function blade_sub_settings_never_enable_blade(): void
     {
-        \putenv('PSALM_LARAVEL_OPTIONS=blade=false');
+        $subSettings = PluginOverrides::parse('blade.validateViewData=true blade.reportUnusedViewData=true blade.reportMixedIssues=true');
 
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'));
+        $this->assertFalse(PluginConfig::fromXml(null, $subSettings)->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);
+    }
 
-        $this->assertFalse($config->bladeEnabled);
+    /** @return iterable<string, array{string}> */
+    public static function malformedXml(): iterable
+    {
+        yield 'bad bool' => ['<resolveDynamicWhereClauses value="maybe" />'];
+        yield 'bad blade value' => ['<blade value="yes" />'];
+        yield 'bad blade sub-setting' => ['<blade reportMixedIssues="yes" />'];
+        yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
+        yield 'prompt injection without value' => ['<findPromptInjection />'];
     }
 
     #[Test]
-    public function options_env_last_repeated_key_wins(): void
+    #[DataProvider('malformedXml')]
+    public function xml_is_still_validated_when_an_override_wins(string $inner): void
     {
-        \putenv("PSALM_LARAVEL_OPTIONS=blade=true  blade=false\tblade=true");
-
-        $this->assertTrue(PluginConfig::fromXml(null)->bladeEnabled);
-
-        \putenv('PSALM_LARAVEL_OPTIONS=blade=true blade=false');
-
-        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'))->bladeEnabled);
-    }
-
-    #[Test]
-    public function empty_or_blank_options_env_leaves_the_xml_decision_alone(): void
-    {
-        \putenv('PSALM_LARAVEL_OPTIONS=');
-        $this->assertTrue(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'))->bladeEnabled);
-        $this->assertFalse(PluginConfig::fromXml(null)->bladeEnabled);
-
-        \putenv('PSALM_LARAVEL_OPTIONS=   ');
-        $this->assertTrue(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'))->bladeEnabled);
-    }
-
-    #[Test]
-    public function options_env_rejects_an_unknown_key_and_lists_the_supported_ones(): void
-    {
-        \putenv('PSALM_LARAVEL_OPTIONS=bladee=true');
-
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*unknown key 'bladee'.*Supported keys: 'blade'/");
 
-        PluginConfig::fromXml(null);
-    }
-
-    #[Test]
-    public function options_env_rejects_a_non_boolean_blade_value(): void
-    {
-        \putenv('PSALM_LARAVEL_OPTIONS=blade=maybe');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/Invalid PSALM_LARAVEL_OPTIONS blade value 'maybe'\. Valid values: 'true', 'false'\./");
-
-        PluginConfig::fromXml(null);
-    }
-
-    #[Test]
-    public function options_env_rejects_a_token_without_an_equals_sign(): void
-    {
-        \putenv('PSALM_LARAVEL_OPTIONS=blade');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'blade'.*KEY=VALUE/");
-
-        PluginConfig::fromXml(null);
-    }
-
-    #[Test]
-    public function options_env_rejects_an_empty_key_with_the_format_message(): void
-    {
-        \putenv('PSALM_LARAVEL_OPTIONS==true');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'=true'.*KEY=VALUE/");
-
-        PluginConfig::fromXml(null);
-    }
-
-    #[Test]
-    public function options_env_rejects_an_empty_value(): void
-    {
-        \putenv('PSALM_LARAVEL_OPTIONS=blade=');
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/PSALM_LARAVEL_OPTIONS.*'blade='.*KEY=VALUE/");
-
-        PluginConfig::fromXml(null);
+        PluginConfig::fromXml(
+            new \SimpleXMLElement("<pluginClass>{$inner}</pluginClass>"),
+            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true blade.reportMixedIssues=true modelProperties.columnFallback=none findPromptInjection=true'),
+        );
     }
 }

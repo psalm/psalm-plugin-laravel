@@ -238,7 +238,7 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function model_without_class_attributes_survives_warm_up_on_laravel_12(): void
     {
-        // Regression for #1254: Laravel 12.14 has none of the four configuration attributes, while
+        // Regression for #1254: the Laravel 12.x floor has none of the four configuration attributes, while
         // mergeHidden()/mergeVisible()/mergeAppends() are also unavailable. Attribute replay must be
         // a no-op instead of calling one of those missing helpers with an empty list.
         $codebase = $this->makeCodebase();
@@ -1261,7 +1261,7 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         // The #[Initialize] attribute and the bootTraits branch reading it arrive in Laravel 12.22; below
         // that the framework ignores the tag, so the replay stays convention-only and `via_attr` is absent
-        // (the plugin is correct there — the CI 12.14 floor exercises exactly this).
+        // (the plugin is correct there — the CI 12.20 floor exercises exactly this).
         if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Initialize::class)) {
             self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
         }

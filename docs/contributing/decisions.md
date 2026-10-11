@@ -154,6 +154,27 @@ This is acceptable — the handlers gracefully handle any Model subclass.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
 Registration order is preserved (relationship > factory > accessor > column).
 
+### Why container-bound classes are queued eagerly at plugin init
+
+**Decision:** `Plugin::__invoke()` calls `ContainerResolver::queueBoundClassesForScanning()` once, after `registerStubs()`: it `make()`s every binding and queues each resolved object class (`store_failure: false`) so `app('alias')` narrows to a class Psalm has storage for (#1797).
+
+- **Why init:** plugins initialize before Psalm's scan and before stub registration, so the classes are scanned as ordinary vendor files, not as stubs (vimeo/psalm#12313). The former `AfterClassLikeVisit` hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run).
+- **Rejected, lazy only** (drop the queue, keep the resolver's storage guard): `app('encrypter')`, `app('cache')` and other string aliases become `mixed` whenever nothing else scans the concrete. The probe found 152 of 201 bound concretes that nothing else scans; `ContainerNarrowedMethodResolutionTest` fails.
+- **Rejected, targeted pre-scan** (queue only classes whose literal abstracts the project names): the only scan-time hook, `AfterClassLikeVisit`, misses file-scope files and goes stale on cache replay after a binding changes. The workable form is an init-time AST pass over `ProjectAnalyzer::$project_files` (private, read by reflection) with a single-file/whole-run gate.
+  - unopim (Laravel 13, 2331 files), single file: 4881 -> 4164-4319 scanned files, 8.8 -> 8.0-8.2 s cold; warm cache is slower (3.9 -> 4.4 s). Whole run: within noise.
+  - Without also queuing alias-binding concretes, single-file results diverge, e.g. `Password::broker()` gives a false `InvalidReturnType`. Literals reached via variables, class constants or concatenation drop to `mixed`.
+  - Cost: about 250 src and 350 test lines. Revisit only if PhpStorm warm-cache runs show a real cost (#1797 reports 574-668 extra classes per single-file run on a 19k-file app).
+- **Rejected, non-instantiating discovery** (`getClosure()`'s captured `$concrete`, `$instances`): covers only 75 of 201 concretes. Core services (cache, encrypter, log) are bound with provider closures and need `make()`.
+
+### `Request::user()` overrides: per-subclass registration, explicit guard only
+
+**Decision:** `RequestHandler::afterCodebasePopulated()` registers the `Request::user()` return-type closure on every `Request` subclass whose `user()` resolves to an override (own, inherited from an overriding parent, or trait-imported), e.g. Laravel Nova's `NovaRequest`.
+
+- **Why per subclass:** Psalm dispatches a return-type provider for the called class or the declaring class only (`MethodCallReturnTypeFetcher`), never an intermediate ancestor, so the `Request` registration never fires for an override and calls stay `mixed`. A trait override is dispatched under the trait, hence registration on the using class and its descendants rather than relying on the declaring-class fallback.
+- **Forwarding bet:** an override is assumed to forward an explicit guard to `parent::user($guard)`. Only an explicit literal string or string-backed enum case guard narrows; dynamic, unknown, or unpacked guards decline.
+- **No-arg and `null` decline on overrides:** the override may pick its own default (Nova reads `config('nova.guard')`), so the app's `auth.defaults.guard` is not provable there. Plain `Request` keeps the default-guard narrowing.
+- **Declared return type wins, decided by Psalm itself:** registration takes every override; at call time, after the argument-shape bails, the handler asks Psalm for its own return type of the called class's `user()` and declines unless it is `mixed` (or unresolved). The call is `Methods::getMethodReturnType()` with the event's `StatementsAnalyzer`, the same call `MethodCallReturnTypeFetcher` makes, minus template lower bounds (an unresolved template param is never mixed, so this can only decline), so typed, docblock-typed, trait-aliased, and documented-by-a-typed-ancestor overrides all keep Psalm's answer and an untyped `{@inheritDoc}` override (documented by `Request::user()`'s `mixed`) narrows. Rejected: a registration-time gate mirroring Psalm's documenting/overridden-method resolution from storage, which diverged on trait aliases, child re-aliases, and a `: mixed` child under a docblock-typed parent. `Codebase::getMethodReturnType()` is not a substitute either: it passes no source analyzer, so `Methods::getMethodReturnType()` returns the documenting `mixed` over an override's own `?Admin`.
+
 ## Performance
 
 ### Performance budget for handlers
@@ -175,6 +196,20 @@ Registration order is preserved (relationship > factory > accessor > column).
 Document every workaround with a comment linking to the upstream issue.
 
 **Why:** Workarounds accumulate tech debt and can mask the root cause. They also break silently when the upstream behavior changes. But waiting indefinitely for upstream fixes blocks real users.
+
+### `NamedArgumentTaintHandler` strips only named arguments bound to a variadic
+
+**Decision:** Strip taint from a named-argument value only when Psalm binds it to the callee's variadic and the callee resolves exactly. Everything else is left to Psalm.
+
+**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1, so the old strip-everything handler only hid true positives. Two variadic bugs remain:
+- vimeo/psalm#12252: an unpacked argument is mapped onto every parameter and string keys are ignored, so `run(...$args)` forwarding to `handle(...$args)` reports `run(page: $x)` against `handle()`'s first parameter (#1395).
+- vimeo/psalm#12251: a variadic is keyed by its written offset, so `v(zzz: $x)` collides with the fixed parameter declared there.
+
+Deleting the handler would bring the #1395 false positive back, so it shrank to this one rule. Retire it when both bugs are fixed.
+
+**Accepted limitation:** the strip drops the whole flow, so a genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (`TaintedNamedArgumentVariadicKnownLimitation`). `AddRemoveTaintsEvent` names neither the parameter nor the destination, so no narrower strip exists.
+
+**Rejected (draft PR #1579):** strip only when the written offset collides with a fixed parameter. It keeps the genuine finding but reopens the reported #1395 false positive, which sits at the variadic's own offset.
 
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 
@@ -269,36 +304,20 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 - `new Illuminate\Http\Response(...)` is a second route to the same sink. Its journey tail (dumped empirically) matches `make()`'s shape, so the matcher trusts the label and needs no class gate.
 - A safe `Content-Type` is proven by a denylist, not the whitelist the issue proposed: deny types containing `html`, `xml` (an XML document can carry an XHTML-namespaced script) or `script` (the WHATWG JavaScript group; `application/postscript` is accepted collateral), plus `multipart/*` and the sniffing escapes `unknown/unknown` and `application/unknown`. Every other well-formed literal type is exempt, so vendor download types need no maintenance list.
 
-**Second application (#1435, `PromptGuardTaintHandler`):** the same mechanism exempts a
-`TaintedLlmPrompt` at a `laravel/ai` `prompt()` / `stream()` call site. Two facts made it cheaper
-than #1348:
+**Second application (#1435, `PromptGuardTaintHandler`):** the same mechanism exempts a `TaintedLlmPrompt` at a `laravel/ai` `prompt()` / `stream()` call site. Two facts made it cheaper than #1348:
 
-- The journey tail label carries the RECEIVER class, not the declaring trait or base
-  (`Internal/Codebase/Methods::getCasedMethodId()` returns the original fq class name unless it is
-  all-lowercase). Dumped empirically on 7.0.0-beta19 with a child class inheriting `middleware()`
-  from an abstract base: the label named the child. So the class is free at emission time, no AST
-  read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
-- The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s
-  declared return type (as an object, a `class-string<Guard>`, or a `Guard::class` literal) whose
-  dispatched method populates `FunctionLikeStorage::$removed_taints` with
-  `TaintKind::INPUT_LLM_PROMPT`, which is what `@psalm-taint-escape llm_prompt` already writes.
+- The journey tail label carries the RECEIVER class, not the declaring trait or base (`Internal/Codebase/Methods::getCasedMethodId()` returns the original fq class name unless it is all-lowercase; dumped on 7.0.0-beta19 with a child inheriting `middleware()` from an abstract base). The class is free at emission time, with no AST read and no receiver-narrowing gate, and an interface- or union-typed receiver declines for free.
+- The proof target is declared TYPES, not a method body: the guard is a class in `middleware()`'s declared return type (object, `class-string<Guard>`, or `Guard::class` literal) whose dispatched method has `TaintKind::INPUT_LLM_PROMPT` in `FunctionLikeStorage::$removed_taints`, which is what `@psalm-taint-escape llm_prompt` already writes. Which method is dispatched: [taint-analysis.md](taint-analysis.md#how-the-prompt-guard-exemption-reads-an-escape-annotation).
 
-**Which method counts is `Illuminate\Pipeline\Pipeline`'s decision, not a fixed `handle`.**
-`Pipeline::carry()` tests `is_callable($pipe)` before `method_exists($pipe, 'handle')`, so an object
-entry with `__invoke` never reaches its own `handle()`, while a class-string entry is not callable,
-takes the container branch, and lands on `handle()` even when `__invoke` exists. The handler mirrors
-both orders per candidate rather than assuming one, and consults only the first method that exists:
-runtime has no fallthrough to the other one, so neither does the exemption. Confirmed against PHP's
-`is_callable()` semantics directly. A closure entry is unprovable by construction and always keeps
-the finding.
+**Trust the tag, do not prove the body.** The exemption is opt-in by the guard author and names no guard package. Rejected: an AST proof of `middleware()`'s body, which would hardcode one vendor's FQN and constructor parameters, could not tell a blocking guard from a logging one, and would exempt nothing for an app-local guard. The cost is an accepted caveat documented in `docs/security.md`: the annotation records that a mitigation is attached, not that a payload is neutralised.
 
-**Trust the tag, do not prove the body.** An AST proof of `middleware()`'s body was designed and
-rejected: it would hardcode one guard vendor's FQN and constructor parameter names (a pre-1.0
-signature that has already moved), it could not distinguish a blocking guard from a logging one
-anyway, and it would exempt nothing for an app-local or second-vendor guard. Reading an escape
-annotation instead keeps the plugin package-agnostic and makes the exemption opt-in by the guard
-author. The cost is an accepted policy caveat, documented in `docs/security.md`: the annotation
-records that a mitigation is attached, not that a payload is neutralised.
+### `json_encode()` HEX flags use `RemoveTaintsInterface`, with a type-unset gate
+
+**Decision:** `JsonEncodeTaintHandler` removes taint from `json_encode()` calls whose flags provably contain literal HEX flags, through `RemoveTaintsInterface`: `JSON_HEX_TAG` removes html, `JSON_HEX_APOS` plus `JSON_HEX_QUOT` removes has_quotes (either alone leaves a raw `'` or a `\"` that HTML does not unescape). Accepted gap: the encoder's own `"` delimiters still close a double-quoted attribute or JS string. Such markup is visibly broken for every string, array or object value (ints, bools and null encode bare), so it rarely survives manual testing; keeping has_quotes instead would report every `@json` in a `<script>` block, where it is safe. Pinned by `TaintedJsonEncodeDoubleQuotedAttributeKnownLimitation.phpt`.
+
+**Why this is not the graph mutation rejected above:** the hazard there is a removal landing on a callee's single project-wide argument-to-return edge. `json_encode()` is a Psalm-shipped stub, so Psalm specializes both of its nodes per call location, and the removal affects only that call's own edge. The handler checks that instead of assuming it: it declines unless the resolved storage is specialized (the test of `TaintFlowGraph::isCallSpecialized()`), so a project stub that re-declares `json_encode()` without per-call specialization (neither `@psalm-taint-specialize` nor `@psalm-pure`) keeps its findings. The handler is stateless and keys on the call expression, not on a recorded node. Emission-time suppression does not fit: the escape belongs to the transform, not to any one sink, so there is no sink call site to key on.
+
+**Constraint:** `ReturnAnalyzer` accumulates the removal returned for a returned expression into the enclosing function's removed taints, which then apply to every return path of that function. A handler that answered on that dispatch would silence `return $tainted;` in the same function. The handler answers only while the call's type is still unset, which is true for the dispatch that writes the edge and false for the return and argument dispatches. This is an internal-ordering heuristic, not counting, and it fails toward a retained finding if Psalm reorders it. The same leak exists in core for `htmlspecialchars()`.
 
 ## Breaking Changes
 
@@ -343,6 +362,24 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - Prefer parent-class/trait matching over FQCN matching (FQCN breaks for custom namespaces)
 - Never suppress issues that *could* be legitimate bugs (e.g. don't suppress `InvalidReturnType` just because it's common)
 
+### Dead code on Psalm 7: edges, not suppressions, for convention entry points
+
+**Decision:** Methods Laravel calls by convention (invokable `__invoke`, pipe `handle`/`terminate`, queued/bus job `handle`/`failed`, `Dispatchable` constructors) and the hooks the queue reads off a job (`$tries`, `middleware()`, `uniqueId()`, ...) are rooted by class-conditional edges ("class is alive => this member is alive") in `IndirectMethodReferenceHandler::RULES`, not by `SuppressHandler` entries. The edge is sourced at the class node (`Context::$self`, no file path), so an unreferenced job stays `UnusedClass`.
+
+**Why:** Psalm 7 resolves dead code by reachability, so an uncalled entry method is never alive and its private dependencies cascade into error-level `UnusedProperty`/`UnusedMethod`. A suppression hides only the entry point's own issue and adds no edge.
+
+**Probed dead ends:**
+- Suppression: adds no edge.
+- Mutating `MethodStorage::$public_api`: an unconditional root, even for dead classes, and it mutates Psalm storage.
+- Call-site AST hooks on `Route::*` / `dispatch()`: too many syntactic forms; string aliases (`'Plain@show'`) need a booted app.
+- Roots from the booted router: deferred; needs a trusted boot and goes stale with route caching and env.
+
+**Boundaries:** concrete user classes; public non-static members (the `Dispatchable` constructor at any visibility); a pipe needs a *native* `Closure` (or `?Closure`) on `handle()`'s second parameter. Not covered: route actions on non-controller classes, auto-discovered listeners, the remaining `SuppressHandler` convention entries.
+
+**Known limitations (accepted):**
+- A `ShouldQueue`-only class (no bus trait) gets no `handle` parameter injection: it may be a listener, and `CallQueuedListener` passes the event positionally. `make:job` always adds `Queueable`.
+- Used traits are read from the class and its parents only, not from traits composed of other traits, and a `class_alias()`ed trait is not recognised.
+
 ## Handler Registration Order
 
 ### Property handler priority: relationship > factory > accessor > column
@@ -350,6 +387,31 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Decision:** When registering property handlers per model in `ModelRegistrationHandler`, the order is: relationship properties first, then factory, then accessor, then migration columns. The first handler that returns a non-null result wins.
 
 **Why:** A method named `posts()` that returns a `HasMany` relation should always be treated as a relationship property, even if a migration column named `posts` also exists. Similarly, an accessor `getFullNameAttribute()` should take priority over a `full_name` column. The order reflects specificity: relationships and accessors are explicit code the developer wrote; columns are inferred from migrations and serve as the fallback.
+
+## Facades
+
+### First-party facade `mixed` pseudo-methods get per-method stubs, not root-signature promotion
+
+**Decision:** When Laravel's generated facade `@method` tag returns `mixed` but the underlying root method is templated (and would infer a precise type), add a real static method to `stubs/<layer>/Support/Facades/<Facade>.phpstub` copying the root signature. `FacadeStubPrecedenceHandler` then drops the pseudo-method, so Psalm uses the typed stub. Covered: `Cache::remember`, `rememberForever`, `flexible`, `sear`; `Cookie::queued`; `Context::scope` (#1368, #1737).
+
+**Why:** A targeted stub is surgical and safe. The rejected alternative — generically promoting the root's `MethodStorage` over any `mixed` pseudo in `FacadeMethodHandler` or via `AtomicStaticCallAnalyzer::checkPseudoMethod()` — was probed in #1737 and ruled out for two reasons: (a) a full census of first-party facade `@method` tags found only four `mixed` pseudos with a more-precise templated root (all four are now stubbed); the remaining `mixed` pseudos are `mixed` in the root too, so generic promotion changes nothing for them; (b) root params are often narrower than pseudo params — `Cache::get`'s pseudo accepts `\UnitEnum|array|string $key` while the root is untyped — so swapping them would introduce new false-positive `ArgumentTypeCoercion` errors. `FacadeMethodHandler` is also not an alternative: it is wired only for app facades and returns the raw declared return without template inference.
+
+**Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
+
+## Laravel Docblock Gaps
+
+### `Arr::toCssClasses()` accepts `null`; `toCssStyles()` is not widened
+
+**Decision:** `stubs/12.50.0/Support/Arr.phpstub` widens `toCssClasses()` to `array<array-key, bool|int|string|null>|string` with a plain `@return string` (#1775). `toCssStyles()` is left as Laravel declares it.
+
+**Why:**
+- `toCssClasses()` tolerates `null` at runtime: `['a', null]` gives `'a '`, `['a', 'b' => null]` gives `'a'`. Laravel's docblock rejects it since 12.50.0 (earlier releases declare a plain `array|string`, which is why the stub is a version dir, not `common`), so `@class(['a', $maybe])` reported `InvalidArgument`.
+- `toCssStyles()` does not tolerate it: a numeric-key `null` reaches `Str::finish(null, ';')` (PHP deprecation, stray `;`).
+- Psalm merges `array<string, ...>|array<int, ...>` into one array type, so `null` cannot be allowed for string keys only.
+
+**Boundaries:**
+- The plugin does not model Laravel's conditional `@return` (`''` vs `non-empty-string`): the wrong types are an upstream docblock bug, and `[null]` renders `''`, so the upstream `non-empty-string` is unsound for nullable items. Fix it in laravel/framework, not here.
+- A top-level `null` `$array` stays rejected.
 
 ## Producer Return Narrowing
 
@@ -386,3 +448,58 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - **Blanket nullable typing** (`?ComponentAttributeBag` / `?ComponentSlot` everywhere, the issue's own first framing). Fixes the over-typing but adds a NEW false positive: `PossiblyNullReference` on an author's own `$attributes->merge()` in a class-component view that never writes `@props`, since `Component::data()` / `AnonymousComponent::data()` already guarantee the key there. Rejected in the issue itself before implementation started.
 - **Directory/view-name classifier** (a view name under `components.` or a registered anonymous-component namespace/path, `ComponentTagCompiler::guessAnonymousComponentUsingNamespaces()`/`guessAnonymousComponentUsingPaths()`). More "principled" — it reflects how `<x-*>` actually resolves — but strictly worse in practice: it needs the view name threaded from `BladeBootstrapper` into `ShadowCompiler::compile()`, it cannot see class-component views outside `components/` (Laravel's own published `vendor/mail/**` overrides are exactly that shape, reached via `@component('mail::message')` **and** `<x-mail::message>`), and the view roots it would depend on are not part of `CompilerEnvironment::describe()`'s cache fingerprint, so a view-path config change would not invalidate cached shadows.
 - **A `$slot` render-path union** (`ComponentSlot|HtmlString`, per the issue's "Render-path differentiation" addendum). Laravel has not produced `HtmlString` slots since before this plugin's floor (`illuminate/view: ^11.35`) — `ManagesComponents::componentData()` builds a `ComponentSlot` on both the `<x-*>` and `@component` paths, verified byte-identical across Laravel 11.50, 12.55, and 13.31. The union would be strictly weaker (losing `$slot->isEmpty()`/`$slot->attributes`) for no soundness gain; only `$attributes` is genuinely render-path-sensitive (absent on the `@component` path), and that distinction cannot be told apart statically from the template source alone — accepted as a documented gap rather than chased with cross-template tracking.
+
+### Class component views are seeded at analysis time from `ClassLikeStorage` (#1804)
+
+**Decision:** `Blade\ComponentViewRegistry` maps a component class to its view at `AfterCodebasePopulated`, from Psalm's class storage and the declaring `render()`'s cached AST. `Blade\ComponentViewSeedHandler` then writes the `Component::data()` types into the shadow's `Context` on the prelude's closing-tag `Stmt\Nop`. The shadow bytes never mention a class.
+
+**Why:**
+- Everything the map needs exists after population: `parent_classes`, `declaring_method_ids['render']` (inherited `render()` included), and the parsed method body via `getStatementsForFile()`. The registry is built once in the parent process, before workers fork, like `ModelMetadataRegistry`.
+- Shadow freshness stays per template. The manifest fingerprints the template text and compiler environment only; a class change, or a `<x-…>` tag added in ANOTHER template, changes the seed without touching the shadow, and the seed is recomputed every run. A warm Psalm cache needs nothing extra on the CLI: `psalm` never runs in diff mode there (`Internal/Cli/Psalm.php`, `$is_diff = false`), so every shadow is re-analyzed against current storage (`ComponentViewTypingTest::a_warm_cache_follows_a_changed_property_type`). The language server is NOT covered: it sets `diff_methods = true` (`ProjectAnalyzer.php:361`) and re-analyzes only changed files and their recorded dependents, and no reference ties a shadow to the component class, so editing a class can leave its view's seed stale until the template itself changes.
+- The closing-tag `Nop` is the earliest point that works: Psalm applies a statement's `@var` docblocks before analyzing it, so a seed placed in `BeforeFileAnalysis` or `BeforeStatementAnalysis` would be overwritten by the prelude's own `@var mixed` net.
+
+**Rejected alternatives:**
+- **Boot-time reflection** of every project class extending `Component`: autoloads arbitrary project files in the main process (a missing parent or trait is an `Error`), duplicates Psalm's own scan, and resolves inherited `render()` no better than `declaring_method_ids`.
+- **Prelude text** (`@var` lines, or `render()`'s array copied into the shadow): makes one template's shadow depend on a class and on every other template's tags, so the fingerprint grows cross-file inputs; a copied expression also changes meaning (magic constants, imports, `self`/private scope) and duplicates its findings.
+- **Next-run type cache**: cold and warm runs would report differently; the manifest changes speed, never results.
+- **File-order tricks**: files are analyzed in worker chunks; producer-side types never cross workers.
+
+### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
+
+**Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.
+
+**Why:** the finding is a correlation gap, not a wrong signature. `compileAware()` picks the arm by `is_string($__key)`, and Psalm does not tie that ternary to the key it narrowed, so a keyed non-string default reaches an arm that runs only for an int key. The fault lives in one compiled shape, so the fix belongs where that shape is recognised. Residuals: [Compiler-generated code](../blade.md#compiler-generated-code).
+
+**Rejected alternatives:**
+- **A `string|null $key` stub.** Silences the `null` default from the original report, but hides a real `null` passed to a hand-written call in any PHP file. It also covers only `null`: `false`, `0`, `[]` defaults and the keyed arm's `NoValue` keep reporting.
+
+## Per-Run Overrides
+
+### One internal transport, bool and enum keys only
+
+**Decision:** `analyze --plugin-option=KEY=VALUE` hands its tokens to the child psalm in `PSALM_LARAVEL_INTERNAL_OPTIONS` (whitespace-split, last wins), overwriting any inherited value; the plugin reads only that variable. Path settings (`configDirectory`, `<blade cacheDir>`) stay XML-only, so no value contains whitespace.
+
+**Why internal, not a public env var:**
+- A bare `vendor/bin/psalm` run with it would bypass the `--no-reference-cache` gate below.
+- An exported variable silently changes every later run (shell profile, CI env), a config drift nobody sees in `psalm.xml`.
+- Publishing it later is non-breaking; withdrawing a public contract is not.
+
+**Rejected alternative:** a private JSON variable for CLI values plus env layer merging (#1709). It existed only to carry whitespace in paths and an env layer, and needed its own validation, forgery handling, and list semantics for `configDirectory`.
+
+### Every plugin setting is report-only for Psalm's result cache, except `blade` (file-reference cache)
+
+**Decision:** All keys of the override schema (`PluginOverrides::KEYS`) are classified report-only except `blade`. `psalm-laravel analyze` prepends `--no-reference-cache` whenever `--blade`/`--no-blade` or `--plugin-option` sets `blade`, even next to a user `--no-cache`: Psalm's getopt stops at the first positional, so the wrapper cannot tell which later flags Psalm parses, and Psalm accepts the duplicate. A future key that changes what Psalm persists at scan time (a scan-time `AfterClassLikeVisit`-style hook, stub selection, a `FileStorage`/`ClassLikeStorage` write) must be classified before it joins the schema, and needs the same wrapper treatment (`--no-reflection-cache` for storage writes).
+
+**Why:** Psalm's cache key hashes the config file, `composer.lock` and Psalm's own storage classes, and the providers are built before any plugin runs, so a per-run override cannot change it. That only matters for state Psalm PERSISTS, and it persists storage only at scan time (`Scanner.php`, `ReflectorVisitor` via `Codebase`). Every handler this plugin gates on a setting runs at analysis time or in `AfterCodebasePopulated` (after the scan, never persisted); all `AfterClassLikeVisit` handlers register unconditionally and read no setting; stub selection depends on no setting except the plugin cache path.
+
+Evidence (Psalm 7.0.0-rc1, laravel/framework 13.34, `--threads=1` and `--threads=4 --scan-threads=4`; each state compared with its own `--no-cache` run, sorted output):
+- Every key flipped on/off/on/off against one cache dir (both directions; the reference diffs were 120–190 lines, so the comparison is sensitive): identical to `--no-cache` at every step, except `blade`.
+- Positive control: a probe `AfterClassLikeVisit` handler gated on an env var went stale on the first warm run, so the method can detect a storage-affecting key.
+- `blade` on→off→on with `<blade />` and dead-code detection: the off run (warm) loses `UnusedClass` for classes only templates reference. The ON run persists the shadows' references (they are analysed through `addFilesToAnalyze`); the OFF run does not analyse the shadows, nothing overwrites those references, and dead-code consolidation still counts the classes as used. Fixed only by `--no-reference-cache` (not `--no-file-cache`, not `--no-reflection-cache`). `blade` is the sole key that changes the ANALYSED FILE SET under an identical config hash; `blade.*` sub-settings change nothing once Blade is on.
+
+**Rejected alternatives:**
+- **Plugin-side cache wipe on a settings fingerprint change.** Works in a probe, but `Config::removeCacheDirectory()` deadlocks in-process (it takes `LOCK_EX` on files this process holds `LOCK_SH` on), the hand-rolled variant hard-codes Psalm's internal directory names, wipes caches of other configs, and races between concurrent runs sharing one cache dir.
+- **Blanket `--no-cache` advice or injection.** False for every key but `blade`; costs a full cold run per invocation.
+- **Upstream cache-key hook** (plugin contribution known before `initProviders`): worth an upstream issue, nothing needs it today.
+
+Known separate defect, not caused by overrides: a Blade shadow with a syntax error loses its `ParseError` on a warm run (the parser cache replays the broken shadow's statements); it reproduces with the XML `<blade />` alone.

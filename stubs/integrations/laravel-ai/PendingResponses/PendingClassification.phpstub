@@ -1,0 +1,45 @@
+<?php
+
+namespace Laravel\Ai\PendingResponses;
+
+use Illuminate\Support\Traits\Conditionable;
+use Laravel\Ai\Contracts\Question;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\PendingResponses\Concerns\ResolvesProviderOptions;
+use Laravel\Ai\Responses\ClassificationResponse;
+
+class PendingClassification
+{
+    use Conditionable;
+    use ResolvesProviderOptions;
+
+    protected array $questions = [];
+
+    protected int $timeout = 30;
+
+    /**
+     * Direct construction also reaches the provider in
+     * `vendor/laravel/ai/src/PendingResponses/PendingClassification.php`.
+     *
+     * 1.2.0 appended `$attachments`; the method-level `@since` gates the whole signature on older
+     * releases. No sink on `$attachments`: attachment content is sunk at the raw-content
+     * `Files\Document` / `Files\Image` factories (`fromString()`, `fromBase64()`), as for `Promptable::prompt()`.
+     *
+     * @since 1.2.0
+     *
+     * @param array<int, \Laravel\Ai\Files\File|\Illuminate\Http\UploadedFile> $attachments
+     * @psalm-taint-sink llm_prompt $state
+     */
+    public function __construct(
+        protected string|array $state,
+        protected array $attachments = [],
+    ) {}
+
+    public function question(string $key, Question $question): self {}
+
+    public function questions(array $questions): self {}
+
+    public function timeout(int $seconds = 30): self {}
+
+    public function classify(Lab|array|string|null $provider = null, ?string $model = null): ClassificationResponse {}
+}

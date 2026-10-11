@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\AnalyzeCommand;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -22,7 +24,7 @@ final class AnalyzeCommandTest extends TestCase
     /** @var array<string, string|false> */
     private array $originalEnv = [];
 
-    private const ENV_VARS = ['PSALM_LARAVEL_OPTIONS', 'PSALM_LARAVEL_TEST_MARKER'];
+    private const ENV_VARS = ['PSALM_LARAVEL_INTERNAL_OPTIONS', 'PSALM_LARAVEL_TEST_MARKER'];
 
     protected function setUp(): void
     {
@@ -181,138 +183,213 @@ final class AnalyzeCommandTest extends TestCase
         unset($_SERVER['argv']);
 
         $this->assertSame(
-            ['forwarded' => [], 'blade' => null],
+            ['forwarded' => [], 'options' => []],
             (new AnalyzeCommand())->scanArguments(),
         );
     }
 
     #[Test]
-    public function strips_blade_flags_from_the_forwarded_tokens_and_reports_the_override(): void
+    public function strips_plugin_options_in_order_and_keeps_the_value_verbatim(): void
     {
-        $command = new AnalyzeCommand();
-
         $this->assertSame(
-            ['forwarded' => ['--threads=1', 'src', '--no-cache'], 'blade' => true],
-            $command->scanArguments(['psalm-laravel', 'analyze', '--threads=1', '--blade', 'src', '--no-cache']),
-        );
-        $this->assertSame(
-            ['forwarded' => ['--no-cache'], 'blade' => false],
-            $command->scanArguments(['psalm-laravel', '--no-blade', '--no-cache']),
-        );
-    }
-
-    #[Test]
-    public function reports_no_blade_override_when_neither_flag_is_given(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertNull($command->scanArguments(['psalm-laravel', 'analyze', '--threads=1'])['blade']);
-        $this->assertNull($command->scanArguments(['psalm-laravel', 'analyze'])['blade']);
-    }
-
-    #[Test]
-    public function the_last_blade_flag_wins(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertSame(
-            ['forwarded' => [], 'blade' => false],
-            $command->scanArguments(['psalm-laravel', 'analyze', '--blade', '--no-blade', '--blade', '--no-blade']),
-        );
-        $this->assertTrue($command->scanArguments(['psalm-laravel', 'analyze', '--no-blade', '--blade'])['blade']);
-    }
-
-    #[Test]
-    public function blade_flags_after_the_double_dash_boundary_are_forwarded_untouched(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertSame(
-            ['forwarded' => ['--', '--blade', 'src'], 'blade' => false],
-            $command->scanArguments(['psalm-laravel', 'analyze', '--no-blade', '--', '--blade', 'src']),
-        );
-        $this->assertNull($command->scanArguments(['psalm-laravel', 'analyze', '--', '--blade'])['blade']);
-    }
-
-    #[Test]
-    public function flags_that_merely_resemble_the_blade_flags_are_forwarded(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertSame(
-            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', 'blade'], 'blade' => null],
-            $command->scanArguments(['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', 'blade']),
+            [
+                'forwarded' => ['--threads=1', 'src'],
+                'options' => ['blade=true', 'modelProperties.columnFallback=none', 'a=b=c', 'blade=false'],
+            ],
+            (new AnalyzeCommand())->scanArguments([
+                'psalm-laravel', 'analyze', '--threads=1',
+                '--plugin-option=blade=true',
+                '--plugin-option=modelProperties.columnFallback=none',
+                'src',
+                '--plugin-option=a=b=c',
+                '--plugin-option=blade=false',
+            ]),
         );
     }
 
     #[Test]
-    public function blade_flags_are_declared_for_help(): void
+    public function blade_shorthands_share_the_ordered_list_with_plugin_options_so_the_last_one_wins(): void
     {
-        $definition = (new AnalyzeCommand())->getDefinition();
-
-        $this->assertTrue($definition->hasOption('blade'));
-        $this->assertTrue($definition->hasNegation('no-blade'));
+        $this->assertSame(
+            ['forwarded' => ['src', '--', '--blade'], 'options' => ['blade=true', 'blade=false', 'blade=false', 'blade=true']],
+            (new AnalyzeCommand())->scanArguments([
+                'psalm-laravel', '--blade', '--plugin-option=blade=false', 'src', '--no-blade', '--plugin-option=blade=true', '--', '--blade',
+            ]),
+        );
     }
 
     #[Test]
-    public function blade_flag_reaches_the_child_as_the_options_env_and_not_as_an_argument(): void
+    public function the_experimental_shorthand_is_ordered_with_plugin_options(): void
     {
-        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1', '--blade']);
-
-        $this->assertSame(Command::SUCCESS, $run['exit']);
-        $this->assertSame('blade=true', $run['report']['options']);
-        $this->assertSame(['--threads=1'], $run['report']['argv']);
+        $this->assertSame(
+            ['forwarded' => ['src'], 'options' => ['experimental=false', 'experimental=true']],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--plugin-option=experimental=false', '--experimental', 'src']),
+        );
     }
 
     #[Test]
-    public function no_blade_flag_reaches_the_child_as_blade_false(): void
+    public function tokens_after_the_double_dash_boundary_are_forwarded_untouched(): void
     {
-        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--no-blade']);
-
-        $this->assertSame('blade=false', $run['report']['options']);
-        $this->assertSame([], $run['report']['argv']);
+        $this->assertSame(
+            ['forwarded' => ['--', '--plugin-option=x=1', '--plugin-option', 'src'], 'options' => ['a=b']],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--plugin-option=a=b', '--', '--plugin-option=x=1', '--plugin-option', 'src']),
+        );
     }
 
     #[Test]
-    public function blade_flag_is_appended_to_an_inherited_options_value_so_the_flag_wins(): void
+    public function flags_that_merely_resemble_the_override_flag_are_forwarded(): void
     {
-        \putenv('PSALM_LARAVEL_OPTIONS=foo=1 blade=true');
+        $this->assertSame(
+            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', '--experimental=true', '--no-experimental', '--plugin', '--plugin-options=x', '--plugin-optionx=1'], 'options' => []],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', '--experimental=true', '--no-experimental', '--plugin', '--plugin-options=x', '--plugin-optionx=1']),
+        );
+    }
 
-        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--no-blade']);
+    /** @return iterable<string, array{list<string>}> */
+    public static function malformedPluginOptions(): iterable
+    {
+        yield 'bare, at the end' => [['--plugin-option']];
+        yield 'spaced form' => [['--plugin-option', 'blade=true']];
+        yield 'empty' => [['--plugin-option=']];
+        yield 'whitespace in the value' => [['--plugin-option=blade=true experimental=true']];
+        yield 'trailing newline' => [["--plugin-option=blade=true\n"]];
+    }
 
-        $this->assertSame('foo=1 blade=true blade=false', $run['report']['options']);
+    /** @param list<string> $args */
+    #[Test]
+    #[DataProvider('malformedPluginOptions')]
+    public function a_malformed_plugin_option_is_an_error_not_forwarded(array $args): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/use --plugin-option=KEY=VALUE/');
+
+        (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', ...$args]);
     }
 
     #[Test]
-    public function the_child_keeps_the_callers_whole_environment_when_a_blade_flag_is_given(): void
+    public function the_option_is_declared_and_the_help_lists_every_key_with_its_values(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertTrue($command->getDefinition()->getOption('plugin-option')->isArray());
+        $this->assertTrue($command->getDefinition()->hasNegation('no-blade'));
+        $this->assertTrue($command->getDefinition()->hasOption('experimental'));
+
+        $help = $command->getHelp();
+        foreach (\array_keys(PluginOverrides::KEYS) as $key) {
+            $this->assertMatchesRegularExpression('/^  ' . \preg_quote($key, '/') . ' +\S/m', $help);
+        }
+
+        $this->assertMatchesRegularExpression('/modelProperties\.columnFallback +migrations\|none$/m', $help);
+        $this->assertMatchesRegularExpression('/^  blade +true\|false$/m', $help);
+    }
+
+    #[Test]
+    public function an_inherited_options_variable_is_replaced_never_merged(): void
+    {
+        \putenv('PSALM_LARAVEL_INTERNAL_OPTIONS=experimental=true blade=true');
+
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--plugin-option=experimental=false', '--threads=1']));
+
+        $this->assertSame('experimental=false', $report['options']);
+        $this->assertSame(['--threads=1'], $report['argv'], 'an inherited blade token must not reach the child or the cache gate');
+
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']));
+
+        $this->assertFalse($report['options'], 'without --plugin-option the inherited value is dropped');
+    }
+
+    #[Test]
+    public function the_child_keeps_the_callers_whole_environment_when_options_are_given(): void
     {
         // proc_open REPLACES the environment when handed an array, so a child that lost PATH or any
         // other inherited variable would mean the handoff built its array from scratch.
         \putenv('PSALM_LARAVEL_TEST_MARKER=kept');
 
-        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--blade']);
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--plugin-option=experimental=true']));
 
-        $this->assertTrue($run['report']['path']);
-        $this->assertSame('kept', $run['report']['marker']);
+        $this->assertTrue($report['path']);
+        $this->assertSame('kept', $report['marker']);
     }
 
     #[Test]
-    public function without_a_blade_flag_the_child_environment_is_untouched(): void
+    public function without_options_the_child_environment_and_arguments_are_untouched(): void
     {
         \putenv('PSALM_LARAVEL_TEST_MARKER=kept');
 
-        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']);
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']));
 
-        $this->assertFalse($run['report']['options'], 'an unset PSALM_LARAVEL_OPTIONS must stay unset');
-        $this->assertTrue($run['report']['path']);
-        $this->assertSame('kept', $run['report']['marker']);
-        $this->assertSame(['--threads=1'], $run['report']['argv']);
+        $this->assertFalse($report['options']);
+        $this->assertTrue($report['path']);
+        $this->assertSame('kept', $report['marker']);
+        $this->assertSame(['--threads=1'], $report['argv']);
+    }
 
-        \putenv('PSALM_LARAVEL_OPTIONS=foo=1');
+    /** @return iterable<string, array{list<string>, list<string>}> */
+    public static function referenceCacheGate(): iterable
+    {
+        $flag = '--no-reference-cache';
 
-        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze']);
+        yield 'cli blade' => [['--plugin-option=blade=true', 'src'], [$flag, 'src']];
+        yield '--no-blade shorthand' => [['--no-blade', 'src'], [$flag, 'src']];
+        yield 'once for several blade overrides' => [['--blade', '--plugin-option=blade=false'], [$flag]];
+        yield 'blade sub-settings only' => [['--plugin-option=blade.reportMixedIssues=true'], []];
+        yield 'other keys only' => [['--plugin-option=experimental=true'], []];
+        yield 'no overrides' => [['--threads=1'], ['--threads=1']];
+        // psalm tolerates the duplicates; the wrapper cannot know which flags psalm's getopt will parse.
+        yield 'user passed --no-cache' => [['--plugin-option=blade=true', '--no-cache'], [$flag, '--no-cache']];
+        yield 'user passed --no-reference-cache' => [['--no-reference-cache', '--plugin-option=blade=true'], [$flag, $flag]];
+        yield 'getopt stops at the first positional, so a later --no-cache is not parsed' => [
+            ['--plugin-option=blade=false', '--find-dead-code=always', 'src', '--no-cache'], [$flag, '--find-dead-code=always', 'src', '--no-cache'],
+        ];
+        yield 'a boundary hides psalm flags after it' => [['--plugin-option=blade=true', '--', '--no-cache'], [$flag, '--', '--no-cache']];
+    }
 
-        $this->assertSame('foo=1', $run['report']['options']);
+    /**
+     * @param list<string> $args
+     * @param list<string> $expected
+     */
+    #[Test]
+    #[DataProvider('referenceCacheGate')]
+    public function blade_overrides_prepend_no_reference_cache_before_every_forwarded_token(array $args, array $expected): void
+    {
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', ...$args]));
+
+        $this->assertSame($expected, $report['argv']);
+    }
+
+    /** @return iterable<string, array{list<string>, string}> */
+    public static function invalidInput(): iterable
+    {
+        yield 'unknown key' => [['--plugin-option=nope=1'], "--plugin-option: unknown key 'nope'"];
+        yield 'bad bool' => [['--plugin-option=blade=yes'], "invalid value 'yes'"];
+        yield 'missing equals' => [['--plugin-option=blade'], 'is not KEY=VALUE'];
+        yield 'bare option' => [['--plugin-option'], 'use --plugin-option=KEY=VALUE'];
+        yield 'whitespace in the value' => [['--plugin-option=blade=true experimental=true'], 'use --plugin-option=KEY=VALUE'];
+    }
+
+    /** @param list<string> $args */
+    #[Test]
+    #[DataProvider('invalidInput')]
+    public function invalid_options_fail_before_psalm_is_launched(array $args, string $message): void
+    {
+        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', ...$args]);
+
+        $this->assertSame(Command::FAILURE, $run['exit']);
+        $this->assertNull($run['report'], 'psalm must not be launched with invalid overrides');
+        $this->assertStringContainsString($message, \preg_replace('/\s+/', ' ', $run['display']) ?? '');
+    }
+
+    /**
+     * @param array{exit: int, display: string, report: ?array{options: string|false, path: bool, marker: string|false, argv: list<string>}} $run
+     *
+     * @return array{options: string|false, path: bool, marker: string|false, argv: list<string>}
+     */
+    private function assertRan(array $run): array
+    {
+        $this->assertNotNull($run['report'], 'the stand-in psalm never ran: ' . $run['display']);
+
+        return $run['report'];
     }
 
     /**
@@ -320,7 +397,7 @@ final class AnalyzeCommandTest extends TestCase
      *
      * @param list<string> $argv
      *
-     * @return array{exit: int, report: array{options: string|false, path: bool, marker: string|false, argv: list<string>}}
+     * @return array{exit: int, display: string, report: ?array{options: string|false, path: bool, marker: string|false, argv: list<string>}}
      */
     private function runAgainstFakePsalm(array $argv): array
     {
@@ -332,22 +409,23 @@ final class AnalyzeCommandTest extends TestCase
         \file_put_contents($binDir . '/psalm', <<<'PHP'
             <?php
             file_put_contents(__DIR__ . '/report.json', json_encode([
-                'options' => getenv('PSALM_LARAVEL_OPTIONS'),
+                'options' => getenv('PSALM_LARAVEL_INTERNAL_OPTIONS'),
                 'path' => getenv('PATH') !== false,
                 'marker' => getenv('PSALM_LARAVEL_TEST_MARKER'),
                 'argv' => array_slice($argv, 1),
             ]));
             PHP);
+        @\unlink($binDir . '/report.json');
 
         $_SERVER['argv'] = $argv;
 
-        $exit = (new CommandTester(new AnalyzeCommand($this->tempDir)))->execute([]);
+        $tester = new CommandTester(new AnalyzeCommand($this->tempDir));
+        $exit = $tester->execute([]);
 
-        $json = \file_get_contents($binDir . '/report.json');
-        $this->assertIsString($json, 'the stand-in psalm never ran');
-        /** @var array{options: string|false, path: bool, marker: string|false, argv: list<string>} $report */
-        $report = \json_decode($json, true, 512, \JSON_THROW_ON_ERROR);
+        $json = @\file_get_contents($binDir . '/report.json');
+        /** @var array{options: string|false, path: bool, marker: string|false, argv: list<string>}|null $report */
+        $report = \is_string($json) ? \json_decode($json, true, 512, \JSON_THROW_ON_ERROR) : null;
 
-        return ['exit' => $exit, 'report' => $report];
+        return ['exit' => $exit, 'display' => $tester->getDisplay(), 'report' => $report];
     }
 }

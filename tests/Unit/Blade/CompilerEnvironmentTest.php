@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\Container\Container;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Illuminate\View\Compilers\BladeCompiler;
@@ -126,6 +127,39 @@ final class CompilerEnvironmentTest extends TestCase
 
         $this->assertFalse($trusted);
         $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * #1693: a plain closure registered in a service provider is bound to the provider. Its file
+     * (the provider) is hashed, so it must not disable the cache.
+     */
+    #[Test]
+    public function closures_bound_to_a_service_provider_are_trusted(): void
+    {
+        $compiler = $this->compiler();
+        (new ProviderBoundDirectives(new Container()))->registerOn($compiler);
+
+        [$hash, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertTrue($trusted);
+        $this->assertSame([], $reasons);
+        $this->assertNotSame('', $hash);
+    }
+
+    /**
+     * The provider exemption is not "any bound object": the reason names the directive and the
+     * bound class so the user can find the input that disabled the cache.
+     */
+    #[Test]
+    public function a_directive_bound_to_another_object_is_untrusted_and_named(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', new MarkerDirective('V1'));
+
+        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
+        $this->assertSame(["directive 'mine' (callable bound to " . MarkerDirective::class . ')'], $reasons);
     }
 
     /**
@@ -283,24 +317,30 @@ final class CompilerEnvironmentTest extends TestCase
      * exist when this test runs alone, so it never naturally reaches a letter (`a`-`f`) unless run
      * inside a large suite that happens to have created enough of them first, which is exactly how
      * an earlier, decimal-only version of the fix (and this test) both passed in isolation and
-     * failed under the full suite. `warmUntilNextAnonymousOrdinalIsHexLettered()` forces that case
-     * deterministically instead of depending on how many other tests ran first.
+     * failed under the full suite. The pair is rebuilt until the first one's ordinal carries a letter,
+     * which forces that case deterministically instead of depending on how many other tests ran first.
      */
     #[Test]
     public function anonymous_compiler_subclasses_from_identical_source_describe_identically_despite_the_ordinal_suffix(): void
     {
-        $this->warmUntilNextAnonymousOrdinalIsHexLettered();
-
         $anonymousCompilerSource = 'return new class(new \Illuminate\Filesystem\Filesystem(), $cachePath) '
             . 'extends \Illuminate\View\Compilers\BladeCompiler {};';
 
-        $compilers = [];
+        // PHP's ordinal is one process-wide counter rendered in hex, so among 16 consecutive values
+        // the last digit hits a letter at least once. Checking the class under test itself, not a
+        // throwaway probe before it: a probe ending in `f` would hand the tested class `...0`.
+        for ($attempt = 0; $attempt < 64; $attempt++) {
+            $compilers = [];
+            foreach (['/anon-a', '/anon-b'] as $suffix) {
+                $cachePath = $this->root . $suffix;
+                /** @var BladeCompiler $compiler */
+                $compiler = eval($anonymousCompilerSource);
+                $compilers[] = $compiler;
+            }
 
-        foreach (['/anon-a', '/anon-b'] as $suffix) {
-            $cachePath = $this->root . $suffix;
-            /** @var BladeCompiler $compiler */
-            $compiler = eval($anonymousCompilerSource);
-            $compilers[] = $compiler;
+            if (\preg_match('/\$[0-9a-fA-F]*[a-fA-F][0-9a-fA-F]*$/', $compilers[0]::class) === 1) {
+                break;
+            }
         }
 
         [$first, $second] = $compilers;
@@ -322,25 +362,5 @@ final class CompilerEnvironmentTest extends TestCase
         $this->assertFalse($firstTrusted);
         $this->assertFalse($secondTrusted);
         $this->assertSame($firstHash, $secondHash, 'identical anonymous-subclass source must describe identically regardless of the process-local ordinal');
-    }
-
-    /**
-     * PHP's anonymous-class ordinal is a single, process-wide, monotonically increasing counter
-     * rendered in hex: among any 16 consecutive values, the last hex digit cycles through
-     * `0123456789abcdef` exactly once, so at most 16 throwaway anonymous classes are ever needed
-     * to reach one whose ordinal's last digit is a letter. Bounded well above that to stay honest
-     * about the guarantee without looping unboundedly if PHP's naming scheme ever changes.
-     */
-    private function warmUntilNextAnonymousOrdinalIsHexLettered(): void
-    {
-        for ($attempt = 0; $attempt < 64; $attempt++) {
-            $probe = eval('return new class {};');
-
-            if (\preg_match('/\$([0-9a-fA-F]+)$/', $probe::class, $matches) === 1 && \preg_match('/[a-fA-F]/', $matches[1]) === 1) {
-                return;
-            }
-        }
-
-        $this->fail('could not reach a hex-lettered anonymous-class ordinal in 64 attempts');
     }
 }

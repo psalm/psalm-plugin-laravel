@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\MarkerPrePass;
@@ -71,6 +72,90 @@ final class MarkerPrePassTest extends TestCase
         $this->assertArrayHasKey(3, $skip);
         $this->assertArrayHasKey(4, $skip);
         $this->assertArrayNotHasKey(5, $skip);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function componentTagAttributesContainingAGreaterThanSign(): iterable
+    {
+        // #1700: `->` inside an echo.
+        yield 'attributes echo with arrow call' => ["{{ \$attributes->merge(['class' => 'x']) }}"];
+        yield '@class with array arrow' => ["@class(['active' => \$on])"];
+        yield '@style with array arrow' => ["@style(['color: red' => \$on])"];
+    }
+
+    #[Test]
+    #[DataProvider('componentTagAttributesContainingAGreaterThanSign')]
+    public function skips_a_multiline_component_tag_through_an_attribute_containing_a_greater_than_sign(string $attribute): void
+    {
+        $source = "<x-foo\n    a=\"b\"\n    {$attribute}\n>\n    @if (\$a)\n        x\n    @endif\n</x-foo>\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayHasKey(4, $skip); // the tag's closing `>`
+        $this->assertArrayNotHasKey(5, $skip);
+        $this->assertStringNotContainsString('blade:4 */', MarkerPrePass::inject($source));
+    }
+
+    #[Test]
+    public function skips_the_wrapped_end_of_a_multiline_closing_component_tag(): void
+    {
+        // compileClosingTags() needs `</x-alert` and its `>` with only whitespace between.
+        $source = "<x-alert class=\"a\"\n    >Read more</x-alert\n    >\ndone\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+    }
+
+    #[Test]
+    public function skips_a_multiline_livewire_tag_body(): void
+    {
+        $source = "<livewire:counter\n    :count=\"\$multi\"\n    wire:key=\"c\"\n/>\ndone\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayHasKey(4, $skip);
+        $this->assertArrayNotHasKey(5, $skip);
+    }
+
+    #[Test]
+    public function a_less_than_x_dash_comparison_does_not_open_a_component_tag(): void
+    {
+        // ComponentTagCompiler wants whitespace, `/` or `>` after the tag name; `x-1)` is not one.
+        $source = "<script>\nif (a < x-1) {\n    b({{ \$c }});\n}\n</script>\ndone\n";
+
+        $this->assertSame([], MarkerPrePass::computeSkipLines($source));
+    }
+
+    #[Test]
+    public function a_never_closed_component_tag_does_not_disarm_later_component_tags(): void
+    {
+        // The unterminated quote makes every later `>` unreachable, so the match fails only after
+        // trying both ways to consume each `{{ }}`: exponential without the possessive outer loop,
+        // and a failed preg_match_all drops every component-tag skip in the template.
+        $source = "<x-alert\n" . \str_repeat("    {{ \$a }}\n", 40) . "    title=\"unterminated\n<x-foo\n    class='a'\n/>\n";
+        $tagLine = 43;
+
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey($tagLine + 1, $skip);
+        $this->assertArrayHasKey($tagLine + 2, $skip);
+    }
+
+    #[Test]
+    public function a_long_unbalanced_class_directive_does_not_disarm_later_component_tags(): void
+    {
+        // Each `@class(` iteration a non-possessive inner loop keeps for backtracking costs JIT
+        // stack; a few hundred lines of calls inside a never-closed `@class([` exhaust it.
+        $source = "<x-alert @class([\n" . \str_repeat("    'a' => \$f(\$b) && \$g(\$c),\n", 1000) . "\n<x-foo\n    class='a'\n/>\n";
+        $tagLine = 1003;
+
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey($tagLine + 1, $skip);
+        $this->assertArrayHasKey($tagLine + 2, $skip);
     }
 
     #[Test]
@@ -307,6 +392,40 @@ final class MarkerPrePassTest extends TestCase
         // Narrower than maskedRanges() on purpose: a `@php` or raw `<?php` body compiles and runs,
         // so a caller reading the source for what the template does must still see it.
         $source = "@php \$slot = 1; @endphp\n<?php echo \$attributes; ?>\n";
+
+        $this->assertSame($source, MarkerPrePass::blankInertText($source));
+    }
+
+    #[Test]
+    public function an_escaped_php_directive_does_not_open_a_masked_range(): void
+    {
+        // Blade's own `(?<!@)@php(.*?)@endphp` skips `@@php`, so it is literal text and the
+        // comment below is compiled (stripped) live rather than swallowed into a phantom block.
+        $source = "@@php\n{{-- note --}}\n@endphp\n";
+
+        $this->assertSame(['{{-- note --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+    }
+
+    #[Test]
+    public function a_real_php_block_after_an_escaped_one_still_masks(): void
+    {
+        $source = "@@php literal\n@php \$x = 1; @endphp\n";
+
+        $this->assertSame(['@php $x = 1; @endphp'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+    }
+
+    #[Test]
+    public function an_escaped_verbatim_directive_does_not_open_a_masked_range(): void
+    {
+        $source = "@@verbatim\n{{-- note --}}\n@endverbatim\n";
+
+        $this->assertSame(['{{-- note --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+    }
+
+    #[Test]
+    public function blanking_inert_text_ignores_an_escaped_verbatim_directive(): void
+    {
+        $source = "@@verbatim\n{{ \$slot }}\n@endverbatim\n";
 
         $this->assertSame($source, MarkerPrePass::blankInertText($source));
     }

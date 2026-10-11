@@ -255,6 +255,22 @@ final class TemplateSnippetMatcher
     }
 
     /**
+     * Whether $text sits in $snippet immediately before $offset, ending exactly there. False for
+     * an $offset outside the snippet: `substr()` would read a negative one from the END and clamp
+     * one past the end, and either can fake a match.
+     *
+     * @psalm-pure
+     */
+    public static function endsAt(string $snippet, int $offset, string $text): bool
+    {
+        if ($offset < 0 || $offset > \strlen($snippet)) {
+            return false;
+        }
+
+        return \str_ends_with(\substr($snippet, 0, $offset), $text);
+    }
+
+    /**
      * The index of the last non-whitespace character at or before $index, or -1.
      *
      * @psalm-pure
