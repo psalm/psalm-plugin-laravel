@@ -16,7 +16,7 @@ final class DeltaSelectAppsTest extends TestCase
 {
     private const REGISTRY = [
         'groups' => ['default' => 'Baseline', 'blade' => 'Blade-heavy apps'],
-        'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off'],
+        'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off', '--opt=camelKey=x' => 'Mixed case'],
         'apps' => [
             ['name' => 'alpha', 'groups' => ['default']],
             ['name' => 'beta', 'groups' => ['blade']],
@@ -42,9 +42,11 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'flag alone keeps default' => ['--blade', 'alpha', '--blade'];
         yield 'comma separated' => ['blade,--blade', 'alpha,beta', '--blade'];
         yield 'all plus flag' => ['all --no-blade', 'alpha,beta,gamma', '--no-blade'];
-        // psalm-laravel analyze is last-wins on --blade/--no-blade, so the order must survive.
+        // A later override wins in psalm-laravel analyze, so the order must survive.
         yield 'order preserved' => ['--no-blade blade --blade', 'alpha,beta', '--no-blade --blade'];
         yield 'no flag' => ['blade', 'alpha,beta', ''];
+        // Plugin option keys are camelCase, so only names and groups are case-folded.
+        yield 'flag case kept' => ['BLADE --opt=camelKey=x', 'alpha,beta', '--opt=camelKey=x'];
     }
 
     /** @param array<string, mixed> $registry */
@@ -66,6 +68,7 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'typo gets a hint' => [self::REGISTRY, 'blade --blad', '`--blad` Did you mean `--blade`?'];
         yield 'undeclared psalm flag' => [self::REGISTRY, '--set-baseline=x', '- `--set-baseline=x`'];
         yield 'unsafe flag not echoed' => [self::REGISTRY, '--$(id)', '(not echoed)'];
+        yield 'flags are case-sensitive' => [self::REGISTRY, '--opt=camelkey=x', '- `--opt=camelkey=x`'];
         yield 'help never mixes with flags' => [self::REGISTRY, 'help --blade', '`help` works only on its own'];
         yield 'registry declares no flags' => [
             \array_diff_key(self::REGISTRY, ['flags' => true]),

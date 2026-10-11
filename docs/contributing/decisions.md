@@ -406,9 +406,20 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 ## Per-Run Overrides
 
+### One internal transport, bool and enum keys only
+
+**Decision:** `analyze --plugin-option=KEY=VALUE` hands its tokens to the child psalm in `PSALM_LARAVEL_INTERNAL_OPTIONS` (whitespace-split, last wins), overwriting any inherited value; the plugin reads only that variable. Path settings (`configDirectory`, `<blade cacheDir>`) stay XML-only, so no value contains whitespace.
+
+**Why internal, not a public env var:**
+- A bare `vendor/bin/psalm` run with it would bypass the `--no-reference-cache` gate below.
+- An exported variable silently changes every later run (shell profile, CI env), a config drift nobody sees in `psalm.xml`.
+- Publishing it later is non-breaking; withdrawing a public contract is not.
+
+**Rejected alternative:** a private JSON variable for CLI values plus env layer merging (#1709). It existed only to carry whitespace in paths and an env layer, and needed its own validation, forgery handling, and list semantics for `configDirectory`.
+
 ### Every plugin setting is report-only for Psalm's result cache, except `blade` (file-reference cache)
 
-**Decision:** All keys of the override schema (`Setting::all()`) are classified report-only except `blade`. `psalm-laravel analyze` appends `--no-reference-cache` whenever the effective override layers (`--plugin-option`, `--blade`/`--no-blade`, or an inherited `PSALM_LARAVEL_OPTIONS`) set `blade`, unless the user already passed `--no-cache` or `--no-reference-cache`. A bare `vendor/bin/psalm` with `blade=…` in the environment is documented, not guarded. A future key that changes what Psalm persists at scan time (a scan-time `AfterClassLikeVisit`-style hook, stub selection, a `FileStorage`/`ClassLikeStorage` write) must be classified before it joins the schema, and needs the same wrapper treatment (`--no-reflection-cache` for storage writes) plus a rejection or doc note for `PSALM_LARAVEL_OPTIONS`.
+**Decision:** All keys of the override schema (`PluginOverrides::KEYS`) are classified report-only except `blade`. `psalm-laravel analyze` prepends `--no-reference-cache` whenever `--blade`/`--no-blade` or `--plugin-option` sets `blade`, even next to a user `--no-cache`: Psalm's getopt stops at the first positional, so the wrapper cannot tell which later flags Psalm parses, and Psalm accepts the duplicate. A future key that changes what Psalm persists at scan time (a scan-time `AfterClassLikeVisit`-style hook, stub selection, a `FileStorage`/`ClassLikeStorage` write) must be classified before it joins the schema, and needs the same wrapper treatment (`--no-reflection-cache` for storage writes).
 
 **Why:** Psalm's cache key hashes the config file, `composer.lock` and Psalm's own storage classes, and the providers are built before any plugin runs, so a per-run override cannot change it. That only matters for state Psalm PERSISTS, and it persists storage only at scan time (`Scanner.php`, `ReflectorVisitor` via `Codebase`). Every handler this plugin gates on a setting runs at analysis time or in `AfterCodebasePopulated` (after the scan, never persisted); all `AfterClassLikeVisit` handlers register unconditionally and read no setting; stub selection depends on no setting except the plugin cache path.
 

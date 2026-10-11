@@ -31,7 +31,7 @@ declare(strict_types=1);
  *   php delta-report.php <output_dir> <base_label> <head_label> \
  *       --apps=monica,pixelfed,coolify \
  *       [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] \
- *       [--details] [--selection='default + octane'] [--flags='--blade']
+ *       [--details] [--selection='default + octane'] [--flags='--find-dead-code']
  *
  * --details prints the changed, added and removed entries and crash text. They
  * carry file paths and issue messages, so they are OFF by default (safe for a
@@ -89,7 +89,7 @@ foreach (array_slice($argv, 1) as $arg) {
 
 $fail = static function (string $message): never {
     fwrite(STDERR, "Error: {$message}\n");
-    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--details] [--selection=label] [--flags='--blade']\n");
+    fwrite(STDERR, "Usage: php delta-report.php <output_dir> <base_label> <head_label> --apps=a,b,c [--base-ref=] [--head-ref=] [--base-sha=] [--head-sha=] [--details] [--selection=label] [--flags='--find-dead-code']\n");
     exit(2);
 };
 
