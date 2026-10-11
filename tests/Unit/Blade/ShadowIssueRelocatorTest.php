@@ -750,6 +750,9 @@ final class ShadowIssueRelocatorTest extends TestCase
                 private readonly string $snippetText,
                 private readonly array $selection,
             ) {
+                // Kept issues get their message remapped, which reads the file path and name.
+                $this->file_path = '/tmp/shadow.php';
+                $this->file_name = 'shadow.php';
                 $this->raw_line_number = 9;
             }
 
