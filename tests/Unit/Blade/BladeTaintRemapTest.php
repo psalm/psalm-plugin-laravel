@@ -169,4 +169,28 @@ final class BladeTaintRemapTest extends TestCase
     {
         $this->assertSame([], $this->taintIssuesFor('resources/views/literal.blade.php'), $this->report()[0]);
     }
+
+    #[Test]
+    public function json_directive_with_default_flags_reports_no_taint(): void
+    {
+        // Default flags 15 include JSON_HEX_TAG, JSON_HEX_APOS and JSON_HEX_QUOT.
+        $this->assertSame([], $this->taintIssuesFor('resources/views/json.blade.php'), $this->report()[0]);
+    }
+
+    #[Test]
+    public function json_directive_with_hex_tag_only_keeps_quotes(): void
+    {
+        $types = \array_column($this->taintIssuesFor('resources/views/json-hex-tag.blade.php'), 'type');
+
+        $this->assertNotContains('TaintedHtml', $types, $this->report()[0]);
+        $this->assertContains('TaintedTextWithQuotes', $types, $this->report()[0]);
+    }
+
+    #[Test]
+    public function json_directive_with_non_escaping_flags_stays_tainted(): void
+    {
+        $types = \array_column($this->taintIssuesFor('resources/views/json-unsafe.blade.php'), 'type');
+
+        $this->assertContains('TaintedHtml', $types, $this->report()[0]);
+    }
 }
