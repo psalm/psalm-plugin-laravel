@@ -9,7 +9,7 @@ declare(strict_types=1);
  *   yq -o=json bin/ci/test-apps.yml | COMMENT_BODY='/psalm-delta octane' php delta-select-apps.php
  *   yq -o=json bin/ci/test-apps.yml | php delta-select-apps.php 'octane,vito'   # no /psalm-delta prefix
  *
- * Grammar (first line only, case-insensitive, tokens split on whitespace/commas):
+ * Grammar (first line only, tokens split on whitespace/commas, case-insensitive except flags):
  *   /psalm-delta            the `default` group
  *   /psalm-delta <tok>...   `default` plus each token: a group tag or an app name
  *                           (a group wins over an app of the same name)
@@ -24,7 +24,7 @@ declare(strict_types=1);
  * flags, matrix: {include: [...]}, reply}. The comment body is untrusted input
  * from a privileged workflow, so every output except `reply` is built only from
  * registry values, and `reply` echoes a user token only when it is plain
- * [a-z0-9_-] (a flag: the same behind a leading `-`/`--`, plus `.` and `=`).
+ * [a-z0-9_-] (a flag: the same behind a leading `-`/`--`, plus uppercase, `.` and `=`).
  * Exit 2 = malformed registry.
  */
 
@@ -58,7 +58,7 @@ if (!isset($groups['default'])) {
 /** @var array<string, string> $flags flag => description */
 $flags = [];
 foreach ((array) ($registry['flags'] ?? []) as $flag => $description) {
-    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[a-z0-9._-]{1,40})?$/', $flag) !== 1) {
+    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[A-Za-z0-9._=-]{1,40})?$/', $flag) !== 1) {
         $fail('invalid flag: ' . var_export($flag, true));
     }
     $flags[$flag] = (string) $description;
@@ -103,8 +103,13 @@ $emit = static function (string $status, array $names = [], string $label = '', 
 $code = static fn(array $tokens): string => implode(', ', array_map(static fn(string $t): string => "`{$t}`", $tokens));
 
 $comment = $argc > 1 ? '/psalm-delta ' . $argv[1] : (string) getenv('COMMENT_BODY');
-$firstLine = strtolower(rtrim(explode("\n", $comment, 2)[0], "\r"));
-$tokens = preg_split('/[\s,]+/', $firstLine, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+$firstLine = rtrim(explode("\n", $comment, 2)[0], "\r");
+$isFlag = static fn(string $token): bool => str_starts_with($token, '-');
+// Flags keep their case: plugin option keys are camelCase.
+$tokens = array_map(
+    static fn(string $token): string => $isFlag($token) ? $token : strtolower($token),
+    preg_split('/[\s,]+/', $firstLine, -1, PREG_SPLIT_NO_EMPTY) ?: [],
+);
 if (array_shift($tokens) !== '/psalm-delta') {
     $emit('ignore');
 }
@@ -140,7 +145,6 @@ if ($tokens === ['help']) {
     $emit('help', reply: implode("\n", $lines) . "\n");
 }
 
-$isFlag = static fn(string $token): bool => str_starts_with($token, '-');
 $runFlags = array_values(array_filter($tokens, $isFlag));
 $tokens = array_values(array_filter($tokens, static fn(string $token): bool => !$isFlag($token)));
 
@@ -155,8 +159,8 @@ if ($unknown !== []) {
             continue;
         }
         if ($isFlag($token)) {
-            if (preg_match('/^--?[a-z0-9][a-z0-9_.=-]{0,39}$/', $token) !== 1) {
-                $lines[] = '- a flag with characters outside `[a-z0-9_.=-]` (not echoed)';
+            if (preg_match('/^--?[a-z0-9][A-Za-z0-9_.=-]{0,79}$/', $token) !== 1) {
+                $lines[] = '- a flag with characters outside `[A-Za-z0-9_.=-]` (not echoed)';
                 continue;
             }
             $candidates = array_keys($flags);
