@@ -12,7 +12,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeCompileError;
-use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\ShadowCompiler;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
@@ -312,38 +311,6 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertStringContainsString('@var mixed $foo */', $result->contents);
-    }
-
-    #[Test]
-    public function contract_vars_are_typed_in_the_prelude_instead_of_mixed(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "Hello {{ \$user }}\n",
-            ['user' => new ContractVar('user', '\App\Models\User', 1, false)],
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('@var \App\Models\User $user */', $result->contents);
-        $this->assertSame(2, \substr_count($result->contents, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
-    }
-
-    /** Psalm reports a contract type's own fault (an unknown class) on the prelude line declaring it. */
-    #[Test]
-    public function a_contract_vars_prelude_line_maps_to_its_declaration_line(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "line one\n{{-- @var \\App\\Missing \$user --}}\n{{ \$user }}\n",
-            ['user' => new ContractVar('user', '\App\Missing', 2, false)],
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $lines = \explode("\n", $result->contents);
-        $declaring = \array_search('/** @var \App\Missing $user */;', $lines, true);
-        $this->assertIsInt($declaring);
-        $this->assertSame(2, $result->lineMap[$declaring + 1]);
-        $this->assertSame(0, $result->lineMap[$declaring], 'the open tag before it stays unmapped');
     }
 
     #[Test]

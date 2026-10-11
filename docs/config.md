@@ -55,7 +55,7 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 - `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
-For one run without editing `psalm.xml`, use `psalm-laravel analyze --no-migrations` or `PSALM_LARAVEL_OPTIONS='columnFallback=none'` (see [Per-run overrides](#per-run-overrides)).
+For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=modelProperties.columnFallback=none` (see [Per-run overrides](#per-run-overrides)).
 
 ## `resolveDynamicWhereClauses`
 
@@ -275,7 +275,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. A contract comment (`{{-- @var \App\Models\User $user --}}`) types the template's own body as well as the call-site checks below; `@props([...])` entries stay `mixed`. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; `@props([...])` entries stay `mixed`. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -301,7 +301,7 @@ The default deliberately sits outside your project tree. A shadow file that one 
 
 Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
 
-A template declares its variables with `{{-- @var \App\Models\User $user --}}` comments and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
+A template declares its variables with `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (every declared variable is required, `T|null` and `mixed` included; a trailing `= null` makes it optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), see [Declaring view variables](blade.md#declaring-view-variables), and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
 
 Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
 
@@ -346,24 +346,26 @@ Psalm's `--no-progress` installs a progress implementation that discards warning
 
 ## Per-run overrides
 
-The `PSALM_LARAVEL_OPTIONS` environment variable overrides plugin settings for one run, without touching `psalm.xml`. `vendor/bin/psalm` rejects flags it does not know, so a per-run switch has to travel through the environment.
+Bool and enum settings on this page can be overridden for one run without touching `psalm.xml`, through `psalm-laravel analyze`:
 
 ```bash
-PSALM_LARAVEL_OPTIONS='blade=true experimental=true columnFallback=none' vendor/bin/psalm
+vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.columnFallback=none
 ```
 
-* Grammar: whitespace-separated `KEY=VALUE` tokens, keys named as in the XML. No quoting. A repeated key is last-wins.
-* Supported keys:
-  * `blade` (`true` or `false`) switches [Blade analysis](blade.md#per-run-toggle) on or off. Other `<blade>` settings keep coming from the XML.
-  * `experimental` (`true` or `false`) acts like [`<experimental value="..."/>`](#experimental). An explicit per-rule XML value, such as `<findUnregisteredRouteNames value="false" />`, still wins over it.
-  * `columnFallback` (`migrations` or `none`) acts like [`<modelProperties columnFallback="..."/>`](#modelproperties).
-* Precedence per key: command-line flag > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. `psalm-laravel analyze` provides the command-line flags, each appending a token to the variable for the Psalm process it launches:
-  * `--blade` / `--no-blade` appends `blade=true|false`.
-  * `--experimental` appends `experimental=true`.
-  * `--no-migrations` appends `columnFallback=none`.
-* An unknown key, a token without `=` or with an empty value, or a value outside the key's valid values aborts the run with a non-zero exit and a message naming the problem.
-* It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
-* Psalm's result cache is keyed on the config file, so after changing an override between runs use `--no-cache` if results look stale.
+* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.validateViewData`). `psalm-laravel analyze --help` lists every key with its values.
+* Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
+* Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
+* `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
+* There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
+* `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
+* `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
+* An unknown key, a token without `=`, or a value outside the key's values aborts the run with a non-zero exit and a message naming the problem. `analyze` checks them before it starts Psalm. An override never skips the XML checks: a malformed element in `psalm.xml` still fails the run.
+
+### Result cache
+
+Psalm's result cache is keyed on the config file, not on overrides. Every setting except `blade` only changes which findings are reported, so flipping it between runs reuses a warm cache and gives the same result as a cold run.
+
+`blade` is the exception (stale file references can hide dead-code findings such as `UnusedClass`), so `psalm-laravel analyze` adds `--no-reference-cache` whenever a `blade` override is given. Rationale: [decisions](contributing/decisions.md#per-run-overrides).
 
 ## Cache directory
 
@@ -404,6 +406,8 @@ Early access to plugin features that are still on their way to becoming the defa
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
 - [`findUnregisteredRouteNames`](#findunregisteredroutenames), [`findUnconfiguredFilesystemDisks`](#findunconfiguredfilesystemdisks), and [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turn on unless the project sets them explicitly.
 
+For one run without editing `psalm.xml`: `psalm-laravel analyze --experimental` (see [Per-run overrides](#per-run-overrides)).
+
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 
 ```xml
@@ -416,7 +420,7 @@ An explicit `<PluginIssue>` entry takes complete ownership of that issue (base l
 
 Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
 
-For one run without editing `psalm.xml`, use `psalm-laravel analyze --experimental` or `PSALM_LARAVEL_OPTIONS='experimental=true'` (see [Per-run overrides](#per-run-overrides)).
+For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=experimental=true` (see [Per-run overrides](#per-run-overrides)).
 
 ## `failOnInternalError`
 
