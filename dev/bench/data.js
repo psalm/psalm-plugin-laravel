@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791715608977,
+  "lastUpdate": 1791717268255,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13470,6 +13470,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "acd444cc395fcf1242cbf4e50083f62c3bea1c6b",
+          "message": "Drop Blade findings on compiled `$__currentLoopData`, nested `$loop->parent`, guarded optional view variables and the `@session` save (#1818)\n\n* fix(blade): leave template-assigned locals out of the prelude's mixed net\n\nA name whose first mention in file scope is a plain `$x = ...` that does\nnot read `$x` is a local the template creates, not view data. Declaring it\n`@var mixed` ahead of the assignment made Psalm drop the correlation between\na flag and the value it guards (`$has = $x !== null; @if ($has) $x->y`),\nreporting PossiblyNullPropertyFetch on the guarded read.\n\n* feat(blade): type $loop->parent as the enclosing loop's shape\n\n`addLoop()` casts the parent frame with the same `(object)` as the loop\nitself, so `$loop->parent` now carries the full loop shape one level deep\n(deeper ancestors stay `object|null`) in both the shadow prelude and the\n`getLastLoop()` stub. It stays nullable: an outermost loop has no parent.\n\nRefs #1696\n\n* feat(blade): type the template body from {{-- @var --}} contracts\n\nA contract comment used to feed only the view() call-site checks; the\nbody fell back to mixed. The prelude now declares each contract @var type,\nso `{{ $user->missing() }}` under `{{-- @var \\App\\Models\\User $user --}}`\nreports like it would in PHP.\n\nA bare short class name stays mixed and logs one --debug line: a Blade\ncomment cannot carry a use import, so the namespace-less shadow would\nresolve it to a global class. Every class an emitted type names is queued\nfor scanning on fresh and warm-manifest runs alike, since Psalm's scanner\nnever reads a stacked prelude docblock.\n\n* fix(blade): only skip the mixed declaration for root-level assignments\n\nAn assignment inside @if, a loop, @once, a <x-...> slot or try may not run,\nleaving the view value it would have replaced (a @props default, a\nvariable an including template passes down) as the one read after it.\nLeaving such a name undeclared reported a false\nPossiblyUndefinedGlobalVariable; only a top-level `$x = ...` statement\nnow marks a template local.\n\n* fix(blade): validate contract body types and report them on the comment line\n\n- A contract type that does not parse stays mixed (with a --debug line)\n  instead of an unmapped InvalidDocblock carrying the cache path plus a\n  false UndefinedGlobalVariable.\n- Each contract @var is its own prelude statement, mapped to the template\n  comment that declared it, so an unknown class reports UndefinedDocblockClass\n  there rather than on line 1 \"(unmapped)\".\n- Class names are read off Psalm's type parse tree: int<0, max> bounds are\n  no class, and PHP's own classes (Closure, stdClass) need no namespace.\n- A contract for a name the prelude already types ($errors, $attributes,\n  ...) no longer adds a second @var line.\n\n* fix(blade): keep a rejected contract type from cascading or leaking the cache path\n\n- Declare each contract variable mixed just ahead of its contract line: a\n  type that parses but Psalm rejects (array<int, string, bool>) used to\n  leave the name undeclared, adding a false UndefinedGlobalVariable on\n  every read. A valid contract type still overrides it.\n- Rewrite the absolute `path:line` an InvalidDocblock message ends with\n  onto the template, so the message no longer names the shadow cache file.\n- Document that a template's @psalm-suppress cannot reach a contract line.\n\n* fix(blade): drop the synthetic iterator call on a union @foreach subject\n\nA `@foreach` over `Collection<int, X>|list<X>` makes Psalm type the loop\nthrough a `getIterator()` call on the compiled `$__currentLoopData`. Psalm\nsuppresses PossiblyInvalidMethodCall and PossiblyUndefinedMethod around\nthat call, but the remap re-emits from BeforeAddIssue before the\nsuppression is checked, so both surfaced on the template.\n\nThe synthetic call carries the subject variable's position, so the drop\nmatches a selection of exactly `$__currentLoopData`. A real call on the\nsame variable is positioned on its method name and keeps reporting.\n\nCloses #1810\n\n* fix(blade): drop PossiblyNullPropertyFetch on a nested $loop->parent read\n\n`$loop->parent` stays nullable in the ambient loop type because an\noutermost loop has no parent, and the prelude cannot see lexical nesting,\nso `{{ $loop->parent->iteration }}` inside a nested `@foreach` reported on\nevery read. The drop matches the message naming the `$loop->parent` chain\n(any depth); a nullable `->parent` on another variable still reports. A\ndepth-1 read, a real null read, is silenced too.\n\nCloses #1696\n\n* fix(blade): drop null-guard findings on a template-declared variable\n\nA template documents its view variables in a `{{-- @var T $x --}}`\ncontract or a raw `<?php /** @var T $x */ ?>` docblock and marks the\noptional ones with `$x ?? ...`, `$x ??= ...` or `isset($x)`. A docblock\ntype cannot say \"may be omitted\", so every such guard reported\nRedundantConditionGivenDocblockType / DocblockTypeContradiction.\n\nThe drop needs the docblock-branch null wording naming `$x`, a guard on\n`$x` in the finding's own line, and `$x` declared by the template as\nContractParser reads it. A guard after the author reassigns the variable\nrenders the inferred wording and still reports, as do a non-guard\n`!is_null($x)` and a guard on a name only an `@php` docblock declares.\n\nCloses #1697\n\n* fix(blade): drop guard findings on the compiled @session/@context value save\n\n`@session`/`@context` compile `if (isset($value)) { $__sessionPrevious[]\n= $value; }` to save an outer `$value`. With an author `$value` in scope\n(a foreach value, `$value = null`), Psalm judged that compiler-written\n`isset()` against it and reported RedundantCondition or\nTypeDoesNotContainType on the directive line.\n\nThe drop needs the finding to sit on the `isset($value)` that opens that\nexact save statement, and the statement to be absent from the template\nsource, so an author's own `@if (isset($value))` and an author-written\ncopy of the save keep reporting.\n\nCloses #1724\n\n* fix(blade): keep guards on template-bound names out of the declared-guard drop\n\nThe #1697 drop treated any name with a raw `@var` as a view variable, so\n`<?php /** @var int $x */ $x = 1; ?>` followed by `@if (isset($x))` lost\na genuine redundant-guard finding: the template assigns `$x` itself, the\ndocblock only types that local. Once raw contracts also read `@php`\nblocks, the author's own `@php` locals would be hidden the same way.\n\nA name the compiled body binds (an assignment, a foreach alias, a\nparameter: ContractParser's local variables) is never a declared view\nvariable for this gate, whatever documents it.\n\nRefs #1697\n\n* perf(blade): parse a template's view variables once per shadow\n\nThe declared-guard drop re-read and re-parsed the template and its shadow\nfor every candidate guard finding, which added seconds on a large app.\nThe declared, never-bound name set is now computed lazily on the first\ncandidate finding per shadow path and kept for the run, with its reset\nregistered in Plugin::resetInvocationState(). Each Psalm worker fills its\nown copy.\n\nA fixture template with 600 guarded reads drops from 17.4s to 5.6s.\n\nRefs #1697",
+          "timestamp": "2026-10-11T13:10:36+02:00",
+          "tree_id": "41b9f29e923cfcc2551732336b4ba633de44a802",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/acd444cc395fcf1242cbf4e50083f62c3bea1c6b"
+        },
+        "date": 1791717266456,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.61,
+            "range": "± 0.43",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1504,
             "unit": "MB"
           }
         ]
