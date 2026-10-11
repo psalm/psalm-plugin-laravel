@@ -4,12 +4,25 @@
 language: en-US
 
 reviews:
-  profile: chill
+  # Inline comments only for important findings; minor ones are grouped in the review summary.
+  profile: quiet
+  # Keep the PR description untouched and the walkthrough comment minimal.
+  high_level_summary: false
+  review_status: false
+  changed_files_summary: false
   sequence_diagrams: false
+  estimate_code_review_effort: false
+  assess_linked_issues: false
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
   in_progress_fortune: false
   auto_review:
     enabled: true
     drafts: false
+    # Review once per PR; re-run with `@coderabbitai review` after follow-up pushes.
+    auto_incremental_review: false
     # 4.x is the default branch; 3.x receives backports.
     base_branches:
       - "3.x"
@@ -33,10 +46,18 @@ reviews:
   pre_merge_checks:
     docstrings:
       mode: "off"
+    title:
+      mode: "off"
+    description:
+      mode: "off"
+    issue_assessment:
+      mode: "off"
   finishing_touches:
     docstrings:
       enabled: false
     unit_tests:
+      enabled: false
+    autofix:
       enabled: false
   tools:
     # Style is enforced by php-cs-fixer and Rector; types by Psalm self-analysis.
@@ -48,3 +69,6 @@ reviews:
       enabled: false
     languagetool:
       enabled: false
+
+chat:
+  art: false
