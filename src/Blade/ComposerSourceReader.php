@@ -165,7 +165,10 @@ final class ComposerSourceReader
         $function = new \ReflectionFunction($closure);
         $declaring = new \ReflectionMethod(Factory::class, $factoryMethod);
 
-        if ($function->getFileName() !== $declaring->getFileName()
+        // The dispatcher can be shared: a closure another factory built resolves through that
+        // factory's container, not the one read here.
+        if ($function->getClosureThis() !== $this->factory
+            || $function->getFileName() !== $declaring->getFileName()
             || $function->getStartLine() < $declaring->getStartLine()
             || $function->getEndLine() > $declaring->getEndLine()
         ) {

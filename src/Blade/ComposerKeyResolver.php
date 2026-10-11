@@ -181,9 +181,24 @@ final class ComposerKeyResolver
         $keys = [];
         $receivers = [];
 
+        $expressions = [];
+
         foreach ($finder->findInstanceOf($stmts, Stmt\Expression::class) as $statement) {
+            $expressions[] = $statement->expr;
+        }
+
+        // Laravel ignores what a composer returns (`Factory::callComposer()` discards the dispatch
+        // result, ManagesEvents.php:177-180; `Dispatcher::invokeListeners()` only stops on `false`,
+        // Dispatcher.php:326-343), so `return $view->with(...)` is a plain call. A `return` nested in a
+        // closure or branch is not accepted: the view would leave through it.
+        foreach ($stmts as $statement) {
+            if ($statement instanceof Stmt\Return_ && $statement->expr instanceof Expr) {
+                $expressions[] = $statement->expr;
+            }
+        }
+
+        foreach ($expressions as $node) {
             $links = [];
-            $node = $statement->expr;
 
             while ($node instanceof Expr\MethodCall) {
                 $links[] = $node;
@@ -231,7 +246,7 @@ final class ComposerKeyResolver
     /** The accessors that read the view without touching its data (`getData()` and `getFactory()` do not qualify). */
     private static function isReadOnly(Expr\MethodCall|Expr\NullsafeMethodCall $call): bool
     {
-        return $call->name instanceof Identifier && \in_array($call->name->toLowerString(), ['name', 'getname', 'getpath'], true);
+        return !$call->isFirstClassCallable() && $call->name instanceof Identifier && \in_array($call->name->toLowerString(), ['name', 'getname', 'getpath'], true);
     }
 
     /**
@@ -246,12 +261,10 @@ final class ComposerKeyResolver
     {
         return match (true) {
             $node instanceof Expr\FuncCall => !$node->name instanceof Name || self::isOpaqueFunction($node->name),
-            // The parent constructor's body is never read, and it may share data.
-            $node instanceof Expr\StaticCall && $node->class instanceof Name && $node->class->toLowerString() === 'parent'
-                && $node->name instanceof Identifier && $node->name->toLowerString() === '__construct' => true,
             // `View::share()` adds keys at render time that no `with()` shows (Factory::make merges them).
+            // So may a constructor this never reads (`parent::__construct()`, `Other::__construct()`).
             $node instanceof Expr\MethodCall, $node instanceof Expr\NullsafeMethodCall, $node instanceof Expr\StaticCall
-                => !$node->name instanceof Identifier || $node->name->toLowerString() === 'share',
+                => !$node->name instanceof Identifier || \in_array($node->name->toLowerString(), ['share', '__construct'], true),
             $node instanceof Expr\Variable => !\is_string($node->name),
             // An included or evaluated file runs in this method's scope, `$view` and all.
             $node instanceof Expr\Include_, $node instanceof Expr\Eval_ => true,
@@ -285,18 +298,32 @@ final class ComposerKeyResolver
     {
         $args = $call->args;
 
-        if (!$call->name instanceof Identifier || $call->name->toLowerString() !== 'with' || $args === [] || \count($args) > 2) {
+        if (!$call->name instanceof Identifier || $call->name->toLowerString() !== 'with' || $call->isFirstClassCallable() || $args === [] || \count($args) > 2) {
             return null;
         }
 
         $key = null;
+        $position = 0;
 
         foreach ($args as $arg) {
-            if (!$arg instanceof Arg || $arg->unpack || $arg->name instanceof Identifier) {
+            if (!$arg instanceof Arg || $arg->unpack) {
                 return null;
             }
 
-            $key ??= $arg->value;
+            // `with(key: ..., value: ...)` in either order; any other parameter name is not `with()`'s.
+            if ($arg->name instanceof Identifier) {
+                if ($arg->name->name === 'key') {
+                    $key = $arg->value;
+                } elseif ($arg->name->name !== 'value') {
+                    return null;
+                }
+
+                continue;
+            }
+
+            if ($position++ === 0) {
+                $key = $arg->value;
+            }
         }
 
         if ($key instanceof String_) {
