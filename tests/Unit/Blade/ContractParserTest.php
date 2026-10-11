@@ -826,4 +826,30 @@ final class ContractParserTest extends TestCase
 
         $this->assertTrue($this->dataContract($source)->vars['n']->optional ?? null);
     }
+
+    #[Test]
+    public function a_var_inside_running_text_is_not_a_declaration(): void
+    {
+        $source = "<?php\n/** @deprecated Replace @var Foo \$user with a value object */\n/**\n * Some text @var int \$other here\n */\n?>\n{{ \$user }}{{ \$other }}\n";
+
+        $this->assertSame([], \array_keys($this->dataContract($source)->vars));
+        $this->assertSame([], ContractParser::rawDeclaredNames($source));
+    }
+
+    #[Test]
+    public function a_var_tag_at_the_start_of_a_line_or_right_after_the_opener_still_declares(): void
+    {
+        $source = "<?php /** @var int \$a */ ?>\n<?php\n/**\n *   @var int \$b\n */\n?>\n";
+
+        $this->assertSame(['a', 'b'], \array_keys($this->dataContract($source)->vars));
+    }
+
+    #[Test]
+    public function a_union_with_spaces_around_null_is_optional(): void
+    {
+        $vars = $this->dataContract("<?php\n/**\n * @var int | null \$count\n * @var Foo | MIXED \$m\n */\n?>\n")->vars;
+
+        $this->assertTrue($vars['count']->optional ?? null);
+        $this->assertTrue($vars['m']->optional ?? null);
+    }
 }

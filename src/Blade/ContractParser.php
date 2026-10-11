@@ -35,9 +35,11 @@ final class ContractParser
 
     /**
      * What follows `@var` on one line of a comment inside a raw PHP block, minus a closing `*\/`.
-     * Per line, because one block can hold several docblocks.
+     * Per line, because one block can hold several docblocks. The tag must start the line (after
+     * optional whitespace and a `*`, `//` or `#`) or directly follow the comment opener: a `@var` in
+     * running text (`@deprecated Replace @var Foo $user with ...`) is prose, not a declaration.
      */
-    private const RAW_PHP_VAR = '/@var\h+(.+?)\h*(?:\*\/)?\h*\r?$/m';
+    private const RAW_PHP_VAR = '/(?:^\h*(?:\*|\/\/|#)?|\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*\r?$/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
@@ -181,6 +183,8 @@ final class ContractParser
     private function isOptional(string $name, string $type, string $source): bool
     {
         foreach ($this->topLevelAlternatives($type) as $alternative) {
+            $alternative = \trim($alternative);
+
             if (\in_array(\strtolower($alternative), ['null', 'mixed'], true) || \str_starts_with($alternative, '?')) {
                 return true;
             }
