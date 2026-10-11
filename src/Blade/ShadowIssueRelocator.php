@@ -452,11 +452,14 @@ final class ShadowIssueRelocator
      * Rewrites the shadow positions an issue message names onto the template, through the same
      * {@see ShadowTarget::templateLineFor()} the location and the journey use: `first seen on line N`
      * (see MESSAGE_LINE_REFERENCES), the `file:line:column` descriptor of the issue's own shadow
-     * that a few messages embed, and the absolute `path:line` an invalid docblock type's message
-     * ends with (`CommentAnalyzer`). Unlike {@see JourneyRemapper}'s clamp-to-1, a `first seen` line
-     * inside the prelude drops the clause (a clamped number would read as a claim), while a
-     * descriptor still clamps because it has no clause to drop. A regex failure keeps Psalm's
-     * message instead of declining: this rewrite is cosmetic and must never lose the issue.
+     * that a few messages embed, the absolute `path:line` an invalid docblock type's message ends
+     * with (`CommentAnalyzer`), and a closure id (`strtolower(path):line:offset:-:closure`), whose
+     * byte offset is dropped: it shifts with the prelude, so it would churn baselines across plugin
+     * versions without telling the author anything. Unlike {@see JourneyRemapper}'s clamp-to-1, a
+     * `first seen` line inside the prelude drops the clause (a clamped number would read as a
+     * claim), while a descriptor still clamps because it has no clause to drop. A regex failure
+     * keeps Psalm's message instead of declining: this rewrite is cosmetic and must never lose the
+     * issue.
      *
      * @psalm-mutation-free
      */
@@ -482,9 +485,10 @@ final class ShadowIssueRelocator
         }
 
         $message = \preg_replace_callback(
-            '/' . \preg_quote($issue->code_location->file_path, '/') . ':(\d++)(?!:\d)/',
+            '/' . \preg_quote($issue->code_location->file_path, '/') . ':(\d++)(?::\d++(:-:closure))?(?!:\d)/i',
             /** @param array<array-key, string> $matches */
-            static fn(array $matches): string => $target->templateName . ':' . \max(1, $target->templateLineFor((int) $matches[1])),
+            static fn(array $matches): string => $target->templateName . ':'
+                . \max(1, $target->templateLineFor((int) $matches[1])) . ($matches[2] ?? ''),
             $message,
         ) ?? $message;
 
