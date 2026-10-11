@@ -366,7 +366,7 @@ PSALM_LARAVEL_OPTIONS='experimental=true modelProperties.columnFallback=none' ve
 
 Psalm's result cache is keyed on the config file, not on overrides. Every setting except `blade` only changes which findings are reported, so flipping it between runs reuses a warm cache and gives the same result as a cold run.
 
-`blade` changes which files are analysed, and Psalm's persisted file-reference cache keeps what the template shadows referenced: after turning Blade off, dead-code findings such as `UnusedClass` for classes only templates used can be lost. `psalm-laravel analyze` therefore adds `--no-reference-cache` as the first argument whenever a `blade` override is in effect (from `--plugin-option` or an inherited `PSALM_LARAVEL_OPTIONS`). A bare `vendor/bin/psalm` has no such hook: pass `--no-reference-cache` yourself, before any path argument.
+`blade` is the exception (stale file references can hide dead-code findings such as `UnusedClass`), so `psalm-laravel analyze` adds `--no-reference-cache` whenever a `blade` override is in effect; with a bare `vendor/bin/psalm`, pass `--no-reference-cache` yourself, before any path argument. Rationale: [decisions](contributing/decisions.md#per-run-overrides).
 
 ## Cache directory
 
