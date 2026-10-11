@@ -100,12 +100,12 @@ usual; the composer-supplied keys are also skipped by
 The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
 
 - is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, including `composing: *`);
-- is a class the container binds or aliases, or the dispatcher is not Laravel's `Illuminate\Events\Dispatcher`;
-- has no readable `compose()` / `create()` body (not declared, or two traits declaring it);
-- passes a key that is not a string literal, passes `with($array)`, `compact()` or a spread, calls `share()`, or uses `extract()`, `get_defined_vars()`, `func_get_args()`;
+- is a class the container binds, aliases or extends, a listener registered raw under a wildcard key, or the dispatcher or view factory is a subclass that could add behaviour (a dispatcher other than exactly `Illuminate\Events\Dispatcher`, a factory overriding `callComposer()`/`callCreator()`);
+- has no readable `compose()` / `create()` body (not declared, not public, constructed through a `new` default value, or two traits declaring it) or a constructor that shares data or delegates to `parent::__construct()`;
+- passes a key that is not a string literal, passes `with($array)`, `compact()` or a spread, calls `share()` (however spelled), or uses `extract()`, `get_defined_vars()`, `func_get_args()`, `debug_backtrace()` or `call_user_func()`;
 - lets `$view` out of reach of the walker: passes it to a method or function (`$this->decorate($view)`, `parent::compose($view)`), stores or reassigns it, captures it in a closure, sets a property or array offset on it (`$view->title = ...`), calls anything but `with()` on it (`$view->name()`, `withTitle()`, `nest()`).
 
-A `share()` hidden inside a method the composer calls is still missed.
+A `share()` hidden inside a method the composer calls, or inside the constructor of a class it receives as a dependency, is still missed: only the composer's own constructor and method are read.
 
 ### Known false positive: variables bound outside the call site
 

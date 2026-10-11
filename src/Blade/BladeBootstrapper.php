@@ -503,7 +503,7 @@ final class BladeBootstrapper
      */
     private function readComposerSources(): array
     {
-        $reader = new ComposerSourceReader($this->app, $this->viewFactory());
+        $reader = new ComposerSourceReader($this->viewFactory());
         $sources = [];
 
         foreach ($this->pendingContracts as [$viewName]) {

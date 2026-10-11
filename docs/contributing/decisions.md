@@ -475,6 +475,8 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - **A config list of keys per view or global** (`<composerKeys>`): duplicates what the composer already says in code, goes stale silently, and puts the maintenance on every user for a problem the AST answers.
 - **Following `$view` into helper methods**: needs inter-procedural tracking of aliases and escapes for a rare shape; declining is correct and cheap.
 
+**Accepted limitation:** a `share()` (or a `with()`) hidden in a helper the composer calls, or in the constructor of a dependency the container injects, is not seen: only the composer's own constructor and `compose()`/`create()` body are read, and following injected classes would need the container's resolution, which analysis cannot run. Resolution paths that rewrite which class runs (bindings, aliases, extenders, subclassed dispatcher or factory) decline instead.
+
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 
 **Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.
