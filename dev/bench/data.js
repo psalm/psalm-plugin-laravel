@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791731072209,
+  "lastUpdate": 1791731893009,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13645,6 +13645,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a0f0395deb265e4948a841feb4f841a12b819f70",
+          "message": "Report guards on required Blade view variables (#1826)\n\n* fix(blade): report guards on required Blade view variables\n\nA declared view variable is required unless its `@var` carries `= null`\n(#1821). A `??`, `??=` or `isset()` guard on a required one is\nredundant, as in PHP, and an optional one is declared\n`@var T|null $x = null`, which raises no contradiction. The #1697 drop\nof these findings therefore hid genuine redundant guards.\n\nRemove the drop and its per-shadow cache, turn the fixture into a test\nthat the findings report, and document the `= null` rule.\n\nRefs #1697, #1821\n\n* test(blade): declare required-guard fixture variables in PHPDoc only\n\nBlade-comment contracts are going away (#1821), so the fixture and the docs line use native PHPDoc `@var` declarations only.\n\n* test(blade): cover isset() on an optional view variable; trim guard docs\n\nAlso makes ContractParser::IDENTIFIER private: its last outside user was the removed guard drop.",
+          "timestamp": "2026-10-11T17:15:19+02:00",
+          "tree_id": "626249473789dfb1ec0f3a2a0d60cf7bcf00055a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a0f0395deb265e4948a841feb4f841a12b819f70"
+        },
+        "date": 1791731891622,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.45,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
