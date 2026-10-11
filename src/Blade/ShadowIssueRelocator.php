@@ -452,11 +452,14 @@ final class ShadowIssueRelocator
      * Rewrites the shadow positions an issue message names onto the template, through the same
      * {@see ShadowTarget::templateLineFor()} the location and the journey use: `first seen on line N`
      * (see MESSAGE_LINE_REFERENCES), the `file:line:column` descriptor of the issue's own shadow
-     * that a few messages embed, and the absolute `path:line` an invalid docblock type's message
-     * ends with (`CommentAnalyzer`). Unlike {@see JourneyRemapper}'s clamp-to-1, a `first seen` line
-     * inside the prelude drops the clause (a clamped number would read as a claim), while a
-     * descriptor still clamps because it has no clause to drop. A regex failure keeps Psalm's
-     * message instead of declining: this rewrite is cosmetic and must never lose the issue.
+     * that a few messages embed, the absolute `path:line` an invalid docblock type's message ends
+     * with (`CommentAnalyzer`), and a closure id (`strtolower(path):line:offset:-:closure`), whose
+     * byte offset is dropped: it shifts with the prelude, so it would churn baselines across plugin
+     * versions without telling the author anything. Unlike {@see JourneyRemapper}'s clamp-to-1, a
+     * `first seen` line inside the prelude drops the clause (a clamped number would read as a
+     * claim), while a descriptor still clamps because it has no clause to drop. A regex failure
+     * keeps Psalm's message instead of declining: this rewrite is cosmetic and must never lose the
+     * issue.
      *
      * @psalm-mutation-free
      */
@@ -482,9 +485,10 @@ final class ShadowIssueRelocator
         }
 
         $message = \preg_replace_callback(
-            '/' . \preg_quote($issue->code_location->file_path, '/') . ':(\d++)(?!:\d)/',
+            '/' . \preg_quote($issue->code_location->file_path, '/') . ':(\d++)(?::\d++(:-:closure))?(?!:\d)/i',
             /** @param array<array-key, string> $matches */
-            static fn(array $matches): string => $target->templateName . ':' . \max(1, $target->templateLineFor((int) $matches[1])),
+            static fn(array $matches): string => $target->templateName . ':'
+                . \max(1, $target->templateLineFor((int) $matches[1])) . ($matches[2] ?? ''),
             $message,
         ) ?? $message;
 
@@ -613,6 +617,15 @@ final class ShadowIssueRelocator
      * keyed call. The call text cut out of the shadow must be absent from the template, the same
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
      * same arguments inside `@php` keeps reporting.
+     *
+     * Caveat (#1725), a deliberately accepted gap: the gate keys on the generated call text, never
+     * on the literal list item behind it, so it cannot tell the #1695 artifact (a keyed non-string
+     * default reaching the list-form arm) from a genuinely non-string list item. `@aware([null])`,
+     * `@aware([$n])` with a nullable `$n`, and `@aware(['color' => 'red', null])` raise the same
+     * argument issue on the same generated call and are dropped with it, although each is a real
+     * bug (a null key; PHP 8.5 deprecates it in `array_key_exists()`). Telling them apart would
+     * mean reading the list literal back out of the `@aware(...)` directive, which this gate does
+     * not do. The shape is rare. Pinned by `BladeIssueRemapTest::a_non_string_aware_list_item_stays_silent_known_limitation()`.
      *
      * @psalm-mutation-free
      */
