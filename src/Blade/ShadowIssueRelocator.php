@@ -21,7 +21,10 @@ use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidMethodCall;
+use Psalm\Issue\PossiblyNullPropertyFetch;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
@@ -69,6 +72,17 @@ final class ShadowIssueRelocator
         // php-parser's `Error::updateMessage()` appends ' on line N' to the raw message
         ParseError::class => '/( on line )(\d++)\z/',
     ];
+
+    /**
+     * @var array<string, array<string, true>> shadow path => {@see self::viewVariables()}, filled
+     *      lazily: re-parsing the template and shadow per guard finding cost seconds on a large app
+     */
+    private static array $viewVariables = [];
+
+    public static function reset(): void
+    {
+        self::$viewVariables = [];
+    }
 
     /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
@@ -209,6 +223,31 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // A `Collection|array` `@foreach`/`@forelse` subject: Psalm types the loop through a
+        // synthetic `getIterator()`/`current()`/`key()` call on `$__currentLoopData` and suppresses
+        // these two classes around it (ForeachAnalyzer.php), but `BeforeAddIssue` fires before that
+        // suppression is checked, and the re-emit cannot carry it (#1810). The synthetic call takes
+        // the subject variable's position; a real call is positioned on its method name.
+        if (
+            ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
+            && self::selectedText($issue->code_location) === '$__currentLoopData'
+        ) {
+            return false;
+        }
+
+        // `$loop->parent` is the enclosing loop's frame and stays `|null` in the ambient shape (an
+        // outermost loop has none), but the prelude cannot see lexical nesting, so every nested
+        // read reported (#1696). InstancePropertyFetchAnalyzer.php is the only emitter naming the
+        // receiver chain. Trade-off: a depth-1 `$loop->parent->x`, which is a real null read, is
+        // silenced too. `PossiblyNullReference` is left alone: its message has no receiver, and a
+        // method call on the `stdClass` frame is a bug that also reports `PossiblyUndefinedMethod`.
+        if (
+            $issue instanceof PossiblyNullPropertyFetch
+            && \preg_match('/^Cannot get property on possibly null variable \$loop(?:->parent)+ of type /', $issue->message) === 1
+        ) {
+            return false;
+        }
+
         // Laravel's own compiled guards on `$attributes`/`$component`/`$slot` (`isset()`, `??=`,
         // `instanceof`) exist to check what {@see PreludeBuilder::componentTypesFor()} now
         // declares as guaranteed inside a component view — most visibly when that view itself
@@ -223,8 +262,8 @@ final class ShadowIssueRelocator
         // gated, or a `@props` view with a nested tag keeps reporting the inferred-branch half.
         //
         // Gated on the MESSAGE, not the class: `RedundantCondition` on an author's OWN
-        // `@if(isset($range))` under their own docblock must keep reporting, and a message-only
-        // gate cannot tell that apart from this shape by class alone.
+        // `@if(isset($range))` under their own `@php` docblock must keep reporting, and a
+        // message-only gate cannot tell that apart from this shape by class alone.
         //
         // `$component`, unlike `$attributes`/`$slot`, is never given a type by
         // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
@@ -337,6 +376,10 @@ final class ShadowIssueRelocator
             }
 
             if (self::isAmbientDocblockGuardName($issue->message, '__env')) {
+                return false;
+            }
+
+            if (self::isDeclaredVariableGuard($issue, $target) || self::isGeneratedValueSave($issue, $target)) {
                 return false;
             }
         }
@@ -708,6 +751,95 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * Whether an issue is the docblock-branch null finding on a `$x ?? …`, `$x ??= …` or
+     * `isset($x)` guard over a variable the template declares (a `{{-- @var --}}` contract or a raw
+     * `<?php` docblock, {@see ContractParser}). The guard is how a template marks a view variable
+     * optional, which a docblock type cannot say (#1697). The inferred-type wording is never
+     * matched, so a guard after the author modifies the variable keeps reporting. A name the template
+     * binds itself (an assignment, a foreach alias, a parameter: ContractParser's local variables)
+     * is never a view variable, whatever documents it, so its guard keeps reporting too.
+     *
+     * The guard is looked for on the whole shadow line, not at the selection: an `isset()`
+     * ternary's contradiction selects its else arm. So a non-guard check on `$x` (`!is_null($x)`)
+     * is silenced too when the same line also guards `$x`, and a guard split across lines is not
+     * recognised. Trade-off: a genuinely redundant guard on a declared variable that is always
+     * passed is silenced too.
+     */
+    private static function isDeclaredVariableGuard(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $id = ContractParser::IDENTIFIER;
+
+        if (
+            \preg_match('/^Docblock-defined type .+ for \$(' . $id . ') is never null\z/', $issue->message, $matches) !== 1
+            && \preg_match('/^Cannot resolve types for \$(' . $id . ') - docblock-defined type .+ does not contain null\z/', $issue->message, $matches) !== 1
+        ) {
+            return false;
+        }
+
+        $name = $matches[1];
+        $selection = ShadowSelection::of($issue->code_location);
+        // Both branches require `??` or `,`/`)` right after the name, which already ends it.
+        $var = '(?<![>$:])\$' . $name;
+
+        if (
+            !$selection instanceof ShadowSelection
+            || \preg_match('/' . $var . '\s*\?\?|\bisset\s*\((?:[^()]|\([^()]*\))*?(?<=[(,\s])' . $var . '\s*[,)]/', $selection->snippet) !== 1
+        ) {
+            return false;
+        }
+
+        $path = $issue->code_location->file_path;
+
+        return isset((self::$viewVariables[$path] ??= self::viewVariables($path, $target))[$name]);
+    }
+
+    /**
+     * The names a shadow's template declares as view variables and never binds itself. The
+     * compiled body is what binds names (`@foreach` aliases exist only there), so it is read too.
+     *
+     * @return array<string, true>
+     */
+    private static function viewVariables(string $shadowPath, ShadowTarget $target): array
+    {
+        $shadow = @\file_get_contents($shadowPath);
+
+        if ($shadow === false) {
+            return [];
+        }
+
+        $contract = (new ContractParser())->parseDataContract($target->templateSource, $shadow);
+        $declared = \array_fill_keys([...\array_keys($contract->vars), ...$contract->rawDeclaredVariables], true);
+
+        return \array_diff_key($declared, \array_flip($contract->localVariables));
+    }
+
+    /**
+     * Whether an issue sits on the `isset($value)` of the save `@session`/`@context` compile
+     * (`if (isset($value)) { $__sessionPrevious[] = $value; }`, CompilesSessions/CompilesContexts),
+     * which Psalm judges against whatever `$value` the author has in scope (#1724). The statement
+     * must be absent from the template, so an author who writes it keeps the finding; in that
+     * template every compiled save keeps it too.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedValueSave(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+        $ifLength = \strlen('if (');
+
+        // The statement must open exactly where the selection starts, less its `if (`.
+        if (
+            !$selection instanceof ShadowSelection
+            || $selection->start < $ifLength
+            || \preg_match('/\Gif \(isset\(\$value\)\) \{ \$__(?:session|context)Previous\[\] = \$value; \}/', $selection->snippet, $save, 0, $selection->start - $ifLength) !== 1
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($save[0], $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
      * The called expression an issue points at, read out of the shadow, or null to decline —
      * fail open, since dropping a real author issue is the costly direction and an unreadable
      * location is no evidence of anything.
@@ -736,6 +868,20 @@ final class ShadowIssueRelocator
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+    }
+
+    /**
+     * The source text an issue's location selects in the shadow, or null when unreadable.
+     *
+     * @psalm-mutation-free
+     */
+    private static function selectedText(CodeLocation $location): ?string
+    {
+        $selection = ShadowSelection::of($location);
+
+        return $selection instanceof ShadowSelection
+            ? \substr($selection->snippet, $selection->start, $selection->end - $selection->start)
+            : null;
     }
 
     /**
