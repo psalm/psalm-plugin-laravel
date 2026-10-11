@@ -189,13 +189,69 @@ final class ContractParser
         return $this->isGuarded($name, $source);
     }
 
-    /** @psalm-pure */
+    /**
+     * Whether the template's live code guards the name (`$x ?? ...`, `$x ??= ...`, `isset($x)`).
+     * Blade comments, `@verbatim` bodies and PHP comments are blanked first: a `@var` description
+     * that mentions `$title ?? 'x'` is not a guard.
+     *
+     * Not scope-aware, on purpose: a guard on a same-named closure parameter or local also counts.
+     * That over-approximation only errs toward silence (the name stays optional).
+     *
+     * @psalm-mutation-free
+     */
     private function isGuarded(string $name, string $source): bool
     {
+        if (!\str_contains($source, '??') && !\str_contains($source, 'isset')) {
+            return false;
+        }
+
         $quoted = \preg_quote($name, '/');
         $end = '(?![a-zA-Z0-9_\x80-\xff])';
 
-        return \preg_match("/\\\${$quoted}{$end}\\s*\\?\\?|isset\\s*\\([^)]*\\\${$quoted}{$end}/", $source) === 1;
+        return \preg_match("/\\\${$quoted}{$end}\\s*\\?\\?|isset\\s*\\([^)]*\\\${$quoted}{$end}/", $this->blankPhpComments($source)) === 1;
+    }
+
+    /**
+     * $source with inert Blade text and the contents of every PHP comment replaced by spaces
+     * (newlines kept).
+     *
+     * @psalm-pure
+     */
+    private function blankPhpComments(string $source): string
+    {
+        $source = MarkerPrePass::blankInertText($source);
+        $ranges = [];
+
+        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
+            // `@php` is a directive, not PHP: tokenize its body behind an open tag. The six-byte tag
+            // stands in for the four-byte directive name, so offsets shift by two.
+            if (\str_starts_with($text, '@php')) {
+                $code = '<?php ' . \substr($text, 4);
+                $cursor = $offset - 2;
+            } elseif (\stripos($text, '<?php') === 0) {
+                $code = $text;
+                $cursor = $offset;
+            } else {
+                continue;
+            }
+
+            // Tokenizing does not parse; the @ is for the warning an unterminated string emits.
+            foreach (@\token_get_all($code) as $token) {
+                if (!\is_array($token)) {
+                    ++$cursor;
+
+                    continue;
+                }
+
+                if ($token[0] === \T_DOC_COMMENT || $token[0] === \T_COMMENT) {
+                    $ranges[] = [$token[1], $cursor];
+                }
+
+                $cursor += \strlen($token[1]);
+            }
+        }
+
+        return MarkerPrePass::blankRanges($source, $ranges);
     }
 
     /**

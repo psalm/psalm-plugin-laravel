@@ -804,4 +804,26 @@ final class ContractParserTest extends TestCase
 
         $this->assertSame(['title'], \array_keys($contract->vars));
     }
+
+    #[Test]
+    public function guard_text_in_inert_or_comment_positions_does_not_make_a_declaration_optional(): void
+    {
+        $declare = "<?php\n/**\n * @var string \$a\n * @var string \$b\n * @var string \$c\n * @var string \$d The default is \$d ?? 'x'\n */\n?>\n";
+        $source = $declare
+            . "{{-- \$a ?? 'x' --}}\n@verbatim isset(\$b) @endverbatim\n<?php // isset(\$c)\n?>\n{{ \$a }}{{ \$b }}{{ \$c }}{{ \$d }}\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        foreach (['a', 'b', 'c', 'd'] as $name) {
+            $this->assertFalse($vars[$name]->optional ?? null, $name);
+        }
+    }
+
+    #[Test]
+    public function a_guard_in_a_php_block_makes_a_declaration_optional(): void
+    {
+        $source = "<?php /** @var int \$n */ ?>\n@php\n\$n ??= 1;\n@endphp\n{{ \$n }}\n";
+
+        $this->assertTrue($this->dataContract($source)->vars['n']->optional ?? null);
+    }
 }
