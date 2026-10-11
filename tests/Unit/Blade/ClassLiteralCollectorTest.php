@@ -19,7 +19,7 @@ final class ClassLiteralCollectorTest extends TestCase
     #[TestWith(["<?php echo '\\\\Vendor\\\\Package\\\\Generator'; ?>", 'Vendor\Package\Generator'], 'leading-backslash FQCN is stripped')]
     public function a_literal_naming_a_namespaced_class_is_collected(string $php, string $expected): void
     {
-        $this->assertSame([$expected], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame([$expected], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     #[Test]
@@ -32,7 +32,7 @@ final class ClassLiteralCollectorTest extends TestCase
     #[TestWith(["<?php echo ''; ?>"], 'empty string')]
     public function a_non_class_literal_is_not_collected(string $php): void
     {
-        $this->assertSame([], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame([], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     /**
@@ -45,7 +45,7 @@ final class ClassLiteralCollectorTest extends TestCase
     {
         $php = '<?php $x = 1; echo "Interp\\Name{$x}More"; ?>';
 
-        $this->assertSame([], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame([], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     /**
@@ -58,7 +58,7 @@ final class ClassLiteralCollectorTest extends TestCase
     {
         $php = "<?php\n/** @var \\Illuminate\\View\\Factory \$__env */\necho 1;\n?>";
 
-        $this->assertSame([], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame([], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     #[Test]
@@ -66,7 +66,7 @@ final class ClassLiteralCollectorTest extends TestCase
     {
         $php = "<?php echo b'Vendor\\\\Package\\\\Generator'; ?>";
 
-        $this->assertSame(['Vendor\Package\Generator'], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame(['Vendor\Package\Generator'], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     #[Test]
@@ -80,7 +80,7 @@ final class ClassLiteralCollectorTest extends TestCase
             ?>
             PHP;
 
-        $this->assertSame([], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame([], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     #[Test]
@@ -88,12 +88,12 @@ final class ClassLiteralCollectorTest extends TestCase
     {
         $php = "<?php echo 'Vendor\\\\Package\\\\Generator'; echo 'Vendor\\\\Package\\\\Generator'; ?>";
 
-        $this->assertSame(['Vendor\Package\Generator'], (new ClassLiteralCollector())->collectFromSource($php));
+        $this->assertSame(['Vendor\Package\Generator'], (new ClassLiteralCollector())->collectFromTokens(\token_get_all($php)));
     }
 
     #[Test]
     public function source_with_no_php_tokens_yields_no_candidates_rather_than_throwing(): void
     {
-        $this->assertSame([], (new ClassLiteralCollector())->collectFromSource('not php at all {{{'));
+        $this->assertSame([], (new ClassLiteralCollector())->collectFromTokens(\token_get_all('not php at all {{{')));
     }
 }

@@ -23,8 +23,9 @@ final class ShadowTarget
     /**
      * @param string $templateSource   the template's bytes, which a `Raw` location indexes into
      * @param string $templateName     the display name Psalm's reporters print for the template
-     * @param bool   $isComponentView  {@see PreludeBuilder::isComponentView()} on $templateSource;
-     *                                 computed once here rather than per issue in the relocator
+     * @param bool   $isComponentView  {@see PreludeBuilder::isComponentView()} on $templateSource, or
+     *                                 a view {@see ComponentViewRegistry} seeds; computed once here
+     *                                 rather than per issue in the relocator
      * @param string $markerPrefix     the prefix the shadow's marker comments actually carry, from
      *                                 {@see ShadowRegistry::markerPrefixFor()}. Passed in rather
      *                                 than derived from $templateSource: the prefix is a salted hash

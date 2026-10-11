@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node\Stmt\Nop;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -387,5 +389,38 @@ final class PreludeBuilderTest extends TestCase
 
         $this->assertSame(1, \substr_count($prelude, '<?php'));
         $this->assertSame(1, \substr_count($prelude, '?>'));
+    }
+
+    /**
+     * #1804: the prelude's closing tag parses to one `Stmt\Nop` on the prelude's last line (mapped
+     * to template line 0) carrying every `@var` docblock after the contract statements, whatever the
+     * compiled output starts with. ComponentViewSeedHandler seeds on it, after all of them apply.
+     */
+    #[Test]
+    public function its_closing_tag_is_one_nop_carrying_the_trailing_docblocks(): void
+    {
+        $contractVars = ['label' => 'string', 'size' => 'int'];
+        $prelude = (new PreludeBuilder())->build('<?php echo $title, $body; ?>', $contractVars, '');
+        $docblocks = \substr_count($prelude, '/** @var ');
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+
+        $this->assertSame($docblocks + 2, \substr_count($prelude, "\n"));
+
+        foreach (['<div></div>', '<?php echo $title; ?>'] as $compiled) {
+            $stmts = $parser->parse($prelude . $compiled);
+            $this->assertIsArray($stmts);
+
+            // One empty statement per contract variable (its `mixed` line and its typed line).
+            foreach (\array_keys(\array_values($contractVars)) as $index) {
+                $this->assertInstanceOf(Nop::class, $stmts[$index]);
+                $this->assertCount(2, $stmts[$index]->getComments());
+            }
+
+            $sentinel = $stmts[\count($contractVars)] ?? null;
+            $this->assertInstanceOf(Nop::class, $sentinel);
+            $this->assertCount($docblocks - 2 * \count($contractVars), $sentinel->getComments());
+            $this->assertSame($docblocks + 2, $sentinel->getStartLine());
+            $this->assertNotInstanceOf(Nop::class, $stmts[\count($contractVars) + 1] ?? null);
+        }
     }
 }
