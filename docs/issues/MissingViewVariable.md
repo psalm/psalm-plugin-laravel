@@ -47,6 +47,23 @@ view('profile', ['name' => 'Ada', 'age' => 36]);
 view('profile', ['name' => 'Ada'])->with('age', 36);
 ```
 
+An `@include` with a literal data array is checked too, reported on the directive's line. A key the array omits is missing only when the including template cannot hand it on from its own scope:
+
+```blade
+{{-- resources/views/team.blade.php: Bad --}}
+<?php /** @var string $title */ ?>
+@include('profile', ['name' => $title]) {{-- MissingViewVariable: $age --}}
+
+{{-- resources/views/roster.blade.php: Good, it declares $age, so its own caller passes it on --}}
+<?php
+/**
+ * @var string $title
+ * @var int $age
+ */
+?>
+@include('profile', ['name' => $title])
+```
+
 ## How to fix
 
 1. Pass the declared variable at the call site.
@@ -76,6 +93,7 @@ The check declines rather than guess. It is silent when:
 - A view composer or creator is registered for the view, wildcard ones (`composing: *`, `admin.*`) included: it can add any data, so the call site's data set proves nothing.
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
+- An `@include` whose including template declares, reads or binds the name, receives it from Blade or as class component data, declares nothing, has a dynamic scope (`$$name`, `extract()`, every `@props`/`@aware` component view), or has a composer registered. `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked. See [Included templates](../blade.md#included-templates).
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
 
 A view rendered from the `render()` of an `Illuminate\View\Component` subclass IS handled: Laravel

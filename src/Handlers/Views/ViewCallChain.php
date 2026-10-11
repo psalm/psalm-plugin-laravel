@@ -102,6 +102,18 @@ final class ViewCallChain
         return new self($chain->viewName, $chain->data, $complete, $merged[0]);
     }
 
+    /**
+     * A compiled `@include('view', [...])`: `$__env->make('view', [...], <the including scope>)`.
+     * The scope argument is judged by the caller, so `complete` holds only when the literal array is
+     * closed AND the caller proved the scope it hands on.
+     */
+    public static function fromInclude(Expr\MethodCall $make, StatementsSource $source, bool $scopeClosed): ?self
+    {
+        $args = self::args($make);
+
+        return $args === null ? null : self::build($args, $source, [], true, $scopeClosed);
+    }
+
     /** @psalm-mutation-free */
     private static function isInRenderMethod(StatementsSource $source): bool
     {

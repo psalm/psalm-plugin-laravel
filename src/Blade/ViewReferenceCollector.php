@@ -69,7 +69,7 @@ final class ViewReferenceCollector
 
             $method = \strtolower($call->name->toString());
 
-            if (!$this->passesWholeScope($call->args)) {
+            if (!self::passesWholeScope($call->args)) {
                 continue;
             }
 
@@ -93,11 +93,14 @@ final class ViewReferenceCollector
      * position shifts with the directive's own optional data array (`@include('x', [...])` pushes it
      * into `$mergeData`), so the whole argument list is scanned rather than one pinned index.
      *
+     * Public for {@see \Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler}, which recognises a
+     * compiled `@include` by the same argument.
+     *
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
      *
      * @psalm-mutation-free
      */
-    private function passesWholeScope(array $args): bool
+    public static function passesWholeScope(array $args): bool
     {
         foreach ($args as $arg) {
             if (!$arg instanceof Arg

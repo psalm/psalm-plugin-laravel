@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
 use Psalm\CodeLocation;
+use Psalm\Context;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ContractParser;
@@ -14,7 +17,10 @@ use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
+use Psalm\LaravelPlugin\Blade\ShadowEntry;
+use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
+use Psalm\LaravelPlugin\Blade\ViewReferenceCollector;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
@@ -38,6 +44,10 @@ use Psalm\Type;
  *
  * Also reports, under its own independent flag, a data key the template never reads
  * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
+ *
+ * Inside a Blade shadow it also checks a compiled `@include('view', [...])` against the included
+ * template's contract. The partial receives the literal array AND the including template's scope,
+ * so a key absent from the array is missing only when the includer provably cannot hand it on.
  *
  * Every check is conservative in the same direction: anything that cannot be proven declines.
  * A missing variable needs the supplied key set to be provably closed, so an open data array
@@ -79,6 +89,14 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
         $stmt = $event->getStmt();
 
+        if ($stmt instanceof Stmt\Echo_) {
+            if (self::$validateViewData) {
+                self::checkInclude($stmt, $event);
+            }
+
+            return null;
+        }
+
         // The two statement shapes a rendering expression is the whole of. An expression nested
         // deeper (an argument, an array element) is left alone on purpose: the check costs a walk
         // per statement, and reaching those shapes would mean re-walking every sub-expression.
@@ -109,11 +127,118 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         return null;
     }
 
+    /**
+     * A compiled `@include` in a Blade shadow. Its location is the `make()` call, which the issue
+     * remap moves to the directive's template line.
+     */
+    private static function checkInclude(Stmt\Echo_ $stmt, AfterStatementAnalysisEvent $event): void
+    {
+        $source = $event->getStatementsSource();
+        $entry = ShadowRegistry::entryFor($source->getFilePath());
+        $make = $entry instanceof ShadowEntry ? self::compiledInclude($stmt, $source) : null;
+
+        if (!$entry instanceof ShadowEntry || !$make instanceof Expr\MethodCall) {
+            return;
+        }
+
+        $inherited = self::inheritedNames($entry->templatePath, $event->getContext());
+        $chain = ViewCallChain::fromInclude($make, $source, $inherited !== null);
+        $contract = $chain instanceof ViewCallChain ? ContractRegistry::contractFor($chain->viewName) : null;
+
+        if (!$chain instanceof ViewCallChain || !$contract instanceof ViewDataContract) {
+            return;
+        }
+
+        self::check($chain, $contract, new CodeLocation($source, $make), $source, $inherited ?? []);
+    }
+
+    /**
+     * The `make()` call of the echo Blade compiles `@include('view', [...])` to:
+     * `<?php echo $__env->make('view', [...], array_diff_key(get_defined_vars(), …))->render(); ?>`.
+     *
+     * `@includeIf` compiles to the same echo behind `if ($__env->exists(…))`, so the echo must also
+     * open its own PHP block. A suppression docblock the shadow injected after the open tag is
+     * skipped. The other include directives compile to other calls or drop the scope argument.
+     */
+    private static function compiledInclude(Stmt\Echo_ $stmt, StatementsSource $source): ?Expr\MethodCall
+    {
+        $render = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
+
+        if (!$render instanceof Expr\MethodCall || !$render->name instanceof Identifier || $render->name->toLowerString() !== 'render') {
+            return null;
+        }
+
+        $make = $render->var;
+
+        if (!$make instanceof Expr\MethodCall
+            || !$make->name instanceof Identifier
+            || $make->name->toLowerString() !== 'make'
+            || !$make->var instanceof Expr\Variable
+            || $make->var->name !== '__env'
+            || \count($make->args) !== 3
+            || !$make->args[1] instanceof Arg
+            || !$make->args[1]->value instanceof Expr\Array_
+            || !ViewReferenceCollector::passesWholeScope([$make->args[2]])
+        ) {
+            return null;
+        }
+
+        $position = $stmt->getStartFilePos();
+        $window = \max(0, $position - 512);
+        $before = \rtrim(\substr($source->getCodebase()->getFileContents($source->getFilePath()), $window, $position - $window));
+
+        if (\str_ends_with($before, '*/')) {
+            $before = \rtrim(\substr($before, 0, (int) \strrpos($before, '/**')));
+        }
+
+        return \str_ends_with($before, '<?php') ? $make : null;
+    }
+
+    /**
+     * Every name the including template can hand on through the scope `@include` forwards: what it
+     * declares, reads (an undeclared read is data it was passed) or binds, what Blade supplies, and
+     * whatever Psalm holds in scope at the directive (a class component's data, a local assigned
+     * above it). Null when that scope is not provable: no contract was registered for the template,
+     * a composer feeds it, it declares nothing and so states no scope at all, its `@props` are
+     * unreadable, or its scope is dynamic (`$$name`, `extract()`).
+     *
+     * @return array<string, true>|null
+     */
+    private static function inheritedNames(string $templatePath, Context $context): ?array
+    {
+        $includer = ContractRegistry::templateScopeFor($templatePath);
+
+        if (!$includer instanceof ViewDataContract
+            || $includer->vars === []
+            || $includer->propsUnknown
+            || $includer->readsUnknown
+            || !$context->check_variables
+        ) {
+            return null;
+        }
+
+        $names = PreludeBuilder::BLADE_OWNED_NAMES
+            + \array_fill_keys(\array_keys($includer->vars), true)
+            + \array_fill_keys($includer->readVariables, true)
+            + \array_fill_keys($includer->rawDeclaredVariables, true);
+
+        foreach ([...\array_keys($context->vars_in_scope), ...\array_keys($context->vars_possibly_in_scope)] as $varId) {
+            $names[\substr($varId, 1)] = true;
+        }
+
+        return $names;
+    }
+
+    /**
+     * @param array<string, true>|null $inheritedNames for an `@include`, the names the includer's
+     *        scope can supply; null for a PHP call site, which inherits nothing
+     */
     private static function check(
         ViewCallChain $chain,
         ViewDataContract $contract,
         CodeLocation $codeLocation,
         StatementsSource $source,
+        ?array $inheritedNames = null,
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
@@ -126,6 +251,10 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
                 $passed = $supplied[$name] ?? null;
 
                 if ($passed === null) {
+                    if (isset($inheritedNames[$name])) {
+                        continue;
+                    }
+
                     self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
 
                     continue;
@@ -135,7 +264,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             }
         }
 
-        if (self::$reportUnusedViewData) {
+        // UnusedViewData judges `view()` call sites only; an include's extra keys are out of its scope.
+        if (self::$reportUnusedViewData && $inheritedNames === null) {
             self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
         }
     }

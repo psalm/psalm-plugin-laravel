@@ -266,6 +266,22 @@ With [`validateViewData`](config.md#validateviewdata), a call site is checked ag
 
 Some names are never contracts, because no call site passes them: a name the template binds itself (a `@foreach` alias, an assignment target, a closure parameter, a `catch` variable), the names Blade supplies (`$errors`, `$slot`, `$attributes`, `$loop`, `$component`, `$__env`), data the framework shares into every view (`$app` and whatever a provider `share()`d before the plugin booted the application), and a `@var` in a plain `/* */` or `//` comment, which Psalm does not read. They still count as declared for [`reportUnusedViewData`](config.md#reportunusedviewdata). The missing-variable check also declines for a view with a composer or creator registered (wildcards included), for a call site inside an `Illuminate\View\Component` subclass's `render()` (its result can be chained by the caller), and for an unreadable `@props` or an open data set. A class name is compared against the call site's value only when it is written with a leading backslash (`\App\Models\User`), or is a PHP internal class (`Closure`): a short or otherwise qualified name (`Thing`, `Models\User`) resolves through the template's own `use` imports, so that variable is checked for presence only. A view with a composer or creator is checked for neither presence nor type, since the composer can overwrite any key. `blade:annotate` writes class names with a leading backslash.
 
+### Included templates
+
+With `validateViewData`, `@include('partials.card', ['user' => $user])` is checked against `partials/card.blade.php`'s declarations like a call site, reported on the `@include` line. Only a literal view name with a literal data array is checked. `@extends('layout', [...])` compiles to the same call and is checked the same way. `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked.
+
+A key present in the array is type checked against the included template's declaration, with the value typed as the including template sees it.
+
+A key absent from the array can still arrive through the including template's scope, which `@include` hands on whole. It is reported missing only when the including template provably cannot supply it, so the check declines when the including template:
+
+* declares the name (`@var`, required or `= null`, or `@props`),
+* reads it (an undeclared read is data its own caller passes), or binds it itself (an assignment, a `@foreach` alias, a closure parameter),
+* receives it from Blade (`$errors`, `$slot`, ...) or as class component data,
+* declares nothing at all, has an unreadable `@props` array, or has a dynamic scope (`$$name`, `extract()`; this includes every `@props`/`@aware` component view, whose compiled output writes `$$name`),
+* has a view composer or creator registered.
+
+The rule is one level deep on purpose: a variable the outer `view()` call passes reaches the partial when the template in between declares it, so declaring it there both documents the hand-off and silences the report.
+
 ## Unused view data
 
 With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it. Both declaration forms count ([Declaring view variables](#declaring-view-variables)): `@props`, and a raw `@var T $name` docblock.

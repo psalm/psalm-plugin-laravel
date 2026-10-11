@@ -37,7 +37,7 @@ final class BladeBootstrapper
         private readonly ShadowRegistrar $registrar,
         private readonly Progress $output,
         private readonly string $shadowDir,
-        /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
+        /** Opt-in for UnusedViewData and validateViewData: gates two extra AST walks per template. */
         private readonly bool $collectDataIncludes = false,
         /**
          * Test seam: vendor dir for the hint-root filter. Null derives it from
@@ -66,7 +66,7 @@ final class BladeBootstrapper
      */
     private array $pendingTemplates = [];
 
-    /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
+    /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null, 4: string}> view name, root index, contract, data includes, template path */
     private array $pendingContracts = [];
 
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
@@ -263,12 +263,16 @@ final class BladeBootstrapper
             ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
         }
 
-        foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
-            ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
+        foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes, $templatePath]) {
+            $contract = $this->withoutSharedNames($contract, $shared);
+            ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
+            $composed = $this->hasComposer($factory, $viewName);
 
-            if ($this->hasComposer($factory, $viewName)) {
+            if ($composed) {
                 ContractRegistry::markComposed($viewName);
             }
+
+            ContractRegistry::registerTemplateScope($templatePath, $composed ? null : $contract);
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
@@ -448,7 +452,7 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
+            $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes, $templatePath];
         }
     }
 

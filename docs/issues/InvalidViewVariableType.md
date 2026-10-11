@@ -35,6 +35,12 @@ response()->view('greeting', ['name' => 123]);  // InvalidViewVariableType
 view('greeting', ['name' => 'Ada']);
 ```
 
+```blade
+{{-- Bad: an @include with a literal data array is checked the same way --}}
+<?php /** @var int $count */ ?>
+@include('greeting', ['name' => $count]) {{-- InvalidViewVariableType --}}
+```
+
 ## How to fix
 
 1. Pass a value of the declared type, or cast it at the call site.
@@ -60,4 +66,5 @@ The check declines rather than guess. It is silent when:
 - The declared type is `mixed`, which is every `@props([...])` entry (`@props` records names, not types).
 - The passed value is `mixed`, which satisfies any declaration.
 - The declared type does not parse. A `@var` docblock is free text and is never validated.
+- An `@include` is not `@include('literal', [literal array])`: `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked. See [Included templates](../blade.md#included-templates).
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.

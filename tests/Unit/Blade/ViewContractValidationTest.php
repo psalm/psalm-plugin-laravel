@@ -431,6 +431,96 @@ final class ViewContractValidationTest extends TestCase
         }
     }
 
+    /**
+     * `@include('view', [...])` hands the partial its literal array AND the including template's
+     * scope, so a key absent from the array is only missing when the includer cannot supply it.
+     */
+    #[Test]
+    public function an_include_missing_a_variable_the_includer_cannot_supply_is_reported_on_its_line(): void
+    {
+        $reported = $this->templateContractIssues('missing.blade.php');
+
+        // Line 5 sits under a Blade suppression of another issue, which the shadow carries as a
+        // docblock between the open tag and the echo.
+        $this->assertSame([3, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::MISSING, $issue['type']);
+            $this->assertStringContainsString("View 'inc.card' declares \$count", (string) $issue['message']);
+        }
+    }
+
+    #[Test]
+    public function an_include_whose_includer_declares_or_binds_the_variable_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('declared.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('declared-required.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('bound.blade.php'));
+    }
+
+    #[Test]
+    public function an_include_value_of_the_wrong_type_is_reported_and_a_mixed_one_declines(): void
+    {
+        $reported = $this->templateContractIssues('wrong-type.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertSame(3, $reported[0]['line_from']);
+        $this->assertStringContainsString('$title as string, but int', (string) $reported[0]['message']);
+    }
+
+    /** An includer whose scope is dynamic, or that declares no contract at all, may hand on anything. */
+    #[Test]
+    public function an_include_from_an_open_includer_scope_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('dynamic.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('no-contract.blade.php'));
+    }
+
+    #[Test]
+    public function the_other_include_directives_are_not_checked(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('include-if.blade.php'));
+    }
+
+    /** `@extends('layout', [...])` compiles to the same call, and hands the layout the same scope. */
+    #[Test]
+    public function an_extends_with_literal_data_is_checked_like_an_include(): void
+    {
+        $reported = $this->templateContractIssues('extends-data.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+    }
+
+    /** A hand-written call that compiles byte-identically to `@include` has its runtime meaning too. */
+    #[Test]
+    public function a_handwritten_compiled_include_is_checked_like_the_directive(): void
+    {
+        $reported = $this->templateContractIssues('handwritten.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+    }
+
+    /**
+     * @return list<array<array-key, mixed>>
+     */
+    private function templateContractIssues(string $template): array
+    {
+        $issues = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if (\in_array($issue['type'], [self::MISSING, self::WRONG_TYPE], true) && \basename((string) $issue['file_name']) === $template) {
+                $issues[] = $issue;
+            }
+        }
+
+        return $issues;
+    }
+
     #[Test]
     public function the_check_is_off_unless_the_config_flag_opts_in(): void
     {
