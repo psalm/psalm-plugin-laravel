@@ -219,6 +219,15 @@ final class AnalyzeCommandTest extends TestCase
     }
 
     #[Test]
+    public function the_experimental_shorthand_is_ordered_with_plugin_options(): void
+    {
+        $this->assertSame(
+            ['forwarded' => ['src'], 'options' => ['experimental=false', 'experimental=true']],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--plugin-option=experimental=false', '--experimental', 'src']),
+        );
+    }
+
+    #[Test]
     public function tokens_after_the_double_dash_boundary_are_forwarded_untouched(): void
     {
         $this->assertSame(
@@ -231,8 +240,8 @@ final class AnalyzeCommandTest extends TestCase
     public function flags_that_merely_resemble_the_override_flag_are_forwarded(): void
     {
         $this->assertSame(
-            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', '--plugin', '--plugin-options=x', '--plugin-optionx=1'], 'options' => []],
-            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', '--plugin', '--plugin-options=x', '--plugin-optionx=1']),
+            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', '--experimental=true', '--no-experimental', '--plugin', '--plugin-options=x', '--plugin-optionx=1'], 'options' => []],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', '--experimental=true', '--no-experimental', '--plugin', '--plugin-options=x', '--plugin-optionx=1']),
         );
     }
 
@@ -264,6 +273,7 @@ final class AnalyzeCommandTest extends TestCase
 
         $this->assertTrue($command->getDefinition()->getOption('plugin-option')->isArray());
         $this->assertTrue($command->getDefinition()->hasNegation('no-blade'));
+        $this->assertTrue($command->getDefinition()->hasOption('experimental'));
 
         $help = $command->getHelp();
         foreach (\array_keys(PluginOverrides::KEYS) as $key) {

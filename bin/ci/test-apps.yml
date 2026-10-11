@@ -72,6 +72,7 @@ flags:
   "--find-dead-code": Report unused code, overriding psalm.xml
   "--find-unused-psalm-suppress": Report unused @psalm-suppress, overriding psalm.xml
   "--find-unused-variables": Report unused variables and params, overriding psalm.xml
+  "--experimental": Enable experimental opt-in rules, overriding psalm.xml
 
 apps:
   - name: monica
