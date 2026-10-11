@@ -9,7 +9,7 @@ use Psalm\Config;
 /**
  * Immutable value object holding all plugin configuration.
  *
- * Built once from the `<pluginClass>` XML element in psalm.xml,
+ * Built once from the `<pluginClass>` XML element in psalm.xml plus the per-run {@see PluginOverrides},
  * then threaded through to handlers that need it.
  *
  * @internal
@@ -29,6 +29,8 @@ final readonly class PluginConfig
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
         public bool $findMissingViews,
+        public bool $findUnconfiguredFilesystemDisks,
+        public bool $findUnregisteredRouteNames,
         public bool $findSerializedQueuedModels,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
@@ -48,12 +50,27 @@ final readonly class PluginConfig
          */
         public ?bool $findPromptInjection,
         public string $cachePath,
+        /** Opt-in Blade template analysis: on when `<blade />` is present, off for `<blade value="false" />`. */
+        public bool $bladeEnabled,
+        /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
+        public string $bladeCacheDir,
+        /** Opt-in checking of `view()` call sites against template contracts (`<blade validateViewData="true" />`). */
+        public bool $bladeValidateViewData,
+        /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
+        public bool $bladeReportUnusedViewData,
+        /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
+        public bool $bladeReportMixedIssues,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
 
-    public static function fromXml(?\SimpleXMLElement $config): self
+    /**
+     * Resolves every setting per key: override > XML > default.
+     * The XML is read and validated first, so a malformed element fails even when an override wins.
+     */
+    public static function fromXml(?\SimpleXMLElement $config, ?PluginOverrides $overrides = null): self
     {
+        $overrides ??= PluginOverrides::parse('');
         $columnFallbackValue = self::xmlStringAttr($config?->modelProperties, 'columnFallback', 'migrations');
         $columnFallback = ColumnFallback::tryFrom($columnFallbackValue);
 
@@ -69,33 +86,49 @@ final readonly class PluginConfig
         }
 
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
-        $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
+        $xmlExperimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        // experimental = early access to rules not yet promoted to default; an explicit
-        // value always overrides it, in either direction.
-        $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
+        // experimental = early access to rules not yet promoted to default; an explicit per-rule value
+        // (override or XML) always wins over it, in either direction, so it resolves after the overrides.
+        $experimental = $overrides->bool('experimental') ?? $xmlExperimental;
+        $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks');
+        $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
+        $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $findPromptInjection = self::xmlPromptInjectionAttr($config);
         $resolveDynamicWhereClauses = self::xmlBoolAttr($config?->resolveDynamicWhereClauses, 'resolveDynamicWhereClauses', true);
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
+        $xmlBladeEnabled = self::xmlBladeEnabled($config);
+        $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
+        $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
+        $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
+        $cachePath = self::resolveCachePath();
 
         return new self(
-            modelPropertiesColumnFallback: $columnFallback,
+            modelPropertiesColumnFallback: ColumnFallback::tryFrom($overrides->string('modelProperties.columnFallback') ?? '') ?? $columnFallback,
             configDirectories: $configDirectories,
-            resolveDynamicWhereClauses: $resolveDynamicWhereClauses,
-            resolveConfigReturnTypes: $resolveConfigReturnTypes,
-            reportImplicitQueryBuilderCalls: $reportImplicitQueryBuilderCalls,
-            findMissingTranslations: $findMissingTranslations,
-            findMissingViews: $findMissingViews,
-            findSerializedQueuedModels: $findSerializedQueuedModels,
-            findOctaneIncompatibleBinding: $findOctaneIncompatibleBinding,
-            findPromptInjection: $findPromptInjection,
-            cachePath: self::resolveCachePath(),
+            resolveDynamicWhereClauses: $overrides->bool('resolveDynamicWhereClauses') ?? $resolveDynamicWhereClauses,
+            resolveConfigReturnTypes: $overrides->bool('resolveConfigReturnTypes') ?? $resolveConfigReturnTypes,
+            reportImplicitQueryBuilderCalls: $overrides->bool('reportImplicitQueryBuilderCalls') ?? $reportImplicitQueryBuilderCalls,
+            findMissingTranslations: $overrides->bool('findMissingTranslations') ?? $findMissingTranslations,
+            findMissingViews: $overrides->bool('findMissingViews') ?? $findMissingViews,
+            findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? $experimental,
+            findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,
+            findSerializedQueuedModels: $overrides->bool('findSerializedQueuedModels') ?? $findSerializedQueuedModels ?? $experimental,
+            findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
+            findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
+            cachePath: $cachePath,
+            // Sub-settings below never reach this switch: only `blade` itself enables the Blade pass.
+            bladeEnabled: $overrides->bool('blade') ?? $xmlBladeEnabled,
+            bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
+            bladeValidateViewData: $overrides->bool('blade.validateViewData') ?? $bladeValidateViewData,
+            bladeReportUnusedViewData: $overrides->bool('blade.reportUnusedViewData') ?? $bladeReportUnusedViewData,
+            bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
             experimental: $experimental,
-            failOnInternalError: $failOnInternalError,
+            failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
         );
     }
 
@@ -146,7 +179,6 @@ final readonly class PluginConfig
     /**
      * Read a named attribute of an XML element as a string.
      * Returns $default when the element is absent or the attribute is missing.
-     * @psalm-pure
      */
     private static function xmlStringAttr(?\SimpleXMLElement $element, string $attribute, string $default): string
     {
@@ -158,18 +190,17 @@ final readonly class PluginConfig
     }
 
     /**
-     * Read the `value` attribute of an XML element as a boolean.
+     * Read a boolean attribute of an XML element, `value` unless $attribute says otherwise.
      * Expects `<element value="true" />` or `<element value="false" />`.
-     * Returns $default when the element is absent.
-     * @psalm-pure
+     * Returns $default when the element or the attribute is absent.
      */
-    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false): bool
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false, string $attribute = 'value'): bool
     {
         if (!$element instanceof \SimpleXMLElement) {
             return $default;
         }
 
-        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
+        $value = (string) ($element[$attribute] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
@@ -183,8 +214,6 @@ final readonly class PluginConfig
      * when unset. Returns null when the element is absent so callers can fall back
      * to runtime detection (e.g. `class_exists()`); returns true/false when the
      * user explicitly opts in or out via XML.
-     *
-     * @psalm-pure
      */
     private static function xmlOptionalBoolAttr(?\SimpleXMLElement $element, string $name): ?bool
     {
@@ -238,6 +267,42 @@ final readonly class PluginConfig
         }
 
         return $value === 'true';
+    }
+
+    /**
+     * `<blade />` opts in by its presence, so its settings live on the same element without a
+     * separate switch; `value="false"` turns a present element off without deleting it.
+     */
+    private static function xmlBladeEnabled(?\SimpleXMLElement $config): bool
+    {
+        $blade = $config?->blade;
+
+        // A missing child still reads as an empty SimpleXMLElement proxy; isset() is what tells them apart.
+        if (!$blade instanceof \SimpleXMLElement || !isset($config->blade)) {
+            return false;
+        }
+
+        return self::xmlBoolAttr($blade, 'blade', true);
+    }
+
+    /**
+     * Shadow files default to a subdirectory of the plugin's own cache directory, alongside the
+     * generated alias stub and the migration schema cache: `--clear-cache` then drops them too.
+     *
+     * Deliberately outside the project tree. A shadow that a `<projectFiles>` glob picks up
+     * becomes reportable, which both leaks compiled-template issues at their compiled locations
+     * and makes Psalm skip taint flows whose source sits in a reportable file. A `cacheDir`
+     * pointing inside the project must therefore be excluded from `<projectFiles>` by the user.
+     */
+    private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
+    {
+        $configured = \rtrim(self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
+
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        return $cachePath . \DIRECTORY_SEPARATOR . 'blade';
     }
 
     private static function resolveCachePath(): string

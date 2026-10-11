@@ -22,7 +22,6 @@ use Psalm\Progress\Progress;
  * cache. Persistent caching is a Phase-4 concern requiring its own serialization
  * strategy.
  *
- * @psalm-external-mutation-free
  * @psalm-api
  * @internal
  */
@@ -36,8 +35,6 @@ final class ModelMetadataRegistry
     /**
      * Plugin-init hook. Captures a {@see Progress} handle for deferred warnings
      * during lazy access paths; no model iteration happens here.
-     *
-     * @psalm-external-mutation-free
      */
     public static function init(Progress $progress): void
     {
@@ -56,7 +53,6 @@ final class ModelMetadataRegistry
      *
      * @param  class-string $modelFqcn
      * @return ModelMetadata<Model>|null
-     * @psalm-external-mutation-free
      */
     public static function for(string $modelFqcn): ?ModelMetadata
     {
@@ -71,7 +67,6 @@ final class ModelMetadataRegistry
      * earlier must not assume this set is complete.
      *
      * @return iterable<class-string<Model>, ModelMetadata<Model>>
-     * @psalm-external-mutation-free
      * @psalm-api
      */
     public static function all(): iterable
@@ -82,7 +77,6 @@ final class ModelMetadataRegistry
     /**
      * Get the Progress handle captured at init-time, for deferred warnings.
      *
-     * @psalm-external-mutation-free
      * @psalm-api
      * @internal
      */
@@ -98,7 +92,6 @@ final class ModelMetadataRegistry
      * @psalm-internal Psalm\LaravelPlugin\Handlers\Eloquent\Metadata
      * @param class-string<Model> $modelFqcn
      * @param ModelMetadata<Model> $metadata
-     * @psalm-external-mutation-free
      */
     public static function store(string $modelFqcn, ModelMetadata $metadata): void
     {
@@ -110,8 +103,6 @@ final class ModelMetadataRegistry
      *
      * @internal called by the builder's reset hook for tests
      * @psalm-internal Psalm\LaravelPlugin\Handlers\Eloquent\Metadata
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {

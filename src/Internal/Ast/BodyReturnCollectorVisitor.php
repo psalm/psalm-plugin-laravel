@@ -27,6 +27,15 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
 
     private bool $bailed = false;
 
+    private bool $bareReturn = false;
+
+    /**
+     * @param bool $bailOnBareReturn false keeps walking past `return;` and only records it,
+     *                               for callers that treat it as a null exit.
+     * @psalm-capabilities read-props
+     */
+    public function __construct(private readonly bool $bailOnBareReturn = true) {}
+
     /**
      * Collected `return <expr>;` expressions in source order, or an empty list
      * when the body contained no returns. Read-only after traversal; mirrors
@@ -53,6 +62,12 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
         return $this->bailed;
     }
 
+    /** `true` when the walker passed a `return;` in non-bailing mode. */
+    public function hasBareReturn(): bool
+    {
+        return $this->bareReturn;
+    }
+
     /**
      * Reset per-traversal state so the visitor can be reused safely against
      * multiple closure bodies. Mirrors the sibling
@@ -67,6 +82,7 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
     {
         $this->returnExprs = [];
         $this->bailed = false;
+        $this->bareReturn = false;
 
         return null;
     }
@@ -90,6 +106,11 @@ final class BodyReturnCollectorVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Stmt\Return_) {
             if (!$node->expr instanceof \PhpParser\Node\Expr) {
+                if (!$this->bailOnBareReturn) {
+                    $this->bareReturn = true;
+                    return null;
+                }
+
                 $this->bailed = true;
                 return NodeVisitor::STOP_TRAVERSAL;
             }

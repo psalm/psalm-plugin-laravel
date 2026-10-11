@@ -6,7 +6,10 @@ use Illuminate\Support\LazyCollection;
 
 /**
  * filter() without callback removes null/false and narrows string/array.
+ * filter(callable) narrows through the same predicate matcher as where(callable);
+ * matcher shapes are covered in CollectionWhereCallbackTest.phpt.
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/441
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1648
  */
 final class CollectionFilterTest
 {
@@ -32,12 +35,46 @@ final class CollectionFilterTest
     }
 
     /**
-     * filter() with a callback should NOT narrow — we don't know what the callback filters.
+     * Null-check callback removes null through the shared predicate matcher.
      * @param Collection<int, string|null> $collection
      */
-    public function filterWithCallbackDoesNotNarrow(Collection $collection): void
+    public function filterWithNullCheckCallbackNarrows(Collection $collection): void
     {
         $_result = $collection->filter(fn (string|null $item) => $item !== null);
+        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+    }
+
+    /** @param Collection<int, Countable> $items */
+    public function filterWithInstanceofCallbackNarrows(Collection $items): void
+    {
+        $_result = $items->filter(static fn (Countable $x): bool => $x instanceof Stringable);
+        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable>&static */
+    }
+
+    /** @param LazyCollection<int, Countable> $items */
+    public function lazyCollectionFilterWithInstanceofCallbackNarrows(LazyCollection $items): void
+    {
+        $_result = $items->filter(static fn (Countable $x): bool => $x instanceof Stringable);
+        /** @psalm-check-type-exact $_result = LazyCollection<int, Countable&Stringable>&static */
+    }
+
+    /**
+     * Opaque predicate body: handler declines, Psalm's default return stands.
+     * @param Collection<int, string|null> $collection
+     */
+    public function filterWithOpaqueCallbackDoesNotNarrow(Collection $collection): void
+    {
+        $_result = $collection->filter(fn (?string $item): bool => $item !== null && strlen($item) > 3);
+        /** @psalm-check-type-exact $_result = Collection<int, null|string>&static */
+    }
+
+    /**
+     * Two-param (value, key) callbacks are opaque: the predicate may depend on the key.
+     * @param Collection<int, string|null> $collection
+     */
+    public function filterWithKeyParamCallbackDoesNotNarrow(Collection $collection): void
+    {
+        $_result = $collection->filter(fn (?string $item, int $_key): bool => $item !== null);
         /** @psalm-check-type-exact $_result = Collection<int, null|string>&static */
     }
 

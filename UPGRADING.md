@@ -3,7 +3,7 @@
 The `1.x` and `2.x` lines are end-of-life (no more fixes, security or otherwise).
 Active development happens on `3.x` and `4.x`, which add taint-based security scanning and modern Laravel/Psalm support.
 
-Compatibility matrix: [README](https://github.com/psalm/psalm-plugin-laravel/blob/master/README.md#versions--dependencies).
+Compatibility matrix: [README](https://github.com/psalm/psalm-plugin-laravel/blob/4.x/README.md#versions--dependencies).
 
 ## 3.x → 4.x
 
@@ -19,7 +19,7 @@ Compatibility matrix: [README](https://github.com/psalm/psalm-plugin-laravel/blo
 composer update psalm/plugin-laravel --with-dependencies
 ```
 
-Eloquent relation generics changed shape. See [`docs/upgrade-v4.md`](https://github.com/psalm/psalm-plugin-laravel/blob/master/docs/upgrade-v4.md) for the full migration, including a Psalter codemod for annotations.
+Eloquent relation generics changed shape. See [`docs/upgrade-v4.md`](https://github.com/psalm/psalm-plugin-laravel/blob/4.x/docs/upgrade-v4.md) for the full migration, including a Psalter codemod for annotations.
 
 ## 2.x → 3.x
 
@@ -67,7 +67,7 @@ After bumping the plugin version, clear Psalm's cache so analysis runs against t
 vendor/bin/psalm --clear-cache
 ```
 
-A cache carried over from the previous plugin version can surface false positives (most visibly `UndefinedMagicMethod` on Eloquent scopes and relations), because the cached per file results still reflect the old type data. This matters most when tracking `dev-master` or a release candidate, where the plugin changes between runs. Clearing the cache resolves these stale findings.
+A cache carried over from the previous plugin version can surface false positives (most visibly `UndefinedMagicMethod` on Eloquent scopes and relations), because the cached per file results still reflect the old type data. This matters most when tracking `4.x-dev` or a release candidate, where the plugin changes between runs. Clearing the cache resolves these stale findings.
 
 ## Stuck?
 

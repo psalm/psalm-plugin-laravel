@@ -62,13 +62,6 @@ final class CachedClosureTypeFactory
      * Reset the cache. Tests rely on this for isolation between runs;
      * production code calls it indirectly via
      * {@see \Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry::reset()}.
-     *
-     * @psalm-external-mutation-free Same convention as
-     *         {@see \Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry::reset()} and
-     *         the other static-cache resets in this namespace: mutates only
-     *         this class's own static state, never anything reachable from
-     *         the caller, so for Psalm's purity tracking it counts as
-     *         effect-free.
      */
     public static function reset(): void
     {

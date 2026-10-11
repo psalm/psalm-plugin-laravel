@@ -1,0 +1,44 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
+use Illuminate\Database\Concerns\BuildsQueries;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Traits\ForwardsCalls;
+
+/**
+ * From Laravel 13.30.1+, insertOrIgnoreReturning is in Eloquent\Builder::$passthru
+ * (before that it was forwarded and returned the builder). Declared here so relations,
+ * which only see Eloquent\Builder through their single @mixin hop, resolve it (#1734).
+ *
+ * The full class header (templates, @property-read proxies, @mixin, use-traits) is
+ * copied verbatim from common because re-declaring the class resets Psalm's
+ * interface/template metadata to whatever this declaration carries.
+ *
+ * @template-covariant TModel of \Illuminate\Database\Eloquent\Model
+ *
+ * Higher-order where proxies (`$builder->orWhere->scope()`). The `<TModel>` arg is
+ * essential and threads through to `HigherOrderBuilderProxy::__call`, which returns
+ * `Builder<TModel>` — see HigherOrderBuilderProxy.phpstub.
+ * Do NOT drop it to `@property-read HigherOrderBuilderProxy` (non-generic), nor to
+ * `@property-read static`/`$this` (Larastan's form): Psalm 7 then loses TModel in the
+ * property-read (the latter collapse to `Builder&static`) and the chained scope falls
+ * to mixed. Verified empirically.
+ * @property-read HigherOrderBuilderProxy<TModel> $orWhere
+ * @property-read HigherOrderBuilderProxy<TModel> $whereNot
+ * @property-read HigherOrderBuilderProxy<TModel> $orWhereNot
+ *
+ * @mixin \Illuminate\Database\Query\Builder
+ */
+class Builder implements BuilderContract
+{
+    use BuildsQueries, Concerns\QueriesRelationships, ForwardsCalls;
+
+    /**
+     * @param  non-empty-array<non-empty-string>  $returning
+     * @param  non-empty-string|non-empty-array<non-empty-string>|null  $uniqueBy
+     * @return \Illuminate\Support\Collection
+     */
+    public function insertOrIgnoreReturning(array $values, array $returning = ['*'], array|string|null $uniqueBy = null) {}
+}

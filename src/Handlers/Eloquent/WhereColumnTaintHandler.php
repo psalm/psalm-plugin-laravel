@@ -731,7 +731,7 @@ final class WhereColumnTaintHandler implements
             // 0 is the raw `$column`. Ordinal 3 would be `$boolean`, which the grammar concatenates
             // verbatim — but it is unreachable: `addArrayOfWheres` passes `boolean:` by name, so a
             // fourth positional element throws "Named parameter $boolean overwrites previous
-            // argument" (verified against laravel/framework v12.14.0, the composer floor, through
+            // argument" (verified against laravel/framework v12.14.0, below the composer floor, through
             // v13.x). Not stripping it costs nothing and is right if that named argument ever goes.
             if (!isset($value_ordinals[$ordinal])) {
                 continue;
@@ -808,8 +808,6 @@ final class WhereColumnTaintHandler implements
      * throw. Collision safety comes from the weak keying, not from this flush: see the class docblock
      * for why an id-keyed record could outlive its node, and why this is per-file rather than
      * per-function-like.
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function beforeAnalyzeFile(BeforeFileAnalysisEvent $event): void

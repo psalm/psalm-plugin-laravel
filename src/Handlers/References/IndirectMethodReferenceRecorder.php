@@ -21,7 +21,7 @@ use Psalm\Internal\MethodIdentifier;
  * constructed instance) Laravel discards after injecting it, so it stays `false`. {@see
  * recordFileReference()} is used only for relationship methods and already-proven framework
  * entrypoints, whose return value Laravel's dispatcher (eager-loading, the router, the console
- * kernel) actually consumes, so it is `true`.
+ * kernel) actually consumes, so it is `true`. {@see recordClassReference()} takes the flag from the caller.
  *
  * @internal
  */
@@ -45,12 +45,38 @@ final class IndirectMethodReferenceRecorder
     }
 
     /**
+     * Record "the class is alive, so Laravel calls this method / reads this property". An edge sourced
+     * at the class node fires only once the class itself is reached, so an unreferenced job stays an
+     * UnusedClass. No file path: addReference() would pin the class node to it and break its
+     * invalidation when the class's own file changes.
+     *
+     * @param MethodIdentifier|array{0: string, 1: string} $target a method, or [declaring class, property]
+     */
+    public static function recordClassReference(
+        Codebase $codebase,
+        string $className,
+        MethodIdentifier|array $target,
+        bool $isReturnValueUsed,
+    ): void {
+        if ($codebase->find_unused_code === null) {
+            return;
+        }
+
+        $context = new Context();
+        $context->self = $className;
+
+        if ($target instanceof MethodIdentifier) {
+            $codebase->addReferenceToFunctionLike(\strtolower((string) $target), null, $context, $isReturnValueUsed);
+        } else {
+            $codebase->addReferenceToProperty(\strtolower($target[0]), $target[1], true, null, $context);
+        }
+    }
+
+    /**
      * Record an indirect call without inventing a calling method. The plugin file is a stable,
      * non-analyzed source for this synthetic edge, so it is not removed when an application file
      * is re-analyzed during an incremental run. With no context, the graph falls back to this
      * file as the reference's source node.
-     *
-     * @psalm-external-mutation-free
      */
     public static function recordFileReference(Codebase $codebase, MethodIdentifier $methodId): void
     {

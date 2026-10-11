@@ -1,0 +1,20 @@
+<?php
+
+namespace Illuminate\Contracts\Events;
+
+interface Dispatcher
+{
+    /**
+     * Fire an event and call the listeners.
+     *
+     * With $halt, returns the first non-null listener response (any type). Without it, returns
+     * the collected responses, or null when the event is deferred or queued until after commit.
+     * Not a list: other implementations of the contract may key the responses.
+     *
+     * @param  string|object  $event
+     * @param  mixed  $payload
+     * @param  bool  $halt
+     * @return ($halt is true ? mixed : array<array-key, mixed>|null)
+     */
+    public function dispatch($event, $payload = [], $halt = false);
+}

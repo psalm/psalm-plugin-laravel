@@ -102,14 +102,9 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    run can overlap other runs: `all` is a global lock, it waits for every other run to finish before
    starting and blocks every other run from starting while it is live, so several `all` fixtures
    serialize against the whole suite one at a time. A unique key (for example
-   `psalm-11959-<FixtureName>`) gives the fixture its own run without that lock: it starts as soon as
+   `<topic>-<FixtureName>`) gives the fixture its own run without that lock: it starts as soon as
    a concurrency slot is free and runs alongside everything else. Use a unique key when a fixture
    only needs to avoid being co-analyzed with other fixtures (the common case, for example a finding
    that a shared batch drops); reserve `all` for a fixture that must not run at the same time as
    anything else in the suite, which should be rare. Picking `all` by habit serializes the whole
    suite behind those runs for no benefit.
-
-   The `psalm-11959-*` keys (`grep -rl 'psalm-11959-' tests/Type/tests`) exist only for
-   vimeo/psalm#11959; remove them together with their `PsalmVersion::skipOnRange` gate once that
-   issue is fixed, not before, since the key is what lets the fixture skip batch co-analysis while
-   the bug is still present.

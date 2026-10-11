@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
@@ -30,10 +32,31 @@ use Psalm\Type\Union;
  * (see .cache/larastan/src/Properties/ModelCastHelper.php) so users of either tool
  * see the same inferred types for the same cast.
  *
+ * Class lookups on a cast target (enum? Castable? CastsAttributes? ...) are two-tier (#1652):
+ * 1. Psalm's storage, via {@see ClassLineage} (leading backslash and `class_alias()` names resolved).
+ *    It never loads the target, so a file that raises a deprecation on load cannot drop the casts.
+ * 2. Only when Psalm never scanned the target (a string cast such as `'Vendor\Status'` is no
+ *    reference, so nothing queues it for scanning): the runtime, as before. The target is autoloaded
+ *    at most once per process ({@see autoloadOnce()}); every check then reads only declared classes.
+ *    A target that fails to load is an unknown cast (mixed).
+ *
  * @internal
  */
 final class CastResolver
 {
+    /**
+     * Unscanned cast targets whose autoload was already attempted, keyed by lowercase name. A file that
+     * fails mid-load (Psalm's error handler throws on a deprecation it raises) keeps what it declared
+     * before the failure, so including it again dies with an uncatchable "Cannot redeclare" fatal.
+     *
+     * Deliberately not reset per invocation (code-patterns.md: process-invariant caches need no reset):
+     * it mirrors PHP's process state, which a partial load cannot undo, so a re-invocation in the same
+     * process must not retry the include either.
+     *
+     * @var array<lowercase-string, true>
+     */
+    private static array $autoloadAttempted = [];
+
     /**
      * Resolve a cast string to a Psalm readable type.
      *
@@ -69,8 +92,8 @@ final class CastResolver
 
         // `enum:App\Enums\Status` — typed enum casts (preserve original case for the class name).
         if (\str_starts_with($baseCast, 'enum:')) {
-            $enumClass = \substr($cast, 5);
-            if (\enum_exists($enumClass)) {
+            $enumClass = ClassLineage::canonicalName($codebase, \substr($cast, 5));
+            if (self::isEnum($codebase, $enumClass)) {
                 return self::makeNullable(new Union([new TNamedObject($enumClass)]), $nullable);
             }
 
@@ -78,9 +101,10 @@ final class CastResolver
         }
 
         // Strip parameter suffix from BOTH the lowercased base AND the case-preserving class name
-        // so `class_exists($castClass)` works for class-based casts with arguments (`Money:USD`).
+        // so the class lookups below work for class-based casts with arguments (`Money:USD`). The
+        // class name is canonical, so a type it resolves to names the class, not an alias of it.
         $baseCast = self::stripParameters($baseCast);
-        $castClass = self::stripParameters($cast);
+        $castClass = ClassLineage::canonicalName($codebase, self::stripParameters($cast));
 
         $type = self::resolveBaseCast($baseCast, $nullable);
         if ($type instanceof Union) {
@@ -97,41 +121,87 @@ final class CastResolver
         }
 
         // Backed enum class reference (`MyEnum::class` in `$casts`).
-        if (\enum_exists($castClass)) {
+        if (self::isEnum($codebase, $castClass)) {
             return self::makeNullable(new Union([new TNamedObject($castClass)]), $nullable);
         }
 
-        if (\class_exists($castClass) || \interface_exists($castClass)) {
-            // Order matters: a class may implement both Castable and CastsAttributes (e.g. a value
-            // object that is its own caster). Try Castable's `castUsing()` chase first; only fall
-            // back to direct CastsAttributes reflection if the chase yields nothing.
-            if (\is_a($castClass, Castable::class, true)) {
-                $type = self::resolveCastable($codebase, $castClass, $nullable, $originalType);
-                if ($type instanceof Union) {
-                    return $type;
-                }
+        // Order matters: a class may implement both Castable and CastsAttributes (e.g. a value
+        // object that is its own caster). Try Castable's `castUsing()` chase first; only fall
+        // back to direct CastsAttributes reflection if the chase yields nothing.
+        if (self::castTargetIsA($codebase, $castClass, Castable::class)) {
+            $type = self::resolveCastable($codebase, $castClass, $nullable, $originalType);
+            if ($type instanceof Union) {
+                return $type;
+            }
+        }
+
+        if (self::castTargetIsA($codebase, $castClass, CastsAttributes::class)) {
+            $type = self::resolveCastsAttributesGet($codebase, $castClass, $nullable);
+            if ($type instanceof Union) {
+                return $type;
+            }
+        }
+
+        if (self::castTargetIsA($codebase, $castClass, CastsInboundAttributes::class)) {
+            // Reading a write-only cast is a passthrough of the raw column value; Larastan
+            // returns `$originalType` here. We do the same when the caller supplies one.
+            if ($originalType instanceof Union) {
+                return self::makeNullable($originalType, $nullable);
             }
 
-            if (\is_a($castClass, CastsAttributes::class, true)) {
-                $type = self::resolveCastsAttributesGet($codebase, $castClass, $nullable);
-                if ($type instanceof Union) {
-                    return $type;
-                }
-            }
-
-            if (\is_a($castClass, CastsInboundAttributes::class, true)) {
-                // Reading a write-only cast is a passthrough of the raw column value; Larastan
-                // returns `$originalType` here. We do the same when the caller supplies one.
-                if ($originalType instanceof Union) {
-                    return self::makeNullable($originalType, $nullable);
-                }
-
-                return self::makeNullable(Type::getMixed(), $nullable);
-            }
+            return self::makeNullable(Type::getMixed(), $nullable);
         }
 
         // Unknown cast → mixed (current behavior preserved for non-resolvable user casts).
         return self::makeNullable(Type::getMixed(), $nullable);
+    }
+
+    /** Two-tier, see the class docblock. */
+    private static function isEnum(Codebase $codebase, string $class): bool
+    {
+        $storage = ClassLineage::storage($codebase, $class);
+        if ($storage instanceof ClassLikeStorage) {
+            return $storage->is_enum;
+        }
+
+        self::autoloadOnce($class);
+
+        return \enum_exists($class, false);
+    }
+
+    /**
+     * Two-tier, see the class docblock.
+     *
+     * @param class-string $ancestor
+     */
+    private static function castTargetIsA(Codebase $codebase, string $class, string $ancestor): bool
+    {
+        if (ClassLineage::storage($codebase, $class) instanceof ClassLikeStorage) {
+            return ClassLineage::isA($codebase, $class, $ancestor);
+        }
+
+        self::autoloadOnce($class);
+
+        // The guard keeps is_a() from autoloading $class itself; its ancestors are already loaded.
+        return (\class_exists($class, false) || \interface_exists($class, false)) && \is_a($class, $ancestor, true);
+    }
+
+    /** See {@see $autoloadAttempted}. */
+    private static function autoloadOnce(string $class): void
+    {
+        $key = \strtolower($class);
+        if (isset(self::$autoloadAttempted[$key])) {
+            return;
+        }
+
+        self::$autoloadAttempted[$key] = true;
+
+        try {
+            // One autoload declares the target whatever its kind (class, interface or enum).
+            \class_exists($class);
+        } catch (\Throwable) {
+            // Failed to load: the checks above then find nothing declared, an unknown cast.
+        }
     }
 
     private static function resolveBaseCast(string $baseCast, bool $nullable): ?Union
@@ -175,8 +245,6 @@ final class CastResolver
     /**
      * Framework-shipped Castable classes whose castUsing() returns null on malformed data, so the
      * read type is implicitly nullable regardless of the column's nullability.
-     *
-     * @psalm-external-mutation-free
      */
     private static function resolveFrameworkCast(string $castClass): ?Union
     {
@@ -257,7 +325,7 @@ final class CastResolver
             // siphoned off the interface-itself case.
             if (
                 $atomic instanceof TNamedObject
-                && \is_a($atomic->value, CastsAttributes::class, true)
+                && ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
             ) {
                 $resolved = self::resolveCastsAttributesGet($codebase, $atomic->value, $nullable);
                 if ($resolved instanceof Union) {
@@ -271,8 +339,8 @@ final class CastResolver
             // the direct CastsInboundAttributes branch in resolve().
             if (
                 $atomic instanceof TNamedObject
-                && \is_a($atomic->value, CastsInboundAttributes::class, true)
-                && !\is_a($atomic->value, CastsAttributes::class, true)
+                && ClassLineage::isA($codebase, $atomic->value, CastsInboundAttributes::class)
+                && !ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
             ) {
                 if ($originalType instanceof Union) {
                     return self::makeNullable($originalType, $nullable);
@@ -288,7 +356,7 @@ final class CastResolver
             ) {
                 $cls = $atomic->as_type->value;
 
-                if (\is_a($cls, CastsAttributes::class, true)) {
+                if (ClassLineage::isA($codebase, $cls, CastsAttributes::class)) {
                     $resolved = self::resolveCastsAttributesGet($codebase, $cls, $nullable);
                     if ($resolved instanceof Union) {
                         return $resolved;
@@ -296,8 +364,8 @@ final class CastResolver
                 }
 
                 if (
-                    \is_a($cls, CastsInboundAttributes::class, true)
-                    && !\is_a($cls, CastsAttributes::class, true)
+                    ClassLineage::isA($codebase, $cls, CastsInboundAttributes::class)
+                    && !ClassLineage::isA($codebase, $cls, CastsAttributes::class)
                 ) {
                     if ($originalType instanceof Union) {
                         return self::makeNullable($originalType, $nullable);

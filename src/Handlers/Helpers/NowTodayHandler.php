@@ -29,7 +29,6 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
      */
     private static array $resolvedClasses = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$resolvedClasses = [];
@@ -47,8 +46,6 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
 
     /**
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
@@ -58,7 +55,6 @@ final class NowTodayHandler implements FunctionReturnTypeProviderInterface
         if (!\array_key_exists($functionId, self::$resolvedClasses)) {
             // Call the actual helper at analysis time to discover the configured date class.
             // Results are cached so Carbon is only instantiated once per function per analysis run.
-            /** @psalm-suppress ImpureFunctionCall */
             $dateInstance = $functionId === 'today' ? \today() : \now();
             self::$resolvedClasses[$functionId] = \get_class($dateInstance);
         }

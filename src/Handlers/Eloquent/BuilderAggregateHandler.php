@@ -155,9 +155,10 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      */
     private static function resolveModelClass(MethodReturnTypeProviderEvent $event): ?string
     {
+        $codebase = $event->getSource()->getCodebase();
         $templateParams = $event->getTemplateTypeParameters();
         foreach ($templateParams ?? [] as $param) {
-            $modelClass = ModelPropertyResolver::extractModelFromUnion($param);
+            $modelClass = ModelPropertyResolver::extractModelFromUnion($param, $codebase);
             if ($modelClass !== null) {
                 return $modelClass;
             }
@@ -179,13 +180,13 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
-            $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null);
+            $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $codebase);
             if ($model !== null) {
                 return $model;
             }
         }
 
-        return ModelPropertyResolver::extractModelFromLhsBuilderExtends($lhsType, $event->getSource()->getCodebase());
+        return ModelPropertyResolver::extractModelFromLhsBuilderExtends($lhsType, $codebase);
     }
 
     /**
@@ -238,10 +239,11 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
     /**
      * Returns `'int'` / `'float'` only when the column is one of those (optionally nullable).
      * Mixed numerics, strings, numeric-string, TNumeric, objects → null (defer to stub).
+     * Also classifies the raw column for {@see ModelAggregatePropertyHandler::columnAwareType()}.
      *
      * @psalm-mutation-free
      */
-    private static function numericShape(Union $type): ?string
+    public static function numericShape(Union $type): ?string
     {
         $hasInt = false;
         $hasFloat = false;

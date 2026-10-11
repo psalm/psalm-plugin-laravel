@@ -16,6 +16,7 @@ use Psalm\Config;
  * how the suite was invoked.
  *
  * @see \Psalm\Config::loadFromXMLElement() `global $argv` -> `CliUtils::getPathsToCheck()` exits on a missing path
+ * @see https://github.com/vimeo/psalm/issues/12070 drop this workaround once that is fixed
  */
 trait LoadsPsalmConfigFromXml
 {

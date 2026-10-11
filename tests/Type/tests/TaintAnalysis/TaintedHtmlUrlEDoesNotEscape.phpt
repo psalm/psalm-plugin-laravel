@@ -9,14 +9,9 @@ function untrustedAvatarUrl_EOnly(): string {
 }
 
 /**
- * Local stand-in for a real `html_url` sink, used here instead of the
- * stubbed `MailMessage::action()` to avoid Psalm's per-sink-node taint
- * de-duplication: the BFS in `TaintFlowGraph::connectSinksAndSources()`
- * emits at most one error per (sink-node, taint-mask) pair across the
- * whole codebase. With a single shared sink, only one of the parallel
- * `Tainted<Path>` tests would fire (whichever the BFS reaches first).
- * The custom sink here is a per-file node, so this test exercises the
- * `e()` escape path independently from `TaintedHtmlUrlMailActionWithoutSanitize.phpt`.
+ * Per-file stand-in for the stubbed `MailMessage::action()` sink, so this test exercises the
+ * `e()` escape path independently of other fixtures reaching the shared sink (see "Testing-time
+ * pitfall" in docs/contributing/taint-analysis.md).
  *
  * @psalm-taint-sink html_url $url
  */

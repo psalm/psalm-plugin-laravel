@@ -11,7 +11,6 @@ final class AuthConfigAnalyzer
 {
     private static ?AuthConfigAnalyzer $instance = null;
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$instance = null;

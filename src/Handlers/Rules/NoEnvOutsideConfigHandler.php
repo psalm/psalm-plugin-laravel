@@ -36,7 +36,6 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
      */
     private static array $configDirectories = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$configDirectories = [];
@@ -136,7 +135,6 @@ final class NoEnvOutsideConfigHandler implements FunctionReturnTypeProviderInter
         return null;
     }
 
-    /** @psalm-external-mutation-free */
     private static function isInsideConfigDirectory(string $filePath): bool
     {
         foreach (self::$configDirectories as $directory) {

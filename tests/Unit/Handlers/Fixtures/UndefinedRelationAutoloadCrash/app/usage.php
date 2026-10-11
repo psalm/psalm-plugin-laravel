@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace AutoloadCrashFixture;
 
-// Drives resolveBaseModel() -> concreteModel(), the pre-fix autoload site.
-DeprecatedOnLoad::with('posts');
+// Drives resolveBaseModel() -> concreteModel(), the pre-fix autoload site; the assignment drives
+// ModelAggregateLoadHandler::singleModel() (#1652).
+$target = DeprecatedOnLoad::with('posts');
 
 // Drives resolveModelFromType() -> modelFromAtomic() -> isClassOrSubclassOf(), the other pre-fix
 // autoload site.
@@ -21,4 +22,14 @@ function drive_instance_path(DeprecatedOnLoadInstance $x): void
 function drive_tier_two_dot_path(TierTwoModel $model): void
 {
     $model->with('deprecatedRel.child');
+}
+
+// CastResolver and ModelMetadataRegistryBuilder::classifyCast() (#1652). A plugin disabled at init (the
+// migration's foreignIdFor()) fails these checks too.
+function drive_casts(CastModel $model): void
+{
+    $status = $model->status;
+    /** @psalm-check-type-exact $status = DeprecatedStatus */
+    $shape = $model->toArray();
+    /** @psalm-check-type-exact $shape = array{price?: int, status?: string, ...<string, mixed>} */
 }

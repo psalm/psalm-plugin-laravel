@@ -109,7 +109,7 @@ final class ContractStubSinkParityTest extends TestCase
 
         // Guards the regex itself: a parser that returned empty sets everywhere would make
         // every parity assertion above trivially true.
-        $this->assertSame(['@psalm-taint-sink html $content'], $sinks['make'] ?? []);
+        $this->assertSame(['@psalm-taint-sink header $headers', '@psalm-taint-sink html $content'], $sinks['make'] ?? []);
 
         // The view NAME is sunk (it selects which blade template executes); the view DATA
         // is not.
