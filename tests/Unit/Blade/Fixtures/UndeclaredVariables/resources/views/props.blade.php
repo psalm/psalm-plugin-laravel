@@ -1,3 +1,3 @@
 @props(['title'])
-{{-- @var string $title --}}
+<?php /** @var string $title */ ?>
 {{ $titel }}

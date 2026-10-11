@@ -63,7 +63,8 @@ groups:
 # which handles its own options and forwards the rest to Psalm. They apply to
 # both sides of every selected app. The workflow runs PR code with them, so a
 # comment can only use these exact strings: add a line to allow another flag.
-# Lowercase `--name` or `--name=value`. A flag the base plugin predates crashes
+# Any `--plugin-option=KEY=VALUE` is accepted without a line here (delta-select-apps.php).
+# Lowercase `--name`, or `--name=value` with [A-Za-z0-9._=-] in the value. A flag the base plugin predates crashes
 # the base side (the report's Crashed bucket shows it).
 flags:
   "--blade": Analyse Blade templates, overriding psalm.xml
@@ -72,7 +73,6 @@ flags:
   "--find-unused-psalm-suppress": Report unused @psalm-suppress, overriding psalm.xml
   "--find-unused-variables": Report unused variables and params, overriding psalm.xml
   "--experimental": Enable experimental opt-in rules, overriding psalm.xml
-  "--no-migrations": Disable migration-based column inference, columnFallback=none
 
 apps:
   - name: monica

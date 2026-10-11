@@ -56,31 +56,19 @@ final class PreludeBuilder
     private ?Parser $parser = null;
 
     /**
-     * @param array<string, string> $contractVars variable name (without $) => type, from the
-     *                                            template's own `{{-- @var --}}` comments
-     * @param list<string>          $omit         names left out of the `mixed` net, so Psalm reports
-     *                                            their reads as undefined (#1827)
+     * @param list<string> $omit names left out of the `mixed` net, so Psalm reports their reads as
+     *                           undefined (#1827)
      */
-    public function build(string $compiled, array $contractVars, string $source, array $omit = []): string
+    public function build(string $compiled, string $source, array $omit = []): string
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
             static fn(?string $type): bool => $type !== null,
         );
 
-        $declared = self::AMBIENT_TYPES + $componentTypes + $contractVars;
+        $declared = self::AMBIENT_TYPES + $componentTypes;
 
         $lines = [];
-
-        // Each its own empty statement, first: Psalm reports a docblock's fault (an unknown class)
-        // on the statement the comment is attached to, and this line is the one ShadowCompiler maps
-        // back to the template comment. Stacked onto the closing tag, it would be unmapped. The
-        // `mixed` line ahead of it keeps the name declared when Psalm drops a type that parses but
-        // is invalid (`array<int, string, bool>`); a valid contract type overrides it.
-        foreach ($contractVars as $name => $type) {
-            $lines[] = "/** @var mixed \${$name} */";
-            $lines[] = "/** @var {$type} \${$name} */;";
-        }
 
         foreach (self::AMBIENT_TYPES as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";
@@ -95,7 +83,7 @@ final class PreludeBuilder
         }
 
         // The closing tag is the prelude's sentinel: php-parser reads it as an empty statement and
-        // keeps it as one `Stmt\Nop` carrying every docblock after the contract statements, which
+        // keeps it as one `Stmt\Nop` carrying every docblock after the ambient statements, which
         // Psalm applies before that statement's AfterStatementAnalysis ({@see ComponentViewSeedHandler}).
         // It is the prelude's last statement and the only one on a line mapped to template line 0;
         // code added before the closing tag would take those docblocks over and stop the seeding.
@@ -197,7 +185,24 @@ final class PreludeBuilder
     }
 
     /**
-     * The class names a `{{-- @var --}}` type names, as written, or null when the type does not
+     * Whether a class name written in a template means the same class wherever it is read: only a
+     * leading `\` does. Any other qualified or short name is resolved through the template's own
+     * `use` imports (`Models\User` under `use App\Models as Models`), which a type string cannot
+     * carry; PHP's own classes (`Closure`, `stdClass`) are global and need none.
+     */
+    public static function resolvesWithoutImport(string $className): bool
+    {
+        if (\str_starts_with($className, '\\')) {
+            return true;
+        }
+
+        return !\str_contains($className, '\\')
+            && (\class_exists($className, false) || \interface_exists($className, false))
+            && (new \ReflectionClass($className))->isInternal();
+    }
+
+    /**
+     * The class names a declared `@var` type names, as written, or null when the type does not
      * parse. Read off Psalm's syntax tree alone: `Type::parseString()` needs a live
      * ProjectAnalyzer, and resolving names against a codebase not yet scanned adds nothing here.
      *

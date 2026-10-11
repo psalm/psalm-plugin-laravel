@@ -18,7 +18,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function includes_ambient_vars(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '');
 
         foreach (['__env', 'errors', 'loop'] as $name) {
             $this->assertStringContainsString("\${$name} */", $prelude);
@@ -30,7 +30,7 @@ final class PreludeBuilderTest extends TestCase
     {
         // Laravel never passes `$component` as view data (only ManagesComponents::componentData()'s
         // slot/data merge reaches a view); it is only a local in the CALLER's compiled output.
-        $prelude = (new PreludeBuilder())->build('<?php if (isset($component)) {} ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php if (isset($component)) {} ?>', '');
 
         $this->assertStringNotContainsString('Illuminate\View\Component ', $prelude);
         $this->assertStringContainsString('@var mixed $component */', $prelude);
@@ -41,7 +41,6 @@ final class PreludeBuilderTest extends TestCase
     {
         $prelude = (new PreludeBuilder())->build(
             '<?php if (isset($attributes)) {} ?>',
-            [],
             '<div>plain caller template, no component markers</div>',
         );
 
@@ -54,7 +53,6 @@ final class PreludeBuilderTest extends TestCase
     {
         $prelude = (new PreludeBuilder())->build(
             '<?php echo 1; ?>',
-            [],
             "@props(['type' => 'info'])\n{{ \$attributes }} {{ \$slot }}",
         );
 
@@ -67,7 +65,7 @@ final class PreludeBuilderTest extends TestCase
     {
         // compileAware() emits no `$attributes` assignment of its own (Component::data() /
         // AnonymousComponent::data() already guarantee the key), so it is never nullable.
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@aware(['type'])\n{{ \$attributes }}");
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@aware(['type'])\n{{ \$attributes }}");
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
         $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
@@ -76,7 +74,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function a_bare_attributes_mention_without_props_declares_attributes_non_null(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], '{{ $attributes->class(["x"]) }}');
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '{{ $attributes->class(["x"]) }}');
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
         $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
@@ -87,7 +85,7 @@ final class PreludeBuilderTest extends TestCase
     {
         // The @component-directive render path agrees with <x-*>: both hand a ComponentSlot
         // (ManagesComponents::componentData()), so a lone `$slot` mention is enough either way.
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], '<div>{{ $slot }}</div>');
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '<div>{{ $slot }}</div>');
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
         $this->assertStringNotContainsString('ComponentAttributeBag', $prelude);
@@ -101,7 +99,6 @@ final class PreludeBuilderTest extends TestCase
         // would flip isComponentView() to true on a plain page that merely happens to declare one.
         $prelude = (new PreludeBuilder())->build(
             '<?php echo 1; ?>',
-            [],
             '<?php $attributesFoo = []; $slots_count = 0; ?>',
         );
 
@@ -116,7 +113,7 @@ final class PreludeBuilderTest extends TestCase
         // Blade dispatches a directive via method_exists($this, 'compile'.ucfirst($name)), which is
         // case-insensitive in PHP, so `@PROPS(...)` compiles exactly like `@props(...)` — the
         // classifier must agree, or it disagrees with the compiler about the same template.
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@PROPS(['type' => 'info'])");
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@PROPS(['type' => 'info'])");
 
         $this->assertStringContainsString('@var ?\Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
     }
@@ -124,7 +121,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function aware_directive_matching_is_case_insensitive(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@AWARE(['type'])");
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@AWARE(['type'])");
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
         $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
@@ -137,7 +134,7 @@ final class PreludeBuilderTest extends TestCase
         // bag is never absent; reading the commented directive as live typed it nullable and made
         // every `$attributes->` read in the view a false PossiblyNullReference.
         $source = "{{-- @props(['type' => 'info']) --}}\n{{ \$attributes->merge([]) }}";
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], $source);
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', $source);
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
         $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
@@ -149,7 +146,7 @@ final class PreludeBuilderTest extends TestCase
         // `@@props(...)` compiles to the literal text `@props(...)`: compileStatements() sees the
         // leading `@` and echoes the rest verbatim instead of dispatching compileProps().
         $source = "@@props(['type' => 'info'])\n{{ \$attributes->merge([]) }}";
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], $source);
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', $source);
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
         $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
@@ -186,7 +183,7 @@ final class PreludeBuilderTest extends TestCase
         // Both render paths build a ComponentSlot for `$slot` whether or not the template names it
         // (ManagesComponents::componentData()), so recognition via a live directive is enough:
         // an indirect read must not fall through to UndefinedGlobalVariable.
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@props(['type' => 'info'])\n<div>no mention</div>");
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@props(['type' => 'info'])\n<div>no mention</div>");
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
     }
@@ -194,7 +191,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function an_aware_view_declares_slot_without_mentioning_it(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], "@aware(['type'])\n<div>no mention</div>");
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@aware(['type'])\n<div>no mention</div>");
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
     }
@@ -204,26 +201,9 @@ final class PreludeBuilderTest extends TestCase
     {
         // Mention-based recognition is a heuristic over a name the template merely happens to use;
         // only a live `@props`/`@aware` directive is proof enough to declare a name never written.
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], '{{ $attributes->class(["x"]) }}');
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '{{ $attributes->class(["x"]) }}');
 
         $this->assertStringNotContainsString('ComponentSlot', $prelude);
-    }
-
-    #[Test]
-    public function includes_contract_vars_with_given_type(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', ['user' => '\App\Models\User'], '');
-
-        $this->assertStringContainsString('@var \App\Models\User $user */', $prelude);
-    }
-
-    /** A contract type Psalm rejects leaves the name declared, with the contract line overriding it. */
-    #[Test]
-    public function a_contract_var_is_declared_mixed_before_its_contract_type(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo $user; ?>', ['user' => '\App\Models\User'], '');
-
-        $this->assertStringContainsString("/** @var mixed \$user */\n/** @var \\App\\Models\\User \$user */;\n", $prelude);
     }
 
     /**
@@ -250,7 +230,7 @@ final class PreludeBuilderTest extends TestCase
      */
     #[Test]
     #[DataProvider('contractTypes')]
-    public function class_names_in_a_contract_type_are_read_as_written(string $type, ?array $expected): void
+    public function class_names_in_a_declared_type_are_read_as_written(string $type, ?array $expected): void
     {
         $this->assertSame($expected, PreludeBuilder::classNamesIn($type));
     }
@@ -258,7 +238,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function undeclared_variable_gets_var_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo $foo; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $foo; ?>', '');
 
         $this->assertStringContainsString('@var mixed $foo */', $prelude);
     }
@@ -266,7 +246,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function a_local_first_seen_as_a_root_level_assignment_is_not_declared(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php $flag = $item !== null; if ($flag) { echo $item; } ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php $flag = $item !== null; if ($flag) { echo $item; } ?>', '');
 
         $this->assertStringNotContainsString('$flag */', $prelude);
         $this->assertStringContainsString('@var mixed $item */', $prelude);
@@ -293,7 +273,7 @@ final class PreludeBuilderTest extends TestCase
     #[DataProvider('stillDeclaredAssignments')]
     public function a_name_whose_first_mention_is_not_a_root_level_assignment_stays_declared(string $compiled): void
     {
-        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+        $prelude = (new PreludeBuilder())->build($compiled, '');
 
         $this->assertStringContainsString('@var mixed $title */', $prelude);
     }
@@ -306,7 +286,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function a_read_before_a_syntax_error_still_gets_var_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo $foo; $bad = [\'value\' => ,]; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $foo; $bad = [\'value\' => ,]; ?>', '');
 
         $this->assertStringContainsString('@var mixed $foo */', $prelude);
     }
@@ -319,7 +299,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function a_read_after_a_syntax_error_still_gets_var_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php $bad = [\'value\' => ,]; echo $undeclared; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php $bad = [\'value\' => ,]; echo $undeclared; ?>', '');
 
         $this->assertStringContainsString('@var mixed $undeclared */', $prelude);
     }
@@ -334,7 +314,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function a_read_underscore_prefixed_global_gets_var_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo $__customShared; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $__customShared; ?>', '');
 
         $this->assertStringContainsString('@var mixed $__customShared */', $prelude);
     }
@@ -353,7 +333,7 @@ final class PreludeBuilderTest extends TestCase
         $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
             . ' if (!empty($__sessionPrevious)) { echo 1; } echo $__readOnlyShared; ?>';
 
-        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+        $prelude = (new PreludeBuilder())->build($compiled, '');
 
         $this->assertStringNotContainsString('$__sessionPrevious', $prelude);
         $this->assertStringContainsString('@var mixed $__readOnlyShared */', $prelude);
@@ -362,7 +342,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function declared_variables_are_not_duplicated_as_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo $errors; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $errors; ?>', '');
 
         $this->assertSame(1, \substr_count($prelude, '$errors'));
     }
@@ -375,7 +355,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function declared_underscore_prefixed_variable_is_not_duplicated_as_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo $__env; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $__env; ?>', '');
 
         $this->assertSame(1, \substr_count($prelude, '$__env'));
         $this->assertStringContainsString('@var \Illuminate\View\Factory $__env */', $prelude);
@@ -385,7 +365,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function wraps_content_in_a_single_php_block(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '');
 
         $this->assertSame(1, \substr_count($prelude, '<?php'));
         $this->assertSame(1, \substr_count($prelude, '?>'));
@@ -393,14 +373,13 @@ final class PreludeBuilderTest extends TestCase
 
     /**
      * #1804: the prelude's closing tag parses to one `Stmt\Nop` on the prelude's last line (mapped
-     * to template line 0) carrying every `@var` docblock after the contract statements, whatever the
-     * compiled output starts with. ComponentViewSeedHandler seeds on it, after all of them apply.
+     * to template line 0) carrying every `@var` docblock before it, whatever the compiled output
+     * starts with. ComponentViewSeedHandler seeds on it, after all of them apply.
      */
     #[Test]
-    public function its_closing_tag_is_one_nop_carrying_the_trailing_docblocks(): void
+    public function its_closing_tag_is_one_nop_carrying_the_docblocks(): void
     {
-        $contractVars = ['label' => 'string', 'size' => 'int'];
-        $prelude = (new PreludeBuilder())->build('<?php echo $title, $body; ?>', $contractVars, '');
+        $prelude = (new PreludeBuilder())->build('<?php echo $title, $body; ?>', '');
         $docblocks = \substr_count($prelude, '/** @var ');
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
@@ -410,17 +389,11 @@ final class PreludeBuilderTest extends TestCase
             $stmts = $parser->parse($prelude . $compiled);
             $this->assertIsArray($stmts);
 
-            // One empty statement per contract variable (its `mixed` line and its typed line).
-            foreach (\array_keys(\array_values($contractVars)) as $index) {
-                $this->assertInstanceOf(Nop::class, $stmts[$index]);
-                $this->assertCount(2, $stmts[$index]->getComments());
-            }
-
-            $sentinel = $stmts[\count($contractVars)] ?? null;
+            $sentinel = $stmts[0] ?? null;
             $this->assertInstanceOf(Nop::class, $sentinel);
-            $this->assertCount($docblocks - 2 * \count($contractVars), $sentinel->getComments());
+            $this->assertCount($docblocks, $sentinel->getComments());
             $this->assertSame($docblocks + 2, $sentinel->getStartLine());
-            $this->assertNotInstanceOf(Nop::class, $stmts[\count($contractVars) + 1] ?? null);
+            $this->assertNotInstanceOf(Nop::class, $stmts[1] ?? null);
         }
     }
 
@@ -428,13 +401,21 @@ final class PreludeBuilderTest extends TestCase
     public function an_omitted_name_loses_only_its_mixed_net_line(): void
     {
         $compiled = '<?php echo $titel, $other, $title; ?>';
-        $contract = ['title' => 'string'];
 
-        $full = (new PreludeBuilder())->build($compiled, $contract, '');
-        $omitted = (new PreludeBuilder())->build($compiled, $contract, '', ['titel']);
+        $full = (new PreludeBuilder())->build($compiled, '');
+        $omitted = (new PreludeBuilder())->build($compiled, '', ['titel']);
 
-        $this->assertSame($full, (new PreludeBuilder())->build($compiled, $contract, '', []));
+        $this->assertSame($full, (new PreludeBuilder())->build($compiled, '', []));
         $this->assertStringContainsString('@var mixed $titel */', $full);
         $this->assertSame(\str_replace("/** @var mixed \$titel */\n", '', $full), $omitted);
+    }
+
+    #[Test]
+    public function only_a_leading_backslash_or_an_internal_class_resolves_without_an_import(): void
+    {
+        $this->assertTrue(PreludeBuilder::resolvesWithoutImport('\\App\\User'));
+        $this->assertTrue(PreludeBuilder::resolvesWithoutImport('Closure'));
+        $this->assertFalse(PreludeBuilder::resolvesWithoutImport('App\\User'), "resolved through the template's imports");
+        $this->assertFalse(PreludeBuilder::resolvesWithoutImport('User'));
     }
 }

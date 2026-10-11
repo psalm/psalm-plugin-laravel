@@ -1,2 +1,2 @@
-{{-- @var string $label --}}
+<?php /** @var string $label */ ?>
 {{ $label }} {{ $pathExtra }}

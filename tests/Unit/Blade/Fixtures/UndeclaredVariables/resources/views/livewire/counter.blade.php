@@ -1,2 +1,2 @@
-{{-- @var int $count --}}
+<?php /** @var int $count */ ?>
 {{ $count }} {{ $step }}

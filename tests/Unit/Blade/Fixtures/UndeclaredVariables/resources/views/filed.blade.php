@@ -1,2 +1,2 @@
-{{-- @var string $title --}}
+<?php /** @var string $title */ ?>
 {{ $title }} {{ $fromFileComposer }}

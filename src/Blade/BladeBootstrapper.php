@@ -71,8 +71,8 @@ final class BladeBootstrapper
     /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
     private array $pendingContracts = [];
 
-    /** @var array<string, true> classes the contract types emitted into preludes name, see {@see bodyTypes()} */
-    private array $bodyClassNames = [];
+    /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
+    private array $pendingProblems = [];
 
     /** @var array<string, true> lowercased classes a compiled `<x-…>` tag renders, see {@see ComponentTagCollector} */
     private array $tagRenderedClasses = [];
@@ -191,10 +191,7 @@ final class BladeBootstrapper
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
         // (which skips ShadowCompiler) still gets them.
-        $this->registrar->queueClassLikesForScanning([
-            ...PreludeBuilder::ambientClassNames(),
-            ...\array_keys($this->bodyClassNames),
-        ]);
+        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
@@ -268,8 +265,20 @@ final class BladeBootstrapper
             ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
         }
 
+        $factory = $this->viewFactory();
+        $shared = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($factory?->getShared() ?? [])), true);
+
+        // A shared name is no contract, so a marker problem on its declaration is not one either.
+        foreach ($this->pendingProblems as $templatePath => $problems) {
+            ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
+        }
+
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
-            ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
+            ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
+
+            if ($this->hasComposer($factory, $viewName)) {
+                ContractRegistry::markComposed($viewName);
+            }
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName, $this->dynamicSlotNames);
@@ -443,20 +452,12 @@ final class BladeBootstrapper
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
-                $contract = $manifest->contractFor($shadowPath);
-
-                // Its prelude was written from these same declarations; only the scan queue is needed.
-                if ($contract instanceof ViewDataContract) {
-                    $this->bodyTypes($template, $contract);
-                }
-
-                $this->registerContract($template, $roots, $contract, $manifest->dataIncludesFor($shadowPath));
+                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $manifest->dataIncludesFor($shadowPath));
 
                 continue;
             }
 
-            $declarations = $parser->parseDeclarations($source);
-            $shadow = $compiler->compile($template, $source, $this->bodyTypes($template, $declarations));
+            $shadow = $compiler->compile($template, $source);
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
@@ -468,7 +469,7 @@ final class BladeBootstrapper
             // Built AFTER compile so the read set comes off compiled output.
             $contract = $this->collectDataIncludes
                 ? $parser->parseDataContract($source, $shadow->contents)
-                : $declarations;
+                : $parser->parseDeclarations($source, $shadow->contents);
 
             // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
             // from "collected nothing".
@@ -487,65 +488,6 @@ final class BladeBootstrapper
 
         return $shadows;
     }
-
-    /**
-     * The contract `@var` declarations the prelude types the template body with. One whose type does
-     * not parse, or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
-     * `use` import, so the namespace-less shadow would resolve `User` to a global class the author
-     * never meant. A qualified name with or without its leading `\` resolves identically there.
-     *
-     * @return array<string, ContractVar>
-     */
-    private function bodyTypes(string $template, ViewDataContract $contract): array
-    {
-        $types = [];
-
-        foreach ($contract->vars as $name => $var) {
-            // `@props` entries are `mixed`, and the prelude already types Blade's own names.
-            if ($var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
-                continue;
-            }
-
-            $classNames = PreludeBuilder::classNamesIn($var->typeString);
-            $reason = $classNames === null ? 'its type does not parse' : null;
-
-            foreach ($classNames ?? [] as $className) {
-                if (!$this->resolvesInShadow($className)) {
-                    $reason = "'{$className}' is not a fully qualified class name";
-
-                    break;
-                }
-            }
-
-            if ($reason !== null) {
-                $this->output->debug(
-                    "Laravel plugin: Blade template '{$template}': \${$name} stays mixed in the template body, {$reason}\n",
-                );
-
-                continue;
-            }
-
-            foreach ($classNames ?? [] as $className) {
-                $this->bodyClassNames[$className] = true;
-            }
-
-            $types[$name] = $var;
-        }
-
-        return $types;
-    }
-
-    /** A name without a namespace is right only for PHP's own classes (`Closure`, `stdClass`). */
-    private function resolvesInShadow(string $className): bool
-    {
-        if (\str_contains($className, '\\')) {
-            return true;
-        }
-
-        return (\class_exists($className, false) || \interface_exists($className, false))
-            && (new \ReflectionClass($className))->isInternal();
-    }
-
 
     /**
      * Realpaths, deduped by (path, namespace): a published override's directory is both the
@@ -615,6 +557,18 @@ final class BladeBootstrapper
         ?ViewDataContract $contract,
         ?array $dataIncludes = null,
     ): void {
+        foreach ($contract?->vars ?? [] as $name => $var) {
+            // Psalm reads a raw docblock as written, so `string $x = null` types the body `string`
+            // while the call-site check treats the key as `string|null`: say so at the declaration.
+            if ($var->optional && !ContractParser::allowsNull($var->typeString)) {
+                $this->pendingProblems[$templatePath][$name] = [
+                    $var->declarationLine,
+                    "Optional view variable \${$name} is declared with `= null` but its type {$var->typeString} does not include null; write `"
+                    . ContractParser::withNull($var->typeString) . " \${$name} = null`",
+                ];
+            }
+        }
+
         // A published override's file matches two roots (default-root name AND namespace name);
         // both must register or one becomes unresolvable.
         foreach (ViewName::resolve($templatePath, $roots) as [$rootIndex, $viewName]) {
@@ -630,6 +584,61 @@ final class BladeBootstrapper
 
             $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
         }
+    }
+
+    /**
+     * Data the framework hands every view (`$app`, whatever a provider `share()`d) is never a
+     * contract: no call site passes it. It stays declared, so a call site that does pass the key is
+     * not reported as unused.
+     *
+     * @param array<string, true> $shared
+     *
+     * @psalm-pure
+     */
+    private function withoutSharedNames(ViewDataContract $contract, array $shared): ViewDataContract
+    {
+        $dropped = \array_intersect_key($contract->vars, $shared);
+
+        if ($dropped === []) {
+            return $contract;
+        }
+
+        return new ViewDataContract(
+            \array_diff_key($contract->vars, $dropped),
+            $contract->propsUnknown,
+            $contract->readVariables,
+            $contract->readsUnknown,
+            $contract->localVariables,
+            [...$contract->rawDeclaredVariables, ...\array_keys($dropped)],
+        );
+    }
+
+    /**
+     * Whether a view composer or creator, wildcard ones included, is registered for the view: it can
+     * add any data, so the call site's data set proves nothing about what the template receives.
+     */
+    private function hasComposer(?Factory $factory, string $viewName): bool
+    {
+        try {
+            $events = $factory?->getDispatcher();
+
+            return $events !== null
+                && ($events->hasListeners("composing: {$viewName}") || $events->hasListeners("creating: {$viewName}"));
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function viewFactory(): ?Factory
+    {
+        try {
+            /** @psalm-suppress MixedAssignment the container resolves any service */
+            $factory = $this->app->bound('view') ? $this->app->make('view') : null;
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $factory instanceof Factory ? $factory : null;
     }
 
     private function resolveCompiler(): ?BladeCompiler

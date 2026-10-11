@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -32,7 +33,7 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $pluginConfig = PluginConfig::fromXml($config);
+        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::parse((string) \getenv(PluginOverrides::ENV_VAR)));
         require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
@@ -244,7 +245,6 @@ final class Plugin implements PluginEntryPointInterface
         Blade\ContractRegistry::reset();
         Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
-        Blade\ShadowIssueRelocator::reset();
         Blade\ShadowRegistry::reset();
         Blade\UndeclaredVariableRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
@@ -805,6 +805,8 @@ final class Plugin implements PluginEntryPointInterface
             // tag facts, hence the same gate.
             require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
+            require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
+            $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
@@ -823,7 +825,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
 
-        // Writes `{{-- @var --}}` declarations into the analysed templates (#1524). Registered only
+        // Writes `@var` docblock declarations into the analysed templates (#1524). Registered only
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
         // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
         // The two hooks are one pass in two halves: the collector fills a static that only survives

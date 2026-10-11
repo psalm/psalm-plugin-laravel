@@ -1,2 +1,2 @@
-{{-- @var string $heading --}}
+<?php /** @var string $heading */ ?>
 {{ $heading }} {{ $label }} {{ $reusedTypo }}

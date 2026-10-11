@@ -12,7 +12,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeCompileError;
-use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\ShadowCompiler;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
@@ -315,38 +314,6 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function contract_vars_are_typed_in_the_prelude_instead_of_mixed(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "Hello {{ \$user }}\n",
-            ['user' => new ContractVar('user', '\App\Models\User', 1, false)],
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('@var \App\Models\User $user */', $result->contents);
-        $this->assertSame(2, \substr_count($result->contents, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
-    }
-
-    /** Psalm reports a contract type's own fault (an unknown class) on the prelude line declaring it. */
-    #[Test]
-    public function a_contract_vars_prelude_line_maps_to_its_declaration_line(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "line one\n{{-- @var \\App\\Missing \$user --}}\n{{ \$user }}\n",
-            ['user' => new ContractVar('user', '\App\Missing', 2, false)],
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $lines = \explode("\n", $result->contents);
-        $declaring = \array_search('/** @var \App\Missing $user */;', $lines, true);
-        $this->assertIsInt($declaring);
-        $this->assertSame(2, $result->lineMap[$declaring + 1]);
-        $this->assertSame(0, $result->lineMap[$declaring], 'the open tag before it stays unmapped');
-    }
-
-    #[Test]
     public function suppress_comment_lands_inside_the_next_statements_php_block(): void
     {
         $result = $this->compiler->compile(
@@ -487,13 +454,14 @@ final class ShadowCompilerTest extends TestCase
     /** @return iterable<string, array{string, list<string>}> */
     public static function undeclaredReadTemplates(): iterable
     {
-        yield 'a typo of a declared name' => ["{{-- @var string \$title --}}\n{{ \$title }}\n{{ \$titel }}\n", ['titel']];
-        yield 'a mixed-typed declaration still counts as one' => ["{{-- @var mixed \$title --}}\n{{ \$titel }}\n", ['titel']];
+        yield 'a typo of a declared name' => ["<?php /** @var string \$title */ ?>\n{{ \$title }}\n{{ \$titel }}\n", ['titel']];
+        yield 'a mixed-typed declaration still counts as one' => ["<?php /** @var mixed \$title */ ?>\n{{ \$titel }}\n", ['titel']];
         yield 'no contract' => ["{{ \$titel }}\n", []];
-        yield 'a raw docblock is not a contract' => ["<?php /** @var string \$title */ ?>\n{{ \$titel }}\n", []];
-        yield '@props reads names no walk enumerates' => ["@props(['title'])\n{{-- @var string \$title --}}\n{{ \$titel }}\n", []];
+        yield 'an @php docblock declares a contract too' => ["@php /** @var string \$title */ @endphp\n{{ \$titel }}\n", ['titel']];
+        yield 'a docblock typing a local is no contract' => ["@php \$title = 'x'; /** @var string \$title */ @endphp\n{{ \$titel }}\n", []];
+        yield '@props reads names no walk enumerates' => ["@props(['title'])\n<?php /** @var string \$title */ ?>\n{{ \$titel }}\n", []];
         yield 'names the template binds itself' => [
-            "{{-- @var string \$title --}}\n"
+            "<?php /** @var string \$title */ ?>\n"
             . "@foreach (\$items as [\$a, \$b]) {{ \$a }} {{ \$b }} {{ \$loop->index }} @endforeach\n"
             . "@php(\$fn = fn (\$p) => \$p)\n"
             . "@php try { echo 1; } catch (\\Exception \$e) { echo \$e; } @endphp\n"
@@ -502,14 +470,14 @@ final class ShadowCompilerTest extends TestCase
             ['items'],
         ];
         yield 'raw and @php declarations' => [
-            "{{-- @var string \$title --}}\n<?php /** @var int \$count */ ?>\n@php /** @var int \$total */ @endphp\n{{ \$count }} {{ \$total }}\n",
+            "<?php /** @var string \$title */ ?>\n<?php /** @var int \$count */ ?>\n@php /** @var int \$total */ @endphp\n{{ \$count }} {{ \$total }}\n",
             [],
         ];
-        yield 'compiler bookkeeping and the mail $message' => ["{{-- @var string \$title --}}\n{{ \$__shared }} {{ \$message }}\n", []];
-        yield 'a Livewire attribute' => ["{{-- @var string \$title --}}\n<input wire:model=\"title\">\n{{ \$titel }}\n", []];
-        yield 'include hands the file every name' => ["{{-- @var string \$title --}}\n@php include 'x.php'; @endphp\n{{ \$titel }}\n", []];
-        yield 'eval' => ["{{-- @var string \$title --}}\n@php eval('echo 1;'); @endphp\n{{ \$titel }}\n", []];
-        yield 'extract' => ["{{-- @var string \$title --}}\n@php extract(\$data); @endphp\n{{ \$titel }}\n", []];
+        yield 'compiler bookkeeping and the mail $message' => ["<?php /** @var string \$title */ ?>\n{{ \$__shared }} {{ \$message }}\n", []];
+        yield 'a Livewire attribute' => ["<?php /** @var string \$title */ ?>\n<input wire:model=\"title\">\n{{ \$titel }}\n", []];
+        yield 'include hands the file every name' => ["<?php /** @var string \$title */ ?>\n@php include 'x.php'; @endphp\n{{ \$titel }}\n", []];
+        yield 'eval' => ["<?php /** @var string \$title */ ?>\n@php eval('echo 1;'); @endphp\n{{ \$titel }}\n", []];
+        yield 'extract' => ["<?php /** @var string \$title */ ?>\n@php extract(\$data); @endphp\n{{ \$titel }}\n", []];
     }
 
     /**
@@ -533,7 +501,7 @@ final class ShadowCompilerTest extends TestCase
     #[Test]
     public function the_net_is_untouched_with_the_flag_off(): void
     {
-        $result = $this->compiler->compile('view.blade.php', "{{-- @var string \$title --}}\n{{ \$titel }}\n");
+        $result = $this->compiler->compile('view.blade.php', "<?php /** @var string \$title */ ?>\n{{ \$titel }}\n");
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertSame([], $result->omittedVariables);

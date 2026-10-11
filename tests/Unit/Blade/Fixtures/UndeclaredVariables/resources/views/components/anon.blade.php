@@ -1,2 +1,2 @@
-{{-- @var string $type --}}
+<?php /** @var string $type */ ?>
 <div {{ $attributes }}>{{ $type }} {{ $anonExtra }}</div>

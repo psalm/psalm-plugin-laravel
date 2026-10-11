@@ -31,11 +31,7 @@ final class ShadowCompiler
         $this->contractParser = $reportUndeclaredVariables ? new ContractParser() : null;
     }
 
-    /**
-     * @param array<string, ContractVar> $contractVars variable name (without $) => the declaration
-     *                                                 whose type the prelude gives the body
-     */
-    public function compile(string $templatePath, string $source, array $contractVars = []): ShadowResult|BladeCompileError
+    public function compile(string $templatePath, string $source): ShadowResult|BladeCompileError
     {
         // The prefix is absent from author text, including real PHP comments.
         $markerPrefix = MarkerComment::prefixFor($source);
@@ -54,26 +50,11 @@ final class ShadowCompiler
 
         $omitted = $this->contractParser?->undeclaredReads($source, $compiled) ?? [];
 
-        $prelude = $this->preludeBuilder->build(
-            $compiled,
-            \array_map(static fn(ContractVar $var): string => $var->typeString, $contractVars),
-            $source,
-            $omitted,
-        );
+        $prelude = $this->preludeBuilder->build($compiled, $source, $omitted);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");
         $lineMap = LineMapBuilder::build($content, $preludeLines, $markerPrefix);
-
-        // Psalm reports a contract type's own fault (an unknown class) on its prelude statement;
-        // the template comment that declared it is where the author can fix it.
-        foreach (SourceLines::split($prelude) as $index => $line) {
-            if (\preg_match('/\$(' . ContractParser::IDENTIFIER . ') \*\/;\s*$/', $line, $match) === 1
-                && isset($contractVars[$match[1]])
-            ) {
-                $lineMap[$index + 1] = $contractVars[$match[1]]->declarationLine;
-            }
-        }
 
         $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
         $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);
