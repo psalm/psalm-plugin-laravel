@@ -29,6 +29,9 @@ final class ContractRegistry
     /** @var array<string, true> */
     private static array $composed = [];
 
+    /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
+    private static array $problems = [];
+
     /**
      * @param array{0: list<string>, 1: bool}|null $dataIncludes view names the template hands its
      *        whole scope to, and whether one of them could not be resolved; null when the collection
@@ -72,8 +75,23 @@ final class ContractRegistry
         return isset(self::$composed[$viewName]);
     }
 
+    /** @param array<string, array{0: int, 1: string}> $problems variable name => [template line, message] */
+    public static function registerProblems(string $templatePath, array $problems): void
+    {
+        if ($problems !== []) {
+            self::$problems[$templatePath] = $problems;
+        }
+    }
+
+    /** @return list<array{0: int, 1: string}> */
+    public static function problemsFor(string $templatePath): array
+    {
+        return \array_values(self::$problems[$templatePath] ?? []);
+    }
+
     public static function reset(): void
     {
+        self::$problems = [];
         self::$contracts = [];
         self::$composed = [];
     }

@@ -383,6 +383,22 @@ final class ViewContractValidationTest extends TestCase
     }
 
     #[Test]
+    public function a_raw_optional_marker_on_a_type_without_null_is_reported_at_the_declaration(): void
+    {
+        $reported = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if ($issue['type'] === 'InvalidDocblock' && \basename((string) $issue['file_name']) === 'raw-bad-optional.blade.php') {
+                $reported[] = $issue;
+            }
+        }
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(3, $reported[0]['line_from']);
+        $this->assertStringContainsString('write `string|null $bad = null`', (string) $reported[0]['message']);
+    }
+
+    #[Test]
     public function the_check_is_off_unless_the_config_flag_opts_in(): void
     {
         $this->assertSame([], $this->contractIssues('psalm-validation-off.xml'));

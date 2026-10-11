@@ -69,6 +69,9 @@ final class BladeBootstrapper
     /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
     private array $pendingContracts = [];
 
+    /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
+    private array $pendingProblems = [];
+
     /** @var array<string, true> classes the contract types emitted into preludes name, see {@see bodyTypes()} */
     private array $bodyClassNames = [];
 
@@ -256,6 +259,10 @@ final class BladeBootstrapper
     {
         foreach ($this->pendingTemplates as [$viewName, $rootIndex, $templatePath]) {
             ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
+        }
+
+        foreach ($this->pendingProblems as $templatePath => $problems) {
+            ContractRegistry::registerProblems($templatePath, $problems);
         }
 
         $factory = $this->viewFactory();
@@ -478,6 +485,18 @@ final class BladeBootstrapper
         ?ViewDataContract $contract,
         ?array $dataIncludes = null,
     ): void {
+        foreach ($contract?->vars ?? [] as $name => $var) {
+            // Psalm reads a raw docblock as written, so `string $x = null` types the body `string`
+            // while the call-site check treats the key as `string|null`: say so at the declaration.
+            if ($var->raw && $var->optional && ContractParser::withNull($var->typeString) !== $var->typeString) {
+                $this->pendingProblems[$templatePath][$name] = [
+                    $var->declarationLine,
+                    "Optional view variable \${$name} is declared with `= null` but its type {$var->typeString} does not include null; write `"
+                    . ContractParser::withNull($var->typeString) . " \${$name} = null`",
+                ];
+            }
+        }
+
         // A published override's file matches two roots (default-root name AND namespace name);
         // both must register or one becomes unresolvable.
         foreach (ViewName::resolve($templatePath, $roots) as [$rootIndex, $viewName]) {

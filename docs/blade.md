@@ -164,7 +164,7 @@ With `<x-alert title="Hi" />` in any template, `components/alert.blade.php` gets
 
 These are exactly the keys `Component::data()` merges into the view on that path, with its precedence: a method wins a name a property also has. The view must be named literally, by a `render()` whose whole body is one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, `$this->view('name', …)`, or `'name'`; an inherited `render()` counts.
 
-A typed key is typed as present, so a defensive guard on it (`{{ $title ?? '' }}`, `@isset($title)`) now reports `RedundantCondition` / `TypeDoesNotContainNull` when the declared type is not nullable. Drop the guard, or keep it by declaring the variable nullable yourself (`{{-- @var ?string $title --}}`), which wins.
+A typed key is typed as present, so a defensive guard on it (`{{ $title ?? '' }}`, `@isset($title)`) now reports `RedundantCondition` / `TypeDoesNotContainNull` when the declared type is not nullable. Drop the guard: component data is always present.
 
 Left `mixed`, as before:
 
@@ -267,6 +267,8 @@ With [`validateViewData`](config.md#validateviewdata), a call site is checked ag
 * **Every declared variable is required**, including `T|null` and `mixed`: a nullable type means "pass `null` explicitly".
 * **`= null` right after the name makes it optional**: `@var string|null $title = null`. A call site may then omit the key, and a layout or partial that is rendered with and without a variable typically needs it. Write the type as `T|null`: a `{{-- @var T $x = null --}}` comment is widened to `T|null` in the template body, but a raw docblock is read by Psalm as written. Text after the `= null` is still description. Tools that do not know the marker (bladestan) read the declaration without it and require the key; PhpStorm keeps the type.
 
+A raw docblock that ends in `= null` while its type excludes null (`@var string $x = null`) is reported as `InvalidDocblock` at the declaration: Psalm types the body `string`, so write `@var string|null $x = null`.
+
 Some names are never contracts, whichever spelling declares them, because no call site passes them: a name the template binds itself (a `@foreach` alias, an assignment target, a closure parameter, a `catch` variable), the names Blade supplies (`$errors`, `$slot`, `$attributes`, `$loop`, `$component`, `$__env`), data the framework shares into every view (`$app` and whatever a provider `share()`d before the plugin booted the application), and a `@var` in a plain `/* */` or `//` comment, which Psalm does not read. They still count as declared for [`reportUnusedViewData`](config.md#reportunusedviewdata). The missing-variable check also declines for a view with a composer or creator registered (wildcards included), for a call site inside an `Illuminate\View\Component` subclass's `render()` (its result can be chained by the caller), and for an unreadable `@props` or an open data set. A short class name (`@var Thing $thing` after a `use` in the template) is checked for presence only.
 
 ## Unused view data
@@ -319,6 +321,7 @@ Annotating changes what the other checks see, which is the point: the declaratio
 
 ## Known limits
 
+* **A layout's declarations are not checked at its children's call sites.** A variable declared in a layout reached through `@extends` is required by the layout, but only the rendered template's own contract is checked against a `view()` call site.
 * **No cross-template following for analysis.** Each template is compiled and analyzed as if it stood alone; `@include`, `@extends`, and component recursion are resolved only for the reference and read-set graphs the two opt-in rules above use, never to type a template's body.
 * **Component tags can fail to compile.** A component tag (`<x-...>`) needs the full application container to resolve, which the standalone compile pass does not always provide. A template that fails this way is skipped and reported once in the degradation warning; other templates are unaffected.
 * **Undeclared variables are silently `mixed`.** There is no way, yet, to catch a typo'd variable name this way, and the `Mixed*` issues that fallback produces are suppressed by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so they cannot be used to spot one either unless you opt back in.

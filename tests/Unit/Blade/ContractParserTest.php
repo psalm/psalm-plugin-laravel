@@ -798,4 +798,15 @@ final class ContractParserTest extends TestCase
         $this->assertSame('(Closure(int): string)|null', ContractParser::withNull('Closure(int): string'));
         $this->assertSame('int | NULL', ContractParser::withNull('int | NULL'));
     }
+
+    #[Test]
+    public function an_equals_null_followed_by_a_dash_or_word_is_not_the_marker(): void
+    {
+        $vars = $this->dataContract("<?php\n/**\n * @var string \$a = null-ish\n * @var string \$b = null\n * @var string \$c = null.\n */\n?>\n{{-- @var string \$d = null-ish --}}\n")->vars;
+
+        $this->assertFalse($vars['a']->optional ?? null);
+        $this->assertTrue($vars['b']->optional ?? null);
+        $this->assertFalse($vars['c']->optional ?? null);
+        $this->assertFalse($vars['d']->optional ?? null);
+    }
 }

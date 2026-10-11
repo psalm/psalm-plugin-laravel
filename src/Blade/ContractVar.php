@@ -6,8 +6,8 @@ namespace Psalm\LaravelPlugin\Blade;
 
 /**
  * One declared template variable: a `{{-- @var \FQCN $name --}}` comment, a raw
- * `@var` docblock in a `<?php` / `@php` block (`optional` set when its type includes
- * `null`), or a `@props([...])` entry (typeString `mixed`, `optional` set from whether
+ * `@var` docblock in a `<?php` / `@php` block (`optional` only when the declaration ends in
+ * `= null`), or a `@props([...])` entry (typeString `mixed`, `optional` set from whether
  * the entry carried a literal default).
  *
  * @psalm-immutable

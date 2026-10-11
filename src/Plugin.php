@@ -804,6 +804,8 @@ final class Plugin implements PluginEntryPointInterface
             // tag facts, hence the same gate.
             require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
+            require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
+            $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports

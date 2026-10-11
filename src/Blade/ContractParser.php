@@ -206,10 +206,10 @@ final class ContractParser
         }
 
         if (\count($parts) > 1 && \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) === 1) {
-            return [$name[1], $parts[0], \preg_match('/^=\s*null(?![a-zA-Z0-9_\x80-\xff])/i', \implode(' ', \array_slice($parts, 2))) === 1];
+            return [$name[1], $parts[0], \preg_match('/^=\s*null(?=\s|\*\/|\z)/i', \implode(' ', \array_slice($parts, 2))) === 1];
         }
 
-        if ($lenient && \preg_match('/^(.+)\s+\$(' . self::IDENTIFIER . ')(\s*=\s*null(?![a-zA-Z0-9_\x80-\xff]).*)?\z/is', $declaration, $last) === 1) {
+        if ($lenient && \preg_match('/^(.+)\s+\$(' . self::IDENTIFIER . ')(\s*=\s*null(?=\s|\*\/|\z).*)?\z/is', $declaration, $last) === 1) {
             return [$last[2], \rtrim($last[1]), isset($last[3])];
         }
 

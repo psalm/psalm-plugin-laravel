@@ -189,7 +189,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): void {
-        // `optional` is a @props entry with a literal default, which Blade fills in itself.
+        // `optional` is a @props entry with a literal default, which Blade fills in itself, or a
+        // declaration ending in `= null`.
         // `propsUnknown` means the declared set is a lower bound, so absence proves nothing about
         // what the template needs; an open data set proves nothing about what was passed; and a
         // composer or creator registered for the view supplies data no call site shows.
