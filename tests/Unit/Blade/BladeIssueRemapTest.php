@@ -926,27 +926,22 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1697: a `??`, `??=` or `isset()` guard (lines 3-7) on a variable the template declares,
-     * through a `{{-- @var --}}` contract or a raw `@var` docblock, reported the docblock-branch
-     * contradiction even though the guard is how a template marks the variable optional. Still
-     * reported: a non-guard null check on a declared name (line 8), a guard on a name only a
-     * `@param` declares (line 9), a guard after the author modifies the variable (line 11), which
-     * renders the inferred-type wording, a guard split across lines (line 12), and a guard on a
-     * name the template assigns itself under its own docblock, raw (line 16) or `@php` (line 18).
-     * Accepted: the guard is looked for on the whole line, so line 14's `!is_null()` is silenced
-     * with its guard.
+     * A view variable declared in a PHPDoc `@var` is required unless the declaration carries
+     * `= null`, so a `??`, `??=` or `isset()` guard on one is redundant and reports like in PHP
+     * (lines 5-7). An optional variable is declared `T|null $x = null` and its guards report
+     * nothing (lines 8-10). #1697 once dropped these findings.
      */
     #[Test]
-    public function a_guard_on_a_template_declared_variable_is_not_reported(): void
+    public function a_guard_on_a_required_view_variable_reports(): void
     {
         $issues = $this->analyze('psalm.xml');
-        $template = 'declared-guard.blade.php';
+        $template = 'required-guard.blade.php';
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
         $expected = [
-            'RedundantCondition' => [11],
-            'RedundantConditionGivenDocblockType' => [8, 9, 12, 16, 18],
-            'DocblockTypeContradiction' => [9, 12],
-            'TypeDoesNotContainNull' => [11],
+            'RedundantCondition' => [],
+            'RedundantConditionGivenDocblockType' => [5, 6, 7],
+            'DocblockTypeContradiction' => [5, 6],
+            'TypeDoesNotContainNull' => [],
             'TypeDoesNotContainType' => [],
         ];
 
@@ -1386,17 +1381,17 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function qualifiedContracts(): iterable
+    public static function qualifiedDocblocks(): iterable
     {
         yield 'leading backslash' => ['contract-typed-body.blade.php'];
         // What `blade:annotate` writes: resolves identically in the namespace-less shadow.
         yield 'no leading backslash' => ['contract-unqualified.blade.php'];
     }
 
-    /** A qualified `{{-- @var --}}` contract types the template body, not only its call sites. */
+    /** A qualified raw `@var` docblock types the template body. */
     #[Test]
-    #[DataProvider('qualifiedContracts')]
-    public function a_contract_var_types_the_template_body(string $template): void
+    #[DataProvider('qualifiedDocblocks')]
+    public function a_raw_var_docblock_types_the_template_body(string $template): void
     {
         $issues = $this->analyze('psalm.xml');
 
@@ -1407,69 +1402,15 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
-    /** A contract naming a missing class reports on the comment that declared it, not as unmapped. */
+    /** A raw docblock naming a vendor class nothing else in the project mentions still types the body. */
     #[Test]
-    public function a_contract_naming_an_unknown_class_reports_on_its_comment_line(): void
+    public function a_raw_var_docblock_naming_an_otherwise_unreferenced_vendor_class_types_the_body(): void
     {
         $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/contract-unknown-class.blade.php';
-        $reported = \array_values(\array_filter(
-            $issues,
-            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template),
-        ));
 
-        $this->assertContains(2, $this->linesFor($issues, 'UndefinedDocblockClass', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-        $this->assertNotContains(1, \array_column($reported, 'line_from'), \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-    }
-
-    /** An unparseable contract type stays `mixed` in the body instead of an InvalidDocblock. */
-    #[Test]
-    public function an_unparseable_contract_type_leaves_the_body_mixed(): void
-    {
-        $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/contract-unparseable.blade.php';
-
-        $this->assertStringContainsString('@var mixed $m */', $this->shadowSourceFor($template));
         $this->assertSame(
-            [],
-            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
-            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-        );
-    }
-
-    /**
-     * A type that parses but is not valid (`array<int, string, bool>`) is dropped by Psalm with an
-     * InvalidDocblock on the comment line. The read below it must not cascade into an
-     * UndefinedGlobalVariable, and the message must not carry the shadow cache path.
-     */
-    #[Test]
-    public function an_invalid_contract_type_reports_once_on_its_comment_line(): void
-    {
-        $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/contract-invalid-type.blade.php';
-        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)));
-        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
-
-        $this->assertSame(['InvalidDocblock'], \array_column($reported, 'type'), $encoded);
-        $this->assertSame(2, $reported[0]['line_from'], $encoded);
-        $this->assertStringEndsWith('in ' . $template . ':2)', $reported[0]['message'], $encoded);
-    }
-
-    /**
-     * A Blade comment cannot carry a `use` import, so a short class name would resolve against the
-     * global namespace in the shadow. It stays `mixed` (and silent) rather than report a class the
-     * author never meant.
-     */
-    #[Test]
-    public function a_short_class_name_in_a_contract_var_leaves_the_body_mixed(): void
-    {
-        $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/contract-short-name.blade.php';
-
-        $this->assertStringContainsString('@var mixed $greeter */', $this->shadowSourceFor($template));
-        $this->assertSame(
-            [],
-            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            [2],
+            $this->linesFor($issues, 'UndefinedMagicMethod', 'resources/views/contract-vendor-class.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
@@ -1498,11 +1439,9 @@ final class BladeIssueRemapTest extends TestCase
         yield 'variable' => ['untyped.blade.php', '$copied: mixed'];
         yield 'interpolated string' => ['untyped.blade.php', '$line: mixed'];
         // An explicit declaration beats the inferred default: a native docblock re-declares the
-        // name after the prelude, and a contract comment either wins by document order or, placed
-        // before `@props`, leaves the name as untyped as it was before defaults were inferred.
-        yield 'native @var' => ['declared-native.blade.php', '$size: int'];
-        yield 'contract comment after @props' => ['declared-comment-after.blade.php', '$size: int'];
-        yield 'contract comment before @props' => ['declared-comment-before.blade.php', '$size: mixed'];
+        // name after the prelude, whether it sits before or after `@props` in the template.
+        yield 'native @var before @props' => ['declared-native.blade.php', '$size: int'];
+        yield 'native @var after @props' => ['declared-native-after.blade.php', '$size: int'];
         // `@aware` assigns unconditionally (no `??`), so a name it shares with `@props` holds the
         // parent's value, whichever directive comes first.
         yield '@aware after @props' => ['aware-after.blade.php', '$color: mixed'];

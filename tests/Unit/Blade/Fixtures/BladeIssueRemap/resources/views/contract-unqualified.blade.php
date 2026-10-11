@@ -1,2 +1,2 @@
-{{-- @var BladeIssueRemapFixture\Greeter $greeter --}}
+<?php /** @var BladeIssueRemapFixture\Greeter $greeter */ ?>
 {{ $greeter->missing() }}

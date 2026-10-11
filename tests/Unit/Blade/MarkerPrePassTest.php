@@ -401,9 +401,9 @@ final class MarkerPrePassTest extends TestCase
     {
         // Blade's own `(?<!@)@php(.*?)@endphp` skips `@@php`, so it is literal text and the
         // comment below is compiled (stripped) live rather than swallowed into a phantom block.
-        $source = "@@php\n{{-- @var int \$n --}}\n@endphp\n";
+        $source = "@@php\n{{-- note --}}\n@endphp\n";
 
-        $this->assertSame(['{{-- @var int $n --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+        $this->assertSame(['{{-- note --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
     }
 
     #[Test]
@@ -417,9 +417,9 @@ final class MarkerPrePassTest extends TestCase
     #[Test]
     public function an_escaped_verbatim_directive_does_not_open_a_masked_range(): void
     {
-        $source = "@@verbatim\n{{-- @var int \$n --}}\n@endverbatim\n";
+        $source = "@@verbatim\n{{-- note --}}\n@endverbatim\n";
 
-        $this->assertSame(['{{-- @var int $n --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+        $this->assertSame(['{{-- note --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
     }
 
     #[Test]
