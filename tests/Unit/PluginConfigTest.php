@@ -678,27 +678,26 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function the_override_layers_win_in_the_order_cli_env_xml_default(): void
+    public function an_override_wins_over_xml_and_default(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="false" /></pluginClass>');
 
         $this->assertTrue(PluginConfig::fromXml(null)->resolveDynamicWhereClauses);
         $this->assertFalse(PluginConfig::fromXml($xml)->resolveDynamicWhereClauses);
-        $this->assertTrue(PluginConfig::fromXml($xml, $this->layers(env: ['resolveDynamicWhereClauses=true']))->resolveDynamicWhereClauses);
-        $this->assertFalse(PluginConfig::fromXml(null, $this->layers(cli: ['resolveDynamicWhereClauses=false'], env: ['resolveDynamicWhereClauses=true']))->resolveDynamicWhereClauses);
-        // A key only the lower layer sets still applies under a higher layer that sets other keys.
-        $this->assertFalse(PluginConfig::fromXml(null, $this->layers(cli: ['blade=true'], env: ['resolveConfigReturnTypes=false']))->resolveConfigReturnTypes);
+        $this->assertTrue(PluginConfig::fromXml($xml, PluginOverrides::parse('resolveDynamicWhereClauses=true'))->resolveDynamicWhereClauses);
+        $this->assertFalse(PluginConfig::fromXml(null, PluginOverrides::parse('resolveDynamicWhereClauses=false'))->resolveDynamicWhereClauses);
+        // A key the overrides do not set keeps its XML value.
+        $this->assertFalse(PluginConfig::fromXml($xml, PluginOverrides::parse('blade=true'))->resolveDynamicWhereClauses);
     }
 
     #[Test]
-    public function every_setting_can_be_overridden(): void
+    public function every_key_reaches_its_setting(): void
     {
-        $config = PluginConfig::fromXml(null, $this->layers(cli: [
+        $config = PluginConfig::fromXml(null, PluginOverrides::parse(\implode(' ', [
             'modelProperties.columnFallback=none',
             'resolveDynamicWhereClauses=false',
             'resolveConfigReturnTypes=false',
             'reportImplicitQueryBuilderCalls=true',
-            'configDirectory=app/Config',
             'findMissingTranslations=true',
             'findMissingViews=true',
             'findUnconfiguredFilesystemDisks=true',
@@ -707,19 +706,17 @@ final class PluginConfigTest extends TestCase
             'findOctaneIncompatibleBinding=true',
             'findPromptInjection=false',
             'blade=true',
-            'blade.cacheDir=/tmp/blade shadows',
             'blade.validateViewData=true',
             'blade.reportUnusedViewData=true',
             'blade.reportMixedIssues=true',
             'experimental=true',
             'failOnInternalError=true',
-        ]));
+        ])));
 
         $this->assertSame(ColumnFallback::None, $config->modelPropertiesColumnFallback);
         $this->assertFalse($config->resolveDynamicWhereClauses);
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->reportImplicitQueryBuilderCalls);
-        $this->assertSame(['app/Config'], $config->configDirectories);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
         $this->assertTrue($config->findUnconfiguredFilesystemDisks);
@@ -728,7 +725,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
         $this->assertTrue($config->bladeEnabled);
-        $this->assertSame('/tmp/blade shadows', $config->bladeCacheDir);
         $this->assertTrue($config->bladeValidateViewData);
         $this->assertTrue($config->bladeReportUnusedViewData);
         $this->assertTrue($config->bladeReportMixedIssues);
@@ -737,30 +733,21 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function an_override_can_flip_an_explicit_xml_tri_state_in_either_direction(): void
+    public function an_override_flips_explicit_xml_in_either_direction(): void
     {
         $xml = new \SimpleXMLElement(
-            '<pluginClass><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
+            '<pluginClass><modelProperties columnFallback="none" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
         );
 
-        $config = PluginConfig::fromXml($xml, $this->layers(cli: ['findOctaneIncompatibleBinding=true', 'findPromptInjection=false']));
+        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findOctaneIncompatibleBinding=true findPromptInjection=false'));
 
+        $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
     }
 
     #[Test]
-    public function a_config_directory_list_is_replaced_by_the_highest_layer_that_sets_it(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><configDirectory name="a" /><configDirectory name="b" /></pluginClass>');
-
-        $this->assertSame(['a', 'b'], PluginConfig::fromXml($xml, $this->layers(cli: ['blade=true']))->configDirectories);
-        $this->assertSame(['c', 'd'], PluginConfig::fromXml($xml, $this->layers(env: ['configDirectory=c', 'configDirectory=d']))->configDirectories);
-        $this->assertSame(['e'], PluginConfig::fromXml($xml, $this->layers(cli: ['configDirectory=e'], env: ['configDirectory=c', 'configDirectory=d']))->configDirectories);
-    }
-
-    #[Test]
-    public function experimental_derived_defaults_resolve_after_the_layers(): void
+    public function experimental_derived_defaults_resolve_after_the_overrides(): void
     {
         $derived = static fn(PluginConfig $config): array => [
             $config->findUnconfiguredFilesystemDisks,
@@ -769,64 +756,40 @@ final class PluginConfigTest extends TestCase
         ];
         $experimentalXml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
 
-        // An experimental override reaches keys that no layer sets explicitly...
-        $this->assertSame([true, true, true], $derived(PluginConfig::fromXml(null, $this->layers(cli: ['experimental=true']))));
+        // An experimental override reaches rules nothing sets explicitly...
+        $this->assertSame([true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
         // ...and switches them back off over an experimental XML...
-        $this->assertSame([false, false, false], $derived(PluginConfig::fromXml($experimentalXml, $this->layers(env: ['experimental=false']))));
+        $this->assertSame([false, false, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
 
-        // ...but an explicit value in any layer still wins, in both directions.
+        // ...but an explicit per-rule value, in the XML or an override, still wins in both directions.
         $explicitXml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="false" /></pluginClass>');
-        $this->assertSame([true, false, true], $derived(PluginConfig::fromXml($explicitXml, $this->layers(cli: ['experimental=true']))));
-        $this->assertSame([false, false, true], $derived(PluginConfig::fromXml($experimentalXml, $this->layers(cli: ['findUnconfiguredFilesystemDisks=false'], env: ['findSerializedQueuedModels=false']))));
+        $this->assertSame([true, false, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([false, false, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
     }
 
     #[Test]
-    public function blade_override_enables_without_the_xml_element_and_keeps_xml_sub_settings(): void
+    public function blade_override_switches_blade_either_way_and_keeps_xml_sub_settings(): void
     {
-        $this->assertTrue(PluginConfig::fromXml(null, $this->layers(cli: ['blade=true']))->bladeEnabled);
+        $this->assertTrue(PluginConfig::fromXml(null, PluginOverrides::parse('blade=true'))->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'), PluginOverrides::parse('blade=false'))->bladeEnabled);
 
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" /></pluginClass>'),
-            $this->layers(env: ['blade=true']),
+            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" cacheDir="from-xml" /></pluginClass>'),
+            PluginOverrides::parse('blade=true'),
         );
 
         $this->assertTrue($config->bladeEnabled);
         $this->assertTrue($config->bladeValidateViewData);
-    }
-
-    #[Test]
-    public function blade_override_disables_an_xml_enabled_blade_and_the_cli_layer_beats_env(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><blade /></pluginClass>');
-
-        $this->assertFalse(PluginConfig::fromXml($xml, $this->layers(env: ['blade=false']))->bladeEnabled);
-        $this->assertTrue(PluginConfig::fromXml($xml, $this->layers(cli: ['blade=true'], env: ['blade=false']))->bladeEnabled);
+        $this->assertSame('from-xml', $config->bladeCacheDir);
     }
 
     #[Test]
     public function blade_sub_settings_never_enable_blade(): void
     {
-        $subSettings = [
-            'blade.cacheDir=/tmp/blade',
-            'blade.validateViewData=true',
-            'blade.reportUnusedViewData=true',
-            'blade.reportMixedIssues=true',
-        ];
+        $subSettings = PluginOverrides::parse('blade.validateViewData=true blade.reportUnusedViewData=true blade.reportMixedIssues=true');
 
-        $this->assertFalse(PluginConfig::fromXml(null, $this->layers(cli: $subSettings))->bladeEnabled);
-        $this->assertFalse(PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'),
-            $this->layers(env: $subSettings),
-        )->bladeEnabled);
-    }
-
-    #[Test]
-    public function blade_cache_dir_override_is_taken_verbatim_like_the_xml_attribute(): void
-    {
-        $xml = new \SimpleXMLElement('<pluginClass><blade cacheDir="from-xml" /></pluginClass>');
-
-        $this->assertSame('/tmp/blade shadows', PluginConfig::fromXml($xml, $this->layers(cli: ['blade.cacheDir=/tmp/blade shadows/']))->bladeCacheDir);
-        $this->assertSame('from-xml', PluginConfig::fromXml($xml, $this->layers(cli: ['blade=true']))->bladeCacheDir);
+        $this->assertFalse(PluginConfig::fromXml(null, $subSettings)->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);
     }
 
     /** @return iterable<string, array{string}> */
@@ -837,7 +800,6 @@ final class PluginConfigTest extends TestCase
         yield 'bad blade sub-setting' => ['<blade reportMixedIssues="yes" />'];
         yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
         yield 'prompt injection without value' => ['<findPromptInjection />'];
-        yield 'nameless configDirectory' => ['<configDirectory />'];
     }
 
     #[Test]
@@ -848,23 +810,7 @@ final class PluginConfigTest extends TestCase
 
         PluginConfig::fromXml(
             new \SimpleXMLElement("<pluginClass>{$inner}</pluginClass>"),
-            $this->layers(cli: [
-                'resolveDynamicWhereClauses=true',
-                'blade=true',
-                'blade.reportMixedIssues=true',
-                'modelProperties.columnFallback=none',
-                'findPromptInjection=true',
-                'configDirectory=a',
-            ]),
+            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true blade.reportMixedIssues=true modelProperties.columnFallback=none findPromptInjection=true'),
         );
-    }
-
-    /**
-     * @param list<string> $cli
-     * @param list<string> $env
-     */
-    private function layers(array $cli = [], array $env = []): PluginOverrides
-    {
-        return PluginOverrides::parse($env, 'env')->over(PluginOverrides::parse($cli, '--plugin-option'));
     }
 }

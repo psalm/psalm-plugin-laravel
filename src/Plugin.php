@@ -33,7 +33,7 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::fromEnvironment(\getenv()));
+        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::parse((string) \getenv(PluginOverrides::ENV_VAR)));
         require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';

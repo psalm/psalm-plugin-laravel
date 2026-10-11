@@ -12,7 +12,7 @@
 #   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(4.x, head)
 #   bash bin/ci/delta.sh <base-ref> vs <head-ref>   # explicit base + head
 #   bash bin/ci/delta.sh --apps "octane,vito" <head-ref>   # default group + octane + vito
-#   bash bin/ci/delta.sh --apps "blade --blade" <head-ref> # + blade apps, Blade analysis on
+#   bash bin/ci/delta.sh --apps "blade --plugin-option=blade=true" <head-ref> # + blade apps, Blade on
 #
 # --apps takes the `/psalm-delta` comment grammar without the prefix (resolved by
 # bin/ci/delta-select-apps.php): group tags and app names add to the `default` group,
@@ -81,8 +81,8 @@ fi
 BASE_LABEL="base-${BASE_SHA}"
 HEAD_LABEL="pr-${HEAD_SHA}"
 
-# Flags change the results, so they key the cache too: `--blade` -> `+blade`.
-# Registry flags are [a-z0-9._=-] only, so the unquoted split is glob-safe.
+# Flags change the results, so they key the cache too: `--find-dead-code` -> `+find-dead-code`.
+# Registry flags are [A-Za-z0-9._=-] only, so the unquoted split is glob-safe.
 FLAGS_SUFFIX=""
 for flag in $RUN_FLAGS; do
     FLAGS_SUFFIX+="+${flag#--}"

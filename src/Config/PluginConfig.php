@@ -65,12 +65,12 @@ final readonly class PluginConfig
     ) {}
 
     /**
-     * Resolves every setting per key: override layers (CLI over env, already merged) > XML > default.
+     * Resolves every setting per key: override > XML > default.
      * The XML is read and validated first, so a malformed element fails even when an override wins.
      */
     public static function fromXml(?\SimpleXMLElement $config, ?PluginOverrides $overrides = null): self
     {
-        $overrides ??= PluginOverrides::none();
+        $overrides ??= PluginOverrides::parse('');
         $columnFallbackValue = self::xmlStringAttr($config?->modelProperties, 'columnFallback', 'migrations');
         $columnFallback = ColumnFallback::tryFrom($columnFallbackValue);
 
@@ -85,13 +85,12 @@ final readonly class PluginConfig
             );
         }
 
-        $columnFallbackOverride = $overrides->string('modelProperties.columnFallback');
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $xmlExperimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        // experimental = early access to rules not yet promoted to default; an explicit value in any
-        // layer always overrides it, in either direction, so it resolves after the layers are merged.
+        // experimental = early access to rules not yet promoted to default; an explicit per-rule value
+        // (override or XML) always wins over it, in either direction, so it resolves after the overrides.
         $experimental = $overrides->bool('experimental') ?? $xmlExperimental;
         $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks');
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
@@ -109,8 +108,8 @@ final readonly class PluginConfig
         $cachePath = self::resolveCachePath();
 
         return new self(
-            modelPropertiesColumnFallback: $columnFallbackOverride === null ? $columnFallback : ColumnFallback::from($columnFallbackOverride),
-            configDirectories: $overrides->list('configDirectory') ?? $configDirectories,
+            modelPropertiesColumnFallback: ColumnFallback::tryFrom($overrides->string('modelProperties.columnFallback') ?? '') ?? $columnFallback,
+            configDirectories: $configDirectories,
             resolveDynamicWhereClauses: $overrides->bool('resolveDynamicWhereClauses') ?? $resolveDynamicWhereClauses,
             resolveConfigReturnTypes: $overrides->bool('resolveConfigReturnTypes') ?? $resolveConfigReturnTypes,
             reportImplicitQueryBuilderCalls: $overrides->bool('reportImplicitQueryBuilderCalls') ?? $reportImplicitQueryBuilderCalls,
@@ -124,7 +123,7 @@ final readonly class PluginConfig
             cachePath: $cachePath,
             // Sub-settings below never reach this switch: only `blade` itself enables the Blade pass.
             bladeEnabled: $overrides->bool('blade') ?? $xmlBladeEnabled,
-            bladeCacheDir: self::resolveBladeCacheDir($config, $overrides, $cachePath),
+            bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $overrides->bool('blade.validateViewData') ?? $bladeValidateViewData,
             bladeReportUnusedViewData: $overrides->bool('blade.reportUnusedViewData') ?? $bladeReportUnusedViewData,
             bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
@@ -295,9 +294,9 @@ final readonly class PluginConfig
      * and makes Psalm skip taint flows whose source sits in a reportable file. A `cacheDir`
      * pointing inside the project must therefore be excluded from `<projectFiles>` by the user.
      */
-    private static function resolveBladeCacheDir(?\SimpleXMLElement $config, PluginOverrides $overrides, string $cachePath): string
+    private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
     {
-        $configured = \rtrim($overrides->string('blade.cacheDir') ?? self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
+        $configured = \rtrim(self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
 
         if ($configured !== '') {
             return $configured;
