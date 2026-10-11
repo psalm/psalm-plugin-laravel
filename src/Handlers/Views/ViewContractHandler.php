@@ -222,6 +222,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         return PreludeBuilder::BLADE_OWNED_NAMES
             + \array_fill_keys(\array_keys($includer->vars), true)
             + \array_fill_keys($includer->readVariables, true)
+            // An assignment target is bound without being read, so only this list has it.
+            + \array_fill_keys($includer->localVariables, true)
             + \array_fill_keys($includer->rawDeclaredVariables, true);
     }
 

@@ -279,6 +279,7 @@ A key absent from the array can still arrive through the including template's sc
 * receives it from Blade (`$errors`, `$slot`, ...),
 * is itself included or extended by another template (by a literal name): it then receives that template's whole scope, whatever it declares,
 * may be a class component's own view: any `Component` subclass whose `render()` names it, in any shape. Class component data cannot be told apart from the rest of that view's scope, so the missing check is off there entirely,
+* is an anonymous component's view (a `components.` view name, or one under a registered anonymous component path or namespace): every tag attribute becomes one of its variables,
 * declares nothing at all, has an unreadable `@props` array, or has a dynamic scope (`$$name`, `extract()`; this includes every `@props`/`@aware` component view, whose compiled output writes `$$name`),
 * has a view composer or creator registered.
 

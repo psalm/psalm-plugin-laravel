@@ -483,6 +483,22 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->templateContractIssues('include-if.blade.php'));
     }
 
+    /** A name only an `@php` assignment binds, never read, is still in the includer's scope. */
+    #[Test]
+    public function an_include_after_an_assignment_in_the_includer_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('assign-block.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('assign-paren.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('assign-conditional.blade.php'));
+    }
+
+    /** An anonymous component's view receives every tag attribute as a variable. */
+    #[Test]
+    public function an_include_from_an_anonymous_components_view_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('anon-includer.blade.php'));
+    }
+
     /** A class component's view receives `data()`, whether or not its render() shape is typed. */
     #[Test]
     public function an_include_from_a_class_components_view_is_not_reported(): void

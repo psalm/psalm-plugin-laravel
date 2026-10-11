@@ -81,6 +81,9 @@ final class BladeBootstrapper
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
 
+    /** @var list<string> view-name prefixes an anonymous component's view resolves under, besides `components.` */
+    private array $anonymousComponentPrefixes = [];
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
@@ -101,6 +104,7 @@ final class BladeBootstrapper
             return false;
         }
 
+        $this->anonymousComponentPrefixes = $this->anonymousComponentPrefixes($compiler);
         $viewPaths = $this->resolveViewPaths();
 
         if ($viewPaths === null) {
@@ -282,7 +286,8 @@ final class BladeBootstrapper
                 ContractRegistry::markComposed($viewName);
             }
 
-            ContractRegistry::registerTemplateScope($templatePath, $composed || isset($scopeReceivers[$viewName]) ? null : $contract);
+            $open = $composed || isset($scopeReceivers[$viewName]) || $this->isAnonymousComponentView($viewName);
+            ContractRegistry::registerTemplateScope($templatePath, $open ? null : $contract);
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
@@ -464,6 +469,47 @@ final class BladeBootstrapper
 
             $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes, $templatePath];
         }
+    }
+
+    /**
+     * An anonymous component's view receives every tag attribute as a variable
+     * (`AnonymousComponent::data()`), so its declarations do not bound its scope. Name-based, the
+     * way `ComponentTagCompiler` guesses the view: `components.x` (also `pkg::components.x`), a
+     * registered anonymous path's hash namespace, or a registered anonymous namespace's directory.
+     *
+     * @psalm-mutation-free
+     */
+    private function isAnonymousComponentView(string $viewName): bool
+    {
+        $separator = \strpos($viewName, '::');
+
+        if (\str_starts_with($separator === false ? $viewName : \substr($viewName, $separator + 2), 'components.')) {
+            return true;
+        }
+
+        foreach ($this->anonymousComponentPrefixes as $prefix) {
+            if (\str_starts_with($viewName, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @psalm-mutation-free
+     */
+    private function anonymousComponentPrefixes(BladeCompiler $compiler): array
+    {
+        $hashes = \array_filter(\array_column($compiler->getAnonymousComponentPaths(), 'prefixHash'), \is_string(...));
+        $directories = \array_filter($compiler->getAnonymousComponentNamespaces(), \is_string(...));
+
+        return [
+            ...\array_map(static fn(string $hash): string => $hash . '::', \array_values($hashes)),
+            ...\array_map(static fn(string $directory): string => $directory . '.', \array_values($directories)),
+        ];
     }
 
     /**
