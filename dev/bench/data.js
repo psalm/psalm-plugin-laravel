@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791717268255,
+  "lastUpdate": 1791719536130,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13505,6 +13505,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1504,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83cd8e140ffa7141833d7f6431ced4b7df537f5a",
+          "message": "Type a Blade class component's own view variables from its component class (#1819)\n\n* fix(blade): leave template-assigned locals out of the prelude's mixed net\n\nA name whose first mention in file scope is a plain `$x = ...` that does\nnot read `$x` is a local the template creates, not view data. Declaring it\n`@var mixed` ahead of the assignment made Psalm drop the correlation between\na flag and the value it guards (`$has = $x !== null; @if ($has) $x->y`),\nreporting PossiblyNullPropertyFetch on the guarded read.\n\n* feat(blade): type $loop->parent as the enclosing loop's shape\n\n`addLoop()` casts the parent frame with the same `(object)` as the loop\nitself, so `$loop->parent` now carries the full loop shape one level deep\n(deeper ancestors stay `object|null`) in both the shadow prelude and the\n`getLastLoop()` stub. It stays nullable: an outermost loop has no parent.\n\nRefs #1696\n\n* feat(blade): type the template body from {{-- @var --}} contracts\n\nA contract comment used to feed only the view() call-site checks; the\nbody fell back to mixed. The prelude now declares each contract @var type,\nso `{{ $user->missing() }}` under `{{-- @var \\App\\Models\\User $user --}}`\nreports like it would in PHP.\n\nA bare short class name stays mixed and logs one --debug line: a Blade\ncomment cannot carry a use import, so the namespace-less shadow would\nresolve it to a global class. Every class an emitted type names is queued\nfor scanning on fresh and warm-manifest runs alike, since Psalm's scanner\nnever reads a stacked prelude docblock.\n\n* fix(blade): only skip the mixed declaration for root-level assignments\n\nAn assignment inside @if, a loop, @once, a <x-...> slot or try may not run,\nleaving the view value it would have replaced (a @props default, a\nvariable an including template passes down) as the one read after it.\nLeaving such a name undeclared reported a false\nPossiblyUndefinedGlobalVariable; only a top-level `$x = ...` statement\nnow marks a template local.\n\n* fix(blade): validate contract body types and report them on the comment line\n\n- A contract type that does not parse stays mixed (with a --debug line)\n  instead of an unmapped InvalidDocblock carrying the cache path plus a\n  false UndefinedGlobalVariable.\n- Each contract @var is its own prelude statement, mapped to the template\n  comment that declared it, so an unknown class reports UndefinedDocblockClass\n  there rather than on line 1 \"(unmapped)\".\n- Class names are read off Psalm's type parse tree: int<0, max> bounds are\n  no class, and PHP's own classes (Closure, stdClass) need no namespace.\n- A contract for a name the prelude already types ($errors, $attributes,\n  ...) no longer adds a second @var line.\n\n* fix(blade): keep a rejected contract type from cascading or leaking the cache path\n\n- Declare each contract variable mixed just ahead of its contract line: a\n  type that parses but Psalm rejects (array<int, string, bool>) used to\n  leave the name undeclared, adding a false UndefinedGlobalVariable on\n  every read. A valid contract type still overrides it.\n- Rewrite the absolute `path:line` an InvalidDocblock message ends with\n  onto the template, so the message no longer names the shadow cache file.\n- Document that a template's @psalm-suppress cannot reach a contract line.\n\n* feat(blade): type a class component's own view from its class\n\n- ComponentViewRegistry, built at AfterCodebasePopulated from class storage, maps a literal\n  render() view name (view(), view()->make(), View::make(), $this->view(), a returned name;\n  inherited render() included) to the one concrete Component subclass rendering it. A template\n  claimed by two classes, or named by a render() outside that shape, declines.\n- Gated on path A: a compiled `$component = Name::resolve(` prologue (<x-…>, @component(Foo::class))\n  must render the class. ComponentTagCollector reads it, and literal named-slot names, off the\n  same per-shadow tokens as ClassLiteralCollector.\n- ComponentViewSeedHandler seeds the shadow scope on the prelude's closing-tag Nop, after its @var\n  lines: public properties by declared type, public methods as InvokableComponentVariable or\n  Closure, $attributes, $componentName. Keys render() also passes, named slots, Blade-owned names\n  and names the template declares itself stay as they were. Shadow bytes are unchanged.\n- ComponentRenderData: methods typed as Component::createVariableFromMethod() builds them, a method\n  wins a name a property shares, extraction overrides open the key set; guaranteedFor() declines\n  on $except, ignoredMethods() and shouldIgnore() overrides.\n\nRefs #1804\n\n* fix(blade): decline component views rendered by name or with unreadable data\n\n- ComponentTagCollector also records every literal in a by-name render call (@include and\n  friends, @each, @extends, @component('view')); such a render never runs Component::data(), so\n  the registry declines that view. Slot and view literals accept either quote style.\n- Fixtures pin the non-literal data array, ->with(), named-argument and @include declines, and\n  seeding only on the prelude's sentinel (a reassigned name survives a later empty statement).\n- PreludeBuilderTest follows the final prelude: contract statements first, then the sentinel.\n- Docs: runtime $except, non-null $attributes in a seeded view, decisions.md entry.\n\nRefs #1804\n\n* fix(blade): drop nested-tag $attributes guards in seeded component views\n\nA view typed from its class gets $attributes seeded non-null even when its source has no @props\nand never names $attributes, so a nested <x-…> tag's compiled isset()/instanceof bookkeeping\nreported RedundantCondition and friends. The remap handler now counts a seeded shadow as a\ncomponent view, which puts it under the relocator's existing attributes|slot guard drop.\n\nRefs #1804\n\n* fix(blade): name the template in closure ids inside issue messages\n\nReturn-type messages name a closure by its id,\n`strtolower(<shadow path>):<line>:<offset>:-:closure`. The cache path\ndiffers per machine and the offset shifts with the prelude, so baselines\nchurned. The id now reads `<template>:<template line>:-:closure`.\n\n* style: apply rector to the closure-id relocator test",
+          "timestamp": "2026-10-11T13:48:38+02:00",
+          "tree_id": "e73099425a09213c41e625476ac5efaa25eda736",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/83cd8e140ffa7141833d7f6431ced4b7df537f5a"
+        },
+        "date": 1791719534676,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.68,
+            "range": "± 0.58",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
