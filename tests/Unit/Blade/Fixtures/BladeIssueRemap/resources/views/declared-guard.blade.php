@@ -7,8 +7,12 @@
 {{ isset($title) ? $title : 'none' }}
 @if(!is_null($title)) set @endif
 @php /** @param string $part */ function declaredGuardPart($part) { return $part ?? ''; } @endphp
-@php $label = 42; @endphp
+@php $label .= "!"; @endphp
 {{ $label ?? 'Label' }}
 {{ $title
     ?? 'multi' }}
 @if(!is_null($title)) {{ $title ?? '' }} @endif
+<?php /** @var int $bound */ $bound = 1; ?>
+@if(isset($bound)) set @endif
+@php /** @var int $local */ $local = 1; @endphp
+@if(isset($local)) set @endif

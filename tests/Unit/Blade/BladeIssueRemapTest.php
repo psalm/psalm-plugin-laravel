@@ -930,9 +930,11 @@ final class BladeIssueRemapTest extends TestCase
      * through a `{{-- @var --}}` contract or a raw `@var` docblock, reported the docblock-branch
      * contradiction even though the guard is how a template marks the variable optional. Still
      * reported: a non-guard null check on a declared name (line 8), a guard on a name only a
-     * `@param` declares (line 9), a guard after the author reassigns the variable (line 11), which
-     * renders the inferred-type wording, and a guard split across lines (line 12). Accepted: the
-     * guard is looked for on the whole line, so line 14's `!is_null()` is silenced with its guard.
+     * `@param` declares (line 9), a guard after the author modifies the variable (line 11), which
+     * renders the inferred-type wording, a guard split across lines (line 12), and a guard on a
+     * name the template assigns itself under its own docblock, raw (line 16) or `@php` (line 18).
+     * Accepted: the guard is looked for on the whole line, so line 14's `!is_null()` is silenced
+     * with its guard.
      */
     #[Test]
     public function a_guard_on_a_template_declared_variable_is_not_reported(): void
@@ -942,7 +944,7 @@ final class BladeIssueRemapTest extends TestCase
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
         $expected = [
             'RedundantCondition' => [11],
-            'RedundantConditionGivenDocblockType' => [8, 9, 12],
+            'RedundantConditionGivenDocblockType' => [8, 9, 12, 16, 18],
             'DocblockTypeContradiction' => [9, 12],
             'TypeDoesNotContainNull' => [11],
             'TypeDoesNotContainType' => [],

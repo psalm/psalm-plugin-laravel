@@ -744,13 +744,15 @@ final class ShadowIssueRelocator
      * `isset($x)` guard over a variable the template declares (a `{{-- @var --}}` contract or a raw
      * `<?php` docblock, {@see ContractParser}). The guard is how a template marks a view variable
      * optional, which a docblock type cannot say (#1697). The inferred-type wording is never
-     * matched, so a guard after the author reassigns the variable keeps reporting.
+     * matched, so a guard after the author modifies the variable keeps reporting. A name the template
+     * binds itself (an assignment, a foreach alias, a parameter: ContractParser's local variables)
+     * is never a view variable, whatever documents it, so its guard keeps reporting too.
      *
      * The guard is looked for on the whole shadow line, not at the selection: an `isset()`
      * ternary's contradiction selects its else arm. So a non-guard check on `$x` (`!is_null($x)`)
      * is silenced too when the same line also guards `$x`, and a guard split across lines is not
      * recognised. Trade-off: a genuinely redundant guard on a declared variable that is always
-     * passed, or that the template assigns under its own docblock, is silenced too.
+     * passed is silenced too.
      */
     private static function isDeclaredVariableGuard(CodeIssue $issue, ShadowTarget $target): bool
     {
@@ -775,8 +777,17 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        return \in_array($name, ContractParser::rawDeclaredNames($target->templateSource), true)
-            || \array_key_exists($name, (new ContractParser())->parseDeclarations($target->templateSource)->vars);
+        // The compiled body is what binds names (`@foreach` aliases exist only there).
+        $shadow = @\file_get_contents($issue->code_location->file_path);
+
+        if ($shadow === false) {
+            return false;
+        }
+
+        $contract = (new ContractParser())->parseDataContract($target->templateSource, $shadow);
+
+        return !\in_array($name, $contract->localVariables, true)
+            && (isset($contract->vars[$name]) || \in_array($name, $contract->rawDeclaredVariables, true));
     }
 
     /**
