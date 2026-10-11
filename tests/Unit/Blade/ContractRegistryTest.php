@@ -75,4 +75,24 @@ final class ContractRegistryTest extends TestCase
 
         $this->assertNull(ContractRegistry::contractFor('profile'));
     }
+
+    /** `[]` and `null` must stay apart: the first lets the call site be judged in full, the second skips the view. */
+    #[Test]
+    public function composed_keys_distinguish_no_composer_from_an_unresolved_one(): void
+    {
+        $this->assertSame([], ContractRegistry::composedKeys('plain'));
+
+        ContractRegistry::registerComposerSources('composed', [['App\\Composer', 'compose']]);
+        $this->assertNull(ContractRegistry::composedKeys('composed'), 'sources the resolver never reached');
+
+        ContractRegistry::registerComposedKeys('composed', ['title' => true]);
+        $this->assertSame(['title' => true], ContractRegistry::composedKeys('composed'));
+
+        ContractRegistry::registerComposerSources('opaque', null);
+        $this->assertNull(ContractRegistry::composedKeys('opaque'));
+
+        ContractRegistry::reset();
+        $this->assertSame([], ContractRegistry::composedKeys('composed'));
+        $this->assertSame([], ContractRegistry::composerSources());
+    }
 }

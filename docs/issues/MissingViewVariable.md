@@ -73,7 +73,7 @@ The check declines rather than guess. It is silent when:
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
-- A view composer or creator is registered for the view, wildcard ones (`composing: *`, `admin.*`) included: it can add any data, so the call site's data set proves nothing.
+- The variable is one a view composer or creator provably supplies (see [Composers and creators](#composers-and-creators)). The other declared variables of that view are still checked; when a composer cannot be read, the whole view is skipped.
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
@@ -85,6 +85,27 @@ though the `render()` passes only `['component' => $this]`. Property types are k
 [InvalidViewVariableType](InvalidViewVariableType.md) still checks them against the template's
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
+
+## Composers and creators
+
+A composer or creator registered for the view (exact name or wildcard such as `admin.*`) runs after
+the call site, so it can supply any key. The plugin reads the composer's body instead of running it,
+and exempts only the keys it provably passes: every `$view->with('key', ...)` and
+`$view->with(['key' => ...])` with a literal key, in a class composer (`View::composer('x', Foo::class)`,
+`Foo@method`) or a creator. `compose()` / `create()` may be inherited or come from a trait. When
+several composers reach a view, their keys are unioned. Everything else about the view is checked as
+usual; the composer-supplied keys are also skipped by
+[InvalidViewVariableType](InvalidViewVariableType.md), since the composer may overwrite the value.
+
+The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
+
+- is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, including `composing: *`);
+- is a class the container binds or aliases, or the dispatcher is not Laravel's `Illuminate\Events\Dispatcher`;
+- has no readable `compose()` / `create()` body (not declared, or two traits declaring it);
+- passes a key that is not a string literal, passes `with($array)`, `compact()` or a spread, calls `share()`, or uses `extract()`, `get_defined_vars()`, `func_get_args()`;
+- lets `$view` out of reach of the walker: passes it to a method or function (`$this->decorate($view)`, `parent::compose($view)`), stores or reassigns it, captures it in a closure, sets a property or array offset on it (`$view->title = ...`), calls anything but `with()` on it (`$view->name()`, `withTitle()`, `nest()`).
+
+A `share()` hidden inside a method the composer calls is still missed.
 
 ### Known false positive: variables bound outside the call site
 
@@ -111,5 +132,4 @@ Application wide, suppress it through `issueHandlers` in your `psalm.xml`:
 </issueHandlers>
 ```
 
-Teaching the check to read `composer()`, `creator()`, `share()` and `@inject` bindings is tracked
-as a follow-up.
+Teaching the check to read `share()` and `@inject` bindings is tracked as a follow-up.

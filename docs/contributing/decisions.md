@@ -464,6 +464,17 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - **Next-run type cache**: cold and warm runs would report differently; the manifest changes speed, never results.
 - **File-order tricks**: files are analyzed in worker chunks; producer-side types never cross workers.
 
+### Composer-supplied view keys are read from the composer's AST (#1832)
+
+**Decision:** A view reached by a composer or creator skips `MissingViewVariable` and `InvalidViewVariableType` only for the keys every composer provably passes. `Blade\ComposerSourceReader` finds the class and method at boot; `Blade\ComposerKeyResolver` reads the `compose()`/`create()` body at `AfterCodebasePopulated` and collects the literal keys of `$view->with(...)`. Anything unrecognised (closure, raw listener, bound class, non-literal key, `$view` leaving the walker's reach, `share()`) makes the view unknown, which keeps the earlier behaviour of skipping the whole view.
+
+**Why:** Skipping the whole view hid every real missing variable behind one unrelated composer key. The only error that costs the user anything is an under-approximated key set (a false positive on a correct call site), so the walker is built to over-approximate and to give up on the first thing it cannot follow. Resolving before Psalm forks matches `ComponentViewRegistry` (#1804): workers inherit the result.
+
+**Rejected alternatives:**
+- **Invoking composers at analysis time** (what Bladestan does): runs arbitrary application code in the analysis process, needs request-time services (auth, session, database) that are not there, and its answer is the composer's runtime values rather than a provable key set, so it cannot back an under-approximation guarantee.
+- **A config list of keys per view or global** (`<composerKeys>`): duplicates what the composer already says in code, goes stale silently, and puts the maintenance on every user for a problem the AST answers.
+- **Following `$view` into helper methods**: needs inter-procedural tracking of aliases and escapes for a rare shape; declining is correct and cheap.
+
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 
 **Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.
