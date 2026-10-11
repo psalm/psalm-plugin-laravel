@@ -222,6 +222,20 @@ See [SerializedQueuedModel](issues/SerializedQueuedModel.md) for details.
 <findSerializedQueuedModels value="true" />
 ```
 
+## `findMassAssignmentFromRequest`
+
+**default**: `false`, or `true` when [`<experimental value="true" />`](#experimental) is set. An explicit value here always wins; a bare `<findMassAssignmentFromRequest />` with no `value` attribute counts as not set, so it still follows `<experimental>`.
+
+When enabled, the plugin flags a `create()` / `fill()` / `update()` call (and their `Quietly` / `updateOrFail` variants) whose argument is proven to be raw, unfiltered request data — `$request->all()`, `request()->all()`, the `query`/`request` `InputBag` properties, `json()`, or the bare, no-argument `input()` / `post()` / `query()`, read directly or through one local variable assignment. `forceFill()` / `forceCreate()` are not flagged.
+
+See [MassAssignmentFromRequest](issues/MassAssignmentFromRequest.md) for details.
+
+### Example
+
+```xml
+<findMassAssignmentFromRequest value="true" />
+```
+
 ## `findOctaneIncompatibleBinding`
 
 **default**: omit the element. The plugin then auto-detects: the rule registers if the project depends on `laravel/octane`, and stays off otherwise.
@@ -353,11 +367,11 @@ vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.
 ```
 
 * Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.validateViewData`). `psalm-laravel analyze --help` lists every key with its values.
-* Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
+* Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the four `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
 * Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
 * `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
 * There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
-* `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
+* `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`, `findMassAssignmentFromRequest`) unless an override or the XML sets one of them explicitly.
 * `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
 * An unknown key, a token without `=`, or a value outside the key's values aborts the run with a non-zero exit and a message naming the problem. `analyze` checks them before it starts Psalm. An override never skips the XML checks: a malformed element in `psalm.xml` still fails the run.
 
@@ -404,7 +418,7 @@ PSALM_LARAVEL_PLUGIN_CACHE_PATH=/path/to/cache ./vendor/bin/psalm
 Early access to plugin features that are still on their way to becoming the default in a later minor or major release. Enabling it pulls in two directions at once, tightening some checks while turning others on:
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
-- [`findUnregisteredRouteNames`](#findunregisteredroutenames), [`findUnconfiguredFilesystemDisks`](#findunconfiguredfilesystemdisks), and [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turn on unless the project sets them explicitly.
+- [`findUnregisteredRouteNames`](#findunregisteredroutenames), [`findUnconfiguredFilesystemDisks`](#findunconfiguredfilesystemdisks), [`findSerializedQueuedModels`](#findserializedqueuedmodels), and [`findMassAssignmentFromRequest`](#findmassassignmentfromrequest), off by default, turn on unless the project sets them explicitly.
 
 For one run without editing `psalm.xml`: `psalm-laravel analyze --experimental` (see [Per-run overrides](#per-run-overrides)).
 

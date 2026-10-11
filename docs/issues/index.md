@@ -27,5 +27,6 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [InvalidViewVariableType](InvalidViewVariableType.md) — the value passed for a Blade template variable does not satisfy the type that template declares for it (opt-in)
 - [UnusedViewData](UnusedViewData.md) — a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (opt-in)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
+- [MassAssignmentFromRequest](MassAssignmentFromRequest.md) — raw, unfiltered request data (`$request->all()` and equivalents) passed to a mass-assignment method (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

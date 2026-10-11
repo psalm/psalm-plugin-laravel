@@ -33,6 +33,7 @@ final readonly class PluginOverrides
         'findUnconfiguredFilesystemDisks' => self::BOOL,
         'findUnregisteredRouteNames' => self::BOOL,
         'findSerializedQueuedModels' => self::BOOL,
+        'findMassAssignmentFromRequest' => self::BOOL,
         'findOctaneIncompatibleBinding' => self::BOOL,
         'findPromptInjection' => self::BOOL,
         'blade' => self::BOOL,

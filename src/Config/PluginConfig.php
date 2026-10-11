@@ -32,6 +32,7 @@ final readonly class PluginConfig
         public bool $findUnconfiguredFilesystemDisks,
         public bool $findUnregisteredRouteNames,
         public bool $findSerializedQueuedModels,
+        public bool $findMassAssignmentFromRequest,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
          *
@@ -95,6 +96,7 @@ final readonly class PluginConfig
         $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks');
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
         $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames');
+        $findMassAssignmentFromRequest = self::xmlOptionalBoolAttr($config?->findMassAssignmentFromRequest, 'findMassAssignmentFromRequest');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
         $findPromptInjection = self::xmlPromptInjectionAttr($config);
@@ -118,6 +120,7 @@ final readonly class PluginConfig
             findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? $experimental,
             findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,
             findSerializedQueuedModels: $overrides->bool('findSerializedQueuedModels') ?? $findSerializedQueuedModels ?? $experimental,
+            findMassAssignmentFromRequest: $overrides->bool('findMassAssignmentFromRequest') ?? $findMassAssignmentFromRequest ?? $experimental,
             findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
             findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
             cachePath: $cachePath,

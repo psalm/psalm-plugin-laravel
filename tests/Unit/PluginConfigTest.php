@@ -436,6 +436,69 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_mass_assignment_from_request_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findMassAssignmentFromRequest);
+    }
+
+    #[Test]
+    public function find_mass_assignment_from_request_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findMassAssignmentFromRequest value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findMassAssignmentFromRequest);
+    }
+
+    #[Test]
+    public function find_mass_assignment_from_request_explicit_true_without_experimental(): void
+    {
+        // The one combination `= $experimental` alone cannot satisfy: the flag must be read.
+        $xml = new \SimpleXMLElement('<pluginClass><findMassAssignmentFromRequest value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findMassAssignmentFromRequest);
+    }
+
+    #[Test]
+    public function find_mass_assignment_from_request_absent_without_experimental_stays_false(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass />');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findMassAssignmentFromRequest);
+    }
+
+    #[Test]
+    public function find_mass_assignment_from_request_no_value_attribute_treated_as_absent(): void
+    {
+        // A present element without a `value` attribute is auto-detect, same as a
+        // missing element — see xmlOptionalBoolAttr().
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findMassAssignmentFromRequest />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findMassAssignmentFromRequest);
+    }
+
+    #[Test]
     public function invalid_experimental_throws(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><experimental value="maybe" /></pluginClass>');
@@ -753,18 +816,19 @@ final class PluginConfigTest extends TestCase
             $config->findUnconfiguredFilesystemDisks,
             $config->findSerializedQueuedModels,
             $config->findUnregisteredRouteNames,
+            $config->findMassAssignmentFromRequest,
         ];
         $experimentalXml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
 
         // An experimental override reaches rules nothing sets explicitly...
-        $this->assertSame([true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([true, true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
         // ...and switches them back off over an experimental XML...
-        $this->assertSame([false, false, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
+        $this->assertSame([false, false, false, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
 
         // ...but an explicit per-rule value, in the XML or an override, still wins in both directions.
         $explicitXml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="false" /></pluginClass>');
-        $this->assertSame([true, false, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
-        $this->assertSame([false, false, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
+        $this->assertSame([true, false, true, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([false, false, true, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
     }
 
     #[Test]
