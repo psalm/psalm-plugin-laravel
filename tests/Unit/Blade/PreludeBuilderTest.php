@@ -332,7 +332,7 @@ final class PreludeBuilderTest extends TestCase
         $compiled = '<?php if (isset($value)) { $__stack[] = $value; }'
             . ' if (!empty($__stack)) { echo 1; } echo $__readOnlyShared; ?>';
 
-        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+        $prelude = (new PreludeBuilder())->build($compiled, '');
 
         $this->assertStringNotContainsString('$__stack', $prelude);
         $this->assertStringContainsString('@var mixed $__readOnlyShared */', $prelude);
@@ -349,7 +349,7 @@ final class PreludeBuilderTest extends TestCase
         $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
             . ' if (isset($value)) { $__contextPrevious[] = $value; } ?>';
 
-        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+        $prelude = (new PreludeBuilder())->build($compiled, '');
 
         $this->assertStringContainsString('@var list<mixed> $__contextPrevious */', $prelude);
         $this->assertStringContainsString('@var list<mixed> $__sessionPrevious */', $prelude);
@@ -375,7 +375,7 @@ final class PreludeBuilderTest extends TestCase
     #[Test]
     public function a_read_only_save_stack_name_without_the_compiled_push_gets_var_mixed(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo strlen($__sessionPrevious); ?>', [], '');
+        $prelude = (new PreludeBuilder())->build('<?php echo strlen($__sessionPrevious); ?>', '');
 
         $this->assertStringContainsString('@var mixed $__sessionPrevious */', $prelude);
     }
