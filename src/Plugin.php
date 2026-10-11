@@ -243,6 +243,7 @@ final class Plugin implements PluginEntryPointInterface
         Blade\BladeIssueRemapHandler::reset();
         Blade\ContractRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
+        Blade\ShadowIssueRelocator::reset();
         Blade\ShadowRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
     }
