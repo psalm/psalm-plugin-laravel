@@ -90,8 +90,8 @@ supplied set is treated as open and this check declines for it.
 
 A composer or creator registered for the view (exact name or wildcard such as `admin.*`) runs after
 the call site, so it can supply any key. The plugin reads the composer's body instead of running it,
-and exempts only the keys it provably passes: every `$view->with('key', ...)` and
-`$view->with(['key' => ...])` with a literal key, in a class composer (`View::composer('x', Foo::class)`,
+and exempts only the keys it provably passes: every `$view->with('key', ...)`,
+`$view->with(['key' => ...])` and named form `$view->with(key: 'key', value: ...)` with a literal key (also as a top-level `return $view->with(...)` of the composer method, since Laravel ignores a composer's return value), in a class composer (`View::composer('x', Foo::class)`,
 `Foo@method`) or a creator. `compose()` / `create()` may be inherited or come from a trait. When
 several composers reach a view, their keys are unioned. Everything else about the view is checked as
 usual; the composer-supplied keys are also skipped by
@@ -102,8 +102,12 @@ The whole view is skipped, as if every key were composer-supplied, when any comp
 - is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, including `composing: *`);
 - is a class the container binds, aliases or extends, a listener registered raw under a wildcard key, or the dispatcher or view factory is a subclass that could add behaviour (a dispatcher other than exactly `Illuminate\Events\Dispatcher`, a factory overriding `callComposer()`/`callCreator()`);
 - has no readable `compose()` / `create()` body (not declared, not public, constructed through a `new` default value, or two traits declaring it) or a constructor that shares data or delegates to `parent::__construct()`;
-- passes a key that is not a string literal, passes `with($array)`, `compact()` or a spread, calls `share()` (however spelled), or uses `extract()`, `get_defined_vars()`, `func_get_args()`, `debug_backtrace()` or `call_user_func()`;
-- lets `$view` out of reach of the walker: passes it to a method or function (`$this->decorate($view)`, `parent::compose($view)`), stores or reassigns it, captures it in a closure, sets a property or array offset on it (`$view->title = ...`), calls anything but `with()` on it (`withTitle()`, `nest()`, `getData()`, `getFactory()`). Only `name()`, `getName()` and `getPath()` are read-only and allowed, so a composer that does `$view->with('path', $view->getName())` stays readable.
+- passes a key that is not a string literal, passes `with($array)`, `compact()` or a spread, calls `share()` (however spelled), or uses `extract()`, `get_defined_vars()`, `func_get_args()`, `debug_backtrace()` or `call_user_func()`, or calls any `__construct()` (`parent::__construct()`, `Other::__construct()`, `$this->__construct()`);
+- lets `$view` out of reach of the walker: passes it to a method or function (`$this->decorate($view)`, `parent::compose($view)`), stores or reassigns it (`return $view;`, or a `return` inside a branch or closure), captures it in a closure, takes a first-class callable of it (`$view->with(...)`, `$view->getName(...)`), sets a property or array offset on it (`$view->title = ...`), calls anything but `with()` on it (`withTitle()`, `nest()`, `getData()`, `getFactory()`). Only `name()`, `getName()` and `getPath()` are read-only and allowed, so a composer that does `$view->with('path', $view->getName())` stays readable.
+
+A listener built by another view factory on the same dispatcher, or one that names an unknown `with()` parameter, also makes the view unknown.
+
+**Limitation: composers registered after boot.** Only composers registered while the application boots (service providers) are read. A composer registered later, in a middleware or a controller, is invisible: a view whose only composer is registered at runtime is checked as if it had none (as since #1821), and a view with a boot composer plus a runtime one is checked against the boot composer's keys only, so a key only the runtime composer supplies is reported as missing.
 
 A `share()` hidden inside a method the composer calls, or inside the constructor of a class it receives as a dependency, is still missed: only the composer's own constructor and method are read.
 

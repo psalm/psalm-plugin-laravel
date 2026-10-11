@@ -720,6 +720,26 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame(['raw.page' => null], ContractRegistry::composerSources());
     }
 
+    /** The dispatcher is shared, so a closure another factory built under it is not the one being read. */
+    #[Test]
+    public function a_composer_another_factory_registered_on_the_shared_dispatcher_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $other = new Factory(new EngineResolver(), $app->make('view.finder'), $app->make('view')->getDispatcher());
+        $other->setContainer($app);
+        $other->composer('foreign', 'App\\ForeignComposer');
+        $other->composer('foreign.*', 'App\\ForeignComposer');
+        $this->writeTemplate('foreign.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        $this->writeTemplate('foreign/page.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(['foreign' => null, 'foreign.page' => null], $sources);
+    }
+
     /** A subclass can add listeners or behaviour the raw listener list does not show. */
     #[Test]
     public function a_dispatcher_or_factory_subclass_leaves_a_listened_view_unknown(): void
