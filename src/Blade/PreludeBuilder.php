@@ -58,8 +58,10 @@ final class PreludeBuilder
     /**
      * @param array<string, string> $contractVars variable name (without $) => type, from the
      *                                            template's own `{{-- @var --}}` comments
+     * @param list<string>          $omit         names left out of the `mixed` net, so Psalm reports
+     *                                            their reads as undefined (#1827)
      */
-    public function build(string $compiled, array $contractVars, string $source): string
+    public function build(string $compiled, array $contractVars, string $source, array $omit = []): string
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
@@ -88,7 +90,7 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        foreach ($this->undeclaredVariables($compiled, $declared) as $name) {
+        foreach ($this->undeclaredVariables($compiled, $declared + \array_fill_keys($omit, '')) as $name) {
             $lines[] = "/** @var mixed \${$name} */";
         }
 

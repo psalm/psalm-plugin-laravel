@@ -18,13 +18,17 @@ final class ShadowCompiler
 
     private readonly SuppressionInjector $suppressionInjector;
 
+    /** Set only when undeclared reads are reported (#1827). */
+    private readonly ?ContractParser $contractParser;
+
     /**
      * @psalm-mutation-free
      */
-    public function __construct(private readonly BladeCompiler $compiler)
+    public function __construct(private readonly BladeCompiler $compiler, bool $reportUndeclaredVariables = false)
     {
         $this->preludeBuilder = new PreludeBuilder();
         $this->suppressionInjector = new SuppressionInjector();
+        $this->contractParser = $reportUndeclaredVariables ? new ContractParser() : null;
     }
 
     /**
@@ -48,10 +52,13 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
+        $omitted = $this->contractParser?->undeclaredReads($source, $compiled) ?? [];
+
         $prelude = $this->preludeBuilder->build(
             $compiled,
             \array_map(static fn(ContractVar $var): string => $var->typeString, $contractVars),
             $source,
+            $omitted,
         );
         $content = $prelude . $compiled;
 
@@ -71,6 +78,6 @@ final class ShadowCompiler
         $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
         $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);
 
-        return new ShadowResult($content, $lineMap, MarkerPrePass::extendsLine($source), $suppressions);
+        return new ShadowResult($content, $lineMap, MarkerPrePass::extendsLine($source), $suppressions, $omitted);
     }
 }

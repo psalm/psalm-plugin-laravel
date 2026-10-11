@@ -423,4 +423,18 @@ final class PreludeBuilderTest extends TestCase
             $this->assertNotInstanceOf(Nop::class, $stmts[\count($contractVars) + 1] ?? null);
         }
     }
+
+    #[Test]
+    public function an_omitted_name_loses_only_its_mixed_net_line(): void
+    {
+        $compiled = '<?php echo $titel, $other, $title; ?>';
+        $contract = ['title' => 'string'];
+
+        $full = (new PreludeBuilder())->build($compiled, $contract, '');
+        $omitted = (new PreludeBuilder())->build($compiled, $contract, '', ['titel']);
+
+        $this->assertSame($full, (new PreludeBuilder())->build($compiled, $contract, '', []));
+        $this->assertStringContainsString('@var mixed $titel */', $full);
+        $this->assertSame(\str_replace("/** @var mixed \$titel */\n", '', $full), $omitted);
+    }
 }

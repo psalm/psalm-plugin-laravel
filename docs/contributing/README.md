@@ -95,6 +95,13 @@ Psalm keeps no global function table for ordinary project code: `Functions::func
 - Types only: a seeded `Union` has no `parent_nodes`, so no taint flows from a property.
 - A seeded shadow counts as a component view for `ShadowTarget::$isComponentView` (`BladeIssueRemapHandler::resolveTarget()`), so the relocator's `attributes|slot` guard drop also covers a nested tag's compiled `isset($attributes)` / `instanceof` bookkeeping in a view that never names `$attributes`. `AttributesRestoreReassert` keeps its source-only gate: it runs at compile time, before the registry exists, and such a view has no `$attributes` read for it to protect.
 
+#### Reporting undeclared variables
+
+`<blade reportUndeclaredVariables="true" />` (#1827, [user docs](../blade.md#undeclared-variables)) splits its decision in two, because a shadow is cached by its source alone and must never bake in app state.
+
+- Compile time: `ContractParser::undeclaredReads()` lists the reads of a contract template that nothing in it declares or binds, and `PreludeBuilder::build()` leaves them out of the `@var mixed` net. It returns nothing for a template whose read set is not provably whole (`$$`, `extract()`, `include`, `eval`) or that carries Livewire markers. The list rides in `ShadowResult`, the manifest's eighth entry slot (a seven-slot entry reads as `[]`), and `ShadowEntry`. The flag is folded into the manifest's environment string only when on, so flag-off shadows and fingerprints are unchanged and the two modes never share an entry; `MARKER_PASS_VERSION` stays put.
+- Analysis time: `Blade\UndeclaredVariableRegistry` holds what the booted app provides (`View::share()` keys, templates with a composer, creator, or `livewire` view name, component-shaped templates), published with the other template facts. `ComponentViewRegistry::build()` also records which views a component claims and, for a seeded one, every `data()` key (`ComponentRenderData::exposedFor()`), `render()` key, and named slot. On the same sentinel the component seed uses, `ComponentViewSeedHandler` declares `mixed` every omitted name the run still provides, or all of them for a declined view. An unregistered registry (the view factory did not resolve) declines everything. Both registries are static, reset in `Plugin::resetInvocationState()`, and filled before workers fork.
+
 #### Remapping a shadow issue onto its template
 
 Neither registration makes a finding visible by itself: an issue Psalm raises in a shadow is located in a file that is deliberately unreportable, so it dies in the reportability gate. `Blade\BladeIssueRemapHandler` (`BeforeAddIssueInterface`, registered from `registerHandlers()` only when the compile step activated) is the only channel from shadow analysis to user-visible output.

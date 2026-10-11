@@ -21,10 +21,13 @@ final class ShadowEntry
     /**
      * @param array<int, int>         $lineMap      shadow line (1-based) => template line; 0 for prelude lines
      * @param array<int, list<string>> $suppressions template line => suppressed issue types
+     * @param list<string>             $omittedVariables names the prelude leaves undeclared, which the
+     *                                                   run's app state may still provide (#1827)
      */
     public function __construct(
         public readonly string $templatePath,
         public readonly array $lineMap,
         public readonly array $suppressions,
+        public readonly array $omittedVariables = [],
     ) {}
 }

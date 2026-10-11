@@ -483,4 +483,60 @@ final class ShadowCompilerTest extends TestCase
         // docblock is expected. Only a reassert glued onto `endif;` would be the bug.
         $this->assertStringNotContainsString('endif; /** @var', $result->contents);
     }
+
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function undeclaredReadTemplates(): iterable
+    {
+        yield 'a typo of a declared name' => ["{{-- @var string \$title --}}\n{{ \$title }}\n{{ \$titel }}\n", ['titel']];
+        yield 'a mixed-typed declaration still counts as one' => ["{{-- @var mixed \$title --}}\n{{ \$titel }}\n", ['titel']];
+        yield 'no contract' => ["{{ \$titel }}\n", []];
+        yield 'a raw docblock is not a contract' => ["<?php /** @var string \$title */ ?>\n{{ \$titel }}\n", []];
+        yield '@props reads names no walk enumerates' => ["@props(['title'])\n{{-- @var string \$title --}}\n{{ \$titel }}\n", []];
+        yield 'names the template binds itself' => [
+            "{{-- @var string \$title --}}\n"
+            . "@foreach (\$items as [\$a, \$b]) {{ \$a }} {{ \$b }} {{ \$loop->index }} @endforeach\n"
+            . "@php(\$fn = fn (\$p) => \$p)\n"
+            . "@php try { echo 1; } catch (\\Exception \$e) { echo \$e; } @endphp\n"
+            . "@php static \$s; global \$g; echo \$s, \$g; @endphp\n"
+            . "@if (\$title) @php(\$maybe = 1) @endif {{ \$maybe }}\n",
+            ['items'],
+        ];
+        yield 'raw and @php declarations' => [
+            "{{-- @var string \$title --}}\n<?php /** @var int \$count */ ?>\n@php /** @var int \$total */ @endphp\n{{ \$count }} {{ \$total }}\n",
+            [],
+        ];
+        yield 'compiler bookkeeping and the mail $message' => ["{{-- @var string \$title --}}\n{{ \$__shared }} {{ \$message }}\n", []];
+        yield 'a Livewire attribute' => ["{{-- @var string \$title --}}\n<input wire:model=\"title\">\n{{ \$titel }}\n", []];
+        yield 'include hands the file every name' => ["{{-- @var string \$title --}}\n@php include 'x.php'; @endphp\n{{ \$titel }}\n", []];
+        yield 'eval' => ["{{-- @var string \$title --}}\n@php eval('echo 1;'); @endphp\n{{ \$titel }}\n", []];
+        yield 'extract' => ["{{-- @var string \$title --}}\n@php extract(\$data); @endphp\n{{ \$titel }}\n", []];
+    }
+
+    /**
+     * @param list<string> $expected
+     */
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('undeclaredReadTemplates')]
+    public function omits_only_provably_undeclared_reads_from_the_net(string $source, array $expected): void
+    {
+        $compiler = new ShadowCompiler(new BladeCompiler(new Filesystem(), \sys_get_temp_dir()), reportUndeclaredVariables: true);
+        $result = $compiler->compile('view.blade.php', $source);
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame($expected, $result->omittedVariables);
+
+        foreach ($expected as $name) {
+            $this->assertStringNotContainsString("@var mixed \${$name} */", $result->contents);
+        }
+    }
+
+    #[Test]
+    public function the_net_is_untouched_with_the_flag_off(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "{{-- @var string \$title --}}\n{{ \$titel }}\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame([], $result->omittedVariables);
+        $this->assertStringContainsString('@var mixed $titel */', $result->contents);
+    }
 }

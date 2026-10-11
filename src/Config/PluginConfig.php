@@ -65,6 +65,8 @@ final readonly class PluginConfig
         public bool $bladeValidateViewData,
         /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
         public bool $bladeReportUnusedViewData,
+        /** Opt-in: a contract template's undeclared reads are left undefined (`<blade reportUndeclaredVariables="true" />`). */
+        public bool $bladeReportUndeclaredVariables,
         /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
         public bool $bladeReportMixedIssues,
         public bool $experimental,
@@ -105,6 +107,7 @@ final readonly class PluginConfig
         $bladeEnabled = $env['blade'] ?? $xmlBladeEnabled;
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
+        $bladeReportUndeclaredVariables = self::xmlBoolAttr($config?->blade, 'blade reportUndeclaredVariables', false, 'reportUndeclaredVariables');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
@@ -126,6 +129,7 @@ final readonly class PluginConfig
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $bladeValidateViewData,
             bladeReportUnusedViewData: $bladeReportUnusedViewData,
+            bladeReportUndeclaredVariables: $bladeReportUndeclaredVariables,
             bladeReportMixedIssues: $bladeReportMixedIssues,
             experimental: $experimental,
             failOnInternalError: $failOnInternalError,

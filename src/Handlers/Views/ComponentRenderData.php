@@ -143,6 +143,18 @@ final class ComponentRenderData
     }
 
     /**
+     * Every key `data()` may hand the view, typed or not: a superset, like {@see self::forSource()}.
+     *
+     * @return array<string, Union>|null null when not knowable
+     *
+     * @psalm-mutation-free
+     */
+    public static function exposedFor(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        return self::exposed($codebase, $storage, false);
+    }
+
+    /**
      * @param bool $typedOnly skip a property with no declared type or a generic declaring class
      *
      * @return array<string, Union>|null

@@ -39,6 +39,8 @@ final class BladeBootstrapper
         private readonly string $shadowDir,
         /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
         private readonly bool $collectDataIncludes = false,
+        /** Opt-in (#1827): leave a contract template's undeclared reads out of the prelude's net. */
+        private readonly bool $reportUndeclaredVariables = false,
         /**
          * Test seam: vendor dir for the hint-root filter. Null derives it from
          * laravel/framework's install path (the plugin's own vendor, in a unit test).
@@ -80,6 +82,9 @@ final class BladeBootstrapper
 
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
+
+    /** @var array<string, true> template paths shaped like a component view, see {@see PreludeBuilder::isComponentView()} */
+    private array $componentViewTemplates = [];
 
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
@@ -152,10 +157,11 @@ final class BladeBootstrapper
             );
         }
 
-        $manifest = new ShadowManifest($shadowDir, $environmentHash);
+        // Folded in only when on, so flag-off fingerprints stay what they were.
+        $manifest = new ShadowManifest($shadowDir, $environmentHash . ($this->reportUndeclaredVariables ? '|undeclared' : ''));
         $manifest->load();
 
-        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
+        $shadows = $this->compileAll(new ShadowCompiler($compiler, $this->reportUndeclaredVariables), $manifest, $templates, $roots, $failures, $trustedEnvironment);
 
         if ($templatesFullyDiscovered) {
             $manifest->prune($templates);
@@ -263,6 +269,47 @@ final class BladeBootstrapper
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
+
+        if ($this->reportUndeclaredVariables) {
+            $this->publishUndeclaredFacts();
+        }
+    }
+
+    /**
+     * Boot-time view data no template source shows (#1827). Left unregistered when the view
+     * factory does not resolve, which keeps every omitted name declared.
+     */
+    private function publishUndeclaredFacts(): void
+    {
+        try {
+            $factory = $this->app->make('view');
+        } catch (\Throwable) {
+            return;
+        }
+
+        if (!$factory instanceof Factory) {
+            return;
+        }
+
+        $events = $factory->getDispatcher();
+        $declined = [];
+
+        foreach ($this->pendingTemplates as [$viewName, , $templatePath]) {
+            // The checks Factory::callComposer() / callCreator() make, wildcard listeners included.
+            if (\str_starts_with($viewName, 'livewire.')
+                || \str_starts_with($viewName, 'livewire::')
+                || $events->hasListeners('composing: ' . $viewName)
+                || $events->hasListeners('creating: ' . $viewName)
+            ) {
+                $declined[$templatePath] = true;
+            }
+        }
+
+        UndeclaredVariableRegistry::register(
+            \array_fill_keys(\array_keys($factory->getShared()), true),
+            $declined,
+            $this->componentViewTemplates,
+        );
     }
 
     /**
@@ -305,6 +352,10 @@ final class BladeBootstrapper
             // The relocator re-reads the template later; a prefix derived from stale bytes
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
+
+            if ($this->reportUndeclaredVariables && PreludeBuilder::isComponentView($source)) {
+                $this->componentViewTemplates[$template] = true;
+            }
 
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);

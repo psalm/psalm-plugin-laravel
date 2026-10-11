@@ -67,6 +67,15 @@ final class ContractParser
      */
     private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
+    /**
+     * Livewire markup or code: the component's public properties reach its view without any
+     * `view()` call or contract naming them.
+     */
+    private const LIVEWIRE_MARKERS = '/\bwire:[\w.-]+|@this\b|@entangle\b|\$wire\b|\$this\b|\bnew\s+class\b/';
+
+    /** Laravel injects `$message` into every mail view, and `@error` binds it. */
+    private const ALWAYS_PROVIDED = ['message' => true];
+
     private ?Parser $parser = null;
 
     public function parse(string $source, string $compiled): TemplateContract
@@ -93,6 +102,33 @@ final class ContractParser
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
+    }
+
+    /**
+     * The names a contract template's compiled body reads that nothing in the template declares or
+     * binds: the ones the prelude may leave undeclared for Psalm to report (#1827). Empty unless the
+     * template declares a `{{-- @var --}}` contract and its read set is provably whole.
+     *
+     * @return list<string>
+     */
+    public function undeclaredReads(string $source, string $compiled): array
+    {
+        [$vars] = $this->parseSource($source);
+
+        if ($vars === [] || \preg_match(self::LIVEWIRE_MARKERS, $source) === 1) {
+            return [];
+        }
+
+        [$names, $locals, $unknown, $opaque] = $this->walkReads($compiled);
+
+        if ($unknown || $opaque) {
+            return [];
+        }
+
+        // Compiled, not source: `@php` docblocks only become raw `<?php` blocks there.
+        $declared = \array_fill_keys([...\array_keys($vars), ...self::rawDeclaredNames($compiled)], true);
+
+        return $this->filterNames($names, $locals + $declared + self::ALWAYS_PROVIDED);
     }
 
     /**
@@ -409,8 +445,9 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool} names read,
+     *         the names the body binds for itself, whether it hides which names it reads, and whether
+     *         it hands its scope to code no walk sees (`include`, `eval`)
      */
     private function walkReads(string $compiled): array
     {
@@ -421,7 +458,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, true];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -433,9 +470,15 @@ final class ContractParser
 
             public bool $unknown = false;
 
+            public bool $opaque = false;
+
             #[\Override]
             public function enterNode(Node $node): null
             {
+                if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+                    $this->opaque = true;
+                }
+
                 if ($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef) {
                     if ($node->var instanceof Node\Expr\Variable) {
                         $node->var->setAttribute('contractSkip', true);
@@ -545,6 +588,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, $visitor->opaque];
     }
 }

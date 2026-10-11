@@ -133,4 +133,22 @@ final class BladeConfigTest extends TestCase
             new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="yes" /></pluginClass>'),
         );
     }
+
+    #[Test]
+    public function report_undeclared_variables_is_disabled_by_default(): void
+    {
+        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'));
+
+        $this->assertFalse($config->bladeReportUndeclaredVariables);
+    }
+
+    #[Test]
+    public function report_undeclared_variables_is_enabled_by_the_attribute(): void
+    {
+        $config = PluginConfig::fromXml(
+            new \SimpleXMLElement('<pluginClass><blade reportUndeclaredVariables="true" /></pluginClass>'),
+        );
+
+        $this->assertTrue($config->bladeReportUndeclaredVariables);
+    }
 }

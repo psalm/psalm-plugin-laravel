@@ -9,6 +9,7 @@ use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
+use Psalm\Type;
 
 /**
  * Types a Blade class component's own view from its class (#1804): builds
@@ -23,6 +24,9 @@ use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
  *
  * Types only: a seeded value carries no taint data-flow node, so taint from a component's
  * properties does not reach the template.
+ *
+ * The same sentinel re-declares, as `mixed`, the names an opted-in shadow left out of its net that
+ * the run still provides ({@see UndeclaredVariableRegistry}).
  *
  * @internal
  */
@@ -45,17 +49,29 @@ final class ComponentViewSeedHandler implements AfterCodebasePopulatedInterface,
 
         $shadowPath = $event->getStatementsSource()->getFilePath();
         $seed = ComponentViewRegistry::seedFor($shadowPath);
+        $entry = ShadowRegistry::entryFor($shadowPath);
 
         // The prelude is the only code on a line the line map sends to template line 0.
-        if ($seed === null || (ShadowRegistry::entryFor($shadowPath)?->lineMap[$stmt->getStartLine()] ?? null) !== 0) {
+        if (!$entry instanceof ShadowEntry
+            || ($seed === null && $entry->omittedVariables === [])
+            || ($entry->lineMap[$stmt->getStartLine()] ?? null) !== 0
+        ) {
             return null;
         }
 
         $context = $event->getContext();
 
-        foreach ($seed as $name => $type) {
+        foreach ($seed ?? [] as $name => $type) {
             $context->vars_in_scope['$' . $name] = $type;
             $context->vars_possibly_in_scope['$' . $name] = true;
+        }
+
+        // #1827: an omitted name the run still provides gets back the `mixed` the net would have given it.
+        foreach (UndeclaredVariableRegistry::providedFor($shadowPath, $entry, $seed !== null) as $name) {
+            if (!isset($seed[$name])) {
+                $context->vars_in_scope['$' . $name] = Type::getMixed();
+                $context->vars_possibly_in_scope['$' . $name] = true;
+            }
         }
 
         return null;

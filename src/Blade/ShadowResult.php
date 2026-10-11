@@ -15,11 +15,13 @@ final class ShadowResult
     /**
      * @param array<int, int>          $lineMap      shadow line (1-based) => blade source line (1-based); 0 for prelude lines
      * @param array<int, list<string>> $suppressions blade line => issue types suppressed there
+     * @param list<string>             $omittedVariables names the prelude leaves undeclared (#1827)
      */
     public function __construct(
         public readonly string $contents,
         public readonly array $lineMap,
         public readonly ?int $extendsLine,
         public readonly array $suppressions = [],
+        public readonly array $omittedVariables = [],
     ) {}
 }

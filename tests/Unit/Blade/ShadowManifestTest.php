@@ -430,4 +430,39 @@ final class ShadowManifestTest extends TestCase
         $this->assertTrue($reloaded->isFresh('/a.blade.php', 'a'));
         $this->assertFalse($reloaded->isFresh('/b.blade.php', 'b'));
     }
+
+    #[Test]
+    public function the_omitted_names_survive_a_reload(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $shadowPath = $manifest->store(
+            '/app/views/foo.blade.php',
+            'source',
+            new ShadowResult('<?php ?>', [], null, [], ['titel']),
+            $this->emptyContract(),
+        );
+        $manifest->flush();
+
+        // A warm run skips the compiler, so the sentinel learns what was left undeclared only here.
+        $reloaded = new ShadowManifest($this->shadowDir);
+        $reloaded->load();
+
+        $this->assertSame(['titel'], $reloaded->shadowEntry($shadowPath)?->omittedVariables);
+    }
+
+    #[Test]
+    public function an_entry_from_before_the_omitted_slot_reads_as_omitting_nothing(): void
+    {
+        \file_put_contents(
+            $this->shadowDir . '/manifest.php',
+            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', [], [[], false, [], false, [], []], null]];\n",
+        );
+
+        $manifest = new ShadowManifest($this->shadowDir);
+        $manifest->load();
+
+        $this->assertSame([], $manifest->shadowEntry('/shadow.php')?->omittedVariables);
+    }
 }

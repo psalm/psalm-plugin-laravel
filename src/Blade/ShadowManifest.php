@@ -33,9 +33,9 @@ final class ShadowManifest
     public const SLOT_DATA_INCLUDES = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: list<string>}>
      *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract,
-     *      dataIncludes]. The final slot is null when its collection pass was disabled.
+     *      dataIncludes, omitted variables]. dataIncludes is null when its collection pass was disabled.
      */
     private array $entries = [];
 
@@ -86,7 +86,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null, 7: list<string>}>
      *
      * @psalm-mutation-free
      */
@@ -99,13 +99,31 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            // Arity 7 gates entries written before the removed references slot. Recompiling is
-            // safer than misreading a derived cache entry of a different shape.
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 7) {
+            // Arity gates entries written before the removed references slot (whose eighth slot fails
+            // the name check below). Recompiling is safer than misreading a derived cache entry of a
+            // different shape. A seven-slot entry predates the omitted-variables slot and was written
+            // with nothing omitted: the flag that omits names also changes the fingerprint.
+            if (!\is_string($shadowPath) || !\is_array($entry)) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $dataIncludes] = \array_values($entry);
+            $entry = \array_values($entry);
+
+            if (\count($entry) === 7) {
+                $entry[] = [];
+            }
+
+            if (\count($entry) !== 8) {
+                continue;
+            }
+
+            /** @psalm-suppress MixedAssignment untyped data straight from an included file */
+            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $dataIncludes, $omitted] = $entry;
+            $validOmitted = \is_array($omitted) ? $this->normalizeNames($omitted) : null;
+
+            if ($validOmitted === null) {
+                continue;
+            }
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
                 continue;
@@ -145,7 +163,7 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validDataIncludes];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validDataIncludes, $validOmitted];
         }
 
         return $entries;
@@ -310,7 +328,7 @@ final class ShadowManifest
     {
         $entry = $this->entries[$shadowPath] ?? null;
 
-        return $entry === null ? null : new ShadowEntry($entry[0], $entry[1], $entry[4]);
+        return $entry === null ? null : new ShadowEntry($entry[0], $entry[1], $entry[4], $entry[7]);
     }
 
     /**
@@ -415,6 +433,7 @@ final class ShadowManifest
             $shadow->suppressions,
             [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
             $dataIncludes,
+            $shadow->omittedVariables,
         ];
 
         return $shadowPath;

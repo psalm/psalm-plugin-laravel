@@ -1,0 +1,9 @@
+{
+    "name": "psalm-laravel-plugin/undeclared-variables-fixture",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    }
+}

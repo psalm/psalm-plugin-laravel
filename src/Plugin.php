@@ -246,6 +246,7 @@ final class Plugin implements PluginEntryPointInterface
         Blade\RuntimeHelperVisibility::reset();
         Blade\ShadowIssueRelocator::reset();
         Blade\ShadowRegistry::reset();
+        Blade\UndeclaredVariableRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
     }
 
@@ -1000,6 +1001,7 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViewData || $annotating,
+            $pluginConfig->bladeReportUndeclaredVariables,
         );
 
         if (!$bootstrapper->boot()) {

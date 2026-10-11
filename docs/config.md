@@ -275,7 +275,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. A contract comment (`{{-- @var \App\Models\User $user --}}`) types the template's own body as well as the call-site checks below; `@props([...])` entries stay `mixed`. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
+- Every template variable the plugin cannot prove a type for is `mixed`, silently, unless [`reportUndeclaredVariables`](#reportundeclaredvariables) is on. A contract comment (`{{-- @var \App\Models\User $user --}}`) types the template's own body as well as the call-site checks below; `@props([...])` entries stay `mixed`. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -323,6 +323,26 @@ A key that a template reached through `@include` or `@extends` reads or declares
 Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
 
 Has no effect under `<blade value="false" />`: the read sets only exist once the compile pass has read the templates.
+
+### `reportUndeclaredVariables`
+
+**default**: off
+
+```xml
+<blade reportUndeclaredVariables="true" />
+```
+
+In a template that declares a contract (at least one `{{-- @var T $name --}}` comment), report a read of a variable the template neither declares nor binds itself. The undeclared variable is no longer `mixed`: Psalm reports it as `UndefinedGlobalVariable` (or `UndefinedVariable` inside a closure) at the template line, once per read. A template without a contract stays silent, so the rule costs nothing until you annotate a template.
+
+Not a read the plugin cannot prove is undeclared:
+
+- a name the template binds itself (`@foreach` aliases, assignments, closure parameters, `catch`), or declares in a raw `<?php /** @var */ ?>` or `@php` docblock;
+- Blade's own names, `$message` (mail views, `@error`), and every `View::share()` key the booted application registered, `$app` included;
+- a read guarded by `isset()`, `??` or `empty()`, which Psalm itself never reports.
+
+Whole templates are skipped when something outside them supplies data the plugin cannot list: a view composer or creator registered for the view, a Livewire view (a `livewire.*` name, `wire:` attributes, `$this`, `@entangle`), `@props` / `@aware`, `extract()`, a non-literal `compact()`, `include` or `eval`, an anonymous component view, and a class component view the plugin could not type from its class. A class component view it could type may read every key its class hands the view.
+
+Enabling it makes every template recompile once; flipping it back reuses the earlier cache.
 
 ### `reportMixedIssues`
 

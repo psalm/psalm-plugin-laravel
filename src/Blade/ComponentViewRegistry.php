@@ -67,6 +67,14 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
+    /**
+     * Shadow path => the omitted names a component view may still read (#1827): its class's data
+     * keys, or null when a component claims the view but it was not seeded, which declines it whole.
+     *
+     * @var array<string, array<array-key, true>|null>
+     */
+    private static array $undeclaredAllowances = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -90,11 +98,22 @@ final class ComponentViewRegistry
         return self::$seeds[$shadowPath] ?? null;
     }
 
+    /**
+     * @return array<array-key, true>|null [] for a view no component claims, null to decline it whole
+     */
+    public static function undeclaredAllowanceFor(string $shadowPath): ?array
+    {
+        return \array_key_exists($shadowPath, self::$undeclaredAllowances) ? self::$undeclaredAllowances[$shadowPath] : [];
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
+        self::$undeclaredAllowances = [];
+        $claimsNeeded = UndeclaredVariableRegistry::isActive();
 
-        if (self::$tagRendered === []) {
+        // Undeclared-read reporting needs every claim, untagged ones included: those views go unseeded.
+        if (self::$tagRendered === [] && !$claimsNeeded) {
             return;
         }
 
@@ -104,6 +123,8 @@ final class ComponentViewRegistry
         $byTemplate = [];
         /** @var array<string, true> $contested template path => true */
         $contested = [];
+        /** @var array<string, true> $claimed template path => true: some component's render() names it */
+        $claimed = [];
 
         foreach (\array_keys(self::$renderedByName) as $viewName) {
             $templatePath = $templates[$viewName] ?? null;
@@ -140,7 +161,7 @@ final class ComponentViewRegistry
             }
 
             if (!\array_key_exists($declaring, $views)) {
-                $views[$declaring] = self::renderedView($codebase, $render, $templates, $contested);
+                $views[$declaring] = self::renderedView($codebase, $render, $templates, $contested, $claimed);
             }
 
             $view = $views[$declaring];
@@ -149,6 +170,8 @@ final class ComponentViewRegistry
             if ($view === null || $templatePath === null) {
                 continue;
             }
+
+            $claimed[$templatePath] = true;
 
             // An inherited `$this->view()` runs the CONCRETE class's view(), which may be overridden.
             if ($view[2] && !self::componentOwnsView($storage)) {
@@ -191,6 +214,21 @@ final class ComponentViewRegistry
 
             if ($vars !== []) {
                 self::$seeds[$shadowPath] = $vars;
+
+                // Untyped properties and withheld keys are data too, just never seeded.
+                $keys = $claimsNeeded ? ComponentRenderData::exposedFor($codebase, $storage) : null;
+
+                if ($keys !== null) {
+                    self::$undeclaredAllowances[$shadowPath] = \array_fill_keys(\array_keys($keys), true) + $renderKeys + self::$namedSlots;
+                }
+            }
+        }
+
+        foreach ($claimsNeeded ? \array_keys($claimed) : [] as $templatePath) {
+            $shadowPath = $shadowPaths[$templatePath] ?? null;
+
+            if ($shadowPath !== null && !isset(self::$undeclaredAllowances[$shadowPath])) {
+                self::$undeclaredAllowances[$shadowPath] = null;
             }
         }
     }
@@ -201,6 +239,7 @@ final class ComponentViewRegistry
         self::$namedSlots = [];
         self::$renderedByName = [];
         self::$seeds = [];
+        self::$undeclaredAllowances = [];
         self::$declaredFunctions = [];
     }
 
@@ -252,10 +291,11 @@ final class ComponentViewRegistry
      *
      * @param array<array-key, string> $templates view name => template path
      * @param array<string, true>      $contested template path => true, appended to
+     * @param array<string, true>      $claimed   template path => true, appended to alongside $contested
      *
      * @return array{0: string, 1: array<array-key, true>, 2: bool}|null
      */
-    private static function renderedView(Codebase $codebase, MethodIdentifier $render, array $templates, array &$contested): ?array
+    private static function renderedView(Codebase $codebase, MethodIdentifier $render, array $templates, array &$contested, array &$claimed): ?array
     {
         $resolved = ClassMethodResolver::resolve($codebase, $render);
 
@@ -276,6 +316,7 @@ final class ComponentViewRegistry
 
             if ($templatePath !== null) {
                 $contested[$templatePath] = true;
+                $claimed[$templatePath] = true;
             }
         }
 
