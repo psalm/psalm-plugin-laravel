@@ -805,6 +805,8 @@ final class Plugin implements PluginEntryPointInterface
             // tag facts, hence the same gate.
             require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
+            require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
+            $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
@@ -823,7 +825,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
 
-        // Writes `{{-- @var --}}` declarations into the analysed templates (#1524). Registered only
+        // Writes `@var` docblock declarations into the analysed templates (#1524). Registered only
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
         // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
         // The two hooks are one pass in two halves: the collector fills a static that only survives
