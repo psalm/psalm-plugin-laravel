@@ -124,6 +124,36 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function appends_to_the_docblock_the_statement_carries_when_two_docblocks_stack(): void
+    {
+        // The PHP parser attaches only the last doc comment to a statement, so lines appended to the
+        // first of two would be dropped and the declarations would not type the body.
+        $source = "<?php\n/** @var Site \$site */\n\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n";
+
+        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+        $this->assertNotNull($result);
+        $this->assertSame(
+            "<?php\n/** @var Site \$site */\n\n/** @var list<string> \$times \n * @var string \$title\n */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
+            $result[0],
+        );
+    }
+
+    #[Test]
+    public function a_docblock_on_a_function_is_not_a_header(): void
+    {
+        $source = "<?php /** Helper. */ function helper(): void {} ?>\n<p>{{ \$title }}</p>\n";
+
+        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+        $this->assertNotNull($result);
+        $this->assertSame(
+            "<?php /** Helper. */ function helper(): void {} ?>\n" . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n",
+            $result[0],
+        );
+    }
+
+    #[Test]
     public function does_not_mistake_php_looking_text_for_a_header(): void
     {
         $source = "<p>/** not php */ {{ \$title }}</p>\n";
@@ -143,6 +173,9 @@ final class TemplateAnnotatorTest extends TestCase
                 "<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n",
                 "<?php declare(strict_types=1); ?>\n<p>{{ \$title }}</p>\n",
                 "<?php\n/**\n * Header.\n */\n?>\n<p>{{ \$title }}</p>\n",
+                "<?php\n/** @var Site \$site */\n\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
+                "<?php /** Helper. */ function helper(): void {} ?>\n<p>{{ \$title }}</p>\n",
+                "\u{FEFF}<?php\r\ndeclare(strict_types=1);\r\n?>\r\n<p>{{ \$title }}</p>\r\n",
             ] as $source
         ) {
             $first = TemplateAnnotator::annotate($source, ['title' => 'string']);
@@ -320,7 +353,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
 
         $this->assertNotNull($result, 'a verbatim body is literal text, not a contract');
-        $this->assertSame(['{{-- @var App\\User $user --}}'], $result[2]);
+        $this->assertSame(['@var App\\User $user'], $result[2]);
     }
 
     #[Test]
@@ -331,11 +364,11 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
 
         $this->assertNotNull($result, 'an @php body is PHP source, not a contract');
-        $this->assertSame(['{{-- @var App\\User $user --}}'], $result[2]);
+        $this->assertSame(['@var App\\User $user'], $result[2]);
     }
 
     #[Test]
-    public function inserts_after_the_live_comment_not_after_one_inside_a_verbatim_block(): void
+    public function leaves_live_comments_alone_and_ignores_one_inside_a_verbatim_block(): void
     {
         $source = "{{-- @var A \$a --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n";
 
@@ -343,7 +376,7 @@ final class TemplateAnnotatorTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame(
-            "{{-- @var A \$a --}}\n{{-- @var C \$c --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n",
+            "<?php\n/**\n * @var C \$c\n */\n?>\n{{-- @var A \$a --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n",
             $result[0],
         );
     }
@@ -356,7 +389,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['x' => 'X']);
 
         $this->assertNotNull($result, 'the parser reads one comment here, and its text is not a declaration');
-        $this->assertSame("{{-- @var X \$x --}}\n{{-- note {{-- @var X \$x --}}\n<p>x</p>\n", $result[0]);
+        $this->assertSame("<?php\n/**\n * @var X \$x\n */\n?>\n{{-- note {{-- @var X \$x --}}\n<p>x</p>\n", $result[0]);
     }
 
     #[Test]

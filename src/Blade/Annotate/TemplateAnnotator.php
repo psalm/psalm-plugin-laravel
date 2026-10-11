@@ -37,6 +37,11 @@ final class TemplateAnnotator
 {
     private const BOM = "\u{FEFF}";
 
+    /** Tokens that start a symbol whose docblock is not the template's header. */
+    private const SYMBOL_DOC_TOKENS = [
+        \T_FUNCTION, \T_FN, \T_CLASS, \T_ABSTRACT, \T_FINAL, \T_READONLY, \T_INTERFACE, \T_TRAIT, \T_ENUM, \T_ATTRIBUTE,
+    ];
+
     /**
      * A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one.
      * Group 1 is the inner content, which is what {@see ContractParser::VAR_PATTERN} reads.
@@ -123,6 +128,10 @@ final class TemplateAnnotator
 
         $block = ['doc' => null, 'openEnd' => $start, 'closeEnd' => null];
         $offset = $start;
+        // The latest doc comment since the last real token: of two stacked ones only the second
+        // reaches the statement, so lines appended to the first would be ignored.
+        $candidate = null;
+        $declined = false;
 
         // Tokenizing does not parse, so a syntactically broken block is fine; the @ is for the
         // warning an unterminated string emits.
@@ -131,15 +140,30 @@ final class TemplateAnnotator
 
             if ($id === \T_OPEN_TAG) {
                 $block['openEnd'] = $offset + \strlen($text);
-            } elseif ($id === \T_DOC_COMMENT && $block['doc'] === null && \str_ends_with($text, '*/')) {
-                $block['doc'] = [$offset, $text];
-            } elseif ($id === \T_CLOSE_TAG) {
-                $block['closeEnd'] = $offset + \strlen($text);
+            } elseif ($id === \T_DOC_COMMENT) {
+                $candidate = \str_ends_with($text, '*/') ? [$offset, $text] : null;
+            } elseif ($id !== \T_WHITESPACE) {
+                if ($candidate !== null && $block['doc'] === null && !$declined) {
+                    // A docblock on a function, class or attribute describes that symbol, not the
+                    // template, and a `@var` there types nothing.
+                    $declined = \in_array($id, self::SYMBOL_DOC_TOKENS, true);
+                    $block['doc'] = $declined ? null : $candidate;
+                }
 
-                break;
+                $candidate = null;
+
+                if ($id === \T_CLOSE_TAG) {
+                    $block['closeEnd'] = $offset + \strlen($text);
+
+                    break;
+                }
             }
 
             $offset += \strlen($text);
+        }
+
+        if ($candidate !== null && $block['doc'] === null && !$declined) {
+            $block['doc'] = $candidate;
         }
 
         return $block;
