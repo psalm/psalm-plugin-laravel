@@ -200,6 +200,9 @@ final class ComposerKeyResolver
         return match (true) {
             $node instanceof Expr\FuncCall => $node->name instanceof Name
                 && \in_array($node->name->toLowerString(), self::OPAQUE_FUNCTIONS, true),
+            // The parent constructor's body is never read, and it may share data.
+            $node instanceof Expr\StaticCall && $node->class instanceof Name && $node->class->toLowerString() === 'parent'
+                && $node->name instanceof Identifier && $node->name->toLowerString() === '__construct' => true,
             // `View::share()` adds keys at render time that no `with()` shows (Factory::make merges them).
             $node instanceof Expr\MethodCall, $node instanceof Expr\NullsafeMethodCall, $node instanceof Expr\StaticCall
                 => $node->name instanceof Identifier && $node->name->toLowerString() === 'share',
