@@ -78,6 +78,9 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'read-only method' => ['$view->name();', null];
         yield 'share through a facade' => ['$view->with("a", 1); View::share("b", 1);', null];
         yield 'share through the factory' => ['$view->with("a", 1); $this->factory->share("b", 1);', null];
+        yield 'include shares the local scope' => ['require __DIR__ . "/data.php"; $view->with("a", 1);', null];
+        yield 'include_once shares the local scope' => ['include_once "data.php";', null];
+        yield 'eval shares the local scope' => ['eval($code);', null];
         yield 'func_get_args without a parameter' => ['func_get_args();', null, ''];
         yield 'by-reference parameter' => ['$view->with("a", 1);', null, '&$view'];
         yield 'variadic parameter' => ['$view[0]->with("a", 1);', null, '...$view'];

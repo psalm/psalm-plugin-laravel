@@ -262,7 +262,7 @@ final class BladeBootstrapper
     /**
      * @see self::$pendingTemplates for why this is deferred to the end of a successful run
      *
-     * @param array<string, list<array{0: string, 1: string}>|null> $composerSources
+     * @param array<array-key, list<array{0: string, 1: string}>|null> $composerSources
      */
     private function publishTemplateFacts(array $composerSources): void
     {
@@ -283,7 +283,8 @@ final class BladeBootstrapper
         }
 
         foreach ($composerSources as $viewName => $sources) {
-            ContractRegistry::registerComposerSources($viewName, $sources);
+            // A numeric view name is an integer array key by now.
+            ContractRegistry::registerComposerSources((string) $viewName, $sources);
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
@@ -498,7 +499,7 @@ final class BladeBootstrapper
      * Only views a composer or creator, wildcard ones included, reaches. It can add any data, so the
      * call site's data set proves nothing about those views beyond what the composer is shown to pass.
      *
-     * @return array<string, list<array{0: string, 1: string}>|null>
+     * @return array<array-key, list<array{0: string, 1: string}>|null>
      */
     private function readComposerSources(): array
     {

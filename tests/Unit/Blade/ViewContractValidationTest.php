@@ -434,7 +434,9 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(
             [
                 self::WRONG_TYPE . ' composer-literal $count',
+                self::MISSING . ' 123 $count',
                 self::MISSING . ' composer-created $count',
+                self::MISSING . ' composer-ctor-plain $count',
                 self::MISSING . ' composer-inherited $count',
                 self::MISSING . ' composer-literal $count',
                 self::MISSING . ' composer-wild.page $other',
