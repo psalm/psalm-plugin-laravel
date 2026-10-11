@@ -21,7 +21,7 @@ use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\ParentConnectingVisitor;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -180,22 +180,10 @@ final class RequestInputProvenance
         return true;
     }
 
-    /** @psalm-external-mutation-free */
+    /** @psalm-mutation-free */
     private static function isRequestSubclass(string $className, Codebase $codebase): bool
     {
-        if ($className === Request::class) {
-            return true;
-        }
-
-        if (!$codebase->classExists($className)) {
-            return false;
-        }
-
-        try {
-            return $codebase->classExtends($className, Request::class);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return false;
-        }
+        return ClassLineage::isA($codebase, $className, Request::class);
     }
 
     /**

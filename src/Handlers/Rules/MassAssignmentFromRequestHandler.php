@@ -12,12 +12,12 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Http\RequestInputProvenance;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\MassAssignmentFromRequest;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -129,8 +129,6 @@ final class MassAssignmentFromRequestHandler implements AfterExpressionAnalysisI
      * builder, so that idiom is covered too).
      *
      * @param class-string<Model> $modelClass
-     *
-     * @psalm-external-mutation-free
      */
     private static function isProvablyUnguarded(string $modelClass): bool
     {
@@ -230,23 +228,11 @@ final class MassAssignmentFromRequestHandler implements AfterExpressionAnalysisI
     /**
      * @psalm-assert-if-true class-string<Model> $className
      *
-     * @psalm-external-mutation-free
+     * @psalm-mutation-free
      */
     private static function isModelSubclass(string $className, Codebase $codebase): bool
     {
-        if ($className === Model::class) {
-            return true;
-        }
-
-        if (!$codebase->classExists($className)) {
-            return false;
-        }
-
-        try {
-            return $codebase->classExtends($className, Model::class);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return false;
-        }
+        return ClassLineage::isA($codebase, $className, Model::class);
     }
 
     /** @psalm-pure */
