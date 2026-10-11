@@ -276,11 +276,15 @@ A key absent from the array can still arrive through the including template's sc
 
 * declares the name (`@var`, required or `= null`, or `@props`),
 * reads it (an undeclared read is data its own caller passes), or binds it itself (an assignment, a `@foreach` alias, a closure parameter),
-* receives it from Blade (`$errors`, `$slot`, ...) or as class component data,
+* receives it from Blade (`$errors`, `$slot`, ...),
+* is itself included or extended by another template (by a literal name): it then receives that template's whole scope, whatever it declares,
+* may be a class component's own view: any `Component` subclass whose `render()` names it, in any shape. Class component data cannot be told apart from the rest of that view's scope, so the missing check is off there entirely,
 * declares nothing at all, has an unreadable `@props` array, or has a dynamic scope (`$$name`, `extract()`; this includes every `@props`/`@aware` component view, whose compiled output writes `$$name`),
 * has a view composer or creator registered.
 
-The rule is one level deep on purpose: a variable the outer `view()` call passes reaches the partial when the template in between declares it, so declaring it there both documents the hand-off and silences the report.
+What reaches the including template from a `view()` call site is bounded by its declarations. **Declare the variables a template forwards to its includes**: with `view('parent', ['title' => $t, 'count' => $n])` and a `parent` that declares only `$title`, an `@include('card', ['title' => $title])` in `parent` reports `card`'s `$count` as missing, although the call site passes it. Declaring `@var int $count` in `parent` documents the hand-off and silences the report.
+
+Not followed: a template reached only through a dynamic include (`@include($name)`) is checked as if no template included it.
 
 ## Unused view data
 

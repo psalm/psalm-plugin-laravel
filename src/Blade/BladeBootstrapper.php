@@ -263,6 +263,16 @@ final class BladeBootstrapper
             ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
         }
 
+        // A view another template includes or extends receives that template's whole scope, so its
+        // own declarations do not bound what it hands on to its own includes.
+        $scopeReceivers = [];
+
+        foreach ($this->pendingContracts as [, , , $dataIncludes]) {
+            foreach ($dataIncludes[0] ?? [] as $included) {
+                $scopeReceivers[$included] = true;
+            }
+        }
+
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes, $templatePath]) {
             $contract = $this->withoutSharedNames($contract, $shared);
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
@@ -272,7 +282,7 @@ final class BladeBootstrapper
                 ContractRegistry::markComposed($viewName);
             }
 
-            ContractRegistry::registerTemplateScope($templatePath, $composed ? null : $contract);
+            ContractRegistry::registerTemplateScope($templatePath, $composed || isset($scopeReceivers[$viewName]) ? null : $contract);
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);

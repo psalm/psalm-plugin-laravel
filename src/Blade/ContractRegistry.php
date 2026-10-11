@@ -80,8 +80,8 @@ final class ContractRegistry
 
     /**
      * Keyed by path, not name: the scope an `@include` hands on belongs to the template being
-     * analyzed, whichever view name it was reached by. A composer on any of its names makes that
-     * scope open, so null is sticky.
+     * analyzed, whichever view name it was reached by. A composer on any of its names, or another
+     * template including or extending one of them, makes that scope open, so null is sticky.
      */
     public static function registerTemplateScope(string $templatePath, ?ViewDataContract $contract): void
     {
@@ -92,7 +92,7 @@ final class ContractRegistry
         self::$templateScopes[$templatePath] = $contract;
     }
 
-    /** Null when the template's scope is not provable: no contract registered, or a composer feeds it. */
+    /** Null when the template's scope is not bounded by its own contract, see {@see registerTemplateScope()}. */
     public static function templateScopeFor(string $templatePath): ?ViewDataContract
     {
         return self::$templateScopes[$templatePath] ?? null;

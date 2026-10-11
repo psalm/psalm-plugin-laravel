@@ -483,6 +483,42 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->templateContractIssues('include-if.blade.php'));
     }
 
+    /** A class component's view receives `data()`, whether or not its render() shape is typed. */
+    #[Test]
+    public function an_include_from_a_class_components_view_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('component-view.blade.php'));
+    }
+
+    /**
+     * A template another template includes or extends receives that template's whole scope, so
+     * what it hands on is not bounded by its own declarations.
+     */
+    #[Test]
+    public function an_include_from_an_included_or_extended_template_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('parent.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('layout.blade.php'));
+    }
+
+    #[Test]
+    public function an_include_never_reports_unused_view_data(): void
+    {
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm-unused-data.xml')) as $issue) {
+            $this->assertFalse(
+                $issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'extra-key.blade.php',
+                \var_export($issue, true),
+            );
+        }
+    }
+
+    /** The includer's own UndefinedDocblockClass already reports an unknown class; no cascade. */
+    #[Test]
+    public function an_include_value_of_an_undefined_class_is_not_type_checked(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('undefined-class.blade.php'));
+    }
+
     /** `@extends('layout', [...])` compiles to the same call, and hands the layout the same scope. */
     #[Test]
     public function an_extends_with_literal_data_is_checked_like_an_include(): void

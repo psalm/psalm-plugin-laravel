@@ -12,6 +12,7 @@ use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ComponentViewRegistry;
 use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
@@ -196,11 +197,11 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
     /**
      * Every name the including template can hand on through the scope `@include` forwards: what it
-     * declares, reads (an undeclared read is data it was passed) or binds, what Blade supplies, and
-     * whatever Psalm holds in scope at the directive (a class component's data, a local assigned
-     * above it). Null when that scope is not provable: no contract was registered for the template,
-     * a composer feeds it, it declares nothing and so states no scope at all, its `@props` are
-     * unreadable, or its scope is dynamic (`$$name`, `extract()`).
+     * declares, reads (an undeclared read is data it was passed) or binds, and what Blade supplies.
+     * Null when that scope is not bounded by the template's own declarations: no contract was
+     * registered for it, a composer feeds it, another template includes or extends it, a class
+     * component may render it, it declares nothing, its `@props` are unreadable, or its scope is
+     * dynamic (`$$name`, `extract()`, or anything else that stops Psalm checking variables).
      *
      * @return array<string, true>|null
      */
@@ -209,6 +210,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         $includer = ContractRegistry::templateScopeFor($templatePath);
 
         if (!$includer instanceof ViewDataContract
+            || ComponentViewRegistry::claimedByComponent($templatePath)
             || $includer->vars === []
             || $includer->propsUnknown
             || $includer->readsUnknown
@@ -217,16 +219,10 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return null;
         }
 
-        $names = PreludeBuilder::BLADE_OWNED_NAMES
+        return PreludeBuilder::BLADE_OWNED_NAMES
             + \array_fill_keys(\array_keys($includer->vars), true)
             + \array_fill_keys($includer->readVariables, true)
             + \array_fill_keys($includer->rawDeclaredVariables, true);
-
-        foreach ([...\array_keys($context->vars_in_scope), ...\array_keys($context->vars_possibly_in_scope)] as $varId) {
-            $names[\substr($varId, 1)] = true;
-        }
-
-        return $names;
     }
 
     /**
@@ -353,6 +349,13 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         // Every @props entry is mixed, and a mixed value satisfies anything we could compare it to.
         if ($supplied->hasMixed()) {
             return;
+        }
+
+        // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof Type\Atomic\TNamedObject && !$source->getCodebase()->classOrInterfaceOrEnumExists($atomic->value)) {
+                return;
+            }
         }
 
         $declared = self::declaredType($var->optional ? ContractParser::withNull($var->typeString) : $var->typeString);

@@ -67,6 +67,9 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
+    /** @var array<string, true> template path => some component's render() may render it, typed or not */
+    private static array $claimed = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -90,9 +93,20 @@ final class ComponentViewRegistry
         return self::$seeds[$shadowPath] ?? null;
     }
 
+    /**
+     * Whether a class component may render the template as its own view, so `data()` can hand it
+     * names no declaration shows. Wider than {@see seedFor()}: any recognised or unrecognised
+     * `render()` naming the view counts.
+     */
+    public static function claimedByComponent(string $templatePath): bool
+    {
+        return isset(self::$claimed[$templatePath]);
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
+        self::$claimed = [];
 
         if (self::$tagRendered === []) {
             return;
@@ -104,14 +118,6 @@ final class ComponentViewRegistry
         $byTemplate = [];
         /** @var array<string, true> $contested template path => true */
         $contested = [];
-
-        foreach (\array_keys(self::$renderedByName) as $viewName) {
-            $templatePath = $templates[$viewName] ?? null;
-
-            if ($templatePath !== null) {
-                $contested[$templatePath] = true;
-            }
-        }
 
         /** @var array<string, array{0: string, 1: array<array-key, true>, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
         $views = [];
@@ -160,6 +166,17 @@ final class ComponentViewRegistry
             $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, $view[1]];
         }
 
+        // Every claim so far came from a render(); the by-name renders below are no component's.
+        self::$claimed = \array_fill_keys(\array_keys($byTemplate), true) + $contested;
+
+        foreach (\array_keys(self::$renderedByName) as $viewName) {
+            $templatePath = $templates[$viewName] ?? null;
+
+            if ($templatePath !== null) {
+                $contested[$templatePath] = true;
+            }
+        }
+
         $shadowPaths = [];
 
         foreach (ShadowRegistry::shadowPaths() as $shadowPath) {
@@ -201,6 +218,7 @@ final class ComponentViewRegistry
         self::$namedSlots = [];
         self::$renderedByName = [];
         self::$seeds = [];
+        self::$claimed = [];
         self::$declaredFunctions = [];
     }
 

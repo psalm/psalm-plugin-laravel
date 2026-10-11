@@ -93,7 +93,7 @@ The check declines rather than guess. It is silent when:
 - A view composer or creator is registered for the view, wildcard ones (`composing: *`, `admin.*`) included: it can add any data, so the call site's data set proves nothing.
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
-- An `@include` whose including template declares, reads or binds the name, receives it from Blade or as class component data, declares nothing, has a dynamic scope (`$$name`, `extract()`, every `@props`/`@aware` component view), or has a composer registered. `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked. See [Included templates](../blade.md#included-templates).
+- An `@include` whose including template declares, reads or binds the name, receives it from Blade, is itself included or extended by another template, may be a class component's view, declares nothing, has a dynamic scope (`$$name`, `extract()`, every `@props`/`@aware` component view), or has a composer registered. `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked. See [Included templates](../blade.md#included-templates).
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
 
 A view rendered from the `render()` of an `Illuminate\View\Component` subclass IS handled: Laravel
@@ -103,6 +103,10 @@ though the `render()` passes only `['component' => $this]`. Property types are k
 [InvalidViewVariableType](InvalidViewVariableType.md) still checks them against the template's
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
+
+### Known false positive: data a template forwards without declaring it
+
+An `@include` is judged against what the including template declares, not against what its own `view()` call sites happen to pass. With `view('parent', ['title' => $t, 'count' => $n])`, a `parent` that declares only `$title`, and `@include('card', ['title' => $title])` in it, `card`'s `$count` is reported missing. Declare the variables a template forwards to its includes (`@var int $count` in `parent`). See [Included templates](../blade.md#included-templates).
 
 ### Known false positive: variables bound outside the call site
 
