@@ -87,7 +87,19 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($contract->propsUnknown);
         $this->assertTrue($contract->vars['title']->optional);
         $this->assertSame('mixed', $contract->vars['title']->typeString);
+        $this->assertSame('string', $contract->vars['title']->defaultType);
         $this->assertFalse($contract->vars['count']->optional);
+        $this->assertNull($contract->vars['count']->defaultType);
+    }
+
+    #[Test]
+    public function a_later_props_entry_for_an_already_declared_name_infers_no_default_type(): void
+    {
+        $contract = $this->parse("{{-- @var int \$size --}}\n@props(['size' => 'lg'])\n");
+
+        $this->assertTrue($contract->vars['size']->optional);
+        $this->assertNull($contract->vars['size']->defaultType);
+        $this->assertSame('mixed', $contract->vars['size']->bodyType());
     }
 
     #[Test]

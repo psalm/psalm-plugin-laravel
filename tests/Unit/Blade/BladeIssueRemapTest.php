@@ -1475,6 +1475,86 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function propsDefaultTypes(): iterable
+    {
+        yield 'string' => ['literals.blade.php', '$size: string'];
+        yield 'int' => ['literals.blade.php', '$count: int'];
+        yield 'float' => ['literals.blade.php', '$ratio: float'];
+        yield 'false' => ['literals.blade.php', '$open: bool'];
+        yield 'upper-case TRUE' => ['literals.blade.php', '$shown: bool'];
+        yield 'empty short array' => ['literals.blade.php', '$items: array<array-key, mixed>'];
+        yield 'long array() with entries' => ['literals.blade.php', '$pairs: array<array-key, mixed>'];
+        yield 'negative int' => ['literals.blade.php', '$offset: int'];
+        yield 'negative float' => ['literals.blade.php', '$scale: float'];
+        yield 'bare name' => ['untyped.blade.php', '$title: mixed'];
+        yield 'null' => ['untyped.blade.php', '$none: mixed'];
+        yield 'constant' => ['untyped.blade.php', '$eol: mixed'];
+        yield 'call' => ['untyped.blade.php', '$upper: mixed'];
+        yield 'concatenation' => ['untyped.blade.php', '$joined: mixed'];
+        yield 'unary plus' => ['untyped.blade.php', '$plus: mixed'];
+        yield 'negated constant' => ['untyped.blade.php', '$max: mixed'];
+        yield 'variable' => ['untyped.blade.php', '$copied: mixed'];
+        yield 'interpolated string' => ['untyped.blade.php', '$line: mixed'];
+        // An explicit declaration beats the inferred default: a native docblock re-declares the
+        // name after the prelude, and a contract comment either wins by document order or, placed
+        // before `@props`, leaves the name as untyped as it was before defaults were inferred.
+        yield 'native @var' => ['declared-native.blade.php', '$size: int'];
+        yield 'contract comment after @props' => ['declared-comment-after.blade.php', '$size: int'];
+        yield 'contract comment before @props' => ['declared-comment-before.blade.php', '$size: mixed'];
+    }
+
+    /** #1828: a `@props` entry types the body from its literal default, widened, never the literal itself. */
+    #[Test]
+    #[DataProvider('propsDefaultTypes')]
+    public function a_props_entry_is_typed_from_its_literal_default(string $template, string $trace): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            $trace,
+            $this->messagesFor($issues, 'Trace', 'resources/views/props/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * The mistakes a typed default exposes, all silent while the prop was `mixed`. The guard on
+     * line 5 is the documented cost of a default-only claim: a caller could pass an array.
+     */
+    #[Test]
+    public function misusing_a_literal_defaulted_prop_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/misuse.blade.php';
+        $reported = [];
+
+        foreach ($issues as $issue) {
+            if (\str_ends_with($issue['file_path'], $template)) {
+                $reported[] = $issue['line_from'] . ' ' . $issue['type'];
+            }
+        }
+
+        $this->assertSame(['2 InvalidPropertyFetch', '3 InvalidMethodCall', '4 InvalidPropertyFetch', '5 DocblockTypeContradiction'], $reported);
+    }
+
+    /** Widened, not `'lg'`: a `match` or comparison against another value is not a dead branch. */
+    #[Test]
+    public function a_string_default_leaves_other_values_reachable(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/match.blade.php';
+
+        $this->assertStringContainsString('@var string $size */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1554: a bound attribute followed by ANOTHER attribute on the same tag compiles to
      * `'value' => ,'label' => ...` (the `'value' => ]` shape #1553 pinned is the OTHER position: an
      * empty bound attribute with nothing after it on that tag). Both are genuine `ParseError`s

@@ -223,6 +223,12 @@ final class ContractParser
         $vars = [];
 
         foreach ($declarations as [, $name, $var]) {
+            // An inferred default never beats an earlier declaration of the name: a `{{-- @var --}}`
+            // ahead of the `@props` entry would otherwise lose the body to the default's type.
+            if (isset($vars[$name]) && $var->defaultType !== null) {
+                $var = new ContractVar($name, $var->typeString, $var->declarationLine, $var->optional);
+            }
+
             $vars[$name] = $var;
         }
 
@@ -281,8 +287,8 @@ final class ContractParser
 
             $line = 1 + SourceLines::breaksIn($source, 0, $offset);
 
-            foreach ($props as $propName => $optional) {
-                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional)];
+            foreach ($props as $propName => [$optional, $defaultType]) {
+                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional, $defaultType)];
             }
         }
     }
@@ -297,7 +303,8 @@ final class ContractParser
      * @param string $innerContent the raw source text between `@props(` and the matching `)`,
      *        exactly as it reads in the template
      *
-     * @return array<string, bool>|null prop name => has a literal default; null when the array isn't fully literal
+     * @return array<string, array{0: bool, 1: string|null}>|null prop name => [has a default, its
+     *         {@see self::defaultType()}]; null when the array isn't fully literal
      */
     private function parseProps(string $innerContent): ?array
     {
@@ -331,7 +338,7 @@ final class ContractParser
                     return null;
                 }
 
-                $props[$item->key->value] = true; // carries a default value
+                $props[$item->key->value] = [true, $this->defaultType($item->value)];
 
                 continue;
             }
@@ -340,10 +347,35 @@ final class ContractParser
                 return null;
             }
 
-            $props[$item->value->value] = false; // bare entry, no default
+            $props[$item->value->value] = [false, null]; // bare entry, no default
         }
 
         return $props;
+    }
+
+    /**
+     * The widened type of a default that is a literal, never the literal type itself: a caller
+     * passes any value for the prop, so `'lg'` as `'lg'` would turn a `match ($size)` default arm
+     * into dead code. An array expression is `array` whatever its items, since the value is one.
+     * `null`, constants, calls and any other expression stay untyped (null here).
+     */
+    private function defaultType(Node\Expr $default): ?string
+    {
+        if ($default instanceof Node\Expr\UnaryMinus
+            && ($default->expr instanceof Node\Scalar\Int_ || $default->expr instanceof Node\Scalar\Float_)
+        ) {
+            $default = $default->expr;
+        }
+
+        return match (true) {
+            $default instanceof Node\Scalar\String_ => 'string',
+            $default instanceof Node\Scalar\Int_ => 'int',
+            $default instanceof Node\Scalar\Float_ => 'float',
+            $default instanceof Node\Expr\Array_ => 'array',
+            $default instanceof Node\Expr\ConstFetch
+                && \in_array($default->name->toLowerString(), ['true', 'false'], true) => 'bool',
+            default => null,
+        };
     }
 
     /**

@@ -355,10 +355,11 @@ final class BladeBootstrapper
     }
 
     /**
-     * The contract `@var` declarations the prelude types the template body with. One whose type does
-     * not parse, or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
-     * `use` import, so the namespace-less shadow would resolve `User` to a global class the author
-     * never meant. A qualified name with or without its leading `\` resolves identically there.
+     * The contract `@var` declarations and `@props` literal defaults the prelude types the template
+     * body with. A contract whose type does not parse, or names a class without a namespace, stays
+     * `mixed`: a Blade comment cannot carry a `use` import, so the namespace-less shadow would
+     * resolve `User` to a global class the author never meant. A qualified name with or without its
+     * leading `\` resolves identically there.
      *
      * @return array<string, ContractVar>
      */
@@ -367,12 +368,13 @@ final class BladeBootstrapper
         $types = [];
 
         foreach ($contract->vars as $name => $var) {
-            // `@props` entries are `mixed`, and the prelude already types Blade's own names.
-            if ($var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
+            // A `@props` entry without a literal default is `mixed`, and the prelude already types
+            // Blade's own names.
+            if ($var->bodyType() === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
                 continue;
             }
 
-            $classNames = PreludeBuilder::classNamesIn($var->typeString);
+            $classNames = PreludeBuilder::classNamesIn($var->bodyType());
             $reason = $classNames === null ? 'its type does not parse' : null;
 
             foreach ($classNames ?? [] as $className) {
