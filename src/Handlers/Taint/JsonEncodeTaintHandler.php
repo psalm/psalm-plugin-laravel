@@ -15,10 +15,11 @@ use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
+// @todo-by https://github.com/vimeo/psalm/issues/12322 remove this handler when Psalm models json_encode() HEX flags
 /**
  * Treats `json_encode()` with literal HEX flags as escaping (Blade `@json` compiles to
  * `json_encode($x, 15, 512)`). Core does this for `htmlspecialchars()` flags in `HtmlFunctionTainter`,
- * but has no `json_encode()` branch. Delete this handler once it has one.
+ * but has no `json_encode()` branch. Delete this handler once it has one (vimeo/psalm#12322).
  *
  * - `JSON_HEX_TAG` removes html. `JSON_HEX_APOS` plus `JSON_HEX_QUOT` removes has_quotes; without
  *   HEX_APOS a `'` stays raw, without HEX_QUOT a `"` becomes `\"` (a backslash escapes nothing in HTML).

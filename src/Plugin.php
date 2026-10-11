@@ -352,6 +352,7 @@ final class Plugin implements PluginEntryPointInterface
 
         // Core Psalm has no json_encode() branch in HtmlFunctionTainter, so literal JSON_HEX_* flags (and the
         // Blade @json directive) stay tainted. Global like the handler above, hence registered next to it.
+        // @todo-by https://github.com/vimeo/psalm/issues/12322 remove this handler when Psalm models json_encode() HEX flags
         require_once __DIR__ . '/Handlers/Taint/JsonEncodeTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Taint\JsonEncodeTaintHandler::class);
 
