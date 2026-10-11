@@ -615,22 +615,7 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($contract->vars['title']->optional ?? null);
         $this->assertSame('int|null', $contract->vars['count']->typeString ?? null);
         $this->assertSame(4, $contract->vars['count']->declarationLine ?? null);
-        $this->assertTrue($contract->vars['count']->optional ?? null);
-    }
-
-    #[Test]
-    public function every_nullable_spelling_is_optional_and_a_nested_null_is_not(): void
-    {
-        $source = "<?php\n/**\n * @var ?int \$a\n * @var null|Foo \$b\n * @var array<int, null> \$c\n * @var int \$d\n * @var array<int|null> \$e\n * @var int|NULL \$f\n */\n?>\n";
-
-        $vars = $this->dataContract($source)->vars;
-
-        $this->assertTrue($vars['a']->optional ?? null);
-        $this->assertTrue($vars['b']->optional ?? null);
-        $this->assertFalse($vars['c']->optional ?? null);
-        $this->assertFalse($vars['d']->optional ?? null);
-        $this->assertFalse($vars['e']->optional ?? null, 'a null inside a generic is not a nullable declaration');
-        $this->assertTrue($vars['f']->optional ?? null);
+        $this->assertFalse($contract->vars['count']->optional ?? null, 'a nullable type is still required');
     }
 
     #[Test]
@@ -687,19 +672,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_nullable_raw_var_with_a_description_is_optional(): void
-    {
-        $source = "<?php\n/**\n * @var ?int \$a The a\n * @var int|null \$b The b\n * @var null|Foo \$c\n * @var int \$d The d\n */\n?>\n";
-
-        $vars = $this->dataContract($source)->vars;
-
-        $this->assertTrue($vars['a']->optional ?? null);
-        $this->assertTrue($vars['b']->optional ?? null);
-        $this->assertTrue($vars['c']->optional ?? null);
-        $this->assertFalse($vars['d']->optional ?? null);
-    }
-
-    #[Test]
     public function a_raw_var_without_a_name_after_its_type_declares_nothing(): void
     {
         $source = "<?php\n/**\n * @var int the count\n * @var \$name string\n * @var array<int \$x\n */\n?>\n";
@@ -728,21 +700,6 @@ final class ContractParserTest extends TestCase
 
         $this->assertSame(['doc'], \array_keys($contract->vars));
         $this->assertEqualsCanonicalizing(['block', 'line'], $contract->rawDeclaredVariables, 'consumed-only, as before');
-    }
-
-    #[Test]
-    public function a_raw_var_the_template_guards_or_types_mixed_is_optional(): void
-    {
-        $source = "<?php\n/**\n * @var string \$page\n * @var string \$flag\n * @var string \$maybe\n * @var mixed \$any\n * @var string \$required\n */\n?>\n"
-            . "@php(\$page ??= 'x')\n{{ \$flag ?? 'no' }}\n@isset(\$maybe){{ \$maybe }}@endisset\n{{ \$any }}{{ \$required }}\n";
-
-        $vars = $this->dataContract($source)->vars;
-
-        foreach (['page', 'flag', 'maybe', 'any'] as $name) {
-            $this->assertTrue($vars[$name]->optional ?? null, $name);
-        }
-
-        $this->assertFalse($vars['required']->optional ?? null);
     }
 
     #[Test]
@@ -784,47 +741,11 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_blade_comment_declaration_is_optional_on_the_same_terms_as_a_raw_one(): void
-    {
-        $source = "{{-- @var int|null \$a --}}\n{{-- @var mixed \$b --}}\n{{-- @var string \$c --}}\n{{-- @var string \$d --}}\n{{ \$c ?? 'x' }}@isset(\$d){{ \$d }}@endisset\n{{-- @var string \$e --}}\n";
-
-        $vars = $this->dataContract($source)->vars;
-
-        foreach (['a', 'b', 'c', 'd'] as $name) {
-            $this->assertTrue($vars[$name]->optional ?? null, $name);
-        }
-
-        $this->assertFalse($vars['e']->optional ?? null);
-    }
-
-    #[Test]
     public function an_upper_case_open_tag_still_declares_a_raw_contract(): void
     {
         $contract = $this->dataContract("<?PHP /** @var string \$title */ ?>\n{{ \$title }}\n");
 
         $this->assertSame(['title'], \array_keys($contract->vars));
-    }
-
-    #[Test]
-    public function guard_text_in_inert_or_comment_positions_does_not_make_a_declaration_optional(): void
-    {
-        $declare = "<?php\n/**\n * @var string \$a\n * @var string \$b\n * @var string \$c\n * @var string \$d The default is \$d ?? 'x'\n */\n?>\n";
-        $source = $declare
-            . "{{-- \$a ?? 'x' --}}\n@verbatim isset(\$b) @endverbatim\n<?php // isset(\$c)\n?>\n{{ \$a }}{{ \$b }}{{ \$c }}{{ \$d }}\n";
-
-        $vars = $this->dataContract($source)->vars;
-
-        foreach (['a', 'b', 'c', 'd'] as $name) {
-            $this->assertFalse($vars[$name]->optional ?? null, $name);
-        }
-    }
-
-    #[Test]
-    public function a_guard_in_a_php_block_makes_a_declaration_optional(): void
-    {
-        $source = "<?php /** @var int \$n */ ?>\n@php\n\$n ??= 1;\n@endphp\n{{ \$n }}\n";
-
-        $this->assertTrue($this->dataContract($source)->vars['n']->optional ?? null);
     }
 
     #[Test]
@@ -844,12 +765,37 @@ final class ContractParserTest extends TestCase
         $this->assertSame(['a', 'b'], \array_keys($this->dataContract($source)->vars));
     }
 
-    #[Test]
-    public function a_union_with_spaces_around_null_is_optional(): void
-    {
-        $vars = $this->dataContract("<?php\n/**\n * @var int | null \$count\n * @var Foo | MIXED \$m\n */\n?>\n")->vars;
 
-        $this->assertTrue($vars['count']->optional ?? null);
-        $this->assertTrue($vars['m']->optional ?? null);
+    #[Test]
+    public function only_an_equals_null_tail_makes_a_declaration_optional_in_both_spellings(): void
+    {
+        $source = "<?php\n/**\n * @var string|null \$a = null\n * @var string|null \$b = null The b, shown above \$a\n * @var string|null \$c\n * @var mixed \$d\n * @var string \$e =null\n * @var int \$f = nullable\n */\n?>\n"
+            . "{{-- @var string|null \$g = null --}}\n{{-- @var string|null \$h --}}\n{{-- @var Closure(int \$x): string \$i   =  NULL trailing --}}\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        foreach (['a', 'b', 'g', 'i'] as $name) {
+            $this->assertTrue($vars[$name]->optional ?? null, $name);
+        }
+
+        foreach (['c', 'd', 'h'] as $name) {
+            $this->assertFalse($vars[$name]->optional ?? null, "{$name}: nullable or mixed is required");
+        }
+
+        $this->assertTrue($vars['e']->optional ?? null, '`=null` without a space still reads as the marker');
+        $this->assertFalse($vars['f']->optional ?? null, '`= nullable` is not `= null`');
+        $this->assertSame('string|null', $vars['a']->typeString);
+    }
+
+    #[Test]
+    public function with_null_widens_only_what_is_not_already_nullable(): void
+    {
+        $this->assertSame('string|null', ContractParser::withNull('string'));
+        $this->assertSame('string|null', ContractParser::withNull('string|null'));
+        $this->assertSame('?int', ContractParser::withNull('?int'));
+        $this->assertSame('mixed', ContractParser::withNull('mixed'));
+        $this->assertSame('array<int|null>|null', ContractParser::withNull('array<int|null>'));
+        $this->assertSame('(Closure(int): string)|null', ContractParser::withNull('Closure(int): string'));
+        $this->assertSame('int | NULL', ContractParser::withNull('int | NULL'));
     }
 }

@@ -38,6 +38,16 @@ final class Renderer
         return view('strict', ['title' => $this->title()]);
     }
 
+    public function noteGiven(): View
+    {
+        return view('note', ['note' => $this->title()]);
+    }
+
+    public function noteOmitted(): View
+    {
+        return view('note', ['other' => 1]);
+    }
+
     public function loop(): View
     {
         return view('loop', ['items' => $this->items()]);

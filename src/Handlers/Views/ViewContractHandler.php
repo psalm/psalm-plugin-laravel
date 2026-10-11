@@ -9,6 +9,7 @@ use PhpParser\Node\Stmt;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -221,7 +222,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return;
         }
 
-        $declared = self::declaredType($var->typeString);
+        $declared = self::declaredType($var->optional ? ContractParser::withNull($var->typeString) : $var->typeString);
 
         if (!$declared instanceof Type\Union || $declared->hasMixed()) {
             return;

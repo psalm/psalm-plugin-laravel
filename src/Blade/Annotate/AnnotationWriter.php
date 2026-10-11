@@ -78,9 +78,9 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $failures = [];
         $diff = '';
 
-        foreach (self::plans() as $templatePath => $vars) {
+        foreach (self::plans() as $templatePath => [$vars, $optional]) {
             try {
-                $hunk = self::apply($templatePath, $vars, $request->dryRun);
+                $hunk = self::apply($templatePath, $vars, $request->dryRun, $optional);
             } catch (\Throwable $throwable) {
                 // One unwritable template must not take the whole pass down with it: by AfterAnalysis
                 // the run is otherwise finished, and an escaping throwable would lose every other
@@ -106,11 +106,13 @@ final class AnnotationWriter implements AfterAnalysisInterface
      * default-root name and its namespace's qualified name, and annotating the file twice would
      * report it twice. A name the two names' call sites type differently falls back to `mixed`.
      *
-     * @return array<string, array<string, string>> template path => variable name => type string
+     * @return array<string, array{0: array<string, string>, 1: array<string, true>}> template path =>
+     *         [variable name => type string, the names a closed call site omits]
      */
     private static function plans(): array
     {
         $plans = [];
+        $required = [];
 
         foreach (ViewReferenceRegistry::templates() as $viewName => $templatePath) {
             // PHP stored a numeric view name (`123.blade.php` is legal) under the int it cast the
@@ -125,10 +127,29 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 $existing = $plans[$templatePath][$name] ?? null;
 
                 $plans[$templatePath][$name] = $existing === null || $existing === $type ? $type : 'mixed';
+
+                // Optional only when every name this file is rendered under agrees.
+                if (!AnnotationCollector::isOptional((string) $viewName, $name)) {
+                    $required[$templatePath][$name] = true;
+                }
             }
         }
 
-        return $plans;
+        $result = [];
+
+        foreach ($plans as $templatePath => $vars) {
+            $optional = [];
+
+            foreach (\array_keys($vars) as $name) {
+                if (!isset($required[$templatePath][$name])) {
+                    $optional[$name] = true;
+                }
+            }
+
+            $result[$templatePath] = [$vars, $optional];
+        }
+
+        return $result;
     }
 
     /**
@@ -164,13 +185,8 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 continue;
             }
 
-            // A call site that renders this view with a provably closed data set NOT carrying the
-            // name proves the template works without it — it reads the name guarded (`$x ?? ''`,
-            // `@isset`), and declaring it would report MissingViewVariable at that call site.
-            if (AnnotationCollector::isOptional($viewName, $name)) {
-                continue;
-            }
-
+            // A name some closed call site omits is still declared, but as `T|null $x = null`
+            // (see plans()): a plain declaration would report MissingViewVariable at that call site.
             $plan[$name] = AnnotationCollector::typeFor($viewName, $name) ?? 'mixed';
         }
 
@@ -181,13 +197,14 @@ final class AnnotationWriter implements AfterAnalysisInterface
      * Declare `$vars` in the template at `$templatePath`, or work out what that would do.
      *
      * @param array<string, string> $vars variable name (without `$`) => type string
+     * @param array<string, true> $optional names to declare `= null`
      *
      * @return string|null a unified-diff hunk for what changed, null when the template already
      *                     declares every name
      *
      * @throws \RuntimeException when the template cannot be read, or written back
      */
-    public static function apply(string $templatePath, array $vars, bool $dryRun): ?string
+    public static function apply(string $templatePath, array $vars, bool $dryRun, array $optional = []): ?string
     {
         $source = @\file_get_contents($templatePath);
 
@@ -195,7 +212,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
             throw new \RuntimeException('the template could not be read');
         }
 
-        $result = TemplateAnnotator::annotate($source, $vars);
+        $result = TemplateAnnotator::annotate($source, $vars, $optional);
 
         if ($result === null) {
             return null;

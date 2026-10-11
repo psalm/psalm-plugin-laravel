@@ -211,9 +211,31 @@ Degradation is all-or-nothing: the template facts the compile pass collects (con
 A template that fails to compile (see [Known limits](#known-limits)) is skipped rather than aborting the run. Up to three failing template paths are named directly in the warning; beyond that, run with `--debug` for every individual cause.
 
 
+## Declaring view variables
+
+A template states the variables its `view()` call sites must pass with `@var` declarations. The recommended spelling is a native PHP docblock, which Psalm also reads as the type of the variable inside the template, and which IDEs understand:
+
+```blade
+<?php
+/**
+ * @var \App\Models\User $user
+ * @var string|null $subtitle = null
+ */
+?>
+```
+
+`{{-- @var \App\Models\User $user --}}` is equivalent; its type also seeds the template body. `@props([...])` entries declare too. The line is read as PHPDoc reads it: the type is the first bracket-balanced token (`array{id: int}`, `Collection<int, User>`), the name is the `$identifier` right after it, and anything after is a description, so a `$` inside the description binds nothing. A raw `@var` counts only as a tag at the start of a line in a `/** */` docblock, anywhere in a `<?php` or `@php` block.
+
+With [`validateViewData`](config.md#validateviewdata), a call site is checked against these declarations:
+
+* **Every declared variable is required**, including `T|null` and `mixed`: a nullable type means "pass `null` explicitly".
+* **`= null` right after the name makes it optional**: `@var string|null $title = null`. A call site may then omit the key, and a layout or partial that is rendered with and without a variable typically needs it. Write the type as `T|null`: a `{{-- @var T $x = null --}}` comment is widened to `T|null` in the template body, but a raw docblock is read by Psalm as written. Text after the `= null` is still description. Tools that do not know the marker (bladestan) read the declaration without it and require the key; PhpStorm keeps the type.
+
+Some names are never contracts, whichever spelling declares them, because no call site passes them: a name the template binds itself (a `@foreach` alias, an assignment target, a closure parameter, a `catch` variable), the names Blade supplies (`$errors`, `$slot`, `$attributes`, `$loop`, `$component`, `$__env`), data the framework shares into every view (`$app` and whatever a provider `share()`d before the plugin booted the application), and a `@var` in a plain `/* */` or `//` comment, which Psalm does not read. They still count as declared for [`reportUnusedViewData`](config.md#reportunusedviewdata). The missing-variable check also declines for a view with a composer or creator registered (wildcards included), for a call site inside an `Illuminate\View\Component` subclass's `render()` (its result can be chained by the caller), and for an unreadable `@props` or an open data set. A short class name (`@var Thing $thing` after a `use` in the template) is checked for presence only.
+
 ## Unused view data
 
-With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it. All three declaration spellings count: `{{-- @var --}}`, `@props`, and a raw `@var T $name` docblock in a `<?php` block or an `@php` block. The raw one is a contract wherever it sits, so [`validateViewData`](config.md#validateviewdata) checks call sites against it too, with exceptions that stay consumed-only (they count as declared here, and nothing more): a name the template binds itself (`@foreach ($members as $member)` followed by `/** @var Member $member */`, an assignment target, a closure parameter, a `catch` variable), which no call site passes; a name Blade supplies (`$errors`, `$slot`, `$attributes`, `$loop`, `$component`, `$__env`), which IDE-hinting templates declare freely, and which `{{-- @var --}}` never makes a contract either; a `@var` in a plain `/* */` or `//` comment, which Psalm does not read; and a name-first `@var $x T`. Only a `/** */` docblock counts. The line is read as PHPDoc reads it: the type is the first bracket-balanced token (`array{id: int}`, `Collection<int, User>`), the name is the `$identifier` right after it, and anything after is a description, so a `$` inside the description binds nothing. A declaration, raw or `{{-- @var --}}`, is optional, so a call site may omit it like a `@props` entry with a default, when its type includes `null` (`int|null`, `?int`) or is `mixed`, or when the template guards the name itself (`$x ?? ...`, `$x ??= ...`, `isset($x)`, `@isset($x)`). Data the framework shares into every view (`$app`, and whatever a provider `share()`d before the plugin booted the app) is never a contract in either spelling, and neither is a view with a composer or creator registered for it, wildcard ones included, for the missing-variable check. A short class name (`@var Thing $thing` after a `use` in the template) is checked for presence only: the type check declines, since the `use` alias is not part of the declaration. When `{{-- @var --}}` and a raw docblock declare the same name, the Blade comment wins.
+With [`reportUnusedViewData`](config.md#reportunusedviewdata) enabled, the plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it. All three declaration spellings count ([Declaring view variables](#declaring-view-variables)): `{{-- @var --}}`, `@props`, and a raw `@var T $name` docblock.
 
 The check declines for a call site instead of guessing, and the gate that matters most in practice is that a template whose compiled body hides which names it reads is never checked. `@props` and `@aware` both compile to `$$name` writes, which means component templates are outside this release's reach. The issue page lists the rest.
 
@@ -244,7 +266,7 @@ What it leaves alone:
 
 * a variable the template already declares, in either `{{-- @var --}}` or raw `@var` docblock form (`<?php` or `@php`). Existing `{{-- @var --}}` comments are recognised but never rewritten or migrated, and existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
 * a variable the template binds itself: a `@foreach ($items as $item)` alias is the template's own, not something the call site passes, so `$items` is declared and `$item` is not. List destructuring (`as [$id, $name]`) binds both names the same way, and so do an assignment (`@php ($heading = 'Hello')`), a closure or arrow-function parameter (`fn ($item) => ...`), a `catch` variable, and a `static`/`global` declaration. A `use ($x)` clause is not one of them: it reads the enclosing `$x`.
-* a variable some call site provably renders the template without. That call site proves the template works without it (it is read guarded, `{{ $flag ?? false }}`), and declaring it would report [MissingViewVariable](issues/MissingViewVariable.md) there.
+* nothing it declares becomes required for a call site that provably omits it: a variable some closed call site renders the template without is declared `T|null $x = null` (see [Declaring view variables](#declaring-view-variables)), with no second `|null` when the type already has one and `mixed $x = null` for `mixed`.
 * a template whose compiled body hides which names it reads. `@props` and `@aware` compile to `$$name`, so component templates are skipped whole rather than annotated in part.
 
 Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. Where the lines go, in order of preference:
@@ -257,7 +279,7 @@ A one-line header docblock (`<?php /** Header. */ ?>`) is opened out: the lines 
 
 Array shapes are written as inferred, so a single call site passing `['a', 'b']` declares `list{string, string}` and a later call site passing three elements reports a type error on correct code. Widen such a declaration by hand, or delete it and re-run once both call sites exist.
 
-Annotating changes what the other checks see, which is the point: the declarations it writes are what [`validateViewData`](config.md#validateviewdata) checks call sites against, what [`reportUnusedViewData`](config.md#reportunusedviewdata) counts as wanted, and the types the template body is analyzed with. Expect new findings on the next run, including [MissingViewVariable](issues/MissingViewVariable.md) for a variable a template reads conditionally (`{{ $flag ?? false }}`) that some call site does not pass; make the declaration nullable (`int|null`), drop it, or make the call site pass it.
+Annotating changes what the other checks see, which is the point: the declarations it writes are what [`validateViewData`](config.md#validateviewdata) checks call sites against, what [`reportUnusedViewData`](config.md#reportunusedviewdata) counts as wanted, and the types the template body is analyzed with. Expect new findings on the next run, including [MissingViewVariable](issues/MissingViewVariable.md) at a call site the annotator could not prove closed (a spread, a dynamic key) that omits a variable the template reads conditionally (`{{ $flag ?? false }}`); add `= null` to the declaration, drop it, or make the call site pass it.
 
 ## Known limits
 

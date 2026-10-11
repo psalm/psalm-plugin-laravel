@@ -40,6 +40,7 @@ final class AnnotateEndToEndTest extends TestCase
         'declared' => "{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
         'headed' => "<?php\n\ndeclare(strict_types=1);\n\n/**\n * Header.\n */\n?>\n<h1>{{ \$title }}</h1>\n",
         'strict' => "<?php declare(strict_types=1); ?>\n<h1>{{ \$title }}</h1>\n",
+        'note' => "<p>{{ \$note ?? '' }}</p>\n",
         'conflict' => "<p>{{ \$flag }}</p>\n",
         'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
@@ -120,6 +121,17 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
+    public function declares_a_key_a_closed_call_site_omits_as_nullable_with_an_equals_null_tail(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string|null \$note = null\n */\n?>\n" . self::TEMPLATES['note'],
+            $this->template('note'),
+        );
+    }
+
+    #[Test]
     public function never_declares_a_loop_alias_the_template_binds_itself(): void
     {
         // A declared `$item` makes every correct call site report MissingViewVariable: the alias is
@@ -187,7 +199,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(7, $result['changed']);
+        $this->assertCount(8, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 

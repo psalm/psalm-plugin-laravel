@@ -148,114 +148,29 @@ final class ContractParser
      * (`$errors`, `$slot`) is the IDE idiom for a variable Blade supplies. Only a `/** *\/` docblock
      * counts, the one Psalm reads a `@var` from.
      *
-     * A declaration is optional, the way a `@props` default is, when its type includes `null` or is
-     * `mixed`, or when the template guards the name itself (`$x ?? ...`, `$x ??= ...`, `isset($x)`):
-     * each states that the template copes without a value.
+     * A declaration is required unless it ends in `= null` (see {@see self::splitVar()}): a nullable
+     * or `mixed` type means "pass null explicitly", not "may be omitted".
      *
      * @param list<string> $locals names the template binds for itself, see {@see self::parseReads()}
      *
      * @return array<string, ContractVar>
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private function rawContractVars(string $source, array $locals): array
     {
         $vars = [];
 
-        foreach (self::rawDeclarations($source) as [$name, $type, $line, $isDoc]) {
+        foreach (self::rawDeclarations($source) as [$name, $type, $line, $isDoc, $optional]) {
             if ($type === null || !$isDoc || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name]) || \in_array($name, $locals, true)) {
                 continue;
             }
 
             // A later declaration of the same name wins, as in a document-order walk.
-            $vars[$name] = new ContractVar($name, $type, $line, $this->isOptional($name, $type, $source), true);
+            $vars[$name] = new ContractVar($name, $type, $line, $optional, true);
         }
 
         return $vars;
-    }
-
-    /**
-     * Whether a declaration states the template copes without the value, the way a `@props` default
-     * does: its type includes `null` or is `mixed`, or the template guards the name itself.
-     *
-     * @psalm-mutation-free
-     */
-    private function isOptional(string $name, string $type, string $source): bool
-    {
-        foreach ($this->topLevelAlternatives($type) as $alternative) {
-            $alternative = \trim($alternative);
-
-            if (\in_array(\strtolower($alternative), ['null', 'mixed'], true) || \str_starts_with($alternative, '?')) {
-                return true;
-            }
-        }
-
-        return $this->isGuarded($name, $source);
-    }
-
-    /**
-     * Whether the template's live code guards the name (`$x ?? ...`, `$x ??= ...`, `isset($x)`).
-     * Blade comments, `@verbatim` bodies and PHP comments are blanked first: a `@var` description
-     * that mentions `$title ?? 'x'` is not a guard.
-     *
-     * Not scope-aware, on purpose: a guard on a same-named closure parameter or local also counts.
-     * That over-approximation only errs toward silence (the name stays optional).
-     *
-     * @psalm-mutation-free
-     */
-    private function isGuarded(string $name, string $source): bool
-    {
-        if (!\str_contains($source, '??') && !\str_contains($source, 'isset')) {
-            return false;
-        }
-
-        $quoted = \preg_quote($name, '/');
-        $end = '(?![a-zA-Z0-9_\x80-\xff])';
-
-        return \preg_match("/\\\${$quoted}{$end}\\s*\\?\\?|isset\\s*\\([^)]*\\\${$quoted}{$end}/", $this->blankPhpComments($source)) === 1;
-    }
-
-    /**
-     * $source with inert Blade text and the contents of every PHP comment replaced by spaces
-     * (newlines kept).
-     *
-     * @psalm-pure
-     */
-    private function blankPhpComments(string $source): string
-    {
-        $source = MarkerPrePass::blankInertText($source);
-        $ranges = [];
-
-        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
-            // `@php` is a directive, not PHP: tokenize its body behind an open tag. The six-byte tag
-            // stands in for the four-byte directive name, so offsets shift by two.
-            if (\str_starts_with($text, '@php')) {
-                $code = '<?php ' . \substr($text, 4);
-                $cursor = $offset - 2;
-            } elseif (\stripos($text, '<?php') === 0) {
-                $code = $text;
-                $cursor = $offset;
-            } else {
-                continue;
-            }
-
-            // Tokenizing does not parse; the @ is for the warning an unterminated string emits.
-            foreach (@\token_get_all($code) as $token) {
-                if (!\is_array($token)) {
-                    ++$cursor;
-
-                    continue;
-                }
-
-                if ($token[0] === \T_DOC_COMMENT || $token[0] === \T_COMMENT) {
-                    $ranges[] = [$token[1], $cursor];
-                }
-
-                $cursor += \strlen($token[1]);
-            }
-        }
-
-        return MarkerPrePass::blankRanges($source, $ranges);
     }
 
     /**
@@ -272,7 +187,11 @@ final class ContractParser
      * Public because {@see Annotate\TemplateAnnotator} must bind the same name the contract does:
      * one that read it differently would append a duplicate declaration for it, forever.
      *
-     * @return array{0: string, 1: string}|null name (without `$`), type string
+     * A description that starts with `= null` marks the variable optional, the one way a template says
+     * a call site may omit it: `@var string|null $title = null`. Anything after the `= null` is
+     * still description.
+     *
+     * @return array{0: string, 1: string, 2: bool}|null name (without `$`), type string, optional
      *
      * @psalm-pure
      */
@@ -287,14 +206,51 @@ final class ContractParser
         }
 
         if (\count($parts) > 1 && \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) === 1) {
-            return [$name[1], $parts[0]];
+            return [$name[1], $parts[0], \preg_match('/^=\s*null(?![a-zA-Z0-9_\x80-\xff])/i', \implode(' ', \array_slice($parts, 2))) === 1];
         }
 
-        if ($lenient && \preg_match('/^(.+)\s+\$(' . self::IDENTIFIER . ')\z/', $declaration, $last) === 1) {
-            return [$last[2], \rtrim($last[1])];
+        if ($lenient && \preg_match('/^(.+)\s+\$(' . self::IDENTIFIER . ')(\s*=\s*null(?![a-zA-Z0-9_\x80-\xff]).*)?\z/is', $declaration, $last) === 1) {
+            return [$last[2], \rtrim($last[1]), isset($last[3])];
         }
 
         return null;
+    }
+
+    /**
+     * `$type` with `null` added, for an optional declaration: `T $x = null` reads as `T|null`. A type
+     * that is already nullable, or `mixed`, is returned as is; a callable type is parenthesised so the
+     * `|null` does not become part of its return type.
+     *
+     * @psalm-pure
+     */
+    public static function withNull(string $type): string
+    {
+        $depth = 0;
+        $current = '';
+        $alternatives = [];
+
+        foreach (\str_split($type) as $char) {
+            $depth += \strpbrk($char, '([{<') !== false ? 1 : (\strpbrk($char, ')]}>') !== false ? -1 : 0);
+
+            if ($char === '|' && $depth === 0) {
+                $alternatives[] = $current;
+                $current = '';
+            } else {
+                $current .= $char;
+            }
+        }
+
+        $alternatives[] = $current;
+
+        foreach ($alternatives as $alternative) {
+            $alternative = \strtolower(\trim($alternative));
+
+            if ($alternative === 'null' || $alternative === 'mixed' || \str_starts_with($alternative, '?')) {
+                return $type;
+            }
+        }
+
+        return (\str_contains($type, '(') ? "({$type})" : $type) . '|null';
     }
 
     /**
@@ -302,8 +258,8 @@ final class ContractParser
      * {@see self::splitVar()}). A name-first `@var $x T` still declares `$x`, with a null type: it is
      * no contract, but a name the template states, which the annotator must not add again.
      *
-     * @return list<array{0: string, 1: string|null, 2: int, 3: bool}> name, type string (null when
-     *         name-first), 1-based line, whether it sits in a `/** *\/` docblock
+     * @return list<array{0: string, 1: string|null, 2: int, 3: bool, 4: bool}> name, type string (null when
+     *         name-first), 1-based line, whether it sits in a `/** *\/` docblock, whether it ends in `= null`
      *
      * @psalm-pure
      */
@@ -321,43 +277,14 @@ final class ContractParser
                 $at = $line + SourceLines::breaksIn($comment, 0, $match[0][1]);
 
                 if ($declared !== null) {
-                    $declarations[] = [$declared[0], $declared[1], $at, $isDoc];
+                    $declarations[] = [$declared[0], $declared[1], $at, $isDoc, $declared[2]];
                 } elseif (\preg_match('/^\$(' . self::IDENTIFIER . ')(?![a-zA-Z0-9_\x80-\xff])/', $match[1][0], $first) === 1) {
-                    $declarations[] = [$first[1], null, $at, $isDoc];
+                    $declarations[] = [$first[1], null, $at, $isDoc, false];
                 }
             }
         }
 
         return $declarations;
-    }
-
-    /**
-     * The top-level `|` alternatives of a type string.
-     *
-     * @return non-empty-list<string>
-     *
-     * @psalm-pure
-     */
-    private function topLevelAlternatives(string $typeString): array
-    {
-        $parts = [];
-        $current = '';
-        $depth = 0;
-
-        foreach (\str_split($typeString) as $char) {
-            $depth += \strpbrk($char, '([{<') !== false ? 1 : (\strpbrk($char, ')]}>') !== false ? -1 : 0);
-
-            if ($char === '|' && $depth === 0) {
-                $parts[] = $current;
-                $current = '';
-            } else {
-                $current .= $char;
-            }
-        }
-
-        $parts[] = $current;
-
-        return $parts;
     }
 
     /**
@@ -421,7 +348,7 @@ final class ContractParser
 
             if ($declared !== null && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$declared[0]])) {
                 $line = 1 + SourceLines::breaksIn($source, 0, $offset);
-                $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, $this->isOptional($declared[0], $declared[1], $source))];
+                $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, $declared[2])];
             }
         }
 

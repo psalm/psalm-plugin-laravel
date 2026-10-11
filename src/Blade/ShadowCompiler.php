@@ -50,7 +50,10 @@ final class ShadowCompiler
 
         $prelude = $this->preludeBuilder->build(
             $compiled,
-            \array_map(static fn(ContractVar $var): string => $var->typeString, $contractVars),
+            \array_map(
+                static fn(ContractVar $var): string => $var->optional ? ContractParser::withNull($var->typeString) : $var->typeString,
+                $contractVars,
+            ),
             $source,
         );
         $content = $prelude . $compiled;

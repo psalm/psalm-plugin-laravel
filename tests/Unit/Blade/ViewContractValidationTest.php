@@ -358,7 +358,7 @@ final class ViewContractValidationTest extends TestCase
     }
 
     #[Test]
-    public function a_raw_var_for_a_blade_owned_name_a_guarded_name_or_a_plain_comment_is_no_contract(): void
+    public function a_raw_var_for_a_blade_owned_name_or_in_a_plain_comment_is_no_contract(): void
     {
         $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawNotContracts.php'));
     }

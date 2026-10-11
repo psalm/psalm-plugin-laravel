@@ -216,6 +216,25 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function an_existing_equals_null_declaration_in_either_spelling_is_already_declared(): void
+    {
+        $raw = "<?php\n/**\n * @var string|null \$a = null The a\n */\n?>\n<p>{{ \$a }}</p>\n";
+        $blade = "{{-- @var string|null \$b = null --}}\n<p>{{ \$b }}</p>\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($raw, ['a' => 'string'], ['a' => true]));
+        $this->assertNull(TemplateAnnotator::annotate($blade, ['b' => 'string'], ['b' => true]));
+    }
+
+    #[Test]
+    public function writes_an_optional_name_as_nullable_with_an_equals_null_tail(): void
+    {
+        $result = TemplateAnnotator::annotate("<p>x</p>\n", ['a' => 'string', 'b' => 'int|null', 'c' => 'int'], ['a' => true, 'b' => true]);
+
+        $this->assertNotNull($result);
+        $this->assertSame(['@var string|null $a = null', '@var int|null $b = null', '@var int $c'], $result[2]);
+    }
+
+    #[Test]
     public function skips_a_name_already_declared_in_an_at_php_block(): void
     {
         $source = "@php\n/** @var \\App\\Models\\User \$user */\n@endphp\n<h1>{{ \$user->name }}</h1>\n";

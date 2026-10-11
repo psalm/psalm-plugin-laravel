@@ -16,13 +16,13 @@ A template declares its variables three ways, all read by [Blade template analys
 @props(['title' => 'Untitled', 'subtitle'])
 ```
 
-A raw `@var` declaring a nullable or `mixed` type, or one for a name the template guards (`??`, `??=`, `isset()`), is optional, so a call site may omit it. A name Blade supplies (`$errors`, `$slot`) is never a declaration. A raw `@var` for a name the template binds itself (a `@foreach` alias, an assignment target) is not a declaration at all.
+Every declared variable is required, including `T|null` and `mixed` (a nullable type means "pass `null` explicitly"). A declaration ending in `= null` is optional: `@var string|null $subtitle = null`. A name Blade supplies (`$errors`, `$slot`) or the template binds itself (a `@foreach` alias, an assignment target) is not a declaration. See [Declaring view variables](../blade.md#declaring-view-variables).
 
 ## Why this is a problem
 
-The variable is undefined at render time. Blade does not fail loudly for it: `{{ $subtitle }}` renders
-an empty string under the default error handler, so the page ships with a hole in it instead of an
-exception anyone would notice.
+The variable is undefined at render time. Laravel's `HandleExceptions` turns the undefined-variable
+warning into an `ErrorException` in every environment, so rendering `{{ $subtitle }}` fails instead of
+producing an empty string.
 
 ## Examples
 
@@ -47,7 +47,7 @@ view('profile', ['name' => 'Ada'])->with('age', 36);
 ## How to fix
 
 1. Pass the declared variable at the call site.
-2. Give it a default in the template's `@props([...])`, or a nullable type (`int|null`), if it is genuinely optional.
+2. Declare it optional if it genuinely is: give it a default in the template's `@props([...])`, or end the declaration with `= null` (`@var string|null $subtitle = null`).
 3. Drop the declaration if the template no longer reads that variable.
 
 ## Configuration
@@ -68,7 +68,7 @@ The check declines rather than guess. It is silent when:
 
 - The view name is not a string literal, or is namespaced (`pkg::view`).
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
-- The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration is optional: its type includes `null` or is `mixed`, or the template guards the name (`$x ?? ...`, `$x ??= ...`, `isset($x)`, `@isset($x)`).
+- The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
 - A view composer or creator is registered for the view, wildcard ones (`composing: *`, `admin.*`) included: it can add any data, so the call site's data set proves nothing.
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.

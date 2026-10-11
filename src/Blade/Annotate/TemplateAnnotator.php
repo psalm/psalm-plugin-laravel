@@ -49,6 +49,7 @@ final class TemplateAnnotator
 
     /**
      * @param array<string, string> $vars variable name (without `$`) => type string
+     * @param array<string, true> $optional names a closed call site omits: declared `T|null $x = null`
      *
      * @return array{0: string, 1: int, 2: list<string>}|null the annotated source, the 1-based line
      *         the first inserted declaration lands on, and the declarations inserted; null when the
@@ -56,7 +57,7 @@ final class TemplateAnnotator
      *
      * @psalm-pure
      */
-    public static function annotate(string $source, array $vars): ?array
+    public static function annotate(string $source, array $vars, array $optional = []): ?array
     {
         $declared = self::declaredNames($source);
         $missing = \array_diff_key($vars, $declared);
@@ -72,7 +73,9 @@ final class TemplateAnnotator
         $declarations = [];
 
         foreach ($missing as $name => $type) {
-            $declarations[] = "@var {$type} \${$name}";
+            $declarations[] = isset($optional[$name])
+                ? '@var ' . ContractParser::withNull($type) . " \${$name} = null"
+                : "@var {$type} \${$name}";
         }
 
         $header = self::leadingPhpBlock($source, $bom);

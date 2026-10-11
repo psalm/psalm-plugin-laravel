@@ -185,12 +185,27 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function leaves_out_a_name_a_provably_closed_call_site_does_not_pass(): void
+    public function declares_a_name_a_provably_closed_call_site_does_not_pass_as_optional(): void
     {
         AnnotationCollector::record('home', ['title' => Type::getString()], true);
         AnnotationCollector::record('home', [], true);
 
-        $this->assertSame([], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
+        $this->assertSame(['title' => 'string'], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
+        $this->assertTrue(AnnotationCollector::isOptional('home', 'title'));
+    }
+
+    #[Test]
+    public function writes_an_optional_name_as_a_nullable_declaration_with_an_equals_null_tail_once(): void
+    {
+        $path = $this->template("<h1>{{ \$title }}</h1>\n");
+
+        AnnotationWriter::apply($path, ['title' => 'string', 'n' => 'int|null', 'm' => 'mixed'], false, ['title' => true, 'n' => true, 'm' => true]);
+
+        $this->assertSame(
+            "<?php\n/**\n * @var mixed \$m = null\n * @var int|null \$n = null\n * @var string|null \$title = null\n */\n?>\n<h1>{{ \$title }}</h1>\n",
+            \file_get_contents($path),
+        );
+        $this->assertNull(AnnotationWriter::apply($path, ['title' => 'string'], false, ['title' => true]), 'idempotent');
     }
 
     #[Test]

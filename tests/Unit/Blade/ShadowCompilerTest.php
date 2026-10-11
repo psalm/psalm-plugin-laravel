@@ -328,6 +328,19 @@ final class ShadowCompilerTest extends TestCase
         $this->assertSame(2, \substr_count($result->contents, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
     }
 
+    #[Test]
+    public function an_optional_contract_var_is_widened_with_null_in_the_prelude(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "{{-- @var string \$title = null --}}\n{{ \$title }}\n",
+            ['title' => new ContractVar('title', 'string', 1, true)],
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('/** @var string|null $title */;', $result->contents);
+    }
+
     /** Psalm reports a contract type's own fault (an unknown class) on the prelude line declaring it. */
     #[Test]
     public function a_contract_vars_prelude_line_maps_to_its_declaration_line(): void
