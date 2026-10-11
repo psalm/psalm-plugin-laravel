@@ -25,6 +25,7 @@ declare(strict_types=1);
  * from a privileged workflow, so every output except `reply` is built only from
  * registry values, and `reply` echoes a user token only when it is plain
  * [a-z0-9_-] (a flag: the same behind a leading `-`/`--`, plus `.` and `=`).
+ * The comment is lowercased, so a flag matches its declared spelling case-insensitively.
  * Exit 2 = malformed registry.
  */
 
@@ -58,7 +59,7 @@ if (!isset($groups['default'])) {
 /** @var array<string, string> $flags flag => description */
 $flags = [];
 foreach ((array) ($registry['flags'] ?? []) as $flag => $description) {
-    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[a-z0-9._-]{1,40})?$/', $flag) !== 1) {
+    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[A-Za-z0-9._=-]{1,60})?$/', $flag) !== 1) {
         $fail('invalid flag: ' . var_export($flag, true));
     }
     $flags[$flag] = (string) $description;
@@ -117,7 +118,7 @@ if ($tokens === ['help']) {
         '',
         '`/psalm-delta [token ...]` benchmarks the `default` group plus each token: a group tag or an app name, separated by spaces or commas. `/psalm-delta all` runs every app; `/psalm-delta help` shows this message.',
         '',
-        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade`. A flag the base plugin does not know crashes the base side.',
+        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --plugin-option=blade=true`. A flag the base plugin does not know crashes the base side.',
         '',
         '| Group | Description | Apps |',
         '|---|---|---|',
@@ -144,8 +145,9 @@ $isFlag = static fn(string $token): bool => str_starts_with($token, '-');
 $runFlags = array_values(array_filter($tokens, $isFlag));
 $tokens = array_values(array_filter($tokens, static fn(string $token): bool => !$isFlag($token)));
 
+$declared = array_combine(array_map(strtolower(...), array_keys($flags)), array_keys($flags));
 $valid = [...array_keys($groups), ...array_keys($apps), 'all'];
-$unknown = array_values(array_unique([...array_diff($tokens, $valid), ...array_diff($runFlags, array_keys($flags))]));
+$unknown = array_values(array_unique([...array_diff($tokens, $valid), ...array_diff($runFlags, array_keys($declared))]));
 if ($unknown !== []) {
     $lines = [];
     // Capped so a huge comment can't push the reply past GitHub's 65,536-char limit.
@@ -155,7 +157,7 @@ if ($unknown !== []) {
             continue;
         }
         if ($isFlag($token)) {
-            if (preg_match('/^--?[a-z0-9][a-z0-9_.=-]{0,39}$/', $token) !== 1) {
+            if (preg_match('/^--?[a-z0-9][a-z0-9_.=-]{0,59}$/', $token) !== 1) {
                 $lines[] = '- a flag with characters outside `[a-z0-9_.=-]` (not echoed)';
                 continue;
             }
@@ -189,7 +191,8 @@ if ($unknown !== []) {
     ]) . "\n");
 }
 
-// Every flag here matched a declared key exactly, so it is a registry value.
+// Every flag here matched a declared key, so the declared spelling is a registry value.
+$runFlags = array_map(static fn(string $flag): string => $declared[$flag], $runFlags);
 if (in_array('all', $tokens, true)) {
     $emit('run', array_keys($apps), 'all', runFlags: $runFlags);
 }

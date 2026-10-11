@@ -5,165 +5,137 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Config;
 
 /**
- * Per-run plugin setting overrides: validated `KEY=VALUE` tokens, typed by the {@see Setting} schema.
- *
- * Two layers exist, merged CLI over env by {@see self::over()}:
- *  - env: `PSALM_LARAVEL_OPTIONS`, whitespace-separated tokens (a value cannot contain whitespace);
- *  - CLI: `psalm-laravel analyze --plugin-option`, handed to the child psalm as a JSON list of tokens
- *    in a private variable, because `vendor/bin/psalm` rejects unknown flags and JSON keeps whitespace.
+ * Per-run plugin setting overrides, applied as a patch to a copy of the plugin's psalm.xml element so
+ * {@see PluginConfig::fromXml()} stays the only reader and validator of values.
+ * A key mirrors the XML: `foo=v` sets `<foo value="v"/>`, `foo.bar=v` sets `<foo bar="v"/>`.
  *
  * @internal
- *
- * @psalm-immutable
  */
-final readonly class PluginOverrides
+final class PluginOverrides
 {
-    /** A real process variable, not a Laravel `.env` entry: it is read before the app boots. */
+    /**
+     * Whitespace-separated `KEY=VALUE` tokens. `psalm-laravel analyze` appends its `--plugin-option`
+     * values here for the child psalm, because `vendor/bin/psalm` rejects unknown flags.
+     * A real process variable, not a Laravel `.env` entry: it is read before the app boots.
+     */
     public const ENV_VAR = 'PSALM_LARAVEL_OPTIONS';
 
-    public const CLI_ENV_VAR = 'PSALM_LARAVEL_CLI_OPTIONS';
-
-    /** @param array<string, bool|string|list<string>> $values */
-    private function __construct(private array $values) {}
-
-    /** @psalm-pure */
-    public static function none(): self
-    {
-        return new self([]);
-    }
+    /** `configDirectory` is absent: it is a list of project layout facts, not a per-run switch. */
+    public const KEYS = [
+        'modelProperties.columnFallback',
+        'resolveDynamicWhereClauses',
+        'resolveConfigReturnTypes',
+        'reportImplicitQueryBuilderCalls',
+        'findMissingTranslations',
+        'findMissingViews',
+        'findUnconfiguredFilesystemDisks',
+        'findUnregisteredRouteNames',
+        'findSerializedQueuedModels',
+        'findOctaneIncompatibleBinding',
+        'findPromptInjection',
+        'blade',
+        'blade.cacheDir',
+        'blade.validateViewData',
+        'blade.reportUnusedViewData',
+        'blade.reportMixedIssues',
+        'experimental',
+        'failOnInternalError',
+    ];
 
     /**
-     * Every token is validated, including ones a later repeat shadows, so a typo never hides.
-     * A repeated scalar key is last-wins; a list key accumulates within the layer.
+     * Checks key names and token shape only; values are checked by fromXml(). A repeated key is
+     * last-wins, but every token is checked, so a shadowed typo still fails.
      *
-     * @param list<string> $tokens
-     * @param string       $origin Names the source in error messages.
+     * @return array<string, non-empty-string>
      *
      * @throws \InvalidArgumentException
      *
      * @psalm-pure
      */
-    public static function parse(array $tokens, string $origin): self
+    public static function parse(string $raw): array
     {
-        $values = [];
-        $lists = [];
+        $overrides = [];
+        $tokens = \preg_split('/\s+/', $raw, -1, \PREG_SPLIT_NO_EMPTY);
 
-        foreach ($tokens as $token) {
+        foreach ($tokens === false ? [] : $tokens as $token) {
             [$key, $value] = \explode('=', $token, 2) + [1 => ''];
 
             if ($key === '' || $value === '') {
-                throw new \InvalidArgumentException("{$origin}: token '{$token}' is invalid: expected KEY=VALUE with a non-empty value.");
+                throw new \InvalidArgumentException("Plugin option '{$token}' is invalid: expected KEY=VALUE with a non-empty value.");
             }
 
-            $setting = Setting::find($key);
-
-            if (!$setting instanceof Setting) {
-                $supported = \implode(', ', \array_map(static fn(Setting $setting): string => $setting->key, Setting::all()));
-
-                throw new \InvalidArgumentException("{$origin}: unknown key '{$key}'. Supported keys: {$supported}.");
+            if (!\in_array($key, self::KEYS, true)) {
+                throw new \InvalidArgumentException("Unknown plugin option '{$key}'. Supported keys: " . \implode(', ', self::KEYS) . '.');
             }
 
-            if ($setting->values !== [] && !\in_array($value, $setting->values, true)) {
-                $valid = \implode(', ', \array_map(static fn(string $valid): string => "'{$valid}'", $setting->values));
-
-                throw new \InvalidArgumentException("{$origin}: invalid value '{$value}' for key '{$key}'. Valid values: {$valid}.");
-            }
-
-            if ($setting->type === SettingType::PathList) {
-                $lists[$key][] = $value;
-            } else {
-                $values[$key] = $setting->type === SettingType::Bool ? $value === 'true' : $value;
-            }
+            $overrides[$key] = $value;
         }
 
-        return new self($values + $lists);
+        return $overrides;
     }
 
     /**
-     * The user grammar of `PSALM_LARAVEL_OPTIONS`. A value starting with a double quote is rejected
-     * so quoting can be added later without changing the meaning of existing values.
+     * @param array<string, non-empty-string> $overrides From {@see self::parse()}.
      *
-     * @throws \InvalidArgumentException
-     *
-     * @psalm-pure
+     * @throws \InvalidArgumentException A setting is invalid, in the XML or in an override.
      */
-    public static function fromEnv(?string $raw): self
+    public static function configure(?\SimpleXMLElement $config, array $overrides): PluginConfig
     {
-        $split = \preg_split('/\s+/', $raw ?? '', -1, \PREG_SPLIT_NO_EMPTY);
-        $tokens = $split === false ? [] : $split;
+        if ($overrides === []) {
+            return PluginConfig::fromXml($config);
+        }
 
-        foreach ($tokens as $token) {
-            if (\preg_match('/^[^=]*="/', $token) === 1) {
-                throw new \InvalidArgumentException(
-                    self::ENV_VAR . ": token '{$token}' starts its value with a double quote, which is reserved: values cannot contain whitespace here. "
-                    . 'Set it in psalm.xml, or pass `psalm-laravel analyze --plugin-option`.',
-                );
+        try {
+            return PluginConfig::fromXml(self::patch($config, $overrides));
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $applied = \implode(' ', \array_map(
+                static fn(string $key, string $value): string => "{$key}={$value}",
+                \array_keys($overrides),
+                $overrides,
+            ));
+
+            throw new \InvalidArgumentException("{$invalidArgumentException->getMessage()} (plugin options in effect: {$applied})", 0, $invalidArgumentException);
+        }
+    }
+
+    /** @param non-empty-array<string, non-empty-string> $overrides */
+    private static function patch(?\SimpleXMLElement $config, array $overrides): \SimpleXMLElement
+    {
+        // A fresh root with the children copied, never a clone: Psalm passes `<pluginClass>->children()`,
+        // whose DOM node is its first child. Copies keep their namespace, which property reads ignore.
+        $document = new \DOMDocument();
+        $root = $document->appendChild($document->createElement('pluginClass'));
+
+        /** @psalm-var iterable<\SimpleXMLElement> $children */
+        $children = $config ?? [];
+
+        foreach ($children as $child) {
+            $root->appendChild($document->importNode(\dom_import_simplexml($child), true));
+        }
+
+        $patched = \simplexml_import_dom($root) ?? throw new \LogicException('Cannot import the plugin config.');
+
+        foreach ($overrides as $key => $value) {
+            [$name, $attribute] = \explode('.', $key, 2) + [1 => 'value'];
+
+            /** @psalm-var \SimpleXMLElement $matches */
+            $matches = $patched->{$name};
+            // The first match, as PluginConfig reads it.
+            $element = $matches[0];
+
+            if ($element === null) {
+                $element = $patched->addChild($name) ?? throw new \LogicException("Cannot add <{$name}>.");
+
+                // `<blade />` enables Blade by its presence: a sub-setting alone must leave it off.
+                if ($name === 'blade') {
+                    $element->addAttribute('value', 'false');
+                }
             }
+
+            unset($element[$attribute]);
+            $element->addAttribute($attribute, $value);
         }
 
-        return self::parse($tokens, self::ENV_VAR);
-    }
-
-    /**
-     * Reads both layers from the process environment (pass `getenv()`); the one place env is touched.
-     *
-     * @param array<string, string> $env
-     *
-     * @throws \InvalidArgumentException
-     */
-    public static function fromEnvironment(array $env): self
-    {
-        $envLayer = self::fromEnv($env[self::ENV_VAR] ?? null);
-
-        if (!isset($env[self::CLI_ENV_VAR])) {
-            return $envLayer;
-        }
-
-        /** @psalm-var mixed $decoded Anything but a list of strings is rejected below. */
-        $decoded = \json_decode($env[self::CLI_ENV_VAR], true);
-        $tokens = [];
-
-        foreach (\is_array($decoded) && \array_is_list($decoded) ? $decoded : [null] as $token) {
-            if (!\is_string($token)) {
-                throw new \InvalidArgumentException(self::CLI_ENV_VAR . ' is internal to `psalm-laravel analyze` and must hold a JSON list of KEY=VALUE strings.');
-            }
-
-            $tokens[] = $token;
-        }
-
-        return $envLayer->over(self::parse($tokens, '--plugin-option'));
-    }
-
-    /** Keys the higher layer sets replace the same keys here; a list is replaced wholesale, never merged. */
-    public function over(self $higher): self
-    {
-        return new self(\array_replace($this->values, $higher->values));
-    }
-
-    public function has(string $key): bool
-    {
-        return isset($this->values[$key]);
-    }
-
-    public function bool(string $key): ?bool
-    {
-        $value = $this->values[$key] ?? null;
-
-        return \is_bool($value) ? $value : null;
-    }
-
-    public function string(string $key): ?string
-    {
-        $value = $this->values[$key] ?? null;
-
-        return \is_string($value) ? $value : null;
-    }
-
-    /** @return list<string>|null */
-    public function list(string $key): ?array
-    {
-        $value = $this->values[$key] ?? null;
-
-        return \is_array($value) ? $value : null;
+        return $patched;
     }
 }

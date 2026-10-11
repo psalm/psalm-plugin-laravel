@@ -16,7 +16,7 @@
 #     --plugin-base /path/plugin-base --plugin-head /path/plugin-head \
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
 #     [--project-dir app] [--before-install 'composer update foo --no-interaction'] \
-#     [--psalm-args '--php-version=8.0'] [--flags '--blade'] \
+#     [--psalm-args '--php-version=8.0'] [--flags '--find-dead-code'] \
 #     [--app-src /cache/monica-src]
 #
 # Output (per side, <label> in {base-label, head-label}):
@@ -77,7 +77,7 @@ export COMPOSER_MEMORY_LIMIT=-1
 # Optional extra CLI args, split on whitespace into arrays so each token is
 # passed as a separate argument: --psalm-args is the registry's per-app Psalm
 # args (e.g. --php-version=8.0), --flags the run-wide `/psalm-delta` flags (e.g.
-# --blade). `=` is not in IFS, so --php-version=8.0 stays one token. `read -ra`
+# --find-dead-code). `=` is not in IFS, so --php-version=8.0 stays one token. `read -ra`
 # returns 0 even on empty input (set -e safe); the arrays are expanded with the
 # bash-3.2-safe ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
 read -ra PSALM_EXTRA <<< "$PSALM_ARGS"
@@ -354,8 +354,7 @@ run_side() {
     # schema into head.
     #
     # Through the side's own `psalm-laravel analyze`, not vendor/bin/psalm: it
-    # consumes plugin options Psalm rejects (--blade/--no-blade, --experimental,
-    # --no-migrations) and forwards
+    # consumes plugin options Psalm rejects (--plugin-option) and forwards
     # everything else to Psalm verbatim, with Psalm's exit code and streams.
     (
         cd "$app_dir"

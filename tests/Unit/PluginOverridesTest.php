@@ -8,221 +8,148 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Config\ColumnFallback;
+use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Config\PluginOverrides;
-use Psalm\LaravelPlugin\Config\Setting;
-use Psalm\LaravelPlugin\Config\SettingType;
 
 #[CoversClass(PluginOverrides::class)]
-#[CoversClass(Setting::class)]
-#[CoversClass(SettingType::class)]
 final class PluginOverridesTest extends TestCase
 {
     #[Test]
-    public function the_schema_lists_exactly_the_documented_keys(): void
+    public function parse_splits_on_whitespace_and_a_repeated_key_is_last_wins(): void
     {
-        $keys = \array_map(static fn(Setting $setting): string => $setting->key, Setting::all());
-
-        // cachePath is deliberately absent: it only places the plugin's own cache files.
-        $this->assertSame([
-            'modelProperties.columnFallback',
-            'resolveDynamicWhereClauses',
-            'resolveConfigReturnTypes',
-            'reportImplicitQueryBuilderCalls',
-            'configDirectory',
-            'findMissingTranslations',
-            'findMissingViews',
-            'findUnconfiguredFilesystemDisks',
-            'findUnregisteredRouteNames',
-            'findSerializedQueuedModels',
-            'findOctaneIncompatibleBinding',
-            'findPromptInjection',
-            'blade',
-            'blade.cacheDir',
-            'blade.validateViewData',
-            'blade.reportUnusedViewData',
-            'blade.reportMixedIssues',
-            'experimental',
-            'failOnInternalError',
-        ], $keys);
-    }
-
-    #[Test]
-    public function every_schema_key_accepts_a_value_of_its_type(): void
-    {
-        foreach (Setting::all() as $setting) {
-            $sample = match ($setting->type) {
-                SettingType::Bool => 'true',
-                SettingType::Enum => $setting->values[0],
-                SettingType::Path, SettingType::PathList => 'some/dir',
-            };
-
-            $overrides = PluginOverrides::parse(["{$setting->key}={$sample}"], '--plugin-option');
-
-            $this->assertTrue($overrides->has($setting->key), $setting->key);
-        }
-    }
-
-    #[Test]
-    public function values_are_typed_by_the_schema(): void
-    {
-        $overrides = PluginOverrides::parse([
-            'blade=false',
-            'findOctaneIncompatibleBinding=true',
-            'modelProperties.columnFallback=none',
-            'blade.cacheDir=/tmp/blade shadows',
-        ], '--plugin-option');
-
-        $this->assertFalse($overrides->bool('blade'));
-        $this->assertTrue($overrides->bool('findOctaneIncompatibleBinding'));
-        $this->assertSame('none', $overrides->string('modelProperties.columnFallback'));
-        $this->assertSame('/tmp/blade shadows', $overrides->string('blade.cacheDir'));
-        $this->assertNull($overrides->bool('experimental'));
-        $this->assertFalse($overrides->has('experimental'));
-    }
-
-    #[Test]
-    public function a_value_keeps_everything_after_the_first_equals_sign(): void
-    {
-        $this->assertSame('a=b=c', PluginOverrides::parse(['blade.cacheDir=a=b=c'], 'x')->string('blade.cacheDir'));
-    }
-
-    #[Test]
-    public function a_repeated_scalar_key_last_wins_and_a_list_key_accumulates(): void
-    {
-        $overrides = PluginOverrides::parse([
-            'blade=true', 'blade=false',
-            'configDirectory=a', 'configDirectory=packages/*/config',
-        ], '--plugin-option');
-
-        $this->assertFalse($overrides->bool('blade'));
-        $this->assertSame(['a', 'packages/*/config'], $overrides->list('configDirectory'));
-    }
-
-    #[Test]
-    public function every_token_is_validated_even_when_a_later_repeat_shadows_it(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        PluginOverrides::parse(['blade=maybe', 'blade=true'], '--plugin-option');
-    }
-
-    #[Test]
-    public function a_higher_layer_replaces_a_list_wholesale_and_only_the_keys_it_sets(): void
-    {
-        $env = PluginOverrides::parse(['configDirectory=a', 'configDirectory=b', 'blade=true', 'experimental=true'], 'env');
-        $cli = PluginOverrides::parse(['configDirectory=c', 'blade=false'], 'cli');
-
-        $merged = $env->over($cli);
-
-        $this->assertSame(['c'], $merged->list('configDirectory'));
-        $this->assertFalse($merged->bool('blade'));
-        $this->assertTrue($merged->bool('experimental'));
-        $this->assertSame(['a', 'b'], $env->list('configDirectory'), 'merging must not mutate the lower layer');
+        $this->assertSame([], PluginOverrides::parse(" \t\n "));
+        $this->assertSame(
+            ['blade' => 'false', 'blade.cacheDir' => 'a=b'],
+            PluginOverrides::parse("blade=true\tblade.cacheDir=a=b  blade=false"),
+        );
     }
 
     /** @return iterable<string, array{string, string}> */
-    public static function invalidTokens(): iterable
+    public static function malformedTokens(): iterable
     {
-        yield 'unknown key' => ['bladee=true', "unknown key 'bladee'"];
-        yield 'unknown key lists the valid ones' => ['nope=1', 'modelProperties.columnFallback'];
-        yield 'cachePath is not a key' => ['cachePath=/tmp/x', "unknown key 'cachePath'"];
-        yield 'bad bool' => ['blade=yes', "Valid values: 'true', 'false'"];
-        yield 'uppercase bool' => ['blade=TRUE', "invalid value 'TRUE'"];
-        yield 'auto is not accepted' => ['findPromptInjection=auto', "invalid value 'auto'"];
-        yield 'bad enum' => ['modelProperties.columnFallback=db', "Valid values: 'migrations', 'none'"];
         yield 'missing equals' => ['blade', 'expected KEY=VALUE'];
-        yield 'empty key' => ['=true', 'expected KEY=VALUE'];
         yield 'empty value' => ['blade=', 'expected KEY=VALUE'];
-        yield 'empty value for a list' => ['configDirectory=', 'expected KEY=VALUE'];
+        yield 'empty key' => ['=true', 'expected KEY=VALUE'];
+        yield 'unknown key lists the supported ones' => ['bladee=true', "Unknown plugin option 'bladee'. Supported keys: modelProperties.columnFallback, "];
+        yield 'list key is not overridable' => ['configDirectory=a', "Unknown plugin option 'configDirectory'"];
+        yield 'a shadowed typo still fails' => ['nope=1 blade=true', "Unknown plugin option 'nope'"];
     }
 
     #[Test]
-    #[DataProvider('invalidTokens')]
-    public function invalid_tokens_fail_loudly_and_name_their_origin(string $token, string $message): void
+    #[DataProvider('malformedTokens')]
+    public function parse_rejects_a_malformed_token(string $raw, string $message): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/^--plugin-option: .*' . \preg_quote($message, '/') . '/s');
+        $this->expectExceptionMessage($message);
 
-        PluginOverrides::parse([$token], '--plugin-option');
+        PluginOverrides::parse($raw);
     }
 
-    #[Test]
-    public function the_env_grammar_is_whitespace_separated_and_blank_means_no_overrides(): void
+    /** @return iterable<string, array{string, \Closure(PluginConfig): mixed, mixed}> */
+    public static function everyKey(): iterable
     {
-        $overrides = PluginOverrides::fromEnv("  blade=true \t experimental=false\nconfigDirectory=a  configDirectory=b ");
+        yield 'modelProperties.columnFallback' => ['none', static fn(PluginConfig $c): ColumnFallback => $c->modelPropertiesColumnFallback, ColumnFallback::None];
+        yield 'resolveDynamicWhereClauses' => ['false', static fn(PluginConfig $c): bool => $c->resolveDynamicWhereClauses, false];
+        yield 'resolveConfigReturnTypes' => ['false', static fn(PluginConfig $c): bool => $c->resolveConfigReturnTypes, false];
+        yield 'reportImplicitQueryBuilderCalls' => ['true', static fn(PluginConfig $c): bool => $c->reportImplicitQueryBuilderCalls, true];
+        yield 'findMissingTranslations' => ['true', static fn(PluginConfig $c): bool => $c->findMissingTranslations, true];
+        yield 'findMissingViews' => ['true', static fn(PluginConfig $c): bool => $c->findMissingViews, true];
+        yield 'findUnconfiguredFilesystemDisks' => ['true', static fn(PluginConfig $c): bool => $c->findUnconfiguredFilesystemDisks, true];
+        yield 'findUnregisteredRouteNames' => ['true', static fn(PluginConfig $c): bool => $c->findUnregisteredRouteNames, true];
+        yield 'findSerializedQueuedModels' => ['true', static fn(PluginConfig $c): bool => $c->findSerializedQueuedModels, true];
+        yield 'findOctaneIncompatibleBinding' => ['false', static fn(PluginConfig $c): ?bool => $c->findOctaneIncompatibleBinding, false];
+        yield 'findPromptInjection' => ['false', static fn(PluginConfig $c): ?bool => $c->findPromptInjection, false];
+        yield 'blade' => ['true', static fn(PluginConfig $c): bool => $c->bladeEnabled, true];
+        yield 'blade.cacheDir' => ['/tmp/shadows/', static fn(PluginConfig $c): string => $c->bladeCacheDir, '/tmp/shadows'];
+        yield 'blade.validateViewData' => ['true', static fn(PluginConfig $c): bool => $c->bladeValidateViewData, true];
+        yield 'blade.reportUnusedViewData' => ['true', static fn(PluginConfig $c): bool => $c->bladeReportUnusedViewData, true];
+        yield 'blade.reportMixedIssues' => ['true', static fn(PluginConfig $c): bool => $c->bladeReportMixedIssues, true];
+        yield 'experimental' => ['true', static fn(PluginConfig $c): bool => $c->experimental, true];
+        yield 'failOnInternalError' => ['true', static fn(PluginConfig $c): bool => $c->failOnInternalError, true];
+    }
 
-        $this->assertTrue($overrides->bool('blade'));
-        $this->assertFalse($overrides->bool('experimental'));
-        $this->assertSame(['a', 'b'], $overrides->list('configDirectory'));
+    /** @param \Closure(PluginConfig): mixed $read */
+    #[Test]
+    #[DataProvider('everyKey')]
+    public function every_key_reaches_its_setting(string $value, \Closure $read, mixed $expected): void
+    {
+        $key = (string) $this->dataName();
 
-        foreach ([null, '', '   ', "\n"] as $blank) {
-            $this->assertFalse(PluginOverrides::fromEnv($blank)->has('blade'));
-        }
+        $this->assertNotSame($expected, $read(PluginConfig::fromXml(null)), 'the override must differ from the default');
+        $this->assertSame($expected, $read(PluginOverrides::configure(null, [$key => $value])));
     }
 
     #[Test]
-    public function the_env_grammar_rejects_a_value_starting_with_a_double_quote(): void
+    public function every_key_has_a_case_above(): void
+    {
+        $this->assertSame(PluginOverrides::KEYS, \array_keys(\iterator_to_array(self::everyKey())));
+    }
+
+    #[Test]
+    public function patches_a_copy_of_the_namespaced_element_psalm_passes(): void
+    {
+        $psalm = new \SimpleXMLElement(
+            '<psalm xmlns="https://getpsalm.org/schema/config"><plugins><pluginClass class="Psalm\LaravelPlugin\Plugin">'
+            . '<findMissingViews value="true" /><blade value="false" cacheDir="xml-dir" />'
+            . '<configDirectory name="a" /><configDirectory name="b" />'
+            . '</pluginClass></plugins></psalm>',
+        );
+        // Psalm's own extraction, see Config::loadFromXML().
+        $original = $psalm->plugins->pluginClass->children();
+        $before = $psalm->asXML();
+
+        $config = PluginOverrides::configure($original, ['blade' => 'true', 'findMissingViews' => 'false', 'experimental' => 'true']);
+
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertSame('xml-dir', $config->bladeCacheDir);
+        $this->assertFalse($config->findMissingViews);
+        $this->assertTrue($config->experimental);
+        $this->assertSame(['a', 'b'], $config->configDirectories);
+        $this->assertSame($before, $psalm->asXML(), 'the element Psalm owns must not be mutated');
+    }
+
+    #[Test]
+    public function blade_sub_settings_never_enable_blade(): void
+    {
+        $subSettings = ['blade.cacheDir' => '/tmp/x', 'blade.validateViewData' => 'true'];
+
+        $this->assertFalse(PluginOverrides::configure(null, $subSettings)->bladeEnabled);
+        $this->assertFalse(PluginOverrides::configure(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);
+        $this->assertTrue(PluginOverrides::configure(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'), $subSettings)->bladeEnabled);
+
+        $config = PluginOverrides::configure(null, ['blade.cacheDir' => '/tmp/x', 'blade' => 'true']);
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertSame('/tmp/x', $config->bladeCacheDir);
+    }
+
+    #[Test]
+    public function an_explicit_xml_rule_still_beats_an_experimental_override(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="false" /></pluginClass>');
+
+        $config = PluginOverrides::configure($xml, ['experimental' => 'true']);
+
+        $this->assertFalse($config->findSerializedQueuedModels);
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    /** @return iterable<string, array{string, array<string, non-empty-string>, string}> */
+    public static function invalidSettings(): iterable
+    {
+        yield 'bad override value' => ['<pluginClass />', ['findPromptInjection' => 'yes'], "Invalid findPromptInjection value 'yes'. Valid values: 'true', 'false'. (plugin options in effect: findPromptInjection=yes)"];
+        yield 'bad enum override' => ['<pluginClass />', ['modelProperties.columnFallback' => 'db'], "Invalid columnFallback value 'db'"];
+        yield 'bad XML value next to an override' => ['<pluginClass><findMissingViews value="yes" /></pluginClass>', ['blade' => 'true'], "Invalid findMissingViews value 'yes'. Valid values: 'true', 'false'. (plugin options in effect: blade=true)"];
+    }
+
+    /** @param array<string, non-empty-string> $overrides */
+    #[Test]
+    #[DataProvider('invalidSettings')]
+    public function an_invalid_setting_fails_naming_the_overrides_in_effect(string $xml, array $overrides, string $message): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/^PSALM_LARAVEL_OPTIONS: .*quot/s');
+        $this->expectExceptionMessage($message);
 
-        PluginOverrides::fromEnv('blade.cacheDir="/tmp/a b"');
-    }
-
-    #[Test]
-    public function a_double_quote_inside_an_env_value_is_taken_verbatim(): void
-    {
-        $this->assertSame('/tmp/a"b', PluginOverrides::fromEnv('blade.cacheDir=/tmp/a"b')->string('blade.cacheDir'));
-    }
-
-    #[Test]
-    public function env_errors_name_the_variable(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/^PSALM_LARAVEL_OPTIONS: unknown key 'bladee'/");
-
-        PluginOverrides::fromEnv('bladee=true');
-    }
-
-    #[Test]
-    public function the_private_cli_layer_carries_values_with_whitespace_through_json(): void
-    {
-        $json = \json_encode(['blade.cacheDir=/tmp/blade shadows', 'blade=true'], \JSON_THROW_ON_ERROR);
-
-        $overrides = PluginOverrides::fromEnvironment([PluginOverrides::CLI_ENV_VAR => $json]);
-
-        $this->assertSame('/tmp/blade shadows', $overrides->string('blade.cacheDir'));
-        $this->assertTrue($overrides->bool('blade'));
-    }
-
-    #[Test]
-    public function the_environment_edge_layers_cli_over_env(): void
-    {
-        $overrides = PluginOverrides::fromEnvironment([
-            PluginOverrides::ENV_VAR => 'blade=true experimental=true',
-            PluginOverrides::CLI_ENV_VAR => '["blade=false"]',
-        ]);
-
-        $this->assertFalse($overrides->bool('blade'));
-        $this->assertTrue($overrides->bool('experimental'));
-        $this->assertFalse(PluginOverrides::fromEnvironment([])->has('blade'));
-    }
-
-    #[Test]
-    #[DataProvider('malformedTransport')]
-    public function a_malformed_private_transport_is_rejected(string $json): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/PSALM_LARAVEL_CLI_OPTIONS/');
-
-        PluginOverrides::fromEnvironment([PluginOverrides::CLI_ENV_VAR => $json]);
-    }
-
-    /** @return iterable<string, array{string}> */
-    public static function malformedTransport(): iterable
-    {
-        yield 'not json' => ['{'];
-        yield 'not a list' => ['{"blade":"true"}'];
-        yield 'non-string entry' => ['[1]'];
+        PluginOverrides::configure(new \SimpleXMLElement($xml), $overrides);
     }
 }

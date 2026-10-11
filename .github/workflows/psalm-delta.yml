@@ -390,7 +390,7 @@ jobs:
           # Quoted heredoc: literal backticks for the inline code span, no expansion.
           cat >> comment.md <<'FOOTER'
 
-          <sub>Informational only — never fails the PR. Pick apps with `/psalm-delta <group|app> ...`, add `--blade`-style flags (`/psalm-delta help` lists both). Reproduce locally: `bash bin/ci/delta.sh --apps "<group|app|--flag> ..." <pr-branch>`.</sub>
+          <sub>Informational only — never fails the PR. Pick apps with `/psalm-delta <group|app> ...`, add declared flags such as `--find-dead-code` (`/psalm-delta help` lists both). Reproduce locally: `bash bin/ci/delta.sh --apps "<group|app|--flag> ..." <pr-branch>`.</sub>
           FOOTER
 
           # Sticky: edit existing delta comment if present, else create.

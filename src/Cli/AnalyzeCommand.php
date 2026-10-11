@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Cli;
 
 use Psalm\LaravelPlugin\Config\PluginOverrides;
-use Psalm\LaravelPlugin\Config\Setting;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -29,14 +28,6 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'analyze', description: 'Run Psalm analysis on the current project.', aliases: ['analyse'])]
 final class AnalyzeCommand extends Command
 {
-    /** Shorthand flags and the override token each stands for. */
-    private const SHORTHANDS = [
-        '--blade' => 'blade=true',
-        '--no-blade' => 'blade=false',
-        '--experimental' => 'experimental=true',
-        '--no-migrations' => 'modelProperties.columnFallback=none',
-    ];
-
     /**
      * @param string|null $workingDirectory Override the target directory; defaults to the process CWD.
      *                                      Exposed for tests.
@@ -63,37 +54,17 @@ final class AnalyzeCommand extends Command
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
         );
 
-        // The overrides below are declared for `analyze --help` only: scanArguments() consumes them
-        // from raw argv and the plugin in the child psalm applies them, because psalm rejects unknown flags.
-        $this->addOption(
-            'blade',
-            null,
-            InputOption::VALUE_NEGATABLE,
-            'Shorthand for --plugin-option blade=true (--blade) or blade=false (--no-blade).',
-        );
-        $this->addOption(
-            'experimental',
-            null,
-            InputOption::VALUE_NONE,
-            'Shorthand for --plugin-option experimental=true.',
-        );
-        $this->addOption(
-            'no-migrations',
-            null,
-            InputOption::VALUE_NONE,
-            'Shorthand for --plugin-option modelProperties.columnFallback=none (skip migration-based column inference).',
-        );
+        // Declared for `analyze --help` only: scanArguments() consumes it from raw argv, and the command
+        // hands it to psalm in PSALM_LARAVEL_OPTIONS because psalm rejects unknown flags.
         $this->addOption(
             'plugin-option',
             null,
             InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
-            'Override a plugin setting for this run, over PSALM_LARAVEL_OPTIONS and psalm.xml (KEY=VALUE, repeatable).',
+            'Override a plugin setting for this run (KEY=VALUE, repeatable), over PSALM_LARAVEL_OPTIONS and psalm.xml.',
         );
         $this->setHelp(
-            "Plugin settings accepted by <info>--plugin-option KEY=VALUE</info>:\n\n"
-            . \implode("\n", \array_map(static fn(Setting $setting): string => $setting->describe(), Setting::all()))
-            . "\n\nPrecedence: --plugin-option > PSALM_LARAVEL_OPTIONS (whitespace-separated KEY=VALUE) > psalm.xml > default."
-            . "\nA repeated key is last-wins; configDirectory accumulates, and a higher layer replaces the lower list.",
+            'Plugin option keys: ' . \implode(', ', PluginOverrides::KEYS) . ".\n"
+            . 'See https://github.com/psalm/psalm-plugin-laravel/blob/4.x/docs/config.md#per-run-overrides',
         );
     }
 
@@ -119,31 +90,31 @@ final class AnalyzeCommand extends Command
             return Command::FAILURE;
         }
 
-        // Validate both layers here so a typo is a clean message, not a stack trace from inside psalm.
+        // Checked before launch so a mistake is a clean message, not a stack trace from inside psalm.
+        // Against an empty plugin element, so only the overrides are checked; the plugin checks psalm.xml.
         try {
             $scan = $this->scanArguments();
-            $childEnv = \getenv();
-            // Only this command may set the private CLI layer; an inherited one would bypass validation and the gate.
-            unset($childEnv[PluginOverrides::CLI_ENV_VAR]);
-            $effective = PluginOverrides::fromEnv($childEnv[PluginOverrides::ENV_VAR] ?? null)
-                ->over(PluginOverrides::parse($scan['options'], '--plugin-option'));
+            $env = \getenv();
 
             if ($scan['options'] !== []) {
-                $childEnv[PluginOverrides::CLI_ENV_VAR] = \json_encode($scan['options'], \JSON_THROW_ON_ERROR);
+                // Appended, so a CLI value beats an inherited one by last-key-wins.
+                $env[PluginOverrides::ENV_VAR] = \trim(($env[PluginOverrides::ENV_VAR] ?? '') . ' ' . \implode(' ', $scan['options']));
             }
-        } catch (\InvalidArgumentException|\JsonException $e) {
-            $io->error($e->getMessage());
+
+            $overrides = PluginOverrides::parse($env[PluginOverrides::ENV_VAR] ?? '');
+
+            if ($overrides !== []) {
+                PluginOverrides::configure(null, $overrides);
+            }
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $io->error($invalidArgumentException->getMessage());
             return Command::FAILURE;
         }
 
         $forwarded = $scan['forwarded'];
 
-        // Toggling `blade` changes which files are analysed under an identical config hash, and psalm's
-        // persisted file-reference cache keeps the shadows' references (stale dead-code findings) on an
-        // on->off flip. Only `--no-reference-cache` fixes that; every other setting is report-only.
-        // Prepended, never appended or skipped on a user's `--no-cache`: psalm's getopt stops at the first
-        // positional, so the wrapper cannot tell which later flags psalm parses. Duplicates are harmless.
-        if ($effective->has('blade')) {
+        // A `blade` toggle under an unchanged psalm.xml replays stale file references; see decisions.md, "Per-run overrides".
+        if (isset($overrides['blade'])) {
             \array_unshift($forwarded, '--no-reference-cache');
         }
 
@@ -153,7 +124,7 @@ final class AnalyzeCommand extends Command
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
         // An explicit env array REPLACES the environment in proc_open, hence the whole getenv() is copied above.
-        $process = \proc_open($command, $descriptors, $pipes, $cwd, $childEnv);
+        $process = \proc_open($command, $descriptors, $pipes, $cwd, $env);
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
@@ -182,14 +153,13 @@ final class AnalyzeCommand extends Command
 
     /**
      * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run plugin
-     * overrides, as ordered `KEY=VALUE` tokens: `--plugin-option KEY=VALUE` / `--plugin-option=KEY=VALUE`
-     * verbatim, the shorthands as their KEY=VALUE (see SHORTHANDS), so the last one wins whichever
-     * spelling it used. One scan yields both, so the stripped tokens and the overrides cannot drift apart.
+     * overrides, from `--plugin-option KEY=VALUE` and `--plugin-option=KEY=VALUE` in order. One scan
+     * yields both, so the stripped tokens and the overrides cannot drift apart.
      *
      * Raw argv, not parsed input: with ignoreValidationErrors one bad option makes Symfony drop ALL
      * parsed options, and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
      * Drops argv[0] and the explicit command-name/alias token (the default-command
-     * form has none, so nothing is stripped). The override flags are consumed here because psalm
+     * form has none, so nothing is stripped). `--plugin-option` is consumed here because psalm
      * rejects flags it does not know; scanning stops at a standalone `--`, past which every
      * token is positional, as in Symfony's own option parsing.
      *
@@ -202,7 +172,7 @@ final class AnalyzeCommand extends Command
      * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
      * @return array{forwarded: list<string>, options: list<string>}
      *
-     * @throws \InvalidArgumentException When `--plugin-option` has no value.
+     * @throws \InvalidArgumentException When a `--plugin-option` value is missing, empty or contains whitespace.
      */
     public function scanArguments(?array $argv = null): array
     {
@@ -227,23 +197,26 @@ final class AnalyzeCommand extends Command
                 return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'options' => $options];
             }
 
-            if (isset(self::SHORTHANDS[$token])) {
-                $options[] = self::SHORTHANDS[$token];
-            } elseif (\str_starts_with($token, '--plugin-option=')) {
-                $options[] = \substr($token, \strlen('--plugin-option='));
+            if (\str_starts_with($token, '--plugin-option=')) {
+                $value = \substr($token, \strlen('--plugin-option='));
             } elseif ($token === '--plugin-option') {
-                $value = $tokens[$index + 1] ?? '-';
+                $value = $tokens[++$index] ?? '-';
 
                 // Mirrors Symfony: a following token starting with `-` is an option, not the value.
                 if (\str_starts_with($value, '-')) {
                     throw new \InvalidArgumentException('--plugin-option requires a KEY=VALUE argument, e.g. --plugin-option blade=true.');
                 }
-
-                $options[] = $value;
-                ++$index;
             } else {
                 $forwarded[] = $token;
+                continue;
             }
+
+            // The value travels in the whitespace-separated PSALM_LARAVEL_OPTIONS, where it must stay one token.
+            if (\preg_match('/^\S+$/', $value) !== 1) {
+                throw new \InvalidArgumentException("--plugin-option '{$value}' must be a non-empty KEY=VALUE without whitespace; set such a value in psalm.xml.");
+            }
+
+            $options[] = $value;
         }
 
         return ['forwarded' => $forwarded, 'options' => $options];

@@ -16,7 +16,7 @@ final class DeltaSelectAppsTest extends TestCase
 {
     private const REGISTRY = [
         'groups' => ['default' => 'Baseline', 'blade' => 'Blade-heavy apps'],
-        'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off'],
+        'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off', '--plugin-option=modelProperties.columnFallback=none' => 'No migrations'],
         'apps' => [
             ['name' => 'alpha', 'groups' => ['default']],
             ['name' => 'beta', 'groups' => ['blade']],
@@ -45,6 +45,8 @@ final class DeltaSelectAppsTest extends TestCase
         // psalm-laravel analyze is last-wins on --blade/--no-blade, so the order must survive.
         yield 'order preserved' => ['--no-blade blade --blade', 'alpha,beta', '--no-blade --blade'];
         yield 'no flag' => ['blade', 'alpha,beta', ''];
+        // The comment is lowercased; the run carries the declared spelling.
+        yield 'mixed-case flag' => ['--plugin-option=modelProperties.columnFallback=none', 'alpha', '--plugin-option=modelProperties.columnFallback=none'];
     }
 
     /** @param array<string, mixed> $registry */
