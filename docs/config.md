@@ -357,7 +357,7 @@ PSALM_LARAVEL_OPTIONS='experimental=true modelProperties.columnFallback=none' ve
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
 * Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
 * `PSALM_LARAVEL_OPTIONS` holds whitespace-separated `KEY=VALUE` tokens; a repeated key is last-wins. It is a process environment variable, not a Laravel `.env` entry: the plugin reads it before the application boots.
-* `--plugin-option=KEY=VALUE` (repeatable, `=` form only) appends its token to `PSALM_LARAVEL_OPTIONS` for the Psalm process `analyze` launches, so precedence per key is `--plugin-option` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default.
+* `--plugin-option=KEY=VALUE` (repeatable, `=` form only) appends its token to `PSALM_LARAVEL_OPTIONS` for the Psalm process `analyze` launches, so precedence per key is `--plugin-option` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default. `--blade` / `--no-blade` are shorthands for `blade=true|false`, ordered with `--plugin-option` (last wins).
 * `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
 * `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
 * An unknown key, a token without `=`, or a value outside the key's values aborts the run with a non-zero exit and a message naming the problem. `analyze` checks both sources before it starts Psalm. An override never skips the XML checks: a malformed element in `psalm.xml` still fails the run.
@@ -366,7 +366,7 @@ PSALM_LARAVEL_OPTIONS='experimental=true modelProperties.columnFallback=none' ve
 
 Psalm's result cache is keyed on the config file, not on overrides. Every setting except `blade` only changes which findings are reported, so flipping it between runs reuses a warm cache and gives the same result as a cold run.
 
-`blade` is the exception (stale file references can hide dead-code findings such as `UnusedClass`), so `psalm-laravel analyze` adds `--no-reference-cache` whenever a `blade` override is in effect; with a bare `vendor/bin/psalm`, pass `--no-reference-cache` yourself, before any path argument. Rationale: [decisions](contributing/decisions.md#per-run-overrides).
+`blade` is the exception (stale file references can hide dead-code findings such as `UnusedClass`), so `psalm-laravel analyze` adds `--no-reference-cache` whenever a `blade` override is in effect (`--blade`, `--no-blade`, `--plugin-option` or `PSALM_LARAVEL_OPTIONS`); with a bare `vendor/bin/psalm`, pass `--no-reference-cache` yourself, before any path argument. Rationale: [decisions](contributing/decisions.md#per-run-overrides).
 
 ## Cache directory
 

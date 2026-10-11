@@ -28,6 +28,9 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'analyze', description: 'Run Psalm analysis on the current project.', aliases: ['analyse'])]
 final class AnalyzeCommand extends Command
 {
+    /** Shorthand flags and the override token each stands for. */
+    private const SHORTHANDS = ['--blade' => 'blade=true', '--no-blade' => 'blade=false'];
+
     /**
      * @param string|null $workingDirectory Override the target directory; defaults to the process CWD.
      *                                      Exposed for tests.
@@ -54,8 +57,14 @@ final class AnalyzeCommand extends Command
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
         );
 
-        // Declared for `analyze --help` only: scanArguments() consumes it from raw argv and the plugin
-        // in the child psalm applies it, because psalm rejects unknown flags.
+        // Declared for `analyze --help` only: scanArguments() consumes them from raw argv and the plugin
+        // in the child psalm applies them, because psalm rejects unknown flags.
+        $this->addOption(
+            'blade',
+            null,
+            InputOption::VALUE_NEGATABLE,
+            'Shorthand for --plugin-option=blade=true (--blade) or blade=false (--no-blade).',
+        );
         $this->addOption(
             'plugin-option',
             null,
@@ -155,7 +164,8 @@ final class AnalyzeCommand extends Command
 
     /**
      * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the ordered
-     * `--plugin-option=KEY=VALUE` values. One scan yields both, so they cannot drift apart.
+     * `--plugin-option=KEY=VALUE` values, shorthands included (see SHORTHANDS), so the last one wins
+     * whichever spelling it used. One scan yields both, so they cannot drift apart.
      *
      * Raw argv, not parsed input: with ignoreValidationErrors one bad option makes Symfony drop ALL
      * parsed options, and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
@@ -193,6 +203,11 @@ final class AnalyzeCommand extends Command
         foreach ($tokens as $index => $token) {
             if ($token === '--') {
                 return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'options' => $options];
+            }
+
+            if (isset(self::SHORTHANDS[$token])) {
+                $options[] = self::SHORTHANDS[$token];
+                continue;
             }
 
             if ($token !== '--plugin-option' && !\str_starts_with($token, '--plugin-option=')) {

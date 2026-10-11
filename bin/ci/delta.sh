@@ -12,7 +12,7 @@
 #   bash bin/ci/delta.sh <head-ref>                 # base = merge-base(4.x, head)
 #   bash bin/ci/delta.sh <base-ref> vs <head-ref>   # explicit base + head
 #   bash bin/ci/delta.sh --apps "octane,vito" <head-ref>   # default group + octane + vito
-#   bash bin/ci/delta.sh --apps "blade --plugin-option=blade=true" <head-ref> # + blade apps, Blade on
+#   bash bin/ci/delta.sh --apps "blade --blade" <head-ref> # + blade apps, Blade analysis on
 #
 # --apps takes the `/psalm-delta` comment grammar without the prefix (resolved by
 # bin/ci/delta-select-apps.php): group tags and app names add to the `default` group,

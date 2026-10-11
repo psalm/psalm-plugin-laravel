@@ -208,6 +208,17 @@ final class AnalyzeCommandTest extends TestCase
     }
 
     #[Test]
+    public function blade_shorthands_share_the_ordered_list_with_plugin_options_so_the_last_one_wins(): void
+    {
+        $this->assertSame(
+            ['forwarded' => ['src', '--', '--blade'], 'options' => ['blade=true', 'blade=false', 'blade=false', 'blade=true']],
+            (new AnalyzeCommand())->scanArguments([
+                'psalm-laravel', '--blade', '--plugin-option=blade=false', 'src', '--no-blade', '--plugin-option=blade=true', '--', '--blade',
+            ]),
+        );
+    }
+
+    #[Test]
     public function tokens_after_the_double_dash_boundary_are_forwarded_untouched(): void
     {
         $this->assertSame(
@@ -220,8 +231,8 @@ final class AnalyzeCommandTest extends TestCase
     public function flags_that_merely_resemble_the_override_flag_are_forwarded(): void
     {
         $this->assertSame(
-            ['forwarded' => ['--blade', '--plugin', '--plugin-options=x', '--plugin-optionx=1'], 'options' => []],
-            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--blade', '--plugin', '--plugin-options=x', '--plugin-optionx=1']),
+            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', '--plugin', '--plugin-options=x', '--plugin-optionx=1'], 'options' => []],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', '--plugin', '--plugin-options=x', '--plugin-optionx=1']),
         );
     }
 
@@ -252,6 +263,7 @@ final class AnalyzeCommandTest extends TestCase
         $command = new AnalyzeCommand();
 
         $this->assertTrue($command->getDefinition()->getOption('plugin-option')->isArray());
+        $this->assertTrue($command->getDefinition()->hasNegation('no-blade'));
 
         $help = $command->getHelp();
         foreach (\array_keys(PluginOverrides::KEYS) as $key) {
@@ -318,6 +330,7 @@ final class AnalyzeCommandTest extends TestCase
         $flag = '--no-reference-cache';
 
         yield 'cli blade' => [['--plugin-option=blade=true', 'src'], null, [$flag, 'src']];
+        yield '--no-blade shorthand' => [['--no-blade', 'src'], null, [$flag, 'src']];
         yield 'inherited env blade' => [['--threads=1'], 'blade=false', [$flag, '--threads=1']];
         yield 'once for several blade overrides' => [['--plugin-option=blade=true', '--plugin-option=blade=false'], 'blade=true', [$flag]];
         yield 'blade sub-settings only' => [['--plugin-option=blade.reportMixedIssues=true'], 'blade.validateViewData=true', []];

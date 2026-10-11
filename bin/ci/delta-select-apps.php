@@ -122,7 +122,7 @@ if ($tokens === ['help']) {
         '',
         '`/psalm-delta [token ...]` benchmarks the `default` group plus each token: a group tag or an app name, separated by spaces or commas. `/psalm-delta all` runs every app; `/psalm-delta help` shows this message.',
         '',
-        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --plugin-option=blade=true`. A flag the base plugin does not know crashes the base side.',
+        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade`. A flag the base plugin does not know crashes the base side.',
         '',
         '| Group | Description | Apps |',
         '|---|---|---|',
