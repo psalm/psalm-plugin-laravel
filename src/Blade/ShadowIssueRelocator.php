@@ -74,6 +74,17 @@ final class ShadowIssueRelocator
     ];
 
     /**
+     * @var array<string, array<string, true>> shadow path => {@see self::viewVariables()}, filled
+     *      lazily: re-parsing the template and shadow per guard finding cost seconds on a large app
+     */
+    private static array $viewVariables = [];
+
+    public static function reset(): void
+    {
+        self::$viewVariables = [];
+    }
+
+    /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
      * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
      *                                                     through; a journey crosses files, so one
@@ -777,17 +788,29 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        // The compiled body is what binds names (`@foreach` aliases exist only there).
-        $shadow = @\file_get_contents($issue->code_location->file_path);
+        $path = $issue->code_location->file_path;
+
+        return isset((self::$viewVariables[$path] ??= self::viewVariables($path, $target))[$name]);
+    }
+
+    /**
+     * The names a shadow's template declares as view variables and never binds itself. The
+     * compiled body is what binds names (`@foreach` aliases exist only there), so it is read too.
+     *
+     * @return array<string, true>
+     */
+    private static function viewVariables(string $shadowPath, ShadowTarget $target): array
+    {
+        $shadow = @\file_get_contents($shadowPath);
 
         if ($shadow === false) {
-            return false;
+            return [];
         }
 
         $contract = (new ContractParser())->parseDataContract($target->templateSource, $shadow);
+        $declared = \array_fill_keys([...\array_keys($contract->vars), ...$contract->rawDeclaredVariables], true);
 
-        return !\in_array($name, $contract->localVariables, true)
-            && (isset($contract->vars[$name]) || \in_array($name, $contract->rawDeclaredVariables, true));
+        return \array_diff_key($declared, \array_flip($contract->localVariables));
     }
 
     /**
