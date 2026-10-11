@@ -395,4 +395,38 @@ final class MarkerPrePassTest extends TestCase
 
         $this->assertSame($source, MarkerPrePass::blankInertText($source));
     }
+
+    #[Test]
+    public function an_escaped_php_directive_does_not_open_a_masked_range(): void
+    {
+        // Blade's own `(?<!@)@php(.*?)@endphp` skips `@@php`, so it is literal text and the
+        // comment below is compiled (stripped) live rather than swallowed into a phantom block.
+        $source = "@@php\n{{-- @var int \$n --}}\n@endphp\n";
+
+        $this->assertSame(['{{-- @var int $n --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+    }
+
+    #[Test]
+    public function a_real_php_block_after_an_escaped_one_still_masks(): void
+    {
+        $source = "@@php literal\n@php \$x = 1; @endphp\n";
+
+        $this->assertSame(['@php $x = 1; @endphp'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+    }
+
+    #[Test]
+    public function an_escaped_verbatim_directive_does_not_open_a_masked_range(): void
+    {
+        $source = "@@verbatim\n{{-- @var int \$n --}}\n@endverbatim\n";
+
+        $this->assertSame(['{{-- @var int $n --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
+    }
+
+    #[Test]
+    public function blanking_inert_text_ignores_an_escaped_verbatim_directive(): void
+    {
+        $source = "@@verbatim\n{{ \$slot }}\n@endverbatim\n";
+
+        $this->assertSame($source, MarkerPrePass::blankInertText($source));
+    }
 }
