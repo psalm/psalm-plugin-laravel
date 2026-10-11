@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791715031332,
+  "lastUpdate": 1791715608977,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13435,6 +13435,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1504,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9fb71599e3d3f2c0b72d1411e4154b147033add5",
+          "message": "Treat `json_encode()` with literal `JSON_HEX_*` flags (and Blade `@json`) as an HTML and quote escape (#1731)\n\n* fix(taint): treat json_encode with literal HEX flags as html escape\n\nPsalm core models json_encode() as a plain taint pass-through, so the Blade\n@json directive and hand-written JSON_HEX_* calls reported TaintedHtml and\nTaintedTextWithQuotes on escaped output. JsonEncodeTaintHandler strips html\nwhen HEX_TAG is provably set and quoted text when HEX_QUOT and HEX_APOS both\nare, per call site, declining on non-literal flags, spreads and userland\nshadows. Refs #1698\n\n* fix(taint): keep quote taint on json_encode and tighten the core-function gate\n\njson_encode() always emits raw double-quote delimiters around attacker\ncontrolled content, so only the html taint is cleared (JSON_HEX_TAG).\nThe function-name gate now accepts only the core function: a fully\nqualified call to another namespace and an alias to an unrelated function\nkeep their findings. Refs #1698\n\n* fix(taint): decline namespace-relative and unspecialized json_encode, fix JS docs\n\nnamespace\\json_encode() loses its qualifier in Psalm's resolver and then\npicks up use-function imports, so it is declined. The handler also declines\nunless json_encode's storage is specialized per call site, since a project\nstub without @psalm-taint-specialize shares one argument-to-return edge\nbetween all calls. The docs now describe @js and Js::from as complete\nJavaScript expressions that are safe in double-quoted attributes only.\nRefs #1698\n\n* refactor(taint): trim JsonEncodeTaintHandler to its load-bearing gates\n\nSpecialization test reads FunctionLikeStorage::builtin like TaintFlowGraph::isCallSpecialized(); the core stub is always loaded, so storage lookup cannot throw. Name resolution collapses to Name::isUnqualified(). First-class callables never reach the type-unset dispatch (FunctionCallReturnTypeFetcher skips taintReturnType for them); pinned by a phpt case.\n\n* feat(taint): clear quoted-text taint on json_encode with JSON_HEX_APOS and JSON_HEX_QUOT\n\nBlade @json defaults (15) now report nothing. Either flag alone keeps TaintedTextWithQuotes. The encoder's own quote delimiters in a double-quoted attribute stay an accepted, documented gap pinned by a KnownLimitation phpt.\n\n* fix(taint): pin json_encode quote flags without HEX_TAG and correct gap docs\n\nRestores the explicit first-class-callable decline before getArgs(), re-documents the aliased-name false positive, and narrows the double-quoted attribute rationale to string, array and object values (scalars encode bare).\n\n* docs(taint): link JsonEncodeTaintHandler retirement to vimeo/psalm#12322",
+          "timestamp": "2026-10-11T12:42:49+02:00",
+          "tree_id": "385d7ff272c35805beb2c2900d2d95e2b9319261",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9fb71599e3d3f2c0b72d1411e4154b147033add5"
+        },
+        "date": 1791715607109,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.77,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
