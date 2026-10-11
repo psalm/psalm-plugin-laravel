@@ -36,7 +36,7 @@ final class ContractRegistry
      * @param array{0: list<string>, 1: bool}|null $dataIncludes view names the template hands its
      *        whole scope to, and whether one of them could not be resolved; null when the collection
      *        pass was off for this run, which {@see ReadSetResolver} treats as "not proven"
-     * @param string|false|null $layout as {@see MarkerPrePass::extendedLayout()}
+     * @param string|false|null $layout as {@see ExtendedLayout::of()}
      */
     public static function register(
         string $viewName,
@@ -70,7 +70,7 @@ final class ContractRegistry
         return self::$contracts[$viewName][2] ?? null;
     }
 
-    /** The layout the view `@extends`, as {@see MarkerPrePass::extendedLayout()} */
+    /** The layout the view `@extends`, as {@see ExtendedLayout::of()} */
     public static function layoutFor(string $viewName): string|false|null
     {
         return self::$contracts[$viewName][3] ?? null;

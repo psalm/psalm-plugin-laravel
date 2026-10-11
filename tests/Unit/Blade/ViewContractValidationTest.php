@@ -463,6 +463,9 @@ final class ViewContractValidationTest extends TestCase
             'LayoutChildDeclares.php', // the child declares it `= null`: the nearer declaration wins
             'LayoutChildBinds.php', // the child assigns it before the layout renders
             'LayoutChildHidesBinds.php', // the child's `extract()` hides what it binds
+            'LayoutTerminalExtracts.php', // the declaring layout's own `extract()` may supply it
+            'LayoutChildCoalesces.php', // the child's `??=` assigns it
+            'LayoutNestedText.php', // `@extends` text inside another directive's arguments is no directive
             'LayoutMidBinds.php', // an intermediate layout assigns it
             'LayoutChildBindsTwoHops.php', // the child assigns it, two layouts before the declaring one
             'LayoutUnregistered.php', // a layout further up the chain was never compiled

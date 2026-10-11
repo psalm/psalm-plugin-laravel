@@ -574,6 +574,19 @@ final class ContractParserTest extends TestCase
         $this->assertContains('items', $contract->readVariables);
     }
 
+    /** `??=` and a by-reference closure use or array item define the name when it is unset. */
+    #[Test]
+    public function a_coalescing_assignment_and_reference_creation_are_local(): void
+    {
+        $contract = (new ContractParser())->parseDataContract(
+            '',
+            '<?php $title ??= "x"; $cb = function () use (&$byUse) {}; $refs = [&$byItem]; $copy = function () use ($byValue) {};',
+        );
+
+        $this->assertSame(['byItem', 'byUse', 'cb', 'copy', 'refs', 'title'], $contract->localVariables);
+        $this->assertContains('byValue', $contract->readVariables);
+    }
+
     #[Test]
     public function an_arrow_function_parameter_and_a_catch_variable_are_local(): void
     {

@@ -109,6 +109,8 @@ The check reads the data one call site passes. It does not know about the ways L
 variable into a view somewhere else entirely:
 
 - A composer or creator that is not registered by the time the plugin boots the application (one added lazily at runtime).
+- A `View::share()` that runs per request (middleware, a controller), which layouts commonly rely on.
+- A Mailable's public properties (`Mailable::buildViewData()`) and `MailMessage::data()`, which Laravel merges into the view data of a mail call site.
 - `@inject('metrics', 'App\Services\Metrics')` inside the template, which resolves from the container rather than from the data array.
 
 A variable that arrives that way is declared by the template but never passed by the call

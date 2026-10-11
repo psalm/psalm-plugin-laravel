@@ -277,8 +277,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
      * Shared names were already stripped from every contract at publish time.
      *
      * Empty when any link is unprovable: a dynamic `@extends`, a layout the compile pass never
-     * registered, a composer or creator on a layout (it can supply any key), or a template that
-     * passes its scope on while its read set is unknown, so what it binds is too.
+     * registered, a composer or creator on a layout (it can supply any key), or a template in the
+     * chain whose read set is unknown, so what it binds is too.
      *
      * @return list<array{0: string, 1: ViewDataContract, 2: array<string, ContractVar>}> layout name,
      *         its contract, and its declarations left to the call site
@@ -314,8 +314,10 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
             $layoutContract = ContractRegistry::contractFor($layout);
 
+            // An unknown read set on the layout itself hides whether it binds its own declarations.
             if (!$layoutContract instanceof ViewDataContract
                 || $contract->readsUnknown
+                || $layoutContract->readsUnknown
                 || ContractRegistry::isComposed($layout)
             ) {
                 $layouts = [];

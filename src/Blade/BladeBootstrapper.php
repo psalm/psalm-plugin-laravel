@@ -315,9 +315,7 @@ final class BladeBootstrapper
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
-            // Read off the source rather than cached: the compiled `@extends` is indistinguishable
-            // from an `@include` in the data-includes slot.
-            $layout = $this->collectDataIncludes ? MarkerPrePass::extendedLayout($source) : null;
+            $layout = $this->collectDataIncludes ? ExtendedLayout::of($source) : null;
 
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
@@ -420,7 +418,7 @@ final class BladeBootstrapper
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array{0: list<string>, 1: bool}|null   $dataIncludes null when the collection pass was off
-     * @param string|false|null                      $layout       as {@see MarkerPrePass::extendedLayout()}
+     * @param string|false|null                      $layout       as {@see ExtendedLayout::of()}
      */
     private function registerContract(
         string $templatePath,

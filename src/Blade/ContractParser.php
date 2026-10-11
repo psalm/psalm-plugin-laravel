@@ -605,6 +605,17 @@ final class ContractParser
                     $this->bindLocals($node->var);
                 }
 
+                // `??=` assigns an unset name; it also reads it, so the name stays in the read set.
+                if ($node instanceof Node\Expr\AssignOp\Coalesce) {
+                    $this->bindLocals($node->var);
+                }
+
+                // Taking a reference creates an unset name as null. `$a = &$b` is left a read: it
+                // typically aliases view data.
+                if (($node instanceof Node\ClosureUse || $node instanceof Node\ArrayItem) && $node->byRef) {
+                    $this->bindLocals($node instanceof Node\ClosureUse ? $node->var : $node->value);
+                }
+
                 if ($node instanceof Node\Stmt\Foreach_) {
                     $this->bindLocals($node->valueVar);
                     $this->bindLocals($node->keyVar);
