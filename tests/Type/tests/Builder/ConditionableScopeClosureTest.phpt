@@ -17,14 +17,14 @@ use Illuminate\Database\Eloquent\Builder;
  *    `&static` is introduced by when()'s `@return $this` (Customer::query() alone is plain
  *    Builder<Customer>, per StaticBuilderMethodsTest::test_static_query).
  *
- * 2. LIMITATION — an UNANNOTATED closure parameter is `mixed`. The stub types $callback as a
- *    bare `?callable` with no callable-signature, so Psalm cannot push Builder<Customer> into
- *    $q. Until the stub gains a typed callable, an unannotated $q->scope() is a MixedMethodCall
- *    (and Psalm also flags the untyped closure param/return). This is the behavior a future
- *    typed-callback stub would change.
+ * 2. An UNANNOTATED closure parameter is typed from the call site. The stub types $callback as a
+ *    bare `?callable`; ConditionableCallbackParamsHandler supplies
+ *    `callable(Builder<Customer>, <truthy $flag>)` per call (#1624), so $q->scope() resolves with
+ *    no MixedMethodCall and no MissingClosureParamType/ReturnType.
  *
- * 3. The escape hatch works. A closure that annotates `@param Builder<Customer> $q` resolves the
- *    scope cleanly with no diagnostics — the path real users rely on today.
+ * 3. An explicit `@param Builder<Customer> $q` annotation still resolves the scope cleanly.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1624
  */
 
 /** Closure RETURNS the scoped builder; when() discards it and the chain stays the builder. */
@@ -34,11 +34,11 @@ function test_scope_inside_when_arrow_closure_keeps_builder(bool $flag): void
     /** @psalm-check-type-exact $_result = Builder<Customer>&static */
 }
 
-/** Closure RETURNS void; pins that the param is mixed (no typed callable in the stub). */
-function test_when_closure_parameter_is_mixed(bool $flag): void
+/** Closure RETURNS void; the unannotated param is the receiver builder. */
+function test_when_closure_parameter_is_receiver(bool $flag): void
 {
     Customer::query()->when($flag, function ($q): void {
-        /** @psalm-check-type-exact $q = mixed */
+        /** @psalm-check-type-exact $q = Builder<Customer> */
         $q->active();
     });
 }
@@ -50,7 +50,7 @@ function test_scope_inside_unless_arrow_closure_keeps_builder(bool $flag): void
     /** @psalm-check-type-exact $_result = Builder<Customer>&static */
 }
 
-/** Escape hatch: annotating the closure param types $q and resolves the scope with no errors. */
+/** Annotating the closure param keeps working and resolves the scope with no errors. */
 function test_when_annotated_closure_resolves_scope(bool $flag): void
 {
     Customer::query()->when($flag, /** @param Builder<Customer> $q */ function ($q): void {
@@ -60,11 +60,3 @@ function test_when_annotated_closure_resolves_scope(bool $flag): void
 }
 ?>
 --EXPECTF--
-MissingClosureReturnType on line %d: Closure does not have a return type, expecting mixed
-MissingClosureParamType on line %d: Parameter $q has no provided type
-MixedMethodCall on line %d: Cannot determine the type of $q when calling method active
-MissingClosureParamType on line %d: Parameter $q has no provided type
-MixedMethodCall on line %d: Cannot determine the type of $q when calling method active
-MissingClosureReturnType on line %d: Closure does not have a return type, expecting mixed
-MissingClosureParamType on line %d: Parameter $q has no provided type
-MixedMethodCall on line %d: Cannot determine the type of $q when calling method active

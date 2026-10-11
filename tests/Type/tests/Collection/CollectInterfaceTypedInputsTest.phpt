@@ -79,7 +79,7 @@ function collectUserInterfaceParam(MyArrayableDto $x): Collection {
 
 // Case 7: bare UnitEnum-typed param - matched by resolve()'s case-insensitive identity fallback
 // (classImplements($fqcn, UnitEnum::class) can't match $fqcn === UnitEnum::class itself). With
-// the 12.14+ Laravel floor (see composer.json), the enum-first wrap is unconditional, so the
+// the 12.20+ Laravel floor (see composer.json), the enum-first wrap is unconditional, so the
 // claim is sound regardless of what concrete enum is actually passed at runtime.
 function collectUnitEnumParam(\UnitEnum $x): Collection {
     $result = collect($x);

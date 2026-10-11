@@ -3,6 +3,7 @@
 namespace Laravel\Ai\Contracts;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
@@ -29,7 +30,11 @@ interface Tool
     public function handle(Request $request): Stringable|string;
 
     /**
-     * @return array<string, mixed>
+     * The element type is vendor's (`Laravel\Ai\Contracts\Tool`); widening it
+     * to `mixed` here silently dropped LessSpecificImplementedReturnType on
+     * every userland tool declaring a looser return.
+     *
+     * @return array<string, Type>
      */
     public function schema(JsonSchema $schema): array;
 }

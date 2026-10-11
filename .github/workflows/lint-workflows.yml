@@ -81,10 +81,6 @@ jobs:
         uses: synacktiv/action-octoscan@6b1cf2343893dfb9e5f75652388bd2dc83f456b0 # v1.0.0
         with:
           filter_triggers: ''
-          # install-smoke.yml intentionally runs on Blacksmith runners; ignore
-          # only octoscan's runner-label warning for those specific labels so
-          # the rule still fires for any other unexpected self-hosted runner.
-          ignore: 'blacksmith-.* is non default'
 
       - name: Upload SARIF file to GitHub
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2

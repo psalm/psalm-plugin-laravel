@@ -80,8 +80,37 @@ function test_unbound_accessor_falls_through(): void
 {
     UnboundAccessorFacade::anyMethod();
 }
+
+/**
+ * A method documented only by a class-level `@method` tag on the resolved root (forwarded
+ * through the root's `__call`) resolves with the tag's return type and parameters.
+ */
+function test_root_pseudo_method_resolves(): array
+{
+    /** @psalm-check-type-exact $parts = list<string> */
+    $parts = Diagnostic::listParts(vehicleId: 1);
+
+    return $parts;
+}
+
+function test_root_pseudo_method_checks_params(): void
+{
+    Diagnostic::listParts('not-an-int');
+}
+
+/**
+ * The facade's own `@method static bool isMinor()` wins over the root's `@method int isMinor()`.
+ */
+function test_facade_method_wins_over_root_pseudo_method(): bool
+{
+    /** @psalm-check-type-exact $minor = bool */
+    $minor = Diagnostic::isMinor();
+
+    return $minor;
+}
 ?>
 --EXPECTF--
 UndefinedMagicMethod on line %d: Magic method App\Facades\Diagnostic::internalcheck does not exist
 UndefinedMagicMethod on line %d: Magic method App\Facades\Diagnostic::definitelynotamethod does not exist
 UndefinedMagicMethod on line %d: Magic method App\Facades\UnboundAccessorFacade::anymethod does not exist
+InvalidArgument on line %d: Argument 1 of App\Facades\Diagnostic::listparts expects int, but 'not-an-int' provided

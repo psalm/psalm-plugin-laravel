@@ -2,10 +2,16 @@
 
 namespace Laravel\Ai;
 
-use Closure;
-use Laravel\Ai\Gateway\FakeImageGateway;
 use Laravel\Ai\PendingResponses\PendingImageGeneration;
 
+/**
+ * Only the test-double surface is waived; every other member must stay restated so a new sink fails CI
+ * (policy: "Stub merging" in docs/contributing/README.md).
+ *
+ * @stub-waive assert*()  test-double assertions; recorded calls, never model-facing text
+ * @stub-waive fake()     test double; swaps the gateway, carries no prompt text
+ * @stub-waive isFaked()  no parameters; a boolean over whether the gateway is swapped
+ */
 class Image
 {
     /**
@@ -16,20 +22,4 @@ class Image
      * @psalm-taint-sink llm_prompt $prompt
      */
     public static function of(string $prompt): PendingImageGeneration {}
-
-    public static function fake(Closure|array $responses = []): FakeImageGateway {}
-
-    public static function assertGenerated(Closure $callback): void {}
-
-    public static function assertNotGenerated(Closure $callback): void {}
-
-    public static function assertNothingGenerated(): void {}
-
-    public static function assertQueued(Closure $callback): void {}
-
-    public static function assertNotQueued(Closure $callback): void {}
-
-    public static function assertNothingQueued(): void {}
-
-    public static function isFaked(): bool {}
 }

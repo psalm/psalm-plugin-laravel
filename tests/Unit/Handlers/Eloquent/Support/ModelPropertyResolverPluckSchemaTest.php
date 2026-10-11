@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Support;
 
 use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
@@ -40,7 +42,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingl
  * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\ModelSerializationShapeBuilderTest},
  * #1167). Driven instead from a hand-built {@see ModelMetadata} via `overrideForTesting()`
  * against a real {@see Codebase}, exactly like that test — {@see WorkOrder} is reused purely
- * as an autoloadable `is_a(Model::class)` target; its real `@property` docblock never enters
+ * as a Model target (lineage set in its storage); its real `@property` docblock never enters
  * play because {@see ClassLikeStorageProvider::create()} allocates a fresh, empty storage
  * rather than scanning the file.
  *
@@ -64,7 +66,7 @@ final class ModelPropertyResolverPluckSchemaTest extends TestCase
         // Fresh empty storage: resolveColumnType() checks pseudo_property_get_types first,
         // so an empty storage keeps the test driven purely by the overridden schema/casts —
         // WorkOrder's real @property docblock is never scanned into this provider.
-        $this->classLikeStorageProvider->create(WorkOrder::class);
+        $this->classLikeStorageProvider->create(WorkOrder::class)->parent_classes = ['illuminate\database\eloquent\model' => Model::class];
         $this->classLikeStorageProvider->create(SerializedIntStatus::class)->is_enum = true;
 
         $this->codebase = $this->makeCodebase();
@@ -255,6 +257,7 @@ final class ModelPropertyResolverPluckSchemaTest extends TestCase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
+        $codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');

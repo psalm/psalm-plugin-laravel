@@ -1,0 +1,24 @@
+<?php
+
+namespace Laravel\Ai\Responses\Data;
+
+use Illuminate\Contracts\Support\Arrayable;
+use JsonSerializable;
+
+/**
+ * Classification results originate at the model. Concrete answers repeat the
+ * source on their overridden `toArray()` methods; see
+ * `vendor/laravel/ai/src/Responses/Data/Answer.php`.
+ */
+abstract class Answer implements Arrayable, JsonSerializable
+{
+    /**
+     * @psalm-taint-source input
+     */
+    abstract public function toArray(): array;
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function jsonSerialize(): mixed {}
+}

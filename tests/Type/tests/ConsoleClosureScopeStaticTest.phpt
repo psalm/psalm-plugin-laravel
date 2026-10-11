@@ -4,7 +4,7 @@
 use Illuminate\Support\Facades\Artisan;
 
 // static closures (function + fn) can't be rebound → $this still errors
-// (handler stays out for both forms).
+// (@param-closure-this does not apply to static closures, matching runtime).
 Artisan::command('inspire', static function (): void {
     $this->comment('x');
 });

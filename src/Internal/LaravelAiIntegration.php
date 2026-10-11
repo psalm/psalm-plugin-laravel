@@ -11,7 +11,15 @@ final class LaravelAiIntegration
 {
     public const PACKAGE = 'laravel/ai';
 
-    public const CONSTRAINT = '>=0.11.0 <1.0.0';
+    /**
+     * laravel/ai 1.0 renamed, removed, and re-typed a large part of the stubbed
+     * surface (Usage -> TextUsage, prompt() input union widened, Vercel protocol
+     * selector, pausedProviderContentBlocks() removed), so one stub tree cannot
+     * be correct for 0.11.x as well. The integration follows the 1.x line; on an
+     * older release it stays off and the plugin contributes nothing rather than
+     * reporting false positives against declarations that no longer exist.
+     */
+    public const CONSTRAINT = '>=1.0.0 <2.0.0';
 
     public static function isEnabled(): bool
     {

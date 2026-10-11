@@ -1,0 +1,71 @@
+<?php
+
+namespace Laravel\Ai\Responses;
+
+use ArrayAccess;
+use Countable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Collection;
+use IteratorAggregate;
+use JsonSerializable;
+use Laravel\Ai\Responses\Data\Answer;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
+use Traversable;
+
+/**
+ * Classification answers are model output and therefore untrusted. Psalm does
+ * not honor a source annotation on the public `$answers` property, so every
+ * accessor that exposes the answer payload is annotated instead, matching the
+ * method-level source coverage for `TextResponse`.
+ */
+class ClassificationResponse implements Arrayable, ArrayAccess, Countable, IteratorAggregate, JsonSerializable
+{
+    public function __construct(
+        public readonly array $answers,
+        public readonly TextUsage $usage,
+        public readonly Meta $meta,
+    ) {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function answer(string $key): Answer {}
+
+    /**
+     * @psalm-taint-source input
+     *
+     * @return Collection<string, Answer>
+     */
+    public function collect(): Collection {}
+
+    public function count(): int {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function toArray(): array {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function jsonSerialize(): mixed {}
+
+    /**
+     * @psalm-taint-source input
+     *
+     * @return Traversable<string, Answer>
+     */
+    public function getIterator(): Traversable {}
+
+    public function offsetExists(mixed $offset): bool {}
+
+    /**
+     * @psalm-taint-source input
+     */
+    public function offsetGet(mixed $offset): Answer {}
+
+    public function offsetSet(mixed $offset, mixed $value): void {}
+
+    public function offsetUnset(mixed $offset): void {}
+}

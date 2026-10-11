@@ -92,7 +92,7 @@ final class ViewNameSignatures
         // A trait, not a class: Psalm dispatches a method return-type provider on the
         // DECLARING class, which for a trait method is the trait itself (the using class
         // arrives as getCalledFqClasslikeName()), so one entry covers every TestCase.
-        // Same registration shape as ConditionableWhenHandler/TappableTapHandler.
+        // Same registration shape as ConditionableWhenHandler.
         self::ROLE_INTERACTS_WITH_VIEWS => [
             'concrete' => \Illuminate\Foundation\Testing\Concerns\InteractsWithViews::class,
             'facade' => null,
@@ -115,6 +115,24 @@ final class ViewNameSignatures
     }
 
     /**
+     * Every receiver class one family dispatches on; registration order is observable, so the
+     * concrete class stays first.
+     *
+     * @param array{concrete: class-string, facade: class-string|null, extra: list<class-string>} $family
+     * @return list<class-string>
+     */
+    private static function classesFor(array $family): array
+    {
+        $classes = [$family['concrete'], ...$family['extra']];
+
+        if ($family['facade'] !== null) {
+            $classes[] = $family['facade'];
+        }
+
+        return [...$classes, ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
+    }
+
+    /**
      * @return list<string>
      */
     public static function getClassLikeNames(): array
@@ -122,13 +140,9 @@ final class ViewNameSignatures
         $names = [];
 
         foreach (self::FAMILIES as $family) {
-            $names = [...$names, $family['concrete'], ...$family['extra']];
-
-            if ($family['facade'] !== null) {
-                $names[] = $family['facade'];
+            foreach (self::classesFor($family) as $class) {
+                $names[] = $class;
             }
-
-            $names = [...$names, ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
         }
 
         return \array_values(\array_unique($names));
@@ -143,13 +157,7 @@ final class ViewNameSignatures
             $classToRole = [];
 
             foreach (self::FAMILIES as $role => $family) {
-                $classes = [$family['concrete'], ...$family['extra'], ...FacadeMapProvider::getFacadeClasses($family['concrete'])];
-
-                if ($family['facade'] !== null) {
-                    $classes[] = $family['facade'];
-                }
-
-                foreach ($classes as $class) {
+                foreach (self::classesFor($family) as $class) {
                     $classToRole[\strtolower($class)] = $role;
                 }
             }

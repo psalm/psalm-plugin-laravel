@@ -1,0 +1,36 @@
+<?php
+
+namespace Laravel\Ai;
+
+use Closure;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\HasStructuredOutput;
+use Laravel\SerializableClosure\SerializableClosure;
+
+/**
+ * Re-declared with the same `extends` / `implements` header as the real class.
+ * StructuredAnonymousAgent OVERRIDES the AnonymousAgent constructor, so the
+ * $instructions / $messages sinks declared on the parent stub do not apply to
+ * it and have to be repeated on this constructor. See "Stub merging" in
+ * `docs/contributing/README.md`.
+ */
+class StructuredAnonymousAgent extends AnonymousAgent implements HasStructuredOutput
+{
+    /**
+     * @var SerializableClosure|null
+     */
+    public $schema;
+
+    /**
+     * @psalm-taint-sink llm_prompt $instructions
+     * @psalm-taint-sink llm_prompt $messages
+     */
+    public function __construct(
+        public string $instructions,
+        public iterable $messages,
+        public iterable $tools,
+        ?Closure $schema = null,
+    ) {}
+
+    public function schema(JsonSchema $schema): array {}
+}
