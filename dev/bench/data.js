@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791731893009,
+  "lastUpdate": 1791754516702,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13675,6 +13675,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.45,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56c1e615672b07518a8bd4e7e27f712ff9602c9d",
+          "message": "feat(blade): keep the shadow-cache warning short, list the inputs under --debug (#1841)",
+          "timestamp": "2026-10-11T23:32:46+02:00",
+          "tree_id": "6fbca2a3f8ac0f2d5ef7c5e910709796707ad519",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/56c1e615672b07518a8bd4e7e27f712ff9602c9d"
+        },
+        "date": 1791754514931,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.66,
+            "range": "± 0.66",
             "unit": "s"
           },
           {
