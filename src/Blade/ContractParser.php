@@ -10,6 +10,9 @@ use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
 use Psalm\Internal\Analyzer\CommentAnalyzer;
+use Psalm\Internal\Type\ParseTree;
+use Psalm\Internal\Type\ParseTreeCreator;
+use Psalm\Internal\Type\TypeTokenizer;
 
 /**
  * Extracts a {@see TemplateContract} from a Blade template: `@var` declarations (raw PHPDoc
@@ -27,10 +30,11 @@ final class ContractParser
     /**
      * What follows `@var` on one line of a comment inside a raw PHP block, minus a closing `*\/`.
      * Per line, because one block can hold several docblocks. The tag must start the line (after
-     * optional whitespace and a `*`, `//` or `#`) or directly follow the comment opener: a `@var` in
-     * running text (`@deprecated Replace @var Foo $user with ...`) is prose, not a declaration.
+     * optional whitespace and a `*`, `//` or `#`) or directly follow the comment's own opener: a `@var` in
+     * running text (`@deprecated Replace @var Foo $user with ...`, `* Example: /** @var T $x`) is prose,
+     * not a declaration. `(*ANYCRLF)` makes a bare `\r` end a line too, as PHP's lexer counts it.
      */
-    private const RAW_PHP_VAR = '/(?:^\h*(?:\*|\/\/|#)?|\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*\r?$/m';
+    private const RAW_PHP_VAR = '/(*ANYCRLF)(?:^\h*(?:\*|\/\/|#)?|\A\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*$/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
@@ -189,40 +193,55 @@ final class ContractParser
     }
 
     /**
+     * Whether a type string includes `null` (or is `mixed`), read off Psalm's type parse tree so a
+     * bracketed `(string|null)` or a `?T` counts and a `null` nested in a generic does not. False for
+     * a type that does not parse.
+     */
+    public static function allowsNull(string $type): bool
+    {
+        try {
+            $tree = (new ParseTreeCreator(TypeTokenizer::tokenize($type)))->create();
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return self::nodeAllowsNull($tree);
+    }
+
+    /** @psalm-mutation-free */
+    private static function nodeAllowsNull(ParseTree $node): bool
+    {
+        if ($node instanceof ParseTree\Value) {
+            return \in_array(\strtolower($node->value), ['null', 'mixed'], true);
+        }
+
+        if ($node instanceof ParseTree\NullableTree) {
+            return true;
+        }
+
+        if ($node instanceof ParseTree\UnionTree || $node instanceof ParseTree\EncapsulationTree || $node instanceof ParseTree\Root) {
+            foreach ($node->children as $child) {
+                if (self::nodeAllowsNull($child)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * `$type` with `null` added, for an optional declaration: `T $x = null` reads as `T|null`. A type
-     * that is already nullable, or `mixed`, is returned as is; a callable type is parenthesised so the
-     * `|null` does not become part of its return type.
-     *
-     * @psalm-pure
+     * that already allows null is returned as is; a callable or intersection type is parenthesised so
+     * the `|null` does not become part of it.
      */
     public static function withNull(string $type): string
     {
-        $depth = 0;
-        $current = '';
-        $alternatives = [];
-
-        foreach (\str_split($type) as $char) {
-            $depth += \strpbrk($char, '([{<') !== false ? 1 : (\strpbrk($char, ')]}>') !== false ? -1 : 0);
-
-            if ($char === '|' && $depth === 0) {
-                $alternatives[] = $current;
-                $current = '';
-            } else {
-                $current .= $char;
-            }
+        if (self::allowsNull($type)) {
+            return $type;
         }
 
-        $alternatives[] = $current;
-
-        foreach ($alternatives as $alternative) {
-            $alternative = \strtolower(\trim($alternative));
-
-            if ($alternative === 'null' || $alternative === 'mixed' || \str_starts_with($alternative, '?')) {
-                return $type;
-            }
-        }
-
-        return (\str_contains($type, '(') ? "({$type})" : $type) . '|null';
+        return (\str_contains($type, '(') || \str_contains($type, '&') ? "({$type})" : $type) . '|null';
     }
 
     /**
@@ -260,11 +279,15 @@ final class ContractParser
     }
 
     /**
-     * The text of every comment inside a raw `<?php` block or an `@php ... @endphp` block, and the
-     * 1-based line it starts on. Ranges are the ones the Blade compiler itself leaves alone, so a
-     * `<?php` inside a Blade comment or `@verbatim` body is not read.
+     * The text of every comment inside a raw `<?php` block or an `@php ... @endphp` block that can
+     * declare a variable, the 1-based line it starts on, and the line its PHP block opens on. A doc
+     * comment counts only at statement level ({@see PhpDocBlocks}): a property, method, function or
+     * closure docblock is no declaration. A plain comment is kept (not a doc one), so a name it
+     * mentions still counts as stated. Ranges are the ones the Blade compiler itself leaves alone,
+     * so a `<?php` inside a Blade comment or `@verbatim` body is not read.
      *
-     * @return list<array{0: string, 1: int, 2: bool}> text, 1-based line, whether it is a docblock
+     * @return list<array{0: string, 1: int, 2: bool, 3: int}> text, 1-based line, whether it is a
+     *         docblock, 1-based line of the enclosing block's opening
      *
      * @psalm-pure
      */
@@ -284,14 +307,45 @@ final class ContractParser
 
             // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
             // not parse, so that is fine; the @ is for the warning an unterminated string emits.
-            foreach (@\token_get_all($text) as $token) {
-                if (\is_array($token) && ($token[0] === \T_DOC_COMMENT || $token[0] === \T_COMMENT)) {
-                    $comments[] = [$token[1], $line + $token[2] - 1, $token[0] === \T_DOC_COMMENT];
+            $tokens = @\token_get_all($text);
+            $docblocks = PhpDocBlocks::statementLevel($tokens);
+
+            foreach ($tokens as $i => $token) {
+                if (!\is_array($token)) {
+                    continue;
+                }
+
+                if ($token[0] === \T_COMMENT || isset($docblocks[$i])) {
+                    $comments[] = [$token[1], $line + $token[2] - 1, $token[0] === \T_DOC_COMMENT, $line];
                 }
             }
         }
 
         return $comments;
+    }
+
+    /**
+     * What suppresses an issue reported on a declaration line: the issue types a `@psalm-suppress` tag
+     * in the declaring docblock names, and the line its PHP block opens on, where a Blade
+     * `{{-- @psalm-suppress --}}` comment above a multi-line block is recorded.
+     *
+     * @return array{0: list<string>, 1: int}
+     *
+     * @psalm-pure
+     */
+    public static function suppressionContext(string $source, int $line): array
+    {
+        foreach (self::rawComments($source) as [$comment, $start, $isDoc, $blockLine]) {
+            if (!$isDoc || $line < $start || $line > $start + SourceLines::breaksIn($comment)) {
+                continue;
+            }
+
+            \preg_match_all('/@psalm-suppress\h+([A-Za-z][A-Za-z0-9_]*)/', $comment, $matched);
+
+            return [$matched[1], $blockLine];
+        }
+
+        return [[], $line];
     }
 
     /**
@@ -598,6 +652,12 @@ final class ContractParser
              */
             private function bindLocals(?Node\Expr $target): void
             {
+                // `$row['k'] = …`, `$row[] = …` and `$a['x']['y'] = …` create `$row` / `$a` when it is
+                // unset, so the template binds it for itself, whatever it holds afterwards.
+                while ($target instanceof Node\Expr\ArrayDimFetch) {
+                    $target = $target->var;
+                }
+
                 if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
                     $this->locals[$target->name] = true;
 

@@ -255,12 +255,13 @@ final class BladeBootstrapper
             ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
         }
 
-        foreach ($this->pendingProblems as $templatePath => $problems) {
-            ContractRegistry::registerProblems($templatePath, $problems);
-        }
-
         $factory = $this->viewFactory();
         $shared = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($factory?->getShared() ?? [])), true);
+
+        // A shared name is no contract, so a marker problem on its declaration is not one either.
+        foreach ($this->pendingProblems as $templatePath => $problems) {
+            ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
+        }
 
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
             ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
@@ -425,7 +426,7 @@ final class BladeBootstrapper
         foreach ($contract?->vars ?? [] as $name => $var) {
             // Psalm reads a raw docblock as written, so `string $x = null` types the body `string`
             // while the call-site check treats the key as `string|null`: say so at the declaration.
-            if ($var->optional && ContractParser::withNull($var->typeString) !== $var->typeString) {
+            if ($var->optional && !ContractParser::allowsNull($var->typeString)) {
                 $this->pendingProblems[$templatePath][$name] = [
                     $var->declarationLine,
                     "Optional view variable \${$name} is declared with `= null` but its type {$var->typeString} does not include null; write `"

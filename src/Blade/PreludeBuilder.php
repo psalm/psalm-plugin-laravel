@@ -181,17 +181,19 @@ final class PreludeBuilder
     }
 
     /**
-     * Whether a class name written in a template means the same thing there as anywhere: a Blade
-     * comment or the namespace-less shadow cannot carry a `use` import, so a name without a
-     * namespace is right only for PHP's own classes (`Closure`, `stdClass`).
+     * Whether a class name written in a template means the same class wherever it is read: only a
+     * leading `\` does. Any other qualified or short name is resolved through the template's own
+     * `use` imports (`Models\User` under `use App\Models as Models`), which a type string cannot
+     * carry; PHP's own classes (`Closure`, `stdClass`) are global and need none.
      */
     public static function resolvesWithoutImport(string $className): bool
     {
-        if (\str_contains($className, '\\')) {
+        if (\str_starts_with($className, '\\')) {
             return true;
         }
 
-        return (\class_exists($className, false) || \interface_exists($className, false))
+        return !\str_contains($className, '\\')
+            && (\class_exists($className, false) || \interface_exists($className, false))
             && (new \ReflectionClass($className))->isInternal();
     }
 

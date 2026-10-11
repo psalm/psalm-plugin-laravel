@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
 use Psalm\LaravelPlugin\Blade\ContractParser;
+use Psalm\LaravelPlugin\Blade\PhpDocBlocks;
 use Psalm\LaravelPlugin\Blade\SourceLines;
 
 /**
@@ -61,6 +62,8 @@ final class TemplateAnnotator
         $declarations = [];
 
         foreach ($missing as $name => $type) {
+            // Psalm's type parser is pure in effect; it just is not annotated as such.
+            /** @psalm-suppress ImpureMethodCall */
             $declarations[] = isset($optional[$name])
                 ? '@var ' . ContractParser::withNull($type) . " \${$name} = null"
                 : "@var {$type} \${$name}";
@@ -97,7 +100,8 @@ final class TemplateAnnotator
     }
 
     /**
-     * Tokenized, so a `<?php` in text or a docblock-looking string is not mistaken for the header.
+     * Tokenized, so a `<?php` in text or a docblock-looking string is not mistaken for the header; the
+     * docblock is the first statement-level one ({@see PhpDocBlocks}).
      *
      * @return array{doc: array{0: int, 1: string}|null, openEnd: int, closeEnd: int|null}|null null
      *         unless the file (after any BOM) opens with `<?php`; `doc` is the first doc comment's
@@ -125,64 +129,25 @@ final class TemplateAnnotator
             $offset += \strlen(\is_array($token) ? $token[1] : $token);
         }
 
-        $depth = 0;
+        $docblocks = PhpDocBlocks::statementLevel($tokens);
 
         foreach ($tokens as $i => $token) {
             if (!\is_array($token)) {
-                $depth += $token === '{' ? 1 : ($token === '}' ? -1 : 0);
-
                 continue;
             }
 
-            if ($token[0] === \T_CURLY_OPEN || $token[0] === \T_DOLLAR_OPEN_CURLY_BRACES) {
-                ++$depth;
-            } elseif ($token[0] === \T_OPEN_TAG) {
+            if ($token[0] === \T_OPEN_TAG) {
                 $block['openEnd'] = $offsets[$i] + \strlen($token[1]);
             } elseif ($token[0] === \T_CLOSE_TAG) {
                 $block['closeEnd'] = $offsets[$i] + \strlen($token[1]);
 
                 break;
-            } elseif ($token[0] === \T_DOC_COMMENT
-                && $block['doc'] === null
-                && $depth === 0
-                && \str_ends_with($token[1], '*/')
-                && !self::attachesToDeclaration($tokens, $i + 1)
-            ) {
+            } elseif ($block['doc'] === null && isset($docblocks[$i])) {
                 $block['doc'] = [$offsets[$i], $token[1]];
             }
         }
 
         return $block;
-    }
-
-    /**
-     * Whether the doc comment ending before `$from` documents a function, class or closure: a
-     * `@var` there is not a variable declaration, and Psalm reports it as an unrecognised tag.
-     *
-     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
-     *
-     * @psalm-pure
-     */
-    private static function attachesToDeclaration(array $tokens, int $from): bool
-    {
-        for ($i = $from, $n = \count($tokens); $i < $n; ++$i) {
-            $token = $tokens[$i];
-
-            if (!\is_array($token)) {
-                return false;
-            }
-
-            if ($token[0] === \T_WHITESPACE || $token[0] === \T_COMMENT) {
-                continue;
-            }
-
-            return \in_array($token[0], [
-                \T_FUNCTION, \T_FN, \T_CLASS, \T_INTERFACE, \T_TRAIT, \T_ENUM,
-                \T_ABSTRACT, \T_FINAL, \T_READONLY, \T_STATIC, \T_ATTRIBUTE,
-            ], true);
-        }
-
-        return false;
     }
 
     /**

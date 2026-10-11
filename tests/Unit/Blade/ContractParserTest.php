@@ -772,4 +772,70 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($vars['c']->optional ?? null);
         $this->assertFalse($vars['d']->optional ?? null);
     }
+
+    #[Test]
+    public function an_array_write_binds_its_root_variable_as_a_local(): void
+    {
+        $source = "<?php\n/** @var array<string, string> \$row */\n/** @var list<int> \$list */\n/** @var array<mixed> \$deep */\n/** @var string \$title */\n?>\n"
+            . "@php(\$row['name'] = 'Ada')\n@php(\$list[] = 1)\n@php(\$deep['a']['b'] = 1)\n{{ \$title }}\n";
+
+        $this->assertSame(['title'], \array_keys($this->dataContract($source)->vars));
+    }
+
+    #[Test]
+    public function only_a_statement_level_docblock_declares(): void
+    {
+        $source = "<?php\nclass Helper {\n    /** @var string \$prop */\n    public string \$prop = '';\n    /** @var string \$method */\n    public function m(): void {}\n}\n"
+            . "/** @var string \$fnDoc */\nfunction f() { /** @var string \$inFn */ return 1; }\n"
+            . "\$items = [/** @var string \$inner */ 1];\n\$cb = function () { /** @var string \$nested */ return 1; };\n"
+            . "/** @var string \$title */\n\$x = 1;\n?>\n";
+
+        $this->assertSame(['title'], \array_keys($this->dataContract($source)->vars));
+        $this->assertSame(['title'], ContractParser::rawDeclaredNames($source));
+    }
+
+    #[Test]
+    public function an_opener_inside_a_description_is_not_a_declaration(): void
+    {
+        $source = "<?php\n/**\n * Example: /** @var string \$phantom\n * @var string \$real\n */\n?>\n";
+
+        $this->assertSame(['real'], \array_keys($this->dataContract($source)->vars));
+    }
+
+    #[Test]
+    public function a_bare_cr_ends_a_declaration_line(): void
+    {
+        $source = "<?php\r/**\r * @var string \$a\r * @var int \$b = null\r */\r?>\r";
+
+        $vars = $this->dataContract($source)->vars;
+
+        $this->assertSame(['a', 'b'], \array_keys($vars));
+        $this->assertSame(3, $vars['a']->declarationLine);
+        $this->assertTrue($vars['b']->optional);
+    }
+
+    #[Test]
+    public function null_is_read_off_the_parsed_type_not_its_text(): void
+    {
+        foreach (['null', 'string|null', '?int', '(string|null)', '(mixed)', "'a|b'|null", 'mixed'] as $type) {
+            $this->assertTrue(ContractParser::allowsNull($type), $type);
+            $this->assertSame($type, ContractParser::withNull($type), $type);
+        }
+
+        foreach (['string', 'array<int|null>', "'null'", 'Closure(int): string', 'array<int $x'] as $type) {
+            $this->assertFalse(ContractParser::allowsNull($type), $type);
+        }
+
+        $this->assertSame('(Closure(int): string)|null', ContractParser::withNull('Closure(int): string'));
+        $this->assertSame('array<int|null>|null', ContractParser::withNull('array<int|null>'));
+    }
+
+    #[Test]
+    public function the_suppression_context_names_the_docblock_tags_and_the_block_opening_line(): void
+    {
+        $source = "<h1>x</h1>\n<?php\n/**\n * @psalm-suppress InvalidDocblock, Foo\n * @var string \$a = null\n */\n?>\n";
+
+        $this->assertSame([['InvalidDocblock'], 2], ContractParser::suppressionContext($source, 5));
+        $this->assertSame([[], 9], ContractParser::suppressionContext($source, 9));
+    }
 }

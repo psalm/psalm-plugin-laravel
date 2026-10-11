@@ -393,9 +393,42 @@ final class ViewContractValidationTest extends TestCase
             }
         }
 
+        // `$bad` only: a bracketed or `mixed` type allows null, a native `@psalm-suppress` silences
+        // its own declaration, and a Blade suppression above the block silences a multi-line block.
         $this->assertCount(1, $reported, \var_export($reported, true));
         $this->assertSame(3, $reported[0]['line_from']);
         $this->assertStringContainsString('write `string|null $bad = null`', (string) $reported[0]['message']);
+    }
+
+    /** A composer or creator can overwrite any key, so a call site is judged on neither presence nor type. */
+    #[Test]
+    public function a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'ComposedWrongType.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComposedMissing.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Only a statement-level docblock of the template's own scope declares: a property or method
+     * docblock, one inside a closure or an expression, and a `$row[...] = ` local are no contract,
+     * and a `use`-aliased qualified name declines the type check.
+     */
+    #[Test]
+    public function only_statement_level_docblocks_declare_and_aliased_names_decline_the_type_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawScope.php'), \var_export($issues, true));
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            $this->assertFalse(
+                $issue['type'] === 'InvalidDocblock' && \str_contains((string) $issue['message'], 'Optional view variable')
+                    && \basename((string) $issue['file_name']) === 'raw-scope.blade.php',
+                'a property docblock is not a declaration',
+            );
+        }
     }
 
     #[Test]

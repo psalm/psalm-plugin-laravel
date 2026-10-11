@@ -396,4 +396,13 @@ final class PreludeBuilderTest extends TestCase
             $this->assertNotInstanceOf(Nop::class, $stmts[1] ?? null);
         }
     }
+
+    #[Test]
+    public function only_a_leading_backslash_or_an_internal_class_resolves_without_an_import(): void
+    {
+        $this->assertTrue(PreludeBuilder::resolvesWithoutImport('\\App\\User'));
+        $this->assertTrue(PreludeBuilder::resolvesWithoutImport('Closure'));
+        $this->assertFalse(PreludeBuilder::resolvesWithoutImport('App\\User'), "resolved through the template's imports");
+        $this->assertFalse(PreludeBuilder::resolvesWithoutImport('User'));
+    }
 }

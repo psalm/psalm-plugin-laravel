@@ -545,6 +545,20 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     #[Test]
+    public function a_marker_problem_on_a_shared_name_is_not_published(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate('profile.blade.php', "<?php /** @var string \$siteName = null */ /** @var string \$other = null */ ?>\n<p>{{ \$other }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $problems = ContractRegistry::problemsFor($this->viewDir . '/profile.blade.php');
+        $this->assertCount(1, $problems);
+        $this->assertStringContainsString('$other', $problems[0][1]);
+    }
+
+    #[Test]
     public function a_view_with_a_composer_creator_or_wildcard_composer_is_marked_composed(): void
     {
         $app = $this->appWithViewFactory();

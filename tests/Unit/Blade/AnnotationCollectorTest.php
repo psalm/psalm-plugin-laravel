@@ -276,4 +276,23 @@ final class AnnotationCollectorTest extends TestCase
     {
         return new Type\Union([new Type\Atomic\TLiteralInt($value)]);
     }
+
+    #[Test]
+    public function writes_class_names_absolute_so_a_template_import_cannot_change_them(): void
+    {
+        $object = new Type\Union([new Type\Atomic\TNamedObject('App\\Models\\User')]);
+
+        AnnotationCollector::record('home', ['user' => $object], true);
+
+        $this->assertSame('\\App\\Models\\User', AnnotationCollector::typeFor('home', 'user'));
+
+        // Composite ids need a live Psalm to round-trip, so the rewrite itself is checked directly.
+        $absolute = new \ReflectionMethod(AnnotationCollector::class, 'withAbsoluteClassNames');
+
+        $this->assertSame(
+            "list<\\App\\User>|\\Closure(int): string|array{User: \\App\\U, 'App\\U': int}",
+            $absolute->invoke(null, "list<App\\User>|Closure(int): string|array{User: App\\U, 'App\\U': int}"),
+            'class names gain a backslash; shape keys, literals and keywords do not',
+        );
+    }
 }

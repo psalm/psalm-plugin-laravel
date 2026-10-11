@@ -361,4 +361,22 @@ final class TemplateAnnotatorTest extends TestCase
         $this->assertSame(['@var App\\User $user'], $result[2]);
     }
 
+
+    #[Test]
+    public function an_expression_local_docblock_is_not_the_header(): void
+    {
+        $header = "<?php \$items = [/** Per-item note. */ 1]; ?>\n";
+        $result = TemplateAnnotator::annotate($header . "<p>{{ \$title }}</p>\n", ['title' => 'string']);
+
+        $this->assertNotNull($result);
+        $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result[0], 'a new block after the leading one, not inside its array item');
+    }
+
+    #[Test]
+    public function a_cr_only_file_is_annotated_once(): void
+    {
+        $source = "<?php\r/**\r * Header.\r * @var string \$title\r */\r?>\r<p>{{ \$title }}</p>\r";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['title' => 'string']));
+    }
 }

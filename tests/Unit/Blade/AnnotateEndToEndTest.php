@@ -74,7 +74,7 @@ final class AnnotateEndToEndTest extends TestCase
         $this->annotate();
 
         $this->assertSame(
-            "<?php\n/**\n * @var AnnotateFixture\\Post \$post\n * @var string \$title\n */\n?>\n" . self::TEMPLATES['home'],
+            "<?php\n/**\n * @var \\AnnotateFixture\\Post \$post\n * @var string \$title\n */\n?>\n" . self::TEMPLATES['home'],
             $this->template('home'),
         );
     }

@@ -17,7 +17,8 @@ use Psalm\Plugin\EventHandler\Event\BeforeFileAnalysisEvent;
  * body and its callers would disagree.
  *
  * Fires on the template's shadow, the one file analysis visits per template, and emits against the
- * template path with the suppressions recorded for that line.
+ * template path. A `@psalm-suppress InvalidDocblock` in the declaring docblock, or a Blade
+ * `{{-- @psalm-suppress --}}` above the block it sits in, silences it.
  *
  * @internal
  */
@@ -50,7 +51,12 @@ final class RawDeclarationHandler implements BeforeFileAnalysisInterface
             $location = TemplateLocation::atLine($entry->templatePath, $name, $source, $line);
 
             if ($location instanceof Raw) {
-                IssueBuffer::accepts(new InvalidDocblock($message, $location), $entry->suppressions[$line] ?? []);
+                [$native, $blockLine] = ContractParser::suppressionContext($source, $line);
+
+                IssueBuffer::accepts(
+                    new InvalidDocblock($message, $location),
+                    [...$native, ...($entry->suppressions[$line] ?? []), ...($entry->suppressions[$blockLine] ?? [])],
+                );
             }
         }
     }

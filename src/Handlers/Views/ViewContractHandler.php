@@ -117,7 +117,9 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        if (self::$validateViewData) {
+        // A composer or creator can overwrite any key after the call site passed it, so neither what
+        // is missing nor what a value's type is can be judged from the call site alone.
+        if (self::$validateViewData && !ContractRegistry::isComposed($chain->viewName)) {
             $supplied = $chain->supplied();
 
             foreach ($contract->vars as $name => $var) {
