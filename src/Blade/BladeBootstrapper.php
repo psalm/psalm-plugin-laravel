@@ -182,7 +182,18 @@ final class BladeBootstrapper
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
         // (which skips ShadowCompiler) still gets them.
-        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
+        // Composer classes ride along: nothing may reference one in code position, yet the key
+        // resolver needs its storage after population.
+        $composerSources = $this->readComposerSources();
+        $composerClasses = [];
+
+        foreach ($composerSources as $sources) {
+            foreach ($sources ?? [] as [$class]) {
+                $composerClasses[$class] = true;
+            }
+        }
+
+        $this->registrar->queueClassLikesForScanning([...PreludeBuilder::ambientClassNames(), ...\array_keys($composerClasses)]);
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
@@ -229,7 +240,7 @@ final class BladeBootstrapper
             $this->publishShadowEntries($manifest, $shadows);
         }
 
-        $this->publishTemplateFacts();
+        $this->publishTemplateFacts($composerSources);
 
         return true;
     }
@@ -248,8 +259,12 @@ final class BladeBootstrapper
         }
     }
 
-    /** @see self::$pendingTemplates for why this is deferred to the end of a successful run */
-    private function publishTemplateFacts(): void
+    /**
+     * @see self::$pendingTemplates for why this is deferred to the end of a successful run
+     *
+     * @param array<string, list<array{0: string, 1: string}>|null> $composerSources
+     */
+    private function publishTemplateFacts(array $composerSources): void
     {
         foreach ($this->pendingTemplates as [$viewName, $rootIndex, $templatePath]) {
             ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
@@ -265,10 +280,10 @@ final class BladeBootstrapper
 
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
             ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
+        }
 
-            if ($this->hasComposer($factory, $viewName)) {
-                ContractRegistry::markComposed($viewName);
-            }
+        foreach ($composerSources as $viewName => $sources) {
+            ContractRegistry::registerComposerSources($viewName, $sources);
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
@@ -480,19 +495,25 @@ final class BladeBootstrapper
     }
 
     /**
-     * Whether a view composer or creator, wildcard ones included, is registered for the view: it can
-     * add any data, so the call site's data set proves nothing about what the template receives.
+     * Only views a composer or creator, wildcard ones included, reaches. It can add any data, so the
+     * call site's data set proves nothing about those views beyond what the composer is shown to pass.
+     *
+     * @return array<string, list<array{0: string, 1: string}>|null>
      */
-    private function hasComposer(?Factory $factory, string $viewName): bool
+    private function readComposerSources(): array
     {
-        try {
-            $events = $factory?->getDispatcher();
+        $reader = new ComposerSourceReader($this->app, $this->viewFactory());
+        $sources = [];
 
-            return $events !== null
-                && ($events->hasListeners("composing: {$viewName}") || $events->hasListeners("creating: {$viewName}"));
-        } catch (\Throwable) {
-            return false;
+        foreach ($this->pendingContracts as [$viewName]) {
+            $found = $reader->sourcesFor($viewName);
+
+            if ($found !== []) {
+                $sources[$viewName] = $found;
+            }
         }
+
+        return $sources;
     }
 
     private function viewFactory(): ?Factory

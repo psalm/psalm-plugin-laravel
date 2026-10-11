@@ -11,7 +11,21 @@ $app = Application::configure(basePath: \dirname(__DIR__))->create();
 // A view composer, as an application's service provider would register one: the `composed` view's
 // data is then not what its call sites pass.
 $app->booted(static function () use ($app): void {
-    $app->make('view')->composer('composed', static fn(): null => null);
+    $view = $app->make('view');
+    $view->composer('composed', static fn(): null => null);
+
+    // Class composers whose bodies the plugin reads: see app/ComposerCallSites.php.
+    $composers = 'ViewContractFixture\\Composers\\';
+    $view->composer('composer-literal', $composers . 'LiteralComposer');
+    $view->composer('composer-dynamic', $composers . 'DynamicKeyComposer');
+    $view->composer('composer-escape', $composers . 'EscapingComposer');
+    $view->composer('composer-wild.*', $composers . 'WildcardComposer');
+    $view->composer('composer-wild.page', $composers . 'MethodComposer@build');
+    $view->composer('composer-inherited', $composers . 'InheritedComposer');
+    $view->composer('composer-conflict', $composers . 'ConflictComposer');
+    $view->creator('composer-created', $composers . 'CreatorComposer');
+    $view->composer('composer-unknown', $composers . 'LiteralComposer');
+    $view->composer('composer-unknown', static fn(): null => null);
 });
 
 return $app;

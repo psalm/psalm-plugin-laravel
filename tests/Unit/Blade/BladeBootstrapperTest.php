@@ -558,25 +558,98 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertStringContainsString('$other', $problems[0][1]);
     }
 
+    /**
+     * A Laravel class composer (`Class`, `Class@method`), creator or wildcard composer is recorded
+     * as the class and method that will run, and the class is queued so Psalm has its storage by the
+     * time the keys are read. A view nobody composes records nothing.
+     */
     #[Test]
-    public function a_view_with_a_composer_creator_or_wildcard_composer_is_marked_composed(): void
+    public function class_composers_creators_and_wildcard_composers_are_recorded_as_class_and_method(): void
     {
         $app = $this->appWithViewFactory();
-        $events = $app->make('view')->getDispatcher();
-        $events->listen('composing: composed', static fn(): null => null);
-        $events->listen('creating: created', static fn(): null => null);
-        $events->listen('composing: admin.*', static fn(): null => null);
+        $view = $app->make('view');
+        $view->composer('composed', '\\App\\ProfileComposer');
+        $view->composer('composed', 'App\\Other@Build');
+        $view->creator('created', 'App\\Maker');
+        $view->composer('admin.*', 'App\\AdminComposer');
 
         foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
             $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
         }
 
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(
+            [
+                'admin.page' => [['App\\AdminComposer', 'compose']],
+                'composed' => [['App\\ProfileComposer', 'compose'], ['App\\Other', 'build']],
+                'created' => [['App\\Maker', 'create']],
+            ],
+            $sources,
+        );
+
+        foreach (['App\\ProfileComposer', 'App\\Other', 'App\\Maker', 'App\\AdminComposer'] as $class) {
+            $this->assertContains($class, $registrar->queuedClassLikes);
+        }
+
+        $this->assertContains(PreludeBuilder::ambientClassNames()[0], $registrar->queuedClassLikes, 'one queue call, not two');
+    }
+
+    /**
+     * Anything that is not Laravel's own class-composer closure leaves the source unknown, and one
+     * unknown source makes the whole view unknown: the key set must never be too small.
+     */
+    #[Test]
+    public function a_composer_that_is_not_a_plain_class_listener_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->bind('App\\Bound', static fn(): object => new \stdClass());
+        $app->alias('App\\Real', 'App\\Aliased');
+
+        $view = $app->make('view');
+        $view->composer('closure', static fn(): null => null);
+        $view->composer('mixed', 'App\\Known');
+        $view->composer('mixed', static fn(): null => null);
+        $view->composer('bound', 'App\\Bound');
+        $view->composer('aliased', 'App\\Aliased');
+        $view->getDispatcher()->listen('composing: raw', 'App\\Listener@handle');
+        $view->getDispatcher()->listen('composing: *', static fn(): null => null);
+
+        foreach (['closure', 'mixed', 'bound', 'aliased', 'raw', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
         $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
 
-        $this->assertTrue(ContractRegistry::isComposed('composed'));
-        $this->assertTrue(ContractRegistry::isComposed('created'));
-        $this->assertTrue(ContractRegistry::isComposed('admin.page'), 'a wildcard composer reaches it');
-        $this->assertFalse(ContractRegistry::isComposed('plain'));
+        // The raw `composing: *` listener reaches every view, so `plain` is unknown too.
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(
+            ['aliased' => null, 'bound' => null, 'closure' => null, 'mixed' => null, 'plain' => null, 'raw' => null],
+            $sources,
+        );
+    }
+
+    #[Test]
+    public function a_dispatcher_other_than_laravels_leaves_a_listened_view_unknown(): void
+    {
+        $app = $this->app();
+        $events = $this->createStub(\Illuminate\Contracts\Events\Dispatcher::class);
+        $events->method('hasListeners')->willReturnCallback(static fn(string $event): bool => $event === 'composing: composed');
+        $app->instance('view', new Factory(new EngineResolver(), $app->make('view.finder'), $events));
+
+        foreach (['composed', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame(['composed' => null], ContractRegistry::composerSources());
     }
 
     /**

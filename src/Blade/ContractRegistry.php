@@ -26,8 +26,15 @@ final class ContractRegistry
      */
     private static array $contracts = [];
 
-    /** @var array<string, true> */
-    private static array $composed = [];
+    /**
+     * @var array<string, list<array{0: string, 1: string}>|null> view name => [class, lowercased
+     *      method] of every composer or creator reaching it, null when one is not a plain class
+     *      composer. Written at boot, read by {@see ComposerKeyResolver}.
+     */
+    private static array $composerSources = [];
+
+    /** @var array<string, array<array-key, true>|null> view name => keys every composer supplies, null when unprovable */
+    private static array $composedKeys = [];
 
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
     private static array $problems = [];
@@ -64,15 +71,34 @@ final class ContractRegistry
         return self::$contracts[$viewName][2] ?? null;
     }
 
-    /** A composer or creator is registered for the view, so it may be handed data no call site shows. */
-    public static function markComposed(string $viewName): void
+    /** @param list<array{0: string, 1: string}>|null $sources */
+    public static function registerComposerSources(string $viewName, ?array $sources): void
     {
-        self::$composed[$viewName] = true;
+        self::$composerSources[$viewName] = $sources;
     }
 
-    public static function isComposed(string $viewName): bool
+    /** @return array<string, list<array{0: string, 1: string}>|null> */
+    public static function composerSources(): array
     {
-        return isset(self::$composed[$viewName]);
+        return self::$composerSources;
+    }
+
+    /** @param array<array-key, true>|null $keys */
+    public static function registerComposedKeys(string $viewName, ?array $keys): void
+    {
+        self::$composedKeys[$viewName] = $keys;
+    }
+
+    /**
+     * The data keys the view's composers and creators provably supply: `[]` for a view none reaches,
+     * null when any of them is unreadable (or the resolver never ran), which makes every key of the
+     * view potentially composer-supplied.
+     *
+     * @return array<array-key, true>|null
+     */
+    public static function composedKeys(string $viewName): ?array
+    {
+        return \array_key_exists($viewName, self::$composerSources) ? (self::$composedKeys[$viewName] ?? null) : [];
     }
 
     /** @param array<string, array{0: int, 1: string}> $problems variable name => [template line, message] */
@@ -93,6 +119,7 @@ final class ContractRegistry
     {
         self::$problems = [];
         self::$contracts = [];
-        self::$composed = [];
+        self::$composerSources = [];
+        self::$composedKeys = [];
     }
 }

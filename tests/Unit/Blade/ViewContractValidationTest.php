@@ -400,7 +400,7 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('write `string|null $bad = null`', (string) $reported[0]['message']);
     }
 
-    /** A composer or creator can overwrite any key, so a call site is judged on neither presence nor type. */
+    /** A closure composer is opaque, so a call site is judged on neither presence nor type. */
     #[Test]
     public function a_composed_view_is_checked_for_neither_presence_nor_type(): void
     {
@@ -408,6 +408,39 @@ final class ViewContractValidationTest extends TestCase
 
         $this->assertSame([], $this->forFile($issues, 'ComposedWrongType.php'), \var_export($issues, true));
         $this->assertSame([], $this->forFile($issues, 'ComposedMissing.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A class composer that provably passes a key only exempts THAT key: the other declared
+     * variables are still judged. The composer-supplied key is not type-checked either, since the
+     * composer runs after the call site and may overwrite it.
+     *
+     * The wildcard and exact composers of `composer-wild.page` are unioned, the exact one is a
+     * `Class@build` entry (its own `compose()` supplies a different key and must not count), a
+     * trait method inherited through a parent class is read, and creators work the same way.
+     */
+    #[Test]
+    public function a_composer_exempts_only_the_keys_it_provably_supplies(): void
+    {
+        $reported = [];
+
+        foreach ($this->forFile($this->contractIssues('psalm.xml'), 'ComposerCallSites.php') as $issue) {
+            \preg_match("/View '([^']+)' declares \\$(\\w+)/", $issue['message'], $matches);
+            $reported[] = "{$issue['type']} {$matches[1]} \${$matches[2]}";
+        }
+
+        \sort($reported);
+
+        $this->assertSame(
+            [
+                self::WRONG_TYPE . ' composer-literal $count',
+                self::MISSING . ' composer-created $count',
+                self::MISSING . ' composer-inherited $count',
+                self::MISSING . ' composer-literal $count',
+                self::MISSING . ' composer-wild.page $other',
+            ],
+            $reported,
+        );
     }
 
     /**
