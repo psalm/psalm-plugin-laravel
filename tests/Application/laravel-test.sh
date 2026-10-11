@@ -321,7 +321,7 @@ PHP
     # plugin's warnings, and a Blade boot that degraded is exactly what this step needs to see.
     ./vendor/bin/psalm-laravel blade:annotate --config="../../tests/Application/laravel-test-psalm-blade.xml"
 
-    if ! grep -qF '{{-- @var string $heading --}}' resources/views/annotate-target.blade.php; then
+    if ! grep -qF ' * @var string $heading' resources/views/annotate-target.blade.php; then
         cat resources/views/annotate-target.blade.php
         error "blade:annotate did not declare \$heading in resources/views/annotate-target.blade.php"
     fi

@@ -162,13 +162,15 @@ final class TemplateAnnotator
                     break;
                 }
 
-                // T_CURLY_OPEN's text is `{`, so the match already counts it.
+                // T_CURLY_OPEN's text is `{`, so the match already counts it; string text such as
+                // the `}` in `"{$a}}"` is not a bracket.
                 $depth = \max(0, $depth + match (true) {
+                    $id === \T_ENCAPSED_AND_WHITESPACE => 0,
                     $id === \T_ATTRIBUTE, $id === \T_DOLLAR_OPEN_CURLY_BRACES, $text === '{', $text === '(', $text === '[' => 1,
                     $text === '}', $text === ')', $text === ']' => -1,
                     default => 0,
                 });
-                $statementStart = $depth === 0 && ($text === ';' || $text === '}');
+                $statementStart = $id !== \T_ENCAPSED_AND_WHITESPACE && $depth === 0 && ($text === ';' || $text === '}');
             }
 
             $offset += \strlen($text);

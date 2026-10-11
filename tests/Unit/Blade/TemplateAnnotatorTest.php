@@ -23,6 +23,7 @@ final class TemplateAnnotatorTest extends TestCase
         '<?php $x = strlen(/** @var string $b */ "b"); ?>',
         '<?php $x = /** @var string $b */ "b"; ?>',
         '<?php $a = [/** @var int $i */ 1]; ?>',
+        '<?php function f() { $a = 1; $s = "{$a}}"; /** @var int $n */ $n = 1; } ?>',
     ];
 
     #[Test]
