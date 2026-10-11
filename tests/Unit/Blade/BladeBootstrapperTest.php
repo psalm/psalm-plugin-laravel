@@ -684,7 +684,7 @@ final class BladeBootstrapperTest extends TestCase
 
     /** The composer is built by the container the factory holds, not by the one the reader was handed. */
     #[Test]
-    public function a_binding_in_the_factorys_own_container_leaves_the_view_unknown(): void
+    public function a_binding_in_the_container_of_the_factory_leaves_the_view_unknown(): void
     {
         $app = $this->appWithViewFactory();
         $other = new Container();
