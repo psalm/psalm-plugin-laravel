@@ -7,6 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
@@ -19,7 +20,10 @@ use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidMethodCall;
+use Psalm\Issue\PossiblyNullReference;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
@@ -58,6 +62,54 @@ final class ShadowIssueRelocatorTest extends TestCase
     private function shadowLocation(int $line): \Psalm\CodeLocation\Raw
     {
         return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
+    }
+
+    /**
+     * A shadow location whose snippet and selection are readable without a booted ProjectAnalyzer,
+     * for the gates that match on the selected text (the pure-unit {@see shadowLocation()} cannot
+     * serve one: `getSnippet()` throws there).
+     */
+    private function selectingLocation(string $snippet, string $selected, int $line): CodeLocation
+    {
+        $start = \strpos($snippet, $selected);
+        $this->assertIsInt($start);
+
+        return new class ($snippet, $start, $start + \strlen($selected), $line, self::SHADOW) extends CodeLocation {
+            public function __construct(
+                private readonly string $snippetText,
+                private readonly int $start,
+                private readonly int $end,
+                private readonly int $line,
+                string $file,
+            ) {
+                $this->file_path = $file;
+                $this->file_name = \basename($file);
+            }
+
+            #[\Override]
+            public function getSnippet(): string
+            {
+                return $this->snippetText;
+            }
+
+            #[\Override]
+            public function getSelectionBounds(): array
+            {
+                return [$this->start, $this->end];
+            }
+
+            #[\Override]
+            public function getSnippetBounds(): array
+            {
+                return [0, \strlen($this->snippetText)];
+            }
+
+            #[\Override]
+            public function getLineNumber(): int
+            {
+                return $this->line;
+            }
+        };
     }
 
     private function relocate(
@@ -1189,5 +1241,98 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(NonStaticSelfCall::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1810: the synthetic `getIterator()` call Psalm makes on a union `@foreach` subject carries the
+     * subject variable's own position, so the selection is exactly `$__currentLoopData`.
+     */
+    #[Test]
+    public function a_synthetic_iterator_call_on_the_loop_subject_is_dropped(): void
+    {
+        $location = $this->selectingLocation('foreach ($__currentLoopData as $item) {', '$__currentLoopData', 9);
+
+        $invalid = new PossiblyInvalidMethodCall('Cannot call method on possible list<string> variable $__currentLoopData', $location);
+        $undefined = new PossiblyUndefinedMethod('Method ArrayIterator::getIterator does not exist', $location, 'arrayiterator::getiterator');
+
+        $this->assertFalse($this->relocate($invalid, $this->entry([9 => 3])));
+        $this->assertFalse($this->relocate($undefined, $this->entry([9 => 3])));
+    }
+
+    /** Negative: a real call on the same variable is positioned on its method name and keeps reporting (#1810). */
+    #[Test]
+    public function a_real_method_call_on_the_loop_subject_survives(): void
+    {
+        $location = $this->selectingLocation('echo e($__currentLoopData->count());', 'count', 9);
+
+        $invalid = new PossiblyInvalidMethodCall('Cannot call method count on possible list<string> variable $__currentLoopData', $location);
+
+        $relocated = $this->relocate($invalid, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * Negative (#1810 review): a dynamic method name `$receiver->$__currentLoopData()` selects exactly
+     * the variable too, but nothing follows it as a foreach subject, so a genuine author finding stays.
+     */
+    #[Test]
+    public function a_dynamic_method_name_on_the_loop_variable_survives(): void
+    {
+        $location = $this->selectingLocation('$receiver->$__currentLoopData();', '$__currentLoopData', 9);
+
+        $issue = new PossiblyInvalidMethodCall('Cannot call method on possible stdClass|int variable $receiver', $location);
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** Negative (#1810 review): `$__currentLoopData[0]` is an `offsetGet()` read, not a foreach subject. */
+    #[Test]
+    public function an_offset_read_of_the_loop_variable_survives(): void
+    {
+        $location = $this->selectingLocation('echo e($__currentLoopData[0]);', '$__currentLoopData', 9);
+
+        $issue = new PossiblyUndefinedMethod('Method stdClass::offsetGet does not exist', $location, 'stdclass::offsetget');
+
+        $this->assertInstanceOf(PossiblyUndefinedMethod::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** The subject is anchored on `as`, with any whitespace and a word boundary (an `asset` suffix is not it). */
+    #[Test]
+    public function a_loop_variable_followed_by_a_longer_word_survives(): void
+    {
+        $location = $this->selectingLocation('foreach ($__currentLoopData assoc) {', '$__currentLoopData', 9);
+
+        $issue = new PossiblyInvalidMethodCall('Cannot call method on possible list<string> variable $__currentLoopData', $location);
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** Negative: the gate is class-scoped, so another class selecting the same variable keeps reporting (#1810). */
+    #[Test]
+    public function another_issue_class_on_the_loop_subject_survives(): void
+    {
+        $location = $this->selectingLocation('foreach ($__currentLoopData as $item) {', '$__currentLoopData', 9);
+
+        $issue = new PossiblyNullReference('Cannot call method on possibly null value', $location);
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(PossiblyNullReference::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** Negative: the same classes selecting an author's own variable keep reporting (#1810). */
+    #[Test]
+    public function a_method_call_finding_on_an_authors_variable_survives(): void
+    {
+        $location = $this->selectingLocation('foreach ($items as $item) {', '$items', 9);
+
+        $issue = new PossiblyInvalidMethodCall('Cannot call method on possible list<string> variable $items', $location);
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $relocated);
     }
 }
