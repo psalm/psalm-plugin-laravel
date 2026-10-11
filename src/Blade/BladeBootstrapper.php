@@ -238,7 +238,7 @@ final class BladeBootstrapper
             $this->publishShadowEntries($manifest, $shadows);
         }
 
-        $this->publishTemplateFacts();
+        $this->publishTemplateFacts($compiler);
 
         return true;
     }
@@ -258,7 +258,7 @@ final class BladeBootstrapper
     }
 
     /** @see self::$pendingTemplates for why this is deferred to the end of a successful run */
-    private function publishTemplateFacts(): void
+    private function publishTemplateFacts(BladeCompiler $compiler): void
     {
         foreach ($this->pendingTemplates as [$viewName, $rootIndex, $templatePath]) {
             ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
@@ -271,7 +271,7 @@ final class BladeBootstrapper
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
 
         if ($this->reportUndeclaredVariables) {
-            $this->publishUndeclaredFacts();
+            $this->publishUndeclaredFacts($compiler);
         }
     }
 
@@ -279,7 +279,7 @@ final class BladeBootstrapper
      * Boot-time view data no template source shows (#1827). Left unregistered when the view
      * factory does not resolve, which keeps every omitted name declared.
      */
-    private function publishUndeclaredFacts(): void
+    private function publishUndeclaredFacts(BladeCompiler $compiler): void
     {
         try {
             $factory = $this->app->make('view');
@@ -293,8 +293,15 @@ final class BladeBootstrapper
 
         $events = $factory->getDispatcher();
         $declined = [];
+        $componentViews = $this->componentViewTemplates;
+        $anonymousPrefixes = $this->anonymousComponentPrefixes($compiler);
 
         foreach ($this->pendingTemplates as [$viewName, , $templatePath]) {
+            // An anonymous `<x-…>` tag hands its view every attribute it was given, markers or not.
+            if (\str_contains($viewName, '::components.') || $this->startsWithAny($viewName, $anonymousPrefixes)) {
+                $componentViews[$templatePath] = true;
+            }
+
             // The checks Factory::callComposer() / callCreator() make, wildcard listeners included.
             if (\str_starts_with($viewName, 'livewire.')
                 || \str_starts_with($viewName, 'livewire::')
@@ -308,8 +315,53 @@ final class BladeBootstrapper
         UndeclaredVariableRegistry::register(
             \array_fill_keys(\array_keys($factory->getShared()), true),
             $declined,
-            $this->componentViewTemplates,
+            $componentViews,
         );
+    }
+
+    /**
+     * The view-name prefixes `ComponentTagCompiler::guessAnonymousComponentUsingNamespaces()` and
+     * `guessAnonymousComponentUsingPaths()` resolve an anonymous tag to.
+     *
+     * @return list<string>
+     *
+     * @psalm-capabilities read-props
+     */
+    private function anonymousComponentPrefixes(BladeCompiler $compiler): array
+    {
+        $prefixes = ['components.'];
+
+        /** @psalm-var mixed $directory */
+        foreach ($compiler->getAnonymousComponentNamespaces() as $directory) {
+            if (\is_string($directory)) {
+                $prefixes[] = $directory . '.';
+            }
+        }
+
+        /** @psalm-var mixed $path */
+        foreach ($compiler->getAnonymousComponentPaths() as $path) {
+            if (\is_array($path) && isset($path['prefixHash']) && \is_string($path['prefixHash'])) {
+                $prefixes[] = $path['prefixHash'] . '::';
+            }
+        }
+
+        return $prefixes;
+    }
+
+    /**
+     * @param list<string> $prefixes
+     *
+     * @psalm-pure
+     */
+    private function startsWithAny(string $subject, array $prefixes): bool
+    {
+        foreach ($prefixes as $prefix) {
+            if (\str_starts_with($subject, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

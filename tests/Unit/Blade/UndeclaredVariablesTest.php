@@ -40,7 +40,7 @@ final class UndeclaredVariablesTest extends TestCase
      * a `View::share()` key and `$app`, a composer's and a creator's view, `@props`, a Livewire
      * attribute and a `livewire.*` view, a seeded class component's own data keys (untyped property,
      * `render()` key, named slot, `$componentName`), a class component view also `@include`d, and an
-     * anonymous component view.
+     * anonymous component view (with or without component markers, default, path, and namespace roots).
      */
     #[Test]
     public function reports_only_provably_undeclared_reads(): void
@@ -61,6 +61,16 @@ final class UndeclaredVariablesTest extends TestCase
     public function a_warm_shadow_cache_reports_the_same(): void
     {
         $run = $this->analyzeFixtureSequence(self::FIXTURE, [self::ARGUMENTS, self::ARGUMENTS]);
+
+        $this->assertSame(self::EXPECTED, $this->undeclaredIn($this->decodeIssues($run)));
+    }
+
+    /** A flag-off run in between must not leave its own entries for the next flag-on run to reuse. */
+    #[Test]
+    public function toggling_the_flag_off_and_back_on_reports_the_same(): void
+    {
+        $off = ['-c', 'psalm-off.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
+        $run = $this->analyzeFixtureSequence(self::FIXTURE, [self::ARGUMENTS, $off, self::ARGUMENTS]);
 
         $this->assertSame(self::EXPECTED, $this->undeclaredIn($this->decodeIssues($run)));
     }

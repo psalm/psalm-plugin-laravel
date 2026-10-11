@@ -332,17 +332,21 @@ Has no effect under `<blade value="false" />`: the read sets only exist once the
 <blade reportUndeclaredVariables="true" />
 ```
 
-In a template that declares a contract (at least one `{{-- @var T $name --}}` comment), report a read of a variable the template neither declares nor binds itself. The undeclared variable is no longer `mixed`: Psalm reports it as `UndefinedGlobalVariable` (or `UndefinedVariable` inside a closure) at the template line, once per read. A template without a contract stays silent, so the rule costs nothing until you annotate a template.
+In a template that declares a contract (at least one `{{-- @var T $name --}}` comment), report a read of a variable the template neither declares nor binds itself. The undeclared variable is no longer `mixed`: Psalm reports it as `UndefinedGlobalVariable` (or `UndefinedVariable` inside a closure) at the template line, once per variable per scope (a closure reports it again). A template without a contract stays silent, so the rule costs nothing until you annotate a template.
 
-Not a read the plugin cannot prove is undeclared:
+Never reported:
 
 - a name the template binds itself (`@foreach` aliases, assignments, closure parameters, `catch`), or declares in a raw `<?php /** @var */ ?>` or `@php` docblock;
 - Blade's own names, `$message` (mail views, `@error`), and every `View::share()` key the booted application registered, `$app` included;
 - a read guarded by `isset()`, `??` or `empty()`, which Psalm itself never reports.
 
-Whole templates are skipped when something outside them supplies data the plugin cannot list: a view composer or creator registered for the view, a Livewire view (a `livewire.*` name, `wire:` attributes, `$this`, `@entangle`), `@props` / `@aware`, `extract()`, a non-literal `compact()`, `include` or `eval`, an anonymous component view, and a class component view the plugin could not type from its class. A class component view it could type may read every key its class hands the view.
+Whole templates are skipped when something outside them supplies data the plugin cannot list: a view composer or creator registered for the view, a Livewire view (a `livewire.*` name, `wire:` attributes, `$this`, `@entangle`), `@props` / `@aware`, `extract()`, a non-literal `compact()`, `include` or `eval`, an anonymous component view (any view an `<x-…>` tag can resolve without a class, under `components.` or a registered anonymous component path or namespace), and a class component view the plugin could not type from its class. A class component view it could type may read every key its class hands the view.
 
-Enabling it makes every template recompile once; flipping it back reuses the earlier cache.
+A wildcard composer (`View::composer('*', ...)`, as a debugging tool's view watcher registers) matches every view, so it skips every template and the rule reports nothing.
+
+Each flip of the flag recompiles every template once: the two modes keep separate cache entries, and a run retires the other mode's.
+
+Has no effect under `<blade value="false" />`: the shadows it changes only exist once the compile pass has run.
 
 ### `reportMixedIssues`
 
