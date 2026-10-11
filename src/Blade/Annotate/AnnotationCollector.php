@@ -238,10 +238,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         // describe one `string` contract, and pinning either would be wrong for the other.
         $id = $observed->getId(false);
 
-        // The id is about to be written between `{{--` and `--}}`. An id carrying the terminator
-        // (a literal array key can) would close the comment early and render the rest of the
-        // declaration into the page.
-        if (\str_contains($id, '--}}') || \preg_match('/[\r\n]/', $id) === 1) {
+        // The id is about to be written inside a docblock. An id carrying the terminator
+        // (a literal array key can) would close the docblock early and leave the rest of the
+        // declaration as PHP in the template.
+        if (\str_contains($id, '*/') || \preg_match('/[\r\n]/', $id) === 1) {
             return null;
         }
 

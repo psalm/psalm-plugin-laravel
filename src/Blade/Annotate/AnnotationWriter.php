@@ -13,14 +13,14 @@ use SebastianBergmann\Diff\Differ;
 use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
 
 /**
- * Turns what {@see AnnotationCollector} saw into `{{-- @var --}}` declarations on disk.
+ * Turns what {@see AnnotationCollector} saw into native `@var` declarations on disk.
  *
  * Runs in AfterAnalysis, never from a per-statement hook: mid-analysis the template's shadow is
  * already parsed and cached, so rewriting the source then would put the run and the file out of
  * step. By AfterAnalysis every call site has been seen, which is also what makes the
  * every-producer-agrees rule answerable at all.
  *
- * Insertion only. A variable the template already declares is never rewritten, in either spelling —
+ * Insertion only (see {@see TemplateAnnotator} for where). A variable the template already declares is never rewritten, in either spelling —
  * narrowing a declaration a human wrote needs a containment check this release does not make.
  *
  * @internal
