@@ -1355,8 +1355,8 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($firstApp, $first)->boot();
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
-        $this->assertStringContainsString('compiler environment', $this->progress->warningText());
-        $this->assertStringContainsString("Cause: directive 'shout' (internal function", $this->progress->warningText());
+        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $this->progress->warningText());
+        $this->assertStringContainsString("directive 'shout' (internal function", \implode('', $this->progress->debugMessages));
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1376,11 +1376,10 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * #1693: the warning must name the input that disabled the cache, but a package registering
-     * many such callbacks must not flood it.
+     * #1693: the default warning stays a single line; the inputs are listed (uncapped) under --debug.
      */
     #[Test]
-    public function the_untrusted_environment_warning_names_at_most_three_inputs(): void
+    public function the_untrusted_environment_warning_is_short_and_inputs_are_listed_in_debug(): void
     {
         $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
 
@@ -1396,9 +1395,18 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $text = $this->progress->warningText();
-        $this->assertStringContainsString("directive 'a'", $text);
-        $this->assertStringContainsString("directive 'c'", $text);
-        $this->assertStringNotContainsString("directive 'd'", $text);
-        $this->assertStringContainsString('and 2 more', $text);
+        $this->assertStringNotContainsString("\n", \trim($text));
+        $this->assertStringContainsString('5 compiler inputs cannot be fingerprinted', $text);
+        $this->assertStringContainsString('analysis results are unaffected', $text);
+        $this->assertStringContainsString('--debug', $text);
+        $this->assertStringNotContainsString("directive 'a'", $text);
+
+        $debug = \implode('', $this->progress->debugMessages);
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $this->assertStringContainsString("  - directive '{$name}'", $debug);
+        }
+
+        $this->assertStringContainsString('To restore caching', $debug);
     }
 }
