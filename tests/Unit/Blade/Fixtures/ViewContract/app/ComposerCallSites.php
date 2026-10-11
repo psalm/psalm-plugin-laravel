@@ -61,6 +61,9 @@ final class ComposerCallSites
         view('composer-alias', ['title' => 123]);
         // The container constructs the composer first, and its constructor shares `count`.
         view('composer-ctor', ['title' => 123]);
+        // The parent constructor (called or inherited) shares `count`.
+        view('composer-parent-ctor', ['title' => 123]);
+        view('composer-inherited-ctor', ['title' => 123]);
         view('composer-unknown', ['title' => 123]);
     }
 }

@@ -26,6 +26,8 @@ $app->booted(static function () use ($app): void {
     $view->composer('composer-alias', $composers . 'AliasConflictComposer@build');
     $view->composer('composer-ctor', $composers . 'ConstructorShareComposer');
     $view->composer('composer-ctor-plain', $composers . 'PromotedConstructorComposer');
+    $view->composer('composer-parent-ctor', $composers . 'ParentConstructorComposer');
+    $view->composer('composer-inherited-ctor', $composers . 'InheritedConstructorComposer');
     // A numeric view name is an integer array key once it has been through a map.
     $view->composer('123', $composers . 'LiteralComposer');
     $view->creator('composer-created', $composers . 'CreatorComposer');
