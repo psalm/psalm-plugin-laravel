@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791674674056,
+  "lastUpdate": 1791712589648,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13360,6 +13360,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.24,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3eefb29630ee1500b0ad11deef5ba4018cfe4eb1",
+          "message": "Trust Blade directive closures bound to a service provider and name what disables the shadow cache (#1807)\n\n* fix(blade): trust Blade directive closures bound to a service provider\n\nPlain closures registered in a provider (pennant @feature, spatie ray) are bound to the provider, which disabled the shadow cache and recompiled every template each run. Fixes #1693.\n\n* feat(blade): name the inputs that disabled the shadow cache in the warning\n\nCapped at three names. Supersedes #1777 and #1728.",
+          "timestamp": "2026-10-11T11:53:41+02:00",
+          "tree_id": "3c3d97a2339c5c9cb581f0c87a07570509264dc6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3eefb29630ee1500b0ad11deef5ba4018cfe4eb1"
+        },
+        "date": 1791712588240,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.75,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
