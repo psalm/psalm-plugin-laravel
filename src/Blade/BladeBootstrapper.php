@@ -140,16 +140,26 @@ final class BladeBootstrapper
         [$environmentHash, $trustedEnvironment, $untrustedInputs] = CompilerEnvironment::describe($compiler);
 
         if (!$trustedEnvironment) {
-            // Capped: one broken package can register dozens of directives.
-            $named = \array_slice($untrustedInputs, 0, 3);
-            $more = \count($untrustedInputs) - \count($named);
+            $count = \count($untrustedInputs);
 
+            // Psalm has no verbose level: the full list goes to --debug so the default warning stays one line.
             $this->output->warning(
-                'Laravel plugin: the Blade compiler environment (a custom directive, condition, precompiler, '
-                . 'extension, or component map) could not be fully resolved, so cached Blade shadows are not '
-                . 'trusted for this run; every template is recompiled.'
-                . ($named === [] ? '' : ' Cause: ' . \implode('; ', $named) . ($more > 0 ? "; and {$more} more" : '') . '.'),
+                'Laravel plugin: Blade shadow cache skipped for this run ('
+                . ($count === 0
+                    ? 'the compiler environment cannot be fingerprinted'
+                    : ($count === 1 ? '1 compiler input cannot' : "{$count} compiler inputs cannot") . ' be fingerprinted')
+                . '): every template is recompiled. Slower only; analysis results are unaffected.'
+                . ($count === 0 ? '' : ' Run with --debug to list the inputs.'),
             );
+
+            if ($count > 0) {
+                $this->output->debug(
+                    "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
+                    . \implode('', \array_map(static fn(string $input): string => "  - {$input}\n", $untrustedInputs))
+                    . "To restore caching, declare such callbacks `static fn` / `static function` that capture no objects, "
+                    . "or register a static method (`[Foo::class, 'bar']`).\n",
+                );
+            }
         }
 
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
