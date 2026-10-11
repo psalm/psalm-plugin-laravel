@@ -17,8 +17,9 @@ use Psalm\Config;
 final readonly class PluginConfig
 {
     /**
-     * Process environment variable carrying per-run setting overrides (`blade=true`), which win over
-     * the XML. A real process variable, not a Laravel `.env` entry: it is read before the app boots.
+     * Process environment variable carrying per-run setting overrides (`blade=true`, `experimental=true`,
+     * `columnFallback=none`), which win over the XML. A real process variable, not a Laravel `.env`
+     * entry: it is read before the app boots.
      */
     public const OPTIONS_ENV_VAR = 'PSALM_LARAVEL_OPTIONS';
 
@@ -72,26 +73,24 @@ final readonly class PluginConfig
 
     public static function fromXml(?\SimpleXMLElement $config): self
     {
+        $env = self::envOverrides();
+
         $columnFallbackValue = self::xmlStringAttr($config?->modelProperties, 'columnFallback', 'migrations');
-        $columnFallback = ColumnFallback::tryFrom($columnFallbackValue);
+        $xmlColumnFallback = ColumnFallback::tryFrom($columnFallbackValue);
 
-        if ($columnFallback === null) {
-            $valid = \implode(', ', \array_map(
-                static fn(ColumnFallback $case): string => "'{$case->value}'",
-                ColumnFallback::cases(),
-            ));
-
+        if ($xmlColumnFallback === null) {
             throw new \InvalidArgumentException(
-                "Invalid columnFallback value '{$columnFallbackValue}'. Valid values: {$valid}.",
+                "Invalid columnFallback value '{$columnFallbackValue}'. Valid values: " . self::validColumnFallbacks() . '.',
             );
         }
 
+        $columnFallback = $env['columnFallback'] ?? $xmlColumnFallback;
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
-        $experimental = self::xmlBoolAttr($config?->experimental, 'experimental');
+        $experimental = $env['experimental'] ?? self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
         $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
-        // experimental = early access to rules not yet promoted to default; an explicit
-        // value always overrides it, in either direction.
+        // experimental = early access to rules not yet promoted to default; an explicit XML
+        // per-rule value always overrides it, in either direction, whether it came from XML or env.
         $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks') ?? $experimental;
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels') ?? $experimental;
         $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames') ?? $experimental;
@@ -103,7 +102,7 @@ final readonly class PluginConfig
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         // Computed first so a malformed <blade> element still fails when the env override would win.
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
-        $bladeEnabled = self::envBladeOverride() ?? $xmlBladeEnabled;
+        $bladeEnabled = $env['blade'] ?? $xmlBladeEnabled;
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
@@ -302,17 +301,19 @@ final readonly class PluginConfig
      * analyze --blade` hands its toggle to the child psalm through this variable.
      *
      * Every token is validated, including ones a later repeat shadows, so a typo never hides.
-     * Returns null (no override) for an unset, empty or blank variable and when `blade` is absent.
+     * A key that is absent (or an unset, empty or blank variable) yields null: no override.
+     *
+     * @return array{blade: ?bool, experimental: ?bool, columnFallback: ?ColumnFallback}
      */
-    private static function envBladeOverride(): ?bool
+    private static function envOverrides(): array
     {
+        $overrides = ['blade' => null, 'experimental' => null, 'columnFallback' => null];
         $raw = \getenv(self::OPTIONS_ENV_VAR);
 
         if (!\is_string($raw)) {
-            return null;
+            return $overrides;
         }
 
-        $blade = null;
         $tokens = \preg_split('/\s+/', $raw, -1, \PREG_SPLIT_NO_EMPTY);
 
         foreach ($tokens === false ? [] : $tokens as $token) {
@@ -324,22 +325,44 @@ final readonly class PluginConfig
                 );
             }
 
-            if ($key !== 'blade') {
+            if ($key === 'columnFallback') {
+                $overrides[$key] = ColumnFallback::tryFrom($value)
+                    ?? throw new \InvalidArgumentException(
+                        "Invalid " . self::OPTIONS_ENV_VAR . " columnFallback value '{$value}'. Valid values: " . self::validColumnFallbacks() . '.',
+                    );
+
+                continue;
+            }
+
+            if ($key !== 'blade' && $key !== 'experimental') {
                 throw new \InvalidArgumentException(
-                    self::OPTIONS_ENV_VAR . " contains unknown key '{$key}'. Supported keys: 'blade'.",
+                    self::OPTIONS_ENV_VAR . " contains unknown key '{$key}'. Supported keys: 'blade', 'experimental', 'columnFallback'.",
                 );
             }
 
             if (!\in_array($value, ['true', 'false'], true)) {
                 throw new \InvalidArgumentException(
-                    "Invalid " . self::OPTIONS_ENV_VAR . " blade value '{$value}'. Valid values: 'true', 'false'.",
+                    "Invalid " . self::OPTIONS_ENV_VAR . " {$key} value '{$value}'. Valid values: 'true', 'false'.",
                 );
             }
 
-            $blade = $value === 'true';
+            $overrides[$key] = $value === 'true';
         }
 
-        return $blade;
+        return $overrides;
+    }
+
+    /**
+     * @return non-empty-string `'migrations', 'none'`
+     *
+     * @psalm-pure
+     */
+    private static function validColumnFallbacks(): string
+    {
+        return \implode(', ', \array_map(
+            static fn(ColumnFallback $case): string => "'{$case->value}'",
+            ColumnFallback::cases(),
+        ));
     }
 
     private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string

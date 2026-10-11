@@ -29,7 +29,14 @@ class Classification
      * `PendingClassification::classify()` sends this state to the model; see
      * `vendor/laravel/ai/src/Classification.php`.
      *
+     * 1.2.0 appended `$attachments`; the method-level `@since` gates the whole signature on older
+     * releases. No sink on `$attachments`: attachment content is sunk at the raw-content
+     * `Files\Document` / `Files\Image` factories (`fromString()`, `fromBase64()`), as for `Promptable::prompt()`.
+     *
+     * @since 1.2.0
+     *
+     * @param array<int, \Laravel\Ai\Files\File|\Illuminate\Http\UploadedFile> $attachments
      * @psalm-taint-sink llm_prompt $state
      */
-    public static function of(string|array $state): PendingClassification {}
+    public static function of(string|array $state, array $attachments = []): PendingClassification {}
 }

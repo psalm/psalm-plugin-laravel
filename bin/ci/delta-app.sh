@@ -354,7 +354,8 @@ run_side() {
     # schema into head.
     #
     # Through the side's own `psalm-laravel analyze`, not vendor/bin/psalm: it
-    # consumes plugin options Psalm rejects (--blade/--no-blade) and forwards
+    # consumes plugin options Psalm rejects (--blade/--no-blade, --experimental,
+    # --no-migrations) and forwards
     # everything else to Psalm verbatim, with Psalm's exit code and streams.
     (
         cd "$app_dir"

@@ -69,6 +69,11 @@ groups:
 flags:
   "--blade": Analyse Blade templates, overriding psalm.xml
   "--no-blade": Skip Blade templates, overriding psalm.xml
+  "--find-dead-code": Report unused code, overriding psalm.xml
+  "--find-unused-psalm-suppress": Report unused @psalm-suppress, overriding psalm.xml
+  "--find-unused-variables": Report unused variables and params, overriding psalm.xml
+  "--experimental": Enable experimental opt-in rules, overriding psalm.xml
+  "--no-migrations": Disable migration-based column inference, columnFallback=none
 
 apps:
   - name: monica

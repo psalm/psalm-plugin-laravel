@@ -181,7 +181,7 @@ final class AnalyzeCommandTest extends TestCase
         unset($_SERVER['argv']);
 
         $this->assertSame(
-            ['forwarded' => [], 'blade' => null],
+            ['forwarded' => [], 'blade' => null, 'experimental' => false, 'noMigrations' => false],
             (new AnalyzeCommand())->scanArguments(),
         );
     }
@@ -192,11 +192,11 @@ final class AnalyzeCommandTest extends TestCase
         $command = new AnalyzeCommand();
 
         $this->assertSame(
-            ['forwarded' => ['--threads=1', 'src', '--no-cache'], 'blade' => true],
+            ['forwarded' => ['--threads=1', 'src', '--no-cache'], 'blade' => true, 'experimental' => false, 'noMigrations' => false],
             $command->scanArguments(['psalm-laravel', 'analyze', '--threads=1', '--blade', 'src', '--no-cache']),
         );
         $this->assertSame(
-            ['forwarded' => ['--no-cache'], 'blade' => false],
+            ['forwarded' => ['--no-cache'], 'blade' => false, 'experimental' => false, 'noMigrations' => false],
             $command->scanArguments(['psalm-laravel', '--no-blade', '--no-cache']),
         );
     }
@@ -216,7 +216,7 @@ final class AnalyzeCommandTest extends TestCase
         $command = new AnalyzeCommand();
 
         $this->assertSame(
-            ['forwarded' => [], 'blade' => false],
+            ['forwarded' => [], 'blade' => false, 'experimental' => false, 'noMigrations' => false],
             $command->scanArguments(['psalm-laravel', 'analyze', '--blade', '--no-blade', '--blade', '--no-blade']),
         );
         $this->assertTrue($command->scanArguments(['psalm-laravel', 'analyze', '--no-blade', '--blade'])['blade']);
@@ -228,7 +228,7 @@ final class AnalyzeCommandTest extends TestCase
         $command = new AnalyzeCommand();
 
         $this->assertSame(
-            ['forwarded' => ['--', '--blade', 'src'], 'blade' => false],
+            ['forwarded' => ['--', '--blade', 'src'], 'blade' => false, 'experimental' => false, 'noMigrations' => false],
             $command->scanArguments(['psalm-laravel', 'analyze', '--no-blade', '--', '--blade', 'src']),
         );
         $this->assertNull($command->scanArguments(['psalm-laravel', 'analyze', '--', '--blade'])['blade']);
@@ -240,7 +240,7 @@ final class AnalyzeCommandTest extends TestCase
         $command = new AnalyzeCommand();
 
         $this->assertSame(
-            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', 'blade'], 'blade' => null],
+            ['forwarded' => ['--blade=true', '--blades', '--no-blade-x', 'blade'], 'blade' => null, 'experimental' => false, 'noMigrations' => false],
             $command->scanArguments(['psalm-laravel', 'analyze', '--blade=true', '--blades', '--no-blade-x', 'blade']),
         );
     }
@@ -252,6 +252,86 @@ final class AnalyzeCommandTest extends TestCase
 
         $this->assertTrue($definition->hasOption('blade'));
         $this->assertTrue($definition->hasNegation('no-blade'));
+    }
+
+    #[Test]
+    public function strips_experimental_and_no_migrations_flags_and_reports_the_overrides(): void
+    {
+        $command = new AnalyzeCommand();
+
+        $this->assertSame(
+            ['forwarded' => ['--threads=1', 'src'], 'blade' => null, 'experimental' => true, 'noMigrations' => false],
+            $command->scanArguments(['psalm-laravel', 'analyze', '--threads=1', '--experimental', 'src']),
+        );
+        $this->assertSame(
+            ['forwarded' => ['--no-cache'], 'blade' => null, 'experimental' => false, 'noMigrations' => true],
+            $command->scanArguments(['psalm-laravel', '--no-migrations', '--no-cache']),
+        );
+        $this->assertSame(
+            ['forwarded' => [], 'blade' => true, 'experimental' => true, 'noMigrations' => true],
+            $command->scanArguments(['psalm-laravel', 'analyze', '--no-migrations', '--blade', '--experimental', '--experimental']),
+        );
+    }
+
+    #[Test]
+    public function experimental_and_no_migrations_flags_after_the_double_dash_boundary_are_forwarded_untouched(): void
+    {
+        $this->assertSame(
+            ['forwarded' => ['--', '--experimental', '--no-migrations'], 'blade' => null, 'experimental' => true, 'noMigrations' => false],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--experimental', '--', '--experimental', '--no-migrations']),
+        );
+    }
+
+    #[Test]
+    public function flags_that_merely_resemble_experimental_and_no_migrations_are_forwarded(): void
+    {
+        $this->assertSame(
+            ['forwarded' => ['--experimental=true', '--experimentals', '--no-migrations-x', '--migrations', '--no-experimental'], 'blade' => null, 'experimental' => false, 'noMigrations' => false],
+            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--experimental=true', '--experimentals', '--no-migrations-x', '--migrations', '--no-experimental']),
+        );
+    }
+
+    #[Test]
+    public function experimental_and_no_migrations_flags_are_declared_for_help(): void
+    {
+        $definition = (new AnalyzeCommand())->getDefinition();
+
+        $this->assertTrue($definition->hasOption('experimental'));
+        $this->assertTrue($definition->hasOption('no-migrations'));
+        $this->assertFalse($definition->hasNegation('no-experimental'));
+        $this->assertFalse($definition->hasOption('migrations'));
+    }
+
+    #[Test]
+    public function experimental_flag_reaches_the_child_as_the_options_env_and_not_as_an_argument(): void
+    {
+        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1', '--experimental']);
+
+        $this->assertSame(Command::SUCCESS, $run['exit']);
+        $this->assertSame('experimental=true', $run['report']['options']);
+        $this->assertSame(['--threads=1'], $run['report']['argv']);
+    }
+
+    #[Test]
+    public function no_migrations_flag_reaches_the_child_as_column_fallback_none(): void
+    {
+        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--no-migrations']);
+
+        $this->assertSame('columnFallback=none', $run['report']['options']);
+        $this->assertSame([], $run['report']['argv']);
+    }
+
+    #[Test]
+    public function all_per_run_flags_are_appended_after_an_inherited_options_value_so_the_flags_win(): void
+    {
+        \putenv('PSALM_LARAVEL_OPTIONS=experimental=false columnFallback=migrations');
+
+        $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--no-migrations', '--experimental', '--no-blade']);
+
+        $this->assertSame(
+            'experimental=false columnFallback=migrations blade=false experimental=true columnFallback=none',
+            $run['report']['options'],
+        );
     }
 
     #[Test]

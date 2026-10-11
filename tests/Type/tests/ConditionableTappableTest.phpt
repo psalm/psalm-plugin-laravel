@@ -214,17 +214,16 @@ function test_stringable_tap_with_callback(): void
 }
 
 /**
- * tap() without a callback returns the higher-order proxy generic over the target.
- *
- * TappableTapHandler supplies this (a conditional return type in the stub cannot
- * discriminate the callback / no-callback branches when overriding a reflected trait).
+ * tap() without a callback returns the higher-order proxy generic over the target. The stub's
+ * conditional return discriminates on `$callback is null`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1110
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1760
  */
 function test_tap_without_callback(): void
 {
     $_result = (new Stringable('hello'))->tap();
-    /** @psalm-check-type-exact $_result = HigherOrderTapProxy<Stringable> */
+    /** @psalm-check-type-exact $_result = HigherOrderTapProxy<Stringable&static> */
 }
 /**
  * tap() on Http\Client\Response (another Tappable user) confirms trait-level application

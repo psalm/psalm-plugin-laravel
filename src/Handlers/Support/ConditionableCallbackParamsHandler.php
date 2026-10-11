@@ -19,6 +19,7 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\AssertionReconciler;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -95,9 +96,10 @@ final class ConditionableCallbackParamsHandler implements
 {
     /**
      * when()/unless() calls awaiting their params lookup, keyed by the call's first Arg (the only
-     * call-identifying object the provider event exposes). Weakly keyed: entries die with the AST.
+     * call-identifying object the provider event exposes). Both ends are weak: the call owns its Arg, so a
+     * strong value would keep the key alive and the entry would outlive its AST.
      *
-     * @psalm-var \WeakMap<Arg, MethodCall|NullsafeMethodCall>|null
+     * @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>>|null
      */
     private static ?\WeakMap $calls = null;
 
@@ -168,7 +170,7 @@ final class ConditionableCallbackParamsHandler implements
         $args = $expr->getArgs();
 
         if (($method === 'when' || $method === 'unless') && \count($args) >= 2) {
-            (self::$calls ??= self::newCallMap())->offsetSet($args[0], $expr);
+            (self::$calls ??= self::newCallMap())->offsetSet($args[0], \WeakReference::create($expr));
         }
 
         return null;
@@ -194,8 +196,8 @@ final class ConditionableCallbackParamsHandler implements
         }
 
         $literals = [
-            'callback' => self::closureLiteral(self::findArg($args, 'callback', 1)),
-            'default' => self::closureLiteral(self::findArg($args, 'default', 2)),
+            'callback' => self::closureLiteral(ArgUtil::boundTo($args, 'callback', 1)),
+            'default' => self::closureLiteral(ArgUtil::boundTo($args, 'default', 2)),
         ];
         if ($literals['callback'] === null && $literals['default'] === null) {
             return null;
@@ -203,7 +205,7 @@ final class ConditionableCallbackParamsHandler implements
 
         // A value arg preceded by another arg (reordered named args) would be pre-analyzed before
         // that arg's side effects; only a leading value arg reads the state it is evaluated in.
-        $valueArg = self::findArg($args, 'value', 0);
+        $valueArg = ArgUtil::boundTo($args, 'value', 0);
         if ($valueArg instanceof \PhpParser\Node\Arg && $valueArg !== $args[0]) {
             return null;
         }
@@ -211,7 +213,7 @@ final class ConditionableCallbackParamsHandler implements
         $source = $event->getStatementsSource();
         $context = $event->getContext();
         // A stash miss (static or forwarded call) leaves no receiver node to read.
-        $call = self::$calls[$args[0]] ?? null;
+        $call = (self::$calls[$args[0]] ?? null)?->get();
         if (!$source instanceof StatementsAnalyzer || !$context instanceof Context || $call === null) {
             return null;
         }
@@ -521,30 +523,12 @@ final class ConditionableCallbackParamsHandler implements
     }
 
     /**
-     * The arg bound to a parameter: by name when named, else by position among the leading
-     * positional args.
-     *
-     * @param list<Arg> $args
-     * @psalm-mutation-free
-     */
-    private static function findArg(array $args, string $name, int $position): ?Arg
-    {
-        foreach ($args as $offset => $arg) {
-            if ($arg->name instanceof Identifier ? $arg->name->name === $name : $offset === $position) {
-                return $arg;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @return \WeakMap<Arg, MethodCall|NullsafeMethodCall>
+     * @return \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>>
      * @psalm-pure
      */
     private static function newCallMap(): \WeakMap
     {
-        /** @psalm-var \WeakMap<Arg, MethodCall|NullsafeMethodCall> $map */
+        /** @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>> $map */
         $map = new \WeakMap();
 
         return $map;

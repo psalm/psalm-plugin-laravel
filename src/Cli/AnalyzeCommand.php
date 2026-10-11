@@ -54,32 +54,58 @@ final class AnalyzeCommand extends Command
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
         );
 
-        // Declared for `analyze --help` only: scanArguments() consumes the toggle from raw argv, and the
-        // command forwards it to psalm as PSALM_LARAVEL_OPTIONS because psalm rejects unknown flags.
+        // Declared for `analyze --help` only: scanArguments() consumes these toggles from raw argv, and the
+        // command forwards them to psalm as PSALM_LARAVEL_OPTIONS because psalm rejects unknown flags.
         $this->addOption(
             'blade',
             null,
             InputOption::VALUE_NEGATABLE,
             'Force Blade template analysis on (--blade) or off (--no-blade) for this run, overriding psalm.xml.',
         );
+        $this->addOption(
+            'experimental',
+            null,
+            InputOption::VALUE_NONE,
+            'Enable the experimental opt-in rules for this run, overriding psalm.xml.',
+        );
+        $this->addOption(
+            'no-migrations',
+            null,
+            InputOption::VALUE_NONE,
+            'Skip migration-based column inference for this run (columnFallback="none"), overriding psalm.xml.',
+        );
     }
 
     /**
-     * The child's environment: null (inherit) unless a Blade toggle was given. The toggle travels as a
-     * `blade=…` token appended to any existing PSALM_LARAVEL_OPTIONS, so it wins by last-key-wins.
+     * The child's environment: null (inherit) unless a per-run toggle was given. Each toggle travels as a
+     * `key=…` token appended to any existing PSALM_LARAVEL_OPTIONS, so it wins by last-key-wins.
      * An explicit array REPLACES the environment in proc_open, hence the whole `getenv()` is copied.
      *
      * @return array<string, string>|null
      */
-    private function childEnvironment(?bool $blade): ?array
+    private function childEnvironment(?bool $blade, bool $experimental, bool $noMigrations): ?array
     {
-        if ($blade === null) {
+        $tokens = [];
+
+        if ($blade !== null) {
+            $tokens[] = 'blade=' . ($blade ? 'true' : 'false');
+        }
+
+        if ($experimental) {
+            $tokens[] = 'experimental=true';
+        }
+
+        if ($noMigrations) {
+            $tokens[] = 'columnFallback=none';
+        }
+
+        if ($tokens === []) {
             return null;
         }
 
         $env = \getenv();
         $inherited = $env[PluginConfig::OPTIONS_ENV_VAR] ?? '';
-        $env[PluginConfig::OPTIONS_ENV_VAR] = \trim($inherited . ' blade=' . ($blade ? 'true' : 'false'));
+        $env[PluginConfig::OPTIONS_ENV_VAR] = \trim($inherited . ' ' . \implode(' ', $tokens));
 
         return $env;
     }
@@ -113,7 +139,13 @@ final class AnalyzeCommand extends Command
         $command = [\PHP_BINARY, $psalmBin, ...$scan['forwarded']];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
-        $process = \proc_open($command, $descriptors, $pipes, $cwd, $this->childEnvironment($scan['blade']));
+        $process = \proc_open(
+            $command,
+            $descriptors,
+            $pipes,
+            $cwd,
+            $this->childEnvironment($scan['blade'], $scan['experimental'], $scan['noMigrations']),
+        );
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
@@ -141,9 +173,10 @@ final class AnalyzeCommand extends Command
     }
 
     /**
-     * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run Blade toggle
-     * (`--blade` true, `--no-blade` false, the last one wins, null when neither was given). One scan
-     * yields both, so the stripped tokens and the toggle cannot drift apart.
+     * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the per-run toggles:
+     * Blade (`--blade` true, `--no-blade` false, the last one wins, null when neither was given),
+     * `--experimental` and `--no-migrations` (plain booleans). One scan yields all of them, so the
+     * stripped tokens and the toggles cannot drift apart.
      *
      * Raw argv, not parsed input: Symfony binds `--flags` as options (not into a
      * declared argument), and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
@@ -159,7 +192,7 @@ final class AnalyzeCommand extends Command
      * Public (not private) so it is unit-testable: CommandTester can't set argv.
      *
      * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
-     * @return array{forwarded: list<string>, blade: ?bool}
+     * @return array{forwarded: list<string>, blade: ?bool, experimental: bool, noMigrations: bool}
      */
     public function scanArguments(?array $argv = null): array
     {
@@ -176,10 +209,17 @@ final class AnalyzeCommand extends Command
 
         $forwarded = [];
         $blade = null;
+        $experimental = false;
+        $noMigrations = false;
 
         foreach ($tokens as $index => $token) {
             if ($token === '--') {
-                return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'blade' => $blade];
+                return [
+                    'forwarded' => [...$forwarded, ...\array_slice($tokens, $index)],
+                    'blade' => $blade,
+                    'experimental' => $experimental,
+                    'noMigrations' => $noMigrations,
+                ];
             }
 
             if ($token === '--blade' || $token === '--no-blade') {
@@ -187,9 +227,19 @@ final class AnalyzeCommand extends Command
                 continue;
             }
 
+            if ($token === '--experimental') {
+                $experimental = true;
+                continue;
+            }
+
+            if ($token === '--no-migrations') {
+                $noMigrations = true;
+                continue;
+            }
+
             $forwarded[] = $token;
         }
 
-        return ['forwarded' => $forwarded, 'blade' => $blade];
+        return ['forwarded' => $forwarded, 'blade' => $blade, 'experimental' => $experimental, 'noMigrations' => $noMigrations];
     }
 }

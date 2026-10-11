@@ -93,20 +93,13 @@ the call reports nothing at all instead of reporting one of its flows. The
 longer flows are discarded whether or not the exemption applies, so this costs
 no coverage relative to running without the plugin.
 
-### Known limitation: named arguments
+### Known limitation: named arguments captured by a variadic
 
-Psalm keys a named argument's taint node by the argument's written position rather than by the
-parameter it names ([vimeo/psalm#11923](https://github.com/vimeo/psalm/issues/11923)), so taint
-can be reported against the wrong parameter. Until that is fixed upstream, the plugin drops
-taint from a named argument it cannot prove is attributed correctly.
-
-Detection is unaffected when the callee is statically known (a plain function, a facade, a
-static call, a constructor, or a method on a receiver typed as exactly one class) and the
-argument names the parameter at its own position, which covers ordinary application code. It is
-lost for a dynamic callee, a receiver Psalm cannot resolve to a single class (including a
-chained call such as `Storage::disk('local')->put(path: $input)`, where the receiver is an
-expression rather than a variable), an argument captured by a variadic, and a `static::` call
-resolved through a subclass override. Passing the same values positionally always reports.
+Two Psalm bugs ([vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251),
+[#12252](https://github.com/vimeo/psalm/issues/12252)) misattribute a named argument bound to a
+variadic parameter. The plugin drops the taint of such an argument when the callee resolves
+exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a
+re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps full detection.
 
 ### Timing-unsafe secret comparison (CWE-208)
 
