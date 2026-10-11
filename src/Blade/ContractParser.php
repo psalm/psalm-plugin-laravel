@@ -12,24 +12,15 @@ use PhpParser\ParserFactory;
 use Psalm\Internal\Analyzer\CommentAnalyzer;
 
 /**
- * Extracts a {@see TemplateContract} from a Blade template: `@var`
- * declarations (`{{-- --}}` comments, and raw docblocks for names the template does not bind itself),
- * `@props` entries, and the set of top-level variables the
- * compiled body reads. Read-only; wiring the result into shadow compilation
- * is a separate step.
+ * Extracts a {@see TemplateContract} from a Blade template: `@var` declarations (raw PHPDoc
+ * docblocks in `<?php` / `@php` blocks, for names the template does not bind itself), `@props`
+ * entries, and the set of top-level variables the compiled body reads. Read-only; wiring the
+ * result into shadow compilation is a separate step.
  *
  * @psalm-api
  */
 final class ContractParser
 {
-    /**
-     * The `{{-- @var T $name --}}` spelling, matched against a comment's inner content; group 1 is
-     * what follows `@var`, for {@see self::splitVar()}. One line, as it always was.
-     *
-     * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises.
-     */
-    public const VAR_PATTERN = '/^\s*@var\s+([^\r\n]+?)\s*$/';
-
     /** PHP's own variable-name grammar, as bytes. */
     public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
@@ -66,8 +57,11 @@ final class ContractParser
     public function parse(string $source, string $compiled): TemplateContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
+        [$names, $locals] = $this->walkReads($compiled);
 
-        return new TemplateContract($vars, $this->readVariables($compiled), $propsUnknown);
+        $vars += $this->rawContractVars($source, $this->filterNames($locals, []));
+
+        return new TemplateContract($vars, $this->filterNames($names, $locals), $propsUnknown);
     }
 
     /**
@@ -91,38 +85,24 @@ final class ContractParser
     }
 
     /**
-     * The declaration half of {@see self::parse()}, from the template source alone, so it can run
-     * before compilation: its `@var` types also seed the shadow prelude
-     * ({@see BladeBootstrapper::bodyTypes()}).
+     * The declaration half of {@see self::parse()}: `@props` entries and, when the compiled output is
+     * given, the raw `@var` docblocks that are view data. Telling view data from a type hint on a
+     * local needs the compiled body, which is only walked when the source mentions a `@var` at all.
      */
-    public function parseDeclarations(string $source): ViewDataContract
+    public function parseDeclarations(string $source, ?string $compiled = null): ViewDataContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
+
+        if ($compiled !== null && \str_contains($source, '@var')) {
+            $vars += self::rawContractVars($source, $this->parseReads($compiled)[2]);
+        }
 
         return new ViewDataContract($vars, $propsUnknown);
     }
 
     /**
-     * {@see self::parseDeclarations()} plus the raw `@var` docblocks, for a run that does not
-     * collect the read set. Raw declarations need the compiled body to tell view data from a type
-     * hint on a local, so it is only walked when the source mentions a `@var` at all.
-     */
-    public function withRawDeclarations(ViewDataContract $declarations, string $source, string $compiled): ViewDataContract
-    {
-        if (!\str_contains($source, '@var')) {
-            return $declarations;
-        }
-
-        return new ViewDataContract(
-            $declarations->vars + $this->rawContractVars($source, $this->parseReads($compiled)[2]),
-            $declarations->propsUnknown,
-        );
-    }
-
-    /**
      * Names a template declares in the raw docblock spelling, which {@see self::parseSource()} does
-     * not read: a raw PHP block reaches the shadow byte-for-byte, so its own docblocks never pass
-     * through the Blade-comment scan above.
+     * not read: a raw PHP block reaches the shadow byte-for-byte.
      *
      * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND an
      * `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which is
@@ -167,7 +147,7 @@ final class ContractParser
             }
 
             // A later declaration of the same name wins, as in a document-order walk.
-            $vars[$name] = new ContractVar($name, $type, $line, $optional, true);
+            $vars[$name] = new ContractVar($name, $type, $line, $optional);
         }
 
         return $vars;
@@ -180,10 +160,6 @@ final class ContractParser
      * `$cb`, not `$f`). Null when it does not read that way: no name, a name-first `@var $x T`,
      * unbalanced brackets.
      *
-     * `$lenient` is for a Blade comment, which has no description convention and whose broken type
-     * (`array<int $x`) must still reach the call-site and prelude checks to be reported: a line the
-     * splitter cannot read falls back to binding its last `$name`.
-     *
      * Public because {@see Annotate\TemplateAnnotator} must bind the same name the contract does:
      * one that read it differently would append a duplicate declaration for it, forever.
      *
@@ -195,7 +171,7 @@ final class ContractParser
      *
      * @psalm-pure
      */
-    public static function splitVar(string $declaration, bool $lenient = false): ?array
+    public static function splitVar(string $declaration): ?array
     {
         $declaration = \trim($declaration);
 
@@ -207,10 +183,6 @@ final class ContractParser
 
         if (\count($parts) > 1 && \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) === 1) {
             return [$name[1], $parts[0], \preg_match('/^=\s*null(?=\s|\*\/|\z)/i', \implode(' ', \array_slice($parts, 2))) === 1];
-        }
-
-        if ($lenient && \preg_match('/^(.+)\s+\$(' . self::IDENTIFIER . ')(\s*=\s*null(?=\s|\*\/|\z).*)?\z/is', $declaration, $last) === 1) {
-            return [$last[2], \rtrim($last[1]), isset($last[3])];
         }
 
         return null;
@@ -329,28 +301,8 @@ final class ContractParser
     {
         $masked = MarkerPrePass::maskedRanges($source);
 
-        // Later byte offset wins on a name collision, same as a document-order walk: a `@props`
-        // entry and a `{{-- @var --}}` comment can both declare the same name, and whichever
-        // appears LATER in the template is the one the author meant to win.
         /** @var list<array{0: int, 1: string, 2: ContractVar}> $declarations */
         $declarations = [];
-
-        foreach ($masked as [$text, $offset]) {
-            // Blade strips comments before it recognises directives, so only the `{{-- --}}`
-            // ranges (never a `@verbatim` body, `@php` block, or raw `<?php` tag) are comments.
-            if (!\str_starts_with($text, '{{--')) {
-                continue;
-            }
-
-            $inner = \substr($text, 4, -4);
-
-            $declared = \preg_match(self::VAR_PATTERN, $inner, $matches) === 1 ? self::splitVar($matches[1], true) : null;
-
-            if ($declared !== null && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$declared[0]])) {
-                $line = 1 + SourceLines::breaksIn($source, 0, $offset);
-                $declarations[] = [$offset, $declared[0], new ContractVar($declared[0], $declared[1], $line, $declared[2])];
-            }
-        }
 
         $maskedSource = MarkerPrePass::blankRanges($source, $masked);
         $propsUnknown = false;
@@ -387,8 +339,7 @@ final class ContractParser
         }
 
         // Stable since PHP 8.0: several props declared by the SAME `@props(...)` call keep their
-        // array order among themselves, and a var/props tie (same byte offset) cannot happen —
-        // `{{--` and `@props` never start at the same position.
+        // array order among themselves; a later `@props` entry wins a name collision.
         \usort($declarations, static fn(array $a, array $b): int => $a[0] <=> $b[0]);
 
         $vars = [];
@@ -518,22 +469,7 @@ final class ContractParser
     }
 
     /**
-     * Locally bound names are excluded template-wide, not per scope: an outer
-     * read of a name that a later loop or closure re-binds is dropped from the
-     * read set. The cost is one missing `mixed` declaration for a shadowed
-     * name; scope-aware tracking is not worth it for v1.
-     *
-     * @return list<string> variable names (without $)
-     */
-    private function readVariables(string $compiled): array
-    {
-        [$names, $locals] = $this->walkReads($compiled);
-
-        return $this->filterNames($names, $locals);
-    }
-
-    /**
-     * The read set the UnusedViewData rule consumes. Two differences from {@see self::readVariables()}:
+     * The read set the UnusedViewData rule consumes. Two differences from {@see self::parse()}'s read set:
      * locally bound names stay in (the question is "does the template use this name at all", and
      * dropping them would report the very name a `@foreach` binds), and an unknowable body is
      * flagged rather than reported as an empty set.

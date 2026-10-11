@@ -1,4 +1,4 @@
-{{-- @var string $title --}}
+<?php /** @var string $title */ ?>
 <?php /** @var string $label */ ?>
 {{ $title ?? 'Untitled' }}
 @php $label ??= 'Label'; @endphp

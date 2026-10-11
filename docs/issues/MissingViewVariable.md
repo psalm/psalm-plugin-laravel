@@ -8,11 +8,10 @@ nav_order: 12
 
 Emitted when a Blade template declares a variable that the call site rendering it never passes.
 
-A template declares its variables three ways, all read by [Blade template analysis](../blade.md):
+A template declares its variables with a `@var` docblock or a `@props` entry, both read by [Blade template analysis](../blade.md):
 
 ```blade
-{{-- @var \App\Models\User $user --}}
-<?php /** @var int $count */ ?>
+<?php /** @var \App\Models\User $user */ ?>
 @props(['title' => 'Untitled', 'subtitle'])
 ```
 
@@ -28,8 +27,12 @@ producing an empty string.
 
 ```blade
 {{-- resources/views/profile.blade.php --}}
-{{-- @var string $name --}}
-{{-- @var int $age --}}
+<?php
+/**
+ * @var string $name
+ * @var int $age
+ */
+?>
 <p>{{ $name }} ({{ $age }})</p>
 ```
 
@@ -92,7 +95,7 @@ variable into a view somewhere else entirely:
 - `@inject('metrics', 'App\Services\Metrics')` inside the template, which resolves from the container rather than from the data array.
 
 A variable that arrives that way is declared by the template but never passed by the call
-site, so it is reported. Either drop its `{{-- @var --}}` declaration, or silence the rule for the
+site, so it is reported. Either drop its `@var` declaration, or silence the rule for the
 call sites it affects:
 
 ```php

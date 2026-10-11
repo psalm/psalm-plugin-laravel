@@ -25,7 +25,7 @@ use Psalm\Type;
 
 /**
  * Checks a `view()` call site against the contract its template declares: a
- * `{{-- @var \App\Models\User $user --}}` comment or a `@props([...])` entry.
+ * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
  * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
  * that does not satisfy the declared type ({@see InvalidViewVariableType}).

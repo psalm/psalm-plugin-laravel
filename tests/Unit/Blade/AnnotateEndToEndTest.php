@@ -37,7 +37,7 @@ final class AnnotateEndToEndTest extends TestCase
 
     private const TEMPLATES = [
         'home' => "<h1>{{ \$title }}</h1>\n<p>{{ \$post->slug }}</p>\n",
-        'declared' => "{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
+        'declared' => "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
         'headed' => "<?php\n\ndeclare(strict_types=1);\n\n/**\n * Header.\n */\n?>\n<h1>{{ \$title }}</h1>\n",
         'strict' => "<?php declare(strict_types=1); ?>\n<h1>{{ \$title }}</h1>\n",
         'note' => "<p>{{ \$note ?? '' }}</p>\n",
@@ -88,12 +88,12 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
-    public function leaves_an_existing_blade_comment_declaration_untouched(): void
+    public function appends_to_an_existing_one_line_docblock_without_touching_its_declaration(): void
     {
         $this->annotate();
 
         $this->assertSame(
-            "<?php\n/**\n * @var string \$extra\n */\n?>\n" . self::TEMPLATES['declared'],
+            "<?php /** @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
             $this->template('declared'),
         );
     }

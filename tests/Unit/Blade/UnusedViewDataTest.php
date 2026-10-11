@@ -178,10 +178,10 @@ final class UnusedViewDataTest extends TestCase
     }
 
     /**
-     * The other spelling of a declaration. `{{-- @var --}}` is the control above: asserting both
-     * together is what distinguishes "the raw spelling is read" from "this template happens to be
+     * A raw docblock the template writes in its own `<?php` block. Asserting it next to the control
+     * above is what distinguishes "the declaration is read" from "this template happens to be
      * silent for an unrelated reason", and `UnreadKey.php` above proves the rule still fires for a
-     * key declared in neither spelling.
+     * key declared nowhere.
      */
     #[Test]
     public function a_key_declared_by_a_raw_php_docblock_is_not_reported(): void
@@ -194,7 +194,7 @@ final class UnusedViewDataTest extends TestCase
     /**
      * The same rule one level down the include chain: "declares" has to count as consumed wherever a
      * contract is declared, or the check contradicts its own semantics for a partial that states its
-     * interface with `{{-- @var --}}` and leaves the body to a later revision.
+     * interface with a `@var` docblock and leaves the body to a later revision.
      */
     #[Test]
     public function a_key_declared_by_an_included_template_is_not_reported(): void

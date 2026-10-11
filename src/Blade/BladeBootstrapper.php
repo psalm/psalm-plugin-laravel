@@ -72,9 +72,6 @@ final class BladeBootstrapper
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
     private array $pendingProblems = [];
 
-    /** @var array<string, true> classes the contract types emitted into preludes name, see {@see bodyTypes()} */
-    private array $bodyClassNames = [];
-
     /** @var array<string, true> lowercased classes a compiled `<x-…>` tag renders, see {@see ComponentTagCollector} */
     private array $tagRenderedClasses = [];
 
@@ -185,10 +182,7 @@ final class BladeBootstrapper
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
         // (which skips ShadowCompiler) still gets them.
-        $this->registrar->queueClassLikesForScanning([
-            ...PreludeBuilder::ambientClassNames(),
-            ...\array_keys($this->bodyClassNames),
-        ]);
+        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
@@ -323,20 +317,12 @@ final class BladeBootstrapper
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
-                $contract = $manifest->contractFor($shadowPath);
-
-                // Its prelude was written from these same declarations; only the scan queue is needed.
-                if ($contract instanceof ViewDataContract) {
-                    $this->bodyTypes($template, $contract);
-                }
-
-                $this->registerContract($template, $roots, $contract, $manifest->dataIncludesFor($shadowPath));
+                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $manifest->dataIncludesFor($shadowPath));
 
                 continue;
             }
 
-            $declarations = $parser->parseDeclarations($source);
-            $shadow = $compiler->compile($template, $source, $this->bodyTypes($template, $declarations));
+            $shadow = $compiler->compile($template, $source);
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
@@ -348,7 +334,7 @@ final class BladeBootstrapper
             // Built AFTER compile so the read set comes off compiled output.
             $contract = $this->collectDataIncludes
                 ? $parser->parseDataContract($source, $shadow->contents)
-                : $parser->withRawDeclarations($declarations, $source, $shadow->contents);
+                : $parser->parseDeclarations($source, $shadow->contents);
 
             // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
             // from "collected nothing".
@@ -367,55 +353,6 @@ final class BladeBootstrapper
 
         return $shadows;
     }
-
-    /**
-     * The contract `@var` declarations the prelude types the template body with. One whose type does
-     * not parse, or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
-     * `use` import, so the namespace-less shadow would resolve `User` to a global class the author
-     * never meant. A qualified name with or without its leading `\` resolves identically there.
-     *
-     * @return array<string, ContractVar>
-     */
-    private function bodyTypes(string $template, ViewDataContract $contract): array
-    {
-        $types = [];
-
-        foreach ($contract->vars as $name => $var) {
-            // `@props` entries are `mixed`, the prelude already types Blade's own names, and a raw
-            // docblock is already in the body, where Psalm reads it itself.
-            if ($var->raw || $var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
-                continue;
-            }
-
-            $classNames = PreludeBuilder::classNamesIn($var->typeString);
-            $reason = $classNames === null ? 'its type does not parse' : null;
-
-            foreach ($classNames ?? [] as $className) {
-                if (!PreludeBuilder::resolvesWithoutImport($className)) {
-                    $reason = "'{$className}' is not a fully qualified class name";
-
-                    break;
-                }
-            }
-
-            if ($reason !== null) {
-                $this->output->debug(
-                    "Laravel plugin: Blade template '{$template}': \${$name} stays mixed in the template body, {$reason}\n",
-                );
-
-                continue;
-            }
-
-            foreach ($classNames ?? [] as $className) {
-                $this->bodyClassNames[$className] = true;
-            }
-
-            $types[$name] = $var;
-        }
-
-        return $types;
-    }
-
 
     /**
      * Realpaths, deduped by (path, namespace): a published override's directory is both the
@@ -488,7 +425,7 @@ final class BladeBootstrapper
         foreach ($contract?->vars ?? [] as $name => $var) {
             // Psalm reads a raw docblock as written, so `string $x = null` types the body `string`
             // while the call-site check treats the key as `string|null`: say so at the declaration.
-            if ($var->raw && $var->optional && ContractParser::withNull($var->typeString) !== $var->typeString) {
+            if ($var->optional && ContractParser::withNull($var->typeString) !== $var->typeString) {
                 $this->pendingProblems[$templatePath][$name] = [
                     $var->declarationLine,
                     "Optional view variable \${$name} is declared with `= null` but its type {$var->typeString} does not include null; write `"

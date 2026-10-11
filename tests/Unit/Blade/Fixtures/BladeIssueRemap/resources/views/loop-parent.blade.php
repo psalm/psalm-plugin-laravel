@@ -1,4 +1,4 @@
-{{-- @var list<list<list<int>>> $rows --}}
+<?php /** @var list<list<list<int>>> $rows */ ?>
 @foreach($rows as $row)
     @foreach($row as $cell)
         {{ $loop->parent->iteration }}

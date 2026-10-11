@@ -13,7 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 
 /**
- * End-to-end proof that a template's `{{-- @var --}}` / `@props` contract is enforced at the
+ * End-to-end proof that a template's `@var` docblock / `@props` contract is enforced at the
  * `view()` call sites that feed it. A real `vendor/bin/psalm` run is the only way to pin it: the
  * contract only exists after the Blade bootstrap has compiled the fixture's templates, and the
  * check reads argument types Psalm infers during analysis.

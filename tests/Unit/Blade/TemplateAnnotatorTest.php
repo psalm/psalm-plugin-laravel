@@ -28,17 +28,6 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function leaves_an_existing_blade_comment_declaration_untouched(): void
-    {
-        $source = "{{-- @var \\App\\Models\\User \$user --}}\n<h1>{{ \$user->name }} {{ \$title }}</h1>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(self::NEW_TITLE_BLOCK . $source, $result[0]);
-    }
-
-    #[Test]
     public function appends_to_the_header_docblock_before_its_closing_delimiter(): void
     {
         $source = "<?php\n\ndeclare(strict_types=1);\n\n/**\n * Header.\n *\n * @var int \$count\n */\n?>\n<p>{{ \$count }} {{ \$title }}</p>\n";
@@ -190,7 +179,7 @@ final class TemplateAnnotatorTest extends TestCase
     #[Test]
     public function declines_when_every_name_is_already_declared(): void
     {
-        $source = "{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n";
+        $source = "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n";
 
         $this->assertNull(TemplateAnnotator::annotate($source, ['title' => 'int']));
     }
@@ -216,13 +205,11 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function an_existing_equals_null_declaration_in_either_spelling_is_already_declared(): void
+    public function an_existing_equals_null_declaration_is_already_declared(): void
     {
-        $raw = "<?php\n/**\n * @var string|null \$a = null The a\n */\n?>\n<p>{{ \$a }}</p>\n";
-        $blade = "{{-- @var string|null \$b = null --}}\n<p>{{ \$b }}</p>\n";
+        $source = "<?php\n/**\n * @var string|null \$a = null The a\n */\n?>\n<p>{{ \$a }}</p>\n";
 
-        $this->assertNull(TemplateAnnotator::annotate($raw, ['a' => 'string'], ['a' => true]));
-        $this->assertNull(TemplateAnnotator::annotate($blade, ['b' => 'string'], ['b' => true]));
+        $this->assertNull(TemplateAnnotator::annotate($source, ['a' => 'string'], ['a' => true]));
     }
 
     #[Test]
@@ -291,19 +278,9 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function recognises_a_declaration_whose_type_itself_contains_a_variable(): void
-    {
-        // The parser binds the LAST $name in the comment ($callback); a reader that bound the first
-        // one ($f) would see the name as undeclared and append a duplicate declaration for it.
-        $source = "{{-- @var Closure(Foo \$f): Bar \$callback --}}\n<p>x</p>\n";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ['callback' => 'mixed']));
-    }
-
-    #[Test]
     public function recognises_a_declaration_followed_by_a_description_naming_another_variable(): void
     {
-        $source = "{{-- @var string \$title The title above \$page --}}\n<p>x</p>\n";
+        $source = "<?php /** @var string \$title The title above \$page */ ?>\n<p>x</p>\n";
 
         $this->assertNull(TemplateAnnotator::annotate($source, ['title' => 'string']));
         $this->assertNotNull(TemplateAnnotator::annotate($source, ['page' => 'string']), '`$page` is description, not a declaration');
@@ -326,16 +303,6 @@ final class TemplateAnnotatorTest extends TestCase
 
         $this->assertNotNull($first);
         $this->assertNull(TemplateAnnotator::annotate($first[0], $vars), 'the comment must not be re-appended');
-    }
-
-    #[Test]
-    public function recognises_a_declaration_with_a_non_ascii_variable_name(): void
-    {
-        // PHP identifiers take bytes >= 0x80; a declaration the writer cannot read back is one it
-        // appends again on every run.
-        $source = "{{-- @var string \$men\u{00fc} --}}\n<p>x</p>\n";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ["men\u{00fc}" => 'string']));
     }
 
     #[Test]
@@ -384,59 +351,14 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function ignores_a_declaration_inside_a_verbatim_block(): void
+    public function ignores_a_declaration_inside_a_verbatim_block_or_a_blade_comment(): void
     {
-        $source = "@verbatim\n{{-- @var \\App\\User \$user --}}\n@endverbatim\n<p>x</p>\n";
+        $source = "@verbatim\n<?php /** @var \\App\\User \$user */ ?>\n@endverbatim\n{{-- <?php /** @var \\App\\User \$user */ ?> --}}\n<p>x</p>\n";
 
         $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
 
-        $this->assertNotNull($result, 'a verbatim body is literal text, not a contract');
+        $this->assertNotNull($result, 'a verbatim body and a Blade comment are literal text, not PHP');
         $this->assertSame(['@var App\\User $user'], $result[2]);
     }
 
-    #[Test]
-    public function ignores_a_declaration_inside_a_php_block(): void
-    {
-        $source = "@php\n{{-- @var \\App\\User \$user --}}\n@endphp\n<p>x</p>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
-
-        $this->assertNotNull($result, 'an @php body is PHP source, not a contract');
-        $this->assertSame(['@var App\\User $user'], $result[2]);
-    }
-
-    #[Test]
-    public function a_live_comment_declares_its_name_and_one_inside_a_verbatim_block_does_not(): void
-    {
-        $source = "{{-- @var A \$a --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n";
-
-        $result = TemplateAnnotator::annotate($source, ['a' => 'A', 'c' => 'C']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(
-            "<?php\n/**\n * @var C \$c\n */\n?>\n{{-- @var A \$a --}}\n<p>x</p>\n@verbatim\n{{-- @var B \$b --}}\n@endverbatim\n",
-            $result[0],
-        );
-    }
-
-    #[Test]
-    public function ignores_a_declaration_nested_in_another_blade_comment(): void
-    {
-        $source = "{{-- note {{-- @var X \$x --}}\n<p>x</p>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['x' => 'X']);
-
-        $this->assertNotNull($result, 'the parser reads one comment here, and its text is not a declaration');
-        $this->assertSame("<?php\n/**\n * @var X \$x\n */\n?>\n{{-- note {{-- @var X \$x --}}\n<p>x</p>\n", $result[0]);
-    }
-
-    #[Test]
-    public function does_not_slide_from_a_non_matching_live_comment_into_a_verbatim_body(): void
-    {
-        // `{{-- note --}}` is a live comment but not a declaration; an unanchored search from its
-        // offset would continue into the verbatim body and read the dead `$x` declaration.
-        $source = "{{-- note --}}\n@verbatim {{-- @var X \$x --}} @endverbatim\n";
-
-        $this->assertNotNull(TemplateAnnotator::annotate($source, ['x' => 'X']));
-    }
 }

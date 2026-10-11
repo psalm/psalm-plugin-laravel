@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
 use Psalm\LaravelPlugin\Blade\ContractParser;
-use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\SourceLines;
 
 /**
@@ -23,8 +22,7 @@ use Psalm\LaravelPlugin\Blade\SourceLines;
  *
  * Byte-conservative on purpose: the template is user source, so the only edit is one insertion at
  * one offset. Nothing is re-serialized, and every byte outside the inserted run comes out
- * identical — including a BOM, the file's own line endings, and any existing declaration, in
- * either spelling.
+ * identical — including a BOM, the file's own line endings, and any existing declaration.
  *
  * Idempotency is derived from state, not from a marker: a name the source already declares is
  * dropped, so re-running over an annotated template inserts nothing.
@@ -36,16 +34,6 @@ use Psalm\LaravelPlugin\Blade\SourceLines;
 final class TemplateAnnotator
 {
     private const BOM = "\u{FEFF}";
-
-    /**
-     * A `{{-- @var ... --}}` comment, and the line break that terminates it if there is one.
-     * Group 1 is the inner content, which is what {@see ContractParser::VAR_PATTERN} reads.
-     *
-     * `\G`-anchored so it matches only at the offset {@see self::liveContractComments()} supplies: when
-     * it fails at a live comment (not an `@var`, or multi-line), an unanchored search would slide
-     * forward into dead text and read that instead.
-     */
-    private const CONTRACT_COMMENT = '/\G\{\{--(\s*@var\s[^\r\n]*?)--\}\}[^\S\r\n]*(?:\r?\n)?/';
 
     /**
      * @param array<string, string> $vars variable name (without `$`) => type string
@@ -240,49 +228,7 @@ final class TemplateAnnotator
      */
     private static function declaredNames(string $source): array
     {
-        $declared = [];
-
-        foreach (self::liveContractComments($source) as [, , $innerContent]) {
-            $split = \preg_match(ContractParser::VAR_PATTERN, $innerContent, $matched) === 1
-                ? ContractParser::splitVar($matched[1], true)
-                : null;
-
-            if ($split !== null) {
-                $declared[$split[0]] = true;
-            }
-        }
-
-        foreach (ContractParser::rawDeclaredNames($source) as $name) {
-            $declared[$name] = true;
-        }
-
-        return $declared;
-    }
-
-    /**
-     * CONTRACT_COMMENT matches at each top-level Blade comment, the only place {@see ContractParser}
-     * reads a declaration. A `{{-- @var --}}` inside `@verbatim`, `@php`, raw PHP, or another comment
-     * sits within a larger masked range, so it is literal text. Single-line comments only, like
-     * CONTRACT_COMMENT itself (a multi-line `{{--\n@var ...\n--}}` is a known gap).
-     *
-     * @return list<array{0: string, 1: int, 2: string}> full match, byte offset, group 1
-     *
-     * @psalm-pure
-     */
-    private static function liveContractComments(string $source): array
-    {
-        $live = [];
-
-        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
-            if (
-                \str_starts_with($text, '{{--')
-                && \preg_match(self::CONTRACT_COMMENT, $source, $match, \PREG_OFFSET_CAPTURE, $offset) === 1
-            ) {
-                $live[] = [$match[0][0], $offset, $match[1][0]];
-            }
-        }
-
-        return $live;
+        return \array_fill_keys(ContractParser::rawDeclaredNames($source), true);
     }
 
     /**

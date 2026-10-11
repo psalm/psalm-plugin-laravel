@@ -12,7 +12,6 @@ use Illuminate\View\Engines\EngineResolver;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
@@ -518,49 +517,6 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame([], $second->queuedResolvableClassLikes);
     }
 
-    /**
-     * A contract type reaches the prelude, and its class is queued on BOTH a fresh compile and a
-     * warm-manifest run: the prelude names it only in a stacked docblock Psalm's scanner never reads.
-     */
-    #[Test]
-    public function a_contract_var_types_the_prelude_and_queues_its_class_on_fresh_and_warm_runs(): void
-    {
-        $this->writeTemplate('profile.blade.php', "{{-- @var \\App\\Models\\User|null \$user --}}\n{{-- @var int \$count --}}\n<p>{{ \$user }}</p>\n");
-        $first = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $first)->boot();
-
-        $shadow = (string) \file_get_contents($first->analyzedShadows[0]);
-        $this->assertStringContainsString("/** @var \\App\\Models\\User|null \$user */;\n", $shadow);
-        $this->assertStringContainsString("/** @var int \$count */;\n", $shadow);
-        $this->assertSame(2, \substr_count($shadow, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
-
-        $second = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $second)->boot();
-
-        foreach ([$first, $second] as $registrar) {
-            $this->assertSame([...PreludeBuilder::ambientClassNames(), '\App\Models\User'], $registrar->queuedClassLikes);
-        }
-    }
-
-    /**
-     * A raw docblock is already in the body, where Psalm reads it itself: it is a contract for the
-     * call-site checks, but emitting it into the prelude too would declare the name twice.
-     */
-    #[Test]
-    public function a_raw_var_contract_is_not_emitted_into_the_prelude_on_fresh_or_warm_runs(): void
-    {
-        $this->writeTemplate('profile.blade.php', "<?php /** @var \\App\\Models\\User \$user */ ?>\n<p>{{ \$user->name }}</p>\n");
-
-        foreach ([new RecordingShadowRegistrar(), new RecordingShadowRegistrar()] as $registrar) {
-            $this->bootstrapper($this->app(), $registrar)->boot();
-
-            $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
-            $this->assertStringNotContainsString("/** @var \\App\\Models\\User \$user */;", $shadow);
-            $this->assertSame(1, \substr_count($shadow, '@var \\App\\Models\\User $user'), 'the raw docblock itself, once');
-            $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
-        }
-    }
-
     private function appWithViewFactory(): Container
     {
         $app = $this->app();
@@ -577,7 +533,7 @@ final class BladeBootstrapperTest extends TestCase
         $app->make('view')->share('siteName', 'x');
         $this->writeTemplate(
             'profile.blade.php',
-            "<?php /** @var \\Illuminate\\Foundation\\Application \$app */ ?>\n{{-- @var string \$siteName --}}\n{{-- @var int \$count --}}\n<p>{{ \$count }}</p>\n",
+            "<?php /** @var \\Illuminate\\Foundation\\Application \$app */ ?>\n<?php /** @var string \$siteName */ ?>\n<?php /** @var int \$count */ ?>\n<p>{{ \$count }}</p>\n",
         );
 
         $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
@@ -598,7 +554,7 @@ final class BladeBootstrapperTest extends TestCase
         $events->listen('composing: admin.*', static fn(): null => null);
 
         foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
-            $this->writeTemplate("{$name}.blade.php", "{{-- @var int \$n --}}\n<p>{{ \$n }}</p>\n");
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
         }
 
         $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
@@ -607,61 +563,6 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertTrue(ContractRegistry::isComposed('created'));
         $this->assertTrue(ContractRegistry::isComposed('admin.page'), 'a wildcard composer reaches it');
         $this->assertFalse(ContractRegistry::isComposed('plain'));
-    }
-
-    /**
-     * @return iterable<string, array{string, string}>
-     */
-    public static function untypedContracts(): iterable
-    {
-        yield 'short class name' => ['User', "'User' is not a fully qualified class name"];
-        yield 'short class name inside a generic' => ['list<User>', "'User' is not a fully qualified class name"];
-        yield 'unparseable type' => ['array<int', 'does not parse'];
-    }
-
-    #[Test]
-    #[DataProvider('untypedContracts')]
-    public function a_contract_type_the_body_cannot_use_stays_mixed_and_says_so_under_debug(string $type, string $reason): void
-    {
-        $template = $this->writeTemplate('profile.blade.php', "{{-- @var {$type} \$user --}}\n<p>{{ \$user }}</p>\n");
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
-        $this->assertStringContainsString('/** @var mixed $user */', $shadow);
-        $this->assertSame(1, \substr_count($shadow, '$user */'));
-        $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
-
-        $debug = \implode('', $this->progress->debugMessages);
-        $this->assertStringContainsString($template, $debug);
-        $this->assertStringContainsString('$user', $debug);
-        $this->assertStringContainsString($reason, $debug);
-    }
-
-    /** PHP's own classes are global, so naming one without a namespace means what it says. */
-    #[Test]
-    public function a_short_internal_class_name_in_a_contract_types_the_body(): void
-    {
-        $this->writeTemplate('profile.blade.php', "{{-- @var Closure(int): string \$format --}}\n<p>{{ \$format(1) }}</p>\n");
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
-        $this->assertStringContainsString('/** @var Closure(int): string $format */;', $shadow);
-        $this->assertSame([], $this->progress->debugMessages);
-    }
-
-    /** The prelude already types Blade's own names; a contract for one must not add a second line. */
-    #[Test]
-    public function a_contract_for_an_ambient_name_is_not_declared_twice(): void
-    {
-        $this->writeTemplate('profile.blade.php', "{{-- @var \\Illuminate\\Support\\MessageBag \$errors --}}\n<p>{{ \$errors->first() }}</p>\n");
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
-        $this->assertSame(1, \substr_count($shadow, '$errors */'));
-        $this->assertStringNotContainsString('MessageBag', $shadow);
     }
 
     /**

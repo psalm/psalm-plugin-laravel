@@ -824,7 +824,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
 
-        // Writes `{{-- @var --}}` declarations into the analysed templates (#1524). Registered only
+        // Writes `@var` docblock declarations into the analysed templates (#1524). Registered only
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
         // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
         // The two hooks are one pass in two halves: the collector fills a static that only survives

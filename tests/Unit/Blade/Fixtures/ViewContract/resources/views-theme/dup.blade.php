@@ -1,2 +1,2 @@
-{{-- @var string $x --}}
+<?php /** @var string $x */ ?>
 <p>{{ $x }}</p>
