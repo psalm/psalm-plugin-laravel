@@ -352,9 +352,9 @@ final class BladeBootstrapper
             };
 
             foreach ($classNames ?? [] as $className) {
-                // A shadow has no enclosing class: Psalm crashes on `self` and reports an empty
-                // class name for `static`.
-                if (isset(PreludeBuilder::CLASS_RELATIVE_NAMES[\strtolower($className)])) {
+                // A shadow has no enclosing class: Psalm crashes on `self` (also spelled `\self`)
+                // and reports an empty class name for `static`.
+                if (isset(PreludeBuilder::CLASS_RELATIVE_NAMES[\strtolower(\ltrim($className, '\\'))])) {
                     $reason = 'its type refers to an enclosing class (self, static, $this, parent), which a template does not have';
 
                     break;

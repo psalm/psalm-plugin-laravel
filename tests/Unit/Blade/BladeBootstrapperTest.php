@@ -551,6 +551,8 @@ final class BladeBootstrapperTest extends TestCase
         yield 'self' => ['self', 'refers to an enclosing class'];
         yield 'self inside a generic' => ['list<self>', 'refers to an enclosing class'];
         yield 'static' => ['static', 'refers to an enclosing class'];
+        yield 'self with a leading backslash' => ['\\self', 'refers to an enclosing class'];
+        yield 'static with a leading backslash' => ['\\Static', 'refers to an enclosing class'];
         yield '$this' => ['$this', 'refers to an enclosing class'];
         yield 'parent' => ['Parent', 'refers to an enclosing class'];
         yield 'comment terminator in a literal' => ["'a*/b'|\\App\\Models\\User", 'would end the docblock'];
