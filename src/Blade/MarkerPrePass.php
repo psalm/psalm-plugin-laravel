@@ -473,6 +473,7 @@ final class MarkerPrePass
      * The layout a template `@extends`: null when it extends nothing, false when that cannot be
      * proven a single literal, non-namespaced view rendered with the template's scope alone (a
      * dynamic or interpolated name, `@extendsFirst`, a data argument, a second live `@extends`).
+     * Slashes are normalized to dots, as `Illuminate\View\ViewName::normalize()` does.
      *
      * Separate from {@see self::extendsLine()} on purpose: its stricter directive match would move
      * markers and invalidate every cached shadow.
@@ -482,7 +483,8 @@ final class MarkerPrePass
     public static function extendedLayout(string $source): string|false|null
     {
         // Blade's own directive match needs a non-word character before `@`, and `@@` escapes one.
-        $matchCount = \preg_match_all('/(?<![\w@])@extends(First)?\s*\(/', $source, $matches, \PREG_OFFSET_CAPTURE | \PREG_SET_ORDER);
+        // Case-insensitive because Blade dispatches a directive through method_exists().
+        $matchCount = \preg_match_all('/(?<![\w@])@extends(First)?\s*\(/i', $source, $matches, \PREG_OFFSET_CAPTURE | \PREG_SET_ORDER);
 
         if ($matchCount === false || $matchCount === 0) {
             return null;
@@ -505,7 +507,7 @@ final class MarkerPrePass
 
             $layout = \preg_match('/\G\s*(?|\'([^\'\\\\]+)\'|"([^"\\\\$]+)")\s*\)/', $source, $name, 0, $offset + \strlen($text)) === 1
                 && !\str_contains($name[1], '::')
-                ? $name[1]
+                ? \str_replace('/', '.', $name[1])
                 : false;
         }
 

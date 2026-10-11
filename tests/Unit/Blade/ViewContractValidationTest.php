@@ -438,7 +438,8 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues('psalm.xml');
 
         // `$tagline` is declared `= null` in the layout, so only `$siteName` is required.
-        foreach (['LayoutMissing.php', 'LayoutMissingTransitive.php'] as $file) {
+        // Blade matches directives case-insensitively, and the finder normalizes `/` to `.`.
+        foreach (['LayoutMissing.php', 'LayoutMissingTransitive.php', 'LayoutUppercase.php', 'LayoutSlashed.php'] as $file) {
             $reported = $this->forFile($issues, $file);
             $this->assertCount(1, $reported, \var_export($issues, true));
             $this->assertSame(self::MISSING, $reported[0]['type']);
@@ -463,6 +464,8 @@ final class ViewContractValidationTest extends TestCase
             'LayoutChildBinds.php', // the child assigns it before the layout renders
             'LayoutChildHidesBinds.php', // the child's `extract()` hides what it binds
             'LayoutMidBinds.php', // an intermediate layout assigns it
+            'LayoutChildBindsTwoHops.php', // the child assigns it, two layouts before the declaring one
+            'LayoutUnregistered.php', // a layout further up the chain was never compiled
             'LayoutDynamicExtends.php', // a dynamic `@extends` further up the chain
             'LayoutComposed.php', // a composer on the layout
             'LayoutChildComposed.php', // a composer on the child

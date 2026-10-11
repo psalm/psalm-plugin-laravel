@@ -297,15 +297,24 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         while (true) {
             $layout = ContractRegistry::layoutFor($current);
 
-            // A revisit is a cycle, which Blade would recurse into forever: nothing past it is new.
-            if ($layout === null || isset($visited[$layout])) {
+            if ($layout === null) {
                 break;
             }
 
-            $layoutContract = $layout === false ? null : ContractRegistry::contractFor($layout);
+            if ($layout === false) {
+                $layouts = [];
 
-            if ($layout === false
-                || !$layoutContract instanceof ViewDataContract
+                break;
+            }
+
+            // A revisit is a cycle, which Blade would recurse into forever: nothing past it is new.
+            if (isset($visited[$layout])) {
+                break;
+            }
+
+            $layoutContract = ContractRegistry::contractFor($layout);
+
+            if (!$layoutContract instanceof ViewDataContract
                 || $contract->readsUnknown
                 || ContractRegistry::isComposed($layout)
             ) {

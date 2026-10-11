@@ -248,6 +248,10 @@ final class MarkerPrePassTest extends TestCase
         yield 'with data' => ["@extends('layouts.app', ['title' => 'x'])\n", false];
         yield 'namespaced' => ["@extends('pkg::layout')\n", false];
         yield 'extendsFirst' => ["@extendsFirst(['a', 'b'])\n", false];
+        yield 'uppercase, as Blade matches directives' => ["@EXTENDS('layouts.app')\n", 'layouts.app'];
+        yield 'mixed case' => ["@Extends('layouts.app')\n", 'layouts.app'];
+        yield 'uppercase extendsFirst' => ["@EXTENDSFIRST(['a', 'b'])\n", false];
+        yield 'slash-separated, normalized like ViewName::normalize()' => ["@extends('layouts/app')\n", 'layouts.app'];
         yield 'two live' => ["@extends('a')\n@extends('b')\n", false];
     }
 
