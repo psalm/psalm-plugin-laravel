@@ -211,14 +211,16 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        // A `Collection|array` `@foreach`/`@forelse` subject: Psalm types the loop through a
-        // synthetic `getIterator()`/`current()`/`key()` call on `$__currentLoopData` and suppresses
-        // these two classes around it (ForeachAnalyzer.php), but `BeforeAddIssue` fires before that
-        // suppression is checked, and the re-emit cannot carry it (#1810). The synthetic call takes
-        // the subject variable's position; a real call is positioned on its method name.
+        // A union `@foreach`/`@forelse` subject (`Collection|array`, a `Generator`, an
+        // `IteratorAggregate` subtype): Psalm types the loop through a synthetic
+        // `getIterator()`/`current()`/`key()` call on `$__currentLoopData` and suppresses these two
+        // classes around it (ForeachAnalyzer.php), but `BeforeAddIssue` fires before that suppression
+        // is checked, and the re-emit cannot carry it (#1810). The synthetic call takes the subject
+        // variable's position, so the drop is anchored on the compiled `foreach ($__currentLoopData as`
+        // shape: the same variable as a dynamic method name or an `offsetGet()` receiver is genuine.
         if (
             ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
-            && self::selectedText($issue->code_location) === '$__currentLoopData'
+            && self::isLoopDataForeachSubject($issue->code_location)
         ) {
             return false;
         }
@@ -745,17 +747,19 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * The source text an issue's location selects in the shadow, or null when unreadable.
+     * Whether the location selects exactly `$__currentLoopData` as the subject of a `foreach`, i.e.
+     * the snippet continues with `as` right after it. The snippet runs to the end of the selection's
+     * line, which holds the whole compiled `foreach (... as ...)` header.
      *
      * @psalm-mutation-free
      */
-    private static function selectedText(CodeLocation $location): ?string
+    private static function isLoopDataForeachSubject(CodeLocation $location): bool
     {
         $selection = ShadowSelection::of($location);
 
         return $selection instanceof ShadowSelection
-            ? \substr($selection->snippet, $selection->start, $selection->end - $selection->start)
-            : null;
+            && \substr($selection->snippet, $selection->start, $selection->end - $selection->start) === '$__currentLoopData'
+            && \preg_match('/\s+as\b/A', \substr($selection->snippet, $selection->end)) === 1;
     }
 
     /**

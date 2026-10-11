@@ -1273,6 +1273,42 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
+    /**
+     * Negative (#1810 review): a dynamic method name `$receiver->$__currentLoopData()` selects exactly
+     * the variable too, but nothing follows it as a foreach subject, so a genuine author finding stays.
+     */
+    #[Test]
+    public function a_dynamic_method_name_on_the_loop_variable_survives(): void
+    {
+        $location = $this->selectingLocation('$receiver->$__currentLoopData();', '$__currentLoopData', 9);
+
+        $issue = new PossiblyInvalidMethodCall('Cannot call method on possible stdClass|int variable $receiver', $location);
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** Negative (#1810 review): `$__currentLoopData[0]` is an `offsetGet()` read, not a foreach subject. */
+    #[Test]
+    public function an_offset_read_of_the_loop_variable_survives(): void
+    {
+        $location = $this->selectingLocation('echo e($__currentLoopData[0]);', '$__currentLoopData', 9);
+
+        $issue = new PossiblyUndefinedMethod('Method stdClass::offsetGet does not exist', $location, 'stdclass::offsetget');
+
+        $this->assertInstanceOf(PossiblyUndefinedMethod::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** The subject is anchored on `as`, with any whitespace and a word boundary (an `asset` suffix is not it). */
+    #[Test]
+    public function a_loop_variable_followed_by_a_longer_word_survives(): void
+    {
+        $location = $this->selectingLocation('foreach ($__currentLoopData assoc) {', '$__currentLoopData', 9);
+
+        $issue = new PossiblyInvalidMethodCall('Cannot call method on possible list<string> variable $__currentLoopData', $location);
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
     /** Negative: the gate is class-scoped, so another class selecting the same variable keeps reporting (#1810). */
     #[Test]
     public function another_issue_class_on_the_loop_subject_survives(): void

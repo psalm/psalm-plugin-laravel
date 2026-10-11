@@ -857,8 +857,10 @@ final class BladeIssueRemapTest extends TestCase
      * #1810: a `Collection|array` `@foreach`/`@forelse` subject makes Psalm resolve the iterator
      * through a synthetic `$__currentLoopData->getIterator()` call that it suppresses in plain PHP
      * (ForeachAnalyzer.php), positioned on the variable: `PossiblyInvalidMethodCall` for the list
-     * branch (line 8), `PossiblyUndefinedMethod` for the `ArrayIterator` branch (line 3). Line 11 is
-     * a real call on the same variable, positioned on the method name, and keeps reporting.
+     * branch (line 8), `PossiblyUndefinedMethod` for the `ArrayIterator` branch (line 3). Those two
+     * are dropped. The rest are genuine author findings that select the same variable and keep
+     * reporting: a real call on it (line 11, positioned on the method name), a dynamic method name
+     * `$receiver->$__currentLoopData()` (line 16) and an `offsetGet()` read of it (line 18).
      */
     #[Test]
     public function foreach_over_a_union_subject_does_not_report_the_synthetic_iterator_call(): void
@@ -867,8 +869,8 @@ final class BladeIssueRemapTest extends TestCase
         $template = 'foreach-union-subject.blade.php';
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
 
-        $this->assertSame([11], $this->linesFor($issues, 'PossiblyInvalidMethodCall', $template), $json);
-        $this->assertSame([], $this->linesFor($issues, 'PossiblyUndefinedMethod', $template), $json);
+        $this->assertSame([11, 16], $this->linesFor($issues, 'PossiblyInvalidMethodCall', $template), $json);
+        $this->assertSame([18], $this->linesFor($issues, 'PossiblyUndefinedMethod', $template), $json);
     }
 
     /**
