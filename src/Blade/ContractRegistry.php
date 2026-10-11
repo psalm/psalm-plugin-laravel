@@ -21,8 +21,8 @@ namespace Psalm\LaravelPlugin\Blade;
 final class ContractRegistry
 {
     /**
-     * @var array<string, array{0: int, 1: ViewDataContract, 2: array{0: list<string>, 1: bool}|null}>
-     *      view name => [view root index, contract, data includes]
+     * @var array<string, array{0: int, 1: ViewDataContract, 2: array{0: list<string>, 1: bool}|null, 3: string|false|null}>
+     *      view name => [view root index, contract, data includes, extended layout]
      */
     private static array $contracts = [];
 
@@ -36,16 +36,22 @@ final class ContractRegistry
      * @param array{0: list<string>, 1: bool}|null $dataIncludes view names the template hands its
      *        whole scope to, and whether one of them could not be resolved; null when the collection
      *        pass was off for this run, which {@see ReadSetResolver} treats as "not proven"
+     * @param string|false|null $layout as {@see MarkerPrePass::extendedLayout()}
      */
-    public static function register(string $viewName, int $rootIndex, ViewDataContract $contract, ?array $dataIncludes = null): void
-    {
+    public static function register(
+        string $viewName,
+        int $rootIndex,
+        ViewDataContract $contract,
+        ?array $dataIncludes = null,
+        string|false|null $layout = null,
+    ): void {
         $existing = self::$contracts[$viewName] ?? null;
 
         if ($existing !== null && $existing[0] <= $rootIndex) {
             return;
         }
 
-        self::$contracts[$viewName] = [$rootIndex, $contract, $dataIncludes];
+        self::$contracts[$viewName] = [$rootIndex, $contract, $dataIncludes, $layout];
     }
 
     /**
@@ -62,6 +68,12 @@ final class ContractRegistry
     public static function dataIncludesFor(string $viewName): ?array
     {
         return self::$contracts[$viewName][2] ?? null;
+    }
+
+    /** The layout the view `@extends`, as {@see MarkerPrePass::extendedLayout()} */
+    public static function layoutFor(string $viewName): string|false|null
+    {
+        return self::$contracts[$viewName][3] ?? null;
     }
 
     /** A composer or creator is registered for the view, so it may be handed data no call site shows. */

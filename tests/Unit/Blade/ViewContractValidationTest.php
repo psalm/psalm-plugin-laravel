@@ -431,6 +431,48 @@ final class ViewContractValidationTest extends TestCase
         }
     }
 
+    /** A layout's declarations reach the call sites of the views that `@extends` it, transitively (#1831). */
+    #[Test]
+    public function a_layouts_declared_variable_is_checked_at_the_childs_call_site(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        // `$tagline` is declared `= null` in the layout, so only `$siteName` is required.
+        foreach (['LayoutMissing.php', 'LayoutMissingTransitive.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+            $this->assertCount(1, $reported, \var_export($issues, true));
+            $this->assertSame(self::MISSING, $reported[0]['type']);
+            $this->assertStringContainsString("extends layout 'layouts.app', which declares \$siteName", $reported[0]['message']);
+        }
+
+        $wrong = $this->forFile($issues, 'LayoutWrongType.php');
+        $this->assertCount(1, $wrong, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrong[0]['type']);
+        $this->assertStringContainsString("extends layout 'layouts.app', which declares \$siteName as string", $wrong[0]['message']);
+    }
+
+    /** Each fixture omits a variable some layout in its chain requires; one gate stands between it and a report. */
+    #[Test]
+    public function a_layout_variable_supplied_elsewhere_or_unprovable_is_not_required(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach ([
+            'LayoutPassed.php', // the call site passes it
+            'LayoutChildDeclares.php', // the child declares it `= null`: the nearer declaration wins
+            'LayoutChildBinds.php', // the child assigns it before the layout renders
+            'LayoutChildHidesBinds.php', // the child's `extract()` hides what it binds
+            'LayoutMidBinds.php', // an intermediate layout assigns it
+            'LayoutDynamicExtends.php', // a dynamic `@extends` further up the chain
+            'LayoutComposed.php', // a composer on the layout
+            'LayoutChildComposed.php', // a composer on the child
+            'LayoutShared.php', // `View::share()`d
+            'LayoutCycle.php', // an `@extends` cycle terminates
+        ] as $file) {
+            $this->assertSame([], $this->forFile($issues, $file), $file . "\n" . \var_export($issues, true));
+        }
+    }
+
     #[Test]
     public function the_check_is_off_unless_the_config_flag_opts_in(): void
     {

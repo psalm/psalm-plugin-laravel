@@ -25,7 +25,8 @@ use Psalm\Type;
 
 /**
  * Checks a `view()` call site against the contract its template declares: a
- * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
+ * `@var \App\Models\User $user` docblock or a `@props([...])` entry. The contract of every layout
+ * in the template's literal `@extends` chain counts too, minus what a nearer template binds.
  *
  * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
  * that does not satisfy the declared type ({@see InvalidViewVariableType}).
@@ -56,6 +57,9 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     /** @var array<string, array<string, true>|null> view name => include-chain read set, null when unprovable */
     private static array $readSets = [];
 
+    /** @var array<string, list<array{0: string, 1: ViewDataContract, 2: array<string, ContractVar>}>> view name => {@see self::layoutVarsFor()} */
+    private static array $layoutVars = [];
+
     public static function init(bool $validateViewData, bool $reportUnusedViewData): void
     {
         self::$validateViewData = $validateViewData;
@@ -68,6 +72,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         self::$reportUnusedViewData = false;
         self::$declaredTypes = [];
         self::$readSets = [];
+        self::$layoutVars = [];
     }
 
     #[\Override]
@@ -122,16 +127,18 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         if (self::$validateViewData && !ContractRegistry::isComposed($chain->viewName)) {
             $supplied = $chain->supplied();
 
-            foreach ($contract->vars as $name => $var) {
-                $passed = $supplied[$name] ?? null;
+            foreach ([[null, $contract, $contract->vars], ...self::layoutVarsFor($chain->viewName, $contract)] as [$layout, $declaring, $vars]) {
+                foreach ($vars as $name => $var) {
+                    $passed = $supplied[$name] ?? null;
 
-                if ($passed === null) {
-                    self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
+                    if ($passed === null) {
+                        self::reportMissing($chain, $declaring, $var, $layout, $codeLocation, $suppressedIssues);
 
-                    continue;
+                        continue;
+                    }
+
+                    self::checkType($chain, $var, $layout, $passed, $codeLocation, $source, $suppressedIssues);
                 }
-
-                self::checkType($chain, $var, $passed, $codeLocation, $source, $suppressedIssues);
             }
         }
 
@@ -188,6 +195,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         ViewCallChain $chain,
         ViewDataContract $contract,
         ContractVar $var,
+        ?string $layout,
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): void {
@@ -202,7 +210,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
         IssueBuffer::accepts(
             new MissingViewVariable(
-                "View '{$chain->viewName}' declares \${$var->name} but the call site does not pass '{$var->name}'",
+                self::declarer($chain, $layout) . " \${$var->name} but the call site does not pass '{$var->name}'",
                 $codeLocation,
             ),
             $suppressedIssues,
@@ -215,6 +223,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     private static function checkType(
         ViewCallChain $chain,
         ContractVar $var,
+        ?string $layout,
         Type\Union $supplied,
         CodeLocation $codeLocation,
         StatementsSource $source,
@@ -245,12 +254,79 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
         IssueBuffer::accepts(
             new InvalidViewVariableType(
-                "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but "
+                self::declarer($chain, $layout) . " \${$var->name} as {$var->typeString}, but "
                 . $supplied->getId() . ' is passed for it',
                 $codeLocation,
             ),
             $suppressedIssues,
         );
+    }
+
+    /** @psalm-mutation-free */
+    private static function declarer(ViewCallChain $chain, ?string $layout): string
+    {
+        return $layout === null
+            ? "View '{$chain->viewName}' declares"
+            : "View '{$chain->viewName}' extends layout '{$layout}', which declares";
+    }
+
+    /**
+     * The declarations of each layout in the view's `@extends` chain, nearest first, that the call
+     * site still has to supply: `@extends` renders the layout with the child's whole scope, so a
+     * name the child or a nearer layout declares or binds for itself never reaches the call site.
+     * Shared names were already stripped from every contract at publish time.
+     *
+     * Empty when any link is unprovable: a dynamic `@extends`, a layout the compile pass never
+     * registered, a composer or creator on a layout (it can supply any key), or a template that
+     * passes its scope on while its read set is unknown, so what it binds is too.
+     *
+     * @return list<array{0: string, 1: ViewDataContract, 2: array<string, ContractVar>}> layout name,
+     *         its contract, and its declarations left to the call site
+     */
+    private static function layoutVarsFor(string $viewName, ViewDataContract $contract): array
+    {
+        if (\array_key_exists($viewName, self::$layoutVars)) {
+            return self::$layoutVars[$viewName];
+        }
+
+        $layouts = [];
+        $bound = [];
+        $visited = [$viewName => true];
+        $current = $viewName;
+
+        while (true) {
+            $layout = ContractRegistry::layoutFor($current);
+
+            // A revisit is a cycle, which Blade would recurse into forever: nothing past it is new.
+            if ($layout === null || isset($visited[$layout])) {
+                break;
+            }
+
+            $layoutContract = $layout === false ? null : ContractRegistry::contractFor($layout);
+
+            if ($layout === false
+                || !$layoutContract instanceof ViewDataContract
+                || $contract->readsUnknown
+                || ContractRegistry::isComposed($layout)
+            ) {
+                $layouts = [];
+
+                break;
+            }
+
+            $bound += \array_fill_keys(\array_keys($contract->vars), true) + \array_fill_keys($contract->localVariables, true);
+            $vars = \array_diff_key($layoutContract->vars, $bound);
+
+            if ($vars !== []) {
+                $layouts[] = [$layout, $layoutContract, $vars];
+            }
+
+            $visited[$layout] = true;
+            $current = $layout;
+            $contract = $layoutContract;
+        }
+
+        return self::$layoutVars[$viewName] = $layouts;
     }
 
     /**

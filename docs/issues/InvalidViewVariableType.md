@@ -9,6 +9,8 @@ nav_order: 12
 Emitted when the value a call site passes for a Blade template variable does not satisfy the type
 that template declares for it in a `@var` docblock.
 
+A view that `@extends` a layout is also checked against the layout's declarations, under the same rules as [MissingViewVariable](MissingViewVariable.md): a name the child declares or binds itself is checked against the child's declaration only.
+
 ## Why this is a problem
 
 The template was written against the declared type and reads the value accordingly (a property

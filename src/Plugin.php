@@ -1001,7 +1001,9 @@ final class Plugin implements PluginEntryPointInterface
             $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
-            $pluginConfig->bladeReportUnusedViewData || $annotating,
+            // validateViewData needs the read sets too: what a child binds before its `@extends`
+            // renders is a layout variable no call site has to pass.
+            $pluginConfig->bladeReportUnusedViewData || $pluginConfig->bladeValidateViewData || $annotating,
         );
 
         if (!$bootstrapper->boot()) {

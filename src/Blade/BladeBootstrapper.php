@@ -66,7 +66,7 @@ final class BladeBootstrapper
      */
     private array $pendingTemplates = [];
 
-    /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
+    /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null, 4: string|false|null}> */
     private array $pendingContracts = [];
 
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
@@ -263,8 +263,8 @@ final class BladeBootstrapper
             ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
         }
 
-        foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
-            ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
+        foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes, $layout]) {
+            ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes, $layout);
 
             if ($this->hasComposer($factory, $viewName)) {
                 ContractRegistry::markComposed($viewName);
@@ -315,10 +315,14 @@ final class BladeBootstrapper
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
+            // Read off the source rather than cached: the compiled `@extends` is indistinguishable
+            // from an `@include` in the data-includes slot.
+            $layout = $this->collectDataIncludes ? MarkerPrePass::extendedLayout($source) : null;
+
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $manifest->dataIncludesFor($shadowPath));
+                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $manifest->dataIncludesFor($shadowPath), $layout);
 
                 continue;
             }
@@ -344,7 +348,7 @@ final class BladeBootstrapper
             try {
                 $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract($template, $roots, $contract, $dataIncludes);
+                $this->registerContract($template, $roots, $contract, $dataIncludes, $layout);
 
             } catch (\RuntimeException $throwable) {
                 $failures[$template] = $throwable->getMessage();
@@ -416,12 +420,14 @@ final class BladeBootstrapper
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array{0: list<string>, 1: bool}|null   $dataIncludes null when the collection pass was off
+     * @param string|false|null                      $layout       as {@see MarkerPrePass::extendedLayout()}
      */
     private function registerContract(
         string $templatePath,
         array $roots,
         ?ViewDataContract $contract,
         ?array $dataIncludes = null,
+        string|false|null $layout = null,
     ): void {
         foreach ($contract?->vars ?? [] as $name => $var) {
             // Psalm reads a raw docblock as written, so `string $x = null` types the body `string`
@@ -448,7 +454,7 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
+            $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes, $layout];
         }
     }
 

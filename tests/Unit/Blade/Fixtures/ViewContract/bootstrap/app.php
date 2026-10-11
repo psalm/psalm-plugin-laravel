@@ -9,9 +9,13 @@ use Illuminate\Foundation\Application;
 $app = Application::configure(basePath: \dirname(__DIR__))->create();
 
 // A view composer, as an application's service provider would register one: the `composed` view's
-// data is then not what its call sites pass.
+// data is then not what its call sites pass. The layout and child composers and the shared key feed
+// the `@extends` fixtures.
 $app->booted(static function () use ($app): void {
     $app->make('view')->composer('composed', static fn(): null => null);
+    $app->make('view')->composer('layouts.composed', static fn(): null => null);
+    $app->make('view')->composer('extends.composed-child', static fn(): null => null);
+    $app->make('view')->share('sharedSiteName', 'Acme');
 });
 
 return $app;

@@ -233,6 +233,31 @@ final class MarkerPrePassTest extends TestCase
         $this->assertSame(4, MarkerPrePass::extendsLine($source));
     }
 
+    /** @return iterable<string, array{string, string|false|null}> */
+    public static function extendedLayouts(): iterable
+    {
+        yield 'none' => ["hello\n", null];
+        yield 'single quotes' => ["@extends('layouts.app')\n", 'layouts.app'];
+        yield 'double quotes, padded' => ["@extends ( \"layouts.app\" )\n", 'layouts.app'];
+        yield 'inside a Blade comment' => ["{{-- @extends('old') --}}\n@extends('real')\n", 'real'];
+        yield 'escaped' => ["@@extends('layouts.app')\n", null];
+        yield 'inside a word' => ["mail@extends('layouts.app')\n", null];
+        yield 'variable' => ["@extends(\$layout)\n", false];
+        yield 'interpolated' => ["@extends(\"layouts.{\$theme}\")\n", false];
+        yield 'concatenated' => ["@extends('layouts.' . \$theme)\n", false];
+        yield 'with data' => ["@extends('layouts.app', ['title' => 'x'])\n", false];
+        yield 'namespaced' => ["@extends('pkg::layout')\n", false];
+        yield 'extendsFirst' => ["@extendsFirst(['a', 'b'])\n", false];
+        yield 'two live' => ["@extends('a')\n@extends('b')\n", false];
+    }
+
+    #[Test]
+    #[DataProvider('extendedLayouts')]
+    public function extended_layout_is_a_single_literal_view_name_or_unprovable(string $source, string|false|null $expected): void
+    {
+        $this->assertSame($expected, MarkerPrePass::extendedLayout($source));
+    }
+
     #[Test]
     public function skips_an_uppercase_raw_php_block(): void
     {
