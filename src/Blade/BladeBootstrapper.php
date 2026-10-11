@@ -126,13 +126,18 @@ final class BladeBootstrapper
             return false;
         }
 
-        [$environmentHash, $trustedEnvironment] = CompilerEnvironment::describe($compiler);
+        [$environmentHash, $trustedEnvironment, $untrustedInputs] = CompilerEnvironment::describe($compiler);
 
         if (!$trustedEnvironment) {
+            // Capped: one broken package can register dozens of directives.
+            $named = \array_slice($untrustedInputs, 0, 3);
+            $more = \count($untrustedInputs) - \count($named);
+
             $this->output->warning(
                 'Laravel plugin: the Blade compiler environment (a custom directive, condition, precompiler, '
                 . 'extension, or component map) could not be fully resolved, so cached Blade shadows are not '
-                . 'trusted for this run; every template is recompiled.',
+                . 'trusted for this run; every template is recompiled.'
+                . ($named === [] ? '' : ' Cause: ' . \implode('; ', $named) . ($more > 0 ? "; and {$more} more" : '') . '.'),
             );
         }
 
