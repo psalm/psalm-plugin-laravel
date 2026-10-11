@@ -74,17 +74,6 @@ final class ShadowIssueRelocator
     ];
 
     /**
-     * @var array<string, array<string, true>> shadow path => {@see self::viewVariables()}, filled
-     *      lazily: re-parsing the template and shadow per guard finding cost seconds on a large app
-     */
-    private static array $viewVariables = [];
-
-    public static function reset(): void
-    {
-        self::$viewVariables = [];
-    }
-
-    /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
      * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
      *                                                     through; a journey crosses files, so one
@@ -262,8 +251,8 @@ final class ShadowIssueRelocator
         // gated, or a `@props` view with a nested tag keeps reporting the inferred-branch half.
         //
         // Gated on the MESSAGE, not the class: `RedundantCondition` on an author's OWN
-        // `@if(isset($range))` under their own `@php` docblock must keep reporting, and a
-        // message-only gate cannot tell that apart from this shape by class alone.
+        // `@if(isset($range))` under their own docblock must keep reporting, and a message-only
+        // gate cannot tell that apart from this shape by class alone.
         //
         // `$component`, unlike `$attributes`/`$slot`, is never given a type by
         // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
@@ -379,7 +368,7 @@ final class ShadowIssueRelocator
                 return false;
             }
 
-            if (self::isDeclaredVariableGuard($issue, $target) || self::isGeneratedValueSave($issue, $target)) {
+            if (self::isGeneratedValueSave($issue, $target)) {
                 return false;
             }
         }
@@ -761,69 +750,6 @@ final class ShadowIssueRelocator
     {
         return \preg_match('/^Docblock-defined type .+ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
             || \preg_match('/^Cannot resolve types for \$(?:' . $names . ') - docblock-defined type/', $message) === 1;
-    }
-
-    /**
-     * Whether an issue is the docblock-branch null finding on a `$x ?? …`, `$x ??= …` or
-     * `isset($x)` guard over a variable the template declares (a `{{-- @var --}}` contract or a raw
-     * `<?php` docblock, {@see ContractParser}). The guard is how a template marks a view variable
-     * optional, which a docblock type cannot say (#1697). The inferred-type wording is never
-     * matched, so a guard after the author modifies the variable keeps reporting. A name the template
-     * binds itself (an assignment, a foreach alias, a parameter: ContractParser's local variables)
-     * is never a view variable, whatever documents it, so its guard keeps reporting too.
-     *
-     * The guard is looked for on the whole shadow line, not at the selection: an `isset()`
-     * ternary's contradiction selects its else arm. So a non-guard check on `$x` (`!is_null($x)`)
-     * is silenced too when the same line also guards `$x`, and a guard split across lines is not
-     * recognised. Trade-off: a genuinely redundant guard on a declared variable that is always
-     * passed is silenced too.
-     */
-    private static function isDeclaredVariableGuard(CodeIssue $issue, ShadowTarget $target): bool
-    {
-        $id = ContractParser::IDENTIFIER;
-
-        if (
-            \preg_match('/^Docblock-defined type .+ for \$(' . $id . ') is never null\z/', $issue->message, $matches) !== 1
-            && \preg_match('/^Cannot resolve types for \$(' . $id . ') - docblock-defined type .+ does not contain null\z/', $issue->message, $matches) !== 1
-        ) {
-            return false;
-        }
-
-        $name = $matches[1];
-        $selection = ShadowSelection::of($issue->code_location);
-        // Both branches require `??` or `,`/`)` right after the name, which already ends it.
-        $var = '(?<![>$:])\$' . $name;
-
-        if (
-            !$selection instanceof ShadowSelection
-            || \preg_match('/' . $var . '\s*\?\?|\bisset\s*\((?:[^()]|\([^()]*\))*?(?<=[(,\s])' . $var . '\s*[,)]/', $selection->snippet) !== 1
-        ) {
-            return false;
-        }
-
-        $path = $issue->code_location->file_path;
-
-        return isset((self::$viewVariables[$path] ??= self::viewVariables($path, $target))[$name]);
-    }
-
-    /**
-     * The names a shadow's template declares as view variables and never binds itself. The
-     * compiled body is what binds names (`@foreach` aliases exist only there), so it is read too.
-     *
-     * @return array<string, true>
-     */
-    private static function viewVariables(string $shadowPath, ShadowTarget $target): array
-    {
-        $shadow = @\file_get_contents($shadowPath);
-
-        if ($shadow === false) {
-            return [];
-        }
-
-        $contract = (new ContractParser())->parseDataContract($target->templateSource, $shadow);
-        $declared = \array_fill_keys([...\array_keys($contract->vars), ...$contract->rawDeclaredVariables], true);
-
-        return \array_diff_key($declared, \array_flip($contract->localVariables));
     }
 
     /**

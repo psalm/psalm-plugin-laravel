@@ -926,27 +926,22 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1697: a `??`, `??=` or `isset()` guard (lines 3-7) on a variable the template declares,
-     * through a raw `@var` docblock, reported the docblock-branch
-     * contradiction even though the guard is how a template marks the variable optional. Still
-     * reported: a non-guard null check on a declared name (line 8), a guard on a name only a
-     * `@param` declares (line 9), a guard after the author modifies the variable (line 11), which
-     * renders the inferred-type wording, a guard split across lines (line 12), and a guard on a
-     * name the template assigns itself under its own docblock, raw (line 16) or `@php` (line 18).
-     * Accepted: the guard is looked for on the whole line, so line 14's `!is_null()` is silenced
-     * with its guard.
+     * A view variable declared in a PHPDoc `@var` is required unless the declaration carries
+     * `= null`, so a `??`, `??=` or `isset()` guard on one is redundant and reports like in PHP
+     * (lines 5-7). An optional variable is declared `T|null $x = null` and its guards report
+     * nothing (lines 8-10). #1697 once dropped these findings.
      */
     #[Test]
-    public function a_guard_on_a_template_declared_variable_is_not_reported(): void
+    public function a_guard_on_a_required_view_variable_reports(): void
     {
         $issues = $this->analyze('psalm.xml');
-        $template = 'declared-guard.blade.php';
+        $template = 'required-guard.blade.php';
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
         $expected = [
-            'RedundantCondition' => [11],
-            'RedundantConditionGivenDocblockType' => [8, 9, 12, 16, 18],
-            'DocblockTypeContradiction' => [9, 12],
-            'TypeDoesNotContainNull' => [11],
+            'RedundantCondition' => [],
+            'RedundantConditionGivenDocblockType' => [5, 6, 7],
+            'DocblockTypeContradiction' => [5, 6],
+            'TypeDoesNotContainNull' => [],
             'TypeDoesNotContainType' => [],
         ];
 
