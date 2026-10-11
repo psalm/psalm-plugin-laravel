@@ -1348,12 +1348,13 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}>
+     * @return iterable<string, array{0: string, 1: string, 2?: string}>
      */
     public static function branchAssignedLocals(): iterable
     {
         yield '@if' => ['locals/if.blade.php', 'label'];
-        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size'];
+        // Declared from its literal default (#1828) rather than `mixed`, but declared all the same.
+        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size', 'string'];
         yield '@once' => ['locals/once.blade.php', 'label'];
         yield '<x-…> slot' => ['locals/slot.blade.php', 'label'];
     }
@@ -1361,16 +1362,16 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * An assignment that can be skipped (a branch, `@once`, a component slot) leaves the incoming
      * view value as the one read after it, a `@props` default or a parent's variable in a partial,
-     * so the name keeps its `mixed` declaration and the read is not possibly undefined.
+     * so the name keeps its prelude declaration and the read is not possibly undefined.
      */
     #[Test]
     #[DataProvider('branchAssignedLocals')]
-    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name): void
+    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name, string $type = 'mixed'): void
     {
         $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/' . $template;
 
-        $this->assertStringContainsString("@var mixed \${$name} */", $this->shadowSourceFor($template));
+        $this->assertStringContainsString("@var {$type} \${$name} */", $this->shadowSourceFor($template));
         $this->assertSame(
             [],
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
