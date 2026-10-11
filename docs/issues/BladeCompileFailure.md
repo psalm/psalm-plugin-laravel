@@ -10,7 +10,7 @@ Emitted on line 1 of a Blade template that the Blade compiler threw on, so the t
 
 ## Why it matters
 
-A template that does not compile is skipped, and every finding it would have produced disappears with it. A template that used to report issues and now fails to compile looks like an improvement. Reported as an issue, the skip shows up under `--no-progress`, in every `--output-format`, and in a baseline.
+A template that does not compile is skipped, and every finding it would have produced disappears with it. A template that used to report issues and now fails to compile looks like an improvement. Reported as an issue, the skip survives `--no-progress` and shows up in every `--output-format`. At the default `info` level Psalm only prints it with `--show-info=true`; once it is an `error` (see [Reporting level](#reporting-level)) it also fails the run and is recorded by `--set-baseline`.
 
 ## Example
 
@@ -41,7 +41,7 @@ A `{{-- @psalm-suppress --}}` comment in the template cannot silence it: that co
 
 ## Reporting level
 
-Without an explicit issue handler, it is reported as `info` by default. Promote that default to an error in `psalm.xml`:
+Without an explicit issue handler, it is reported as `info` by default: hidden unless Psalm runs with `--show-info=true`, never failing the run, and left out of a baseline. Promote that default to an error in `psalm.xml`:
 
 ```xml
 <pluginClass class="Psalm\LaravelPlugin\Plugin">
@@ -54,5 +54,5 @@ Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, 
 
 ## Limitations
 
-* Not reported when no template compiled at all, or when Blade analysis turned itself off for the run (see [Degradation](../blade.md#degradation)). The run-level warning names the skipped templates instead.
+* Not reported when Blade analysis turned itself off for the run (see [Degradation](../blade.md#degradation)). The run-level warning covers every template instead.
 * A template that cannot be read, or whose compiled shadow cannot be written, is not a compile failure. It stays in the run-level warning.

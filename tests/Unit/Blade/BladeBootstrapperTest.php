@@ -871,16 +871,33 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     #[Test]
-    public function a_compile_failure_stays_in_the_warning_when_no_template_compiled(): void
+    public function a_compile_failure_is_reported_even_when_no_template_compiled(): void
     {
         $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
         $registrar = new RecordingShadowRegistrar();
         $app = $this->app();
         $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
 
+        // Nothing joins the analysis, but a one-template app must not go silent under --no-progress.
         $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
 
-        // No shadow means no activation, so the template cannot be made reportable.
+        $this->assertSame([$broken], $registrar->reportableTemplates);
+        $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
+        $this->assertSame([], $registrar->analyzedShadows);
+        $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
+        $this->assertStringNotContainsString('skipped', $this->progress->warningText());
+    }
+
+    #[Test]
+    public function a_compile_failure_stays_in_the_warning_when_no_template_compiled_and_it_cannot_be_made_reportable(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
         $this->assertSame([], $registrar->compileFailures);
         $this->assertStringContainsString("1 Blade template(s) were skipped and are not analyzed ({$broken})", $this->progress->warningText());
     }

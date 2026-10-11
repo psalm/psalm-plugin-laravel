@@ -94,16 +94,15 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     public function reportCompileFailure(string $templatePath, string $source, string $message): void
     {
         $name = $this->projectAnalyzer->getCodebase()->config->shortenFileName($templatePath);
-        $location = TemplateLocation::atLine($templatePath, $name, $source, 1);
+        $location = TemplateLocation::atLine($templatePath, $name, $source, 1)
+            ?? new Raw($source, $templatePath, $name, 0, 0);
 
-        if ($location instanceof Raw) {
-            // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the
-            // only way to silence it.
-            IssueBuffer::accepts(
-                new BladeCompileFailure("Blade template could not be compiled and is not analyzed: {$message}", $location),
-                [],
-            );
-        }
+        // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the only
+        // way to silence it.
+        IssueBuffer::accepts(
+            new BladeCompileFailure("Blade template could not be compiled and is not analyzed: {$message}", $location),
+            [],
+        );
     }
 
     /**

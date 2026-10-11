@@ -75,7 +75,7 @@ interface ShadowRegistrar
 
     /**
      * Reports a template the compiler threw on, at its line 1, as `BladeCompileFailure`. Only called
-     * once the run has activated, so the template is already reportable.
+     * after {@see self::markTemplatesReportable()} succeeded for it.
      *
      * @param string $source  the template source the compiler was given
      * @param string $message the compiler's exception class and message
