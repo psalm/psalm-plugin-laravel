@@ -433,7 +433,7 @@ final class ViewContractValidationTest extends TestCase
 
     /** A layout's declarations reach the call sites of the views that `@extends` it, transitively (#1831). */
     #[Test]
-    public function a_layouts_declared_variable_is_checked_at_the_childs_call_site(): void
+    public function a_layouts_declared_variable_is_checked_at_the_child_views_call_site(): void
     {
         $issues = $this->contractIssues('psalm.xml');
 
