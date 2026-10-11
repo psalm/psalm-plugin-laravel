@@ -77,9 +77,9 @@ final class AnalyzeCommand extends Command
             PluginOverrides::KEYS,
         );
         $this->setHelp(
-            "Keys accepted by <info>--plugin-option=KEY=VALUE</info> and PSALM_LARAVEL_OPTIONS:\n\n"
+            "Keys accepted by <info>--plugin-option=KEY=VALUE</info>:\n\n"
             . \implode("\n", $keys)
-            . "\n\nPrecedence: --plugin-option > PSALM_LARAVEL_OPTIONS (whitespace-separated KEY=VALUE) > psalm.xml > default."
+            . "\n\nPrecedence: --plugin-option > psalm.xml > default."
             . "\nDetails: https://psalm.github.io/psalm-plugin-laravel/config/#per-run-overrides",
         );
     }
@@ -109,23 +109,23 @@ final class AnalyzeCommand extends Command
         // Validated here so a typo is a clean message, not a stack trace from inside psalm.
         try {
             $scan = $this->scanArguments();
-            $childEnv = \getenv();
-            $inherited = PluginOverrides::parse($childEnv[PluginOverrides::ENV_VAR] ?? '');
             $cli = PluginOverrides::parse(\implode(' ', $scan['options']), '--plugin-option');
         } catch (\InvalidArgumentException $invalidArgumentException) {
             $io->error($invalidArgumentException->getMessage());
             return Command::FAILURE;
         }
 
-        // Appended, so the CLI wins over the inherited value by last-wins.
+        // Overwritten, never merged: an inherited value would bypass validation and the cache gate below.
+        $childEnv = \getenv();
+        unset($childEnv[PluginOverrides::ENV_VAR]);
         if ($scan['options'] !== []) {
-            $childEnv[PluginOverrides::ENV_VAR] = \trim(($childEnv[PluginOverrides::ENV_VAR] ?? '') . ' ' . \implode(' ', $scan['options']));
+            $childEnv[PluginOverrides::ENV_VAR] = \implode(' ', $scan['options']);
         }
 
         $forwarded = $scan['forwarded'];
 
         // Toggling Blade leaves stale file references in psalm's cache, see decisions.md "Per-Run Overrides".
-        if ($inherited->has('blade') || $cli->has('blade')) {
+        if ($cli->has('blade')) {
             \array_unshift($forwarded, '--no-reference-cache');
         }
 
@@ -215,7 +215,7 @@ final class AnalyzeCommand extends Command
                 continue;
             }
 
-            // The value travels whitespace-split in PSALM_LARAVEL_OPTIONS, so it must be one non-empty word.
+            // The value travels whitespace-split to the child psalm, so it must be one non-empty word.
             if (\preg_match('/^--plugin-option=\S+\z/', $token) !== 1) {
                 throw new \InvalidArgumentException("'{$token}' is invalid: use --plugin-option=KEY=VALUE, without whitespace.");
             }

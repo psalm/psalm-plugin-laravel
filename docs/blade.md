@@ -52,10 +52,9 @@ Switch Blade analysis for one run without editing `psalm.xml`:
 ```bash
 vendor/bin/psalm-laravel analyze --blade       # on, even without <blade /> in psalm.xml
 vendor/bin/psalm-laravel analyze --no-blade    # off, even with <blade /> in psalm.xml
-PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm --no-reference-cache   # same, for a bare psalm run
 ```
 
-* `--blade` / `--no-blade` are shorthands for `--plugin-option=blade=true|false`. Precedence: command line > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default (off). On the command line the last flag wins, whichever spelling.
+* `--blade` / `--no-blade` are shorthands for `--plugin-option=blade=true|false`. Precedence: command line > `psalm.xml` > default (off). On the command line the last flag wins, whichever spelling.
 * Only the on/off decision is overridden by `blade=…`. The other `<blade>` settings come from the XML, or from their own keys such as `blade.validateViewData=true`, which never switch Blade on by themselves. [`cacheDir`](#cachedir) is XML-only.
 * `--no-reference-cache` keeps dead-code findings correct across a toggle; `analyze` adds it for you. See [Per-run overrides](config.md#per-run-overrides) and [Result cache](config.md#result-cache).
 

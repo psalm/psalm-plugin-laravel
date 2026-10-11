@@ -67,7 +67,7 @@ final class PluginOverridesTest extends TestCase
     public function invalid_tokens_fail_loudly_and_name_their_origin(string $token, string $message): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/^PSALM_LARAVEL_OPTIONS: .*' . \preg_quote($message, '/') . '/s');
+        $this->expectExceptionMessageMatches('/^PSALM_LARAVEL_INTERNAL_OPTIONS: .*' . \preg_quote($message, '/') . '/s');
 
         PluginOverrides::parse($token);
     }

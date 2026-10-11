@@ -24,7 +24,7 @@ final class AnalyzeCommandTest extends TestCase
     /** @var array<string, string|false> */
     private array $originalEnv = [];
 
-    private const ENV_VARS = ['PSALM_LARAVEL_OPTIONS', 'PSALM_LARAVEL_TEST_MARKER'];
+    private const ENV_VARS = ['PSALM_LARAVEL_INTERNAL_OPTIONS', 'PSALM_LARAVEL_TEST_MARKER'];
 
     protected function setUp(): void
     {
@@ -275,20 +275,18 @@ final class AnalyzeCommandTest extends TestCase
     }
 
     #[Test]
-    public function cli_options_are_appended_to_the_inherited_variable_so_they_win(): void
+    public function an_inherited_options_variable_is_replaced_never_merged(): void
     {
-        \putenv('PSALM_LARAVEL_OPTIONS=experimental=true blade=true');
+        \putenv('PSALM_LARAVEL_INTERNAL_OPTIONS=experimental=true blade=true');
 
-        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--plugin-option=blade=false', '--threads=1']));
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--plugin-option=experimental=false', '--threads=1']));
 
-        $this->assertSame('experimental=true blade=true blade=false', $report['options']);
-        $this->assertSame(['--no-reference-cache', '--threads=1'], $report['argv']);
+        $this->assertSame('experimental=false', $report['options']);
+        $this->assertSame(['--threads=1'], $report['argv'], 'an inherited blade token must not reach the child or the cache gate');
 
-        \putenv('PSALM_LARAVEL_OPTIONS');
+        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']));
 
-        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--plugin-option=experimental=true', '--plugin-option=blade=true']));
-
-        $this->assertSame('experimental=true blade=true', $report['options']);
+        $this->assertFalse($report['options'], 'without --plugin-option the inherited value is dropped');
     }
 
     #[Test]
@@ -311,38 +309,30 @@ final class AnalyzeCommandTest extends TestCase
 
         $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']));
 
-        $this->assertFalse($report['options'], 'an unset PSALM_LARAVEL_OPTIONS must stay unset');
+        $this->assertFalse($report['options']);
         $this->assertTrue($report['path']);
         $this->assertSame('kept', $report['marker']);
         $this->assertSame(['--threads=1'], $report['argv']);
-
-        \putenv('PSALM_LARAVEL_OPTIONS=experimental=true');
-
-        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze']));
-
-        $this->assertSame('experimental=true', $report['options']);
-        $this->assertSame([], $report['argv']);
     }
 
-    /** @return iterable<string, array{list<string>, ?string, list<string>}> */
+    /** @return iterable<string, array{list<string>, list<string>}> */
     public static function referenceCacheGate(): iterable
     {
         $flag = '--no-reference-cache';
 
-        yield 'cli blade' => [['--plugin-option=blade=true', 'src'], null, [$flag, 'src']];
-        yield '--no-blade shorthand' => [['--no-blade', 'src'], null, [$flag, 'src']];
-        yield 'inherited env blade' => [['--threads=1'], 'blade=false', [$flag, '--threads=1']];
-        yield 'once for several blade overrides' => [['--plugin-option=blade=true', '--plugin-option=blade=false'], 'blade=true', [$flag]];
-        yield 'blade sub-settings only' => [['--plugin-option=blade.reportMixedIssues=true'], 'blade.validateViewData=true', []];
-        yield 'other keys only' => [['--plugin-option=experimental=true'], 'findMissingViews=true', []];
-        yield 'no overrides' => [['--threads=1'], null, ['--threads=1']];
+        yield 'cli blade' => [['--plugin-option=blade=true', 'src'], [$flag, 'src']];
+        yield '--no-blade shorthand' => [['--no-blade', 'src'], [$flag, 'src']];
+        yield 'once for several blade overrides' => [['--blade', '--plugin-option=blade=false'], [$flag]];
+        yield 'blade sub-settings only' => [['--plugin-option=blade.reportMixedIssues=true'], []];
+        yield 'other keys only' => [['--plugin-option=experimental=true'], []];
+        yield 'no overrides' => [['--threads=1'], ['--threads=1']];
         // psalm tolerates the duplicates; the wrapper cannot know which flags psalm's getopt will parse.
-        yield 'user passed --no-cache' => [['--plugin-option=blade=true', '--no-cache'], null, [$flag, '--no-cache']];
-        yield 'user passed --no-reference-cache' => [['--no-reference-cache', '--plugin-option=blade=true'], null, [$flag, $flag]];
+        yield 'user passed --no-cache' => [['--plugin-option=blade=true', '--no-cache'], [$flag, '--no-cache']];
+        yield 'user passed --no-reference-cache' => [['--no-reference-cache', '--plugin-option=blade=true'], [$flag, $flag]];
         yield 'getopt stops at the first positional, so a later --no-cache is not parsed' => [
-            ['--plugin-option=blade=false', '--find-dead-code=always', 'src', '--no-cache'], null, [$flag, '--find-dead-code=always', 'src', '--no-cache'],
+            ['--plugin-option=blade=false', '--find-dead-code=always', 'src', '--no-cache'], [$flag, '--find-dead-code=always', 'src', '--no-cache'],
         ];
-        yield 'a boundary hides psalm flags after it' => [['--plugin-option=blade=true', '--', '--no-cache'], null, [$flag, '--', '--no-cache']];
+        yield 'a boundary hides psalm flags after it' => [['--plugin-option=blade=true', '--', '--no-cache'], [$flag, '--', '--no-cache']];
     }
 
     /**
@@ -351,38 +341,28 @@ final class AnalyzeCommandTest extends TestCase
      */
     #[Test]
     #[DataProvider('referenceCacheGate')]
-    public function blade_overrides_prepend_no_reference_cache_before_every_forwarded_token(array $args, ?string $env, array $expected): void
+    public function blade_overrides_prepend_no_reference_cache_before_every_forwarded_token(array $args, array $expected): void
     {
-        if ($env !== null) {
-            \putenv('PSALM_LARAVEL_OPTIONS=' . $env);
-        }
-
         $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', ...$args]));
 
         $this->assertSame($expected, $report['argv']);
     }
 
-    /** @return iterable<string, array{list<string>, ?string, string}> */
+    /** @return iterable<string, array{list<string>, string}> */
     public static function invalidInput(): iterable
     {
-        yield 'unknown key' => [['--plugin-option=nope=1'], null, "--plugin-option: unknown key 'nope'"];
-        yield 'bad bool' => [['--plugin-option=blade=yes'], null, "invalid value 'yes'"];
-        yield 'missing equals' => [['--plugin-option=blade'], null, 'is not KEY=VALUE'];
-        yield 'bare option' => [['--plugin-option'], null, 'use --plugin-option=KEY=VALUE'];
-        yield 'whitespace in the value' => [['--plugin-option=blade=true experimental=true'], null, 'use --plugin-option=KEY=VALUE'];
-        yield 'bad env key' => [[], 'bladee=true', "PSALM_LARAVEL_OPTIONS: unknown key 'bladee'"];
-        yield 'valid cli over bad env' => [['--plugin-option=blade=true'], 'blade=maybe', "PSALM_LARAVEL_OPTIONS: invalid value 'maybe'"];
+        yield 'unknown key' => [['--plugin-option=nope=1'], "--plugin-option: unknown key 'nope'"];
+        yield 'bad bool' => [['--plugin-option=blade=yes'], "invalid value 'yes'"];
+        yield 'missing equals' => [['--plugin-option=blade'], 'is not KEY=VALUE'];
+        yield 'bare option' => [['--plugin-option'], 'use --plugin-option=KEY=VALUE'];
+        yield 'whitespace in the value' => [['--plugin-option=blade=true experimental=true'], 'use --plugin-option=KEY=VALUE'];
     }
 
     /** @param list<string> $args */
     #[Test]
     #[DataProvider('invalidInput')]
-    public function invalid_options_fail_before_psalm_is_launched(array $args, ?string $env, string $message): void
+    public function invalid_options_fail_before_psalm_is_launched(array $args, string $message): void
     {
-        if ($env !== null) {
-            \putenv('PSALM_LARAVEL_OPTIONS=' . $env);
-        }
-
         $run = $this->runAgainstFakePsalm(['psalm-laravel', 'analyze', ...$args]);
 
         $this->assertSame(Command::FAILURE, $run['exit']);
@@ -419,7 +399,7 @@ final class AnalyzeCommandTest extends TestCase
         \file_put_contents($binDir . '/psalm', <<<'PHP'
             <?php
             file_put_contents(__DIR__ . '/report.json', json_encode([
-                'options' => getenv('PSALM_LARAVEL_OPTIONS'),
+                'options' => getenv('PSALM_LARAVEL_INTERNAL_OPTIONS'),
                 'path' => getenv('PATH') !== false,
                 'marker' => getenv('PSALM_LARAVEL_TEST_MARKER'),
                 'argv' => array_slice($argv, 1),

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Config;
 
 /**
- * Per-run plugin setting overrides from `PSALM_LARAVEL_OPTIONS`: whitespace-separated `KEY=VALUE` tokens,
- * last wins. `psalm-laravel analyze --plugin-option` appends to the same variable, so the CLI wins over env.
+ * Per-run plugin setting overrides from `psalm-laravel analyze --plugin-option`, received through
+ * {@see self::ENV_VAR} as whitespace-separated `KEY=VALUE` tokens, last wins.
  *
  * @internal
  *
@@ -14,8 +14,8 @@ namespace Psalm\LaravelPlugin\Config;
  */
 final readonly class PluginOverrides
 {
-    /** A real process variable, not a Laravel `.env` entry: it is read before the app boots. */
-    public const ENV_VAR = 'PSALM_LARAVEL_OPTIONS';
+    /** Internal transport from `psalm-laravel analyze` to the child psalm, not a user contract. */
+    public const ENV_VAR = 'PSALM_LARAVEL_INTERNAL_OPTIONS';
 
     private const BOOL = ['true', 'false'];
 
