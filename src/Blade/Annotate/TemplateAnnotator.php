@@ -17,7 +17,8 @@ use Psalm\LaravelPlugin\Blade\SourceLines;
  * 1. the doc comment that opens a top-level statement of a `<?php` block the file opens with —
  *    appended before its `*\/`, so the template keeps one docblock (of two stacked, the PHP parser
  *    attaches only the last, so the lines go into that one). A docblock on a function, class,
- *    attribute, `use`, or `namespace` is not read as a `@var` source and is skipped;
+ *    attribute, `use`, `namespace`, or before `while`/`else`/`elseif`/`catch`/`finally` is not read as
+ *    a `@var` source and is skipped;
  * 2. a new `<?php /** ... *\/ ?>` block directly after that leading block, so a
  *    `declare(strict_types=1)` stays the first statement;
  * 3. the same new block at the very top of the file, after any BOM.
@@ -42,6 +43,13 @@ final class TemplateAnnotator
     private const NON_HEADER_TOKENS = [
         \T_FUNCTION, \T_FN, \T_CLASS, \T_ABSTRACT, \T_FINAL, \T_READONLY, \T_INTERFACE, \T_TRAIT, \T_ENUM, \T_ATTRIBUTE,
         \T_USE, \T_NAMESPACE,
+        // Control-flow keywords php-parser does not hang a leading comment on: `do {} /** */ while`.
+        \T_WHILE, \T_ELSE, \T_ELSEIF, \T_CATCH, \T_FINALLY,
+    ];
+
+    /** Declarations a docblock before them describes, so a plain docblock above them types nothing. */
+    private const DECLARATION_TOKENS = [
+        \T_FUNCTION, \T_FN, \T_CLASS, \T_ABSTRACT, \T_FINAL, \T_READONLY, \T_INTERFACE, \T_TRAIT, \T_ENUM, \T_ATTRIBUTE, \T_USE,
     ];
 
     /**
@@ -95,6 +103,10 @@ final class TemplateAnnotator
             } elseif ($header['closeEnd'] !== null) {
                 $offset = $header['closeEnd'];
                 $insertion = '<?php' . $eol . $docblock . '?>' . $eol;
+            } elseif ($header['opensWithDeclaration']) {
+                // A plain docblock after the open tag would describe the declaration it lands on.
+                $offset = $bom;
+                $insertion = '<?php' . $eol . $docblock . '?>' . $eol;
             } else {
                 // The file never leaves PHP, so a new PHP block would land before a `declare`;
                 // a plain docblock after the open tag is legal there.
@@ -115,20 +127,21 @@ final class TemplateAnnotator
     /**
      * Tokenized, so a `<?php` in text or a docblock-looking string is not mistaken for the header.
      *
-     * @return array{doc: array{0: int, 1: string}|null, openEnd: int, closeEnd: int|null}|null null
+     * @return array{doc: array{0: int, 1: string}|null, openEnd: int, closeEnd: int|null, opensWithDeclaration: bool}|null null
      *         unless the file (after any BOM) opens with `<?php`; `doc` is the first doc comment's
      *         offset and text, `closeEnd` the offset after the block's `?>` (and the one line break
-     *         PHP swallows after it), null when the block runs to the end of the file
+     *         PHP swallows after it), null when the block runs to the end of the file;
+     *         `opensWithDeclaration` is true when its first statement is a `use`, function, or class
      *
      * @psalm-pure
      */
     private static function leadingPhpBlock(string $source, int $start): ?array
     {
-        if (\preg_match('/\G<\?php\s/', $source, offset: $start) !== 1) {
+        if (\preg_match('/\G<\?php[ \t\r\n]/', $source, offset: $start) !== 1) {
             return null;
         }
 
-        $block = ['doc' => null, 'openEnd' => $start, 'closeEnd' => null];
+        $block = ['doc' => null, 'openEnd' => $start, 'closeEnd' => null, 'opensWithDeclaration' => false];
         $offset = $start;
         // The latest doc comment since the last real token: of two stacked ones only the second
         // reaches the statement, so lines appended to the first would be ignored. Plain comments
@@ -138,6 +151,7 @@ final class TemplateAnnotator
         $declined = false;
         $depth = 0;
         $statementStart = true;
+        $first = true;
 
         // Tokenizing does not parse, so a syntactically broken block is fine; the @ is for the
         // warning an unterminated string emits.
@@ -149,6 +163,11 @@ final class TemplateAnnotator
             } elseif ($id === \T_DOC_COMMENT) {
                 $candidate = $depth === 0 && $statementStart && \str_ends_with($text, '*/') ? [$offset, $text] : null;
             } elseif ($id !== \T_WHITESPACE && $id !== \T_COMMENT) {
+                if ($first) {
+                    $block['opensWithDeclaration'] = \in_array($id, self::DECLARATION_TOKENS, true);
+                    $first = false;
+                }
+
                 if ($candidate !== null && $block['doc'] === null && !$declined) {
                     $declined = \in_array($id, self::NON_HEADER_TOKENS, true);
                     $block['doc'] = $declined ? null : $candidate;

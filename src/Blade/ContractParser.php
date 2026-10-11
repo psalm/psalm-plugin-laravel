@@ -36,9 +36,6 @@ final class ContractParser
     /** PHP's own variable-name grammar, as bytes. */
     public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
-    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling a template declares in. */
-    private const RAW_PHP_BLOCK = '/<\?php\b.*?(?:\?>|\z)/s';
-
     /**
      * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
      * same (last) name {@see self::VAR_PATTERN} does; per line, because one block can hold several
@@ -129,21 +126,29 @@ final class ContractParser
      */
     public static function rawDeclaredNames(string $source): array
     {
-        if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) < 1) {
-            return [];
-        }
-
         $names = [];
+        $from = 0;
 
-        foreach ($blocks[0] as $block) {
-            // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
-            // not parse, so that is fine; the @ is for the warning an unterminated string emits.
-            foreach (@\token_get_all($block) as $token) {
-                if (!\is_array($token) || ($token[0] !== \T_DOC_COMMENT && $token[0] !== \T_COMMENT)) {
+        // Each block is tokenized from its `<?php` to the first real close tag, not regex-cut at the
+        // first close-tag text: one inside a string or heredoc does not end the block, and a cut there
+        // would drop the docblocks after it. Only `<?php` opens one (never `<?` or `<?xml`).
+        // Tokenizing does not parse, so a syntactically incomplete block (an unclosed `<?php` at EOF)
+        // is fine; the @ is for the warning an unterminated string emits.
+        while (\preg_match('/<\?php[ \t\r\n]/', $source, $open, \PREG_OFFSET_CAPTURE, $from) === 1) {
+            $from = $open[0][1];
+
+            foreach (@\token_get_all(\substr($source, $from)) as $token) {
+                $from += \is_array($token) ? \strlen($token[1]) : \strlen($token);
+
+                if (!\is_array($token)) {
                     continue;
                 }
 
-                if (\preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
+                if ($token[0] === \T_CLOSE_TAG) {
+                    break;
+                }
+
+                if (($token[0] === \T_DOC_COMMENT || $token[0] === \T_COMMENT) && \preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
                     foreach ($matched[1] as $name) {
                         $names[] = $name;
                     }

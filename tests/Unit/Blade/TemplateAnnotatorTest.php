@@ -23,6 +23,11 @@ final class TemplateAnnotatorTest extends TestCase
         '<?php $x = strlen(/** @var string $b */ "b"); ?>',
         '<?php $x = /** @var string $b */ "b"; ?>',
         '<?php $a = [/** @var int $i */ 1]; ?>',
+        '<?php do {} /** Header */ while (false); echo $title; ?>',
+        '<?php if ($a) {} /** Header */ else {} ?>',
+        '<?php if ($a) {} elseif ($b) {} /** Header */ elseif ($c) {} ?>',
+        '<?php try {} /** Header */ catch (\\Exception $e) {} ?>',
+        '<?php try {} catch (\\Exception $e) {} /** Header */ finally {} ?>',
         '<?php function f() { $a = 1; $s = "{$a}}"; /** @var int $n */ $n = 1; } ?>',
     ];
 
@@ -197,6 +202,35 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function an_unclosed_block_opening_with_a_declaration_gets_a_block_at_the_top(): void
+    {
+        foreach (
+            [
+                "<?php\nuse DateTime as D;\necho \$title;\n",
+                "<?php\nclass A {}\necho \$title;\n",
+                "<?php\nfunction f() {}\necho \$title;\n",
+                "<?php\n#[Attr]\nclass B {}\necho \$title;\n",
+            ] as $source
+        ) {
+            $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+            $this->assertNotNull($result);
+            $this->assertSame(self::NEW_TITLE_BLOCK . $source, $result[0], $source);
+        }
+    }
+
+    #[Test]
+    public function a_form_feed_after_the_open_tag_is_not_an_open_tag(): void
+    {
+        $source = "<?php\x0c/** Header. */ ?>\n<p>{{ \$title }}</p>\n";
+
+        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+        $this->assertNotNull($result);
+        $this->assertSame(self::NEW_TITLE_BLOCK . $source, $result[0]);
+    }
+
+    #[Test]
     public function does_not_mistake_php_looking_text_for_a_header(): void
     {
         $source = "<p>/** not php */ {{ \$title }}</p>\n";
@@ -218,6 +252,8 @@ final class TemplateAnnotatorTest extends TestCase
                 "<?php\n/**\n * Header.\n */\n?>\n<p>{{ \$title }}</p>\n",
                 "<?php\n/** @var Site \$site */\n\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
                 "<?php /** Helper. */ function helper(): void {} ?>\n<p>{{ \$title }}</p>\n",
+                "<?php \$s = \"?>\"; /** Header */ echo \$title; ?>x",
+                "<?php \$s = <<<EOT\n?>\nEOT;\n/** Header */ echo \$title; ?>x",
                 "<?php\n/** @var Site \$site */\n// note\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
                 "\u{FEFF}<?php\r\ndeclare(strict_types=1);\r\n?>\r\n<p>{{ \$title }}</p>\r\n",
             ] as $source
