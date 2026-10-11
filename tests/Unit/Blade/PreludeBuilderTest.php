@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -212,6 +213,46 @@ final class PreludeBuilderTest extends TestCase
         $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', ['user' => '\App\Models\User'], '');
 
         $this->assertStringContainsString('@var \App\Models\User $user */', $prelude);
+    }
+
+    /** A contract type Psalm rejects leaves the name declared, with the contract line overriding it. */
+    #[Test]
+    public function a_contract_var_is_declared_mixed_before_its_contract_type(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo $user; ?>', ['user' => '\App\Models\User'], '');
+
+        $this->assertStringContainsString("/** @var mixed \$user */\n/** @var \\App\\Models\\User \$user */;\n", $prelude);
+    }
+
+    /**
+     * @return iterable<string, array{string, list<string>|null}>
+     */
+    public static function contractTypes(): iterable
+    {
+        yield 'fully qualified' => ['\App\User', ['\App\User']];
+        yield 'nullable' => ['?\App\User', ['\App\User']];
+        yield 'qualified without the leading backslash' => ['App\Models\User|null', ['App\Models\User']];
+        yield 'short name' => ['User', ['User']];
+        yield 'generic arguments' => ['array<int, \App\User>|\Illuminate\Support\Collection<int, User>', ['\Illuminate\Support\Collection', '\App\User', 'User']];
+        yield 'shape keys are not classes' => ['array{name: string, user?: \App\User}', ['\App\User']];
+        yield 'keywords and literals' => ["non-empty-list<int>|'Draft'|\"Posted\"|positive-int|-1|null", []];
+        yield 'int range bounds' => ['int<0, max>|int<min, -1>', []];
+        yield 'class constant' => ['\App\Status::DRAFT_*', ['\App\Status']];
+        yield 'callable parameter names' => ['callable(string $user): \App\User', ['\App\User']];
+        yield 'closure' => ['Closure(int): string', ['Closure']];
+        yield 'unparseable' => ['array<int $m', null];
+        yield 'class-relative names' => ['self|list<static>|Parent', ['self', 'Parent', 'static']];
+        yield '$this' => ['$this', ['static']];
+    }
+
+    /**
+     * @param list<string>|null $expected
+     */
+    #[Test]
+    #[DataProvider('contractTypes')]
+    public function class_names_in_a_contract_type_are_read_as_written(string $type, ?array $expected): void
+    {
+        $this->assertSame($expected, PreludeBuilder::classNamesIn($type));
     }
 
     #[Test]

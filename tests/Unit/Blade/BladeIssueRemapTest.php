@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -1171,6 +1172,144 @@ final class BladeIssueRemapTest extends TestCase
         $shadow = $this->shadowSourceFor($template);
         $this->assertStringContainsString('@var mixed $__themeViews', $shadow);
         $this->assertStringContainsString('$__componentOriginal', $shadow);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function qualifiedContracts(): iterable
+    {
+        yield 'leading backslash' => ['contract-typed-body.blade.php'];
+        // What `blade:annotate` writes: resolves identically in the namespace-less shadow.
+        yield 'no leading backslash' => ['contract-unqualified.blade.php'];
+    }
+
+    /** A qualified `{{-- @var --}}` contract types the template body, not only its call sites. */
+    #[Test]
+    #[DataProvider('qualifiedContracts')]
+    public function a_contract_var_types_the_template_body(string $template): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UndefinedMethod', 'resources/views/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** A raw PHP `@var` docblock below a contract retypes the variable from that point on. */
+    #[Test]
+    public function a_raw_var_docblock_overrides_the_contract_type(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-raw-override.blade.php';
+        $reported = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template) && $issue['type'] === 'UndefinedMethod',
+        ));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([3], \array_column($reported, 'line_from'), $encoded);
+        $this->assertStringContainsString('GenuineMiss::missing', $reported[0]['message'], $encoded);
+    }
+
+    /**
+     * `self`/`static` need an enclosing class, which a shadow has none of: Psalm crashes on `self`
+     * ("Could not get class storage for self") and reports an empty class name for `static`.
+     */
+    #[Test]
+    public function a_class_relative_contract_type_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-class-relative.blade.php';
+
+        $this->assertStringNotContainsString('@var self', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** A type carrying a docblock terminator would close its prelude line and turn the template into a ParseError. */
+    #[Test]
+    public function a_contract_type_carrying_a_comment_terminator_keeps_the_templates_findings(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-comment-terminator.blade.php';
+        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), $encoded);
+        $this->assertSame([2], $this->linesFor($issues, 'InvalidScalarArgument', $template), $encoded);
+    }
+
+    /** A contract naming a missing class reports on the comment that declared it, not as unmapped. */
+    #[Test]
+    public function a_contract_naming_an_unknown_class_reports_on_its_comment_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-unknown-class.blade.php';
+        $reported = \array_values(\array_filter(
+            $issues,
+            static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template),
+        ));
+
+        $this->assertContains(2, $this->linesFor($issues, 'UndefinedDocblockClass', $template), \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertNotContains(1, \array_column($reported, 'line_from'), \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /** An unparseable contract type stays `mixed` in the body instead of an InvalidDocblock. */
+    #[Test]
+    public function an_unparseable_contract_type_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-unparseable.blade.php';
+
+        $this->assertStringContainsString('@var mixed $m */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * A type that parses but is not valid (`array<int, string, bool>`) is dropped by Psalm with an
+     * InvalidDocblock on the comment line. The read below it must not cascade into an
+     * UndefinedGlobalVariable, and the message must not carry the shadow cache path.
+     */
+    #[Test]
+    public function an_invalid_contract_type_reports_once_on_its_comment_line(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-invalid-type.blade.php';
+        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)));
+        $encoded = \json_encode($reported, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame(['InvalidDocblock'], \array_column($reported, 'type'), $encoded);
+        $this->assertSame(2, $reported[0]['line_from'], $encoded);
+        $this->assertStringEndsWith('in ' . $template . ':2)', $reported[0]['message'], $encoded);
+    }
+
+    /**
+     * A Blade comment cannot carry a `use` import, so a short class name would resolve against the
+     * global namespace in the shadow. It stays `mixed` (and silent) rather than report a class the
+     * author never meant.
+     */
+    #[Test]
+    public function a_short_class_name_in_a_contract_var_leaves_the_body_mixed(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/contract-short-name.blade.php';
+
+        $this->assertStringContainsString('@var mixed $greeter */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
