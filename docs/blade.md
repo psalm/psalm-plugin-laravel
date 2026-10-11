@@ -54,13 +54,11 @@ Switch Blade analysis for one run without editing `psalm.xml`:
 ```bash
 vendor/bin/psalm-laravel analyze --blade       # on, even without <blade /> in psalm.xml
 vendor/bin/psalm-laravel analyze --no-blade    # off, even with <blade /> in psalm.xml
-PSALM_LARAVEL_OPTIONS='blade=true' vendor/bin/psalm   # same, for a bare psalm run
 ```
 
-* Precedence: `--blade`/`--no-blade` > `PSALM_LARAVEL_OPTIONS` > `psalm.xml` > default (off). Of repeated flags the last one wins.
-* Only the on/off decision is overridden. Settings such as [`cacheDir`](#cachedir) and `validateViewData` still come from the `<blade>` element, with their defaults when it is absent.
-* `PSALM_LARAVEL_OPTIONS` is a process environment variable read by the plugin before the app boots, not a Laravel `.env` entry. See [Per-run overrides](config.md#per-run-overrides).
-* Psalm's result cache is keyed on the config file, not on this toggle. After switching a project between on and off, results from the previous mode can be replayed: turning Blade off after a Blade run can drop dead-code findings such as `UnusedClass` for classes only templates used. Run with `--no-cache` when results look stale.
+* `--blade` / `--no-blade` are shorthands for `--plugin-option=blade=true|false`. Precedence: command line > `psalm.xml` > default (off). On the command line the last flag wins, whichever spelling.
+* Only the on/off decision is overridden by `blade=…`. The other `<blade>` settings come from the XML, or from their own keys such as `blade.validateViewData=true`, which never switch Blade on by themselves. [`cacheDir`](#cachedir) is XML-only.
+* `--no-reference-cache` keeps dead-code findings correct across a toggle; `analyze` adds it for you. See [Per-run overrides](config.md#per-run-overrides) and [Result cache](config.md#result-cache).
 
 ## Suppressing issues
 
