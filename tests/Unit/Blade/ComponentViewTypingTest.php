@@ -79,6 +79,27 @@ final class ComponentViewTypingTest extends TestCase
     }
 
     /**
+     * A seeded view that never writes `@props` or names `$attributes` still holds a nested tag's
+     * compiled `isset($attributes)` / `instanceof` bookkeeping; with `$attributes` seeded non-null,
+     * those guards are the compiler's, not the author's, and must stay silent.
+     */
+    #[Test]
+    public function a_nested_tag_in_an_unmarked_seeded_view_is_silent(): void
+    {
+        $issues = $this->fixtureIssues(self::FIXTURE, self::ARGUMENTS);
+        $reported = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], 'components/frame.blade.php')) {
+                $reported[] = $issue['type'] . ': ' . $issue['message'];
+            }
+        }
+
+        $this->assertSame(['$heading: string'], $this->tracesIn($issues, 'frame.blade.php'), 'the view was not seeded, so the silence proves nothing.');
+        $this->assertSame([], $reported);
+    }
+
+    /**
      * The seed is computed from class storage on every run, never written into the shadow: a warm
      * Psalm cache and an unchanged (fresh) shadow must still follow a changed property type.
      */

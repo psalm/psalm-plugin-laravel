@@ -20,3 +20,4 @@
 <x-named/>
 <x-included/>
 @include('components.included')
+<x-frame/>
