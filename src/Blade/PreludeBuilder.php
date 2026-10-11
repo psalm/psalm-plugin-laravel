@@ -6,10 +6,15 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use PhpParser\ErrorHandler\Collecting;
 use PhpParser\Node;
+use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
+use Psalm\Exception\TypeParseTreeException;
+use Psalm\Internal\Type\ParseTree;
+use Psalm\Internal\Type\ParseTreeCreator;
+use Psalm\Internal\Type\TypeTokenizer;
 
 /**
  * Builds the leading `<?php … ?>` block of standalone one-line docblocks
@@ -26,9 +31,12 @@ final class PreludeBuilder
     public const AMBIENT_TYPES = [
         '__env' => '\Illuminate\View\Factory',
         'errors' => '\Illuminate\Support\ViewErrorBag',
-        // Blade's loop cursor is a plain stdClass built from an array (ManagesLoops::getLastLoop()).
-        'loop' => 'object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}',
+        // Blade's loop cursor is a plain stdClass built from an array (ManagesLoops::getLastLoop()),
+        // `parent` the enclosing loop's own array cast the same way; shaped one level deep only.
+        'loop' => 'object{' . self::LOOP_FIELDS . ', parent: (\stdClass&object{' . self::LOOP_FIELDS . ', parent: object|null})|null}',
     ];
+
+    private const LOOP_FIELDS = 'index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int';
 
     /**
      * Every name Blade injects into a compiled view itself, declared or not (`$component` is
@@ -48,7 +56,8 @@ final class PreludeBuilder
     private ?Parser $parser = null;
 
     /**
-     * @param array<string, string> $contractVars variable name (without $) => FQCN
+     * @param array<string, string> $contractVars variable name (without $) => type, from the
+     *                                            template's own `{{-- @var --}}` comments
      */
     public function build(string $compiled, array $contractVars, string $source): string
     {
@@ -61,15 +70,21 @@ final class PreludeBuilder
 
         $lines = [];
 
+        // Each its own empty statement, first: Psalm reports a docblock's fault (an unknown class)
+        // on the statement the comment is attached to, and this line is the one ShadowCompiler maps
+        // back to the template comment. Stacked onto the closing tag, it would be unmapped. The
+        // `mixed` line ahead of it keeps the name declared when Psalm drops a type that parses but
+        // is invalid (`array<int, string, bool>`); a valid contract type overrides it.
+        foreach ($contractVars as $name => $type) {
+            $lines[] = "/** @var mixed \${$name} */";
+            $lines[] = "/** @var {$type} \${$name} */;";
+        }
+
         foreach (self::AMBIENT_TYPES as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
         foreach ($componentTypes as $name => $type) {
-            $lines[] = "/** @var {$type} \${$name} */";
-        }
-
-        foreach ($contractVars as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
@@ -174,6 +189,47 @@ final class PreludeBuilder
         ));
     }
 
+    /**
+     * The class names a `{{-- @var --}}` type names, as written, or null when the type does not
+     * parse. Read off Psalm's syntax tree alone: `Type::parseString()` needs a live
+     * ProjectAnalyzer, and resolving names against a codebase not yet scanned adds nothing here.
+     *
+     * @return list<string>|null
+     */
+    public static function classNamesIn(string $type): ?array
+    {
+        try {
+            $pending = [(new ParseTreeCreator(TypeTokenizer::tokenize($type)))->create()];
+        } catch (TypeParseTreeException) {
+            return null;
+        }
+
+        $names = [];
+
+        while (($node = \array_shift($pending)) !== null) {
+            \array_push($pending, ...$node->children);
+
+            // Shape keys and callable parameter names live on other node kinds; literals, numbers,
+            // `int<0, max>` bounds and Psalm's keywords are filtered by name.
+            if (!$node instanceof ParseTree\Value && !$node instanceof ParseTree\GenericTree && !$node instanceof ParseTree\CallableTree) {
+                continue;
+            }
+
+            $name = \explode('::', $node->value, 2)[0];
+            $keyword = \strtolower($name);
+
+            if (\preg_match('/^\\\\?[a-zA-Z_\x80-\xff]/', $name) === 1
+                && !isset(TypeTokenizer::PSALM_RESERVED_WORDS[$keyword])
+                && $keyword !== 'min'
+                && $keyword !== 'max'
+            ) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
     /** One parser for every template in the pass: constructing one re-reads PHP's own token tables. */
     private function parser(): Parser
     {
@@ -201,12 +257,43 @@ final class PreludeBuilder
             return [];
         }
 
-        $visitor = new class extends NodeVisitorAbstract {
+        $finder = new NodeFinder();
+        /** @var array<int, string> $rootAssigns Assign node id => target name */
+        $rootAssigns = [];
+
+        // Only a statement of the file itself always runs. An assignment inside `@if`, `@once`, a
+        // `<x-…>` slot, a loop or `try` can be skipped, leaving the incoming view value (a `@props`
+        // default, a parent's variable in a partial) as the one read after it.
+        foreach ($ast as $statement) {
+            if ($statement instanceof Node\Stmt\Expression
+                && $statement->expr instanceof Node\Expr\Assign
+                && $statement->expr->var instanceof Node\Expr\Variable
+                && \is_string($name = $statement->expr->var->name)
+                && !$finder->findFirst(
+                    $statement->expr->expr,
+                    static fn(Node $read): bool => $read instanceof Node\Expr\Variable && $read->name === $name,
+                ) instanceof Node
+            ) {
+                $rootAssigns[\spl_object_id($statement->expr)] = $name;
+            }
+        }
+
+        $visitor = new class ($rootAssigns) extends NodeVisitorAbstract {
             /** @var array<string, true> */
             public array $found = [];
 
             /** @var array<string, true> */
             public array $written = [];
+
+            /** @var array<string, true> names first mentioned as a root-level `$x = …` whose value never reads `$x` */
+            public array $assignedFirst = [];
+
+            /**
+             * @param array<int, string> $rootAssigns
+             *
+             * @psalm-mutation-free
+             */
+            public function __construct(private readonly array $rootAssigns) {}
 
             /**
              * @psalm-external-mutation-free
@@ -214,6 +301,15 @@ final class PreludeBuilder
             #[\Override]
             public function enterNode(Node $node): null
             {
+                // Checked before the target itself is recorded as found: Assign is entered first.
+                if ($node instanceof Node\Expr\Assign) {
+                    $name = $this->rootAssigns[\spl_object_id($node)] ?? null;
+
+                    if ($name !== null && !isset($this->found[$name])) {
+                        $this->assignedFirst[$name] = true;
+                    }
+                }
+
                 if ($node instanceof Node\Expr\Variable && \is_string($node->name)) {
                     $this->found[$node->name] = true;
                 }
@@ -273,6 +369,14 @@ final class PreludeBuilder
 
         foreach (\array_keys($visitor->found) as $name) {
             if (isset($declared[$name])) {
+                continue;
+            }
+
+            // A name the template assigns unconditionally before any other mention is a local:
+            // whatever view value it had is overwritten unread. Declaring it ahead of the assignment
+            // is not harmless: Psalm then drops the correlation between a flag and the value it was
+            // derived from (`$has = $x !== null; … @if ($has) $x->y`) after the next `if`.
+            if (isset($visitor->assignedFirst[$name])) {
                 continue;
             }
 
