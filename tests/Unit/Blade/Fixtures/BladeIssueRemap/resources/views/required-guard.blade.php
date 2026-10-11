@@ -7,3 +7,4 @@
 @if(isset($title)) {{ $title }} @endif
 {{ $subtitle ?? '' }}{{ $note ?? '' }}
 @php $note ??= 'Note'; @endphp
+@if(isset($subtitle)) {{ $subtitle }} @endif

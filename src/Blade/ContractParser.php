@@ -25,7 +25,7 @@ use Psalm\Internal\Type\TypeTokenizer;
 final class ContractParser
 {
     /** PHP's own variable-name grammar, as bytes. */
-    public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
+    private const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
     /**
      * What follows `@var` on one line of a comment inside a raw PHP block, minus a closing `*\/`.

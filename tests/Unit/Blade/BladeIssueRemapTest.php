@@ -929,7 +929,7 @@ final class BladeIssueRemapTest extends TestCase
      * A view variable declared in a PHPDoc `@var` is required unless the declaration carries
      * `= null`, so a `??`, `??=` or `isset()` guard on one is redundant and reports like in PHP
      * (lines 5-7). An optional variable is declared `T|null $x = null` and its guards report
-     * nothing (lines 8-9). #1697 once dropped these findings.
+     * nothing (lines 8-10). #1697 once dropped these findings.
      */
     #[Test]
     public function a_guard_on_a_required_view_variable_reports(): void
