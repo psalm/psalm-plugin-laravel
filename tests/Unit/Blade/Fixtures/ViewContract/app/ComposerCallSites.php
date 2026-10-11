@@ -51,6 +51,12 @@ final class ComposerCallSites
         return view('123', []);
     }
 
+    // `currentAdminViewPath` comes from the composer, which only reads the view's name: `count` is missing.
+    public function readOnlyAccessor(): View
+    {
+        return view('composer-accessor', []);
+    }
+
     // Everything below stays whole-view silent: the key set cannot be proven.
     public function declined(): void
     {

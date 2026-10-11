@@ -194,7 +194,12 @@ final class ComposerKeyResolver
                 continue;
             }
 
-            foreach ($links as $link) {
+            // Past a read-only accessor the chain works on its result, not on the view.
+            foreach (\array_reverse($links) as $link) {
+                if (self::isReadOnly($link)) {
+                    break;
+                }
+
                 $linkKeys = self::withKeys($link);
 
                 if ($linkKeys === null) {
@@ -207,6 +212,12 @@ final class ComposerKeyResolver
             $receivers[\spl_object_id($node)] = true;
         }
 
+        foreach ([...$finder->findInstanceOf($stmts, Expr\MethodCall::class), ...$finder->findInstanceOf($stmts, Expr\NullsafeMethodCall::class)] as $call) {
+            if ($call->var instanceof Expr\Variable && $call->var->name === $view && self::isReadOnly($call)) {
+                $receivers[\spl_object_id($call->var)] = true;
+            }
+        }
+
         // Every other mention of the view is somewhere the walker cannot follow.
         foreach ($finder->findInstanceOf($stmts, Expr\Variable::class) as $variable) {
             if ($variable->name === $view && !isset($receivers[\spl_object_id($variable)])) {
@@ -215,6 +226,12 @@ final class ComposerKeyResolver
         }
 
         return $keys;
+    }
+
+    /** The accessors that read the view without touching its data (`getData()` and `getFactory()` do not qualify). */
+    private static function isReadOnly(Expr\MethodCall|Expr\NullsafeMethodCall $call): bool
+    {
+        return $call->name instanceof Identifier && \in_array($call->name->toLowerString(), ['name', 'getname', 'getpath'], true);
     }
 
     /**

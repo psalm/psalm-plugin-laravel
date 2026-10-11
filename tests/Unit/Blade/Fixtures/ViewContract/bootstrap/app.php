@@ -31,6 +31,7 @@ $app->booted(static function () use ($app): void {
     $view->composer('composer-protected', $composers . 'ProtectedComposer');
     $view->composer('composer-protected-trait', $composers . 'ProtectedTraitComposer');
     $view->composer('composer-ctor-default', $composers . 'ConstructorDefaultComposer');
+    $view->composer('composer-accessor', $composers . 'AccessorComposer');
     // A numeric view name is an integer array key once it has been through a map.
     $view->composer('123', $composers . 'LiteralComposer');
     $view->creator('composer-created', $composers . 'CreatorComposer');
