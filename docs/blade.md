@@ -234,7 +234,7 @@ What it leaves alone:
 
 Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. Where the lines go, in order of preference:
 
-1. the doc comment of the `<?php` block the file opens with, appended before its closing `*/` and indented and line-ended like it, so the template keeps a single docblock (Psalm attaches only the last of two docblocks before one statement, so when two stack, the lines go into the later one). A docblock that sits on a function, class, or attribute describes that symbol rather than the template, so it does not count;
+1. the docblock that opens a top-level statement of the `<?php` block the file opens with, appended before its closing `*/` and indented like it, with the file's dominant line ending, so the template keeps a single docblock (Psalm attaches only the last of two docblocks before one statement, so when two stack, the lines go into the later one). A docblock Psalm would not read a `@var` from does not count: one on a function, class, attribute, `use`, or `namespace`, or one nested in a body or an expression;
 2. a new `<?php /** ... */ ?>` block directly after that leading block, so a `declare(strict_types=1);` stays the first statement. A leading block that never closes gets a plain docblock after its open tag instead;
 3. a new `<?php /** ... */ ?>` block at the very top of the file, after any BOM.
 

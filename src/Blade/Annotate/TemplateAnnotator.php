@@ -14,9 +14,10 @@ use Psalm\LaravelPlugin\Blade\SourceLines;
  * A template's own docblock is the one place Psalm reads a `@var` as typing the body, and the
  * spelling a template author already knows. Where the lines go, in order of preference:
  *
- * 1. the first doc comment of a `<?php` block the file opens with — appended before its `*\/`, so
- *    the template keeps one docblock (a second one before the same statement is dropped by the PHP
- *    parser, which attaches only the last);
+ * 1. the doc comment that opens a top-level statement of a `<?php` block the file opens with —
+ *    appended before its `*\/`, so the template keeps one docblock (of two stacked, the PHP parser
+ *    attaches only the last, so the lines go into that one). A docblock on a function, class,
+ *    attribute, `use`, or `namespace` is not read as a `@var` source and is skipped;
  * 2. a new `<?php /** ... *\/ ?>` block directly after that leading block, so a
  *    `declare(strict_types=1)` stays the first statement;
  * 3. the same new block at the very top of the file, after any BOM.
@@ -37,9 +38,10 @@ final class TemplateAnnotator
 {
     private const BOM = "\u{FEFF}";
 
-    /** Tokens that start a symbol whose docblock is not the template's header. */
-    private const SYMBOL_DOC_TOKENS = [
+    /** Statements whose docblock describes the statement itself, so Psalm never reads a `@var` from it. */
+    private const NON_HEADER_TOKENS = [
         \T_FUNCTION, \T_FN, \T_CLASS, \T_ABSTRACT, \T_FINAL, \T_READONLY, \T_INTERFACE, \T_TRAIT, \T_ENUM, \T_ATTRIBUTE,
+        \T_USE, \T_NAMESPACE,
     ];
 
     /**
@@ -129,9 +131,13 @@ final class TemplateAnnotator
         $block = ['doc' => null, 'openEnd' => $start, 'closeEnd' => null];
         $offset = $start;
         // The latest doc comment since the last real token: of two stacked ones only the second
-        // reaches the statement, so lines appended to the first would be ignored.
+        // reaches the statement, so lines appended to the first would be ignored. Plain comments
+        // between them do not break the stack. Only a top-level statement start qualifies: a docblock
+        // inside a body, an argument list, or mid-expression types that scope or nothing at all.
         $candidate = null;
         $declined = false;
+        $depth = 0;
+        $statementStart = true;
 
         // Tokenizing does not parse, so a syntactically broken block is fine; the @ is for the
         // warning an unterminated string emits.
@@ -141,12 +147,10 @@ final class TemplateAnnotator
             if ($id === \T_OPEN_TAG) {
                 $block['openEnd'] = $offset + \strlen($text);
             } elseif ($id === \T_DOC_COMMENT) {
-                $candidate = \str_ends_with($text, '*/') ? [$offset, $text] : null;
-            } elseif ($id !== \T_WHITESPACE) {
+                $candidate = $depth === 0 && $statementStart && \str_ends_with($text, '*/') ? [$offset, $text] : null;
+            } elseif ($id !== \T_WHITESPACE && $id !== \T_COMMENT) {
                 if ($candidate !== null && $block['doc'] === null && !$declined) {
-                    // A docblock on a function, class or attribute describes that symbol, not the
-                    // template, and a `@var` there types nothing.
-                    $declined = \in_array($id, self::SYMBOL_DOC_TOKENS, true);
+                    $declined = \in_array($id, self::NON_HEADER_TOKENS, true);
                     $block['doc'] = $declined ? null : $candidate;
                 }
 
@@ -157,6 +161,14 @@ final class TemplateAnnotator
 
                     break;
                 }
+
+                // T_CURLY_OPEN's text is `{`, so the match already counts it.
+                $depth = \max(0, $depth + match (true) {
+                    $id === \T_ATTRIBUTE, $id === \T_DOLLAR_OPEN_CURLY_BRACES, $text === '{', $text === '(', $text === '[' => 1,
+                    $text === '}', $text === ')', $text === ']' => -1,
+                    default => 0,
+                });
+                $statementStart = $depth === 0 && ($text === ';' || $text === '}');
             }
 
             $offset += \strlen($text);

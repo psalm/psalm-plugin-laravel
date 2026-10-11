@@ -14,6 +14,17 @@ final class TemplateAnnotatorTest extends TestCase
 {
     private const NEW_TITLE_BLOCK = "<?php\n/**\n * @var string \$title\n */\n?>\n";
 
+    /** Leading PHP blocks whose docblock Psalm does not apply to the body, one closing tag each. */
+    private const NON_HEADER_BLOCKS = [
+        "<?php\n/**\n * Header.\n */\nuse Foo\\Bar;\n?>",
+        "<?php\n/**\n * Header.\n */\nnamespace Foo;\n?>",
+        '<?php $f = function (): int { /** @var int $n */ $n = 1; return $n; }; ?>',
+        '<?php function helper(): int { /** @var int $n */ $n = 1; return $n; } ?>',
+        '<?php $x = strlen(/** @var string $b */ "b"); ?>',
+        '<?php $x = /** @var string $b */ "b"; ?>',
+        '<?php $a = [/** @var int $i */ 1]; ?>',
+    ];
+
     #[Test]
     public function inserts_a_php_block_at_the_top_of_a_template_that_has_none(): void
     {
@@ -137,6 +148,7 @@ final class TemplateAnnotatorTest extends TestCase
             "<?php\n/** @var Site \$site */\n\n/** @var list<string> \$times \n * @var string \$title\n */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
             $result[0],
         );
+        $this->assertSame(5, $result[1]);
     }
 
     #[Test]
@@ -151,6 +163,36 @@ final class TemplateAnnotatorTest extends TestCase
             "<?php /** Helper. */ function helper(): void {} ?>\n" . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n",
             $result[0],
         );
+    }
+
+    #[Test]
+    public function a_plain_comment_between_stacked_docblocks_does_not_commit_the_first(): void
+    {
+        foreach (['// note', '/* note */'] as $comment) {
+            $source = "<?php\n/** @var Site \$site */\n{$comment}\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n";
+
+            $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+            $this->assertNotNull($result);
+            $this->assertSame(
+                "<?php\n/** @var Site \$site */\n{$comment}\n/** @var list<string> \$times \n * @var string \$title\n */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
+                $result[0],
+                $comment,
+            );
+        }
+    }
+
+    #[Test]
+    public function a_docblock_that_does_not_reach_a_statement_is_not_a_header(): void
+    {
+        foreach (self::NON_HEADER_BLOCKS as $block) {
+            $source = $block . "\n<p>{{ \$title }}</p>\n";
+
+            $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+            $this->assertNotNull($result);
+            $this->assertSame($block . "\n" . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result[0], $block);
+        }
     }
 
     #[Test]
@@ -175,6 +217,7 @@ final class TemplateAnnotatorTest extends TestCase
                 "<?php\n/**\n * Header.\n */\n?>\n<p>{{ \$title }}</p>\n",
                 "<?php\n/** @var Site \$site */\n\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
                 "<?php /** Helper. */ function helper(): void {} ?>\n<p>{{ \$title }}</p>\n",
+                "<?php\n/** @var Site \$site */\n// note\n/** @var list<string> \$times */\n\$times = [];\n?>\n<p>{{ \$title }}</p>\n",
                 "\u{FEFF}<?php\r\ndeclare(strict_types=1);\r\n?>\r\n<p>{{ \$title }}</p>\r\n",
             ] as $source
         ) {
@@ -182,6 +225,13 @@ final class TemplateAnnotatorTest extends TestCase
 
             $this->assertNotNull($first);
             $this->assertNull(TemplateAnnotator::annotate($first[0], ['title' => 'string']), $source);
+        }
+
+        foreach (self::NON_HEADER_BLOCKS as $block) {
+            $first = TemplateAnnotator::annotate($block . "\n<p>{{ \$title }}</p>\n", ['title' => 'string']);
+
+            $this->assertNotNull($first);
+            $this->assertNull(TemplateAnnotator::annotate($first[0], ['title' => 'string']), $block);
         }
     }
 
