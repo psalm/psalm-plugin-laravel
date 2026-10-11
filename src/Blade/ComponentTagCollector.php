@@ -42,8 +42,9 @@ final class ComponentTagCollector
     /**
      * @param array<array-key, array{0: int, 1: string, 2: int}|string> $tokens {@see \token_get_all()} output
      *
-     * @return array{0: list<string>, 1: list<string>, 2: list<string>} lowercased, `\`-stripped class
-     *         names a tag renders, literal named-slot names, and view names rendered by name
+     * @return array{0: list<string>, 1: list<string>, 2: list<string>, 3: bool} lowercased, `\`-stripped
+     *         class names a tag renders, literal named-slot names, view names rendered by name, and
+     *         whether a slot is named by anything but a lone literal
      */
     public static function collect(array $tokens): array
     {
@@ -58,6 +59,7 @@ final class ComponentTagCollector
         $classes = [];
         $slots = [];
         $views = [];
+        $dynamicSlot = false;
         $count = \count($significant);
 
         for ($i = 0; $i < $count; $i++) {
@@ -89,9 +91,12 @@ final class ComponentTagCollector
 
             if ($method === 'slot') {
                 $name = self::literal($significant[$i + 4] ?? null);
+                $next = $significant[$i + 5] ?? null;
 
-                if ($name !== null) {
+                if ($name !== null && ($next === ',' || $next === ')')) {
                     $slots[$name] = true;
+                } else {
+                    $dynamicSlot = true;
                 }
             } elseif (isset(self::RENDER_BY_NAME[$method])) {
                 foreach (self::literalsInArguments($significant, $i + 3) as $name) {
@@ -104,6 +109,7 @@ final class ComponentTagCollector
             \array_map(\strval(...), \array_keys($classes)),
             \array_map(\strval(...), \array_keys($slots)),
             \array_map(\strval(...), \array_keys($views)),
+            $dynamicSlot,
         ];
     }
 

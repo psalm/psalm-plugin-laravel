@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ComponentViewSeedHandler;
 use Psalm\LaravelPlugin\Blade\UndeclaredVariableRegistry;
+use Symfony\Component\Process\Process;
 
 /**
  * #1827: `<blade reportUndeclaredVariables="true" />` leaves a contract template's undeclared reads
@@ -76,6 +77,37 @@ final class UndeclaredVariablesTest extends TestCase
     }
 
     /**
+     * A slot named by an expression can supply any variable, and the collector cannot tell which
+     * component it went to, so no seeded component view keeps its key allowance. Run on a copy:
+     * one such slot anywhere changes every other case's component expectations.
+     */
+    #[Test]
+    public function a_dynamic_slot_name_declines_seeded_component_views(): void
+    {
+        $copy = \sys_get_temp_dir() . '/psalm-undeclared-variables-' . \getmypid();
+        self::removeTree($copy);
+        self::copyTree(self::FIXTURE, $copy);
+
+        try {
+            $views = $copy . '/resources/views';
+            \file_put_contents($views . '/dynamic-slot.blade.php', "@php(\$slotName = 'header')\n<x-profile>\n@slot(\$slotName) H @endslot\n</x-profile>\n");
+            \file_put_contents($views . '/components/profile.blade.php', "{{ \$header }}\n", \FILE_APPEND);
+
+            $process = new Process([\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', ...self::ARGUMENTS], $copy);
+            $process->setTimeout(300);
+            $process->run();
+            $run = ['output' => $process->getOutput(), 'errorOutput' => $process->getErrorOutput(), 'shadows' => ''];
+
+            $this->assertSame(
+                ['typo.blade.php:3 UndefinedGlobalVariable $titel', 'typo.blade.php:4 UndefinedVariable $insideArrow'],
+                $this->undeclaredIn($this->decodeIssues($run)),
+            );
+        } finally {
+            self::removeTree($copy);
+        }
+    }
+
+    /**
      * @param list<array<string, mixed>> $issues
      *
      * @return list<string>
@@ -101,5 +133,31 @@ final class UndeclaredVariablesTest extends TestCase
         \sort($found);
 
         return $found;
+    }
+
+    private static function copyTree(string $from, string $to): void
+    {
+        \mkdir($to, 0o777, true);
+
+        foreach (\array_diff(\scandir($from) ?: [], ['.', '..', '.cache']) as $entry) {
+            \is_dir($from . '/' . $entry)
+                ? self::copyTree($from . '/' . $entry, $to . '/' . $entry)
+                : \copy($from . '/' . $entry, $to . '/' . $entry);
+        }
+    }
+
+    private static function removeTree(string $directory): void
+    {
+        if (!\is_dir($directory)) {
+            return;
+        }
+
+        foreach (\array_diff(\scandir($directory) ?: [], ['.', '..']) as $entry) {
+            \is_dir($directory . '/' . $entry) && !\is_link($directory . '/' . $entry)
+                ? self::removeTree($directory . '/' . $entry)
+                : \unlink($directory . '/' . $entry);
+        }
+
+        \rmdir($directory);
     }
 }

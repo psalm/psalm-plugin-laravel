@@ -49,6 +49,16 @@ final class ComponentTagCollectorTest extends TestCase
         $this->assertSame(['footer', 'title'], ComponentTagCollector::collect(\token_get_all($php))[1]);
     }
 
+    #[Test]
+    public function flags_a_slot_named_by_anything_but_a_lone_literal(): void
+    {
+        $literal = "<?php \$__env->slot('footer', null, []); ?><?php \$__env->slot('title'); ?>";
+
+        $this->assertFalse(ComponentTagCollector::collect(\token_get_all($literal))[3]);
+        $this->assertTrue(ComponentTagCollector::collect(\token_get_all("<?php \$__env->slot(\$name, null, []); ?>"))[3]);
+        $this->assertTrue(ComponentTagCollector::collect(\token_get_all("<?php \$__env->slot('a' . \$b); ?>"))[3]);
+    }
+
     /**
      * The by-name render directives, as Laravel 13 compiles them: every literal in the call's
      * arguments counts, so an `@includeWhen` condition or `@includeFirst` list cannot hide a name.

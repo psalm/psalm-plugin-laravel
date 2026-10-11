@@ -64,6 +64,9 @@ final class ComponentViewRegistry
     /** @var array<array-key, true> view names any compiled template renders by name */
     private static array $renderedByName = [];
 
+    /** Whether any compiled template names a slot by an expression, which could be any key. */
+    private static bool $dynamicSlots = false;
+
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
@@ -83,8 +86,9 @@ final class ComponentViewRegistry
      * @param array<array-key, true> $namedSlots         slot name => true
      * @param array<array-key, true> $renderedByName     view name => true
      */
-    public static function registerTagUsage(array $tagRenderedClasses, array $namedSlots, array $renderedByName): void
+    public static function registerTagUsage(array $tagRenderedClasses, array $namedSlots, array $renderedByName, bool $dynamicSlots = false): void
     {
+        self::$dynamicSlots = $dynamicSlots;
         self::$tagRendered = $tagRenderedClasses;
         self::$namedSlots = $namedSlots;
         self::$renderedByName = $renderedByName;
@@ -216,7 +220,8 @@ final class ComponentViewRegistry
                 self::$seeds[$shadowPath] = $vars;
 
                 // Untyped properties and withheld keys are data too, just never seeded.
-                $keys = $claimsNeeded ? ComponentRenderData::exposedFor($codebase, $storage) : null;
+                // A slot named by an expression may be any key, so it declines every seeded view.
+                $keys = $claimsNeeded && !self::$dynamicSlots ? ComponentRenderData::exposedFor($codebase, $storage) : null;
 
                 if ($keys !== null) {
                     self::$undeclaredAllowances[$shadowPath] = \array_fill_keys(\array_keys($keys), true) + $renderKeys + self::$namedSlots;
@@ -238,6 +243,7 @@ final class ComponentViewRegistry
         self::$tagRendered = [];
         self::$namedSlots = [];
         self::$renderedByName = [];
+        self::$dynamicSlots = false;
         self::$seeds = [];
         self::$undeclaredAllowances = [];
         self::$declaredFunctions = [];

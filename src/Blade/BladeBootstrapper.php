@@ -83,6 +83,9 @@ final class BladeBootstrapper
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
 
+    /** Whether any compiled template names a slot by an expression. */
+    private bool $dynamicSlotNames = false;
+
     /** @var array<string, true> template paths shaped like a component view, see {@see PreludeBuilder::isComponentView()} */
     private array $componentViewTemplates = [];
 
@@ -213,7 +216,8 @@ final class BladeBootstrapper
                 $literalCandidates[$candidate] = true;
             }
 
-            [$tagClasses, $slotNames, $viewNames] = ComponentTagCollector::collect($tokens);
+            [$tagClasses, $slotNames, $viewNames, $dynamicSlot] = ComponentTagCollector::collect($tokens);
+            $this->dynamicSlotNames = $this->dynamicSlotNames || $dynamicSlot;
 
             foreach ($tagClasses as $tagClass) {
                 $this->tagRenderedClasses[$tagClass] = true;
@@ -268,7 +272,7 @@ final class BladeBootstrapper
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
 
-        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
+        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName, $this->dynamicSlotNames);
 
         if ($this->reportUndeclaredVariables) {
             $this->publishUndeclaredFacts($compiler);
@@ -295,10 +299,14 @@ final class BladeBootstrapper
         $declined = [];
         $componentViews = $this->componentViewTemplates;
         $anonymousPrefixes = $this->anonymousComponentPrefixes($compiler);
+        $aliasedViews = $this->viewValuedAliases($compiler);
 
         foreach ($this->pendingTemplates as [$viewName, , $templatePath]) {
             // An anonymous `<x-…>` tag hands its view every attribute it was given, markers or not.
-            if (\str_contains($viewName, '::components.') || $this->startsWithAny($viewName, $anonymousPrefixes)) {
+            if (\str_contains($viewName, '::components.')
+                || isset($aliasedViews[$viewName])
+                || $this->startsWithAny($viewName, $anonymousPrefixes)
+            ) {
                 $componentViews[$templatePath] = true;
             }
 
@@ -307,6 +315,9 @@ final class BladeBootstrapper
                 || \str_starts_with($viewName, 'livewire::')
                 || $events->hasListeners('composing: ' . $viewName)
                 || $events->hasListeners('creating: ' . $viewName)
+                // `View::file()` names the view, and so the event, by its path.
+                || $events->hasListeners('composing: ' . $templatePath)
+                || $events->hasListeners('creating: ' . $templatePath)
             ) {
                 $declined[$templatePath] = true;
             }
@@ -346,6 +357,26 @@ final class BladeBootstrapper
         }
 
         return $prefixes;
+    }
+
+    /**
+     * Views a `Blade::component('view.name', 'alias')` tag renders as an anonymous component: an
+     * alias whose target is not a class (`ComponentTagCompiler::componentClass()`).
+     *
+     * @return array<string, true>
+     */
+    private function viewValuedAliases(BladeCompiler $compiler): array
+    {
+        $views = [];
+
+        /** @psalm-var mixed $target */
+        foreach ($compiler->getClassComponentAliases() as $target) {
+            if (\is_string($target) && !\class_exists($target)) {
+                $views[\str_replace('/', '.', $target)] = true;
+            }
+        }
+
+        return $views;
     }
 
     /**
