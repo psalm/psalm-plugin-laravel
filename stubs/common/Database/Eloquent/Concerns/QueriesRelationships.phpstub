@@ -12,7 +12,7 @@ trait QueriesRelationships
      * Also load the relationship with same condition.
      *
      * @param  string  $relation
-     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder): mixed)|null  $callback
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<\Illuminate\Database\Eloquent\Model>|\Illuminate\Database\Eloquent\Relations\Relation<\Illuminate\Database\Eloquent\Model, \Illuminate\Database\Eloquent\Model, mixed>): mixed)|null  $callback
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this

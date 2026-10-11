@@ -580,7 +580,14 @@ final class ApplicationProvider
      */
     private function resolveProjectRoot(): ?string
     {
-        $envOverride = $this->readEnvOverride('APP_BASE_PATH') ?? $this->readEnvOverride('TESTBENCH_APP_BASE_PATH');
+        $envOverride = $this->firstNonEmptyString(
+            $_ENV['APP_BASE_PATH'] ?? null,
+            $_SERVER['APP_BASE_PATH'] ?? null,
+            \getenv('APP_BASE_PATH'),
+            $_ENV['TESTBENCH_APP_BASE_PATH'] ?? null,
+            $_SERVER['TESTBENCH_APP_BASE_PATH'] ?? null,
+            \getenv('TESTBENCH_APP_BASE_PATH'),
+        );
 
         if ($envOverride !== null) {
             return $envOverride;
@@ -596,7 +603,7 @@ final class ApplicationProvider
     }
 
     /**
-     * Read an environment variable across the three PHP surfaces.
+     * Return the first non-empty string among env candidates read across the three PHP surfaces.
      *
      * `$_ENV` alone is unreliable: the `variables_order` ini setting may omit `E`,
      * leaving `$_ENV` empty even when the value was passed to the process. CGI/FPM
@@ -604,11 +611,14 @@ final class ApplicationProvider
      * php ...` route through `getenv()`. Testbench's own helper reads only `$_ENV`,
      * which is the documented escape hatch but not the most portable one — we widen
      * the check so the override actually takes effect across runtime configurations.
+     *
+     * Callers pass literal superglobal keys: Psalm treats `$_SERVER` reads with a
+     * dynamic key as client input.
+     *
+     * @psalm-pure
      */
-    private function readEnvOverride(string $name): ?string
+    private function firstNonEmptyString(string|false|null ...$candidates): ?string
     {
-        $candidates = [$_ENV[$name] ?? null, $_SERVER[$name] ?? null, \getenv($name)];
-
         foreach ($candidates as $value) {
             if (\is_string($value) && $value !== '') {
                 return $value;

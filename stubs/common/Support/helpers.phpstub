@@ -83,7 +83,12 @@ function class_uses_recursive($class) {}
  * to string at runtime (no declare(strict_types=1) in helpers.php), so any
  * \Stringable is accepted and correctly escaped, not just the listed scalars.
  *
- * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|\Stringable|string|int|float|null  $value
+ * \Illuminate\Contracts\View\View is accepted although the contract extends only
+ * Renderable: view(), Component::render() and View::with() are all typed as the
+ * contract, but its only framework implementation (\Illuminate\View\View) is
+ * Htmlable, so e() takes the toHtml() branch at runtime (#1776).
+ *
+ * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\Illuminate\Contracts\View\View|\BackedEnum|\Stringable|string|int|float|null  $value
  * @param  bool  $doubleEncode
  * @return string
  *

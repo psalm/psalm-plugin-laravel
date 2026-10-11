@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -512,6 +515,82 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertSame(PreludeBuilder::ambientClassNames(), $second->queuedClassLikes);
         $this->assertSame([], $second->queuedResolvableClassLikes);
+    }
+
+    private function appWithViewFactory(): Container
+    {
+        $app = $this->app();
+        $app->instance('view', new Factory(new EngineResolver(), $app->make('view.finder'), new Dispatcher()));
+
+        return $app;
+    }
+
+    /** `$app` is shared into every view by the framework, so no call site passes it: it is no contract. */
+    #[Test]
+    public function framework_shared_data_is_never_a_contract_but_stays_declared(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate(
+            'profile.blade.php',
+            "<?php /** @var \\Illuminate\\Foundation\\Application \$app */ ?>\n<?php /** @var string \$siteName */ ?>\n<?php /** @var int \$count */ ?>\n<p>{{ \$count }}</p>\n",
+        );
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $contract = ContractRegistry::contractFor('profile');
+        $this->assertNotNull($contract);
+        $this->assertSame(['count'], \array_keys($contract->vars));
+        $this->assertContains('siteName', $contract->rawDeclaredVariables);
+    }
+
+    #[Test]
+    public function a_marker_problem_on_a_shared_name_is_not_published(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate('profile.blade.php', "<?php /** @var string \$siteName = null */ /** @var string \$other = null */ ?>\n<p>{{ \$other }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $problems = ContractRegistry::problemsFor($this->viewDir . '/profile.blade.php');
+        $this->assertCount(1, $problems);
+        $this->assertStringContainsString('$other', $problems[0][1]);
+    }
+
+    #[Test]
+    public function a_view_with_a_composer_creator_or_wildcard_composer_is_marked_composed(): void
+    {
+        $app = $this->appWithViewFactory();
+        $events = $app->make('view')->getDispatcher();
+        $events->listen('composing: composed', static fn(): null => null);
+        $events->listen('creating: created', static fn(): null => null);
+        $events->listen('composing: admin.*', static fn(): null => null);
+
+        foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertTrue(ContractRegistry::isComposed('composed'));
+        $this->assertTrue(ContractRegistry::isComposed('created'));
+        $this->assertTrue(ContractRegistry::isComposed('admin.page'), 'a wildcard composer reaches it');
+        $this->assertFalse(ContractRegistry::isComposed('plain'));
+    }
+
+    /**
+     * A `@props` entry carries no type, so it is no contract line: a prop the template overwrites
+     * at file level is a local like any other, and stays undeclared.
+     */
+    #[Test]
+    public function an_untyped_props_entry_is_not_declared_by_the_contract(): void
+    {
+        $this->writeTemplate('profile.blade.php', "@props(['size'])\n@php \$size = 'sm'; @endphp\n<p>{{ \$size }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertStringNotContainsString('$size */', (string) \file_get_contents($registrar->analyzedShadows[0]));
     }
 
     /**
@@ -1072,6 +1151,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
         $this->assertStringContainsString('compiler environment', $this->progress->warningText());
+        $this->assertStringContainsString("Cause: directive 'shout' (internal function", $this->progress->warningText());
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1088,5 +1168,32 @@ final class BladeBootstrapperTest extends TestCase
             (string) \file_get_contents($second->analyzedShadows[0]),
             'an untrustworthy environment must force a recompile even though nothing else changed',
         );
+    }
+
+    /**
+     * #1693: the warning must name the input that disabled the cache, but a package registering
+     * many such callbacks must not flood it.
+     */
+    #[Test]
+    public function the_untrusted_environment_warning_names_at_most_three_inputs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $compiler->directive($name, 'strtoupper');
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $text = $this->progress->warningText();
+        $this->assertStringContainsString("directive 'a'", $text);
+        $this->assertStringContainsString("directive 'c'", $text);
+        $this->assertStringNotContainsString("directive 'd'", $text);
+        $this->assertStringContainsString('and 2 more', $text);
     }
 }

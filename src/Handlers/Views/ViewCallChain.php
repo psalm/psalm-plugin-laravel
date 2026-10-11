@@ -9,6 +9,8 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\StatementsSource;
 use Psalm\Type;
@@ -93,7 +95,19 @@ final class ViewCallChain
             return $chain;
         }
 
-        return new self($chain->viewName, $chain->data, $chain->complete && $merged[1], $merged[0]);
+        // A component's public `render()` can be called, and its result chained, from anywhere
+        // (`$component->render()->with([...])`): the data added there is not in this chain.
+        $complete = $chain->complete && $merged[1] && !self::isInRenderMethod($source);
+
+        return new self($chain->viewName, $chain->data, $complete, $merged[0]);
+    }
+
+    /** @psalm-mutation-free */
+    private static function isInRenderMethod(StatementsSource $source): bool
+    {
+        $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
+
+        return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
     }
 
     private static function walk(Expr $expr, StatementsSource $source): ?self

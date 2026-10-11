@@ -1,0 +1,20 @@
+<?php
+
+namespace Illuminate\Support;
+
+/**
+ * Laravel 12.50.0 narrowed `toCssClasses()` to `array<string, bool>|array<int, string|int>|string`
+ * (earlier releases declare a plain `array|string`). That docblock rejects `null` values that
+ * the runtime accepts (#1775), so it is widened here; the precise conditional return is left to
+ * upstream. Only this method is declared: the rest of `Arr` merges from `common` and reflection.
+ */
+class Arr
+{
+    use Traits\Macroable;
+
+    /**
+     * @param  array<array-key, bool|int|string|null>|string  $array
+     * @return string
+     */
+    public static function toCssClasses($array) {}
+}

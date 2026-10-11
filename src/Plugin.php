@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -32,7 +33,7 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $pluginConfig = PluginConfig::fromXml($config);
+        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::parse((string) \getenv(PluginOverrides::ENV_VAR)));
         require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
@@ -119,6 +120,12 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Last: make()ing every binding runs provider and binding closures, so it must follow every other
+            // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
+            if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+                Handlers\Application\ContainerResolver::queueBoundClassesForScanning($registration->codebase);
+            }
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
@@ -194,6 +201,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Application\ContainerResolver::reset();
         Handlers\Auth\AuthConfigAnalyzer::reset();
         Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
@@ -207,6 +215,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelPropertyHandler::reset();
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\RelationCallbackParamsHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
@@ -234,6 +243,7 @@ final class Plugin implements PluginEntryPointInterface
         Blade\Annotate\AnnotationWriter::reset();
         Blade\BladeIssueRemapHandler::reset();
         Blade\ContractRegistry::reset();
+        Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
         Blade\ShadowRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
@@ -336,11 +346,17 @@ final class Plugin implements PluginEntryPointInterface
         bool $bladeActive,
         ?Blade\Annotate\AnnotateRequest $annotate,
     ): void {
-        // Global stop-gap for vimeo/psalm#11923 (named-argument taint mis-attribution).
+        // Global stop-gap for vimeo/psalm#12251 and #12252 (named arguments bound to a variadic).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Taint\NamedArgumentTaintHandler::class);
+
+        // Core Psalm has no json_encode() branch in HtmlFunctionTainter, so literal JSON_HEX_* flags (and the
+        // Blade @json directive) stay tainted. Global like the handler above, hence registered next to it.
+        // @todo-by https://github.com/vimeo/psalm/issues/12322 remove this handler when Psalm models json_encode() HEX flags
+        require_once __DIR__ . '/Handlers/Taint/JsonEncodeTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Taint\JsonEncodeTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
@@ -412,6 +428,9 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -516,9 +535,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
 
-        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
-        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
-
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
@@ -526,8 +542,6 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
-        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
-        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
@@ -786,6 +800,12 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
             require_once __DIR__ . '/Blade/RuntimeHelperVisibility.php';
             $registration->registerHooksFromClass(Blade\RuntimeHelperVisibility::class);
+            // Types a class component's own view from its class (#1804). Needs the boot's shadow and
+            // tag facts, hence the same gate.
+            require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
+            $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
+            require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
+            $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
@@ -804,7 +824,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
 
-        // Writes `{{-- @var --}}` declarations into the analysed templates (#1524). Registered only
+        // Writes `@var` docblock declarations into the analysed templates (#1524). Registered only
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
         // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
         // The two hooks are one pass in two halves: the collector fills a static that only survives
