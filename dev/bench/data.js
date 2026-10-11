@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791729323136,
+  "lastUpdate": 1791729941561,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13570,6 +13570,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.41,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "863c5ff75ab5f44ce1c966f603181d05c684ffbc",
+          "message": "Add `--experimental` to `analyze` and accept any `--plugin-option` in `/psalm-delta` (#1836)\n\n* ci(psalm-delta): accept any --plugin-option=KEY=VALUE flag\n\nDeclared flags stay an exact allowlist; --plugin-option tokens pass when they match a shell-safe pattern, and psalm-laravel analyze validates the key and value.\n\n* feat(cli): add --experimental as a shorthand for --plugin-option=experimental=true\n\nAlso declared as a /psalm-delta flag.",
+          "timestamp": "2026-10-11T16:42:12+02:00",
+          "tree_id": "431eeeb071f4bd0d331e811449f2e5aa3bd73284",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/863c5ff75ab5f44ce1c966f603181d05c684ffbc"
+        },
+        "date": 1791729939716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.72,
+            "range": "± 0.26",
             "unit": "s"
           },
           {
