@@ -40,8 +40,6 @@ use Psalm\Type\Union;
  *   distinguish `wherefooandbar` as `[Foo, Bar]` vs an unsplittable `[FooAndBar]` column),
  *   but that only widens existence to extra true-positives; the return-type and params
  *   providers still call {@see resolveColumnType} for the strict camel-cased check.
- *
- * @psalm-external-mutation-free
  */
 final class DynamicWhereResolver
 {
@@ -110,15 +108,12 @@ final class DynamicWhereResolver
     /**
      * Enable dynamic where{Column} resolution. Wired from `Plugin::registerHandlers()`
      * when `<resolveDynamicWhereClauses value="true" />` is set (default true).
-     *
-     * @psalm-external-mutation-free
      */
     public static function enable(): void
     {
         self::$enabled = true;
     }
 
-    /** @psalm-external-mutation-free */
     public static function isEnabled(): bool
     {
         return self::$enabled;
@@ -133,8 +128,6 @@ final class DynamicWhereResolver
      * second bootstrap correctly leaves the resolver disabled. Without resetting the flag,
      * the second bootstrap would inherit "enabled" from the first run and silently ignore
      * the new config value.
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -201,7 +194,6 @@ final class DynamicWhereResolver
      * via {@see resolveColumnType}.
      *
      * @param class-string<Model> $modelClass
-     * @psalm-external-mutation-free
      */
     public static function methodMatchesColumns(Codebase $codebase, string $modelClass, string $methodNameLower): bool
     {
@@ -243,7 +235,6 @@ final class DynamicWhereResolver
      *     type is scalar. Caller queues this type for the params provider (issue #928).
      *
      * @param class-string<Model> $modelClass
-     * @psalm-external-mutation-free
      */
     public static function resolveColumnType(
         Codebase $codebase,
@@ -301,8 +292,6 @@ final class DynamicWhereResolver
 
     /**
      * Queue a column type for the params provider to consume on the matching call.
-     *
-     * @psalm-external-mutation-free
      */
     public static function storePendingColumnType(string $methodName, Arg $firstArg, Union $type): void
     {
@@ -327,7 +316,6 @@ final class DynamicWhereResolver
      *
      * @param list<Arg>|null $callArgs
      * @return list<FunctionLikeParameter>|null
-     * @psalm-external-mutation-free
      */
     public static function consumeTypedParams(string $methodName, ?array $callArgs): ?array
     {
@@ -362,7 +350,6 @@ final class DynamicWhereResolver
     /**
      * @param class-string<Model> $modelClass
      * @return array<string, Union>|null Normalised property name -> property type. Null when storage is missing.
-     * @psalm-external-mutation-free
      */
     private static function getNormalizedProperties(Codebase $codebase, string $modelClass): ?array
     {

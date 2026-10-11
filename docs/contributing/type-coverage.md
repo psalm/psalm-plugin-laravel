@@ -1,7 +1,7 @@
 ---
 title: Type Coverage
 parent: Contributing
-nav_order: 6
+nav_order: 7
 ---
 
 # Keeping self-analysis at 100% type coverage

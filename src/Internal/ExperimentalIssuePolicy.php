@@ -25,7 +25,6 @@ use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
  * is supposed to mean.
  *
  * @internal
- * @psalm-external-mutation-free
  */
 final class ExperimentalIssuePolicy
 {
@@ -35,7 +34,6 @@ final class ExperimentalIssuePolicy
         UndefinedModelRelation::class,
     ];
 
-    /** @psalm-external-mutation-free */
     public static function apply(bool $enforced): void
     {
         DefaultIssueLevels::apply(

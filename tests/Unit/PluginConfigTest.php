@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\ColumnFallback;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Psalm\LaravelPlugin\Plugin;
 
 #[CoversClass(PluginConfig::class)]
@@ -43,6 +45,8 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
         $this->assertFalse($config->findMissingViews);
+        $this->assertFalse($config->findUnconfiguredFilesystemDisks);
+        $this->assertFalse($config->findUnregisteredRouteNames);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertFalse($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -233,6 +237,24 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
+    public function find_unconfigured_filesystem_disks_follows_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $this->assertTrue(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
+    }
+
+    #[Test]
+    public function find_unconfigured_filesystem_disks_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><experimental value="true" /><findUnconfiguredFilesystemDisks value="false" /></pluginClass>',
+        );
+
+        $this->assertFalse(PluginConfig::fromXml($xml)->findUnconfiguredFilesystemDisks);
+    }
+
+    #[Test]
     public function find_prompt_injection_true(): void
     {
         $xml = new \SimpleXMLElement('<pluginClass><findPromptInjection value="true" /></pluginClass>');
@@ -272,6 +294,41 @@ final class PluginConfigTest extends TestCase
         $this->expectExceptionMessage("Invalid findPromptInjection value 'yes'");
 
         PluginConfig::fromXml($xml);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_true(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findUnregisteredRouteNames value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_defaults_to_experimental(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertTrue($config->findUnregisteredRouteNames);
+    }
+
+    #[Test]
+    public function find_unregistered_route_names_explicit_false_wins_over_experimental(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass>'
+            . '<experimental value="true" />'
+            . '<findUnregisteredRouteNames value="false" />'
+            . '</pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml);
+
+        $this->assertFalse($config->findUnregisteredRouteNames);
     }
 
     #[Test]
@@ -661,6 +718,7 @@ final class PluginConfigTest extends TestCase
             . '<resolveConfigReturnTypes value="false" />'
             . '<findMissingTranslations value="true" />'
             . '<findMissingViews value="true" />'
+            . '<findUnconfiguredFilesystemDisks value="true" />'
             . '<experimental value="true" />'
             . '<failOnInternalError value="true" />'
             . '<configDirectory name="app/Config" />'
@@ -675,9 +733,148 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse($config->resolveConfigReturnTypes);
         $this->assertTrue($config->findMissingTranslations);
         $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
         $this->assertTrue($config->experimental);
         $this->assertSame('/tmp/psalm-test', $config->cachePath);
         $this->assertTrue($config->failOnInternalError);
         $this->assertSame(['app/Config', 'packages/*/config'], $config->configDirectories);
+    }
+
+    #[Test]
+    public function an_override_wins_over_xml_and_default(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><resolveDynamicWhereClauses value="false" /></pluginClass>');
+
+        $this->assertTrue(PluginConfig::fromXml(null)->resolveDynamicWhereClauses);
+        $this->assertFalse(PluginConfig::fromXml($xml)->resolveDynamicWhereClauses);
+        $this->assertTrue(PluginConfig::fromXml($xml, PluginOverrides::parse('resolveDynamicWhereClauses=true'))->resolveDynamicWhereClauses);
+        $this->assertFalse(PluginConfig::fromXml(null, PluginOverrides::parse('resolveDynamicWhereClauses=false'))->resolveDynamicWhereClauses);
+        // A key the overrides do not set keeps its XML value.
+        $this->assertFalse(PluginConfig::fromXml($xml, PluginOverrides::parse('blade=true'))->resolveDynamicWhereClauses);
+    }
+
+    #[Test]
+    public function every_key_reaches_its_setting(): void
+    {
+        $config = PluginConfig::fromXml(null, PluginOverrides::parse(\implode(' ', [
+            'modelProperties.columnFallback=none',
+            'resolveDynamicWhereClauses=false',
+            'resolveConfigReturnTypes=false',
+            'reportImplicitQueryBuilderCalls=true',
+            'findMissingTranslations=true',
+            'findMissingViews=true',
+            'findUnconfiguredFilesystemDisks=true',
+            'findUnregisteredRouteNames=true',
+            'findSerializedQueuedModels=true',
+            'findOctaneIncompatibleBinding=true',
+            'findPromptInjection=false',
+            'blade=true',
+            'blade.validateViewData=true',
+            'blade.reportUnusedViewData=true',
+            'blade.reportMixedIssues=true',
+            'experimental=true',
+            'failOnInternalError=true',
+        ])));
+
+        $this->assertSame(ColumnFallback::None, $config->modelPropertiesColumnFallback);
+        $this->assertFalse($config->resolveDynamicWhereClauses);
+        $this->assertFalse($config->resolveConfigReturnTypes);
+        $this->assertTrue($config->reportImplicitQueryBuilderCalls);
+        $this->assertTrue($config->findMissingTranslations);
+        $this->assertTrue($config->findMissingViews);
+        $this->assertTrue($config->findUnconfiguredFilesystemDisks);
+        $this->assertTrue($config->findUnregisteredRouteNames);
+        $this->assertTrue($config->findSerializedQueuedModels);
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
+        $this->assertFalse($config->findPromptInjection);
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertTrue($config->bladeValidateViewData);
+        $this->assertTrue($config->bladeReportUnusedViewData);
+        $this->assertTrue($config->bladeReportMixedIssues);
+        $this->assertTrue($config->experimental);
+        $this->assertTrue($config->failOnInternalError);
+    }
+
+    #[Test]
+    public function an_override_flips_explicit_xml_in_either_direction(): void
+    {
+        $xml = new \SimpleXMLElement(
+            '<pluginClass><modelProperties columnFallback="none" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
+        );
+
+        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findOctaneIncompatibleBinding=true findPromptInjection=false'));
+
+        $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
+        $this->assertTrue($config->findOctaneIncompatibleBinding);
+        $this->assertFalse($config->findPromptInjection);
+    }
+
+    #[Test]
+    public function experimental_derived_defaults_resolve_after_the_overrides(): void
+    {
+        $derived = static fn(PluginConfig $config): array => [
+            $config->findUnconfiguredFilesystemDisks,
+            $config->findSerializedQueuedModels,
+            $config->findUnregisteredRouteNames,
+            $config->findMassAssignmentFromRequest,
+        ];
+        $experimentalXml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
+
+        // An experimental override reaches rules nothing sets explicitly...
+        $this->assertSame([true, true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
+        // ...and switches them back off over an experimental XML...
+        $this->assertSame([false, false, false, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
+
+        // ...but an explicit per-rule value, in the XML or an override, still wins in both directions.
+        $explicitXml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="false" /></pluginClass>');
+        $this->assertSame([true, false, true, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([false, false, true, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
+    }
+
+    #[Test]
+    public function blade_override_switches_blade_either_way_and_keeps_xml_sub_settings(): void
+    {
+        $this->assertTrue(PluginConfig::fromXml(null, PluginOverrides::parse('blade=true'))->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'), PluginOverrides::parse('blade=false'))->bladeEnabled);
+
+        $config = PluginConfig::fromXml(
+            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" cacheDir="from-xml" /></pluginClass>'),
+            PluginOverrides::parse('blade=true'),
+        );
+
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertTrue($config->bladeValidateViewData);
+        $this->assertSame('from-xml', $config->bladeCacheDir);
+    }
+
+    #[Test]
+    public function blade_sub_settings_never_enable_blade(): void
+    {
+        $subSettings = PluginOverrides::parse('blade.validateViewData=true blade.reportUnusedViewData=true blade.reportMixedIssues=true');
+
+        $this->assertFalse(PluginConfig::fromXml(null, $subSettings)->bladeEnabled);
+        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function malformedXml(): iterable
+    {
+        yield 'bad bool' => ['<resolveDynamicWhereClauses value="maybe" />'];
+        yield 'bad blade value' => ['<blade value="yes" />'];
+        yield 'bad blade sub-setting' => ['<blade reportMixedIssues="yes" />'];
+        yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
+        yield 'prompt injection without value' => ['<findPromptInjection />'];
+    }
+
+    #[Test]
+    #[DataProvider('malformedXml')]
+    public function xml_is_still_validated_when_an_override_wins(string $inner): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        PluginConfig::fromXml(
+            new \SimpleXMLElement("<pluginClass>{$inner}</pluginClass>"),
+            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true blade.reportMixedIssues=true modelProperties.columnFallback=none findPromptInjection=true'),
+        );
     }
 }

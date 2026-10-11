@@ -34,7 +34,6 @@ final class ConfigRepositoryMethodHandler implements MethodReturnTypeProviderInt
      *
      * @inheritDoc
      * @return list<string>
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array

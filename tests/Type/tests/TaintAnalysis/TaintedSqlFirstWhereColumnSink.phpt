@@ -19,5 +19,5 @@ function unsafeFirstWhereColumn(\Illuminate\Http\Request $request): void {
 ?>
 --EXPECTF--
 MixedAssignment on line %d: Unable to determine the type that $column is being assigned to
-MixedArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::firstWhere cannot be mixed, expecting Illuminate\Contracts\Database\Query\Expression|array<array-key, mixed>|impure-Closure(Illuminate\Database\Eloquent\Builder<FirstWhereColumnSinkModel&static>):mixed|string
+MixedArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::firstWhere cannot be mixed, expecting Closure[impure](Illuminate\Database\Eloquent\Builder<FirstWhereColumnSinkModel&static>):mixed|Illuminate\Contracts\Database\Query\Expression|array<array-key, mixed>|string
 TaintedSql on line %d: Detected tainted SQL

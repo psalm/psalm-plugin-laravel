@@ -36,7 +36,6 @@ final class GuardClassResolver
      */
     private static array $union_cache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$union_cache = [];

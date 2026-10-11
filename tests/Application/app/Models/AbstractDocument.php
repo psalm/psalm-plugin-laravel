@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\ComparesRank;
+use App\Models\Concerns\HasRevisions;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 abstract class AbstractDocument extends Model
 {
     use ComparesRank;
+    use HasRevisions;
 
     /**
      * Cast declaration on the abstract base (see class docblock for why it is concrete-only).
@@ -56,9 +58,9 @@ abstract class AbstractDocument extends Model
     /**
      * Plain-typed (non-generic) relation declared on the abstract PARENT. Guards the registry's
      * `relations()` OWN-CLASS invariant: a child inheriting this relation must NOT find it in its own
-     * `relations()` map (the AST parser is own-class), so its magic-property type falls back to the
-     * imprecise `Collection<int, Model>` bound rather than `Collection<int, Part>`. If `relations()`
-     * were ever changed to an ancestor walk (as scopes()/accessors() do), the child would resolve the
+     * `relations()` map (the registry parses only the model's own methods), so its magic-property
+     * type falls back to the imprecise `Collection<int, Model>` bound rather than `Collection<int, Part>`.
+     * If `relations()` were ever changed to an ancestor walk (as scopes()/accessors() do), the child would resolve the
      * precise model and the guard test (`InheritedRelationOwnClassTest`) would flip — catching the
      * regression. The return type is the bare, NON-generic `HasMany` (no `@return HasMany<Part, ...>`)
      * on purpose: the property handler's Tier 1 (generic-return extraction) then cannot resolve the
@@ -67,6 +69,23 @@ abstract class AbstractDocument extends Model
     public function documentParts(): HasMany
     {
         return $this->hasMany(Part::class);
+    }
+
+    /**
+     * `$this->revisions()` in this non-final base must bind TDeclaringModel to `AbstractDocument&static`
+     * for the trait-hosted relation too (#1613); a plain binding is less specific than `$this`.
+     *
+     * @return HasMany<AbstractDocument, $this>
+     */
+    public function draftRevisions(): HasMany
+    {
+        return $this->revisions()->whereNull('signed_at');
+    }
+
+    /** Delegates to documentParts(), which Receipt overrides: dispatch follows the receiver (#1613). */
+    public function pendingParts(): HasMany
+    {
+        return $this->documentParts()->whereNull('signed_at');
     }
 
     /**

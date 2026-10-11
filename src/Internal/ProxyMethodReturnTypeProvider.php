@@ -22,7 +22,6 @@ final class ProxyMethodReturnTypeProvider
      */
     private static array $cache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$cache = [];

@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
+use Psalm\Internal\Codebase\ClassLikes;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -210,6 +211,7 @@ final class ModelPropertyHandlerTest extends TestCase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
+        $codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
 
         // $progress is declared protected(set) readonly in Psalm 7 — bypass via reflection.
         $progressProperty = new \ReflectionProperty(Codebase::class, 'progress');

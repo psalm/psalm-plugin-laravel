@@ -1,0 +1,33 @@
+<?php
+
+namespace Illuminate\Support;
+
+use Countable;
+use Illuminate\Contracts\Support\MessageBag as MessageBagContract;
+use Stringable;
+
+/**
+ * Interface list mirrors Laravel's source declaration; see the rationale on the MessageBag
+ * stub in this directory for why it must be repeated verbatim.
+ *
+ * `__call()` forwards to `getBag('default')`, a CONCRETE `\Illuminate\Support\MessageBag`,
+ * but the mixin below stays on the CONTRACT rather than widening to that concrete class:
+ * widening it fixes the methods below but also makes Psalm treat every other method name as
+ * a valid magic call, silently dropping UndefinedMagicMethod for a genuine typo. The
+ * `@method` tags cover the contract-missing methods the concrete bag actually forwards.
+ *
+ * @mixin \Illuminate\Contracts\Support\MessageBag
+ *
+ * @method \Illuminate\Support\MessageBag addIf(bool $boolean, string $key, string $message)
+ * @method bool hasAny(string|array<string>|null ...$keys)
+ * @method bool missing(string|array<string>|null $key, string|null ...$keys)
+ * @method array<string> unique(?string $format = null)
+ * @method array<string, array<string>> messages()
+ * @method \Illuminate\Support\MessageBag getMessageBag()
+ * @method array<string, array<string>> toArray()
+ * @method array<string, array<string>> jsonSerialize()
+ * @method string toJson(int $options = 0)
+ */
+class ViewErrorBag implements Countable, Stringable
+{
+}

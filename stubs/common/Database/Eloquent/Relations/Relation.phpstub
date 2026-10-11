@@ -14,12 +14,11 @@ use Illuminate\Support\Traits\Macroable;
  * must be repeated verbatim or callers typed on the contract break.
  *
  * TDeclaringModel is covariant (`@template-covariant`) on purpose: the relation methods in
- * HasRelationships return e.g. BelongsTo<TRelatedModel, static> (a deliberate Psalm-7
- * divergence from Laravel's $this; Psalm does not late-static-substitute $this when the
- * relation is chained). On a non-final model `static` resolves to the model intersected with
- * `static` (e.g. `Order&static`), so a call-site `@return BelongsTo<..., self>` is only
- * satisfiable if TDeclaringModel is covariant (`Order&static` <: `Order`). Keep it covariant
- * or #913 regresses to InvalidReturnStatement.
+ * HasRelationships return e.g. BelongsTo<TRelatedModel, static>. Psalm substitutes `static`
+ * (and `$this`) there, but on a non-final model it keeps the late-static marker, so the
+ * argument resolves to the model intersected with `static` (e.g. `Order&static`). A call-site
+ * `@return BelongsTo<..., self>` is only satisfiable if TDeclaringModel is covariant
+ * (`Order&static` <: `Order`). Keep it covariant or #913 regresses to InvalidReturnStatement.
  *
  * Covariance is sound here because TDeclaringModel is never consumed through a
  * non-constructor parameter in these stubs: it surfaces via reads (getParent(): TDeclaringModel
@@ -283,4 +282,16 @@ abstract class Relation implements BuilderContract
      * @return mixed
      */
     public function max($column) {}
+
+    /**
+     * Get the alias associated with a custom polymorphic class.
+     *
+     * Laravel declares `int|string`. The body is `array_search(...) ?: $className`: the `?:`
+     * discards the falsy keys 0 and '', so the fallback is the class name, never ''. Integer
+     * keys survive in an associative morph map; non-zero is not expressible, hence `int`.
+     *
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $className
+     * @return int|non-empty-string
+     */
+    public static function getMorphAlias(string $className) {}
 }

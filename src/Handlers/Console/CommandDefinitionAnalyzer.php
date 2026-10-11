@@ -27,7 +27,6 @@ final class CommandDefinitionAnalyzer
     /** @var array<string, InputDefinition|null> */
     private static array $cache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$cache = [];

@@ -91,7 +91,6 @@ final class FacadeMapProvider
     /** @var array<lowercase-string, list<class-string>> service class → facade + alias classes */
     private static array $serviceToFacades = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$serviceToFacades = [];
@@ -247,7 +246,6 @@ final class FacadeMapProvider
      *
      * @param class-string $serviceClass
      * @return list<class-string>
-     * @psalm-external-mutation-free
      */
     public static function getFacadeClasses(string $serviceClass): array
     {

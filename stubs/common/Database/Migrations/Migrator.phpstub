@@ -8,7 +8,7 @@ class Migrator
      * Execute the given callback using the given connection as the default connection.
      *
      * @template TCallbackReturn
-     * @param string $name
+     * @param string|null $name
      * @param callable(): TCallbackReturn $callback
      * @return TCallbackReturn
      */

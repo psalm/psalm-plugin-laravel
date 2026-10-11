@@ -14,6 +14,7 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\MissingView;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -83,8 +84,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * Return to the disabled state before each application boot. The narrowed and
      * spread unions are immutable and independent of the application, so they are
      * deliberately retained.
-     *
-     * @psalm-external-mutation-free
      */
     public static function reset(): void
     {
@@ -98,7 +97,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
     /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
      * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
-     * @psalm-external-mutation-free
      */
     public static function init(array $viewPaths, array $extensions = ['blade.php', 'php']): void
     {
@@ -119,7 +117,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * binding. Null disables the narrowing and the stub's contract fallback applies.
      *
      * @param class-string|null $class
-     * @psalm-external-mutation-free
      */
     public static function initViewFactory(?string $class): void
     {
@@ -197,7 +194,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      *   may override `viewInstance()` to construct a different implementation.
      *
      * @return class-string|null
-     * @psalm-external-mutation-free
      */
     private static function narrowedHelperReturn(int $argCount): ?string
     {
@@ -210,7 +206,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
 
     /**
      * @param class-string $class
-     * @psalm-external-mutation-free
      */
     private static function narrowedUnion(string $class): Union
     {
@@ -221,8 +216,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * Sound return for a leading-spread view() call of unknown cardinality: the
      * union of both func_num_args() branches, on the contracts so no concrete-only
      * call is falsely accepted regardless of which branch runs.
-     *
-     * @psalm-external-mutation-free
      */
     private static function spreadReturn(): Union
     {
@@ -239,7 +232,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * facade so an app that trims its alias registry still gets the diagnostic).
      *
      * @inheritDoc
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function getClassLikeNames(): array
@@ -341,9 +333,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
                 break;
 
             case 'first':
-                $arg = self::argByNameOrPosition($callArgs, 0, 'views');
+                $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'views');
 
-                if ($arg instanceof \PhpParser\Node\Arg) {
+                if ($arg instanceof Arg) {
                     $viewNames = self::extractLiteralStringArrayArg($arg);
 
                     if ($viewNames !== null) {
@@ -362,9 +354,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             case 'rendereach':
                 self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
 
-                $emptyArg = self::argByNameOrPosition($callArgs, 3, 'empty');
+                $emptyArg = ArgUtil::byNameOrPosition($callArgs, 3, 'empty');
 
-                if ($emptyArg instanceof \PhpParser\Node\Arg) {
+                if ($emptyArg instanceof Arg) {
                     $emptyName = self::extractLiteralStringArg($emptyArg);
 
                     if ($emptyName !== null && !\str_starts_with($emptyName, 'raw|')) {
@@ -393,7 +385,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      */
     private static function checkViewPatternArg(array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
     {
-        $arg = self::argByNameOrPosition($callArgs, 0, 'views');
+        $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'views');
         if (!$arg instanceof Arg) {
             return;
         }
@@ -441,9 +433,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             return;
         }
 
-        $arg = self::argByNameOrPosition($callArgs, 0, 'view');
+        $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'view');
 
-        if (!$arg instanceof \PhpParser\Node\Arg) {
+        if (!$arg instanceof Arg) {
             return;
         }
 
@@ -565,9 +557,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): void {
-        $arg = self::argByNameOrPosition($callArgs, $position, $paramName);
+        $arg = ArgUtil::byNameOrPosition($callArgs, $position, $paramName);
 
-        if (!$arg instanceof \PhpParser\Node\Arg) {
+        if (!$arg instanceof Arg) {
             return;
         }
 
@@ -576,32 +568,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         if ($viewName !== null) {
             self::checkViewExists($viewName, $codeLocation, $suppressedIssues);
         }
-    }
-
-    /**
-     * Resolve one parameter's Arg node whether the call used positional or
-     * named arguments. PHP requires every positional argument to precede any
-     * named one, so a non-named node already at `$position` is authoritative;
-     * otherwise the parameter can only have been supplied by name, in whatever
-     * order — e.g. `Route::view(view: 'welcome', uri: '/x')` must not read
-     * '/x' (position 1) as the view name just because $paramName's usual slot
-     * is 1.
-     *
-     * @param list<Arg> $callArgs
-     */
-    private static function argByNameOrPosition(array $callArgs, int $position, string $paramName): ?Arg
-    {
-        if (isset($callArgs[$position]) && $callArgs[$position]->name === null) {
-            return $callArgs[$position];
-        }
-
-        foreach ($callArgs as $arg) {
-            if ($arg->name !== null && $arg->name->toLowerString() === $paramName) {
-                return $arg;
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -698,17 +664,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             return;
         }
 
-        // Skip namespaced views (e.g., 'mail::html.header') — they resolve
-        // through package-registered paths we don't track yet
-        if (\str_contains($viewName, '::')) {
-            return;
-        }
-
-        if ($viewName === '') {
-            return;
-        }
-
-        if (self::viewFileExists($viewName)) {
+        // Namespaced views (e.g., 'mail::html.header') resolve through
+        // package-registered paths we don't track yet, so they are skipped.
+        if ($viewName === '' || \str_contains($viewName, '::') || self::viewFileExists($viewName)) {
             return;
         }
 

@@ -8,8 +8,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Application\ContainerResolver;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Encryption\EncrypterTaintHandler;
+use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Symfony\Component\Process\Process;
 
 /**
@@ -26,10 +28,14 @@ use Symfony\Component\Process\Process;
  *
  * The fix in both cases replaced a full-class stub (`SessionGuard.phpstub` / `TokenGuard.phpstub`,
  * `Encryption/Encrypter.phpstub`), which shadowed a whole class to host its taint methods, with a
- * handler that leaves the real class intact so its methods resolve.
+ * handler that leaves the real class intact so its methods resolve. #1616 is the general form for
+ * stubs that stay: the plugin queues every stubbed class before Psalm's main scan so its vendor
+ * file is scanned and the stub merges into it.
  */
+#[CoversClass(ContainerResolver::class)]
 #[CoversClass(EncrypterTaintHandler::class)]
 #[CoversClass(GuardTaintHandler::class)]
+#[CoversClass(StubFileFinder::class)]
 #[Group('subprocess')]
 final class ContainerNarrowedMethodResolutionTest extends TestCase
 {
@@ -76,6 +82,40 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
             [],
             $guardErrors,
             "auth('web') methods must resolve against the real SessionGuard, got UndefinedMethod:\n{$joined}",
+        );
+    }
+
+    #[Test]
+    public function it_resolves_unstubbed_methods_of_a_stubbed_class_reached_only_through_container_narrowing(): void
+    {
+        // #1616: a stub that re-declares a class shadowed its vendor file when nothing else queued
+        // it, so `hasListeners()` resolved through Macroable `__call` to `mixed`. No issue names the
+        // gap, so the fixture pins the return type and any CheckType mismatch is the regression.
+        $typeMismatches = $this->messagesOfType($this->findings('StubbedClassMethodResolution'), 'CheckType');
+
+        $this->assertSame(
+            [],
+            $typeMismatches,
+            "app('events')->hasListeners() must resolve against the real Dispatcher, got:\n" . \implode("\n", $typeMismatches),
+        );
+    }
+
+    #[Test]
+    public function it_queues_a_bound_class_that_nothing_else_references(): void
+    {
+        // The plugin instantiates the container's bindings once at init and queues each resolved class.
+        // 'composer' resolves to a class no stub and no source names, so it narrows only if queued.
+        $findings = $this->findings('BoundClassResolution');
+        $problems = [
+            ...$this->messagesOfType($findings, 'CheckType'),
+            ...$this->messagesOfType($findings, 'MixedMethodCall'),
+            ...$this->messagesOfType($findings, 'UndefinedClass'),
+        ];
+
+        $this->assertSame(
+            [],
+            $problems,
+            "app('composer')->dumpAutoloads() must resolve against Illuminate\\Support\\Composer, got:\n" . \implode("\n", $problems),
         );
     }
 

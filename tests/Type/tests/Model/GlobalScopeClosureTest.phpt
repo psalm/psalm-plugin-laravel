@@ -73,4 +73,4 @@ function test_named_string_form_passes(): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of App\Models\Tool::addGlobalScope expects %s, but impure-Closure(string):void provided
+InvalidArgument on line %d: Argument 1 of App\Models\Tool::addGlobalScope expects %s, but Closure[io](string):void provided

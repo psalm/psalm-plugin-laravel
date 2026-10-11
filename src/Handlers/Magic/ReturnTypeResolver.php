@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Magic;
 
 use Psalm\Codebase;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -15,8 +16,6 @@ use Psalm\Type\Union;
  *
  * Results are cached per method+rule combination since return types are
  * immutable during a single Psalm run.
- *
- * @psalm-external-mutation-free
  */
 final class ReturnTypeResolver
 {
@@ -48,8 +47,6 @@ final class ReturnTypeResolver
      *
      * Must be called when the active ForwardingRule changes (e.g., in tests
      * with multiple init() calls). Called from MethodForwardingHandler::init().
-     *
-     * @psalm-external-mutation-free
      */
     public static function initForRule(ForwardingRule $rule): void
     {
@@ -69,7 +66,6 @@ final class ReturnTypeResolver
      * the source's generic type. Otherwise returns null to let Psalm resolve.
      *
      * @param list<Union>|null $sourceTemplateParams
-     * @psalm-external-mutation-free
      */
     public static function resolve(
         string $sourceClass,
@@ -106,8 +102,6 @@ final class ReturnTypeResolver
      * 3. TNamedObject matching selfReturnIndicators — catches explicit class returns
      *    like Builder::where() which declares @return self<TModel>
      *    (Psalm stores this as TGenericObject("Builder", [TModel]))
-     *
-     * @psalm-external-mutation-free
      */
     private static function anyTargetClassMethodReturnsSelf(Codebase $codebase, string $methodNameLowercase): bool
     {
@@ -127,7 +121,7 @@ final class ReturnTypeResolver
         foreach ($rule->searchClasses as $searchClass) {
             $returnType = self::getDeclaredReturnType($codebase, $searchClass, $methodNameLowercase);
 
-            if ($returnType instanceof Union && self::returnTypeIndicatesSelf($returnType)) {
+            if ($returnType instanceof Union && self::returnTypeIndicatesSelf($returnType, true)) {
                 $result = true;
                 break;
             }
@@ -140,8 +134,6 @@ final class ReturnTypeResolver
 
     /**
      * Check one target class instead of all search classes in the active forwarding rule.
-     *
-     * @psalm-external-mutation-free
      */
     public static function targetClassMethodReturnsSelf(
         Codebase $codebase,
@@ -160,13 +152,10 @@ final class ReturnTypeResolver
             return self::$targetSelfReturnCache[$key] = false;
         }
 
-        return self::$targetSelfReturnCache[$key] = self::returnTypeIndicatesSelf($returnType);
+        return self::$targetSelfReturnCache[$key] = self::returnTypeIndicatesSelf($returnType, true);
     }
 
-    /**
-     * @psalm-external-mutation-free
-     */
-    private static function returnTypeIndicatesSelf(Union $returnType): bool
+    private static function returnTypeIndicatesSelf(Union $returnType, bool $viaIndicators): bool
     {
         foreach ($returnType->getAtomicTypes() as $atomicType) {
             if (!$atomicType instanceof TNamedObject) {
@@ -181,7 +170,7 @@ final class ReturnTypeResolver
             }
 
             // Check 2: class name matches selfReturnIndicators (e.g., Builder)
-            if (isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
+            if ($viaIndicators && isset(self::$indicatorsLower[\strtolower($atomicType->value)])) {
                 return true;
             }
         }
@@ -190,11 +179,32 @@ final class ReturnTypeResolver
     }
 
     /**
-     * Get the declared return type for a method from ClassLikeStorage.
+     * Whether $targetClass declares the method with a return of ONLY self (`$this` / `static`, or a
+     * selfReturnIndicators class when $forwarded); null when it does not declare the method. Unlike
+     * targetClassMethodReturnsSelf(), a union such as Conditionable::when()'s
+     * `$this|TWhenReturnType` does not count, since the call may return something else.
      *
-     * All lookups go through classlike_storage_provider->get() and declaring_method_ids
-     * to get the real MethodStorage, NOT through methodExists() which could resolve
-     * through __call and return mixed.
+     * $forwarded is for classes whose methods Relation::__call forwards: it swaps a returned builder
+     * for the relation. A method declared on the relation itself (`getQuery()`) returns that builder.
+     */
+    public static function declaredMethodReturnsOnlySelf(
+        Codebase $codebase,
+        string $targetClass,
+        string $methodNameLowercase,
+        bool $forwarded,
+    ): ?bool {
+        $methodStorage = self::getDeclaredMethodStorage($codebase, $targetClass, $methodNameLowercase);
+        if (!$methodStorage instanceof MethodStorage) {
+            return null;
+        }
+
+        $returnType = $methodStorage->return_type;
+
+        return $returnType instanceof Union && $returnType->isSingle() && self::returnTypeIndicatesSelf($returnType, $forwarded);
+    }
+
+    /**
+     * Get the declared return type for a method from ClassLikeStorage.
      *
      * @psalm-mutation-free
      */
@@ -203,6 +213,21 @@ final class ReturnTypeResolver
         string $class,
         string $methodNameLowercase,
     ): ?Union {
+        return self::getDeclaredMethodStorage($codebase, $class, $methodNameLowercase)?->return_type;
+    }
+
+    /**
+     * All lookups go through classlike_storage_provider->get() and declaring_method_ids
+     * to get the real MethodStorage, NOT through methodExists() which could resolve
+     * through __call and return mixed.
+     *
+     * @psalm-mutation-free
+     */
+    private static function getDeclaredMethodStorage(
+        Codebase $codebase,
+        string $class,
+        string $methodNameLowercase,
+    ): ?MethodStorage {
         try {
             $classStorage = $codebase->classlike_storage_provider->get(\strtolower($class));
         } catch (\InvalidArgumentException) {
@@ -216,11 +241,9 @@ final class ReturnTypeResolver
         }
 
         try {
-            $methodStorage = $codebase->methods->getStorage($declaringId);
+            return $codebase->methods->getStorage($declaringId);
         } catch (\UnexpectedValueException) {
             return null;
         }
-
-        return $methodStorage->return_type;
     }
 }

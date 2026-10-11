@@ -3,7 +3,7 @@ name: Test Laravel app
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [4.x]
     paths:
       - '**.php'
       - '**.phpstub'
@@ -26,17 +26,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The PHP >= 8.3 cells double as the Phase 1 "drift canary" for the laravel/ai integration:
-# laravel-test.sh installs laravel/ai with no upper version ceiling below 1.0 (a future
-# minor's coverage must never be silently dropped just to dodge a rare drift-caused false
-# positive), so these cells always pull the newest release. The weekly schedule and
-# workflow_dispatch trigger above already run this independent of which files changed.
+# The PHP >= 8.3 cells double as a fresh-app canary for the laravel/ai integration:
+# laravel-test.sh installs the newest release satisfying `>=1.0.0 <2.0.0`, the
+# plugin's supported range (1.0.0 floor; the 2.0 ceiling is excluded because that
+# unsupported major has no compatibility coverage). The weekly schedule and
+# workflow_dispatch trigger above already run this independently of which files
+# changed.
 #
-# Like the PromptInjection suite in tests.yml, this catches laravel/ai failing to install
-# and the plugin's own regressions, but NOT a stubbed method's native signature drifting on
-# a laravel/ai release: this leg runs through the same registered stubs, which override the
-# vendor's reflected signature for methods they declare, so Psalm never compares the two
-# here either. Tracked separately: psalm/psalm-plugin-laravel#1331.
+# Like the PromptInjection suite in tests.yml, this catches laravel/ai failing to
+# install and the plugin's own regressions, but NOT a stubbed method's native
+# signature drifting on a laravel/ai release: this leg runs through the registered
+# stubs, which override the vendor's reflected signature for methods they declare,
+# so Psalm never compares the two here either. Tracked
+# separately: psalm/psalm-plugin-laravel#1331.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -59,7 +61,7 @@ jobs:
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -74,19 +76,7 @@ jobs:
           php-version: ${{ matrix.php-version }}
           coverage: none
 
-      # TEMPORARY: laravel/framework v13.32.0 added a `@phpstan-this-out` docblock carrying a
-      # parameter conditional (Collection::prepend(), "($key is null ? ... : $this)"). Psalm 7
-      # cannot parse that shape and dies with an uncaught
-      # TypeParseTreeException: Unrecognized template '$key' during its scan phase, before any
-      # issue is reported, so the whole fresh-app leg is unanalysable. The crash still reproduces
-      # on 7.0.0-beta22 and is not caused by the plugin. Only the dev-master cells reach it; the
-      # pinned 12.12.2 cells resolve laravel/framework ^12. Drop this once Psalm parses it.
-      # @see https://github.com/vimeo/psalm/issues/11958
       - name: Build a Laravel project and run Psalm on it
-        env:
-          # Only the dev-master cells resolve laravel/framework 13.x; leaving this empty on the
-          # 12.12.2 cells keeps them resolving exactly what laravel/laravel pins.
-          LARAVEL_FRAMEWORK_CONSTRAINT: ${{ matrix.laravel-installer-version == 'dev-master' && '>=13.3 <13.32' || '' }}
         run: |
           LARAVEL_INSTALLER_VERSION=${{ matrix.laravel-installer-version }} ./tests/Application/laravel-test.sh --verbose
 
@@ -94,12 +84,12 @@ jobs:
           echo "Psalm analysis failed on a fresh Laravel project. Please consider updating baseline: tests/Application/laravel-test-psalm-baseline.xml"
         if: ${{ failure() }}
 
-      - name: Report fresh-app failure against the newest laravel/ai
+      - name: Report fresh-app failure against the newest supported laravel/ai
         # Only the PHP >= 8.3 cells install laravel/ai (tests/Application/laravel-test.sh
-        # gates the install on the same check). This cell installs the newest available
-        # release (no upper version ceiling below 1.0), so a failure here may be a plugin
-        # regression rather than something specific to this app fixture. It is NOT proof
-        # of a stubbed method's native signature drifting: this leg resolves calls through
+        # gates the install on the same check). This cell resolves the newest release
+        # within the supported `>=1.0.0 <2.0.0` gate, so a failure here may be a plugin regression
+        # rather than something specific to this app fixture. It is NOT proof of a
+        # stubbed method's native signature drifting: this leg resolves calls through
         # the same registered stubs as the phpt suite, so that class of drift stays
         # invisible here too (psalm/psalm-plugin-laravel#1331). Scroll up to the compact
         # psalm output for the exact failing issue/class/line.
@@ -107,7 +97,7 @@ jobs:
         env:
           LARAVEL_INSTALLER_VERSION: ${{ matrix.laravel-installer-version }}
         run: |
-          echo "::error::Fresh-app Psalm analysis failed against the newest installed" \
-            "laravel/ai release. See the compact output above for the exact failure." \
+          echo "::error::Fresh-app Psalm analysis failed against the newest supported" \
+            "laravel/ai 1.x release. See the compact output above for the exact failure." \
             "Reproduce locally with:" \
             "LARAVEL_INSTALLER_VERSION=$LARAVEL_INSTALLER_VERSION ./tests/Application/laravel-test.sh --verbose"

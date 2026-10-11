@@ -231,8 +231,6 @@ final class MigrationSchemaBuilder
     /**
      * Graceful degradation skips {@see InternalErrorReporter}, so surface the swallowed
      * bootstrap error here — it's the root cause of the missing migrator, not just the symptom.
-     *
-     * @psalm-external-mutation-free
      */
     private function migratorUnavailableWarning(): string
     {

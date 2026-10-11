@@ -1,3 +1,5 @@
+--CONFLICTS--
+psalm-1416-SafeResponseFactoryMakeInterpolatedDisposition
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --no-cache --threads=1
 --FILE--
@@ -10,7 +12,7 @@ use Illuminate\Support\Facades\Response;
  * #1416 widening 2. The `attachment;` token and its separator are literal; only the filename is
  * interpolated. No `Content-Type` entry: the content-type denylist proof (widening 4) must not be
  * able to prove this call exempt on its own, or the interpolated-disposition proof could break
- * completely without failing this test. The unique ARGS line runs this file in its own batch (see
+ * completely without failing this test. The unique CONFLICTS key runs this file in its own batch (see
  * the sibling const-folded headers test for why a shared batch would mask a regression here).
  */
 function makeCsvExportWithInterpolatedFilename(Request $request): void

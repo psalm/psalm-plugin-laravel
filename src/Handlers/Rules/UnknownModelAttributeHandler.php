@@ -377,8 +377,6 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
     /**
      * @psalm-assert-if-true class-string<Model> $className
-     *
-     * @psalm-external-mutation-free
      */
     private static function isModelSubclass(string $className, Codebase $codebase): bool
     {

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
 use PhpParser\Node;
-use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\ArrowFunction;
+use PhpParser\Node\Expr\CallLike;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\FuncCall;
@@ -279,7 +279,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             && isset(self::RESOLVER_METHODS[\strtolower($node->name->name)])
             && self::looksLikeContainer($node->var, $containerParamName)
         ) {
-            $abstract = self::extractAbstract($node->getArgs());
+            $abstract = self::extractAbstract($node);
 
             if ($abstract !== null) {
                 return [$abstract, $node];
@@ -305,7 +305,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             && $node->name instanceof Name
             && \in_array($node->name->toLowerString(), ['app', 'resolve'], true)
         ) {
-            $abstract = self::extractAbstract($node->getArgs());
+            $abstract = self::extractAbstract($node);
 
             if ($abstract !== null) {
                 return [$abstract, $node];
@@ -323,7 +323,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             && $node->class instanceof Name
             && self::isAppFacade($node->class)
         ) {
-            $abstract = self::extractAbstract($node->getArgs());
+            $abstract = self::extractAbstract($node);
 
             if ($abstract !== null) {
                 return [$abstract, $node];
@@ -357,6 +357,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             $expr instanceof FuncCall
             && $expr->name instanceof Name
             && \in_array($expr->name->toLowerString(), ['app', 'resolve'], true)
+            && !$expr->isFirstClassCallable()
             && $expr->getArgs() === []
         );
     }
@@ -380,16 +381,20 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     }
 
     /**
-     * From the args of make() / get() / app() / resolve(), extract the first
+     * From a make() / get() / app() / resolve() call, extract the first
      * positional argument only, which is the "abstract" in Laravel's container API.
      * Extra arguments (parameters for makeWith) are not relevant to this rule.
      *
-     * @param array<array-key, Arg> $args
      * @psalm-return class-string|string|null
      */
-    private static function extractAbstract(array $args): ?string
+    private static function extractAbstract(CallLike $call): ?string
     {
-        foreach ($args as $arg) {
+        // getArgs() throws on a first-class callable (`$app->make(...)`), which resolves nothing yet.
+        if ($call->isFirstClassCallable()) {
+            return null;
+        }
+
+        foreach ($call->getArgs() as $arg) {
             return self::literalAbstractFrom($arg->value);
         }
 

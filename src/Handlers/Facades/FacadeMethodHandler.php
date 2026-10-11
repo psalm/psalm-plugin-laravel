@@ -30,8 +30,8 @@ use Psalm\Type\Union;
  *   a matching `@method` tag.
  * - Container-resolved root class — {@see AppFacadeRegistrationHandler::tryGetFacadeRootClass()}
  *   is called while the Testbench app is known alive; the resolved class is bound into
- *   per-facade provider closures registered with Psalm. Methods present on that class
- *   are forwarded to the facade.
+ *   per-facade provider closures registered with Psalm. Public methods present on that class,
+ *   or documented by its instance `@method` tags, are forwarded to the facade.
  *
  * @internal
  */
@@ -50,7 +50,6 @@ final class FacadeMethodHandler
      */
     private static array $pseudoMethodCache = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$methodCache = [];
@@ -124,7 +123,6 @@ final class FacadeMethodHandler
 
     /**
      * @param class-string $rootClass
-     * @psalm-external-mutation-free
      */
     private static function resolveMethod(
         Codebase $codebase,
@@ -159,8 +157,6 @@ final class FacadeMethodHandler
      * declares `@method $methodNameLower`. Psalm's Populator already merges ancestor
      * pseudo-methods into child `pseudo_static_methods`, so walking ancestors is a superset
      * kept defensively against Populator changes.
-     *
-     * @psalm-external-mutation-free
      */
     private static function hasPseudoStaticMethod(
         Codebase $codebase,
@@ -230,7 +226,10 @@ final class FacadeMethodHandler
         $declaringId = $storage->declaring_method_ids[$methodNameLower] ?? null;
 
         if ($declaringId === null) {
-            return null;
+            // Real methods win; otherwise honour the root's class-level `@method` tags.
+            // Managers forward through `__call` and document the targets this way
+            // (instance tags only: the facade's `__callStatic` invokes the root instance).
+            return $storage->pseudo_methods[$methodNameLower] ?? null;
         }
 
         try {

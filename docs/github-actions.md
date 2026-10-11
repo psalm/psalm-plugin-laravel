@@ -13,7 +13,7 @@ The plugin ships a ready-to-commit workflow and a CLI command that installs it f
 ./vendor/bin/psalm-laravel add github
 ```
 
-This writes `.github/workflows/psalm.yml`, copied verbatim from the plugin's bundled template ([view on GitHub](https://github.com/psalm/psalm-plugin-laravel/blob/master/resources/ci/github-actions/psalm.yml)). Pass `--force` to overwrite an existing file.
+This writes `.github/workflows/psalm.yml`, copied verbatim from the plugin's bundled template ([view on GitHub](https://github.com/psalm/psalm-plugin-laravel/blob/4.x/resources/ci/github-actions/psalm.yml)). Pass `--force` to overwrite an existing file.
 
 ## What it generates
 
@@ -42,7 +42,7 @@ The generated file carries inline comments for each knob. The common edits:
 The generated workflow does three things a hand-written Psalm job usually misses, all measured on a 7,600-file Laravel codebase:
 
 * **Persists Psalm's cache** between runs, which removes most of the scan phase. A whole run went 158s to 78s. This is the largest of the three.
-* **Sets both thread counts.** Psalm forces a single thread whenever it detects CI, and decides scanning and analysis separately, so passing only `--threads` leaves the scan phase serial. Fully single-threaded measured 177s against 47s. Note that `psalm.xml`'s `threads` and `scanThreads` attributes cannot do this: `getThreads()` tests for CI before it reads them.
+* **Sets both thread counts.** Psalm sizes scanning (`--scan-threads`) and analysis (`--threads`) separately. Since Psalm `7.0.0-beta23` ([vimeo/psalm#11771](https://github.com/vimeo/psalm/pull/11771)) both default to the detected core count on CI too; earlier versions forced a single thread there, and fully single-threaded measured 177s against 47s. The template still passes explicit numbers so the run does not hinge on core detection and the two phases can be tuned apart. `psalm.xml`'s `threads` and `scanThreads` attributes work as well.
 * **Installs `igbinary`**, which Psalm's `ForkContext` uses to serialise worker results back to the parent. Roughly 6s of thread-merge with it against 50s without.
 
 Each of these is a small number of steps in the generated file, and every non-obvious detail (why the cache restore sits after Composer, why restore and save are separate steps, why the `restore-keys` fallback is qualified, why the save keeps `success()`) is explained in an inline comment at the step it belongs to. Read the file before changing any of them.

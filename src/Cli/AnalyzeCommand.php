@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Cli;
 
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -26,6 +28,9 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'analyze', description: 'Run Psalm analysis on the current project.', aliases: ['analyse'])]
 final class AnalyzeCommand extends Command
 {
+    /** Shorthand flags and the override token each stands for. */
+    private const SHORTHANDS = ['--blade' => 'blade=true', '--no-blade' => 'blade=false', '--experimental' => 'experimental=true'];
+
     /**
      * @param string|null $workingDirectory Override the target directory; defaults to the process CWD.
      *                                      Exposed for tests.
@@ -45,11 +50,43 @@ final class AnalyzeCommand extends Command
 
         // Declared so `analyze --help` documents the passthrough. Symfony binds
         // `--flags` as options (never into this argument), so it is not the
-        // source the command reads — forwardedArguments() reads the raw argv.
+        // source the command reads — scanArguments() reads the raw argv.
         $this->addArgument(
             'psalm-args',
             InputArgument::IS_ARRAY | InputArgument::OPTIONAL,
             'Flags and arguments forwarded verbatim to the psalm binary (e.g. --set-baseline=psalm-baseline.xml).',
+        );
+
+        // Declared for `analyze --help` only: scanArguments() consumes them from raw argv and the plugin
+        // in the child psalm applies them, because psalm rejects unknown flags.
+        $this->addOption(
+            'blade',
+            null,
+            InputOption::VALUE_NEGATABLE,
+            'Shorthand for --plugin-option=blade=true (--blade) or blade=false (--no-blade).',
+        );
+        $this->addOption(
+            'experimental',
+            null,
+            InputOption::VALUE_NONE,
+            'Shorthand for --plugin-option=experimental=true.',
+        );
+        $this->addOption(
+            'plugin-option',
+            null,
+            InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
+            'Override a plugin setting for this run: --plugin-option=KEY=VALUE (repeatable, last wins).',
+        );
+        $keys = \array_map(
+            static fn(string $key, array $values): string => \sprintf('  %-32s %s', $key, \implode('|', $values)),
+            \array_keys(PluginOverrides::KEYS),
+            PluginOverrides::KEYS,
+        );
+        $this->setHelp(
+            "Keys accepted by <info>--plugin-option=KEY=VALUE</info>:\n\n"
+            . \implode("\n", $keys)
+            . "\n\nPrecedence: --plugin-option > psalm.xml > default."
+            . "\nDetails: https://psalm.github.io/psalm-plugin-laravel/config/#per-run-overrides",
         );
     }
 
@@ -75,12 +112,36 @@ final class AnalyzeCommand extends Command
             return Command::FAILURE;
         }
 
+        // Validated here so a typo is a clean message, not a stack trace from inside psalm.
+        try {
+            $scan = $this->scanArguments();
+            $cli = PluginOverrides::parse(\implode(' ', $scan['options']), '--plugin-option');
+        } catch (\InvalidArgumentException $invalidArgumentException) {
+            $io->error($invalidArgumentException->getMessage());
+            return Command::FAILURE;
+        }
+
+        // Overwritten, never merged: an inherited value would bypass validation and the cache gate below.
+        $childEnv = \getenv();
+        unset($childEnv[PluginOverrides::ENV_VAR]);
+        if ($scan['options'] !== []) {
+            $childEnv[PluginOverrides::ENV_VAR] = \implode(' ', $scan['options']);
+        }
+
+        $forwarded = $scan['forwarded'];
+
+        // Toggling Blade leaves stale file references in psalm's cache, see decisions.md "Per-Run Overrides".
+        if ($cli->has('blade')) {
+            \array_unshift($forwarded, '--no-reference-cache');
+        }
+
         // proc_open with an array argv runs the binary directly (no shell), so
         // forwarded tokens are passed literally and never re-interpreted.
-        $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
+        $command = [\PHP_BINARY, $psalmBin, ...$forwarded];
 
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
-        $process = \proc_open($command, $descriptors, $pipes, $cwd);
+        // An explicit env array REPLACES the environment in proc_open, hence the whole getenv() is copied above.
+        $process = \proc_open($command, $descriptors, $pipes, $cwd, $childEnv);
 
         if (!\is_resource($process)) {
             $io->error('Failed to launch Psalm.');
@@ -108,12 +169,15 @@ final class AnalyzeCommand extends Command
     }
 
     /**
-     * Tokens to forward to psalm, sliced from the raw `$_SERVER['argv']`.
+     * Splits the raw `$_SERVER['argv']` into the tokens to forward to psalm and the ordered
+     * `--plugin-option=KEY=VALUE` values, shorthands included (see SHORTHANDS), so the last one wins
+     * whichever spelling it used. One scan yields both, so they cannot drift apart.
      *
-     * Raw argv, not parsed input: Symfony binds `--flags` as options (not into a
-     * declared argument), and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
+     * Raw argv, not parsed input: with ignoreValidationErrors one bad option makes Symfony drop ALL
+     * parsed options, and `ArgvInput::getRawTokens()` needs Symfony >= 7.1.
      * Drops argv[0] and the explicit command-name/alias token (the default-command
-     * form has none, so nothing is stripped).
+     * form has none, so nothing is stripped). Scanning stops at a standalone `--`, past which every
+     * token is positional, as in Symfony's own option parsing.
      *
      * Limits: `-h`/`-V` short-circuit to the wrapper's own help/version (use
      * `vendor/bin/psalm` for those); global options before the subcommand aren't
@@ -122,9 +186,11 @@ final class AnalyzeCommand extends Command
      * Public (not private) so it is unit-testable: CommandTester can't set argv.
      *
      * @param list<string>|null $argv Raw argv override; defaults to the process argv. Exposed for tests.
-     * @return list<string>
+     * @return array{forwarded: list<string>, options: list<string>}
+     *
+     * @throws \InvalidArgumentException On `--plugin-option` without `=KEY=VALUE`, or a value with whitespace.
      */
-    public function forwardedArguments(?array $argv = null): array
+    public function scanArguments(?array $argv = null): array
     {
         // `argv` is absent only when `register_argc_argv` is disabled; Symfony's
         // own ArgvInput falls back the same way, so default to an empty list.
@@ -137,6 +203,32 @@ final class AnalyzeCommand extends Command
             \array_shift($tokens); // drop the explicit command-name token
         }
 
-        return $tokens;
+        $forwarded = [];
+        $options = [];
+
+        foreach ($tokens as $index => $token) {
+            if ($token === '--') {
+                return ['forwarded' => [...$forwarded, ...\array_slice($tokens, $index)], 'options' => $options];
+            }
+
+            if (isset(self::SHORTHANDS[$token])) {
+                $options[] = self::SHORTHANDS[$token];
+                continue;
+            }
+
+            if ($token !== '--plugin-option' && !\str_starts_with($token, '--plugin-option=')) {
+                $forwarded[] = $token;
+                continue;
+            }
+
+            // The value travels whitespace-split to the child psalm, so it must be one non-empty word.
+            if (\preg_match('/^--plugin-option=\S+\z/', $token) !== 1) {
+                throw new \InvalidArgumentException("'{$token}' is invalid: use --plugin-option=KEY=VALUE, without whitespace.");
+            }
+
+            $options[] = \substr($token, \strlen('--plugin-option='));
+        }
+
+        return ['forwarded' => $forwarded, 'options' => $options];
     }
 }

@@ -24,9 +24,6 @@ use Psalm\Type\Union;
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/808
  * @internal
- *
- * @psalm-external-mutation-free (not @psalm-immutable / @psalm-mutation-free: resolve() caches
- * invariant Unions in static properties, see $neverUnion/$literalZeroKeyUnion).
  */
 final class CollectionInputTypeResolver
 {
@@ -40,7 +37,6 @@ final class CollectionInputTypeResolver
 
     /**
      * @return array{Union, Union}|null [TKey, TValue]
-     * @psalm-external-mutation-free
      */
     public static function resolve(?Union $argType, Codebase $codebase): ?array
     {
@@ -81,7 +77,7 @@ final class CollectionInputTypeResolver
 
         // UnitEnum, including a bare `UnitEnum $x` param (identity, not classImplements(), since
         // classImplements() is non-reflexive - see CollectInterfaceTypedInputsTest.phpt). With the
-        // 12.14+ Laravel floor (see composer.json), getArrayableItems()'s dispatch - `is_null() ||
+        // 12.20+ Laravel floor (see composer.json), getArrayableItems()'s dispatch - `is_null() ||
         // is_scalar() || $items instanceof UnitEnum ? Arr::wrap($items) : Arr::from($items)` -
         // checks UnitEnum unconditionally, no probe, no interface-deferral needed:
         // Arr::wrap($enumCase) === [0 => $enumCase].

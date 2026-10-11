@@ -2,10 +2,10 @@
 
 name-template: '$RESOLVED_VERSION'
 tag-template: '$RESOLVED_VERSION'
-# Pin the draft to master's history only. `3.x` is a separate major line:
+# Pin the draft to 4.x's history only. `3.x` is a separate major line:
 # without `filter-by-commitish`, release-drafter pulls every merged PR since the
-# last tag regardless of base branch, so 3.x PRs would leak into the master draft.
-commitish: refs/heads/master
+# last tag regardless of base branch, so 3.x PRs would leak into the 4.x draft.
+commitish: refs/heads/4.x
 filter-by-commitish: true
 categories:
   - title: 'Features'

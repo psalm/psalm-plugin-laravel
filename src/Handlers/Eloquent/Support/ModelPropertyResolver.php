@@ -16,6 +16,7 @@ use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 // and several other handlers in this codebase already depend on Psalm\Internal\*).
 // Re-verify when bumping Psalm to a new minor/major version.
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
@@ -41,14 +42,14 @@ final class ModelPropertyResolver
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    public static function extractModelFromUnion(?Union $type): ?string
+    public static function extractModelFromUnion(?Union $type, Codebase $codebase): ?string
     {
         if (!$type instanceof \Psalm\Type\Union) {
             return null;
         }
 
         foreach ($type->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return $atomic->value;
             }
         }
@@ -68,15 +69,15 @@ final class ModelPropertyResolver
         Codebase $codebase,
     ): ?string {
         $template = $templateParams[$modelTemplateIndex] ?? null;
-        $modelClass = self::extractExactlyOneModelFromUnion($template);
+        $modelClass = self::extractExactlyOneModelFromUnion($template, $codebase);
         if ($modelClass !== null || !$lhsType instanceof Union
-            || $template !== null && self::extractModelFromUnion($template) !== null) {
+            || $template !== null && self::extractModelFromUnion($template, $codebase) !== null) {
             return $modelClass;
         }
 
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             $atomicType = new Union([$atomic]);
-            $resolved = self::extractModelFromLhsType($atomicType, $modelTemplateIndex)
+            $resolved = self::extractModelFromLhsType($atomicType, $modelTemplateIndex, $codebase)
                 ?? self::extractModelFromLhsBuilderExtends($atomicType, $codebase)
                 ?? self::extractModelFromLhsCollectionExtends($atomicType, $codebase);
 
@@ -97,11 +98,11 @@ final class ModelPropertyResolver
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    public static function extractExactlyOneModelFromUnion(?Union $type): ?string
+    public static function extractExactlyOneModelFromUnion(?Union $type, Codebase $codebase): ?string
     {
         $modelClass = null;
         foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
-            if (!$atomic instanceof TNamedObject || !\is_a($atomic->value, Model::class, true)
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)
                 || ($modelClass !== null && $modelClass !== $atomic->value)) {
                 return null;
             }
@@ -124,7 +125,7 @@ final class ModelPropertyResolver
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    public static function extractModelFromIterableValueType(?Union $argType): ?string
+    public static function extractModelFromIterableValueType(?Union $argType, Codebase $codebase): ?string
     {
         if (!$argType instanceof Union || !$argType->isSingle()) {
             return null;
@@ -133,16 +134,16 @@ final class ModelPropertyResolver
         $atomic = $argType->getSingleAtomic();
 
         if ($atomic instanceof TKeyedArray) {
-            return self::extractExactlyOneModelFromUnion($atomic->getGenericValueType());
+            return self::extractExactlyOneModelFromUnion($atomic->getGenericValueType(), $codebase);
         }
 
         if (($atomic instanceof TArray || $atomic instanceof TIterable) && \count($atomic->type_params) >= 2) {
-            return self::extractExactlyOneModelFromUnion($atomic->type_params[1]);
+            return self::extractExactlyOneModelFromUnion($atomic->type_params[1], $codebase);
         }
 
         if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2
-            && \is_a($atomic->value, Enumerable::class, true)) {
-            return self::extractExactlyOneModelFromUnion($atomic->type_params[1]);
+            && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
+            return self::extractExactlyOneModelFromUnion($atomic->type_params[1], $codebase);
         }
 
         return null;
@@ -176,7 +177,7 @@ final class ModelPropertyResolver
             return null;
         }
 
-        $modelClass = self::extractModelFromUnion($templateParams[$modelTemplateIndex] ?? null);
+        $modelClass = self::extractModelFromUnion($templateParams[$modelTemplateIndex] ?? null, $codebase);
 
         // When the call is reached via Psalm's @mixin chain (e.g. $relation->pluck()
         // forwards to Builder<TRelatedModel>), the event's template parameters can
@@ -185,7 +186,7 @@ final class ModelPropertyResolver
         // type carries the concrete generic arguments.
         if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
             $lhsType = $nodeTypeProvider->getType($lhsExpr);
-            $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex);
+            $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex, $codebase);
 
             // Custom Builder subclasses declared as `/** @extends Builder<Task> */
             // final class TaskBuilder extends Builder {}` are not themselves generic,
@@ -321,7 +322,7 @@ final class ModelPropertyResolver
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    private static function extractModelFromLhsType(?Union $lhsType, int $modelTemplateIndex): ?string
+    private static function extractModelFromLhsType(?Union $lhsType, int $modelTemplateIndex, Codebase $codebase): ?string
     {
         if (!$lhsType instanceof Union) {
             return null;
@@ -333,7 +334,7 @@ final class ModelPropertyResolver
             }
 
             $modelType = $atomic->type_params[$modelTemplateIndex] ?? null;
-            $modelClass = self::extractExactlyOneModelFromUnion($modelType);
+            $modelClass = self::extractExactlyOneModelFromUnion($modelType, $codebase);
             if ($modelClass !== null) {
                 return $modelClass;
             }
@@ -386,6 +387,7 @@ final class ModelPropertyResolver
 
             $modelClass = self::extractExactlyOneModelFromUnion(
                 $classStorage->template_extended_params[Builder::class]['TModel'] ?? null,
+                $codebase,
             );
             if ($modelClass !== null) {
                 return $modelClass;
@@ -439,8 +441,10 @@ final class ModelPropertyResolver
 
             $modelClass = self::extractExactlyOneModelFromUnion(
                 $classStorage->template_extended_params[EloquentCollection::class]['TModel'] ?? null,
+                $codebase,
             ) ?? self::extractExactlyOneModelFromUnion(
                 $classStorage->template_extended_params[Collection::class]['TValue'] ?? null,
+                $codebase,
             );
             if ($modelClass !== null) {
                 return $modelClass;

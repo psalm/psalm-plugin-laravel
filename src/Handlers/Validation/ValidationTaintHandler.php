@@ -111,8 +111,6 @@ final class ValidationTaintHandler implements
      * Entries aren't function-stamped, so flush all; later functions re-populate.
      *
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterStatementAnalysis(AfterFunctionLikeAnalysisEvent $event): ?bool
@@ -131,8 +129,6 @@ final class ValidationTaintHandler implements
      * — which would silently drop the source on a legitimate read.
      *
      * @inheritDoc
-     *
-     * @psalm-external-mutation-free
      */
     #[\Override]
     public static function afterAnalyzeFile(AfterFileAnalysisEvent $event): void

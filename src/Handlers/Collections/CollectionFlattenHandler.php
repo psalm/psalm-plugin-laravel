@@ -8,7 +8,9 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\LazyCollection;
 use PhpParser\Node\Scalar\Int_;
+use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\Arg;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -48,7 +50,6 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         return [Collection::class, LazyCollection::class];
     }
 
-    /** @psalm-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -68,7 +69,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         }
 
         $tValue = $templateTypeParameters[1];
-        $innerValue = self::extractInnerValue($tValue);
+        $innerValue = self::extractInnerValue($tValue, $event->getSource()->getCodebase());
         if (!$innerValue instanceof \Psalm\Type\Union) {
             return null;
         }
@@ -104,7 +105,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
      * Handles: Collection<K, V>, array<K, V>, array{...} (via getGenericValueType).
      * @psalm-mutation-free
      */
-    private static function extractInnerValue(Union $tValue): ?Union
+    private static function extractInnerValue(Union $tValue, Codebase $codebase): ?Union
     {
         if (!$tValue->isSingle()) {
             return null; // union TValue like Collection|array — too complex, bail
@@ -113,7 +114,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         $atomic = $tValue->getSingleAtomic();
 
         // Collection<K, V>, LazyCollection<K, V>, or any Enumerable — extract V (index 1)
-        if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2 && \is_a($atomic->value, Enumerable::class, allow_string: true)) {
+        if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2 && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
             return $atomic->type_params[1];
         }
 

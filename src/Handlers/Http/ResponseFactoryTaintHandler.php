@@ -56,12 +56,8 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * "direct top-level statement" to belong to. Superglobals and `$this` are rejected outright. Each
  * such miss fails toward a retained finding, never a dropped one.
  *
- * ACCEPTED LIMITATION: every `make()` call in a project shares one sink node (and, separately,
- * every constructor call shares its own), and `TaintFlowGraph::getChildNodes()` walks each once,
- * so its `visited_source_ids` set already discards every flow into it longer than the first one
- * found. Exempting that first flow leaves the sink reporting nothing rather than reporting one of
- * its flows. The longer flow is lost with or without this handler; pinned for `make()` by
- * `TaintedHtmlResponseFactoryMakeSharedSinkKnownLimitation.phpt`.
+ * Every `make()` call shares one sink node; Psalm reports each flow into it separately, so
+ * exempting one never hides another (`TaintedHtmlResponseFactoryMakeSharedSinkLongerFlow.phpt`).
  *
  * Every private helper below is free of side effects, but the purity annotations follow what Psalm
  * can verify rather than what is true: helpers that reach for a call's arguments or walk the AST

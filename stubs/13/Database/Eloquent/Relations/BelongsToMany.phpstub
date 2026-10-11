@@ -1,0 +1,59 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+ * Laravel 13.0 added the transactional sync*OrFail() methods; they do not exist on 12.x, so they
+ * live here rather than in stubs/common/. Like sync() in common, they type the Collection arm of
+ * $ids with method-level templates so any Collection<K, V> is accepted. Everything else merges
+ * from stubs/common/.
+ *
+ * The full class header (templates, @template-extends, @mixin, use-trait) is copied
+ * verbatim from common because re-declaring the class resets Psalm's
+ * interface/template metadata to whatever this declaration carries.
+ *
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * @template TAccessor of string = 'pivot'
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+class BelongsToMany extends Relation
+{
+    use Concerns\InteractsWithPivotTable;
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array  $ids
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     *
+     * @throws \Throwable
+     */
+    public function syncOrFail($ids, $detaching = true) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array  $ids
+     * @return array{attached: array, detached: array, updated: array}
+     *
+     * @throws \Throwable
+     */
+    public function syncWithoutDetachingOrFail($ids) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  array  $values
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     *
+     * @throws \Throwable
+     */
+    public function syncWithPivotValuesOrFail($ids, array $values, bool $detaching = true) {}
+}

@@ -1,6 +1,6 @@
 name: Benchmark
 
-# Push to master (or manual dispatch): benchmarks Monica with the plugin
+# Push to 4.x (or manual dispatch): benchmarks Monica with the plugin
 # installed, stores the result for historical trend tracking (GH Pages chart,
 # regression alert at 150%).
 #
@@ -20,7 +20,7 @@ name: Benchmark
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [4.x]
     paths:
       - 'src/**'
       - 'stubs/**'
@@ -38,9 +38,9 @@ permissions:
 env:
   # Pinned Monica release for reproducible benchmarks.
   # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
-  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12.14 || ^13.3;
+  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12.20 || ^13.3;
   # beta.4 and earlier ship Laravel 11). Requiring the plugin bumps Monica's Laravel
-  # to >=12.14 during `composer update`. Its lock pins the dev dependency
+  # to >=12.20 during `composer update`. Its lock pins the dev dependency
   # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so a plain
   # `composer install` aborts. The Prime step below bumps that one package to a clean
   # release before installing (see there).
@@ -61,7 +61,7 @@ jobs:
     steps:
 
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 

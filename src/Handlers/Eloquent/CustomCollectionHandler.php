@@ -26,6 +26,7 @@ use Illuminate\Pagination\AbstractPaginator;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -60,7 +61,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      */
     private static array $modelToCollectionMap = [];
 
-    /** @psalm-external-mutation-free */
     public static function reset(): void
     {
         self::$modelToCollectionMap = [];
@@ -85,7 +85,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * @param class-string<Model> $modelClass
      * @param class-string<EloquentCollection> $collectionClass
-     * @psalm-external-mutation-free
      */
     public static function registerCustomCollection(string $modelClass, string $collectionClass): void
     {
@@ -136,7 +135,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         ];
     }
 
-    /** @psalm-external-mutation-free */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -161,15 +159,16 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         // Skip union types (e.g., MorphTo<Post|User>) — each model may use a different
         // custom collection, making the narrowing ambiguous.
         $templateUnion = $templateTypeParameters[0] ?? null;
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion);
-        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion)) {
+        $codebase = $source->getCodebase();
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion, $codebase);
+        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion, $codebase)) {
             return null;
         }
 
         $collectionClass = self::getCollectionClassForModel($modelClass);
 
         return $collectionClass !== null
-            ? self::collectionType($collectionClass, $modelClass, $source->getCodebase())
+            ? self::collectionType($collectionClass, $modelClass, $codebase)
             : null;
     }
 
@@ -181,8 +180,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      * A userland paginator subclass that overrides getCollection() shifts the declaring
      * class off AbstractPaginator/AbstractCursorPaginator, so the provider correctly stops
      * firing for it — the override's own return type wins.
-     *
-     * @psalm-external-mutation-free
      */
     private static function paginatorCollectionType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -196,8 +193,8 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
         // it's index 0.
         $templateTypeParameters = $event->getTemplateTypeParameters();
         $templateUnion = $templateTypeParameters[1] ?? null;
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion);
-        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion)) {
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateUnion, $source->getCodebase());
+        if ($modelClass === null || self::hasMultipleModelTypes($templateUnion, $source->getCodebase())) {
             return null;
         }
 
@@ -224,8 +221,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * Registered per-model by {@see ModelRegistrationHandler} because Psalm's
      * provider lookup requires exact class name matching.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getModelMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -249,8 +244,6 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Look up the custom collection class for a model, or null if using default.
-     *
-     * @psalm-external-mutation-free
      */
     public static function getCollectionClassForModel(string $modelClass): ?string
     {
@@ -265,7 +258,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
      *
      * @psalm-mutation-free
      */
-    private static function hasMultipleModelTypes(?Union $union): bool
+    private static function hasMultipleModelTypes(?Union $union, Codebase $codebase): bool
     {
         if (!$union instanceof Union) {
             return false;
@@ -273,7 +266,7 @@ final class CustomCollectionHandler implements MethodReturnTypeProviderInterface
 
         $count = 0;
         foreach ($union->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && \is_a($atomic->value, Model::class, true)) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 $count++;
                 if ($count > 1) {
                     return true;
