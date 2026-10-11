@@ -1503,6 +1503,11 @@ final class BladeIssueRemapTest extends TestCase
         yield 'native @var' => ['declared-native.blade.php', '$size: int'];
         yield 'contract comment after @props' => ['declared-comment-after.blade.php', '$size: int'];
         yield 'contract comment before @props' => ['declared-comment-before.blade.php', '$size: mixed'];
+        // `@aware` assigns unconditionally (no `??`), so a name it shares with `@props` holds the
+        // parent's value, whichever directive comes first.
+        yield '@aware after @props' => ['aware-after.blade.php', '$color: mixed'];
+        yield '@aware before @props' => ['aware-before.blade.php', '$color: mixed'];
+        yield '@props name @aware does not share' => ['aware-before.blade.php', '$size: string'];
     }
 
     /** #1828: a `@props` entry types the body from its literal default, widened, never the literal itself. */

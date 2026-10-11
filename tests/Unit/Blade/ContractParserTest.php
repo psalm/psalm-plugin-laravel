@@ -93,6 +93,37 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function a_props_name_that_is_no_assignable_variable_infers_no_default_type(): void
+    {
+        $contract = $this->parse("@props(['max-width' => 'x', 'this' => 'y', 'ok' => 'z'])\n");
+
+        $this->assertNull($contract->vars['max-width']->defaultType);
+        $this->assertNull($contract->vars['this']->defaultType);
+        $this->assertSame('string', $contract->vars['ok']->defaultType);
+    }
+
+    #[Test]
+    public function a_props_name_any_aware_shares_infers_no_default_type(): void
+    {
+        $contract = $this->parse("@props(['color' => 'gray', 'size' => 'lg'])\n@aware(['color' => 'red'])\n");
+
+        $this->assertNull($contract->vars['color']->defaultType);
+        $this->assertSame('string', $contract->vars['size']->defaultType);
+        // `@aware` is no declaration of its own: the contract and its optional flag are unchanged.
+        $this->assertTrue($contract->vars['color']->optional);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function an_unreadable_aware_leaves_every_props_default_untyped(): void
+    {
+        $contract = $this->parse("@aware(\$inherited)\n@props(['size' => 'lg'])\n");
+
+        $this->assertNull($contract->vars['size']->defaultType);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
     public function a_later_props_entry_for_an_already_declared_name_infers_no_default_type(): void
     {
         $contract = $this->parse("{{-- @var int \$size --}}\n@props(['size' => 'lg'])\n");

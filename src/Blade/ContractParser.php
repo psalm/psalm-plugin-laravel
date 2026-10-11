@@ -183,6 +183,8 @@ final class ContractParser
 
         $maskedSource = MarkerPrePass::blankRanges($source, $masked);
         $propsUnknown = false;
+        /** @var array<string, true>|null $awareNames null when an `@aware` list is unreadable */
+        $awareNames = [];
 
         /*
          * A raw open-tag (raw PHP, not `@php`) is a HARD boundary a directive's argument can
@@ -210,7 +212,7 @@ final class ContractParser
         foreach ($hardBoundaries as [$hardStart, $hardEnd]) {
             $segment = \substr($maskedSource, $segmentStart, $hardStart - $segmentStart);
 
-            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown);
+            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown, $awareNames);
 
             $segmentStart = $hardEnd;
         }
@@ -223,9 +225,10 @@ final class ContractParser
         $vars = [];
 
         foreach ($declarations as [, $name, $var]) {
-            // An inferred default never beats an earlier declaration of the name: a `{{-- @var --}}`
-            // ahead of the `@props` entry would otherwise lose the body to the default's type.
-            if (isset($vars[$name]) && $var->defaultType !== null) {
+            // An inferred default never beats an earlier declaration of the name (a `{{-- @var --}}`
+            // ahead of the `@props` entry), nor `@aware`, which `compileAware()` assigns without a
+            // `??` and so overwrites the default whichever directive comes first.
+            if ($var->defaultType !== null && (isset($vars[$name]) || $awareNames === null || isset($awareNames[$name]))) {
                 $var = new ContractVar($name, $var->typeString, $var->declarationLine, $var->optional);
             }
 
@@ -237,12 +240,20 @@ final class ContractParser
 
     /**
      * One segment's worth of {@see self::DIRECTIVE_PATTERN} matches, appending every `@props`
-     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable.
+     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable. The
+     * names an `@aware` lists go to `$awareNames`, which an unreadable one nulls.
      *
      * @param list<array{0: int, 1: string, 2: ContractVar}> $declarations
+     * @param array<string, true>|null                       $awareNames
      */
-    private function scanPropsDirectives(string $segment, int $segmentOffset, string $source, array &$declarations, bool &$propsUnknown): void
-    {
+    private function scanPropsDirectives(
+        string $segment,
+        int $segmentOffset,
+        string $source,
+        array &$declarations,
+        bool &$propsUnknown,
+        ?array &$awareNames,
+    ): void {
         if (\preg_match_all(self::DIRECTIVE_PATTERN, $segment, $directives, \PREG_OFFSET_CAPTURE) === false) {
             $propsUnknown = true;
 
@@ -257,34 +268,39 @@ final class ContractParser
         $argLists = $directives['args'];
 
         foreach ($names as $i => [$directiveName]) {
+            $directive = \strtolower($directiveName);
+
             // A leading `@` in the captured name is Blade's own `@@props` escape: the match is
             // STILL consumed (so the scan does not re-enter its argument looking for a nested
             // `@props`), it is simply never a live declaration.
-            if (\str_starts_with($directiveName, '@') || \strtolower($directiveName) !== 'props') {
+            if (\str_starts_with($directiveName, '@') || ($directive !== 'props' && $directive !== 'aware')) {
                 continue;
             }
 
-            $offset = $segmentOffset + $fullMatches[$i][1];
             [$argsText, $localArgsOffset] = $argLists[$i];
+            $props = null;
 
-            if ($localArgsOffset === -1) {
-                // No `(...)` follows this `@props` at all: unparseable, same as a props array
-                // that isn't fully literal.
-                $propsUnknown = true;
+            if ($localArgsOffset !== -1) {
+                $argsOffset = $segmentOffset + $localArgsOffset;
+                $props = $this->parseProps(\substr($source, $argsOffset + 1, \strlen($argsText) - 2));
+            }
+
+            if ($directive === 'aware') {
+                $awareNames = $props === null || $awareNames === null
+                    ? null
+                    : $awareNames + \array_fill_keys(\array_keys($props), true);
 
                 continue;
             }
 
-            $argsOffset = $segmentOffset + $localArgsOffset;
-            $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
-            $props = $this->parseProps($rawArgs);
-
+            // No `(...)` after this `@props` at all is unparseable, same as a non-literal array.
             if ($props === null) {
                 $propsUnknown = true;
 
                 continue;
             }
 
+            $offset = $segmentOffset + $fullMatches[$i][1];
             $line = 1 + SourceLines::breaksIn($source, 0, $offset);
 
             foreach ($props as $propName => [$optional, $defaultType]) {
@@ -338,7 +354,9 @@ final class ContractParser
                     return null;
                 }
 
-                $props[$item->key->value] = [true, $this->defaultType($item->value)];
+                // A name that is no assignable variable (`max-width`, `this`) gets no body type.
+                $assignable = \preg_match('/^' . self::IDENTIFIER . '$/D', $item->key->value) === 1 && $item->key->value !== 'this';
+                $props[$item->key->value] = [true, $assignable ? $this->defaultType($item->value) : null];
 
                 continue;
             }
