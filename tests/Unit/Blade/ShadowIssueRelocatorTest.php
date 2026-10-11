@@ -368,7 +368,7 @@ final class ShadowIssueRelocatorTest extends TestCase
     {
         $shadow = '/tmp/Cache/Blade/Shadow.php';
         $issue = new InvalidNullableReturnType(
-            "The declared return type 'string' for " . \strtolower($shadow) . ':5:25279:-:closure is not nullable, but the function returns \'null|string\'',
+            "The declared return type 'string' for " . \strtolower($shadow) . ":5:25279:-:closure is not nullable, but the function returns 'null|string'",
             new Raw("\n\n\n\n", $shadow, 'Shadow.php', 4, 4),
         );
 
