@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791719536130,
+  "lastUpdate": 1791729323136,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13540,6 +13540,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fa5d67bd1b2d49fd07f50becafb93922859328c9",
+          "message": "Add per-run plugin setting overrides via `--plugin-option` (#1709)\n\n* feat(config): add per-run plugin option overrides\n\nEvery plugin setting can now be overridden per run: repeatable\n`psalm-laravel analyze --plugin-option KEY=VALUE` and the\nPSALM_LARAVEL_OPTIONS env var, resolved in PluginConfig as\nCLI > env > XML > default from one flat typed schema.\n\n- the CLI layer reaches the child psalm as JSON in a private env var,\n  so values may contain whitespace; analyze no longer appends to\n  PSALM_LARAVEL_OPTIONS\n- analyze pre-validates both layers and strips the flags from raw argv\n- analyze adds --no-reference-cache when a `blade` override is in\n  effect (the persisted file-reference cache keeps shadow references)\n\nRefs #1702, #1703\n\n* docs(config): document per-run overrides and the cache gate\n\n- config.md: key/value grammar, precedence, env limits, result-cache\n  note (only `blade` needs --no-reference-cache); drops the blanket\n  --no-cache advice\n- decisions.md: classify every key report-only except `blade`, with\n  the probe evidence and rejected alternatives\n\nRefs #1702, #1703\n\n* fix(cli): never let an inherited CLI-layer variable reach psalm\n\nAn inherited PSALM_LARAVEL_CLI_OPTIONS became the top layer in the\nchild, skipped validation and the --no-reference-cache gate. analyze\nnow always builds the child env, drops the private variable and sets\nit only from its own flags.\n\nRefs #1702, #1703\n\n* fix(cli): always prepend --no-reference-cache for blade overrides\n\nPsalm's getopt stops at the first positional, so the wrapper cannot\ntell whether a later --no-cache is parsed. Drop the suppression check\nand prepend the flag; psalm tolerates the duplicate.\n\n- docs: relative-path qualifier (resolveFromConfigFile), spaced\n  --plugin-option needs the explicit `analyze` subcommand\n\nRefs #1702, #1703\n\n* refactor(config): simplify per-run overrides (#1833)\n\n* refactor(config): simplify per-run overrides to one env channel with bool/enum keys\n\nDrop the path-valued keys (configDirectory, blade.cacheDir), the private\nJSON transport and layer merging, the Setting/SettingType schema, and the\n--blade/--no-blade/--experimental/--no-migrations shorthands. analyze\nappends --plugin-option=KEY=VALUE tokens to PSALM_LARAVEL_OPTIONS, so\nCLI-over-env precedence is last-wins.\n\nRefs #1702, #1709\n\n* docs(config): shorten the result-cache note to one sentence and point to decisions.md\n\n* feat(cli): restore --blade/--no-blade as shorthands for blade=true|false\n\n* refactor(cli): make the override env var an internal analyze-to-psalm channel\n\nRename PSALM_LARAVEL_OPTIONS to PSALM_LARAVEL_INTERNAL_OPTIONS. analyze\noverwrites it with its own tokens instead of appending to an inherited\nvalue, so precedence is CLI > XML > default and the cache gate keys off\nthe CLI alone. The public env contract is dropped from the docs.\n\n* docs(ci): restore --blade in psalm-delta script examples",
+          "timestamp": "2026-10-11T16:31:04+02:00",
+          "tree_id": "e23d7643b1977508c202f8ee72eee278a67ea832",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fa5d67bd1b2d49fd07f50becafb93922859328c9"
+        },
+        "date": 1791729321680,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.41,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
