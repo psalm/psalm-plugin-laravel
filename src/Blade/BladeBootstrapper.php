@@ -69,6 +69,17 @@ final class BladeBootstrapper
     /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
     private array $pendingContracts = [];
 
+    /** @var array<string, true> classes the contract types emitted into preludes name, see {@see bodyTypes()} */
+    private array $bodyClassNames = [];
+
+    /** @var array<string, true> lowercased classes a compiled `<x-…>` tag renders, see {@see ComponentTagCollector} */
+    private array $tagRenderedClasses = [];
+
+    /** @var array<string, true> literal named-slot names any compiled template passes */
+    private array $namedSlots = [];
+
+    /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
+    private array $viewsRenderedByName = [];
 
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
@@ -126,13 +137,18 @@ final class BladeBootstrapper
             return false;
         }
 
-        [$environmentHash, $trustedEnvironment] = CompilerEnvironment::describe($compiler);
+        [$environmentHash, $trustedEnvironment, $untrustedInputs] = CompilerEnvironment::describe($compiler);
 
         if (!$trustedEnvironment) {
+            // Capped: one broken package can register dozens of directives.
+            $named = \array_slice($untrustedInputs, 0, 3);
+            $more = \count($untrustedInputs) - \count($named);
+
             $this->output->warning(
                 'Laravel plugin: the Blade compiler environment (a custom directive, condition, precompiler, '
                 . 'extension, or component map) could not be fully resolved, so cached Blade shadows are not '
-                . 'trusted for this run; every template is recompiled.',
+                . 'trusted for this run; every template is recompiled.'
+                . ($named === [] ? '' : ' Cause: ' . \implode('; ', $named) . ($more > 0 ? "; and {$more} more" : '') . '.'),
             );
         }
 
@@ -166,11 +182,15 @@ final class BladeBootstrapper
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
         // (which skips ShadowCompiler) still gets them.
-        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
+        $this->registrar->queueClassLikesForScanning([
+            ...PreludeBuilder::ambientClassNames(),
+            ...\array_keys($this->bodyClassNames),
+        ]);
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
-        // result, so a warm-manifest run (which skips ShadowCompiler) is covered too.
+        // result, so a warm-manifest run (which skips ShadowCompiler) is covered too. The same
+        // tokens feed the class-component scan (#1804).
         $collector = new ClassLiteralCollector();
         $literalCandidates = [];
 
@@ -181,8 +201,24 @@ final class BladeBootstrapper
                 continue;
             }
 
-            foreach ($collector->collectFromSource($shadowSource) as $candidate) {
+            $tokens = \token_get_all($shadowSource);
+
+            foreach ($collector->collectFromTokens($tokens) as $candidate) {
                 $literalCandidates[$candidate] = true;
+            }
+
+            [$tagClasses, $slotNames, $viewNames] = ComponentTagCollector::collect($tokens);
+
+            foreach ($tagClasses as $tagClass) {
+                $this->tagRenderedClasses[$tagClass] = true;
+            }
+
+            foreach ($slotNames as $slotName) {
+                $this->namedSlots[$slotName] = true;
+            }
+
+            foreach ($viewNames as $viewName) {
+                $this->viewsRenderedByName[$viewName] = true;
             }
         }
 
@@ -226,6 +262,7 @@ final class BladeBootstrapper
             ContractRegistry::register($viewName, $rootIndex, $contract, $dataIncludes);
         }
 
+        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
     }
 
     /**
@@ -272,20 +309,20 @@ final class BladeBootstrapper
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
-                $this->registerContract(
-                    $template,
-                    $roots,
-                    $manifest->contractFor($shadowPath),
-                    $manifest->dataIncludesFor($shadowPath),
-                );
+                $contract = $manifest->contractFor($shadowPath);
 
+                // Its prelude was written from these same declarations; only the scan queue is needed.
+                if ($contract instanceof ViewDataContract) {
+                    $this->bodyTypes($template, $contract);
+                }
+
+                $this->registerContract($template, $roots, $contract, $manifest->dataIncludesFor($shadowPath));
 
                 continue;
             }
 
-            // NOT fed into compile(): contract types in the prelude would change the shadow's
-            // fingerprint. Built AFTER compile so the read set comes off compiled output.
-            $shadow = $compiler->compile($template, $source);
+            $declarations = $parser->parseDeclarations($source);
+            $shadow = $compiler->compile($template, $source, $this->bodyTypes($template, $declarations));
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
@@ -294,9 +331,10 @@ final class BladeBootstrapper
                 continue;
             }
 
+            // Built AFTER compile so the read set comes off compiled output.
             $contract = $this->collectDataIncludes
                 ? $parser->parseDataContract($source, $shadow->contents)
-                : $parser->parseDeclarations($source);
+                : $declarations;
 
             // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
             // from "collected nothing".
@@ -314,6 +352,64 @@ final class BladeBootstrapper
         }
 
         return $shadows;
+    }
+
+    /**
+     * The contract `@var` declarations the prelude types the template body with. One whose type does
+     * not parse, or names a class without a namespace, stays `mixed`: a Blade comment cannot carry a
+     * `use` import, so the namespace-less shadow would resolve `User` to a global class the author
+     * never meant. A qualified name with or without its leading `\` resolves identically there.
+     *
+     * @return array<string, ContractVar>
+     */
+    private function bodyTypes(string $template, ViewDataContract $contract): array
+    {
+        $types = [];
+
+        foreach ($contract->vars as $name => $var) {
+            // `@props` entries are `mixed`, and the prelude already types Blade's own names.
+            if ($var->typeString === 'mixed' || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
+                continue;
+            }
+
+            $classNames = PreludeBuilder::classNamesIn($var->typeString);
+            $reason = $classNames === null ? 'its type does not parse' : null;
+
+            foreach ($classNames ?? [] as $className) {
+                if (!$this->resolvesInShadow($className)) {
+                    $reason = "'{$className}' is not a fully qualified class name";
+
+                    break;
+                }
+            }
+
+            if ($reason !== null) {
+                $this->output->debug(
+                    "Laravel plugin: Blade template '{$template}': \${$name} stays mixed in the template body, {$reason}\n",
+                );
+
+                continue;
+            }
+
+            foreach ($classNames ?? [] as $className) {
+                $this->bodyClassNames[$className] = true;
+            }
+
+            $types[$name] = $var;
+        }
+
+        return $types;
+    }
+
+    /** A name without a namespace is right only for PHP's own classes (`Closure`, `stdClass`). */
+    private function resolvesInShadow(string $className): bool
+    {
+        if (\str_contains($className, '\\')) {
+            return true;
+        }
+
+        return (\class_exists($className, false) || \interface_exists($className, false))
+            && (new \ReflectionClass($className))->isInternal();
     }
 
 

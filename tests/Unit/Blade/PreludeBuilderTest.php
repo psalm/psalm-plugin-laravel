@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node\Stmt\Nop;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -214,12 +217,85 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var \App\Models\User $user */', $prelude);
     }
 
+    /** A contract type Psalm rejects leaves the name declared, with the contract line overriding it. */
+    #[Test]
+    public function a_contract_var_is_declared_mixed_before_its_contract_type(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php echo $user; ?>', ['user' => '\App\Models\User'], '');
+
+        $this->assertStringContainsString("/** @var mixed \$user */\n/** @var \\App\\Models\\User \$user */;\n", $prelude);
+    }
+
+    /**
+     * @return iterable<string, array{string, list<string>|null}>
+     */
+    public static function contractTypes(): iterable
+    {
+        yield 'fully qualified' => ['\App\User', ['\App\User']];
+        yield 'nullable' => ['?\App\User', ['\App\User']];
+        yield 'qualified without the leading backslash' => ['App\Models\User|null', ['App\Models\User']];
+        yield 'short name' => ['User', ['User']];
+        yield 'generic arguments' => ['array<int, \App\User>|\Illuminate\Support\Collection<int, User>', ['\Illuminate\Support\Collection', '\App\User', 'User']];
+        yield 'shape keys are not classes' => ['array{name: string, user?: \App\User}', ['\App\User']];
+        yield 'keywords and literals' => ["non-empty-list<int>|'Draft'|\"Posted\"|positive-int|-1|null", []];
+        yield 'int range bounds' => ['int<0, max>|int<min, -1>', []];
+        yield 'class constant' => ['\App\Status::DRAFT_*', ['\App\Status']];
+        yield 'callable parameter names' => ['callable(string $user): \App\User', ['\App\User']];
+        yield 'closure' => ['Closure(int): string', ['Closure']];
+        yield 'unparseable' => ['array<int $m', null];
+    }
+
+    /**
+     * @param list<string>|null $expected
+     */
+    #[Test]
+    #[DataProvider('contractTypes')]
+    public function class_names_in_a_contract_type_are_read_as_written(string $type, ?array $expected): void
+    {
+        $this->assertSame($expected, PreludeBuilder::classNamesIn($type));
+    }
+
     #[Test]
     public function undeclared_variable_gets_var_mixed(): void
     {
         $prelude = (new PreludeBuilder())->build('<?php echo $foo; ?>', [], '');
 
         $this->assertStringContainsString('@var mixed $foo */', $prelude);
+    }
+
+    #[Test]
+    public function a_local_first_seen_as_a_root_level_assignment_is_not_declared(): void
+    {
+        $prelude = (new PreludeBuilder())->build('<?php $flag = $item !== null; if ($flag) { echo $item; } ?>', [], '');
+
+        $this->assertStringNotContainsString('$flag */', $prelude);
+        $this->assertStringContainsString('@var mixed $item */', $prelude);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function stillDeclaredAssignments(): iterable
+    {
+        yield 'the assignment reads its own target' => ['<?php $title = strtoupper($title); ?>'];
+        yield 'a read comes first' => ['<?php echo $title; $title = 1; ?>'];
+        yield 'the first mention is inside a closure' => ['<?php $f = function () { $title = 1; }; $title = 2; ?>'];
+        yield 'the first mention is a closure use' => ['<?php $f = function () use ($title) {}; $title = 2; ?>'];
+        yield 'the first write is not a plain assignment' => ['<?php $title .= "x"; ?>'];
+        yield 'the first write is a foreach target' => ['<?php foreach ($rows as $title) {} ?>'];
+        yield 'the assignment sits in a branch' => ['<?php if ($c): ?><?php $title = 1; ?><?php endif; ?><?php echo $title; ?>'];
+        yield 'the assignment sits in a loop' => ['<?php foreach ($rows as $row) { $title = $row; } echo $title; ?>'];
+        yield 'the assignment sits in try' => ['<?php try { $title = f(); } catch (\Throwable) {} echo $title; ?>'];
+        yield 'the assignment is nested in an expression' => ['<?php $c && ($title = 1); echo $title; ?>'];
+    }
+
+    #[Test]
+    #[DataProvider('stillDeclaredAssignments')]
+    public function a_name_whose_first_mention_is_not_a_root_level_assignment_stays_declared(string $compiled): void
+    {
+        $prelude = (new PreludeBuilder())->build($compiled, [], '');
+
+        $this->assertStringContainsString('@var mixed $title */', $prelude);
     }
 
     /**
@@ -313,5 +389,38 @@ final class PreludeBuilderTest extends TestCase
 
         $this->assertSame(1, \substr_count($prelude, '<?php'));
         $this->assertSame(1, \substr_count($prelude, '?>'));
+    }
+
+    /**
+     * #1804: the prelude's closing tag parses to one `Stmt\Nop` on the prelude's last line (mapped
+     * to template line 0) carrying every `@var` docblock after the contract statements, whatever the
+     * compiled output starts with. ComponentViewSeedHandler seeds on it, after all of them apply.
+     */
+    #[Test]
+    public function its_closing_tag_is_one_nop_carrying_the_trailing_docblocks(): void
+    {
+        $contractVars = ['label' => 'string', 'size' => 'int'];
+        $prelude = (new PreludeBuilder())->build('<?php echo $title, $body; ?>', $contractVars, '');
+        $docblocks = \substr_count($prelude, '/** @var ');
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+
+        $this->assertSame($docblocks + 2, \substr_count($prelude, "\n"));
+
+        foreach (['<div></div>', '<?php echo $title; ?>'] as $compiled) {
+            $stmts = $parser->parse($prelude . $compiled);
+            $this->assertIsArray($stmts);
+
+            // One empty statement per contract variable (its `mixed` line and its typed line).
+            foreach (\array_keys(\array_values($contractVars)) as $index) {
+                $this->assertInstanceOf(Nop::class, $stmts[$index]);
+                $this->assertCount(2, $stmts[$index]->getComments());
+            }
+
+            $sentinel = $stmts[\count($contractVars)] ?? null;
+            $this->assertInstanceOf(Nop::class, $sentinel);
+            $this->assertCount($docblocks - 2 * \count($contractVars), $sentinel->getComments());
+            $this->assertSame($docblocks + 2, $sentinel->getStartLine());
+            $this->assertNotInstanceOf(Nop::class, $stmts[\count($contractVars) + 1] ?? null);
+        }
     }
 }

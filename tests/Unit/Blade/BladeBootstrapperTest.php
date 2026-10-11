@@ -9,6 +9,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\FileViewFinder;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
@@ -512,6 +513,99 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertSame(PreludeBuilder::ambientClassNames(), $second->queuedClassLikes);
         $this->assertSame([], $second->queuedResolvableClassLikes);
+    }
+
+    /**
+     * A contract type reaches the prelude, and its class is queued on BOTH a fresh compile and a
+     * warm-manifest run: the prelude names it only in a stacked docblock Psalm's scanner never reads.
+     */
+    #[Test]
+    public function a_contract_var_types_the_prelude_and_queues_its_class_on_fresh_and_warm_runs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{-- @var \\App\\Models\\User|null \$user --}}\n{{-- @var int \$count --}}\n<p>{{ \$user }}</p>\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+
+        $shadow = (string) \file_get_contents($first->analyzedShadows[0]);
+        $this->assertStringContainsString("/** @var \\App\\Models\\User|null \$user */;\n", $shadow);
+        $this->assertStringContainsString("/** @var int \$count */;\n", $shadow);
+        $this->assertSame(2, \substr_count($shadow, '$user */'), 'the contract line and the mixed fallback ahead of it, no other');
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        foreach ([$first, $second] as $registrar) {
+            $this->assertSame([...PreludeBuilder::ambientClassNames(), '\App\Models\User'], $registrar->queuedClassLikes);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function untypedContracts(): iterable
+    {
+        yield 'short class name' => ['User', "'User' is not a fully qualified class name"];
+        yield 'short class name inside a generic' => ['list<User>', "'User' is not a fully qualified class name"];
+        yield 'unparseable type' => ['array<int', 'does not parse'];
+    }
+
+    #[Test]
+    #[DataProvider('untypedContracts')]
+    public function a_contract_type_the_body_cannot_use_stays_mixed_and_says_so_under_debug(string $type, string $reason): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "{{-- @var {$type} \$user --}}\n<p>{{ \$user }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
+        $this->assertStringContainsString('/** @var mixed $user */', $shadow);
+        $this->assertSame(1, \substr_count($shadow, '$user */'));
+        $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString($template, $debug);
+        $this->assertStringContainsString('$user', $debug);
+        $this->assertStringContainsString($reason, $debug);
+    }
+
+    /** PHP's own classes are global, so naming one without a namespace means what it says. */
+    #[Test]
+    public function a_short_internal_class_name_in_a_contract_types_the_body(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{-- @var Closure(int): string \$format --}}\n<p>{{ \$format(1) }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
+        $this->assertStringContainsString('/** @var Closure(int): string $format */;', $shadow);
+        $this->assertSame([], $this->progress->debugMessages);
+    }
+
+    /** The prelude already types Blade's own names; a contract for one must not add a second line. */
+    #[Test]
+    public function a_contract_for_an_ambient_name_is_not_declared_twice(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{-- @var \\Illuminate\\Support\\MessageBag \$errors --}}\n<p>{{ \$errors->first() }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $shadow = (string) \file_get_contents($registrar->analyzedShadows[0]);
+        $this->assertSame(1, \substr_count($shadow, '$errors */'));
+        $this->assertStringNotContainsString('MessageBag', $shadow);
+    }
+
+    /**
+     * A `@props` entry carries no type, so it is no contract line: a prop the template overwrites
+     * at file level is a local like any other, and stays undeclared.
+     */
+    #[Test]
+    public function an_untyped_props_entry_is_not_declared_by_the_contract(): void
+    {
+        $this->writeTemplate('profile.blade.php', "@props(['size'])\n@php \$size = 'sm'; @endphp\n<p>{{ \$size }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertStringNotContainsString('$size */', (string) \file_get_contents($registrar->analyzedShadows[0]));
     }
 
     /**
@@ -1072,6 +1166,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
         $this->assertStringContainsString('compiler environment', $this->progress->warningText());
+        $this->assertStringContainsString("Cause: directive 'shout' (internal function", $this->progress->warningText());
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1088,5 +1183,32 @@ final class BladeBootstrapperTest extends TestCase
             (string) \file_get_contents($second->analyzedShadows[0]),
             'an untrustworthy environment must force a recompile even though nothing else changed',
         );
+    }
+
+    /**
+     * #1693: the warning must name the input that disabled the cache, but a package registering
+     * many such callbacks must not flood it.
+     */
+    #[Test]
+    public function the_untrusted_environment_warning_names_at_most_three_inputs(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $compiler->directive($name, 'strtoupper');
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $text = $this->progress->warningText();
+        $this->assertStringContainsString("directive 'a'", $text);
+        $this->assertStringContainsString("directive 'c'", $text);
+        $this->assertStringNotContainsString("directive 'd'", $text);
+        $this->assertStringContainsString('and 2 more', $text);
     }
 }

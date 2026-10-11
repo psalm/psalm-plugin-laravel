@@ -120,6 +120,12 @@ final class Plugin implements PluginEntryPointInterface
 
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Last: make()ing every binding runs provider and binding closures, so it must follow every other
+            // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
+            if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+                Handlers\Application\ContainerResolver::queueBoundClassesForScanning($registration->codebase);
+            }
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
@@ -237,7 +243,9 @@ final class Plugin implements PluginEntryPointInterface
         Blade\Annotate\AnnotationWriter::reset();
         Blade\BladeIssueRemapHandler::reset();
         Blade\ContractRegistry::reset();
+        Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
+        Blade\ShadowIssueRelocator::reset();
         Blade\ShadowRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
     }
@@ -344,6 +352,12 @@ final class Plugin implements PluginEntryPointInterface
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Taint\NamedArgumentTaintHandler::class);
+
+        // Core Psalm has no json_encode() branch in HtmlFunctionTainter, so literal JSON_HEX_* flags (and the
+        // Blade @json directive) stay tainted. Global like the handler above, hence registered next to it.
+        // @todo-by https://github.com/vimeo/psalm/issues/12322 remove this handler when Psalm models json_encode() HEX flags
+        require_once __DIR__ . '/Handlers/Taint/JsonEncodeTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Taint\JsonEncodeTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
@@ -787,6 +801,10 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
             require_once __DIR__ . '/Blade/RuntimeHelperVisibility.php';
             $registration->registerHooksFromClass(Blade\RuntimeHelperVisibility::class);
+            // Types a class component's own view from its class (#1804). Needs the boot's shadow and
+            // tag facts, hence the same gate.
+            require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
+            $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports

@@ -225,10 +225,13 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      * These methods are protected in Laravel's source but explicitly forwarded as public
      * via Model::__call(). Redeclared here to match the runtime public API.
      *
+     * Returns false when an `updating` listener cancels the update; the *Quietly variants
+     * run without events and always return int.
+     *
      * @param  string  $column
      * @param  float|int  $amount
      * @param  array<string, mixed>  $extra
-     * @return int
+     * @return int|false
      */
     public function increment($column, $amount = 1, array $extra = []) {}
 
@@ -238,7 +241,7 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      * @param  string  $column
      * @param  float|int  $amount
      * @param  array<string, mixed>  $extra
-     * @return int
+     * @return int|false
      */
     public function decrement($column, $amount = 1, array $extra = []) {}
 
@@ -262,21 +265,6 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      */
     public function decrementQuietly($column, $amount = 1, array $extra = []) {}
 
-    /**
-     * Increment each given column's value by the given amounts.
-     *
-     * @param  array<string, float|int>  $columns
-     * @param  array<string, mixed>  $extra
-     * @return int
-     */
-    public function incrementEach(array $columns, array $extra = []) {}
-
-    /**
-     * Decrement each given column's value by the given amounts.
-     *
-     * @param  array<string, float|int>  $columns
-     * @param  array<string, mixed>  $extra
-     * @return int
-     */
-    public function decrementEach(array $columns, array $extra = []) {}
+    // incrementEach()/decrementEach() (Laravel 13.3+) and the *EachQuietly variants (13.20+)
+    // are declared in stubs/13.3.0/ and stubs/13.20.0/: older Model::__call() does not forward them.
 }

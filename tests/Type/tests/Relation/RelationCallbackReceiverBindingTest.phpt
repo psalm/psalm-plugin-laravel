@@ -44,7 +44,7 @@ final class LeadingModelBuilder extends Builder {}
 final class LabellingBuilder extends Builder
 {
     /**
-     * @param string $relation
+     * @param \Illuminate\Database\Eloquent\Relations\Relation<\Illuminate\Database\Eloquent\Model, \Illuminate\Database\Eloquent\Model, mixed>|string $relation
      * @param string $operator
      * @param int|\Illuminate\Contracts\Database\Query\Expression $count
      * @return $this

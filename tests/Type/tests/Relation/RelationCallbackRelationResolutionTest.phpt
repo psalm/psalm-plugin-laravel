@@ -16,6 +16,7 @@ use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
  * How the callback's relation is resolved: its CLASS (is it a MorphTo?) is read separately from its
@@ -114,7 +115,7 @@ function test_trait_on_parent_model_declines(): void
         $q->where('id', 1);
     });
     Contract::query()->withWhereHas('revisions', function ($q): void {
-        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model> */
+        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model>|Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed> */
         $q->where('id', 1);
     });
 }
@@ -192,7 +193,7 @@ function test_declared_generic_relation(): void
 function test_eager_load_without_a_parsed_relation_type_declines(): void
 {
     LocalOwner::query()->withWhereHas('localVehicles', function ($q): void {
-        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model> */
+        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model>|Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed> */
         $q->whereElectric();
     });
 }
