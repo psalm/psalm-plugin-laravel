@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791729941561,
+  "lastUpdate": 1791731072209,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13605,6 +13605,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.72,
             "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3e27081f5a473a08bb4ff19c1b92cb68cf815be8",
+          "message": "Declare Blade view variables with native `@var` only, require them unless marked `= null`, and write them from `blade:annotate` (#1821)\n\n* fix(blade): leave template-assigned locals out of the prelude's mixed net\n\nA name whose first mention in file scope is a plain `$x = ...` that does\nnot read `$x` is a local the template creates, not view data. Declaring it\n`@var mixed` ahead of the assignment made Psalm drop the correlation between\na flag and the value it guards (`$has = $x !== null; @if ($has) $x->y`),\nreporting PossiblyNullPropertyFetch on the guarded read.\n\n* feat(blade): type $loop->parent as the enclosing loop's shape\n\n`addLoop()` casts the parent frame with the same `(object)` as the loop\nitself, so `$loop->parent` now carries the full loop shape one level deep\n(deeper ancestors stay `object|null`) in both the shadow prelude and the\n`getLastLoop()` stub. It stays nullable: an outermost loop has no parent.\n\nRefs #1696\n\n* feat(blade): type the template body from {{-- @var --}} contracts\n\nA contract comment used to feed only the view() call-site checks; the\nbody fell back to mixed. The prelude now declares each contract @var type,\nso `{{ $user->missing() }}` under `{{-- @var \\App\\Models\\User $user --}}`\nreports like it would in PHP.\n\nA bare short class name stays mixed and logs one --debug line: a Blade\ncomment cannot carry a use import, so the namespace-less shadow would\nresolve it to a global class. Every class an emitted type names is queued\nfor scanning on fresh and warm-manifest runs alike, since Psalm's scanner\nnever reads a stacked prelude docblock.\n\n* fix(blade): only skip the mixed declaration for root-level assignments\n\nAn assignment inside @if, a loop, @once, a <x-...> slot or try may not run,\nleaving the view value it would have replaced (a @props default, a\nvariable an including template passes down) as the one read after it.\nLeaving such a name undeclared reported a false\nPossiblyUndefinedGlobalVariable; only a top-level `$x = ...` statement\nnow marks a template local.\n\n* fix(blade): validate contract body types and report them on the comment line\n\n- A contract type that does not parse stays mixed (with a --debug line)\n  instead of an unmapped InvalidDocblock carrying the cache path plus a\n  false UndefinedGlobalVariable.\n- Each contract @var is its own prelude statement, mapped to the template\n  comment that declared it, so an unknown class reports UndefinedDocblockClass\n  there rather than on line 1 \"(unmapped)\".\n- Class names are read off Psalm's type parse tree: int<0, max> bounds are\n  no class, and PHP's own classes (Closure, stdClass) need no namespace.\n- A contract for a name the prelude already types ($errors, $attributes,\n  ...) no longer adds a second @var line.\n\n* fix(blade): keep a rejected contract type from cascading or leaking the cache path\n\n- Declare each contract variable mixed just ahead of its contract line: a\n  type that parses but Psalm rejects (array<int, string, bool>) used to\n  leave the name undeclared, adding a false UndefinedGlobalVariable on\n  every read. A valid contract type still overrides it.\n- Rewrite the absolute `path:line` an InvalidDocblock message ends with\n  onto the template, so the message no longer names the shadow cache file.\n- Document that a template's @psalm-suppress cannot reach a contract line.\n\n* feat(blade): write native @var docblock lines from blade:annotate\n\n* feat(blade): treat raw @var docblocks as view-data contract declarations\n\n* fix(blade): read a raw @var line the way PHPDoc does, description included\n\n* fix(blade): keep raw @var contracts out of the prelude and bind comments by PHPDoc rule\n\n* fix(blade): keep Blade-owned names and plain comments out of raw contracts\n\n* fix(blade): decline contract checks for shared, composed and render() data\n\n* test(application): expect the native docblock form from blade:annotate\n\n* fix(blade): ignore guard text in comments and inert Blade text when deciding optionality\n\n* fix(blade): count a raw @var only as a tag and trim union alternatives for optionality\n\n* feat(blade): require every declared view variable unless it ends in = null\n\n* fix(blade): report a raw = null on a non-nullable type, tighten the marker, refresh stale docs\n\n* refactor(blade): declare view variables with PHPDoc only, drop the {{-- @var --}} form\n\n* fix(blade): decline composed and import-dependent contract checks, scope declarations to statement-level docblocks",
+          "timestamp": "2026-10-11T17:00:43+02:00",
+          "tree_id": "4f6afcceeb2c733b402eedd9e339a466dcae3191",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3e27081f5a473a08bb4ff19c1b92cb68cf815be8"
+        },
+        "date": 1791731070850,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.9,
+            "range": "± 0.35",
             "unit": "s"
           },
           {
