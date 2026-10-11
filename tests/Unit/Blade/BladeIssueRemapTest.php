@@ -855,6 +855,107 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1724: `@session`/`@context` save an outer `$value` behind a compiled `isset($value)`, which
+     * Psalm judged against the author's own `$value`: a foreach value (line 2), `null` (line 5,
+     * the `@context` twin) and a literal (line 8). The author's own `@if (isset($value))` on line
+     * 7 keeps reporting.
+     */
+    #[Test]
+    public function the_compiled_session_value_save_is_not_judged_against_an_author_value(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-value-save.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('if (isset($value)) { $__contextPrevious[] = $value; }', $this->shadowSourceFor($template));
+        $this->assertSame([7], $this->linesFor($issues, 'RedundantCondition', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $json);
+    }
+
+    /**
+     * #1724: the drop needs the save statement to be absent from the template, so an author who
+     * writes it verbatim (line 2) keeps the finding, and so does every compiled save in that
+     * template (line 3).
+     */
+    #[Test]
+    public function an_author_written_value_save_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2, 3],
+            $this->linesFor($issues, 'RedundantCondition', 'session-value-save-authored.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1810: a `Collection|array` `@foreach`/`@forelse` subject makes Psalm resolve the iterator
+     * through a synthetic `$__currentLoopData->getIterator()` call that it suppresses in plain PHP
+     * (ForeachAnalyzer.php), positioned on the variable: `PossiblyInvalidMethodCall` for the list
+     * branch (line 8), `PossiblyUndefinedMethod` for the `ArrayIterator` branch (line 3). Line 11 is
+     * a real call on the same variable, positioned on the method name, and keeps reporting.
+     */
+    #[Test]
+    public function foreach_over_a_union_subject_does_not_report_the_synthetic_iterator_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'foreach-union-subject.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([11], $this->linesFor($issues, 'PossiblyInvalidMethodCall', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyUndefinedMethod', $template), $json);
+    }
+
+    /**
+     * #1696: `$loop->parent` stays nullable in the ambient loop shape, so a nested loop's
+     * `$loop->parent->iteration` (line 4) and `$loop->parent->parent->iteration` (line 6, one
+     * finding per level) reported PossiblyNullPropertyFetch. An author's own nullable `->parent`
+     * on another variable (line 11) keeps reporting: the match is anchored to `$loop`.
+     */
+    #[Test]
+    public function loop_parent_is_not_reported_as_possibly_null(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            ['Cannot get property on possibly null variable $node->parent of type null|object{iteration:int}'],
+            $this->messagesFor($issues, 'PossiblyNullPropertyFetch', 'loop-parent.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1697: a `??`, `??=` or `isset()` guard (lines 3-7) on a variable the template declares,
+     * through a `{{-- @var --}}` contract or a raw `@var` docblock, reported the docblock-branch
+     * contradiction even though the guard is how a template marks the variable optional. Still
+     * reported: a non-guard null check on a declared name (line 8), a guard on a name only a
+     * `@param` declares (line 9), a guard after the author modifies the variable (line 11), which
+     * renders the inferred-type wording, a guard split across lines (line 12), and a guard on a
+     * name the template assigns itself under its own docblock, raw (line 16) or `@php` (line 18).
+     * Accepted: the guard is looked for on the whole line, so line 14's `!is_null()` is silenced
+     * with its guard.
+     */
+    #[Test]
+    public function a_guard_on_a_template_declared_variable_is_not_reported(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'declared-guard.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+        $expected = [
+            'RedundantCondition' => [11],
+            'RedundantConditionGivenDocblockType' => [8, 9, 12, 16, 18],
+            'DocblockTypeContradiction' => [9, 12],
+            'TypeDoesNotContainNull' => [11],
+            'TypeDoesNotContainType' => [],
+        ];
+
+        foreach ($expected as $family => $lines) {
+            $this->assertSame($lines, $this->linesFor($issues, $family, $template), "{$family}: {$json}");
+        }
+    }
+
+    /**
      * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
      * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
      * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`
