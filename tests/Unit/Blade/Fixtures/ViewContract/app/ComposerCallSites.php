@@ -39,12 +39,28 @@ final class ComposerCallSites
         return view('composer-created', []);
     }
 
+    // A constructor that only stores its arguments keeps the composer readable: `count` is missing.
+    public function plainConstructor(): View
+    {
+        return view('composer-ctor-plain', []);
+    }
+
+    // PHP turns the numeric string `'123'` into the integer key `123` in every map keyed by view name.
+    public function numericViewName(): View
+    {
+        return view('123', []);
+    }
+
     // Everything below stays whole-view silent: the key set cannot be proven.
     public function declined(): void
     {
         view('composer-dynamic', ['title' => 123]);
         view('composer-escape', ['title' => 123]);
         view('composer-conflict', ['title' => 123]);
+        // `build` is the alias of the trait body `insteadof` excluded; Psalm maps it onto the other one.
+        view('composer-alias', ['title' => 123]);
+        // The container constructs the composer first, and its constructor shares `count`.
+        view('composer-ctor', ['title' => 123]);
         view('composer-unknown', ['title' => 123]);
     }
 }

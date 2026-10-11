@@ -601,7 +601,9 @@ final class BladeBootstrapperTest extends TestCase
 
     /**
      * Anything that is not Laravel's own class-composer closure leaves the source unknown, and one
-     * unknown source makes the whole view unknown: the key set must never be too small.
+     * unknown source makes the whole view unknown: the key set must never be too small. Each view
+     * here is reached by exactly one kind of listener, so each recognition guard is proven alone and
+     * a view nobody listens to stays out of the map.
      */
     #[Test]
     public function a_composer_that_is_not_a_plain_class_listener_leaves_the_view_unknown(): void
@@ -617,7 +619,6 @@ final class BladeBootstrapperTest extends TestCase
         $view->composer('bound', 'App\\Bound');
         $view->composer('aliased', 'App\\Aliased');
         $view->getDispatcher()->listen('composing: raw', 'App\\Listener@handle');
-        $view->getDispatcher()->listen('composing: *', static fn(): null => null);
 
         foreach (['closure', 'mixed', 'bound', 'aliased', 'raw', 'plain'] as $name) {
             $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
@@ -625,14 +626,43 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
 
-        // The raw `composing: *` listener reaches every view, so `plain` is unknown too.
         $sources = ContractRegistry::composerSources();
         \ksort($sources);
 
         $this->assertSame(
-            ['aliased' => null, 'bound' => null, 'closure' => null, 'mixed' => null, 'plain' => null, 'raw' => null],
+            ['aliased' => null, 'bound' => null, 'closure' => null, 'mixed' => null, 'raw' => null],
             $sources,
         );
+    }
+
+    /** A raw `composing: *` listener reaches every view, so even a view with no composer of its own is unknown. */
+    #[Test]
+    public function a_raw_wildcard_listener_leaves_every_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->getDispatcher()->listen('composing: *', static fn(): null => null);
+
+        $this->writeTemplate('plain.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame(['plain' => null], ContractRegistry::composerSources());
+    }
+
+    /**
+     * PHP turns the numeric string `'123'` into an integer array key, and the registry takes the
+     * name as a string: a numeric view name must not crash the boot, which would silently turn off
+     * every Blade check.
+     */
+    #[Test]
+    public function a_numeric_view_name_with_a_composer_boots(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->composer('123', 'App\\NumberedComposer');
+        $this->writeTemplate('123.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->assertTrue($this->bootstrapper($app, new RecordingShadowRegistrar())->boot());
+        $this->assertSame(['123' => [['App\\NumberedComposer', 'compose']]], ContractRegistry::composerSources());
     }
 
     #[Test]

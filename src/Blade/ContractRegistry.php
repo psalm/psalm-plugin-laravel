@@ -77,7 +77,7 @@ final class ContractRegistry
         self::$composerSources[$viewName] = $sources;
     }
 
-    /** @return array<string, list<array{0: string, 1: string}>|null> */
+    /** @return array<array-key, list<array{0: string, 1: string}>|null> a numeric view name is an integer key */
     public static function composerSources(): array
     {
         return self::$composerSources;

@@ -16,6 +16,7 @@ use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
+use Psalm\Storage\ClassLikeStorage;
 
 /**
  * Turns the composer sources {@see ContractRegistry::composerSources()} holds into the data keys
@@ -64,7 +65,7 @@ final class ComposerKeyResolver
                 $keys += $methods[$id];
             }
 
-            ContractRegistry::registerComposedKeys($viewName, $keys);
+            ContractRegistry::registerComposedKeys((string) $viewName, $keys);
         }
     }
 
@@ -73,35 +74,50 @@ final class ComposerKeyResolver
      */
     private static function keysOfMethod(Codebase $codebase, string $class, string $method): ?array
     {
-        $method = \strtolower($method);
-
         try {
             $storage = $codebase->classlike_storage_provider->get($class);
-            $declaring = $storage->declaring_method_ids[$method] ?? null;
-            $appearing = $storage->appearing_method_ids[$method] ?? null;
 
-            if (!$declaring instanceof MethodIdentifier || !$appearing instanceof MethodIdentifier) {
-                return null;
+            // The container builds the composer before it calls the method, so a constructor that
+            // shares data (or reaches the view scope another way) adds keys no `with()` shows.
+            if (isset($storage->declaring_method_ids['__construct'])) {
+                $constructor = self::declaredMethod($codebase, $storage, '__construct');
+
+                if (!$constructor instanceof Stmt\ClassMethod || $constructor->stmts === null || self::hasOpaqueNode($constructor->stmts)) {
+                    return null;
+                }
             }
 
-            // Psalm ignores `insteadof` (vimeo/psalm#12113), so with two traits declaring the method
-            // it may name the body that loses.
-            if ($codebase->classlike_storage_provider->get($declaring->fq_class_name)->is_trait
-                && RelationMethodParser::countTraitOwners(
-                    $codebase,
-                    $codebase->classlike_storage_provider->get($appearing->fq_class_name)->used_traits,
-                    $method,
-                ) > 1
-            ) {
-                return null;
-            }
+            $resolved = self::declaredMethod($codebase, $storage, \strtolower($method));
 
-            $resolved = ClassMethodResolver::resolve($codebase, $declaring);
-
-            return $resolved === null ? null : self::keysIn($resolved['classMethod']);
+            return $resolved instanceof Stmt\ClassMethod ? self::keysIn($resolved) : null;
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
             return null;
         }
+    }
+
+    private static function declaredMethod(Codebase $codebase, ClassLikeStorage $storage, string $method): ?Stmt\ClassMethod
+    {
+        $declaring = $storage->declaring_method_ids[$method] ?? null;
+        $appearing = $storage->appearing_method_ids[$method] ?? null;
+
+        if (!$declaring instanceof MethodIdentifier || !$appearing instanceof MethodIdentifier) {
+            return null;
+        }
+
+        // Psalm ignores `insteadof` (vimeo/psalm#12113), so with two traits declaring the method
+        // it may name the body that loses. The declaring name, not the requested one: an `as`
+        // alias is absent from the trait method maps.
+        if ($codebase->classlike_storage_provider->get($declaring->fq_class_name)->is_trait
+            && RelationMethodParser::countTraitOwners(
+                $codebase,
+                $codebase->classlike_storage_provider->get($appearing->fq_class_name)->used_traits,
+                $declaring->method_name,
+            ) > 1
+        ) {
+            return null;
+        }
+
+        return ClassMethodResolver::resolve($codebase, $declaring)['classMethod'] ?? null;
     }
 
     /**
@@ -126,11 +142,11 @@ final class ComposerKeyResolver
             $view = $parameter->var->name;
         }
 
-        $finder = new NodeFinder();
-
-        if ($finder->findFirst($stmts, self::isOpaque(...)) instanceof Node) {
+        if (self::hasOpaqueNode($stmts)) {
             return null;
         }
+
+        $finder = new NodeFinder();
 
         $keys = [];
         $receivers = [];
@@ -171,6 +187,14 @@ final class ComposerKeyResolver
         return $keys;
     }
 
+    /**
+     * @param array<array-key, Node> $stmts
+     */
+    private static function hasOpaqueNode(array $stmts): bool
+    {
+        return (new NodeFinder())->findFirst($stmts, self::isOpaque(...)) instanceof Node;
+    }
+
     private static function isOpaque(Node $node): bool
     {
         return match (true) {
@@ -180,6 +204,8 @@ final class ComposerKeyResolver
             $node instanceof Expr\MethodCall, $node instanceof Expr\NullsafeMethodCall, $node instanceof Expr\StaticCall
                 => $node->name instanceof Identifier && $node->name->toLowerString() === 'share',
             $node instanceof Expr\Variable => !\is_string($node->name),
+            // An included or evaluated file runs in this method's scope, `$view` and all.
+            $node instanceof Expr\Include_, $node instanceof Expr\Eval_ => true,
             default => false,
         };
     }
