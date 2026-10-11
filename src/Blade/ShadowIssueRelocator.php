@@ -606,6 +606,15 @@ final class ShadowIssueRelocator
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
      * same arguments inside `@php` keeps reporting.
      *
+     * Caveat (#1725), a deliberately accepted gap: the gate keys on the generated call text, never
+     * on the literal list item behind it, so it cannot tell the #1695 artifact (a keyed non-string
+     * default reaching the list-form arm) from a genuinely non-string list item. `@aware([null])`,
+     * `@aware([$n])` with a nullable `$n`, and `@aware(['color' => 'red', null])` raise the same
+     * argument issue on the same generated call and are dropped with it, although each is a real
+     * bug (a null key; PHP 8.5 deprecates it in `array_key_exists()`). Telling them apart would
+     * mean reading the list literal back out of the `@aware(...)` directive, which this gate does
+     * not do. The shape is rare. Pinned by `BladeIssueRemapTest::a_non_string_aware_list_item_stays_silent_known_limitation()`.
+     *
      * @psalm-mutation-free
      */
     private static function isGeneratedAwareArgument(CodeIssue $issue, ShadowTarget $target): bool
