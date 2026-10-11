@@ -777,12 +777,13 @@ final class PluginConfigTest extends TestCase
     public function an_override_flips_explicit_xml_in_either_direction(): void
     {
         $xml = new \SimpleXMLElement(
-            '<pluginClass><modelProperties columnFallback="none" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
+            '<pluginClass><modelProperties columnFallback="none" /><findMissingTranslations value="true" keys="short" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
         );
 
-        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findOctaneIncompatibleBinding=true findPromptInjection=false'));
+        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findMissingTranslations.keys=all findOctaneIncompatibleBinding=true findPromptInjection=false'));
 
         $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
+        $this->assertSame(TranslationKeys::All, $config->findMissingTranslationsKeys);
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
     }

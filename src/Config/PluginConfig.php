@@ -130,7 +130,7 @@ final readonly class PluginConfig
             resolveConfigReturnTypes: $overrides->bool('resolveConfigReturnTypes') ?? $resolveConfigReturnTypes,
             reportImplicitQueryBuilderCalls: $overrides->bool('reportImplicitQueryBuilderCalls') ?? $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $overrides->bool('findMissingTranslations') ?? $findMissingTranslations,
-            findMissingTranslationsKeys: $translationKeys,
+            findMissingTranslationsKeys: TranslationKeys::tryFrom($overrides->string('findMissingTranslations.keys') ?? '') ?? $translationKeys,
             findMissingViews: $overrides->bool('findMissingViews') ?? $findMissingViews,
             findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? $experimental,
             findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,
