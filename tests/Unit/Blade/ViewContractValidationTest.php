@@ -499,6 +499,25 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->templateContractIssues('anon-includer.blade.php'));
     }
 
+    /**
+     * Any by-name render hands the view data its own declarations do not show: `@component`'s
+     * named slots, `@each`'s item and key, and the including scope of a slash-spelled `@include`.
+     */
+    #[Test]
+    public function an_include_from_a_view_any_directive_renders_by_name_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('slot-panel.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('each-panel.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('slash-panel.blade.php'));
+    }
+
+    /** Only `__data` and `__path` leave the scope `@include` forwards, so an author's `$__x` arrives. */
+    #[Test]
+    public function an_include_needing_a_double_underscore_name_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('dunder.blade.php'));
+    }
+
     /** A class component's view receives `data()`, whether or not its render() shape is typed. */
     #[Test]
     public function an_include_from_a_class_components_view_is_not_reported(): void

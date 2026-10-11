@@ -249,7 +249,9 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
                 $passed = $supplied[$name] ?? null;
 
                 if ($passed === null) {
-                    if (isset($inheritedNames[$name])) {
+                    // The read sets drop every `__` name as Blade's own, but the scope an include
+                    // forwards loses only `__data` and `__path`: an author's `$__x` is not provable.
+                    if (isset($inheritedNames[$name]) || ($inheritedNames !== null && \str_starts_with($name, '__'))) {
                         continue;
                     }
 

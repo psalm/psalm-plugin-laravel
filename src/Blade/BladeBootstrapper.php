@@ -267,14 +267,13 @@ final class BladeBootstrapper
             ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
         }
 
-        // A view another template includes or extends receives that template's whole scope, so its
-        // own declarations do not bound what it hands on to its own includes.
+        // A view another template renders by name gets data its own declarations do not show: the
+        // includer's whole scope, `@each`'s item and key, `@component`'s named slots. Laravel
+        // normalizes `/` to `.` in a view name, so the reference is matched the same way.
         $scopeReceivers = [];
 
-        foreach ($this->pendingContracts as [, , , $dataIncludes]) {
-            foreach ($dataIncludes[0] ?? [] as $included) {
-                $scopeReceivers[$included] = true;
-            }
+        foreach (\array_keys($this->viewsRenderedByName) as $rendered) {
+            $scopeReceivers[\str_replace('/', '.', (string) $rendered)] = true;
         }
 
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes, $templatePath]) {

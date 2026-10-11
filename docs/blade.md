@@ -277,13 +277,15 @@ A key absent from the array can still arrive through the including template's sc
 * declares the name (`@var`, required or `= null`, or `@props`),
 * reads it (an undeclared read is data its own caller passes), or binds it itself (an assignment, a `@foreach` alias, a closure parameter),
 * receives it from Blade (`$errors`, `$slot`, ...),
-* is itself included or extended by another template (by a literal name): it then receives that template's whole scope, whatever it declares,
+* is itself rendered by a literal name from another template (any `@include` variant, `@extends`, `@each`, `@component`; `inc/panel` and `inc.panel` alike): it then receives data its declarations do not show (that template's whole scope, `@each`'s item and key, `@component`'s named slots),
 * may be a class component's own view: any `Component` subclass whose `render()` names it, in any shape. Class component data cannot be told apart from the rest of that view's scope, so the missing check is off there entirely,
 * is an anonymous component's view (a `components.` view name, or one under a registered anonymous component path or namespace): every tag attribute becomes one of its variables,
 * declares nothing at all, has an unreadable `@props` array, or has a dynamic scope (`$$name`, `extract()`; this includes every `@props`/`@aware` component view, whose compiled output writes `$$name`),
 * has a view composer or creator registered.
 
 What reaches the including template from a `view()` call site is bounded by its declarations. **Declare the variables a template forwards to its includes**: with `view('parent', ['title' => $t, 'count' => $n])` and a `parent` that declares only `$title`, an `@include('card', ['title' => $title])` in `parent` reports `card`'s `$count` as missing, although the call site passes it. Declaring `@var int $count` in `parent` documents the hand-off and silences the report.
+
+A name starting with `__` is never reported missing on an include: the forwarded scope drops only Blade's `$__data` and `$__path`, and the plugin does not track an author's own `$__x`.
 
 Not followed: a template reached only through a dynamic include (`@include($name)`) is checked as if no template included it.
 
