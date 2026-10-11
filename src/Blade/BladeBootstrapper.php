@@ -81,6 +81,9 @@ final class BladeBootstrapper
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
 
+    /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
+    private array $compileFailures = [];
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
@@ -162,7 +165,10 @@ final class BladeBootstrapper
         }
 
         $manifest->flush();
-        $this->reportFailures($failures);
+        // With shadows the run is about to activate and report each compile failure as an issue,
+        // so the warning keeps only the rest. If activation fails after all, the degradation
+        // warning covers every template.
+        $this->reportFailures($failures, $shadows === [] ? [] : $this->compileFailures);
 
         if ($shadows === []) {
             return false;
@@ -230,6 +236,10 @@ final class BladeBootstrapper
         }
 
         $this->publishTemplateFacts();
+
+        foreach ($this->compileFailures as $templatePath => [$source, $message]) {
+            $this->registrar->reportCompileFailure($templatePath, $source, $message);
+        }
 
         return true;
     }
@@ -327,6 +337,7 @@ final class BladeBootstrapper
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
+                $this->compileFailures[$shadow->templatePath] = [$source, $shadow->message];
                 $this->claimNameOnly($template, $roots);
 
                 continue;
@@ -785,15 +796,19 @@ final class BladeBootstrapper
      * some templates are not covered.
      *
      * @param array<string, string> $failures
+     * @param array<string, mixed>  $reportedAsIssues templates left out of the warning, because each
+     *                                                is reported as a `BladeCompileFailure` instead
      */
-    private function reportFailures(array $failures): void
+    private function reportFailures(array $failures, array $reportedAsIssues = []): void
     {
-        if ($failures === []) {
-            return;
-        }
-
         foreach ($failures as $path => $reason) {
             $this->output->debug("Laravel plugin: skipped Blade template '{$path}': {$reason}\n");
+        }
+
+        $failures = \array_diff_key($failures, $reportedAsIssues);
+
+        if ($failures === []) {
+            return;
         }
 
         $count = \count($failures);
