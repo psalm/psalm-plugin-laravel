@@ -12,6 +12,7 @@ use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidDocblock;
+use Psalm\Issue\InvalidNullableReturnType;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
@@ -353,6 +354,29 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertInstanceOf(InvalidDocblock::class, $relocated);
         $this->assertSame(
             'array<int, string, bool> is not a valid type (Too many template parameters for array in resources/views/profile.blade.php:2)',
+            $relocated->message,
+        );
+    }
+
+    /**
+     * A closure's id is `strtolower(<shadow path>):<line>:<byte offset>:-:closure`, and return-type
+     * messages name it. The path differs per machine and the offset shifts with the prelude, so
+     * both go: the id becomes `<template>:<template line>:-:closure`.
+     */
+    #[Test]
+    public function a_closure_id_inside_a_message_names_the_template(): void
+    {
+        $shadow = '/tmp/Cache/Blade/Shadow.php';
+        $issue = new InvalidNullableReturnType(
+            "The declared return type 'string' for " . \strtolower($shadow) . ":5:25279:-:closure is not nullable, but the function returns 'null|string'",
+            new Raw("\n\n\n\n", $shadow, 'Shadow.php', 4, 4),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 2]));
+
+        $this->assertInstanceOf(InvalidNullableReturnType::class, $relocated);
+        $this->assertSame(
+            "The declared return type 'string' for resources/views/profile.blade.php:2:-:closure is not nullable, but the function returns 'null|string'",
             $relocated->message,
         );
     }
