@@ -349,13 +349,13 @@ Psalm's `--no-progress` installs a progress implementation that discards warning
 Bool and enum settings on this page can be overridden for one run without touching `psalm.xml`, through `psalm-laravel analyze`:
 
 ```bash
-vendor/bin/psalm-laravel analyze --plugin-option=experimental=true --plugin-option=modelProperties.columnFallback=none
+vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.columnFallback=none
 ```
 
 * Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.validateViewData`). `psalm-laravel analyze --help` lists every key with its values.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
 * Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
-* `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
+* `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
 * There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
 * `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
 * `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
@@ -405,6 +405,8 @@ Early access to plugin features that are still on their way to becoming the defa
 
 - Any experimental plugin issue with no explicit [`issueHandlers`](https://psalm.dev/docs/running_psalm/dealing_with_code_issues/) entry is enforced as `error` instead of its default `info`.
 - [`findUnregisteredRouteNames`](#findunregisteredroutenames), [`findUnconfiguredFilesystemDisks`](#findunconfiguredfilesystemdisks), and [`findSerializedQueuedModels`](#findserializedqueuedmodels), off by default, turn on unless the project sets them explicitly.
+
+For one run without editing `psalm.xml`: `psalm-laravel analyze --experimental` (see [Per-run overrides](#per-run-overrides)).
 
 An explicit `<PluginIssue>` entry takes complete ownership of that issue (base level and scoped filters), regardless of `<experimental>`. When using scoped filters, state the desired base level explicitly:
 

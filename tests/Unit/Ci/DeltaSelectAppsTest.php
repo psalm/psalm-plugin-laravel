@@ -10,7 +10,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Guards the flag half of `bin/ci/delta-select-apps.php`: `/psalm-delta` comments are untrusted, and the flags
- * it emits run PR code in CI, so only flags declared in the registry may reach the output.
+ * it emits run PR code in CI, so only flags declared in the registry, or a `--plugin-option` within a shell-safe
+ * charset, may reach the output.
  */
 final class DeltaSelectAppsTest extends TestCase
 {
@@ -47,6 +48,11 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'no flag' => ['blade', 'alpha,beta', ''];
         // Plugin option keys are camelCase, so only names and groups are case-folded.
         yield 'flag case kept' => ['BLADE --opt=camelKey=x', 'alpha,beta', '--opt=camelKey=x'];
+        yield 'undeclared plugin option' => [
+            'blade --blade --plugin-option=blade.reportMixedIssues=true',
+            'alpha,beta',
+            '--blade --plugin-option=blade.reportMixedIssues=true',
+        ];
     }
 
     /** @param array<string, mixed> $registry */
@@ -73,8 +79,13 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'registry declares no flags' => [
             \array_diff_key(self::REGISTRY, ['flags' => true]),
             '--blade',
-            'Flags: none declared.',
+            'Flags: none declared, or any `--plugin-option=KEY=VALUE`.',
         ];
+        yield 'plugin option without a value' => [self::REGISTRY, '--plugin-option=blade', '- `--plugin-option=blade`'];
+        yield 'plugin option with a second equals' => [self::REGISTRY, '--plugin-option=a=b=c', '- `--plugin-option=a=b=c`'];
+        yield 'plugin option key not starting with a letter' => [self::REGISTRY, '--plugin-option=.a=b', '- `--plugin-option=.a=b`'];
+        yield 'plugin option with shell characters' => [self::REGISTRY, '--plugin-option=blade=$(id)', '(not echoed)'];
+        yield 'plugin option with a glob' => [self::REGISTRY, '--plugin-option=blade=*', '(not echoed)'];
     }
 
     #[Test]
