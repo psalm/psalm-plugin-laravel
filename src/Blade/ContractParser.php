@@ -226,9 +226,12 @@ final class ContractParser
 
         foreach ($declarations as [, $name, $var]) {
             // An inferred default never beats an earlier declaration of the name (a `{{-- @var --}}`
-            // ahead of the `@props` entry), nor `@aware`, which `compileAware()` assigns without a
-            // `??` and so overwrites the default whichever directive comes first.
-            if ($var->defaultType !== null && (isset($vars[$name]) || $awareNames === null || isset($awareNames[$name]))) {
+            // ahead of the `@props` entry, or an unreadable `@props` list, which may set any name
+            // first: a later default only applies through `??`), nor `@aware`, which
+            // `compileAware()` assigns without a `??` whichever directive comes first.
+            if ($var->defaultType !== null
+                && ($propsUnknown || isset($vars[$name]) || $awareNames === null || isset($awareNames[$name]))
+            ) {
                 $var = new ContractVar($name, $var->typeString, $var->declarationLine, $var->optional);
             }
 
@@ -282,7 +285,10 @@ final class ContractParser
 
             if ($localArgsOffset !== -1) {
                 $argsOffset = $segmentOffset + $localArgsOffset;
-                $props = $this->parseProps(\substr($source, $argsOffset + 1, \strlen($argsText) - 2));
+                $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
+                // Blade strips a `{{-- --}}` before compiling, so the names it splits are not the ones
+                // written here (`'co{{-- x --}}lor'` is `color`).
+                $props = \str_contains($rawArgs, '{{--') ? null : $this->parseProps($rawArgs);
             }
 
             if ($directive === 'aware') {
@@ -354,8 +360,11 @@ final class ContractParser
                     return null;
                 }
 
-                // A name that is no assignable variable (`max-width`, `this`) gets no body type.
-                $assignable = \preg_match('/^' . self::IDENTIFIER . '$/D', $item->key->value) === 1 && $item->key->value !== 'this';
+                // A name that is no assignable variable (`max-width`, `this`) gets no body type, and
+                // neither does one the prelude types itself (`$slot`, `$errors`).
+                $assignable = \preg_match('/^' . self::IDENTIFIER . '$/D', $item->key->value) === 1
+                    && $item->key->value !== 'this'
+                    && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$item->key->value]);
                 $props[$item->key->value] = [true, $assignable ? $this->defaultType($item->value) : null];
 
                 continue;

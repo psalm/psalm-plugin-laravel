@@ -124,6 +124,43 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function an_unreadable_props_list_leaves_every_later_default_untyped(): void
+    {
+        $contract = $this->parse("@php \$defaults = ['size' => 3]; @endphp\n@props(\$defaults)\n@props(['size' => 'lg'])\n");
+
+        $this->assertTrue($contract->propsUnknown);
+        $this->assertNull($contract->vars['size']->defaultType);
+    }
+
+    #[Test]
+    public function a_blade_comment_inside_an_aware_list_makes_it_unreadable(): void
+    {
+        // Blade strips the comment before compiling, so this `@aware` consumes `color`.
+        $contract = $this->parse("@props(['color' => 'gray'])\n@aware(['co{{-- split --}}lor'])\n");
+
+        $this->assertNull($contract->vars['color']->defaultType);
+    }
+
+    #[Test]
+    public function a_blade_comment_inside_a_props_list_makes_it_unreadable(): void
+    {
+        $contract = $this->parse("@props(['si{{-- x --}}ze' => 'lg'])\n");
+
+        $this->assertTrue($contract->propsUnknown);
+        $this->assertSame([], $contract->vars);
+    }
+
+    #[Test]
+    public function a_props_entry_for_a_blade_owned_name_infers_no_default_type(): void
+    {
+        $contract = $this->parse("@props(['slot' => '', 'errors' => [], 'size' => 'lg'])\n");
+
+        $this->assertNull($contract->vars['slot']->defaultType);
+        $this->assertNull($contract->vars['errors']->defaultType);
+        $this->assertSame('string', $contract->vars['size']->defaultType);
+    }
+
+    #[Test]
     public function a_later_props_entry_for_an_already_declared_name_infers_no_default_type(): void
     {
         $contract = $this->parse("{{-- @var int \$size --}}\n@props(['size' => 'lg'])\n");

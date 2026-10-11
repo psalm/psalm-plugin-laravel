@@ -1508,6 +1508,8 @@ final class BladeIssueRemapTest extends TestCase
         yield '@aware after @props' => ['aware-after.blade.php', '$color: mixed'];
         yield '@aware before @props' => ['aware-before.blade.php', '$color: mixed'];
         yield '@props name @aware does not share' => ['aware-before.blade.php', '$size: string'];
+        // An unreadable list may set any name first, and a later default never replaces it (`??`).
+        yield 'after an unreadable @props' => ['unreadable-first.blade.php', '$size: mixed'];
     }
 
     /** #1828: a `@props` entry types the body from its literal default, widened, never the literal itself. */
@@ -1542,6 +1544,21 @@ final class BladeIssueRemapTest extends TestCase
         }
 
         $this->assertSame(['2 InvalidPropertyFetch', '3 InvalidMethodCall', '4 InvalidPropertyFetch', '5 DocblockTypeContradiction'], $reported);
+    }
+
+    /** Blade echoes a bool as `'1'` / `''`, so a `bool` default is no `e()` argument error. */
+    #[Test]
+    public function a_bool_default_echoes_silently(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/bool-echo.blade.php';
+
+        $this->assertStringContainsString('@var bool $open */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /** Widened, not `'lg'`: a `match` or comparison against another value is not a dead branch. */
