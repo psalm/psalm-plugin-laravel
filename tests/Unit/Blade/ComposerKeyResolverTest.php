@@ -80,7 +80,16 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'magic withFoo' => ['$view->withTitle("x");', null];
         yield 'nest' => ['$view->with("a", 1)->nest("b", "c");', null];
         yield 'nullsafe' => ['$view?->with("a", 1);', null];
-        yield 'read-only method' => ['$view->name();', null];
+        yield 'read-only name' => ['$view->name();', []];
+        yield 'read-only getName feeding with' => ['$view->with("a", $view->getName());', ['a' => true]];
+        yield 'read-only getPath case-insensitive' => ['$p = $view->GETPATH();', []];
+        yield 'nullsafe accessor' => ['$n = $view?->getName();', []];
+        yield 'accessor result used as a string' => ['$n = $view->getName()->trim(); $view->with("a", 1);', ['a' => true]];
+        yield 'getData' => ['$d = $view->getData();', null];
+        yield 'getFactory' => ['$view->getFactory()->share("a", 1);', null];
+        yield 'accessor with a computed name' => ['$view->{"getName"}();', null];
+        yield 'read-only property' => ['$n = $view->name;', null];
+        yield 'accessor on a with chain' => ['$view->with("a", 1)->getName();', ['a' => true]];
         yield 'share through a facade' => ['$view->with("a", 1); View::share("b", 1);', null];
         yield 'share through the factory' => ['$view->with("a", 1); $this->factory->share("b", 1);', null];
         yield 'parent constructor delegation' => ['parent::__construct();', null];
