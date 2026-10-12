@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791754516702,
+  "lastUpdate": 1791840919824,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13715,6 +13715,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c3f979a696616c459f247a2e45e383e18e0dcd6d",
+          "message": "Report Blade template compile failures as `BladeCompileFailure` (#1839)\n\n* feat(blade): report template compile failures as BladeCompileFailure\n\nA template the Blade compiler throws on was only named in a progress\nwarning, which --no-progress discards, so it silently stopped being\nanalyzed. It is now reported as an experimental BladeCompileFailure issue\n(info by default, error under <experimental value=\"true\" />) on line 1 of\nthe template, carrying the compiler's exception class and message, so it\nreaches every output format, baselines and issueHandlers.\n\nThe issue is emitted only once the run has activated. A run where no\ntemplate compiled, or that degrades, keeps the run-level warning.\nUnreadable templates and shadow write failures stay in the warning.\n\nRefs #1829\n\n* fix(blade): report compile failures when no template compiled\n\nAn app whose every template failed to compile still exited before\nactivation with only the progress warning, so it stayed silent under\n--no-progress. The failing templates are now made reportable on their own\nand reported as BladeCompileFailure; nothing is analyzed and no template\nfact is published, so degradation stays all-or-nothing.\n\nAn empty-source template now falls back to offset 0 instead of dropping\nthe issue. The docs now say that at the default info level the issue\nneeds --show-info=true, and only fails the run and enters baselines as\nan error.\n\nRefs #1829",
+          "timestamp": "2026-10-12T23:31:55+02:00",
+          "tree_id": "e3f720e1bf6129d5883fc4d330316a66c97a5a2a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c3f979a696616c459f247a2e45e383e18e0dcd6d"
+        },
+        "date": 1791840918356,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.07,
+            "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
