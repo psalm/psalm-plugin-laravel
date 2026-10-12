@@ -25,6 +25,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
 - [MissingViewVariable](MissingViewVariable.md) — a Blade template declares a variable (`@var` docblock, `@props`) that the `view()` call site rendering it never passes (opt-in)
 - [InvalidViewVariableType](InvalidViewVariableType.md) — the value passed for a Blade template variable does not satisfy the type that template declares for it (opt-in)
+- [BladeCompileFailure](BladeCompileFailure.md): a Blade template the Blade compiler threw on, so it is not analyzed (needs Blade analysis)
 - [UnusedViewData](UnusedViewData.md) — a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (opt-in)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
 
