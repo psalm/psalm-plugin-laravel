@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\PhpVisitor\SimpleNameResolver;
 use Psalm\LaravelPlugin\Blade\RuntimeComposerCollector;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\RuntimeComposer\ConcreteProvider;
 
 /**
  * A registration is recognized by its receiver, never by the method name alone, and a view argument
@@ -27,12 +28,16 @@ final class RuntimeComposerCollectorTest extends TestCase
     /** @param list<string>|null $expected */
     #[Test]
     #[DataProvider('sources')]
-    public function it_collects_the_view_patterns_a_runtime_registration_names(string $code, ?array $expected): void
+    public function it_collects_the_view_patterns_a_runtime_registration_names(string $code, ?array $expected, bool $rootViewIsFacade = true): void
     {
-        $this->assertSame($expected, RuntimeComposerCollector::patternsIn($this->parse($code), ['App\\Providers\\ViewServiceProvider']));
+        $this->assertSame($expected, RuntimeComposerCollector::patternsIn(
+            $this->parse($code),
+            ['App\\Providers\\ViewServiceProvider', ConcreteProvider::class],
+            $rootViewIsFacade,
+        ));
     }
 
-    /** @return iterable<string, array{0: string, 1: list<string>|null}> */
+    /** @return iterable<string, array{0: string, 1: list<string>|null, 2?: bool}> */
     public static function sources(): iterable
     {
         yield 'facade, literal and array' => ['View::composer("a", $cb); View::creator(["b", "admin/c"], $cb);', ['a', 'b', 'admin.c']];
@@ -70,6 +75,25 @@ final class RuntimeComposerCollectorTest extends TestCase
         yield 'provider the app did not load' => [
             'namespace App\Providers; use Illuminate\Support\Facades\View; class Other { public function boot() { View::composer("a", $cb); } }',
             ['a'],
+        ];
+
+        yield 'nullsafe call on a typed factory' => ['function f(?Factory $f) { $f?->composer("a", $cb); }', ['a']];
+        yield 'named arguments in any order' => ['View::composer(callback: "C", views: "a"); View::composers(composers: ["C" => "b"]);', ['a', 'b']];
+        yield 'namespace-relative type resolves against the namespace, not imports' => ['function f(namespace\\Factory $f) { $f->composer("a", $cb); }', []];
+        yield 'root View alias that is not the facade' => ['\\View::composer("a", $cb);', [], false];
+        yield 'imported view() function' => ['use function Foo\\view; view()->composer("a", $cb);', []];
+        yield 'container key compared exactly' => ['app("VIEW")->composer("a", $cb); app("\\\\view")->composer("b", $cb);', []];
+        yield 'first-class callable creation registers nothing' => ['$register = View::composer(...);', []];
+        yield 'no views argument registers nothing' => ['View::composer(callback: "C");', []];
+        yield 'inner parameter shadows an outer factory' => [
+            'function f(Factory $v) { $a = fn(Other $v) => $v->composer("a", $cb); $b = function ($v) { $v->composer("b", $cb); }; $v->composer("c", $cb); }',
+            ['c'],
+        ];
+        yield 'provider base class and trait of a loaded provider' => [
+            'namespace Tests\\Psalm\\LaravelPlugin\\Unit\\Blade\\Fixtures\\RuntimeComposer; use Illuminate\\Support\\Facades\\View; '
+            . 'abstract class BaseProvider { public function boot() { View::composer("a", $cb); } } '
+            . 'trait RegistersComposers { public function register() { View::creator("b", $cb); } }',
+            [],
         ];
 
         // Views that cannot be named: every contracted view is unknown.

@@ -22,5 +22,6 @@ final class RuntimeComposerCallSites
         view('runtime-unmatched', []);
         // `title` and `tags` come from the provider's class composer.
         view('composer-provider', []);
+        view('composer-mixed', []);
     }
 }

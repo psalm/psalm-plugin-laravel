@@ -483,7 +483,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Why:** the boot reader cannot see a registration that has not run yet, and its keys cannot be read either (the composer is usually a closure). The receiver test is syntactic (facade FQCN, `view()`, `app('view')`, factory-typed parameter, local or property) because inferred types only exist after the fork; matching on the method name alone would let any userland `composer()` disable checks. Marking every view on a non-literal name gives up the rule for that project, but declining the collection would leave the false positives the strict model ranks worse than misses.
 
-**Accepted limitation:** a factory reached through an untyped variable, a container alias other than `view`, or code outside the project files is not seen. A call made directly in a method of a loaded service provider is skipped as boot-time, even when that method only runs later.
+**Accepted limitation:** a factory reached through an untyped variable, a container key other than `view` or a factory class name, a variable reassigned earlier in the function (even in a returning branch; the walk is not flow-sensitive), a factory-typed property inherited from a parent class, or code outside the project files is not seen. A call made directly in a method of a loaded service provider, its parent class or one of its traits is skipped as boot-time, even when that method only runs later.
 
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 

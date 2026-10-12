@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Blade;
 use Illuminate\Support\Str;
 use Illuminate\View\ViewName;
 use PhpParser\Node;
-use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
@@ -36,7 +35,8 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
 {
     private const FACTORIES = ['illuminate\\view\\factory', 'illuminate\\contracts\\view\\factory'];
 
-    private const FACADES = ['illuminate\\support\\facades\\view', 'view'];
+    /** Container keys are matched as Laravel matches them, case and all. */
+    private const CONTAINER_KEYS = ['view', 'Illuminate\\View\\Factory', 'Illuminate\\Contracts\\View\\Factory'];
 
     private string $namespace = '';
 
@@ -46,7 +46,11 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
     /** @var list<array{0: string, 1: array<string, true>}> enclosing class (lowercased, '' when anonymous) => factory-typed properties */
     private array $classes = [];
 
-    /** @var list<array{0: array<string, true>, 1: bool}> factory-typed variables, and whether the scope is an arrow function; the first is the file's top-level code */
+    /**
+     * @var list<array{0: array<string, bool>, 1: bool}> variable => whether it holds the factory (a
+     *      non-factory entry shadows an outer one), and whether the scope is an arrow function; the
+     *      first is the file's top-level code
+     */
     private array $scopes = [[[], false]];
 
     /** @var list<string> */
@@ -54,18 +58,16 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
 
     private bool $unknown = false;
 
-    /** @var array<string, true> lowercased service provider classes the app loaded */
-    private readonly array $bootProviders;
-
     /**
-     * @param list<string> $bootProviders
+     * @param list<string> $bootProviders service provider classes the app loaded
+     * @param bool $rootViewIsFacade whether the global `View` name is the facade's alias
      *
      * @psalm-mutation-free
      */
-    private function __construct(array $bootProviders)
-    {
-        $this->bootProviders = \array_fill_keys(\array_map(static fn(string $class): string => \strtolower(\ltrim($class, '\\')), $bootProviders), true);
-    }
+    private function __construct(
+        private readonly array $bootProviders,
+        private readonly bool $rootViewIsFacade,
+    ) {}
 
     public static function markComposedViews(Codebase $codebase): void
     {
@@ -99,6 +101,13 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
             $loaded = [];
         }
 
+        try {
+            // Autoloading `View` runs the booted app's AliasLoader; a userland global `View` is no facade.
+            $rootViewIsFacade = \class_exists('View') && \is_a('View', \Illuminate\Support\Facades\View::class, true);
+        } catch (\Throwable) {
+            $rootViewIsFacade = false;
+        }
+
         $patterns = [];
 
         foreach (\array_keys($codebase->scanner->getScannedFiles()) as $path) {
@@ -114,8 +123,13 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
                     continue;
                 }
 
-                $found = self::patternsIn($codebase->getStatementsForFile($path), $loaded);
-            } catch (\Throwable) {
+                $found = self::patternsIn($codebase->getStatementsForFile($path), $loaded, $rootViewIsFacade);
+            } catch (\Throwable $throwable) {
+                $codebase->progress->debug(
+                    "Laravel plugin: reading runtime view composers from {$path} threw: {$throwable->getMessage()}; "
+                    . "no view data contract is checked this run\n",
+                );
+
                 return null;
             }
 
@@ -135,9 +149,9 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
      *
      * @return list<string>|null
      */
-    public static function patternsIn(array $stmts, array $bootProviders = []): ?array
+    public static function patternsIn(array $stmts, array $bootProviders = [], bool $rootViewIsFacade = true): ?array
     {
-        $collector = new self($bootProviders);
+        $collector = new self($bootProviders, $rootViewIsFacade);
         (new NodeTraverser($collector))->traverse($stmts);
 
         return $collector->unknown ? null : $collector->patterns;
@@ -163,14 +177,14 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
             $variables = [];
 
             foreach ($node->params as $param) {
-                if ($param->var instanceof Expr\Variable && \is_string($param->var->name) && $this->isFactoryType($param->type)) {
-                    $variables[$param->var->name] = true;
+                if ($param->var instanceof Expr\Variable && \is_string($param->var->name)) {
+                    $variables[$param->var->name] = $this->isFactoryType($param->type);
                 }
             }
 
             foreach ($node instanceof Expr\Closure ? $node->uses : [] as $use) {
-                if (\is_string($use->var->name) && $this->isFactoryVariable($use->var->name)) {
-                    $variables[$use->var->name] = true;
+                if (\is_string($use->var->name)) {
+                    $variables[$use->var->name] = $this->isFactoryVariable($use->var->name);
                 }
             }
 
@@ -179,15 +193,10 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
             $factory = $this->isFactory($node->expr);
             [$variables, $arrow] = \array_pop($this->scopes) ?? [[], false];
 
-            if ($factory) {
-                $variables[$node->var->name] = true;
-            } else {
-                unset($variables[$node->var->name]);
-            }
-
+            $variables[$node->var->name] = $factory;
             $this->scopes[] = [$variables, $arrow];
-        } elseif (($node instanceof Expr\MethodCall && $this->isFactory($node->var))
-            || ($node instanceof Expr\StaticCall && $node->class instanceof Name && \in_array($this->className($node->class), self::FACADES, true))
+        } elseif ((($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) && $this->isFactory($node->var))
+            || ($node instanceof Expr\StaticCall && $node->class instanceof Name && $this->isFacade($node->class))
         ) {
             $this->record($node);
         }
@@ -208,23 +217,45 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
         return null;
     }
 
-    private function record(Expr\MethodCall|Expr\StaticCall $call): void
+    private function record(Expr\MethodCall|Expr\NullsafeMethodCall|Expr\StaticCall $call): void
     {
         $method = $call->name instanceof Identifier ? $call->name->toLowerString() : null;
 
-        if (!\in_array($method, ['composer', 'creator', 'composers'], true) || $this->ranAtBoot()) {
+        // `View::composer(...)` only builds a closure; a call through it is not seen either way.
+        if (!\in_array($method, ['composer', 'creator', 'composers'], true) || $call->isFirstClassCallable() || $this->ranAtBoot()) {
             return;
         }
 
-        $first = $call->isFirstClassCallable() ? null : ($call->getArgs()[0] ?? null);
+        $parameter = $method === 'composers' ? 'composers' : 'views';
+        $argument = null;
+
+        foreach ($call->getArgs() as $position => $arg) {
+            if ($arg->unpack) {
+                $this->unknown = true;
+
+                return;
+            }
+
+            if ($arg->name instanceof Identifier ? $arg->name->name === $parameter : $position === 0) {
+                $argument = $arg->value;
+
+                break;
+            }
+        }
+
+        // Without it PHP throws before anything is registered.
+        if (!$argument instanceof Expr) {
+            return;
+        }
+
         $views = [];
 
-        if ($first instanceof Arg && !$first->unpack && $method === 'composers' && $first->value instanceof Expr\Array_) {
-            foreach ($first->value->items as $item) {
+        if ($method === 'composers' && $argument instanceof Expr\Array_) {
+            foreach ($argument->items as $item) {
                 $views[] = $item instanceof Expr\ArrayItem && !$item->unpack ? $this->viewNames($item->value) : null;
             }
         } else {
-            $views[] = $first instanceof Arg && !$first->unpack ? $this->viewNames($first->value) : null;
+            $views[] = $this->viewNames($argument);
         }
 
         foreach ($views as $names) {
@@ -242,15 +273,30 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
     }
 
     /**
-     * A call straight in a method of a provider the app loaded; in a closure there, it runs later.
-     *
-     * @psalm-external-mutation-free
+     * A call straight in a method of a provider the app loaded, of a parent class of one, or of a trait
+     * one uses; in a closure there, it runs later.
      */
     private function ranAtBoot(): bool
     {
         $class = \end($this->classes);
 
-        return $class !== false && isset($this->bootProviders[$class[0]]) && \count($this->scopes) === 2;
+        if ($class === false || $class[0] === '' || \count($this->scopes) !== 2) {
+            return false;
+        }
+
+        foreach ($this->bootProviders as $provider) {
+            if (\strtolower(\ltrim($provider, '\\')) === $class[0]) {
+                return true;
+            }
+
+            $parents = \class_exists($provider) ? \class_parents($provider) : false;
+
+            if (\is_array($parents) && isset(\array_change_key_case([...$parents, ...\class_uses_recursive($provider)])[$class[0]])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -312,7 +358,7 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
         $abstract = $args[0]->value;
 
         return match (true) {
-            $abstract instanceof String_ => \in_array(\strtolower(\ltrim($abstract->value, '\\')), ['view', ...self::FACTORIES], true),
+            $abstract instanceof String_ => \in_array($abstract->value, self::CONTAINER_KEYS, true),
             $abstract instanceof Expr\ClassConstFetch => $abstract->class instanceof Name && $abstract->name instanceof Identifier
                 && $abstract->name->toLowerString() === 'class' && \in_array($this->className($abstract->class), self::FACTORIES, true),
             default => false,
@@ -330,7 +376,7 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
             [$variables, $arrow] = $this->scopes[$index];
 
             if (isset($variables[$name])) {
-                return true;
+                return $variables[$name];
             }
 
             if (!$arrow) {
@@ -372,6 +418,13 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
         return $type instanceof Name && \in_array($this->className($type), self::FACTORIES, true);
     }
 
+    private function isFacade(Name $name): bool
+    {
+        $class = $this->className($name);
+
+        return $class === 'illuminate\\support\\facades\\view' || ($class === 'view' && $this->rootViewIsFacade);
+    }
+
     /**
      * Resolved here rather than read off Psalm's `resolvedName`, which Psalm sets on method and closure
      * signatures but not on function, arrow function or property types.
@@ -380,6 +433,11 @@ final class RuntimeComposerCollector extends NodeVisitorAbstract
     {
         if ($name->isFullyQualified()) {
             return $name->toLowerString();
+        }
+
+        // `namespace\Foo` ignores imports.
+        if ($name->isRelative()) {
+            return \strtolower($this->namespace . $name->toString());
         }
 
         $alias = $this->uses[\strtolower($name->getFirst())] ?? null;

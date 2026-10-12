@@ -14,6 +14,7 @@ final class FixtureViewServiceProvider extends ServiceProvider
     {
         // Ran at boot, so its keys were read: `composer-provider` keeps the per-key check.
         View::composer('composer-provider', LiteralComposer::class);
+        View::composer('composer-mixed', LiteralComposer::class);
 
         // Runs later, on a request: `runtime-closure-provider` is exempt as a whole.
         $this->app->terminating(static function (): void {

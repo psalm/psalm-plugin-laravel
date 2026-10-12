@@ -22,6 +22,8 @@ final class ShareViewData
         View::creator('runtime-wild.*', static fn(): null => null);
         app('view')->composer('runtime-container', static fn(): null => null);
         View::composers([LateComposer::class => ['runtime-map']]);
+        // Also composed at boot, where `title` and `tags` were read: the runtime one hides `count` too.
+        View::composer('composer-mixed', static fn(): null => null);
 
         $assigned = view();
         $assigned->composer('runtime-assigned', static fn(): null => null);
