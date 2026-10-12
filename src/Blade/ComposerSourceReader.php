@@ -16,13 +16,15 @@ use Illuminate\View\Factory;
  * A listener counts only when it is the very closure `Factory::buildClassEventCallback()` builds
  * (identified by where it was declared and by its captured variables, never by a name or a guess):
  * a user closure, a string or array registered straight on the dispatcher, a class the container
- * binds to something else, or a dispatcher other than Laravel's, cannot be read, so the view's
- * sources are unknown.
+ * binds, extends, hooks before resolving or binds through an attribute, or a dispatcher or factory
+ * other than Laravel's, cannot be read, so the view's sources are unknown.
  *
  * @internal
  */
 final class ComposerSourceReader
 {
+    private const BINDING_ATTRIBUTES = ['illuminate\\container\\attributes\\bind', 'illuminate\\container\\attributes\\bindwhen'];
+
     /** @psalm-mutation-free */
     public function __construct(
         private readonly ?Factory $factory,
@@ -70,7 +72,9 @@ final class ComposerSourceReader
 
     private function overridesDispatch(Factory $factory): bool
     {
-        foreach (['callComposer', 'callCreator'] as $method) {
+        // `viewInstance()` builds the view every composer receives, and a View subclass's `with()` can
+        // add keys of its own.
+        foreach (['callComposer', 'callCreator', 'viewInstance'] as $method) {
             if ((new \ReflectionMethod($factory, $method))->getDeclaringClass()->getName() !== Factory::class) {
                 return true;
             }
@@ -140,6 +144,8 @@ final class ComposerSourceReader
         if (!$container instanceof Container
             || $container->bound($captured['class']) || $container->bound($class)
             || $this->extended($container, $captured['class']) || $this->extended($container, $class)
+            || $this->hookedBeforeResolving($container, $captured['class']) || $this->hookedBeforeResolving($container, $class)
+            || $this->boundByAttribute($class)
         ) {
             return null;
         }
@@ -151,6 +157,50 @@ final class ComposerSourceReader
     private function extended(Container $container, string $class): bool
     {
         return (new \ReflectionMethod($container, 'getExtenders'))->invoke($container, $class) !== [];
+    }
+
+    /**
+     * `Container::resolve()` fires before-resolving callbacks ahead of picking the concrete, and one can
+     * bind the class to another. Per-type entries match as `fireBeforeResolvingCallbacks()` matches them;
+     * global ones fire for every class and decline every composer, but the framework registers none.
+     */
+    private function hookedBeforeResolving(Container $container, string $class): bool
+    {
+        if ((new \ReflectionProperty(Container::class, 'globalBeforeResolvingCallbacks'))->getValue($container) !== []) {
+            return true;
+        }
+
+        // Keyed by abstract, which `is_subclass_of()` takes as a class name the way Laravel passes it.
+        /** @var array<class-string, mixed> $callbacks */
+        $callbacks = (new \ReflectionProperty(Container::class, 'beforeResolvingCallbacks'))->getValue($container);
+
+        foreach (\array_keys($callbacks) as $type) {
+            if ($type === $class || \is_subclass_of($class, $type)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * `Container::getConcrete()` binds a class carrying `Bind` or `BindWhen` lazily, on first resolution,
+     * so `bound()` misses it until then. Matched by name, since older Laravel lacks the attribute classes;
+     * only the class's own attributes count, as `ReflectionClass::getAttributes()` reads no parents.
+     */
+    private function boundByAttribute(string $class): bool
+    {
+        if (!\class_exists($class)) {
+            return false;
+        }
+
+        foreach ((new \ReflectionClass($class))->getAttributes() as $attribute) {
+            if (\in_array(\strtolower($attribute->getName()), self::BINDING_ATTRIBUTES, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

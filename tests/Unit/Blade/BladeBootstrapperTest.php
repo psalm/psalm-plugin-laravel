@@ -20,6 +20,10 @@ use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\ComposerBinding\AttributeBoundComposer;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\ComposerBinding\ConditionallyBoundComposer;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\ComposerBinding\CountableComposer;
+use Tests\Psalm\LaravelPlugin\Unit\Blade\Fixtures\ComposerBinding\OtherComposer;
 
 #[CoversClass(BladeBootstrapper::class)]
 final class BladeBootstrapperTest extends TestCase
@@ -680,6 +684,81 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
 
         $this->assertSame(['extended' => null], ContractRegistry::composerSources());
+    }
+
+    /**
+     * `Container::resolve()` fires before-resolving callbacks before it picks the concrete, and a
+     * callback can bind the class to something else. A per-type callback matches the way Laravel
+     * matches it (same name or `is_subclass_of()`); a global one fires for every class.
+     */
+    #[Test]
+    public function a_composer_class_a_before_resolving_callback_can_rebind_leaves_the_view_unknown(): void
+    {
+        $cases = [
+            'exact' => static fn(Container $app): null => $app->beforeResolving('App\\Hooked', static fn(): null => null),
+            'parent' => static fn(Container $app): null => $app->beforeResolving(\Countable::class, static fn(): null => null),
+            'global' => static fn(Container $app): null => $app->beforeResolving(static fn(): null => null),
+        ];
+        $composers = ['exact' => 'App\\Hooked', 'parent' => CountableComposer::class, 'global' => 'App\\Plain'];
+        $this->writeTemplate('hooked.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        $sources = [];
+
+        foreach ($cases as $case => $hook) {
+            $app = $this->appWithViewFactory();
+            $hook($app);
+            $app->make('view')->composer('hooked', $composers[$case]);
+
+            ContractRegistry::reset();
+            $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+            $sources[$case] = ContractRegistry::composerSources();
+        }
+
+        $this->assertSame(\array_fill_keys(\array_keys($cases), ['hooked' => null]), $sources);
+    }
+
+    /** A `Bind`/`BindWhen` attribute binds the class lazily, inside `getConcrete()`, which `bound()` does not see. */
+    #[Test]
+    public function a_composer_class_with_a_binding_attribute_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $view = $app->make('view');
+        $view->composer('bind', AttributeBoundComposer::class);
+        $view->composer('bind-when', ConditionallyBoundComposer::class);
+        $view->composer('unbound', OtherComposer::class);
+
+        foreach (['bind', 'bind-when', 'unbound'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(['bind' => null, 'bind-when' => null, 'unbound' => [[OtherComposer::class, 'compose']]], $sources);
+    }
+
+    /** The composer receives whatever `viewInstance()` returns, and a View subclass can override `with()`. */
+    #[Test]
+    public function a_factory_subclass_overriding_view_instance_leaves_a_listened_view_unknown(): void
+    {
+        $app = $this->app();
+        $factory = new class (new EngineResolver(), $app->make('view.finder'), new Dispatcher()) extends Factory {
+            #[\Override]
+            protected function viewInstance($view, $path, $data)
+            {
+                return parent::viewInstance($view, $path, $data);
+            }
+        };
+        $factory->setContainer($app);
+        $factory->composer('composed', 'App\\Composer');
+
+        $app->instance('view', $factory);
+        $this->writeTemplate('composed.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame(['composed' => null], ContractRegistry::composerSources());
     }
 
     /** The composer is built by the container the factory holds, not by the one the reader was handed. */
