@@ -178,7 +178,7 @@ final class AnnotateCommandTest extends TestCase
             'dryRun' => true,
             'changed' => ['a.blade.php' => ['title']],
             'failures' => ['b.blade.php' => 'unreadable'],
-            'diff' => "+{{-- @var string \$title --}}\n",
+            'diff' => "+ * @var string \$title\n",
         ]));
     }
 
@@ -200,7 +200,7 @@ final class AnnotateCommandTest extends TestCase
                 'dryRun' => $dryRun,
                 'changed' => ['a.blade.php' => ['title']],
                 'failures' => [],
-                'diff' => "+{{-- @var string \$title --}}\n",
+                'diff' => "+ * @var string \$title\n",
             ]));
         }
     }

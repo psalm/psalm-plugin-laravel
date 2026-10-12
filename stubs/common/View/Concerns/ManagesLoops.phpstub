@@ -45,7 +45,11 @@ trait ManagesLoops
      * MoreSpecificReturnType. Prepending `\stdClass&` keeps the property shape byte-identical
      * while restoring the identity.
      *
-     * @return \stdClass&object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null}
+     * `parent` is the enclosing loop's frame, cast by `addLoop()` with the same `(object)`, so it
+     * gets the same shape one level deep (deeper ancestors stay `object|null`); it is `null` at
+     * depth 1.
+     *
+     * @return \stdClass&object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: (\stdClass&object{index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int, parent: object|null})|null}
      */
     public function getLastLoop()
     {

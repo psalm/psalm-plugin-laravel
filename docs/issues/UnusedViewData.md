@@ -27,7 +27,7 @@ view('profile', ['name' => $user->name, 'subtitle' => $this->expensiveSubtitle()
 view('profile', ['name' => $user->name]);
 ```
 
-A key an included partial reads — or declares, since `{{-- @var --}}`, a raw `<?php /** @var T $name */ ?>` docblock, and `@props` all state that template's interface just as they do at the top of the chain — counts as consumed, because the include inherits the whole scope:
+A key an included partial reads — or declares, since a `<?php /** @var T $name */ ?>` docblock and `@props` both state that template's interface just as they do at the top of the chain — counts as consumed, because the include inherits the whole scope:
 
 ```blade
 {{-- resources/views/page.blade.php --}}
@@ -46,7 +46,7 @@ view('page', ['title' => 'Home', 'author' => 'Ada']);
 ## How to fix
 
 1. Drop the key from the call site.
-2. If the template should be using it, use it (or declare it with `{{-- @var --}}`, a raw `<?php /** @var T $name */ ?>` docblock, or `@props`, all of which also silence this check).
+2. If the template should be using it, use it (or declare it with a `<?php /** @var T $name */ ?>` docblock or `@props`, both of which also silence this check).
 3. If it is consumed somewhere this release cannot follow, see Limitations and suppress it.
 
 ## Configuration
@@ -63,7 +63,7 @@ This check is disabled by default. Enable it alongside Blade analysis in your `p
 
 ## Suppressing it
 
-The issue is reported at the call site, so `@psalm-suppress UnusedViewData` on the statement or the enclosing function works, as does an `<issueHandlers>` entry. Declaring the variable in the template (`{{-- @var mixed $key --}}`, or a `@props` entry) is the better fix when the key is part of the template's contract but only reached by code this release cannot follow.
+The issue is reported at the call site, so `@psalm-suppress UnusedViewData` on the statement or the enclosing function works, as does an `<issueHandlers>` entry. Declaring the variable in the template (`<?php /** @var mixed $key */ ?>`, or a `@props` entry) is the better fix when the key is part of the template's contract but only reached by code this release cannot follow.
 
 ## Limitations
 

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * One declared template variable: either a `{{-- @var \FQCN $name --}}`
- * comment or a `@props([...])` entry (typeString `mixed`, `optional` set
- * from whether the entry carried a literal default).
+ * One declared template variable: a raw `@var` docblock in a `<?php` / `@php` block
+ * (`optional` only when the declaration ends in `= null`), or a `@props([...])` entry (typeString `mixed`, `optional` set from whether
+ * the entry carried a literal default).
  *
  * @psalm-immutable
  * @psalm-api

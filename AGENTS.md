@@ -64,7 +64,7 @@ Gotchas:
 
 ## Git and PRs
 
-- Base PRs on `4.x`. Psalm-6-only bugs base on `3.x`.
+- `4.x` is the default branch: base PRs on it (Blade included). Psalm-6-only bugs base on `3.x`. `master` is stale, never base on it.
 - The `style: auto-fix` workflow commits style fixes back to pushed branches. Run `composer rector` and `composer cs` locally BEFORE pushing, and `git pull --ff-only` before any further local edits after a push.
 - Worktrees: run `composer install` inside the worktree; never symlink `vendor/` from the primary checkout. Write and Edit tools must target worktree-absolute paths, never the primary root.
 - Commits follow Conventional Commits. The subject describes the change, not the issue it closes; issue ref is required in the PR body and optional in the commit message body.

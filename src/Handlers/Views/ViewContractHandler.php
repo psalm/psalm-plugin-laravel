@@ -9,6 +9,7 @@ use PhpParser\Node\Stmt;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -24,7 +25,7 @@ use Psalm\Type;
 
 /**
  * Checks a `view()` call site against the contract its template declares: a
- * `{{-- @var \App\Models\User $user --}}` comment or a `@props([...])` entry.
+ * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
  * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
  * that does not satisfy the declared type ({@see InvalidViewVariableType}).
@@ -116,7 +117,9 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        if (self::$validateViewData) {
+        // A composer or creator can overwrite any key after the call site passed it, so neither what
+        // is missing nor what a value's type is can be judged from the call site alone.
+        if (self::$validateViewData && !ContractRegistry::isComposed($chain->viewName)) {
             $supplied = $chain->supplied();
 
             foreach ($contract->vars as $name => $var) {
@@ -188,10 +191,12 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): void {
-        // `optional` is a @props entry with a literal default, which Blade fills in itself.
+        // `optional` is a @props entry with a literal default, which Blade fills in itself, or a
+        // declaration ending in `= null`.
         // `propsUnknown` means the declared set is a lower bound, so absence proves nothing about
-        // what the template needs; and an open data set proves nothing about what was passed.
-        if ($var->optional || $contract->propsUnknown || !$chain->complete) {
+        // what the template needs; an open data set proves nothing about what was passed; and a
+        // composer or creator registered for the view supplies data no call site shows.
+        if ($var->optional || $contract->propsUnknown || !$chain->complete || ContractRegistry::isComposed($chain->viewName)) {
             return;
         }
 
@@ -220,10 +225,18 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return;
         }
 
-        $declared = self::declaredType($var->typeString);
+        $declared = self::declaredType($var->optional ? ContractParser::withNull($var->typeString) : $var->typeString);
 
         if (!$declared instanceof Type\Union || $declared->hasMixed()) {
             return;
+        }
+
+        // A short class name may be a `use` alias in the template's own PHP block, which the type
+        // string cannot carry: comparing against the global class of that name would be a guess.
+        foreach (PreludeBuilder::classNamesIn($var->typeString) ?? [] as $className) {
+            if (!PreludeBuilder::resolvesWithoutImport($className)) {
+                return;
+            }
         }
 
         if ($source->getCodebase()->isTypeContainedByType($supplied, $declared)) {

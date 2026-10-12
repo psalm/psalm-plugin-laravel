@@ -27,10 +27,7 @@ final class ShadowCompiler
         $this->suppressionInjector = new SuppressionInjector();
     }
 
-    /**
-     * @param array<string, string> $contractVars variable name (without $) => FQCN
-     */
-    public function compile(string $templatePath, string $source, array $contractVars = []): ShadowResult|BladeCompileError
+    public function compile(string $templatePath, string $source): ShadowResult|BladeCompileError
     {
         // The prefix is absent from author text, including real PHP comments.
         $markerPrefix = MarkerComment::prefixFor($source);
@@ -47,7 +44,7 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
-        $prelude = $this->preludeBuilder->build($compiled, $contractVars, $source);
+        $prelude = $this->preludeBuilder->build($compiled, $source);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");
