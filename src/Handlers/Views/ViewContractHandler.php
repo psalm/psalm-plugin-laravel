@@ -15,6 +15,7 @@ use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
+use Psalm\LaravelPlugin\Blade\RuntimeComposerCollector;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
@@ -78,6 +79,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
         if (self::$validateViewData) {
+            RuntimeComposerCollector::markComposedViews($event->getCodebase());
             ComposerKeyResolver::resolve($event->getCodebase());
         }
     }

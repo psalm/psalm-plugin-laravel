@@ -475,7 +475,15 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - **A config list of keys per view or global** (`<composerKeys>`): duplicates what the composer already says in code, goes stale silently, and puts the maintenance on every user for a problem the AST answers.
 - **Following `$view` into helper methods**: needs inter-procedural tracking of aliases and escapes for a rare shape; declining is correct and cheap.
 
-**Accepted limitation:** a `share()` (or a `with()`) hidden in a helper the composer calls, or in the constructor of a dependency the container injects, is not seen: only the composer's own constructor and `compose()`/`create()` body are read, and following injected classes would need the container's resolution, which analysis cannot run. Composers registered after boot (middleware, a controller) are not read: a view whose only composer is registered at runtime was already checked since #1821, while a view with a boot composer plus a runtime one is checked against the boot keys only. Resolution paths that rewrite which class runs (bindings, aliases, extenders, subclassed dispatcher or factory) decline instead.
+**Accepted limitation:** a `share()` (or a `with()`) hidden in a helper the composer calls, or in the constructor of a dependency the container injects, is not seen: only the composer's own constructor and `compose()`/`create()` body are read, and following injected classes would need the container's resolution, which analysis cannot run. Composers registered after boot are covered separately (next entry). Resolution paths that rewrite which class runs (bindings, aliases, extenders, subclassed dispatcher or factory) decline instead.
+
+### Runtime composer registrations are found syntactically and skip the whole view (#1842)
+
+**Decision:** `Blade\RuntimeComposerCollector` walks project files at `AfterCodebasePopulated` (pre-fork, only files spelling `composer`/`creator`) for `composer()`/`creator()`/`composers()` calls on a receiver that is provably the view factory, and marks each matched contracted view unknown (whole-view skip). A non-literal view argument marks every contracted view.
+
+**Why:** the boot reader cannot see a registration that has not run yet, and its keys cannot be read either (the composer is usually a closure). The receiver test is syntactic (facade FQCN, `view()`, `app('view')`, factory-typed parameter, local or property) because inferred types only exist after the fork; matching on the method name alone would let any userland `composer()` disable checks. Marking every view on a non-literal name gives up the rule for that project, but declining the collection would leave the false positives the strict model ranks worse than misses.
+
+**Accepted limitation:** a factory reached through an untyped variable, a container alias other than `view`, or code outside the project files is not seen. A call made directly in a method of a loaded service provider is skipped as boot-time, even when that method only runs later.
 
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 

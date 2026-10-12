@@ -815,6 +815,7 @@ final class Plugin implements PluginEntryPointInterface
         if ($bladeActive && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
             require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
+            require_once __DIR__ . '/Blade/RuntimeComposerCollector.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
             Handlers\Views\ViewContractHandler::init(

@@ -71,6 +71,13 @@ final class ContractRegistry
         return self::$contracts[$viewName][2] ?? null;
     }
 
+    /** @return list<string> */
+    public static function viewNames(): array
+    {
+        // A numeric view name is an integer key.
+        return \array_map(strval(...), \array_keys(self::$contracts));
+    }
+
     /** @param list<array{0: string, 1: string}>|null $sources */
     public static function registerComposerSources(string $viewName, ?array $sources): void
     {

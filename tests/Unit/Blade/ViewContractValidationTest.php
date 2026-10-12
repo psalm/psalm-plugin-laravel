@@ -447,6 +447,34 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A composer registered at request time (middleware, a controller, a provider's deferred
+     * callback) is invisible at boot, so every view it reaches is exempt as a whole. A `composer()`
+     * on a class that is no view factory, and a view no runtime pattern matches, stay checked; a
+     * loaded provider's own boot-time composer keeps its per-key exemption.
+     */
+    #[Test]
+    public function a_runtime_composer_exempts_every_view_it_reaches(): void
+    {
+        $reported = [];
+
+        foreach ($this->forFile($this->contractIssues('psalm.xml'), 'RuntimeComposerCallSites.php') as $issue) {
+            \preg_match("/View '([^']+)' declares \\$(\\w+)/", $issue['message'], $matches);
+            $reported[] = "{$issue['type']} {$matches[1]} \${$matches[2]}";
+        }
+
+        \sort($reported);
+
+        $this->assertSame(
+            [
+                self::MISSING . ' composer-provider $count',
+                self::MISSING . ' runtime-unmatched $user',
+                self::MISSING . ' runtime-userland $user',
+            ],
+            $reported,
+        );
+    }
+
+    /**
      * Only a statement-level docblock of the template's own scope declares: a property or method
      * docblock, one inside a closure or an expression, and a `$row[...] = ` local are no contract,
      * and a `use`-aliased qualified name declines the type check.

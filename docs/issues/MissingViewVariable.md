@@ -107,7 +107,7 @@ The whole view is skipped, as if every key were composer-supplied, when any comp
 
 A listener built by another view factory on the same dispatcher, or one that names an unknown `with()` parameter, also makes the view unknown.
 
-**Limitation: composers registered after boot.** Only composers registered while the application boots (service providers) are read. A composer registered later, in a middleware or a controller, is invisible: a view whose only composer is registered at runtime is checked as if it had none (as since #1821), and a view with a boot composer plus a runtime one is checked against the boot composer's keys only, so a key only the runtime composer supplies is reported as missing.
+**Composers registered after boot.** A composer or creator registered later (in a middleware, a controller, a route closure, or a closure a service provider defers) cannot be read at boot, so the plugin finds the registration in your project files instead and skips every view it reaches as a whole. It recognizes `View::composer()`, `View::creator()` and `View::composers()` on the `View` facade, and `composer()` / `creator()` / `composers()` on `view()`, `app('view')`, `app(Factory::class)`, or a parameter, local variable or property typed `Illuminate\View\Factory` or `Illuminate\Contracts\View\Factory`. View names may be string literals or literal arrays, wildcards included. A view argument that is not a literal (a variable, a constant) could name any view, so it skips every view. A `composer()` method on any other class is not a view registration. A call made directly in a method of a service provider the application loaded already ran at boot, so its composer is read as described above. A registration through an untyped variable, or in code outside your project files, is not seen.
 
 A `share()` hidden inside a method the composer calls, or inside the constructor of a class it receives as a dependency, is still missed: only the composer's own constructor and method are read.
 
@@ -116,7 +116,7 @@ A `share()` hidden inside a method the composer calls, or inside the constructor
 The check reads the data one call site passes. It does not know about the ways Laravel binds a
 variable into a view somewhere else entirely:
 
-- A composer or creator that is not registered by the time the plugin boots the application (one added lazily at runtime).
+- A composer or creator registered at runtime in a form the plugin does not recognize (see [Composers registered after boot](#composers-and-creators)).
 - `@inject('metrics', 'App\Services\Metrics')` inside the template, which resolves from the container rather than from the data array.
 
 A variable that arrives that way is declared by the template but never passed by the call

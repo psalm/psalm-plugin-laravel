@@ -6,7 +6,12 @@ use Illuminate\Foundation\Application;
 
 // A minimal real bootstrap/app.php (branch 1 of ApplicationProvider::doGetApp()), so the booted app
 // binds 'blade.compiler' and a 'view.finder' anchored at THIS fixture's config/view.php paths.
-$app = Application::configure(basePath: \dirname(__DIR__))->create();
+// The provider is loaded at boot, so its composers are read like any other boot-time registration.
+require_once __DIR__ . '/../app/Providers/FixtureViewServiceProvider.php';
+
+$app = Application::configure(basePath: \dirname(__DIR__))
+    ->withProviders([ViewContractFixture\Providers\FixtureViewServiceProvider::class])
+    ->create();
 
 // A view composer, as an application's service provider would register one: the `composed` view's
 // data is then not what its call sites pass.
