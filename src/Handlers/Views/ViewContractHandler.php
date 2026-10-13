@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\Contracts\Support\Renderable;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Stmt;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
@@ -16,6 +18,7 @@ use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
@@ -257,7 +260,14 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             }
         }
 
-        if ($source->getCodebase()->isTypeContainedByType($supplied, $declared)) {
+        $codebase = $source->getCodebase();
+
+        // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
+        // gains no new report.
+        if (
+            $codebase->isTypeContainedByType($supplied, $declared)
+            || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
+        ) {
             return;
         }
 
@@ -269,6 +279,26 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             ),
             $suppressedIssues,
         );
+    }
+
+    /**
+     * What the template receives: `View::gatherData()` swaps every `Renderable` data value for the
+     * string it renders to. A class Psalm never scanned is not proven `Renderable` and stays as is.
+     *
+     * @psalm-mutation-free
+     */
+    private static function renderablesAsString(Type\Union $supplied, Codebase $codebase): Type\Union
+    {
+        $atomics = [];
+
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof Type\Atomic\TNamedObject
+                && ClassLineage::isA($codebase, $atomic->value, Renderable::class)
+                    ? new Type\Atomic\TString()
+                    : $atomic;
+        }
+
+        return new Type\Union($atomics);
     }
 
     /**

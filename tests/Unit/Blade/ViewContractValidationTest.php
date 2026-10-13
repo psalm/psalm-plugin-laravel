@@ -124,6 +124,28 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('string', $reported[0]['message']);
     }
 
+    /**
+     * `View::gatherData()` renders every `Renderable` data value to a string before the template sees
+     * it, so one passed for a `string` declaration is correct. Only the `Renderable` atomics are
+     * rewritten: an unrelated object and a `Renderable|int` union are still wrong, which also proves
+     * the check runs on the shapes of the silent file.
+     */
+    #[Test]
+    public function a_renderable_value_satisfies_a_string_declaration(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RenderableValue.php'), \var_export($issues, true));
+
+        $wrong = $this->forFile($issues, 'NonRenderableValue.php');
+        $this->assertCount(2, $wrong, \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($wrong, 'type'));
+
+        $messages = \implode("\n", \array_column($wrong, 'message'));
+        $this->assertStringContainsString('DateTimeImmutable', $messages);
+        $this->assertStringContainsString('Illuminate\Contracts\View\View|int', $messages);
+    }
+
     #[Test]
     public function a_with_chain_contributes_its_key_to_the_same_contract_check(): void
     {
