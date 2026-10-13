@@ -81,6 +81,9 @@ final class BladeBootstrapper
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
 
+    /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
+    private array $compileFailures = [];
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
@@ -172,11 +175,27 @@ final class BladeBootstrapper
         }
 
         $manifest->flush();
-        $this->reportFailures($failures);
 
         if ($shadows === []) {
+            // Nothing joins the analysis and no template fact is published, but a compile failure
+            // still gets its issue: an app whose every template fails would otherwise go silent
+            // under --no-progress.
+            $reported = $this->compileFailures !== []
+                && $this->registrar->markTemplatesReportable(\array_keys($this->compileFailures));
+
+            if ($reported) {
+                $this->reportCompileFailures();
+            }
+
+            $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+
             return false;
         }
+
+        // The run is about to activate and report each compile failure as an issue, so the warning
+        // keeps only the rest. If activation fails after all, the degradation warning covers every
+        // template.
+        $this->reportFailures($failures, $this->compileFailures);
 
         // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry.
         // Config::reportIssueInFile() consults only this project-file list.
@@ -240,8 +259,16 @@ final class BladeBootstrapper
         }
 
         $this->publishTemplateFacts();
+        $this->reportCompileFailures();
 
         return true;
+    }
+
+    private function reportCompileFailures(): void
+    {
+        foreach ($this->compileFailures as $templatePath => [$source, $message]) {
+            $this->registrar->reportCompileFailure($templatePath, $source, $message);
+        }
     }
 
     /**
@@ -337,6 +364,7 @@ final class BladeBootstrapper
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
+                $this->compileFailures[$shadow->templatePath] = [$source, $shadow->message];
                 $this->claimNameOnly($template, $roots);
 
                 continue;
@@ -795,15 +823,19 @@ final class BladeBootstrapper
      * some templates are not covered.
      *
      * @param array<string, string> $failures
+     * @param array<string, array{0: string, 1: string}> $reportedAsIssues templates left out of the
+     *        warning, because each is reported as a `BladeCompileFailure` instead
      */
-    private function reportFailures(array $failures): void
+    private function reportFailures(array $failures, array $reportedAsIssues = []): void
     {
-        if ($failures === []) {
-            return;
-        }
-
         foreach ($failures as $path => $reason) {
             $this->output->debug("Laravel plugin: skipped Blade template '{$path}': {$reason}\n");
+        }
+
+        $failures = \array_diff_key($failures, $reportedAsIssues);
+
+        if ($failures === []) {
+            return;
         }
 
         $count = \count($failures);
