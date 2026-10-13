@@ -312,7 +312,7 @@ final class BladeBootstrapper
         }
 
         $factory = $this->viewFactory();
-        $shared = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($factory?->getShared() ?? [])), true);
+        $shared = $this->sharedNames($factory);
 
         // A shared name is no contract, so a marker problem on its declaration is not one either.
         foreach ($this->pendingProblems as $templatePath => $problems) {
@@ -525,14 +525,27 @@ final class BladeBootstrapper
         }
     }
 
+    /**
+     * `$app` and whatever a provider `share()`d: the data every view receives, which no call site passes.
+     *
+     * @return array<string, true>
+     *
+     * @psalm-capabilities read-props
+     */
+    private function sharedNames(?Factory $factory): array
+    {
+        return ['app' => true] + \array_fill_keys(\array_map(static fn(int|string $name): string => (string) $name, \array_keys($factory?->getShared() ?? [])), true);
+    }
+
     private function collectProvidedFacts(BladeCompiler $compiler): void
     {
         $this->factory = $this->viewFactory();
-        $this->providedNames = ['app' => true] + \array_fill_keys(\array_map(static fn(int|string $name): string => (string) $name, \array_keys($this->factory?->getShared() ?? [])), true);
+        $this->providedNames = $this->sharedNames($this->factory);
         \ksort($this->providedNames);
         $this->providedHash = \hash('xxh128', \implode(',', \array_keys($this->providedNames)));
 
         // Closures take `mixed`, so the untyped getters add no mixed locals (docs/contributing/type-coverage.md).
+        // `array_values()` below: these maps are string-keyed, and a string key in a spread is a named argument.
         $this->componentViewPrefixes = \array_merge(
             $this->componentViewPrefixes,
             ...\array_values(\array_map(
