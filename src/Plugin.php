@@ -988,8 +988,7 @@ final class Plugin implements PluginEntryPointInterface
      * `Blade\CompilerEnvironment::describe()`).
      *
      * @param bool $annotating the annotate codemod is driving this run, which needs the read sets
-     *                         the UnusedViewData pass collects whether or not that rule is on;
-     *                         validateViewData needs them too, to judge an `@include`'s inherited scope
+     *                         the UnusedViewData pass collects whether or not that rule is on
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
@@ -1003,7 +1002,7 @@ final class Plugin implements PluginEntryPointInterface
             $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
-            $pluginConfig->bladeReportUnusedViewData || $pluginConfig->bladeValidateViewData || $annotating,
+            $pluginConfig->bladeReportUnusedViewData || $annotating,
         );
 
         if (!$bootstrapper->boot()) {

@@ -270,26 +270,13 @@ Some names are never contracts, because no call site passes them: a name the tem
 
 ### Included templates
 
-With `validateViewData`, `@include('partials.card', ['user' => $user])` is checked against `partials/card.blade.php`'s declarations like a call site, reported on the `@include` line. Only a literal view name with a literal data array is checked. `@extends('layout', [...])` compiles to the same call and is checked the same way. `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked.
+With `validateViewData`, a template's `$__env->make('view', [literal array], …)` call is checked like a `view()` call site, on the directive's line:
 
-A key present in the array is type checked against the included template's declaration, with the value typed as the including template sees it.
+* `@include`, `@includeIf` and `@extends('layout', [...])` type-check the keys their array passes. A key the array omits is never reported: the included template also inherits the including template's scope, so the key can still arrive.
+* `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables.
+* `@includeWhen`, `@includeUnless`, `@includeFirst`, `@each` and `@component` are not checked, nor is an include without a literal data array.
 
-A key absent from the array can still arrive through the including template's scope, which `@include` hands on whole. It is reported missing only when the including template provably cannot supply it, so the check declines when the including template:
-
-* declares the name (`@var`, required or `= null`, or `@props`),
-* reads it (an undeclared read is data its own caller passes), or binds it itself (an assignment, a `@foreach` alias, a closure parameter),
-* receives it from Blade (`$errors`, `$slot`, ...),
-* is itself rendered by a literal name from another template (any `@include` variant, `@extends`, `@each`, `@component`; `inc/panel` and `inc.panel` alike): it then receives data its declarations do not show (that template's whole scope, `@each`'s item and key, `@component`'s named slots),
-* may be a class component's own view: any `Component` subclass whose `render()` names it, in any shape. Class component data cannot be told apart from the rest of that view's scope, so the missing check is off there entirely,
-* is an anonymous component's view (a `components.` view name, or one under a registered anonymous component path or namespace): every tag attribute becomes one of its variables,
-* declares nothing at all, has an unreadable `@props` array, or has a dynamic scope (`$$name`, `extract()`; this includes every `@props`/`@aware` component view, whose compiled output writes `$$name`),
-* has a view composer or creator registered.
-
-What reaches the including template from a `view()` call site is bounded by its declarations. **Declare the variables a template forwards to its includes**: with `view('parent', ['title' => $t, 'count' => $n])` and a `parent` that declares only `$title`, an `@include('card', ['title' => $title])` in `parent` reports `card`'s `$count` as missing, although the call site passes it. Declaring `@var int $count` in `parent` documents the hand-off and silences the report.
-
-A name starting with `__` is never reported missing on an include: the forwarded scope drops only Blade's `$__data` and `$__path`, and the plugin does not track an author's own `$__x`.
-
-Not followed: a template reached only through a dynamic include (`@include($name)`) is checked as if no template included it.
+[`reportUnusedViewData`](config.md#reportunusedviewdata) does not judge includes.
 
 ## Unused view data
 

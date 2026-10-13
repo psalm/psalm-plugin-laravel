@@ -29,9 +29,6 @@ final class ContractRegistry
     /** @var array<string, true> */
     private static array $composed = [];
 
-    /** @var array<string, ViewDataContract|null> template path => its own contract, null when a composer feeds it */
-    private static array $templateScopes = [];
-
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
     private static array $problems = [];
 
@@ -78,26 +75,6 @@ final class ContractRegistry
         return isset(self::$composed[$viewName]);
     }
 
-    /**
-     * Keyed by path, not name: the scope an `@include` hands on belongs to the template being
-     * analyzed, whichever view name it was reached by. A composer on any of its names, or another
-     * template including or extending one of them, makes that scope open, so null is sticky.
-     */
-    public static function registerTemplateScope(string $templatePath, ?ViewDataContract $contract): void
-    {
-        if (\array_key_exists($templatePath, self::$templateScopes) && !self::$templateScopes[$templatePath] instanceof ViewDataContract) {
-            return;
-        }
-
-        self::$templateScopes[$templatePath] = $contract;
-    }
-
-    /** Null when the template's scope is not bounded by its own contract, see {@see registerTemplateScope()}. */
-    public static function templateScopeFor(string $templatePath): ?ViewDataContract
-    {
-        return self::$templateScopes[$templatePath] ?? null;
-    }
-
     /** @param array<string, array{0: int, 1: string}> $problems variable name => [template line, message] */
     public static function registerProblems(string $templatePath, array $problems): void
     {
@@ -117,6 +94,5 @@ final class ContractRegistry
         self::$problems = [];
         self::$contracts = [];
         self::$composed = [];
-        self::$templateScopes = [];
     }
 }

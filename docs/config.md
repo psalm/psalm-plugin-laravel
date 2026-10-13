@@ -307,7 +307,7 @@ Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` fa
 
 Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
 
-Inside a template, `@include('view', [...])` with a literal name and a literal array is checked the same way and reported on the directive's line. The included template also inherits the including one's scope, so a key missing from the array is reported only when the including template declares variables of its own, neither declares, reads nor binds that name, and is neither rendered by name from another template nor a component's view. See [Included templates](blade.md#included-templates).
+Inside templates, the literal data array of `@include`, `@includeIf` and `@extends` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
 
 
 ### `reportUnusedViewData`

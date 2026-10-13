@@ -67,27 +67,12 @@ final class ContractRegistryTest extends TestCase
         $this->assertSame([], $contract->vars);
     }
 
-    /** A template reached by two view names has an open scope when a composer feeds either of them. */
-    #[Test]
-    public function a_composed_template_scope_stays_open_whichever_name_registers_last(): void
-    {
-        ContractRegistry::registerTemplateScope('/views/a.blade.php', null);
-        ContractRegistry::registerTemplateScope('/views/a.blade.php', $this->contractDeclaring('string'));
-        ContractRegistry::registerTemplateScope('/views/b.blade.php', $this->contractDeclaring('string'));
-
-        $this->assertNull(ContractRegistry::templateScopeFor('/views/a.blade.php'));
-        $this->assertNotNull(ContractRegistry::templateScopeFor('/views/b.blade.php'));
-        $this->assertNull(ContractRegistry::templateScopeFor('/views/unregistered.blade.php'));
-    }
-
     #[Test]
     public function reset_clears_a_previous_invocations_contracts(): void
     {
         ContractRegistry::register('profile', 0, $this->contractDeclaring('string'));
-        ContractRegistry::registerTemplateScope('/views/a.blade.php', $this->contractDeclaring('string'));
         ContractRegistry::reset();
 
         $this->assertNull(ContractRegistry::contractFor('profile'));
-        $this->assertNull(ContractRegistry::templateScopeFor('/views/a.blade.php'));
     }
 }

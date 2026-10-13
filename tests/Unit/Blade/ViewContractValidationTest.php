@@ -446,108 +446,69 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
-     * `@include('view', [...])` hands the partial its literal array AND the including template's
-     * scope, so a key absent from the array is only missing when the includer cannot supply it.
+     * `@include` and `@includeIf` also hand the partial the includer's whole scope, so only the keys
+     * their array passes are checked, by type.
      */
     #[Test]
-    public function an_include_missing_a_variable_the_includer_cannot_supply_is_reported_on_its_line(): void
-    {
-        $reported = $this->templateContractIssues('missing.blade.php');
-
-        // Line 5 sits under a Blade suppression of another issue, which the shadow carries as a
-        // docblock between the open tag and the echo.
-        $this->assertSame([3, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
-
-        foreach ($reported as $issue) {
-            $this->assertSame(self::MISSING, $issue['type']);
-            $this->assertStringContainsString("View 'inc.card' declares \$count", (string) $issue['message']);
-        }
-    }
-
-    #[Test]
-    public function an_include_whose_includer_declares_or_binds_the_variable_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('declared.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('declared-required.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('bound.blade.php'));
-    }
-
-    #[Test]
-    public function an_include_value_of_the_wrong_type_is_reported_and_a_mixed_one_declines(): void
+    public function an_include_value_of_the_wrong_type_is_reported_on_its_line_and_a_mixed_one_declines(): void
     {
         $reported = $this->templateContractIssues('wrong-type.blade.php');
 
+        $this->assertSame([3, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+            $this->assertStringContainsString('$title as string, but int', (string) $issue['message']);
+        }
+    }
+
+    /** The partial inherits the includer's scope, so a key the array omits may still arrive. */
+    #[Test]
+    public function a_key_an_include_omits_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('omitted.blade.php'));
+    }
+
+    /** `@includeIsolated` hands on no scope: its array is the whole data set, as at a `view()` call. */
+    #[Test]
+    public function an_isolated_include_omitting_a_declared_variable_is_reported_on_its_line(): void
+    {
+        $reported = $this->templateContractIssues('isolated.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+        $this->assertStringContainsString("View 'inc.card' declares \$count", (string) $reported[0]['message']);
+    }
+
+    #[Test]
+    public function an_isolated_include_passing_every_required_variable_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('isolated-complete.blade.php'));
+    }
+
+    #[Test]
+    public function an_include_of_a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('composed-include.blade.php'));
+    }
+
+    /** `@extends('layout', [...])` compiles to the `@include` call, emitted after the template body. */
+    #[Test]
+    public function an_extends_value_of_the_wrong_type_is_reported_on_the_directive_line(): void
+    {
+        $reported = $this->templateContractIssues('extends-data.blade.php');
+
         $this->assertCount(1, $reported, \var_export($reported, true));
         $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
-        $this->assertSame(3, $reported[0]['line_from']);
-        $this->assertStringContainsString('$title as string, but int', (string) $reported[0]['message']);
+        $this->assertSame(2, $reported[0]['line_from']);
     }
 
-    /** An includer whose scope is dynamic, or that declares no contract at all, may hand on anything. */
+    /** The includer's own UndefinedDocblockClass already reports an unknown class; no cascade. */
     #[Test]
-    public function an_include_from_an_open_includer_scope_is_not_reported(): void
+    public function an_include_value_of_an_undefined_class_is_not_type_checked(): void
     {
-        $this->assertSame([], $this->templateContractIssues('dynamic.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('no-contract.blade.php'));
-    }
-
-    #[Test]
-    public function the_other_include_directives_are_not_checked(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('include-if.blade.php'));
-    }
-
-    /** A name only an `@php` assignment binds, never read, is still in the includer's scope. */
-    #[Test]
-    public function an_include_after_an_assignment_in_the_includer_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('assign-block.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('assign-paren.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('assign-conditional.blade.php'));
-    }
-
-    /** An anonymous component's view receives every tag attribute as a variable. */
-    #[Test]
-    public function an_include_from_an_anonymous_components_view_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('anon-includer.blade.php'));
-    }
-
-    /**
-     * Any by-name render hands the view data its own declarations do not show: `@component`'s
-     * named slots, `@each`'s item and key, and the including scope of a slash-spelled `@include`.
-     */
-    #[Test]
-    public function an_include_from_a_view_any_directive_renders_by_name_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('slot-panel.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('each-panel.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('slash-panel.blade.php'));
-    }
-
-    /** Only `__data` and `__path` leave the scope `@include` forwards, so an author's `$__x` arrives. */
-    #[Test]
-    public function an_include_needing_a_double_underscore_name_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('dunder.blade.php'));
-    }
-
-    /** A class component's view receives `data()`, whether or not its render() shape is typed. */
-    #[Test]
-    public function an_include_from_a_class_components_view_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('component-view.blade.php'));
-    }
-
-    /**
-     * A template another template includes or extends receives that template's whole scope, so
-     * what it hands on is not bounded by its own declarations.
-     */
-    #[Test]
-    public function an_include_from_an_included_or_extended_template_is_not_reported(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('parent.blade.php'));
-        $this->assertSame([], $this->templateContractIssues('layout.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('undefined-class.blade.php'));
     }
 
     #[Test]
@@ -559,35 +520,6 @@ final class ViewContractValidationTest extends TestCase
                 \var_export($issue, true),
             );
         }
-    }
-
-    /** The includer's own UndefinedDocblockClass already reports an unknown class; no cascade. */
-    #[Test]
-    public function an_include_value_of_an_undefined_class_is_not_type_checked(): void
-    {
-        $this->assertSame([], $this->templateContractIssues('undefined-class.blade.php'));
-    }
-
-    /** `@extends('layout', [...])` compiles to the same call, and hands the layout the same scope. */
-    #[Test]
-    public function an_extends_with_literal_data_is_checked_like_an_include(): void
-    {
-        $reported = $this->templateContractIssues('extends-data.blade.php');
-
-        $this->assertCount(1, $reported, \var_export($reported, true));
-        $this->assertSame(self::MISSING, $reported[0]['type']);
-        $this->assertSame(2, $reported[0]['line_from']);
-    }
-
-    /** A hand-written call that compiles byte-identically to `@include` has its runtime meaning too. */
-    #[Test]
-    public function a_handwritten_compiled_include_is_checked_like_the_directive(): void
-    {
-        $reported = $this->templateContractIssues('handwritten.blade.php');
-
-        $this->assertCount(1, $reported, \var_export($reported, true));
-        $this->assertSame(self::MISSING, $reported[0]['type']);
-        $this->assertSame(2, $reported[0]['line_from']);
     }
 
     /**
