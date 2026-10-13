@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791930278354,
+  "lastUpdate": 1791932226306,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13855,6 +13855,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "723c77ee55f6c26c5d8a237898f7416097bdabc0",
+          "message": "Report `match` findings in Blade templates as Psalm does on plain PHP (#1803)\n\n* fix(blade): drop match-arm findings Psalm suppresses on plain PHP #1801\n\n- Decline positionless (line -1) issues so Psalm drops them as on plain PHP; UndefinedThisPropertyAssignment keeps the #1545 line-1 report\n- Suppress RedundantCondition and RedundantConditionGivenDocblockType inside match arms, mirroring MatchAnalyzer's runtime suppression that BeforeAddIssue omits\n\n* fix(blade): keep match findings Psalm re-analyzes or reports outside arms #1801\n\n- Suppress RedundantCondition* only inside an arm span, so a match used as a condition operand keeps reporting\n- Keep RedundantCondition on arm conditions of a match without default arm (Psalm analyzes them again outside its suppression window)\n- Docs: widen the positionless decline wording and reword the UndefinedThisPropertyAssignment exception\n\n* fix(blade): mirror match subject tracking case-sensitively #1801\n\n- Subject tracking now follows MatchAnalyzer: `TRUE` is tracked, `true` is not; get_class/gettype/get_debug_type/count/sizeof over a plain variable and `$expr::class` stay untracked\n\n* test(blade): pin match subject tracking branches #1801\n\n- Cover match(true), count() over a non-variable argument and Foo::class subjects without a default arm\n- Reword the handler docblock and the docs note on the re-analyzed arm conditions\n\n* fix(blade): report docblock redundancy in re-analyzed match conditions #1801\n\n- MatchAnalyzer removes both suppressions before re-analyzing the arm conditions of a tracked, default-less match, so suppress neither there\n- Document the accepted extra-report residuals\n\n* refactor(blade): drop RedundantCondition inside match arms without mirroring MatchAnalyzer\n\n- Suppress RedundantCondition and RedundantConditionGivenDocblockType whenever an enclosing match arm contains the finding, nothing more\n- Remove the default-arm and tracked-subject mirroring of MatchAnalyzer's second analysis of arm conditions\n- Accepted residual: for a match without a default arm Psalm reports in an arm condition where a template now stays silent\n- Keep the subject and operand fixtures (add a subject case), drop the tracked-subject and re-analysis cases",
+          "timestamp": "2026-10-14T00:53:35+02:00",
+          "tree_id": "cfdadb26e4ade16d83fb199b053dd6ba0f3961b2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/723c77ee55f6c26c5d8a237898f7416097bdabc0"
+        },
+        "date": 1791932224758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.52,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1505,
             "unit": "MB"
           }
         ]
