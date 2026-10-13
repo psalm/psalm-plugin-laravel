@@ -531,7 +531,12 @@ final class ContractParser
                 return null;
             }
 
-            if ($item->key !== null) {
+            // `ComponentAttributeBag::extractPropNames()` names an entry with an `is_numeric()` key by
+            // its value, with no default, exactly like a bare entry.
+            $numericKey = $item->key instanceof Node\Scalar\Int_
+                || ($item->key instanceof Node\Scalar\String_ && \is_numeric($item->key->value));
+
+            if ($item->key !== null && !$numericKey) {
                 if (!$item->key instanceof Node\Scalar\String_) {
                     return null;
                 }
@@ -550,7 +555,11 @@ final class ContractParser
                 return null;
             }
 
-            $props[$item->value->value] = [false, null]; // bare entry, no default
+            // An all-digit name is never a variable the body can read, and PHP would cast most to an
+            // int key: skip it here, where the key is written (#1848).
+            if (\preg_match('/^-?\d+$/D', $item->value->value) !== 1) {
+                $props[$item->value->value] = [false, null]; // bare entry, no default
+            }
         }
 
         return $props;
@@ -757,7 +766,10 @@ final class ContractParser
 
                 foreach ($args as $arg) {
                     if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
-                        $this->names[$arg->value->value] = true;
+                        // An all-digit name is never a variable, and PHP would cast most to an int key.
+                        if (\preg_match('/^-?\d+$/D', $arg->value->value) !== 1) {
+                            $this->names[$arg->value->value] = true;
+                        }
 
                         continue;
                     }

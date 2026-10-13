@@ -102,6 +102,46 @@ final class ContractParserTest extends TestCase
         $this->assertSame('string', $contract->vars['ok']->defaultType);
     }
 
+    /** PHP casts a decimal-integer string key to int, which reached `ContractVar`'s string name (#1848). */
+    #[Test]
+    #[DataProvider('integerNameProvider')]
+    public function an_integer_like_props_or_aware_name_declares_nothing_and_keeps_the_rest(string $source): void
+    {
+        $contract = $this->parse($source);
+
+        $this->assertSame(['size'], \array_keys($contract->vars));
+        $this->assertSame('string', $contract->vars['size']->defaultType);
+        $this->assertFalse($contract->propsUnknown);
+        $this->assertSame(['size'], \array_keys($this->parser->parseDeclarations($source)->vars));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function integerNameProvider(): iterable
+    {
+        yield 'keyed' => ["@props(['1' => '2', 'size' => 'lg'])\n"];
+        yield 'negative keyed' => ["@props(['-1' => '3', 'size' => 'lg'])\n"];
+        yield 'bare' => ["@props(['1', 'size' => 'lg'])\n"];
+        yield 'aware' => ["@aware(['1', '2' => 'x'])\n@props(['size' => 'lg'])\n"];
+    }
+
+    /** `ComponentAttributeBag::extractPropNames()` names a numeric-keyed entry by its value, as a bare one. */
+    #[Test]
+    public function a_numeric_keyed_props_entry_declares_its_value_as_a_required_name(): void
+    {
+        $contract = $this->parse("@props(['1' => 'color', '01' => 'tone', 2 => 'size'])\n");
+
+        $this->assertSame(['color', 'tone', 'size'], \array_keys($contract->vars));
+        $this->assertFalse($contract->vars['color']->optional);
+        $this->assertNull($contract->vars['color']->defaultType);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_numeric_keyed_props_entry_with_a_non_literal_value_is_unreadable(): void
+    {
+        $this->assertTrue($this->parse("@props(['1' => \$name])\n")->propsUnknown);
+    }
+
     #[Test]
     public function a_props_name_any_aware_shares_infers_no_default_type(): void
     {
@@ -550,6 +590,15 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($contract->readsUnknown);
         $this->assertContains('first', $contract->readVariables);
         $this->assertContains('second', $contract->readVariables);
+    }
+
+    #[Test]
+    public function an_all_digit_compact_arg_reads_nothing(): void
+    {
+        $contract = $this->dataContract("@php\n\$out = compact('1', '-1', 'first');\n@endphp\n{{ \$out }}\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertContains('first', $contract->readVariables);
     }
 
     #[Test]

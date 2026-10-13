@@ -6,7 +6,7 @@ nav_order: 13
 
 # BladeCompileFailure
 
-Emitted on line 1 of a Blade template that the Blade compiler threw on, so the template is not analyzed. The message names the compiler's exception class and message. Needs [Blade template analysis](../blade.md) enabled. See [Reporting level](#reporting-level).
+Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on, so the template is not analyzed. The message names the exception class and message. Needs [Blade template analysis](../blade.md) enabled. See [Reporting level](#reporting-level).
 
 ## Why it matters
 
@@ -22,6 +22,7 @@ INFO: BladeCompileFailure - resources/views/dashboard.blade.php:1:1 - Blade temp
 
 * A directive, condition, or precompiler callback that throws when called outside a request.
 * A component tag (`<x-...>`) whose class or view cannot be resolved by the booted application (see [Known limits](../blade.md#known-limits)).
+* The plugin's own declaration parser crashed on the template (an exception class such as `TypeError`). This is a plugin bug: report it with the template.
 
 ## How to fix
 

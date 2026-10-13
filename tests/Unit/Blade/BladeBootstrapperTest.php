@@ -870,6 +870,22 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertCount(1, $registrar->analyzedShadows);
     }
 
+    /** One template's `@props` contract once threw out of compileAll() and disabled Blade for the run (#1848). */
+    #[Test]
+    public function an_integer_props_name_does_not_disable_blade_for_the_run(): void
+    {
+        $component = $this->writeTemplate('props-int.blade.php', "@props(['1' => 'x', '2'])\n<div>{{ \$attributes }}</div>\n");
+        $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->assertTrue($this->bootstrapper($this->app(), $registrar)->boot());
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([], $registrar->compileFailures);
+        $this->assertEqualsCanonicalizing([$component, $healthy], $registrar->reportableTemplates);
+        $this->assertCount(2, $registrar->analyzedShadows);
+    }
+
     #[Test]
     public function a_compile_failure_is_reported_even_when_no_template_compiled(): void
     {
