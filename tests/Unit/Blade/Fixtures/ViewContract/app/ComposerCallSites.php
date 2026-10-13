@@ -51,4 +51,10 @@ final class ComposerCallSites
     {
         return view('composer-dynamic', ['title' => 123]);
     }
+
+    // `compact('view')` hands the view on by name, so `title` is not reported.
+    public function compacted(): View
+    {
+        return view('composer-compact', []);
+    }
 }

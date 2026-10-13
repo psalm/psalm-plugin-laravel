@@ -82,8 +82,13 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'computed static method name' => ['View::{"share"}("b", 1);', null];
         yield 'variable function' => ['$f = "share"; $f("b", 1);', null];
         yield 'variable variable' => ['$$name = 1;', null];
+        yield 'compact reaching the view by name' => ['$vars = compact("view"); $vars["view"]->with("a", 1);', null];
+        yield 'get_defined_vars' => ['$this->decorate(get_defined_vars());', null];
+        yield 'extract, fully qualified and upper-cased' => ['\EXTRACT($data);', null];
+        yield 'func_get_args' => ['func_get_args()[0]->with("a", 1);', null];
+        yield 'func_get_arg' => ['func_get_arg(0)->with("a", 1);', null];
 
-        // Accepted residual: the view reached without its parameter name is not seen.
-        yield 'func_get_args' => ['func_get_args()[0]->with("a", 1);', []];
+        // Accepted residual: a `share()` reached through a callable is not seen.
+        yield 'share through call_user_func' => ['call_user_func([View::class, "share"], "b", 1);', []];
     }
 }

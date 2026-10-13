@@ -27,6 +27,9 @@ use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
  */
 final class ComposerKeyResolver
 {
+    /** Reach the view by name or position, where the occurrence check cannot see it. */
+    private const OPAQUE_FUNCTIONS = ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg'];
+
     public static function resolve(Codebase $codebase): void
     {
         /** @var array<string, array<array-key, true>|null> $methods class::method => keys, memoized */
@@ -144,7 +147,8 @@ final class ComposerKeyResolver
             // `share()` adds keys at render time that no `with()` shows.
             $node instanceof Expr\MethodCall, $node instanceof Expr\NullsafeMethodCall, $node instanceof Expr\StaticCall
                 => !$node->name instanceof Identifier || $node->name->toLowerString() === 'share',
-            $node instanceof Expr\FuncCall => !$node->name instanceof Name,
+            $node instanceof Expr\FuncCall => !$node->name instanceof Name
+                || \in_array(\ltrim($node->name->toLowerString(), '\\'), self::OPAQUE_FUNCTIONS, true),
             $node instanceof Expr\Variable => !\is_string($node->name),
             default => false,
         };

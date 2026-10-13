@@ -24,6 +24,7 @@ $app->booted(static function () use ($app): void {
     $view->composer('composer-accessor', $composers . 'AccessorComposer');
     $view->composer('composer-dynamic', $composers . 'LiteralComposer');
     $view->composer('composer-dynamic', $composers . 'MethodComposer@dynamic');
+    $view->composer('composer-compact', $composers . 'MethodComposer@compacted');
 });
 
 return $app;

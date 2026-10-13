@@ -88,11 +88,13 @@ supplied set is treated as open and this check declines for it.
 
 ## Composers and creators
 
-A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) runs
-after the call site, so it can supply any key. The plugin reads the composer's method instead of
-running it and exempts only the keys it passes; every other declared variable is checked as usual.
-[InvalidViewVariableType](InvalidViewVariableType.md) skips the composer-supplied keys too, since the
-composer may overwrite the value.
+A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) can
+supply any key. A creator runs inside `view()` (`Factory::make()`), after the data array is set but
+before any chained `->with()`; a composer runs at render time, after the whole call site. The plugin
+reads the method instead of running it and exempts only the keys it passes; every other declared
+variable is checked as usual. [InvalidViewVariableType](InvalidViewVariableType.md) skips those keys
+too, since the composer or creator may overwrite the passed value (a chained `->with()` beats a
+creator, so skipping it there is merely conservative).
 
 What is read:
 
@@ -103,17 +105,16 @@ What is read:
 The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
 
 - is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, `composing: *` included);
-- passes a key that is not a string literal: a variable, `compact()`, `with($array)`, a spread or named arguments;
+- passes a key that is not a string literal: a variable, `with($array)`, a spread or named arguments;
 - uses `$view` any other way: passes it on (`$this->decorate($view)`, `parent::compose($view)`), assigns, returns or captures it, uses the result of `with()`, sets a property or offset on it, calls another method on it (`withTitle()`, `nest()`, `getData()`), or calls it through `?->`;
-- calls `share()`, uses a variable variable, or calls a method or function through a computed name;
+- calls `share()`, or `compact()`, `extract()`, `get_defined_vars()`, `func_get_args()` or `func_get_arg()` (which reach `$view` by name or position), uses a variable variable, or calls a method or function through a computed name;
 - has no method body the plugin can find.
 
 **Accepted residual.** The composer class is read as written. A class the container rebinds, extends
 or hooks before resolving, a view factory or dispatcher subclass, a constructor that shares data, a
-protected method served by `__call()`, and data reaching the view through `func_get_args()`,
-`call_user_func()` or an `include` are not modelled. If the keys such a composer really supplies
-differ from what its method shows, the call site reports; the fix is `= null` on the declaration or
-a suppression (below).
+protected method served by `__call()`, and data reaching the view through `call_user_func()` or an
+`include` are not modelled. If the keys such a composer really supplies differ from what its method
+shows, the call site reports; the fix is `= null` on the declaration or a suppression (below).
 
 **Limitation: composers registered after boot.** Only composers registered while the application
 boots (service providers) are read. A composer registered later, in a middleware or a controller, is

@@ -22,4 +22,10 @@ final class MethodComposer
     {
         $view->with(\strtolower('TITLE'), 'x');
     }
+
+    public function compacted(View $view): void
+    {
+        $vars = compact('view');
+        $vars['view']->with('title', 'Ready');
+    }
 }

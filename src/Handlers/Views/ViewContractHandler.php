@@ -129,9 +129,9 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        // A composer or creator can overwrite a key after the call site passed it, so for the keys it
-        // supplies neither presence nor type can be judged from the call site. A view whose composer
-        // cannot be read is exempt as a whole.
+        // A composer (at render time) or a creator (inside `view()`, before a chained `with()`) can
+        // overwrite a key the call site passed, so for the keys it supplies neither presence nor type
+        // can be judged from the call site. A view whose composer cannot be read is exempt as a whole.
         $composed = ContractRegistry::composedKeys($chain->viewName);
 
         if (self::$validateViewData && $composed !== null) {
