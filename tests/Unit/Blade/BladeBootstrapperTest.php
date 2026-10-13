@@ -858,7 +858,7 @@ final class BladeBootstrapperTest extends TestCase
         // untrustworthy, #1517 F3, unrelated to this test's own point). The compile failure is an
         // issue instead, so it is not named in a warning `--no-progress` would discard.
         $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
-        $this->assertStringNotContainsString('skipped', $this->progress->warningText());
+        $this->assertStringNotContainsString('were skipped and are not analyzed', $this->progress->warningText());
         $this->assertSame(
             [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
             $registrar->compileFailures,
@@ -901,7 +901,7 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
-        $this->assertStringNotContainsString('skipped', $this->progress->warningText());
+        $this->assertStringNotContainsString('were skipped and are not analyzed', $this->progress->warningText());
     }
 
     #[Test]
