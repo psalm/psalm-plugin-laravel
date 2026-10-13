@@ -81,6 +81,22 @@ final class UndeclaredVariablesTest extends TestCase
         ], $this->coldRun('psalm.xml'));
     }
 
+    /**
+     * Each of these views reads a name nothing declares, so only its gate keeps the net: the first by
+     * the string-keyed namespace map, the second by an anonymous component path, the third by a
+     * `Blade::component()` alias naming a view. A boot that choked on the string-keyed maps would
+     * degrade the whole run, which leaves no shadow at all and fails this too.
+     */
+    #[Test]
+    public function a_view_a_component_registration_can_render_keeps_its_net(): void
+    {
+        $shadows = $this->shadowsOf($this->analyzeFixture(self::FIXTURE, $this->arguments('psalm.xml'))['shadows']);
+
+        foreach (['undeclaredNamespaced', 'undeclaredPathed', 'undeclaredAliased'] as $name) {
+            $this->assertStringContainsString("@var mixed \${$name}", $shadows);
+        }
+    }
+
     #[Test]
     public function with_the_flag_off_nothing_is_reported_and_the_net_still_declares_the_name(): void
     {

@@ -13,6 +13,13 @@ $app->booted(static function () use ($app): void {
     $view = $app->make('view');
     $view->share('siteName', 'Fixture');
     $view->composer('composed', static fn(): null => null);
+
+    // Anonymous component registrations, as a package's service provider makes them. The namespace
+    // and alias maps are string-keyed, which the bootstrapper must not splat as named arguments.
+    $blade = $app->make('blade.compiler');
+    $blade->anonymousComponentNamespace('anon-ns', 'ns');
+    $blade->anonymousComponentPath(\dirname(__DIR__) . '/resources/anon-path', 'pkg');
+    $blade->component('aliased.target', 'my-alias');
 });
 
 return $app;
