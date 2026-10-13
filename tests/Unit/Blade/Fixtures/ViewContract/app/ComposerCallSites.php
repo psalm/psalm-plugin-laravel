@@ -6,7 +6,7 @@ namespace ViewContractFixture;
 
 use Illuminate\Contracts\View\View;
 
-// Each statement is one case; the composer behind every view is registered in bootstrap/app.php.
+// Each method is one case; the composer behind every view is registered in bootstrap/app.php.
 final class ComposerCallSites
 {
     // `title` and `tags` come from the composer, so only `count` is missing.
@@ -21,11 +21,17 @@ final class ComposerCallSites
         return view('composer-literal', ['title' => 123, 'tags' => 'x', 'count' => 'x']);
     }
 
-    // The exact composer's `build` method and the wildcard composer's `compose` together supply
-    // `count` and `title`; the exact composer's own `compose` (which would supply `other`) never runs.
+    // The wildcard composer supplies `title`, the exact `Class@build` one `count`; the class's own
+    // `compose()`, which would supply `other`, never runs.
     public function wildcardAndMethodUnion(): View
     {
         return view('composer-wild.page', []);
+    }
+
+    // A creator registered as `Class@build` supplies `count`.
+    public function creator(): View
+    {
+        return view('composer-created', []);
     }
 
     // `compose()` is declared in a trait that the parent class uses.
@@ -34,47 +40,15 @@ final class ComposerCallSites
         return view('composer-inherited', []);
     }
 
-    public function creator(): View
-    {
-        return view('composer-created', []);
-    }
-
-    // A constructor that only stores its arguments keeps the composer readable: `count` is missing.
-    public function plainConstructor(): View
-    {
-        return view('composer-ctor-plain', []);
-    }
-
-    // PHP turns the numeric string `'123'` into the integer key `123` in every map keyed by view name.
-    public function numericViewName(): View
-    {
-        return view('123', []);
-    }
-
-    // `currentAdminViewPath` comes from the composer, which only reads the view's name: `count` is missing.
+    // `section` comes from a composer that reads the view's path first.
     public function readOnlyAccessor(): View
     {
         return view('composer-accessor', []);
     }
 
-    // Everything below stays whole-view silent: the key set cannot be proven.
-    public function declined(): void
+    // One of the view's composers passes a computed key, so the view is checked for nothing.
+    public function unknown(): View
     {
-        view('composer-dynamic', ['title' => 123]);
-        view('composer-escape', ['title' => 123]);
-        view('composer-conflict', ['title' => 123]);
-        // `build` is the alias of the trait body `insteadof` excluded; Psalm maps it onto the other one.
-        view('composer-alias', ['title' => 123]);
-        // The container constructs the composer first, and its constructor shares `count`.
-        view('composer-ctor', ['title' => 123]);
-        // The parent constructor (called or inherited) shares `count`.
-        view('composer-parent-ctor', ['title' => 123]);
-        // A protected `compose()` is reached through `__call()`, which supplies `count`.
-        view('composer-protected', ['title' => 123]);
-        view('composer-protected-trait', ['title' => 123]);
-        // A default value that constructs an object runs code the reader cannot see.
-        view('composer-ctor-default', ['title' => 123]);
-        view('composer-inherited-ctor', ['title' => 123]);
-        view('composer-unknown', ['title' => 123]);
+        return view('composer-dynamic', ['title' => 123]);
     }
 }

@@ -1,3 +1,3 @@
-<?php /** @var string $currentAdminViewPath */ ?>
+<?php /** @var string $section */ ?>
 <?php /** @var int $count */ ?>
-<p>{{ $currentAdminViewPath }} ({{ $count }})</p>
+<p>{{ $section }} ({{ $count }})</p>

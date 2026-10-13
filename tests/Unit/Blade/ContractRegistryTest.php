@@ -80,15 +80,12 @@ final class ContractRegistryTest extends TestCase
     #[Test]
     public function composed_keys_distinguish_no_composer_from_an_unresolved_one(): void
     {
+        ContractRegistry::registerComposerSources(['composed' => [['App\\Composer', 'compose']], 'opaque' => null]);
         $this->assertSame([], ContractRegistry::composedKeys('plain'));
-
-        ContractRegistry::registerComposerSources('composed', [['App\\Composer', 'compose']]);
         $this->assertNull(ContractRegistry::composedKeys('composed'), 'sources the resolver never reached');
 
-        ContractRegistry::registerComposedKeys('composed', ['title' => true]);
+        ContractRegistry::registerComposedKeys(['composed' => ['title' => true], 'opaque' => null]);
         $this->assertSame(['title' => true], ContractRegistry::composedKeys('composed'));
-
-        ContractRegistry::registerComposerSources('opaque', null);
         $this->assertNull(ContractRegistry::composedKeys('opaque'));
 
         ContractRegistry::reset();

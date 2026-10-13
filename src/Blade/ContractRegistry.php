@@ -26,14 +26,10 @@ final class ContractRegistry
      */
     private static array $contracts = [];
 
-    /**
-     * @var array<string, list<array{0: string, 1: string}>|null> view name => [class, lowercased
-     *      method] of every composer or creator reaching it, null when one is not a plain class
-     *      composer. Written at boot, read by {@see ComposerKeyResolver}.
-     */
+    /** @var array<array-key, list<array{0: string, 1: string}>|null> view name => {@see ComposerSourceReader::read()} */
     private static array $composerSources = [];
 
-    /** @var array<string, array<array-key, true>|null> view name => keys every composer supplies, null when unprovable */
+    /** @var array<array-key, array<array-key, true>|null> view name => keys its composers supply, null when unknown */
     private static array $composedKeys = [];
 
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
@@ -71,28 +67,27 @@ final class ContractRegistry
         return self::$contracts[$viewName][2] ?? null;
     }
 
-    /** @param list<array{0: string, 1: string}>|null $sources */
-    public static function registerComposerSources(string $viewName, ?array $sources): void
+    /** @param array<array-key, list<array{0: string, 1: string}>|null> $sources */
+    public static function registerComposerSources(array $sources): void
     {
-        self::$composerSources[$viewName] = $sources;
+        self::$composerSources = $sources;
     }
 
-    /** @return array<array-key, list<array{0: string, 1: string}>|null> a numeric view name is an integer key */
+    /** @return array<array-key, list<array{0: string, 1: string}>|null> */
     public static function composerSources(): array
     {
         return self::$composerSources;
     }
 
-    /** @param array<array-key, true>|null $keys */
-    public static function registerComposedKeys(string $viewName, ?array $keys): void
+    /** @param array<array-key, array<array-key, true>|null> $keys */
+    public static function registerComposedKeys(array $keys): void
     {
-        self::$composedKeys[$viewName] = $keys;
+        self::$composedKeys = $keys;
     }
 
     /**
-     * The data keys the view's composers and creators provably supply: `[]` for a view none reaches,
-     * null when any of them is unreadable (or the resolver never ran), which makes every key of the
-     * view potentially composer-supplied.
+     * The data keys the view's composers and creators supply: `[]` when none reaches it, null when
+     * one is unreadable or the keys were never resolved.
      *
      * @return array<array-key, true>|null
      */

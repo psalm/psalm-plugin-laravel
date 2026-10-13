@@ -656,7 +656,7 @@ final class RelationMethodParser
      * @param lowercase-string $methodName
      * @psalm-capabilities read-props
      */
-    public static function countTraitOwners(Codebase $codebase, array $usedTraits, string $methodName): int
+    private static function countTraitOwners(Codebase $codebase, array $usedTraits, string $methodName): int
     {
         $owners = 0;
         $visited = [];

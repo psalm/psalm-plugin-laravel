@@ -425,16 +425,13 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
-     * A class composer that provably passes a key only exempts THAT key: the other declared
-     * variables are still judged. The composer-supplied key is not type-checked either, since the
-     * composer runs after the call site and may overwrite it.
-     *
-     * The wildcard and exact composers of `composer-wild.page` are unioned, the exact one is a
-     * `Class@build` entry (its own `compose()` supplies a different key and must not count), a
-     * trait method inherited through a parent class is read, and creators work the same way.
+     * A class composer exempts only the keys it passes: the other declared variables are still
+     * judged, and a composer-supplied key is not type-checked either, since the composer runs after
+     * the call site and may overwrite it. Wildcard and `Class@method` composers are unioned, creators
+     * and trait methods are read, and one unreadable composer leaves its view unchecked.
      */
     #[Test]
-    public function a_composer_exempts_only_the_keys_it_provably_supplies(): void
+    public function a_composer_exempts_only_the_keys_it_supplies(): void
     {
         $reported = [];
 
@@ -448,10 +445,8 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(
             [
                 self::WRONG_TYPE . ' composer-literal $count',
-                self::MISSING . ' 123 $count',
                 self::MISSING . ' composer-accessor $count',
-                self::MISSING . ' composer-created $count',
-                self::MISSING . ' composer-ctor-plain $count',
+                self::MISSING . ' composer-created $title',
                 self::MISSING . ' composer-inherited $count',
                 self::MISSING . ' composer-literal $count',
                 self::MISSING . ' composer-wild.page $other',

@@ -6,11 +6,12 @@ namespace ViewContractFixture\Composers;
 
 use Illuminate\View\View;
 
-// Reading the view's name does not add or change data, so `$view` stays provable.
+// Reading the view's path leaves its data untouched, so `$view` stays provable.
 final class AccessorComposer
 {
     public function compose(View $view): void
     {
-        $view->with('currentAdminViewPath', $view->getName());
+        $section = \basename(\dirname($view->getPath()));
+        $view->with('section', $section);
     }
 }

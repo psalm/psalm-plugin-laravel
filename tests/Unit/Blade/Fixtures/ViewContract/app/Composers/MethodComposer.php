@@ -17,4 +17,9 @@ final class MethodComposer
     {
         $view->with('count', 1);
     }
+
+    public function dynamic(View $view): void
+    {
+        $view->with(\strtolower('TITLE'), 'x');
+    }
 }

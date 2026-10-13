@@ -73,7 +73,7 @@ The check declines rather than guess. It is silent when:
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
-- The variable is one a view composer or creator provably supplies (see [Composers and creators](#composers-and-creators)). The other declared variables of that view are still checked; when a composer cannot be read, the whole view is skipped.
+- The variable is one a view composer or creator supplies (see [Composers and creators](#composers-and-creators)). The other declared variables of that view are still checked; when a composer cannot be read, the whole view is skipped.
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
@@ -88,28 +88,38 @@ supplied set is treated as open and this check declines for it.
 
 ## Composers and creators
 
-A composer or creator registered for the view (exact name or wildcard such as `admin.*`) runs after
-the call site, so it can supply any key. The plugin reads the composer's body instead of running it,
-and exempts only the keys it provably passes: every `$view->with('key', ...)`,
-`$view->with(['key' => ...])` and named form `$view->with(key: 'key', value: ...)` with a literal key (also as a top-level `return $view->with(...)` of the composer method, since Laravel ignores a composer's return value), in a class composer (`View::composer('x', Foo::class)`,
-`Foo@method`) or a creator. `compose()` / `create()` may be inherited or come from a trait. When
-several composers reach a view, their keys are unioned. Everything else about the view is checked as
-usual; the composer-supplied keys are also skipped by
-[InvalidViewVariableType](InvalidViewVariableType.md), since the composer may overwrite the value.
+A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) runs
+after the call site, so it can supply any key. The plugin reads the composer's method instead of
+running it and exempts only the keys it passes; every other declared variable is checked as usual.
+[InvalidViewVariableType](InvalidViewVariableType.md) skips the composer-supplied keys too, since the
+composer may overwrite the value.
+
+What is read:
+
+- Class composers and creators: `View::composer('x', Foo::class)`, `'Foo@method'`, `View::creator(...)`, wildcard names included. The method may be inherited or come from a trait. The keys of several composers on one view are unioned.
+- Every `$view->with('key', ...)` and `$view->with(['key' => ..., ...])` with string literal keys, chained or not, as a statement of its own.
+- `$view->name()`, `$view->getName()` and `$view->getPath()`, which only read the view: a composer may compute a value from them and pass it to `with()`.
 
 The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
 
-- is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, including `composing: *`);
-- is a class the container binds, aliases or extends, a class a before-resolving callback can rebind (one registered for the class, a parent or an interface of it, or any global `App::beforeResolving(fn)` callback, which declines every composer of the application), a class carrying a `#[Bind]` or `#[BindWhen]` attribute, a listener registered raw under a wildcard key, or the dispatcher or view factory is a subclass that could add behaviour (a dispatcher other than exactly `Illuminate\Events\Dispatcher`, a factory overriding `callComposer()`/`callCreator()`, or `viewInstance()`, whose View subclass could add keys in `with()`);
-- has no readable `compose()` / `create()` body (not declared, not public, constructed through a `new` default value, or two traits declaring it) or a constructor that shares data or delegates to `parent::__construct()`;
-- passes a key that is not a string literal, passes `with($array)`, `compact()` or a spread, calls `share()` (however spelled), or uses `extract()`, `get_defined_vars()`, `func_get_args()`, `debug_backtrace()` or `call_user_func()`, or calls any `__construct()` (`parent::__construct()`, `Other::__construct()`, `$this->__construct()`);
-- lets `$view` out of reach of the walker: passes it to a method or function (`$this->decorate($view)`, `parent::compose($view)`), stores or reassigns it (`return $view;`, or a `return` inside a branch or closure), captures it in a closure, takes a first-class callable of it (`$view->with(...)`, `$view->getName(...)`), sets a property or array offset on it (`$view->title = ...`), calls anything but `with()` on it (`withTitle()`, `nest()`, `getData()`, `getFactory()`). Only `name()`, `getName()` and `getPath()` are read-only and allowed, so a composer that does `$view->with('path', $view->getName())` stays readable.
+- is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, `composing: *` included);
+- passes a key that is not a string literal: a variable, `compact()`, `with($array)`, a spread or named arguments;
+- uses `$view` any other way: passes it on (`$this->decorate($view)`, `parent::compose($view)`), assigns, returns or captures it, uses the result of `with()`, sets a property or offset on it, calls another method on it (`withTitle()`, `nest()`, `getData()`), or calls it through `?->`;
+- calls `share()`, uses a variable variable, or calls a method or function through a computed name;
+- has no method body the plugin can find.
 
-A listener built by another view factory on the same dispatcher, or one that names an unknown `with()` parameter, also makes the view unknown.
+**Accepted residual.** The composer class is read as written. A class the container rebinds, extends
+or hooks before resolving, a view factory or dispatcher subclass, a constructor that shares data, a
+protected method served by `__call()`, and data reaching the view through `func_get_args()`,
+`call_user_func()` or an `include` are not modelled. If the keys such a composer really supplies
+differ from what its method shows, the call site reports; the fix is `= null` on the declaration or
+a suppression (below).
 
-**Limitation: composers registered after boot.** Only composers registered while the application boots (service providers) are read. A composer registered later, in a middleware or a controller, is invisible: a view whose only composer is registered at runtime is checked as if it had none (as since #1821), and a view with a boot composer plus a runtime one is checked against the boot composer's keys only, so a key only the runtime composer supplies is reported as missing.
-
-A `share()` hidden inside a method the composer calls, or inside the constructor of a class it receives as a dependency, is still missed: only the composer's own constructor and method are read.
+**Limitation: composers registered after boot.** Only composers registered while the application
+boots (service providers) are read. A composer registered later, in a middleware or a controller, is
+invisible: a view whose only composer is registered at runtime is checked as if it had none, and a
+view with a boot composer plus a runtime one is checked against the boot composer's keys only. A
+`share()` inside a method the composer calls, or inside a dependency it receives, is not seen either.
 
 ### Known false positive: variables bound outside the call site
 
