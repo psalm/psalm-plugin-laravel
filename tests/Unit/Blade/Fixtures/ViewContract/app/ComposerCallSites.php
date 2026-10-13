@@ -57,4 +57,10 @@ final class ComposerCallSites
     {
         return view('composer-compact', []);
     }
+
+    // Only the dispatcher observers reach `observed`, so it is checked in full.
+    public function observed(): View
+    {
+        return view('observed', []);
+    }
 }

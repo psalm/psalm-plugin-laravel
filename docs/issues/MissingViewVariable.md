@@ -104,17 +104,22 @@ What is read:
 
 The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
 
-- is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, `composing: *` included);
+- is a closure, or a listener registered straight on the event dispatcher for the exact view name (`Event::listen('composing: x', ...)`);
 - passes a key that is not a string literal: a variable, `with($array)`, a spread or named arguments;
 - uses `$view` any other way: passes it on (`$this->decorate($view)`, `parent::compose($view)`), assigns, returns or captures it, uses the result of `with()`, sets a property or offset on it, calls another method on it (`withTitle()`, `nest()`, `getData()`), or calls it through `?->`;
 - calls `share()`, `extract()`, `get_defined_vars()`, `func_get_args()` or `func_get_arg()`, or a `compact()` naming `$view` or a name that is not a string literal (they reach `$view` by name or position), uses a variable variable, or calls a method or function through a computed name;
 - has no method body the plugin can find.
 
+Wildcard listeners registered straight on the dispatcher (`Event::listen('composing:*', ...)`,
+`Event::listen('*', ...)`) are ignored: the composer API never registers one, and debugging and
+monitoring packages such as Ray, Telescope or Debugbar use them to watch every view.
+
 **Accepted residual.** The composer class is read as written. A class the container rebinds, extends
 or hooks before resolving, a view factory or dispatcher subclass, a constructor that shares data, a
-protected method served by `__call()`, and data reaching the view through `call_user_func()` or an
-`include` are not modelled. If the keys such a composer really supplies differ from what its method
-shows, the call site reports; the fix is `= null` on the declaration or a suppression (below).
+protected method served by `__call()`, data reaching the view through `call_user_func()` or an
+`include`, and a wildcard dispatcher listener that adds view data are not modelled. If the keys the
+view really receives differ from what the composer's method shows, the call site reports; the fix is
+`= null` on the declaration or a suppression (below).
 
 **Limitation: composers registered after boot.** Only composers registered while the application
 boots (service providers) are read. A composer registered later, in a middleware or a controller, is

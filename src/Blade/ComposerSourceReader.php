@@ -12,7 +12,8 @@ use Illuminate\View\Factory;
 /**
  * Reads which class and method each composer or creator of a view runs, without running any. Only
  * the closure `Factory::buildClassEventCallback()` builds is recognised; any other listener makes
- * the view's sources unknown. The class is read as written: container rebinding and factory or
+ * the view's sources unknown, except a wildcard one the composer API did not wrap, which is an
+ * observer and skipped. The class is read as written: container rebinding and factory or
  * dispatcher subclasses are not modelled.
  *
  * @internal
@@ -61,10 +62,16 @@ final class ComposerSourceReader
             foreach ($names as $name) {
                 $listeners = $exact[$name] ?? [];
 
-                // For a wildcard view name `addEventListener()` wraps the class callback to pass it the view.
+                // The composer API wraps every wildcard composer in `addEventListener()`'s closure. Any
+                // other wildcard listener went straight to the dispatcher: an observer such as a
+                // debugging package's view watcher, not a composer.
                 foreach ($wildcards as $pattern => $wrappers) {
                     foreach (Str::is($pattern, $name) ? $wrappers : [] as $wrapper) {
-                        $listeners[] = self::captured($wrapper, 'addEventListener')['callback'] ?? null;
+                        $callback = self::captured($wrapper, 'addEventListener')['callback'] ?? null;
+
+                        if ($callback !== null) {
+                            $listeners[] = $callback;
+                        }
                     }
                 }
 

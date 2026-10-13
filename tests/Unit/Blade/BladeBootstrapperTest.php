@@ -561,7 +561,8 @@ final class BladeBootstrapperTest extends TestCase
     /**
      * A class composer (`Class`, `Class@method`), creator or wildcard composer is recorded as the
      * class and method that will run, and the class is queued so Psalm has its storage when the keys
-     * are read. A view nobody composes records nothing.
+     * are read. A view nobody composes records nothing: wildcard observers registered straight on
+     * the dispatcher (a debugging package's view watcher) are no composers.
      */
     #[Test]
     public function class_composers_creators_and_wildcard_composers_are_recorded_as_class_and_method(): void
@@ -572,6 +573,8 @@ final class BladeBootstrapperTest extends TestCase
         $view->composer('composed', 'App\\Other@Build');
         $view->creator('created', 'App\\Maker');
         $view->composer('admin.*', 'App\\AdminComposer');
+        $view->getDispatcher()->listen('composing:*', static fn(): null => null);
+        $view->getDispatcher()->listen('*', static fn(): null => null);
 
         foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
             $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
@@ -598,8 +601,8 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * A user closure or a listener registered straight on the dispatcher, exact or wildcard, leaves
-     * the view unknown, and one such listener makes the whole view unknown.
+     * A user closure, or a listener registered straight on the dispatcher for the exact view name,
+     * leaves the view unknown, and one such listener makes the whole view unknown.
      */
     #[Test]
     public function a_listener_that_is_not_a_class_composer_leaves_the_view_unknown(): void
@@ -610,9 +613,8 @@ final class BladeBootstrapperTest extends TestCase
         $view->composer('mixed', 'App\\Known');
         $view->composer('mixed', static fn(): null => null);
         $view->getDispatcher()->listen('composing: raw', 'App\\Listener@handle');
-        $view->getDispatcher()->listen('composing: wild.*', static fn(): null => null);
 
-        foreach (['closure', 'mixed', 'raw', 'wild/page', 'plain'] as $name) {
+        foreach (['closure', 'mixed', 'raw', 'plain'] as $name) {
             $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
         }
 
@@ -621,7 +623,7 @@ final class BladeBootstrapperTest extends TestCase
         $sources = ContractRegistry::composerSources();
         \ksort($sources);
 
-        $this->assertSame(['closure' => null, 'mixed' => null, 'raw' => null, 'wild.page' => null], $sources);
+        $this->assertSame(['closure' => null, 'mixed' => null, 'raw' => null], $sources);
     }
 
     /**

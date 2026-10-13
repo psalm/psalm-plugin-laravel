@@ -428,7 +428,8 @@ final class ViewContractValidationTest extends TestCase
      * A class composer exempts only the keys it passes: the other declared variables are still
      * judged, and a composer-supplied key is not type-checked either, since the composer runs after
      * the call site and may overwrite it. Wildcard and `Class@method` composers are unioned, creators
-     * and trait methods are read, and one unreadable composer leaves its view unchecked.
+     * and trait methods are read, and one unreadable composer leaves its view unchecked. The wildcard
+     * observers bootstrap/app.php registers on the dispatcher count as no composer at all.
      */
     #[Test]
     public function a_composer_exempts_only_the_keys_it_supplies(): void
@@ -450,6 +451,7 @@ final class ViewContractValidationTest extends TestCase
                 self::MISSING . ' composer-inherited $count',
                 self::MISSING . ' composer-literal $count',
                 self::MISSING . ' composer-wild.page $other',
+                self::MISSING . ' observed $title',
             ],
             $reported,
         );

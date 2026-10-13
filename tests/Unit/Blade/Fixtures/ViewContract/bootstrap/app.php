@@ -25,6 +25,12 @@ $app->booted(static function () use ($app): void {
     $view->composer('composer-dynamic', $composers . 'LiteralComposer');
     $view->composer('composer-dynamic', $composers . 'MethodComposer@dynamic');
     $view->composer('composer-compact', $composers . 'MethodComposer@compacted');
+
+    // Observers registered straight on the dispatcher, as Ray, Telescope or Debugbar do: they reach
+    // every view and supply nothing.
+    $events = $app->make('events');
+    $events->listen('composing:*', static fn(): null => null);
+    $events->listen('*', static fn(): null => null);
 });
 
 return $app;
