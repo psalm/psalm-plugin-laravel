@@ -533,8 +533,8 @@ final class ContractParser
 
             $name = $item->key ?? $item->value;
 
-            // PHP would store a decimal-integer name (`'1'`) under an int key, and no such name is a
-            // variable the body can read: skip it here, where the key is written (#1848).
+            // An all-digit name is never a variable the body can read, and PHP would cast most to an int
+            // key: skip it here, where the key is written (#1848).
             if ($name instanceof Node\Scalar\String_ && \preg_match('/^-?\d+$/D', $name->value) === 1) {
                 continue;
             }
