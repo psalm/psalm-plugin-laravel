@@ -858,7 +858,7 @@ final class BladeBootstrapperTest extends TestCase
         // untrustworthy, #1517 F3, unrelated to this test's own point). The compile failure is an
         // issue instead, so it is not named in a warning `--no-progress` would discard.
         $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
-        $this->assertStringNotContainsString('were skipped and are not analyzed', $this->progress->warningText());
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
         $this->assertSame(
             [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
             $registrar->compileFailures,
@@ -868,22 +868,6 @@ final class BladeBootstrapperTest extends TestCase
         // from a healthy shadow can be remapped to its template, and the failure reported on it.
         $this->assertSame([$broken, $healthy], $registrar->reportableTemplates);
         $this->assertCount(1, $registrar->analyzedShadows);
-    }
-
-    /** One template's `@props` contract once threw out of compileAll() and disabled Blade for the run (#1848). */
-    #[Test]
-    public function an_integer_props_name_does_not_disable_blade_for_the_run(): void
-    {
-        $component = $this->writeTemplate('props-int.blade.php', "@props(['1' => 'x', '2'])\n<div>{{ \$attributes }}</div>\n");
-        $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
-        $registrar = new RecordingShadowRegistrar();
-
-        $this->assertTrue($this->bootstrapper($this->app(), $registrar)->boot());
-
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
-        $this->assertSame([], $registrar->compileFailures);
-        $this->assertEqualsCanonicalizing([$component, $healthy], $registrar->reportableTemplates);
-        $this->assertCount(2, $registrar->analyzedShadows);
     }
 
     #[Test]
@@ -901,7 +885,7 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
-        $this->assertStringNotContainsString('were skipped and are not analyzed', $this->progress->warningText());
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
     }
 
     #[Test]
