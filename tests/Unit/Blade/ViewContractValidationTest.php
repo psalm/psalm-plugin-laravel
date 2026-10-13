@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -528,6 +529,8 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_isolated_include_omitting_a_declared_variable_is_reported_on_its_line(): void
     {
+        $this->requireIncludeIsolated();
+
         $reported = $this->templateContractIssues('isolated.blade.php');
 
         $this->assertCount(1, $reported, \var_export($reported, true));
@@ -539,6 +542,8 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_isolated_include_passing_every_required_variable_is_not_reported(): void
     {
+        $this->requireIncludeIsolated();
+
         $this->assertSame([], $this->templateContractIssues('isolated-complete.blade.php'));
     }
 
@@ -546,6 +551,8 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_isolated_include_without_data_reports_every_required_variable(): void
     {
+        $this->requireIncludeIsolated();
+
         $reported = $this->templateContractIssues('isolated-bare.blade.php');
 
         $this->assertCount(1, $reported, \var_export($reported, true));
@@ -557,12 +564,17 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_isolated_include_without_data_of_a_view_with_only_optional_variables_is_not_reported(): void
     {
+        $this->requireIncludeIsolated();
+
         $this->assertSame([], $this->templateContractIssues('isolated-bare-optional.blade.php'));
     }
 
+    /** `composed`'s closure composer is opaque: neither presence (`@includeIsolated`) nor type is judged. */
     #[Test]
     public function an_include_of_a_composed_view_is_checked_for_neither_presence_nor_type(): void
     {
+        $this->requireIncludeIsolated();
+
         $this->assertSame([], $this->templateContractIssues('composed-include.blade.php'));
     }
 
@@ -592,6 +604,14 @@ final class ViewContractValidationTest extends TestCase
                 $issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'extra-key.blade.php',
                 \var_export($issue, true),
             );
+        }
+    }
+
+    /** `@includeIsolated` arrives in Laravel 12.47; below that Blade leaves the directive as text. */
+    private function requireIncludeIsolated(): void
+    {
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            self::markTestSkipped('@includeIsolated requires Laravel >= 12.47.');
         }
     }
 
