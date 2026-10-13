@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -498,6 +499,136 @@ final class ViewContractValidationTest extends TestCase
                 'a property docblock is not a declaration',
             );
         }
+    }
+
+    /**
+     * `@include` and `@includeIf` also hand the partial the includer's whole scope, so only the keys
+     * their array passes are checked, by type.
+     */
+    #[Test]
+    public function an_include_value_of_the_wrong_type_is_reported_on_its_line_and_a_mixed_one_declines(): void
+    {
+        $reported = $this->templateContractIssues('wrong-type.blade.php');
+
+        $this->assertSame([3, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+            $this->assertStringContainsString('$title as string, but int', (string) $issue['message']);
+        }
+    }
+
+    /** The partial inherits the includer's scope, so a key the array omits may still arrive. */
+    #[Test]
+    public function a_key_an_include_omits_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('omitted.blade.php'));
+    }
+
+    /** `@includeIsolated` hands on no scope: its array is the whole data set, as at a `view()` call. */
+    #[Test]
+    public function an_isolated_include_omitting_a_declared_variable_is_reported_on_its_line(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $reported = $this->templateContractIssues('isolated.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+        $this->assertStringContainsString("View 'inc.card' declares \$count", (string) $reported[0]['message']);
+    }
+
+    #[Test]
+    public function an_isolated_include_passing_every_required_variable_is_not_reported(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $this->assertSame([], $this->templateContractIssues('isolated-complete.blade.php'));
+    }
+
+    /** Without an array, `@includeIsolated('view')` compiles to `make('view')`: no data at all. */
+    #[Test]
+    public function an_isolated_include_without_data_reports_every_required_variable(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $reported = $this->templateContractIssues('isolated-bare.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(1, $reported[0]['line_from']);
+        $this->assertStringContainsString("View 'greeting' declares \$name", (string) $reported[0]['message']);
+    }
+
+    #[Test]
+    public function an_isolated_include_without_data_of_a_view_with_only_optional_variables_is_not_reported(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $this->assertSame([], $this->templateContractIssues('isolated-bare-optional.blade.php'));
+    }
+
+    /** `composed`'s closure composer is opaque: neither presence (`@includeIsolated`) nor type is judged. */
+    #[Test]
+    public function an_include_of_a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $this->assertSame([], $this->templateContractIssues('composed-include.blade.php'));
+    }
+
+    /** `@extends('layout', [...])` compiles to the `@include` call, emitted after the template body. */
+    #[Test]
+    public function an_extends_value_of_the_wrong_type_is_reported_on_the_directive_line(): void
+    {
+        $reported = $this->templateContractIssues('extends-data.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+    }
+
+    /** The includer's own UndefinedDocblockClass already reports an unknown class; no cascade. */
+    #[Test]
+    public function an_include_value_of_an_undefined_class_is_not_type_checked(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('undefined-class.blade.php'));
+    }
+
+    #[Test]
+    public function an_include_never_reports_unused_view_data(): void
+    {
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm-unused-data.xml')) as $issue) {
+            $this->assertFalse(
+                $issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'extra-key.blade.php',
+                \var_export($issue, true),
+            );
+        }
+    }
+
+    /** `@includeIsolated` arrives in Laravel 12.47; below that Blade leaves the directive as text. */
+    private function requireIncludeIsolated(): void
+    {
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            self::markTestSkipped('@includeIsolated requires Laravel >= 12.47.');
+        }
+    }
+
+    /**
+     * @return list<array<array-key, mixed>>
+     */
+    private function templateContractIssues(string $template): array
+    {
+        $issues = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if (\in_array($issue['type'], [self::MISSING, self::WRONG_TYPE], true) && \basename((string) $issue['file_name']) === $template) {
+                $issues[] = $issue;
+            }
+        }
+
+        return $issues;
     }
 
     #[Test]

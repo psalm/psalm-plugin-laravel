@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\Contracts\Support\Renderable;
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
@@ -44,6 +46,11 @@ use Psalm\Type;
  *
  * Also reports, under its own independent flag, a data key the template never reads
  * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
+ *
+ * Inside a template, the `$__env->make()` call an `@include` compiles to is checked as the
+ * `Factory::make()` call site it is. `@include` passes the including scope as `$mergeData`, which
+ * leaves the key set open, so only its explicit keys are type-checked; `@includeIsolated` passes no
+ * scope and is checked in full.
  *
  * Every check is conservative in the same direction: anything that cannot be proven declines.
  * A missing variable needs the supplied key set to be provably closed, so an open data array
@@ -93,11 +100,14 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         $stmt = $event->getStmt();
+        $include = self::$validateViewData && $stmt instanceof Stmt\Echo_ ? self::compiledInclude($stmt) : null;
 
-        // The two statement shapes a rendering expression is the whole of. An expression nested
-        // deeper (an argument, an array element) is left alone on purpose: the check costs a walk
-        // per statement, and reaching those shapes would mean re-walking every sub-expression.
+        // The two statement shapes a rendering expression is the whole of, plus a compiled include.
+        // An expression nested deeper (an argument, an array element) is left alone on purpose: the
+        // check costs a walk per statement, and reaching those shapes would mean re-walking every
+        // sub-expression.
         $expr = match (true) {
+            $include instanceof Expr\MethodCall => $include,
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
             default => null,
         };
@@ -119,9 +129,39 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             return null;
         }
 
-        self::check($chain, $contract, new CodeLocation($source, $expr), $source);
+        self::check($chain, $contract, new CodeLocation($source, $expr), $source, $include instanceof Expr\MethodCall);
 
         return null;
+    }
+
+    /**
+     * The `make()` call of `echo $__env->make('view', [...], <the including scope>)->render();`,
+     * which `@include`, `@includeIf` and `@extends` compile to, or of `@includeIsolated`'s forms
+     * without the scope: `make('view', [...])`, and `make('view')`, whose data set is closed and empty.
+     * Only a literal data array is read: `@include('view')` also compiles to two arguments, its second
+     * being the scope.
+     */
+    private static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
+    {
+        $render = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
+        $make = $render instanceof Expr\MethodCall && self::isNamed($render, 'render') ? $render->var : null;
+
+        if (!$make instanceof Expr\MethodCall
+            || !self::isNamed($make, 'make')
+            || !$make->var instanceof Expr\Variable
+            || $make->var->name !== '__env'
+        ) {
+            return null;
+        }
+
+        $data = $make->args[1] ?? null;
+
+        return \count($make->args) === 1 || ($data instanceof Arg && $data->value instanceof Expr\Array_) ? $make : null;
+    }
+
+    private static function isNamed(Expr\MethodCall $call, string $name): bool
+    {
+        return $call->name instanceof Identifier && $call->name->toLowerString() === $name;
     }
 
     private static function check(
@@ -129,6 +169,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         ViewDataContract $contract,
         CodeLocation $codeLocation,
         StatementsSource $source,
+        bool $include,
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
@@ -157,7 +198,8 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             }
         }
 
-        if (self::$reportUnusedViewData) {
+        // UnusedViewData judges `view()` call sites only.
+        if (self::$reportUnusedViewData && !$include) {
             self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
         }
     }
@@ -246,6 +288,15 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             return;
         }
 
+        $codebase = $source->getCodebase();
+
+        // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof Type\Atomic\TNamedObject && !$codebase->classOrInterfaceOrEnumExists($atomic->value)) {
+                return;
+            }
+        }
+
         $declared = self::declaredType($var->optional ? ContractParser::withNull($var->typeString) : $var->typeString);
 
         if (!$declared instanceof Type\Union || $declared->hasMixed()) {
@@ -259,8 +310,6 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
                 return;
             }
         }
-
-        $codebase = $source->getCodebase();
 
         // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
         // gains no new report.
