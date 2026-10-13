@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791923158490,
+  "lastUpdate": 1791928063582,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13785,6 +13785,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ae01a1afeb3be5bf14616e5739b556a7fb95f3b",
+          "message": "Skip an all-digit `@props` name instead of disabling Blade analysis for the run (#1850)\n\n* fix(blade): skip an integer-like @props or @aware name #1848\n\nPHP casts a decimal-integer string key to int, which reached ContractVar's\nstring name and threw out of the compile pass, disabling Blade analysis for\nevery template in the run. No such name is a variable the template can read.\n\n* fix(blade): skip a template whose contract parse throws #1848\n\nA throw from per-template declaration parsing is now reported as a\nBladeCompileFailure for that template, as a compile failure is, instead of\nescaping compileAll() and degrading the whole run.\n\n* test(blade): pin the skipped-templates wording in compile-failure tests #1848\n\nThe shadow-cache warning now says \"shadow cache skipped\", so a bare\n'skipped' check failed although no compile failure reached the\nskipped-templates warning.\n\n* docs(blade): note plugin parser crashes in BladeCompileFailure #1848\n\n* fix(blade): name a numeric-keyed @props entry by its value #1848\n\nComponentAttributeBag::extractPropNames() uses the value as the prop name\nwhen the key is numeric, with no default, so ['1' => 'color'] declares a\nrequired $color exactly like a bare 'color' entry.\n\n* fix(blade): skip an all-digit compact() name in the read set #1848\n\nAn int-cast key from compact('1') reached a string consumer and threw,\nlosing the whole template as a BladeCompileFailure.\n\n* test(blade): restore the integer @props boot test dropped in the 4.x merge #1848",
+          "timestamp": "2026-10-13T23:44:15+02:00",
+          "tree_id": "ac84ba559207b1baa921a2f32f29db1a789c1cf9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9ae01a1afeb3be5bf14616e5739b556a7fb95f3b"
+        },
+        "date": 1791928061780,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.87,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1504,
             "unit": "MB"
           }
         ]
