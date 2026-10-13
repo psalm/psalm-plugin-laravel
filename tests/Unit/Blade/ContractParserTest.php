@@ -593,6 +593,15 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function an_all_digit_compact_arg_reads_nothing(): void
+    {
+        $contract = $this->dataContract("@php\n\$out = compact('1', '-1', 'first');\n@endphp\n{{ \$out }}\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertContains('first', $contract->readVariables);
+    }
+
+    #[Test]
     public function a_non_literal_compact_arg_makes_the_read_set_unknown(): void
     {
         $contract = $this->dataContract("@php\n\$out = compact(\$names);\n@endphp\n{{ \$out }}\n");

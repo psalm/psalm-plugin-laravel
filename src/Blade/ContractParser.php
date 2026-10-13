@@ -766,7 +766,10 @@ final class ContractParser
 
                 foreach ($args as $arg) {
                     if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
-                        $this->names[$arg->value->value] = true;
+                        // An all-digit name is never a variable, and PHP would cast most to an int key.
+                        if (\preg_match('/^-?\d+$/D', $arg->value->value) !== 1) {
+                            $this->names[$arg->value->value] = true;
+                        }
 
                         continue;
                     }
