@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791932911659,
+  "lastUpdate": 1791933959341,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13925,6 +13925,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b6424144371da34b89a9520617dd549a5668cfe",
+          "message": "refactor(blade): restore 100% type coverage in BladeBootstrapper (#1854)\n\n- `viewFactory()` bound the container's `mixed` to a local under\n  `@psalm-suppress MixedAssignment`. Narrow it inline through\n  `asFactory()`, like the other `as*` helpers, and drop the suppression.\n- `array_map('strval', ...)` makes Psalm's return type provider analyze a\n  synthetic array fetch with a mixed offset, which counts as a mixed\n  expression. Use a typed closure instead.\n- No behavior change.",
+          "timestamp": "2026-10-14T01:22:37+02:00",
+          "tree_id": "c8a9545e48c6f9cf3d43d05d8e5040ccbcb52e61",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1b6424144371da34b89a9520617dd549a5668cfe"
+        },
+        "date": 1791933957875,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.54,
+            "range": "± 0.49",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
