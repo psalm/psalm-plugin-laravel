@@ -528,31 +528,28 @@ final class BladeBootstrapper
     private function collectProvidedFacts(BladeCompiler $compiler): void
     {
         $this->factory = $this->viewFactory();
-        $this->providedNames = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($this->factory?->getShared() ?? [])), true);
+        $this->providedNames = ['app' => true] + \array_fill_keys(\array_map(static fn(int|string $name): string => (string) $name, \array_keys($this->factory?->getShared() ?? [])), true);
         \ksort($this->providedNames);
         $this->providedHash = \hash('xxh128', \implode(',', \array_keys($this->providedNames)));
 
-        /** @psalm-var mixed $directory */
-        foreach ($compiler->getAnonymousComponentNamespaces() as $directory) {
-            if (\is_string($directory)) {
-                $this->componentViewPrefixes[] = $directory . '.';
-            }
-        }
-
-        /** @psalm-var mixed $path */
-        foreach ($compiler->getAnonymousComponentPaths() as $path) {
-            if (\is_array($path) && isset($path['prefixHash']) && \is_string($path['prefixHash'])) {
-                $this->componentViewPrefixes[] = $path['prefixHash'] . '::';
-            }
-        }
+        // Closures take `mixed`, so the untyped getters add no mixed locals (docs/contributing/type-coverage.md).
+        $this->componentViewPrefixes = \array_merge(
+            $this->componentViewPrefixes,
+            ...\array_values(\array_map(
+                static fn(mixed $directory): array => \is_string($directory) ? [$directory . '.'] : [],
+                $compiler->getAnonymousComponentNamespaces(),
+            )),
+            ...\array_map(
+                static fn(mixed $hash): array => \is_string($hash) ? [$hash . '::'] : [],
+                \array_column($compiler->getAnonymousComponentPaths(), 'prefixHash'),
+            ),
+        );
 
         // An alias naming a view rather than a class is rendered as an anonymous component.
-        /** @psalm-var mixed $target */
-        foreach ($compiler->getClassComponentAliases() as $target) {
-            if (\is_string($target) && !\class_exists($target)) {
-                $this->aliasedViews[\str_replace('/', '.', $target)] = true;
-            }
-        }
+        $this->aliasedViews = \array_fill_keys(\array_merge(...\array_values(\array_map(
+            static fn(mixed $target): array => \is_string($target) && !\class_exists($target) ? [\str_replace('/', '.', $target)] : [],
+            $compiler->getClassComponentAliases(),
+        ))), true);
     }
 
     /**
