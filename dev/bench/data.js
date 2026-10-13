@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791840919824,
+  "lastUpdate": 1791923158490,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13745,6 +13745,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.07,
             "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3074f85056f06ca42cb602fef1a1abfc883d1e4",
+          "message": "Type Blade `@props` entries from their literal default (#1837)\n\n* feat(blade): type @props entries from their literal default\n\nA `@props` entry whose default is a literal now types the template body\nwith the widened type: string, int (leading minus included), float,\nbool, and array for any array expression. `null`, bare names and every\nother default stay mixed. Never the literal type, so a `match` over a\nstring prop keeps its other arms reachable.\n\nThe inferred type lives beside the contract, not in it: a caller may\npass any value for a prop, so the view() call-site checks still treat\nevery entry as mixed. An earlier declaration of the same name keeps the\ndefault from typing the body; a native @var re-declares it after the\nprelude.\n\nThe prelude changes for unchanged sources, so MARKER_PASS_VERSION is\nbumped to recompile cached shadows.\n\nRefs #1828\n\n* fix(blade): keep @props defaults from typing values another source supplies\n\n- `@aware` assigns every name it lists without a `??`, overwriting a\n  `@props` default whichever directive comes first: such a name, or\n  every name when an `@aware` list is unreadable, gets no default type.\n- A class component hands its view `data()` and `render()` data before\n  `@props` falls back to a default: every view any component's render()\n  may name has its inferred defaults reset to mixed through the seed\n  channel, seeded by the class or not. The registry no longer skips\n  building when no `<x-...>` tag exists, so an untagged class's view is\n  reset too.\n- A prop name that is no assignable variable (`max-width`, `this`) gets\n  no default type.\n- Pin that a call site is never checked against a default's type.\n- Revert the MARKER_PASS_VERSION bump.\n\nRefs #1828\n\n* fix(blade): infer @props default types only where nothing else can set the name\n\n- Accept bool in the e() stub: Laravel leaves $value untyped and\n  helpers.php is not strict, so htmlspecialchars() renders a bool as\n  '1' / ''. `{{ $open }}` under a `false` default reported\n  InvalidArgument.\n- Infer nothing in a template with an unreadable @props list: it may\n  set any name first, and a later default only applies through `??`.\n- Treat a @props or @aware list holding a `{{-- --}}` as unreadable:\n  Blade strips the comment before compiling, so the names it splits are\n  not the ones written.\n- Infer nothing for a name Blade types itself ($slot, $errors, ...),\n  so the class-view reset no longer erases those ambient types.\n\nRefs #1828\n\n* test(blade): expect the literal-default prelude type for a branch-assigned @props name",
+          "timestamp": "2026-10-13T22:22:48+02:00",
+          "tree_id": "06ff5a965bb0ed845941e2e276955faccefa83b9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d3074f85056f06ca42cb602fef1a1abfc883d1e4"
+        },
+        "date": 1791923157022,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.68,
+            "range": "± 0.01",
             "unit": "s"
           },
           {
