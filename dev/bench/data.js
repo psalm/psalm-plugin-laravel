@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791928063582,
+  "lastUpdate": 1791930278354,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13820,6 +13820,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1504,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3fc112bde3a614412568bf0040b143c0cfa8cb03",
+          "message": "Declare the `@session`/`@context` save stacks in the Blade prelude (#1750)\n\n* fix(blade): declare @session/@context save stacks in the prelude\n\n`$__sessionPrevious`/`$__contextPrevious` are now declared `list<mixed>`\ninstead of being skipped as written bookkeeping. This removes the\nPossiblyUndefinedGlobalVariable on the append (its name gate is deleted)\nand, with reportMixedIssues on, the MixedArgument on every\n`@endsession`/`@endcontext` `array_pop()` and the MixedArrayAssignment on\nnested or repeated blocks.\n\nCloses #1722\n\n* fix(blade): declare save stacks only for the compiled @session/@context push\n\n`list<mixed>` for `$__sessionPrevious`/`$__contextPrevious` now keys on\nthe compiler's own `if (isset($value)) { $stack[] = $value; }` push, not\nthe name. Without `@session`/`@context`, an author's own same-named\nvariable keeps the base behavior: written is skipped (a read before the\nassignment still reports UndefinedGlobalVariable), read-only is `mixed`.\n\nRefs #1722\n\n* test(blade): call PreludeBuilder::build() with the two-argument 4.x signature\n\n* chore(blade): drop generated bootstrap cache files committed by mistake\n\n- `Fixtures/UndeclaredVariables/bootstrap/cache/{packages,services}.php` came in with the\n  last `4.x` merge. No fixture, test, or config references the directory.\n- `services.php` carries Laravel's `queue.failer` binding, which the typos check flags.\n\n* refactor(blade): declare the session save stacks from the compiled push text\n\n- Declare `$__sessionPrevious` / `$__contextPrevious` as `list<mixed>` in the prelude exactly\n  when the compiled output contains the compiler's own push (`$__sessionPrevious[] = $value;`),\n  a plain `str_contains()` instead of a 12-condition AST shape match.\n- Keep the name-based `PossiblyUndefinedGlobalVariable` drop gate in `ShadowIssueRelocator` deleted.\n- Accepted residual: an author who writes the same name in a template that also uses `@session`\n  or `@context` gets it typed `list<mixed>` too.\n- Tests: keep the `reportMixedIssues` case (red without the declaration), the nested and repeated\n  fixture under the default config, and one unit negative; drop the AST-shape pins and the\n  author-names fixture.",
+          "timestamp": "2026-10-14T00:21:07+02:00",
+          "tree_id": "5b00032f771f80369ee11c931b7ac3ba49f7ca7f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3fc112bde3a614412568bf0040b143c0cfa8cb03"
+        },
+        "date": 1791930277189,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37,
+            "range": "± 0.51",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
