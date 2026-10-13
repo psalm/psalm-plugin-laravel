@@ -86,6 +86,17 @@ final class PreludeBuilder
             $lines[] = "/** @var mixed \${$name} */";
         }
 
+        // `@session`/`@context` push an outer `$value` onto these stacks and pop it back in `@end…`
+        // (CompilesSessions, CompilesContexts). Undeclared they report PossiblyUndefinedGlobalVariable;
+        // `mixed`, the `array_pop()` and `!empty()` report Mixed*/RiskyTruthyFalsyComparison (#1722).
+        // Keyed on the compiled push, not the name. Accepted residual: an author's own same-named
+        // variable in a template that also uses `@session` is typed `list<mixed>` too.
+        foreach (['__sessionPrevious', '__contextPrevious'] as $stack) {
+            if (\str_contains($compiled, "\${$stack}[] = \$value;")) {
+                $lines[] = "/** @var list<mixed> \${$stack} */";
+            }
+        }
+
         // The closing tag is the prelude's sentinel: php-parser reads it as an empty statement and
         // keeps it as one `Stmt\Nop` carrying every docblock after the ambient statements, which
         // Psalm applies before that statement's AfterStatementAnalysis ({@see ComponentViewSeedHandler}).
