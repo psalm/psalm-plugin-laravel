@@ -27,9 +27,6 @@ use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
  */
 final class ComposerKeyResolver
 {
-    /** Reach the view by name or position, where the occurrence check cannot see it. */
-    private const OPAQUE_FUNCTIONS = ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg'];
-
     public static function resolve(Codebase $codebase): void
     {
         /** @var array<string, array<array-key, true>|null> $methods class::method => keys, memoized */
@@ -85,7 +82,7 @@ final class ComposerKeyResolver
         $parameter = $method->params[0]->var ?? null;
         $view = $parameter instanceof Expr\Variable ? $parameter->name : null;
 
-        if ($stmts === null || $finder->findFirst($stmts, self::isOpaque(...)) instanceof Node) {
+        if ($stmts === null || $finder->findFirst($stmts, static fn(Node $node): bool => self::isOpaque($node, $view)) instanceof Node) {
             return null;
         }
 
@@ -141,17 +138,44 @@ final class ComposerKeyResolver
         return $keys;
     }
 
-    private static function isOpaque(Node $node): bool
+    private static function isOpaque(Node $node, string|Expr|null $view): bool
     {
         return match (true) {
             // `share()` adds keys at render time that no `with()` shows.
             $node instanceof Expr\MethodCall, $node instanceof Expr\NullsafeMethodCall, $node instanceof Expr\StaticCall
                 => !$node->name instanceof Identifier || $node->name->toLowerString() === 'share',
-            $node instanceof Expr\FuncCall => !$node->name instanceof Name
-                || \in_array(\ltrim($node->name->toLowerString(), '\\'), self::OPAQUE_FUNCTIONS, true),
+            // A computed name may be any of these, which reach the view by name or position where the
+            // occurrence check cannot see it.
+            $node instanceof Expr\FuncCall => match ($node->name instanceof Name ? \ltrim($node->name->toLowerString(), '\\') : null) {
+                null, 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg' => true,
+                'compact' => self::compactsView($node, $view),
+                default => false,
+            },
             $node instanceof Expr\Variable => !\is_string($node->name),
             default => false,
         };
+    }
+
+    /**
+     * `compact()` captures the view when it names it, or names something that is not a literal.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function compactsView(Expr\FuncCall $call, string|Expr|null $view): bool
+    {
+        foreach ($call->args as $arg) {
+            $value = $arg instanceof Arg && !$arg->unpack ? $arg->value : null;
+
+            foreach ($value instanceof Expr\Array_ ? $value->items : [$value] as $item) {
+                $name = $item instanceof Expr\ArrayItem ? $item->value : $item;
+
+                if (!$name instanceof String_ || $name->value === $view) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static function isReadOnly(Expr\MethodCall $call): bool

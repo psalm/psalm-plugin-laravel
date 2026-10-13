@@ -107,7 +107,7 @@ The whole view is skipped, as if every key were composer-supplied, when any comp
 - is a closure, or a listener registered straight on the event dispatcher (`Event::listen('composing: x', ...)`, `composing: *` included);
 - passes a key that is not a string literal: a variable, `with($array)`, a spread or named arguments;
 - uses `$view` any other way: passes it on (`$this->decorate($view)`, `parent::compose($view)`), assigns, returns or captures it, uses the result of `with()`, sets a property or offset on it, calls another method on it (`withTitle()`, `nest()`, `getData()`), or calls it through `?->`;
-- calls `share()`, or `compact()`, `extract()`, `get_defined_vars()`, `func_get_args()` or `func_get_arg()` (which reach `$view` by name or position), uses a variable variable, or calls a method or function through a computed name;
+- calls `share()`, `extract()`, `get_defined_vars()`, `func_get_args()` or `func_get_arg()`, or a `compact()` naming `$view` or a name that is not a string literal (they reach `$view` by name or position), uses a variable variable, or calls a method or function through a computed name;
 - has no method body the plugin can find.
 
 **Accepted residual.** The composer class is read as written. A class the container rebinds, extends

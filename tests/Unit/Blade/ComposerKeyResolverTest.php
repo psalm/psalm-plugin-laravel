@@ -49,11 +49,12 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'name read inside with' => ['$view->with("a", $view->getName());', ['a' => true]];
         yield 'accessor case-insensitive' => ['$n = $view->NAME();', []];
         yield 'accessor ends the view part of a chain' => ['$view->with("a", 1)->getName();', ['a' => true]];
+        yield 'compact() of another variable as a value' => ['$name = "Ada"; $view->with("profile", compact("name"));', ['profile' => true]];
 
         yield 'dynamic key' => ['$view->with($key, 1);', null];
         yield 'dynamic array key' => ['$view->with([$key => 1]);', null];
         yield 'array passed as a variable' => ['$view->with($data);', null];
-        yield 'compact' => ['$view->with(compact("a"));', null];
+        yield 'compact() as the data array' => ['$view->with(compact("a"));', null];
         yield 'array with a spread' => ['$view->with([...$data]);', null];
         yield 'list-style array' => ['$view->with([1, 2]);', null];
         yield 'spread arguments' => ['$view->with(...$args);', null];
@@ -83,6 +84,9 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'variable function' => ['$f = "share"; $f("b", 1);', null];
         yield 'variable variable' => ['$$name = 1;', null];
         yield 'compact reaching the view by name' => ['$vars = compact("view"); $vars["view"]->with("a", 1);', null];
+        yield 'compact reaching a renamed view' => ['$vars = compact("v"); $vars["v"]->with("a", 1);', null, '$v'];
+        yield 'compact reaching the view in a literal array' => ['$vars = compact(["view", "x"]); $vars["view"]->with("a", 1);', null];
+        yield 'compact of a name that is not a literal' => ['$vars = compact($names); $view->with("a", 1);', null];
         yield 'get_defined_vars' => ['$this->decorate(get_defined_vars());', null];
         yield 'extract, fully qualified and upper-cased' => ['\EXTRACT($data);', null];
         yield 'func_get_args' => ['func_get_args()[0]->with("a", 1);', null];
