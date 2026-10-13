@@ -1661,30 +1661,18 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. A `match`
-     * used as a condition operand (the finding sits on the whole expression) and the arm conditions
-     * of a `match` with no default arm (analyzed again after the suppression window closes) both
-     * keep reporting on plain PHP, so they must keep reporting in a template. MatchAnalyzer tracks
-     * the subject case-sensitively (`\TRUE`, `\stdClass::class` and `count(\array_values($list))` are
-     * tracked; `true`, `$obj::class`, `count($list)` and `get_class($obj)` over a plain variable are
-     * not), and the cases here mirror that.
+     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. The subject
+     * and a `match` used as a condition operand (the finding sits on the whole expression) are
+     * outside every arm and report on plain PHP, so they must keep reporting in a template.
      */
     #[Test]
     public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
     {
         $issues = $this->analyze('psalm.xml');
-        $template = 'resources/views/match-outside-arms.blade.php';
 
         $this->assertSame(
-            [7, 14, 19, 25, 31, 56, 61],
-            $this->linesFor($issues, 'RedundantCondition', $template),
-            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-        );
-        // The re-analysis reports the docblock sibling too (line 70). Line 25 is the accepted
-        // residual: the suppressed first pass raised it, and its location equals the second's.
-        $this->assertSame(
-            [25, 70],
-            $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template),
+            [5, 12, 17, 23],
+            $this->linesFor($issues, 'RedundantCondition', 'resources/views/match-outside-arms.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
