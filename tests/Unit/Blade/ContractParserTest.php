@@ -118,10 +118,28 @@ final class ContractParserTest extends TestCase
     /** @return iterable<string, array{string}> */
     public static function integerNameProvider(): iterable
     {
-        yield 'keyed' => ["@props(['1' => 'x', 'size' => 'lg'])\n"];
-        yield 'negative keyed' => ["@props(['-1' => 'x', 'size' => 'lg'])\n"];
+        yield 'keyed' => ["@props(['1' => '2', 'size' => 'lg'])\n"];
+        yield 'negative keyed' => ["@props(['-1' => '3', 'size' => 'lg'])\n"];
         yield 'bare' => ["@props(['1', 'size' => 'lg'])\n"];
         yield 'aware' => ["@aware(['1', '2' => 'x'])\n@props(['size' => 'lg'])\n"];
+    }
+
+    /** `ComponentAttributeBag::extractPropNames()` names a numeric-keyed entry by its value, as a bare one. */
+    #[Test]
+    public function a_numeric_keyed_props_entry_declares_its_value_as_a_required_name(): void
+    {
+        $contract = $this->parse("@props(['1' => 'color', '01' => 'tone', 2 => 'size'])\n");
+
+        $this->assertSame(['color', 'tone', 'size'], \array_keys($contract->vars));
+        $this->assertFalse($contract->vars['color']->optional);
+        $this->assertNull($contract->vars['color']->defaultType);
+        $this->assertFalse($contract->propsUnknown);
+    }
+
+    #[Test]
+    public function a_numeric_keyed_props_entry_with_a_non_literal_value_is_unreadable(): void
+    {
+        $this->assertTrue($this->parse("@props(['1' => \$name])\n")->propsUnknown);
     }
 
     #[Test]
