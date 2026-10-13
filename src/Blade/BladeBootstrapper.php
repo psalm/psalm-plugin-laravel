@@ -363,32 +363,44 @@ final class BladeBootstrapper
             // A `@props` literal default types the body through the prelude: no docblock states it (#1828).
             $propTypes = [];
 
-            if (\stripos($source, '@props') !== false) {
-                foreach ($parser->parseDeclarations($source)->vars as $name => $var) {
-                    if ($var->defaultType !== null) {
-                        $propTypes[$name] = $var->defaultType;
+            // A contract parse that throws costs its own template, as a compile failure does, never
+            // the whole run (#1848).
+            try {
+                if (\stripos($source, '@props') !== false) {
+                    foreach ($parser->parseDeclarations($source)->vars as $name => $var) {
+                        if ($var->defaultType !== null) {
+                            $propTypes[$name] = $var->defaultType;
+                        }
                     }
                 }
+            } catch (\Throwable $throwable) {
+                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+
+                continue;
             }
 
             $shadow = $compiler->compile($template, $source, $propTypes);
 
             if ($shadow instanceof BladeCompileError) {
-                $failures[$shadow->templatePath] = $shadow->message;
-                $this->compileFailures[$shadow->templatePath] = [$source, $shadow->message];
-                $this->claimNameOnly($template, $roots);
+                $this->skipUncompiled($shadow, $source, $roots, $failures);
 
                 continue;
             }
 
-            // Built AFTER compile so the read set comes off compiled output.
-            $contract = $this->collectDataIncludes
-                ? $parser->parseDataContract($source, $shadow->contents)
-                : $parser->parseDeclarations($source, $shadow->contents);
+            try {
+                // Built AFTER compile so the read set comes off compiled output.
+                $contract = $this->collectDataIncludes
+                    ? $parser->parseDataContract($source, $shadow->contents)
+                    : $parser->parseDeclarations($source, $shadow->contents);
 
-            // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
-            // from "collected nothing".
-            $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+                // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
+                // from "collected nothing".
+                $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+            } catch (\Throwable $throwable) {
+                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+
+                continue;
+            }
 
             try {
                 $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
@@ -402,6 +414,19 @@ final class BladeBootstrapper
         }
 
         return $shadows;
+    }
+
+    /**
+     * Skips a template this pass could not compile; it is reported as a `BladeCompileFailure`.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     * @param array<string, string>                  $failures
+     */
+    private function skipUncompiled(BladeCompileError $error, string $source, array $roots, array &$failures): void
+    {
+        $failures[$error->templatePath] = $error->message;
+        $this->compileFailures[$error->templatePath] = [$source, $error->message];
+        $this->claimNameOnly($error->templatePath, $roots);
     }
 
     /**
