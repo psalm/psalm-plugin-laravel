@@ -297,7 +297,10 @@ final class BladeBootstrapper
         }
 
         $factory = $this->viewFactory();
-        $shared = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($factory?->getShared() ?? [])), true);
+        $shared = ['app' => true] + \array_fill_keys(
+            \array_map(static fn(int|string $name): string => (string) $name, \array_keys($factory?->getShared() ?? [])),
+            true,
+        );
 
         // A shared name is no contract, so a marker problem on its declaration is not one either.
         foreach ($this->pendingProblems as $templatePath => $problems) {
@@ -556,13 +559,10 @@ final class BladeBootstrapper
     private function viewFactory(): ?Factory
     {
         try {
-            /** @psalm-suppress MixedAssignment the container resolves any service */
-            $factory = $this->app->bound('view') ? $this->app->make('view') : null;
+            return $this->asFactory($this->app->bound('view') ? $this->app->make('view') : null);
         } catch (\Throwable) {
             return null;
         }
-
-        return $factory instanceof Factory ? $factory : null;
     }
 
     private function resolveCompiler(): ?BladeCompiler
@@ -746,6 +746,14 @@ final class BladeBootstrapper
     private function asFinder(mixed $resolved): ?FileViewFinder
     {
         return $resolved instanceof FileViewFinder ? $resolved : null;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private function asFactory(mixed $resolved): ?Factory
+    {
+        return $resolved instanceof Factory ? $resolved : null;
     }
 
     /**
