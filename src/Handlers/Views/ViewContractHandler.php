@@ -9,6 +9,7 @@ use PhpParser\Node\Stmt;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
 use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
@@ -18,7 +19,9 @@ use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
@@ -44,7 +47,7 @@ use Psalm\Type;
  * (a spread, a dynamic key, `$mergeData`) silences it while leaving the type check on the keys that
  * ARE known.
  */
-final class ViewContractHandler implements AfterStatementAnalysisInterface
+final class ViewContractHandler implements AfterCodebasePopulatedInterface, AfterStatementAnalysisInterface
 {
     private static bool $validateViewData = false;
 
@@ -68,6 +71,15 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         self::$reportUnusedViewData = false;
         self::$declaredTypes = [];
         self::$readSets = [];
+    }
+
+    /** Resolved here, before Psalm forks its workers, so each one inherits the result. */
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
+    {
+        if (self::$validateViewData) {
+            ComposerKeyResolver::resolve($event->getCodebase());
+        }
     }
 
     #[\Override]
@@ -117,12 +129,19 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        // A composer or creator can overwrite any key after the call site passed it, so neither what
-        // is missing nor what a value's type is can be judged from the call site alone.
-        if (self::$validateViewData && !ContractRegistry::isComposed($chain->viewName)) {
+        // A composer (at render time) or a creator (inside `view()`, before a chained `with()`) can
+        // overwrite a key the call site passed, so for the keys it supplies neither presence nor type
+        // can be judged from the call site. A view whose composer cannot be read is exempt as a whole.
+        $composed = ContractRegistry::composedKeys($chain->viewName);
+
+        if (self::$validateViewData && $composed !== null) {
             $supplied = $chain->supplied();
 
             foreach ($contract->vars as $name => $var) {
+                if (isset($composed[$name])) {
+                    continue;
+                }
+
                 $passed = $supplied[$name] ?? null;
 
                 if ($passed === null) {
@@ -194,9 +213,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         // `optional` is a @props entry with a literal default, which Blade fills in itself, or a
         // declaration ending in `= null`.
         // `propsUnknown` means the declared set is a lower bound, so absence proves nothing about
-        // what the template needs; an open data set proves nothing about what was passed; and a
-        // composer or creator registered for the view supplies data no call site shows.
-        if ($var->optional || $contract->propsUnknown || !$chain->complete || ContractRegistry::isComposed($chain->viewName)) {
+        // what the template needs, and an open data set proves nothing about what was passed.
+        if ($var->optional || $contract->propsUnknown || !$chain->complete) {
             return;
         }
 

@@ -210,8 +210,11 @@ final class BladeBootstrapper
 
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
-        // (which skips ShadowCompiler) still gets them.
-        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
+        // (which skips ShadowCompiler) still gets them. Composer classes ride along: nothing
+        // references one in code position, yet the key resolver needs their storage.
+        $composerSources = ComposerSourceReader::read($this->viewFactory(), \array_column($this->pendingContracts, 0));
+        $composerClasses = \array_column(\array_merge(...\array_values(\array_filter($composerSources))), 0);
+        $this->registrar->queueClassLikesForScanning([...PreludeBuilder::ambientClassNames(), ...$composerClasses]);
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
@@ -259,6 +262,7 @@ final class BladeBootstrapper
         }
 
         $this->publishTemplateFacts();
+        ContractRegistry::registerComposerSources($composerSources);
         $this->reportCompileFailures();
 
         return true;
@@ -302,10 +306,6 @@ final class BladeBootstrapper
 
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
             ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
-
-            if ($this->hasComposer($factory, $viewName)) {
-                ContractRegistry::markComposed($viewName);
-            }
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
@@ -551,22 +551,6 @@ final class BladeBootstrapper
             $contract->localVariables,
             [...$contract->rawDeclaredVariables, ...\array_keys($dropped)],
         );
-    }
-
-    /**
-     * Whether a view composer or creator, wildcard ones included, is registered for the view: it can
-     * add any data, so the call site's data set proves nothing about what the template receives.
-     */
-    private function hasComposer(?Factory $factory, string $viewName): bool
-    {
-        try {
-            $events = $factory?->getDispatcher();
-
-            return $events !== null
-                && ($events->hasListeners("composing: {$viewName}") || $events->hasListeners("creating: {$viewName}"));
-        } catch (\Throwable) {
-            return false;
-        }
     }
 
     private function viewFactory(): ?Factory

@@ -814,6 +814,7 @@ final class Plugin implements PluginEntryPointInterface
         // ContractRegistry, hence the activation half of the gate; the two flags are independent
         // opt-ins for the checks themselves, sharing one walk of the statement.
         if ($bladeActive && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
+            require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';

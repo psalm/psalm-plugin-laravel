@@ -26,8 +26,11 @@ final class ContractRegistry
      */
     private static array $contracts = [];
 
-    /** @var array<string, true> */
-    private static array $composed = [];
+    /** @var array<array-key, list<array{0: string, 1: string}>|null> view name => {@see ComposerSourceReader::read()} */
+    private static array $composerSources = [];
+
+    /** @var array<array-key, array<array-key, true>|null> view name => keys its composers supply, null when unknown */
+    private static array $composedKeys = [];
 
     /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
     private static array $problems = [];
@@ -64,15 +67,33 @@ final class ContractRegistry
         return self::$contracts[$viewName][2] ?? null;
     }
 
-    /** A composer or creator is registered for the view, so it may be handed data no call site shows. */
-    public static function markComposed(string $viewName): void
+    /** @param array<array-key, list<array{0: string, 1: string}>|null> $sources */
+    public static function registerComposerSources(array $sources): void
     {
-        self::$composed[$viewName] = true;
+        self::$composerSources = $sources;
     }
 
-    public static function isComposed(string $viewName): bool
+    /** @return array<array-key, list<array{0: string, 1: string}>|null> */
+    public static function composerSources(): array
     {
-        return isset(self::$composed[$viewName]);
+        return self::$composerSources;
+    }
+
+    /** @param array<array-key, array<array-key, true>|null> $keys */
+    public static function registerComposedKeys(array $keys): void
+    {
+        self::$composedKeys = $keys;
+    }
+
+    /**
+     * The data keys the view's composers and creators supply: `[]` when none reaches it, null when
+     * one is unreadable or the keys were never resolved.
+     *
+     * @return array<array-key, true>|null
+     */
+    public static function composedKeys(string $viewName): ?array
+    {
+        return \array_key_exists($viewName, self::$composerSources) ? (self::$composedKeys[$viewName] ?? null) : [];
     }
 
     /** @param array<string, array{0: int, 1: string}> $problems variable name => [template line, message] */
@@ -93,6 +114,7 @@ final class ContractRegistry
     {
         self::$problems = [];
         self::$contracts = [];
-        self::$composed = [];
+        self::$composerSources = [];
+        self::$composedKeys = [];
     }
 }
