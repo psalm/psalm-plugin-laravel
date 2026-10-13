@@ -38,6 +38,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        require_once __DIR__ . '/Issues/BladeCompileFailure.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.

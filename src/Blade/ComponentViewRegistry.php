@@ -17,6 +17,7 @@ use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Views\ComponentRenderData;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
@@ -41,6 +42,9 @@ use Psalm\Type\Union;
  * Then each guaranteed key is seeded, except a key `render()` itself passes (path A and B disagree
  * on it), a literal named-slot name (a caller's slot overrides the key), an ambient or
  * slot-owned name, and a name the template declares itself.
+ *
+ * Every view any component's `render()` may name, seeded or not, also gets each `@props` entry the
+ * prelude typed from its literal default reset to `mixed`.
  *
  * Static because Psalm instantiates event handlers itself and hands them no plugin state.
  *
@@ -93,11 +97,8 @@ final class ComponentViewRegistry
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
-
-        if (self::$tagRendered === []) {
-            return;
-        }
-
+        // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
+        // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
 
         /** @var array<string, array<string, array{0: ClassLikeStorage, 1: array<array-key, true>}>> $byTemplate template path => class => [storage, render() keys] */
@@ -115,6 +116,10 @@ final class ComponentViewRegistry
 
         /** @var array<string, array{0: string, 1: array<array-key, true>, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
         $views = [];
+        /** @var array<string, true> $claimed template path => true, every view a component's render() may name */
+        $claimed = [];
+        /** @var array<string, true> $rivals template path => true, spelled by a render() outside the recognised shape */
+        $rivals = [];
 
         foreach (ClassLikeStorageProvider::getAll() as $storage) {
             if ($storage->abstract || !isset($storage->parent_classes[self::COMPONENT])) {
@@ -140,7 +145,7 @@ final class ComponentViewRegistry
             }
 
             if (!\array_key_exists($declaring, $views)) {
-                $views[$declaring] = self::renderedView($codebase, $render, $templates, $contested);
+                $views[$declaring] = self::renderedView($codebase, $render, $templates, $rivals);
             }
 
             $view = $views[$declaring];
@@ -149,6 +154,8 @@ final class ComponentViewRegistry
             if ($view === null || $templatePath === null) {
                 continue;
             }
+
+            $claimed[$templatePath] = true;
 
             // An inherited `$this->view()` runs the CONCRETE class's view(), which may be overridden.
             if ($view[2] && !self::componentOwnsView($storage)) {
@@ -159,6 +166,9 @@ final class ComponentViewRegistry
 
             $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, $view[1]];
         }
+
+        $contested += $rivals;
+        $claimed += $rivals;
 
         $shadowPaths = [];
 
@@ -171,6 +181,24 @@ final class ComponentViewRegistry
         }
 
         $parser = new ContractParser();
+
+        foreach (\array_keys($claimed) as $templatePath) {
+            $shadowPath = $shadowPaths[$templatePath] ?? null;
+            $source = $shadowPath === null ? null : ShadowRegistry::templateSource($templatePath);
+            $defaults = [];
+
+            // `data()` and `render()`'s own data reach a class's view before `@props` falls back to a
+            // default, so no literal default may type it (#1828); seeding `mixed` undoes the prelude's.
+            foreach ($source === null ? [] : $parser->parseDeclarations($source)->vars as $name => $var) {
+                if ($var->defaultType !== null) {
+                    $defaults[$name] = Type::getMixed();
+                }
+            }
+
+            if ($shadowPath !== null && $defaults !== []) {
+                self::$seeds[$shadowPath] = $defaults;
+            }
+        }
 
         foreach ($byTemplate as $templatePath => $claims) {
             $shadowPath = $shadowPaths[$templatePath] ?? null;
@@ -188,6 +216,8 @@ final class ComponentViewRegistry
             }
 
             $vars = self::seedVariables($codebase, $storage, $renderKeys, $templatePath, $parser);
+
+            $vars += self::$seeds[$shadowPath] ?? [];
 
             if ($vars !== []) {
                 self::$seeds[$shadowPath] = $vars;

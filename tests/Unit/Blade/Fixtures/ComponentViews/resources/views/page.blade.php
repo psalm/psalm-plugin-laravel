@@ -21,3 +21,4 @@
 <x-included/>
 @include('components.included')
 <x-frame/>
+<x-sized/>

@@ -243,6 +243,20 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * #1828: a literal default types the template body only. A caller may pass any value for the
+     * prop, so the call site is never checked against the default's type; the declared-type case
+     * beside it proves the check itself runs.
+     */
+    #[Test]
+    public function a_props_default_type_is_never_checked_against_the_call_site(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'PropsDefaultMismatch.php'), \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE], \array_column($this->forFile($issues, 'WrongType.php'), 'type'));
+    }
+
+    /**
      * An open key set silences the missing-variable check without silencing the type check: the
      * keys that ARE known are still known.
      */

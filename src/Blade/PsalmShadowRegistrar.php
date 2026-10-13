@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Psalm\CodeLocation\Raw;
 use Psalm\Config;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
 
 /**
  * Registers Blade shadows with the running Psalm analysis.
@@ -85,6 +88,21 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
 
             $scanner->addFileToDeepScan($path);
         }
+    }
+
+    #[\Override]
+    public function reportCompileFailure(string $templatePath, string $source, string $message): void
+    {
+        $name = $this->projectAnalyzer->getCodebase()->config->shortenFileName($templatePath);
+        $location = TemplateLocation::atLine($templatePath, $name, $source, 1)
+            ?? new Raw($source, $templatePath, $name, 0, 0);
+
+        // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the only
+        // way to silence it.
+        IssueBuffer::accepts(
+            new BladeCompileFailure("Blade template could not be compiled and is not analyzed: {$message}", $location),
+            [],
+        );
     }
 
     /**

@@ -57,7 +57,7 @@ This check is disabled by default, and needs Blade analysis enabled. Enable it i
 The check declines rather than guess. It is silent when:
 
 - The view name is not a string literal, or is namespaced (`pkg::view`).
-- The declared type is `mixed`, which is every `@props([...])` entry (`@props` records names, not types).
+- The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
 - The passed value is `mixed`, which satisfies any declaration.
 - The declared type does not parse. A `@var` docblock is free text and is never validated.
 - The variable is one a view composer or creator provably supplies: the composer runs after the call site and may overwrite the value, so the passed value proves nothing. Other variables of that view are still checked. A view with a composer the plugin cannot read (a closure, a non-literal key, `$view` handed to a method, and so on) is skipped entirely; see [Composers and creators](MissingViewVariable.md#composers-and-creators) for the full list. Only composers registered while the application boots are read: a composer added later (middleware, controller) is not seen, so its keys are still type-checked.
