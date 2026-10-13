@@ -360,7 +360,18 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $shadow = $compiler->compile($template, $source);
+            // A `@props` literal default types the body through the prelude: no docblock states it (#1828).
+            $propTypes = [];
+
+            if (\stripos($source, '@props') !== false) {
+                foreach ($parser->parseDeclarations($source)->vars as $name => $var) {
+                    if ($var->defaultType !== null) {
+                        $propTypes[$name] = $var->defaultType;
+                    }
+                }
+            }
+
+            $shadow = $compiler->compile($template, $source, $propTypes);
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;

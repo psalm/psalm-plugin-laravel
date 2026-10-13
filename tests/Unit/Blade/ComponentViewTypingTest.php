@@ -66,6 +66,16 @@ final class ComponentViewTypingTest extends TestCase
         yield 'a ->with() link after the view call' => ['withed.blade.php', ['$title: mixed']];
         yield 'named arguments' => ['named.blade.php', ['$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
+        // #1828: `data()` (and `render()`'s own data) hand the view its values before `@props`
+        // falls back to a default, so a class's view never takes a type from a literal default.
+        // The reset touches only what the prelude typed from a default: Blade's own names keep theirs.
+        yield '@props defaults in a seeded view' => ['sized.blade.php', [
+            '$errors: Illuminate\Support\ViewErrorBag',
+            '$size: mixed',
+            '$slot: Illuminate\View\ComponentSlot',
+            '$tone: mixed',
+        ]];
+        yield '@props defaults in an unseeded view' => ['untagged.blade.php', ['$size: mixed']];
     }
 
     /**
