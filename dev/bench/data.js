@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791932226306,
+  "lastUpdate": 1791932911659,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13890,6 +13890,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1505,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4faa3d44cea92dff7b8b4c0093538bcf78cc700e",
+          "message": "Type-check `@include` data and check `@includeIsolated` data against the included template's contract (#1840)\n\n* feat(blade): validate @include data against the included template's contract\n\nA compiled `@include('view', [...])` with a literal name and a literal array\nis now checked by validateViewData like a view() call site: values present in\nthe array are type checked, and a key the array omits is reported missing\nonly when the including template provably cannot hand it on from its own\nscope (it declares, reads or binds the name, Blade or a class component\nsupplies it, or its scope is open: no contract, dynamic, composed).\n\nThe data-contract pass now also runs under validateViewData, since the\nincluder's read and bound names come from it.\n\nCloses #1830\n\n* fix(blade): decline @include missing-variable checks for templates with an open scope\n\nA template that another template includes or extends receives that\ntemplate's whole scope, and a class component's view receives `data()`,\nso neither template's own declarations bound what it hands on to its\nincludes. Both now decline the missing-variable check, whatever shape the\ncomponent's render() takes. A value typed as an undefined class no longer\ncascades into InvalidViewVariableType.\n\nDocs state the remaining rule: declare the variables a template forwards\nto its includes.\n\nRefs #1830\n\n* fix(blade): keep assigned locals and anonymous component views in @include scope declines\n\nA name an includer binds only by assignment is never read, so it sat in\nthe local-variable set alone and the missing-variable check reported it.\nAn anonymous component's view receives every tag attribute as a\nvariable, so its declarations do not bound what it hands on; it now\ndeclines like a class component's view.\n\nRefs #1830\n\n* fix(blade): open the @include scope of every view another template renders by name\n\nA view reached through `@component` gets its named slots, one reached\nthrough `@each` gets the item and key, and a slash-spelled `@include`\nnames the same view as its dotted form. Every view a compiled template\nrenders by a literal name, normalized the way Laravel does, now declines\nthe missing-variable check for its own includes. A `__`-prefixed name is\nnever reported missing on an include: the forwarded scope drops only\n`$__data` and `$__path`, and the read sets do not track author `$__x`.\n\nRefs #1830\n\n* feat(blade): type-check @include data, check @includeIsolated in full\n\nAn ordinary @include also hands the partial the includer's whole scope,\nso a key its literal array omits can still arrive: only the passed keys\nare type-checked. @includeIsolated forwards no scope and is checked like\na view() call site, missing variables included.\n\nViewContractHandler hands the compiled $__env->make() call to\nViewCallChain, which reads it as any Factory::make() call: the scope\n@include passes third, as $mergeData, leaves the key set open. This drops\nthe includer-scope approximation (template scopes, component claims,\nanonymous-component prefixes, the <?php look-back) and the read-set\ncollection it needed under validateViewData.\n\n* feat(blade): check data-less @includeIsolated in full\n\n@includeIsolated('view') compiles to a one-argument make('view'): no\ndata and no scope, so the supplied set is closed and empty and every\nrequired variable of the included template is missing.\n\n* test(blade): skip @includeIsolated cases where Blade lacks the directive\n\n@includeIsolated first ships in Laravel 12.47; older versions leave it\nas text, so its fixture lines check nothing there. The cases skip on a\nBladeCompiler::compileIncludeIsolated() capability probe, and the docs\nsay which Laravel the check needs.\n\n* refactor(blade): share one codebase handle in ViewContractHandler::checkType()",
+          "timestamp": "2026-10-14T01:06:12+02:00",
+          "tree_id": "15e679fda1d9f89756a08685a519b7a28ff99e6c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/4faa3d44cea92dff7b8b4c0093538bcf78cc700e"
+        },
+        "date": 1791932910238,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.19,
+            "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
