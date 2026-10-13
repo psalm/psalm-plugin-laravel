@@ -58,6 +58,8 @@ final readonly class PluginConfig
         public bool $bladeValidateViewData,
         /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
         public bool $bladeReportUnusedViewData,
+        /** Opt-in: a contract template's undeclared reads are left undefined for Psalm to report (`<blade reportUndeclaredVariables="true" />`). */
+        public bool $bladeReportUndeclaredVariables,
         /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
         public bool $bladeReportMixedIssues,
         public bool $experimental,
@@ -104,6 +106,7 @@ final readonly class PluginConfig
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
+        $bladeReportUndeclaredVariables = self::xmlBoolAttr($config?->blade, 'blade reportUndeclaredVariables', false, 'reportUndeclaredVariables');
         $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
@@ -126,6 +129,7 @@ final readonly class PluginConfig
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $overrides->bool('blade.validateViewData') ?? $bladeValidateViewData,
             bladeReportUnusedViewData: $overrides->bool('blade.reportUnusedViewData') ?? $bladeReportUnusedViewData,
+            bladeReportUndeclaredVariables: $overrides->bool('blade.reportUndeclaredVariables') ?? $bladeReportUndeclaredVariables,
             bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
             experimental: $experimental,
             failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,

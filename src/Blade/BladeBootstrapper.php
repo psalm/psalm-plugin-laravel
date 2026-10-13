@@ -39,6 +39,8 @@ final class BladeBootstrapper
         private readonly string $shadowDir,
         /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
         private readonly bool $collectDataIncludes = false,
+        /** Opt-in (#1827): a contract template's undeclared reads stay out of the prelude's `mixed` net. */
+        private readonly bool $reportUndeclaredVariables = false,
         /**
          * Test seam: vendor dir for the hint-root filter. Null derives it from
          * laravel/framework's install path (the plugin's own vendor, in a unit test).
@@ -80,6 +82,19 @@ final class BladeBootstrapper
 
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
+
+    private ?Factory $factory = null;
+
+    /** @var list<string> view-name prefixes an anonymous `<x-…>` tag resolves to (#1827) */
+    private array $componentViewPrefixes = ['components.'];
+
+    /** @var array<string, true> views a `Blade::component()` alias renders as an anonymous component */
+    private array $aliasedViews = [];
+
+    /** @var array<string, true> names every view receives from the booted app: `$app` and `View::share()` keys */
+    private array $providedNames = [];
+
+    private string $providedHash = '';
 
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
     private array $compileFailures = [];
@@ -167,6 +182,10 @@ final class BladeBootstrapper
 
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
         $manifest->load();
+
+        if ($this->reportUndeclaredVariables) {
+            $this->collectProvidedFacts($compiler);
+        }
 
         $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
 
@@ -352,6 +371,11 @@ final class BladeBootstrapper
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
+            // The decision is app state the shadow bakes in, so it is a cache input: a template cached
+            // under another decision must recompile.
+            $provided = $this->providedFor($template, $roots);
+            $manifest->salt($template, !$this->reportUndeclaredVariables ? '' : 'undeclared:' . ($provided === null ? 'declined' : $this->providedHash));
+
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
@@ -371,7 +395,7 @@ final class BladeBootstrapper
                 }
             }
 
-            $shadow = $compiler->compile($template, $source, $propTypes);
+            $shadow = $compiler->compile($template, $source, $propTypes, $provided);
 
             if ($shadow instanceof BladeCompileError) {
                 $failures[$shadow->templatePath] = $shadow->message;
@@ -499,6 +523,77 @@ final class BladeBootstrapper
 
             $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
         }
+    }
+
+    private function collectProvidedFacts(BladeCompiler $compiler): void
+    {
+        $this->factory = $this->viewFactory();
+        $this->providedNames = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($this->factory?->getShared() ?? [])), true);
+        \ksort($this->providedNames);
+        $this->providedHash = \hash('xxh128', \implode(',', \array_keys($this->providedNames)));
+
+        /** @psalm-var mixed $directory */
+        foreach ($compiler->getAnonymousComponentNamespaces() as $directory) {
+            if (\is_string($directory)) {
+                $this->componentViewPrefixes[] = $directory . '.';
+            }
+        }
+
+        /** @psalm-var mixed $path */
+        foreach ($compiler->getAnonymousComponentPaths() as $path) {
+            if (\is_array($path) && isset($path['prefixHash']) && \is_string($path['prefixHash'])) {
+                $this->componentViewPrefixes[] = $path['prefixHash'] . '::';
+            }
+        }
+
+        // An alias naming a view rather than a class is rendered as an anonymous component.
+        /** @psalm-var mixed $target */
+        foreach ($compiler->getClassComponentAliases() as $target) {
+            if (\is_string($target) && !\class_exists($target)) {
+                $this->aliasedViews[\str_replace('/', '.', $target)] = true;
+            }
+        }
+    }
+
+    /**
+     * The names the booted app provides to this template, or null when the template keeps its
+     * `mixed` net: a component or Livewire view, or one whose data a composer or creator (wildcard
+     * ones included) can add to, none of which a template's own source lists.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     *
+     * @return array<string, true>|null
+     */
+    private function providedFor(string $template, array $roots): ?array
+    {
+        if (!$this->reportUndeclaredVariables || !$this->factory instanceof Factory) {
+            return null;
+        }
+
+        $names = ViewName::resolve($template, $roots);
+
+        if ($names === []) {
+            return null;
+        }
+
+        foreach ($names as [, $viewName]) {
+            if (isset($this->aliasedViews[$viewName])
+                || \str_contains($viewName, '::components.')
+                || \str_starts_with($viewName, 'livewire.')
+                || \str_starts_with($viewName, 'livewire::')
+                || $this->hasComposer($this->factory, $viewName)
+            ) {
+                return null;
+            }
+
+            foreach ($this->componentViewPrefixes as $prefix) {
+                if (\str_starts_with($viewName, $prefix)) {
+                    return null;
+                }
+            }
+        }
+
+        return $this->providedNames;
     }
 
     /**

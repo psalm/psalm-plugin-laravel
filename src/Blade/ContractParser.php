@@ -56,6 +56,12 @@ final class ContractParser
      */
     private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
+    /** Livewire markup or code: the component's public properties reach its view with no call site naming them. */
+    private const LIVEWIRE_MARKERS = '/\bwire:[\w.-]+|@this\b|@entangle\b|\$wire\b|\$this\b|\bnew\s+class\b/';
+
+    /** Laravel injects `$message` into every mail view, and `@error` binds it. */
+    private const ALWAYS_PROVIDED = ['message' => true];
+
     private ?Parser $parser = null;
 
     public function parse(string $source, string $compiled): TemplateContract
@@ -86,6 +92,40 @@ final class ContractParser
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
+    }
+
+    /**
+     * The names a contract template reads that nothing in it declares, binds or captures, and the
+     * booted app does not provide: the ones the prelude leaves undeclared so Psalm reports them
+     * (#1827). Empty when the template declares no view variable, is a component or Livewire view,
+     * or its read set is not provably whole.
+     *
+     * @param array<string, true> $provided names the booted application supplies to every view
+     *
+     * @return list<string>
+     */
+    public function undeclaredReads(string $source, string $compiled, array $provided): array
+    {
+        if (PreludeBuilder::isComponentView($source)
+            || \preg_match(self::LIVEWIRE_MARKERS, MarkerPrePass::blankInertText($source)) === 1
+        ) {
+            return [];
+        }
+
+        [$names, $locals, $unknown, $opaque, $captured] = $this->walkReads($compiled);
+
+        if ($unknown || $opaque) {
+            return [];
+        }
+
+        if (\array_diff_key($this->rawContractVars($source, $this->filterNames($locals, [])), $provided) === []) {
+            return [];
+        }
+
+        // Every raw `@var` counts, not only view data: a name-first or non-doc one still states the name.
+        $declared = \array_fill_keys(self::rawDeclaredNames($source), true);
+
+        return $this->filterNames($names, $locals + $captured + $declared + $provided + self::ALWAYS_PROVIDED);
     }
 
     /**
@@ -629,8 +669,10 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool, 4: array<string, true>}
+     *         names read, the names the body binds for itself, whether it hides which names it reads,
+     *         whether it hands its scope to code no walk sees (`include`, `eval`), and the names a
+     *         closure `use` clause captures
      */
     private function walkReads(string $compiled): array
     {
@@ -641,7 +683,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, true, []];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -653,9 +695,22 @@ final class ContractParser
 
             public bool $unknown = false;
 
+            public bool $opaque = false;
+
+            /** @var array<string, true> */
+            public array $captured = [];
+
             #[\Override]
             public function enterNode(Node $node): null
             {
+                if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+                    $this->opaque = true;
+                }
+
+                if ($node instanceof Node\ClosureUse && \is_string($node->var->name)) {
+                    $this->captured[$node->var->name] = true;
+                }
+
                 if ($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef) {
                     if ($node->var instanceof Node\Expr\Variable) {
                         $node->var->setAttribute('contractSkip', true);
@@ -771,6 +826,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, $visitor->opaque, $visitor->captured];
     }
 }
