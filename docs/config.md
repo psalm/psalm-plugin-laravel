@@ -275,7 +275,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; a `@props([...])` entry is typed in the body from a literal default (`'lg'` as `string`) and is `mixed` otherwise. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
+- Every template variable the plugin cannot prove a type for is `mixed`, silently, unless [`reportUndeclaredVariables`](#reportundeclaredvariables) is on. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; a `@props([...])` entry is typed in the body from a literal default (`'lg'` as `string`) and is `mixed` otherwise. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -323,6 +323,35 @@ A key that a template reached through `@include` or `@extends` reads or declares
 Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
 
 Has no effect under `<blade value="false" />`: the read sets only exist once the compile pass has read the templates.
+
+### `reportUndeclaredVariables`
+
+**default**: off
+
+```xml
+<blade reportUndeclaredVariables="true" />
+```
+
+In a template that declares at least one view variable with a native `@var` docblock (see [Declaring view variables](blade.md#declaring-view-variables)), report every read of a variable the template neither declares nor binds itself. Psalm reports it as `UndefinedGlobalVariable` (`UndefinedVariable` inside an arrow function) at the template line, on each read. A typo such as `{{ $titel }}` next to `/** @var string $title */` is caught. A template without a declaration stays silent.
+
+Never reported:
+
+- a name the template declares with any `@var`, or binds itself (`@foreach` aliases, assignments, closure parameters, `catch`), or captures in a closure `use (...)` clause;
+- Blade's own names, `$message` (mail views), `$app`, and every `View::share()` key the booted application registered;
+- a read guarded by `isset()`, `??` or `empty()`, which Psalm itself never reports.
+
+A whole template is skipped when something outside it can supply data the plugin cannot list:
+
+- a component view: it writes `@props`, `@aware`, `$attributes` or `$slot`, sits under `components.` (or `ns::components.`), under a registered anonymous component path or namespace, or is named by a `Blade::component()` alias;
+- a Livewire view: a `livewire.` name, `wire:` attributes, `$this`, `@entangle`;
+- a view with a composer or creator registered, wildcards included. A wildcard composer (`View::composer('*', ...)`, as a debugging tool's view watcher registers) therefore skips every template;
+- a template whose reads cannot be listed: `$$name`, `extract()`, a non-literal `compact()`, `include` or `eval`.
+
+Only boot-time data is known. A share registered at runtime (a middleware, a controller), and data a class component hands a view outside the component prefixes above, are reported unless the template declares the name, ending in `= null` when call sites do not pass it.
+
+Each flip of the flag recompiles the affected templates once, and a change to the shared names or the composers does too.
+
+Has no effect under `<blade value="false" />`: the shadows it changes only exist once the compile pass has run.
 
 ### `reportMixedIssues`
 
