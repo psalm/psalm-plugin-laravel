@@ -102,6 +102,28 @@ final class ContractParserTest extends TestCase
         $this->assertSame('string', $contract->vars['ok']->defaultType);
     }
 
+    /** PHP casts a decimal-integer string key to int, which reached `ContractVar`'s string name (#1848). */
+    #[Test]
+    #[DataProvider('integerNameProvider')]
+    public function an_integer_like_props_or_aware_name_declares_nothing_and_keeps_the_rest(string $source): void
+    {
+        $contract = $this->parse($source);
+
+        $this->assertSame(['size'], \array_keys($contract->vars));
+        $this->assertSame('string', $contract->vars['size']->defaultType);
+        $this->assertFalse($contract->propsUnknown);
+        $this->assertSame(['size'], \array_keys($this->parser->parseDeclarations($source)->vars));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function integerNameProvider(): iterable
+    {
+        yield 'keyed' => ["@props(['1' => 'x', 'size' => 'lg'])\n"];
+        yield 'negative keyed' => ["@props(['-1' => 'x', 'size' => 'lg'])\n"];
+        yield 'bare' => ["@props(['1', 'size' => 'lg'])\n"];
+        yield 'aware' => ["@aware(['1', '2' => 'x'])\n@props(['size' => 'lg'])\n"];
+    }
+
     #[Test]
     public function a_props_name_any_aware_shares_infers_no_default_type(): void
     {
