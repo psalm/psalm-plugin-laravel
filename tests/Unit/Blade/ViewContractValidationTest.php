@@ -487,6 +487,24 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->templateContractIssues('isolated-complete.blade.php'));
     }
 
+    /** Without an array, `@includeIsolated('view')` compiles to `make('view')`: no data at all. */
+    #[Test]
+    public function an_isolated_include_without_data_reports_every_required_variable(): void
+    {
+        $reported = $this->templateContractIssues('isolated-bare.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(1, $reported[0]['line_from']);
+        $this->assertStringContainsString("View 'greeting' declares \$name", (string) $reported[0]['message']);
+    }
+
+    #[Test]
+    public function an_isolated_include_without_data_of_a_view_with_only_optional_variables_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('isolated-bare-optional.blade.php'));
+    }
+
     #[Test]
     public function an_include_of_a_composed_view_is_checked_for_neither_presence_nor_type(): void
     {

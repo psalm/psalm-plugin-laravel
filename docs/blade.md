@@ -273,8 +273,8 @@ Some names are never contracts, because no call site passes them: a name the tem
 With `validateViewData`, a template's `$__env->make('view', [literal array], …)` call is checked like a `view()` call site, on the directive's line:
 
 * `@include`, `@includeIf` and `@extends('layout', [...])` type-check the keys their array passes. A key the array omits is never reported: the included template also inherits the including template's scope, so the key can still arrive.
-* `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables.
-* `@includeWhen`, `@includeUnless`, `@includeFirst`, `@each` and `@component` are not checked, nor is an include without a literal data array.
+* `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables. `@includeIsolated('view')` passes no data at all, so every required variable is missing.
+* `@includeWhen`, `@includeUnless`, `@includeFirst`, `@each` and `@component` are not checked, nor is data passed in a variable (`@include('view', $data)`).
 
 [`reportUnusedViewData`](config.md#reportunusedviewdata) does not judge includes.
 

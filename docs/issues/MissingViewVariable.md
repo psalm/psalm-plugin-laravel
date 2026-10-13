@@ -47,7 +47,7 @@ view('profile', ['name' => 'Ada', 'age' => 36]);
 view('profile', ['name' => 'Ada'])->with('age', 36);
 ```
 
-In a template, `@includeIsolated('profile', [...])` is checked the same way. An ordinary `@include` never reports a missing variable, because the included template also inherits the including one's scope. See [Included templates](../blade.md#included-templates).
+In a template, `@includeIsolated('profile', [...])` is checked the same way, and so is `@includeIsolated('profile')`, which passes no data. An ordinary `@include` never reports a missing variable, because the included template also inherits the including one's scope. See [Included templates](../blade.md#included-templates).
 
 ## How to fix
 

@@ -121,9 +121,10 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
     /**
      * The `make()` call of `echo $__env->make('view', [...], <the including scope>)->render();`,
-     * which `@include`, `@includeIf` and `@extends` compile to, or of `@includeIsolated`'s form
-     * without the scope. Only a literal data array is read: `@include('view')` also compiles to two
-     * arguments, its second being the scope.
+     * which `@include`, `@includeIf` and `@extends` compile to, or of `@includeIsolated`'s forms
+     * without the scope: `make('view', [...])`, and `make('view')`, whose data set is closed and empty.
+     * Only a literal data array is read: `@include('view')` also compiles to two arguments, its second
+     * being the scope.
      */
     private static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
     {
@@ -140,7 +141,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
         $data = $make->args[1] ?? null;
 
-        return $data instanceof Arg && $data->value instanceof Expr\Array_ ? $make : null;
+        return \count($make->args) === 1 || ($data instanceof Arg && $data->value instanceof Expr\Array_) ? $make : null;
     }
 
     private static function isNamed(Expr\MethodCall $call, string $name): bool
