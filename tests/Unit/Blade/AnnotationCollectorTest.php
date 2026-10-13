@@ -104,7 +104,7 @@ final class AnnotationCollectorTest extends TestCase
     public function declines_a_type_that_does_not_survive_a_parse_round_trip(): void
     {
         // An anonymous class prints an id carrying its defining file and line, which the
-        // `{{-- @var --}}` reader on the next run cannot parse back.
+        // `@var` reader on the next run cannot parse back.
         $anonymous = new Type\Union([new Type\Atomic\TNamedObject('Foo@anonymous/var/www/x.php:3$0')]);
 
         AnnotationCollector::record('home', ['title' => $anonymous], true);
@@ -122,11 +122,11 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function declines_a_type_whose_id_would_terminate_the_blade_comment(): void
+    public function declines_a_type_whose_id_would_terminate_the_docblock(): void
     {
-        // `{{-- @var array{'--}}': string} $payload --}}` closes at the key, and Laravel renders the
-        // rest of the declaration into the page.
-        $keyed = new Type\Union([Type\Atomic\TKeyedArray::make(['--}}' => Type::getString()])]);
+        // `@var array{'*/': string} $payload` closes the docblock at the key, and the rest of the
+        // declaration becomes PHP in the template.
+        $keyed = new Type\Union([Type\Atomic\TKeyedArray::make(['*/' => Type::getString()])]);
 
         AnnotationCollector::record('home', ['payload' => $keyed], true);
 
@@ -275,5 +275,24 @@ final class AnnotationCollectorTest extends TestCase
     private function literal(int $value): Type\Union
     {
         return new Type\Union([new Type\Atomic\TLiteralInt($value)]);
+    }
+
+    #[Test]
+    public function writes_class_names_absolute_so_a_template_import_cannot_change_them(): void
+    {
+        $object = new Type\Union([new Type\Atomic\TNamedObject('App\\Models\\User')]);
+
+        AnnotationCollector::record('home', ['user' => $object], true);
+
+        $this->assertSame('\\App\\Models\\User', AnnotationCollector::typeFor('home', 'user'));
+
+        // Composite ids need a live Psalm to round-trip, so the rewrite itself is checked directly.
+        $absolute = new \ReflectionMethod(AnnotationCollector::class, 'withAbsoluteClassNames');
+
+        $this->assertSame(
+            "list<\\App\\User>|\\Closure(int): string|array{User: \\App\\U, 'App\\U': int}",
+            $absolute->invoke(null, "list<App\\User>|Closure(int): string|array{User: App\\U, 'App\\U': int}"),
+            'class names gain a backslash; shape keys, literals and keywords do not',
+        );
     }
 }

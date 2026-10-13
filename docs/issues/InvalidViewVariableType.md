@@ -7,7 +7,7 @@ nav_order: 12
 # InvalidViewVariableType
 
 Emitted when the value a call site passes for a Blade template variable does not satisfy the type
-that template declares for it in a `{{-- @var --}}` comment.
+that template declares for it in a `@var` docblock.
 
 ## Why this is a problem
 
@@ -20,7 +20,7 @@ site that caused it.
 
 ```blade
 {{-- resources/views/greeting.blade.php --}}
-{{-- @var string $name --}}
+<?php /** @var string $name */ ?>
 <p>{{ $name }}</p>
 ```
 
@@ -38,7 +38,7 @@ view('greeting', ['name' => 'Ada']);
 ## How to fix
 
 1. Pass a value of the declared type, or cast it at the call site.
-2. Widen the template's declaration if the template really does handle both (`{{-- @var string|int $name --}}`).
+2. Widen the template's declaration if the template really does handle both (`@var string|int $name`).
 
 ## Configuration
 
@@ -57,7 +57,7 @@ This check is disabled by default, and needs Blade analysis enabled. Enable it i
 The check declines rather than guess. It is silent when:
 
 - The view name is not a string literal, or is namespaced (`pkg::view`).
-- The declared type is `mixed`, which is every `@props([...])` entry (`@props` records names, not types).
+- The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
 - The passed value is `mixed`, which satisfies any declaration.
-- The declared type does not parse. A `{{-- @var --}}` comment is free text and is never validated.
+- The declared type does not parse. A `@var` docblock is free text and is never validated.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.

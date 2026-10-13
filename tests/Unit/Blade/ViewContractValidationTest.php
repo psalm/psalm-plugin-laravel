@@ -13,7 +13,7 @@ use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 
 /**
- * End-to-end proof that a template's `{{-- @var --}}` / `@props` contract is enforced at the
+ * End-to-end proof that a template's `@var` docblock / `@props` contract is enforced at the
  * `view()` call sites that feed it. A real `vendor/bin/psalm` run is the only way to pin it: the
  * contract only exists after the Blade bootstrap has compiled the fixture's templates, and the
  * check reads argument types Psalm infers during analysis.
@@ -243,6 +243,20 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * #1828: a literal default types the template body only. A caller may pass any value for the
+     * prop, so the call site is never checked against the default's type; the declared-type case
+     * beside it proves the check itself runs.
+     */
+    #[Test]
+    public function a_props_default_type_is_never_checked_against_the_call_site(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'PropsDefaultMismatch.php'), \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE], \array_column($this->forFile($issues, 'WrongType.php'), 'type'));
+    }
+
+    /**
      * An open key set silences the missing-variable check without silencing the type check: the
      * keys that ARE known are still known.
      */
@@ -324,9 +338,111 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'NoContract.php'));
         // A spread shifts every position after it, so no argument can be read by position.
         $this->assertSame([], $this->forFile($issues, 'SpreadArgs.php'));
-        // A raw `<?php` docblock types a local the template assigns itself; it counts
-        // as declared for UnusedViewData and is never a contract a call site has to satisfy.
+        // A raw `<?php` docblock types a local the template assigns itself, so it is never a
+        // contract a call site has to satisfy.
         $this->assertSame([], $this->forFile($issues, 'RawLocalHint.php'));
+    }
+
+    /**
+     * A raw `@var` is a contract wherever it sits (a `<?php` block or `@php`), unless the name is one
+     * the template binds itself. The nullable one is optional, like a `@props` default.
+     */
+    #[Test]
+    public function a_raw_var_for_view_data_is_a_contract_and_a_nullable_one_is_optional(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $missing = $this->forFile($issues, 'RawMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+        $this->assertStringContainsString("'title'", $missing[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'RawOptional.php'), 'the nullable `$count` may be omitted');
+
+        $wrong = $this->forFile($issues, 'RawWrongType.php');
+        $this->assertCount(1, $wrong, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrong[0]['type']);
+        $this->assertStringContainsString('$title', $wrong[0]['message']);
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_loop_alias_is_not_a_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawLoopAlias.php'));
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_blade_owned_name_or_in_a_plain_comment_is_no_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawNotContracts.php'));
+    }
+
+    /** The template's own `use` alias is invisible to the contract: the type check declines, the presence check stays. */
+    #[Test]
+    public function a_short_class_name_declines_the_type_check_but_keeps_the_presence_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawShortName.php'), \var_export($issues, true));
+
+        $missing = $this->forFile($issues, 'RawShortNameMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+    }
+
+    #[Test]
+    public function a_components_public_render_leaves_the_data_set_open(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'ComponentRenderPublic.php'));
+    }
+
+    #[Test]
+    public function a_raw_optional_marker_on_a_type_without_null_is_reported_at_the_declaration(): void
+    {
+        $reported = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if ($issue['type'] === 'InvalidDocblock' && \basename((string) $issue['file_name']) === 'raw-bad-optional.blade.php') {
+                $reported[] = $issue;
+            }
+        }
+
+        // `$bad` only: a bracketed or `mixed` type allows null, a native `@psalm-suppress` silences
+        // its own declaration, and a Blade suppression above the block silences a multi-line block.
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(3, $reported[0]['line_from']);
+        $this->assertStringContainsString('write `string|null $bad = null`', (string) $reported[0]['message']);
+    }
+
+    /** A composer or creator can overwrite any key, so a call site is judged on neither presence nor type. */
+    #[Test]
+    public function a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'ComposedWrongType.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComposedMissing.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Only a statement-level docblock of the template's own scope declares: a property or method
+     * docblock, one inside a closure or an expression, and a `$row[...] = ` local are no contract,
+     * and a `use`-aliased qualified name declines the type check.
+     */
+    #[Test]
+    public function only_statement_level_docblocks_declare_and_aliased_names_decline_the_type_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawScope.php'), \var_export($issues, true));
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            $this->assertFalse(
+                $issue['type'] === 'InvalidDocblock' && \str_contains((string) $issue['message'], 'Optional view variable')
+                    && \basename((string) $issue['file_name']) === 'raw-scope.blade.php',
+                'a property docblock is not a declaration',
+            );
+        }
     }
 
     #[Test]

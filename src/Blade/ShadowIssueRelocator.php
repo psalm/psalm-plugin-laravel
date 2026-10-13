@@ -21,7 +21,10 @@ use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidMethodCall;
+use Psalm\Issue\PossiblyNullPropertyFetch;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
@@ -210,6 +213,31 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // A `Collection|array` `@foreach`/`@forelse` subject: Psalm types the loop through a
+        // synthetic `getIterator()`/`current()`/`key()` call on `$__currentLoopData` and suppresses
+        // these two classes around it (ForeachAnalyzer.php), but `BeforeAddIssue` fires before that
+        // suppression is checked, and the re-emit cannot carry it (#1810). The synthetic call takes
+        // the subject variable's position; a real call is positioned on its method name.
+        if (
+            ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
+            && self::selectedText($issue->code_location) === '$__currentLoopData'
+        ) {
+            return false;
+        }
+
+        // `$loop->parent` is the enclosing loop's frame and stays `|null` in the ambient shape (an
+        // outermost loop has none), but the prelude cannot see lexical nesting, so every nested
+        // read reported (#1696). InstancePropertyFetchAnalyzer.php is the only emitter naming the
+        // receiver chain. Trade-off: a depth-1 `$loop->parent->x`, which is a real null read, is
+        // silenced too. `PossiblyNullReference` is left alone: its message has no receiver, and a
+        // method call on the `stdClass` frame is a bug that also reports `PossiblyUndefinedMethod`.
+        if (
+            $issue instanceof PossiblyNullPropertyFetch
+            && \preg_match('/^Cannot get property on possibly null variable \$loop(?:->parent)+ of type /', $issue->message) === 1
+        ) {
+            return false;
+        }
+
         // Laravel's own compiled guards on `$attributes`/`$component`/`$slot` (`isset()`, `??=`,
         // `instanceof`) exist to check what {@see PreludeBuilder::componentTypesFor()} now
         // declares as guaranteed inside a component view — most visibly when that view itself
@@ -340,6 +368,10 @@ final class ShadowIssueRelocator
             if (self::isAmbientDocblockGuardName($issue->message, '__env')) {
                 return false;
             }
+
+            if (self::isGeneratedValueSave($issue, $target)) {
+                return false;
+            }
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
@@ -461,11 +493,15 @@ final class ShadowIssueRelocator
     /**
      * Rewrites the shadow positions an issue message names onto the template, through the same
      * {@see ShadowTarget::templateLineFor()} the location and the journey use: `first seen on line N`
-     * (see MESSAGE_LINE_REFERENCES) and the `file:line:column` descriptor of the issue's own shadow
-     * that a few messages embed. Unlike {@see JourneyRemapper}'s clamp-to-1, a `first seen` line
-     * inside the prelude drops the clause (a clamped number would read as a claim), while a
-     * descriptor still clamps because it has no clause to drop. A regex failure keeps Psalm's
-     * message instead of declining: this rewrite is cosmetic and must never lose the issue.
+     * (see MESSAGE_LINE_REFERENCES), the `file:line:column` descriptor of the issue's own shadow
+     * that a few messages embed, the absolute `path:line` an invalid docblock type's message ends
+     * with (`CommentAnalyzer`), and a closure id (`strtolower(path):line:offset:-:closure`), whose
+     * byte offset is dropped: it shifts with the prelude, so it would churn baselines across plugin
+     * versions without telling the author anything. Unlike {@see JourneyRemapper}'s clamp-to-1, a
+     * `first seen` line inside the prelude drops the clause (a clamped number would read as a
+     * claim), while a descriptor still clamps because it has no clause to drop. A regex failure
+     * keeps Psalm's message instead of declining: this rewrite is cosmetic and must never lose the
+     * issue.
      *
      * @psalm-mutation-free
      */
@@ -489,6 +525,14 @@ final class ShadowIssueRelocator
                 $message,
             ) ?? $message;
         }
+
+        $message = \preg_replace_callback(
+            '/' . \preg_quote($issue->code_location->file_path, '/') . ':(\d++)(?::\d++(:-:closure))?(?!:\d)/i',
+            /** @param array<array-key, string> $matches */
+            static fn(array $matches): string => $target->templateName . ':'
+                . \max(1, $target->templateLineFor((int) $matches[1])) . ($matches[2] ?? ''),
+            $message,
+        ) ?? $message;
 
         return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
     }
@@ -616,6 +660,15 @@ final class ShadowIssueRelocator
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
      * same arguments inside `@php` keeps reporting.
      *
+     * Caveat (#1725), a deliberately accepted gap: the gate keys on the generated call text, never
+     * on the literal list item behind it, so it cannot tell the #1695 artifact (a keyed non-string
+     * default reaching the list-form arm) from a genuinely non-string list item. `@aware([null])`,
+     * `@aware([$n])` with a nullable `$n`, and `@aware(['color' => 'red', null])` raise the same
+     * argument issue on the same generated call and are dropped with it, although each is a real
+     * bug (a null key; PHP 8.5 deprecates it in `array_key_exists()`). Telling them apart would
+     * mean reading the list literal back out of the `@aware(...)` directive, which this gate does
+     * not do. The shape is rare. Pinned by `BladeIssueRemapTest::a_non_string_aware_list_item_stays_silent_known_limitation()`.
+     *
      * @psalm-mutation-free
      */
     private static function isGeneratedAwareArgument(CodeIssue $issue, ShadowTarget $target): bool
@@ -710,6 +763,32 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * Whether an issue sits on the `isset($value)` of the save `@session`/`@context` compile
+     * (`if (isset($value)) { $__sessionPrevious[] = $value; }`, CompilesSessions/CompilesContexts),
+     * which Psalm judges against whatever `$value` the author has in scope (#1724). The statement
+     * must be absent from the template, so an author who writes it keeps the finding; in that
+     * template every compiled save keeps it too.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedValueSave(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+        $ifLength = \strlen('if (');
+
+        // The statement must open exactly where the selection starts, less its `if (`.
+        if (
+            !$selection instanceof ShadowSelection
+            || $selection->start < $ifLength
+            || \preg_match('/\Gif \(isset\(\$value\)\) \{ \$__(?:session|context)Previous\[\] = \$value; \}/', $selection->snippet, $save, 0, $selection->start - $ifLength) !== 1
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($save[0], $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
      * The called expression an issue points at, read out of the shadow, or null to decline —
      * fail open, since dropping a real author issue is the costly direction and an unreadable
      * location is no evidence of anything.
@@ -738,6 +817,20 @@ final class ShadowIssueRelocator
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+    }
+
+    /**
+     * The source text an issue's location selects in the shadow, or null when unreadable.
+     *
+     * @psalm-mutation-free
+     */
+    private static function selectedText(CodeLocation $location): ?string
+    {
+        $selection = ShadowSelection::of($location);
+
+        return $selection instanceof ShadowSelection
+            ? \substr($selection->snippet, $selection->start, $selection->end - $selection->start)
+            : null;
     }
 
     /**

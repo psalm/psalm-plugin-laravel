@@ -8,25 +8,31 @@ nav_order: 12
 
 Emitted when a Blade template declares a variable that the call site rendering it never passes.
 
-A template declares its variables two ways, both read by [Blade template analysis](../blade.md):
+A template declares its variables with a `@var` docblock or a `@props` entry, both read by [Blade template analysis](../blade.md):
 
 ```blade
-{{-- @var \App\Models\User $user --}}
+<?php /** @var \App\Models\User $user */ ?>
 @props(['title' => 'Untitled', 'subtitle'])
 ```
 
+Every declared variable is required, including `T|null` and `mixed` (a nullable type means "pass `null` explicitly"). A declaration ending in `= null` is optional: `@var string|null $subtitle = null`. A name Blade supplies (`$errors`, `$slot`) or the template binds itself (a `@foreach` alias, an assignment target) is not a declaration. See [Declaring view variables](../blade.md#declaring-view-variables).
+
 ## Why this is a problem
 
-The variable is undefined at render time. Blade does not fail loudly for it: `{{ $subtitle }}` renders
-an empty string under the default error handler, so the page ships with a hole in it instead of an
-exception anyone would notice.
+The variable is undefined at render time. Laravel's `HandleExceptions` turns the undefined-variable
+warning into an `ErrorException` in every environment, so rendering `{{ $subtitle }}` fails instead of
+producing an empty string.
 
 ## Examples
 
 ```blade
 {{-- resources/views/profile.blade.php --}}
-{{-- @var string $name --}}
-{{-- @var int $age --}}
+<?php
+/**
+ * @var string $name
+ * @var int $age
+ */
+?>
 <p>{{ $name }} ({{ $age }})</p>
 ```
 
@@ -44,8 +50,8 @@ view('profile', ['name' => 'Ada'])->with('age', 36);
 ## How to fix
 
 1. Pass the declared variable at the call site.
-2. Give it a default in the template's `@props([...])` if it is genuinely optional (`@props(['subtitle' => ''])`).
-3. Drop the `{{-- @var --}}` declaration if the template no longer reads that variable.
+2. Declare it optional if it genuinely is: give it a default in the template's `@props([...])`, or end the declaration with `= null` (`@var string|null $subtitle = null`).
+3. Drop the declaration if the template no longer reads that variable.
 
 ## Configuration
 
@@ -65,7 +71,10 @@ The check declines rather than guess. It is silent when:
 
 - The view name is not a string literal, or is namespaced (`pkg::view`).
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
-- The `@props` entry carries a literal default, which Blade fills in itself.
+- The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
+- The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
+- A view composer or creator is registered for the view, wildcard ones (`composing: *`, `admin.*`) included: it can add any data, so the call site's data set proves nothing.
+- The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
 
@@ -82,12 +91,11 @@ supplied set is treated as open and this check declines for it.
 The check reads the data one call site passes. It does not know about the ways Laravel binds a
 variable into a view somewhere else entirely:
 
-- `View::composer('profile', ...)` and `View::creator(...)`, which bind at render time from a service provider.
-- `View::share('siteName', ...)`, which binds into every view in the application.
+- A composer or creator that is not registered by the time the plugin boots the application (one added lazily at runtime).
 - `@inject('metrics', 'App\Services\Metrics')` inside the template, which resolves from the container rather than from the data array.
 
-A variable that arrives one of those ways is declared by the template but never passed by the call
-site, so it is reported. Either drop its `{{-- @var --}}` declaration, or silence the rule for the
+A variable that arrives that way is declared by the template but never passed by the call
+site, so it is reported. Either drop its `@var` declaration, or silence the rule for the
 call sites it affects:
 
 ```php
