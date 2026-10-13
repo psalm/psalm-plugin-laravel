@@ -854,15 +854,83 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, $registrar)->boot();
 
-        // Two warnings total, not three: one because `ThrowingBladeCompiler` is a compiler
-        // SUBCLASS (unconditionally untrustworthy, #1517 F3, unrelated to this test's own point),
-        // and one aggregated compile-failure warning for the broken template — never one per
-        // failed template.
-        $this->assertCount(2, $this->progress->warnings, $this->progress->warningText());
+        // The one warning is for `ThrowingBladeCompiler` being a compiler SUBCLASS (unconditionally
+        // untrustworthy, #1517 F3, unrelated to this test's own point). The compile failure is an
+        // issue instead, so it is not named in a warning `--no-progress` would discard.
+        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+        $this->assertSame(
+            [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
+            $registrar->compileFailures,
+        );
+        $this->assertStringContainsString("skipped Blade template '{$broken}'", \implode("\n", $this->progress->debugMessages));
         // Every discovered template is reportable, not only the ones that compiled, so findings
-        // from a healthy shadow can be remapped to its template.
+        // from a healthy shadow can be remapped to its template, and the failure reported on it.
         $this->assertSame([$broken, $healthy], $registrar->reportableTemplates);
         $this->assertCount(1, $registrar->analyzedShadows);
+    }
+
+    /** One template's `@props` contract once threw out of compileAll() and disabled Blade for the run (#1848). */
+    #[Test]
+    public function an_integer_props_name_does_not_disable_blade_for_the_run(): void
+    {
+        $component = $this->writeTemplate('props-int.blade.php', "@props(['1' => 'x', '2'])\n<div>{{ \$attributes }}</div>\n");
+        $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->assertTrue($this->bootstrapper($this->app(), $registrar)->boot());
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([], $registrar->compileFailures);
+        $this->assertEqualsCanonicalizing([$component, $healthy], $registrar->reportableTemplates);
+        $this->assertCount(2, $registrar->analyzedShadows);
+    }
+
+    #[Test]
+    public function a_compile_failure_is_reported_even_when_no_template_compiled(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $registrar = new RecordingShadowRegistrar();
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        // Nothing joins the analysis, but a one-template app must not go silent under --no-progress.
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([$broken], $registrar->reportableTemplates);
+        $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
+        $this->assertSame([], $registrar->analyzedShadows);
+        $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+    }
+
+    #[Test]
+    public function a_compile_failure_stays_in_the_warning_when_no_template_compiled_and_it_cannot_be_made_reportable(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([], $registrar->compileFailures);
+        $this->assertStringContainsString("1 Blade template(s) were skipped and are not analyzed ({$broken})", $this->progress->warningText());
+    }
+
+    #[Test]
+    public function a_compile_failure_is_not_reported_when_activation_fails(): void
+    {
+        $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([], $registrar->compileFailures, 'a degraded run reports nothing from Blade');
+        $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
     }
 
 
@@ -1150,8 +1218,8 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($firstApp, $first)->boot();
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
-        $this->assertStringContainsString('compiler environment', $this->progress->warningText());
-        $this->assertStringContainsString("Cause: directive 'shout' (internal function", $this->progress->warningText());
+        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $this->progress->warningText());
+        $this->assertStringContainsString("directive 'shout' (internal function", \implode('', $this->progress->debugMessages));
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1171,11 +1239,10 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * #1693: the warning must name the input that disabled the cache, but a package registering
-     * many such callbacks must not flood it.
+     * #1693: the default warning stays a single line; the inputs are listed (uncapped) under --debug.
      */
     #[Test]
-    public function the_untrusted_environment_warning_names_at_most_three_inputs(): void
+    public function the_untrusted_environment_warning_is_short_and_inputs_are_listed_in_debug(): void
     {
         $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
 
@@ -1191,9 +1258,18 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $text = $this->progress->warningText();
-        $this->assertStringContainsString("directive 'a'", $text);
-        $this->assertStringContainsString("directive 'c'", $text);
-        $this->assertStringNotContainsString("directive 'd'", $text);
-        $this->assertStringContainsString('and 2 more', $text);
+        $this->assertStringNotContainsString("\n", \trim($text));
+        $this->assertStringContainsString('5 compiler inputs cannot be fingerprinted', $text);
+        $this->assertStringContainsString('analysis results are unaffected', $text);
+        $this->assertStringContainsString('--debug', $text);
+        $this->assertStringNotContainsString("directive 'a'", $text);
+
+        $debug = \implode('', $this->progress->debugMessages);
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $this->assertStringContainsString("  - directive '{$name}'", $debug);
+        }
+
+        $this->assertStringContainsString('To restore caching', $debug);
     }
 }
