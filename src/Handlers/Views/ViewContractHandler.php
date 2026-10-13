@@ -288,9 +288,11 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             return;
         }
 
+        $codebase = $source->getCodebase();
+
         // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
         foreach ($supplied->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof Type\Atomic\TNamedObject && !$source->getCodebase()->classOrInterfaceOrEnumExists($atomic->value)) {
+            if ($atomic instanceof Type\Atomic\TNamedObject && !$codebase->classOrInterfaceOrEnumExists($atomic->value)) {
                 return;
             }
         }
@@ -308,8 +310,6 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
                 return;
             }
         }
-
-        $codebase = $source->getCodebase();
 
         // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
         // gains no new report.
