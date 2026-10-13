@@ -360,6 +360,8 @@ final class ContractParser
 
         $maskedSource = MarkerPrePass::blankRanges($source, $masked);
         $propsUnknown = false;
+        /** @var array<string, true>|null $awareNames null when an `@aware` list is unreadable */
+        $awareNames = [];
 
         /*
          * A raw open-tag (raw PHP, not `@php`) is a HARD boundary a directive's argument can
@@ -387,7 +389,7 @@ final class ContractParser
         foreach ($hardBoundaries as [$hardStart, $hardEnd]) {
             $segment = \substr($maskedSource, $segmentStart, $hardStart - $segmentStart);
 
-            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown);
+            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown, $awareNames);
 
             $segmentStart = $hardEnd;
         }
@@ -399,6 +401,16 @@ final class ContractParser
         $vars = [];
 
         foreach ($declarations as [, $name, $var]) {
+            // An inferred default never beats an earlier declaration of the name (an earlier `@props`
+            // entry, or an unreadable `@props` list, which may set any name first: a later default
+            // only applies through `??`), nor `@aware`, which `compileAware()` assigns without a
+            // `??` whichever directive comes first.
+            if ($var->defaultType !== null
+                && ($propsUnknown || isset($vars[$name]) || $awareNames === null || isset($awareNames[$name]))
+            ) {
+                $var = new ContractVar($name, $var->typeString, $var->declarationLine, $var->optional);
+            }
+
             $vars[$name] = $var;
         }
 
@@ -407,12 +419,20 @@ final class ContractParser
 
     /**
      * One segment's worth of {@see self::DIRECTIVE_PATTERN} matches, appending every `@props`
-     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable.
+     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable. The
+     * names an `@aware` lists go to `$awareNames`, which an unreadable one nulls.
      *
      * @param list<array{0: int, 1: string, 2: ContractVar}> $declarations
+     * @param array<string, true>|null                       $awareNames
      */
-    private function scanPropsDirectives(string $segment, int $segmentOffset, string $source, array &$declarations, bool &$propsUnknown): void
-    {
+    private function scanPropsDirectives(
+        string $segment,
+        int $segmentOffset,
+        string $source,
+        array &$declarations,
+        bool &$propsUnknown,
+        ?array &$awareNames,
+    ): void {
         if (\preg_match_all(self::DIRECTIVE_PATTERN, $segment, $directives, \PREG_OFFSET_CAPTURE) === false) {
             $propsUnknown = true;
 
@@ -427,38 +447,46 @@ final class ContractParser
         $argLists = $directives['args'];
 
         foreach ($names as $i => [$directiveName]) {
+            $directive = \strtolower($directiveName);
+
             // A leading `@` in the captured name is Blade's own `@@props` escape: the match is
             // STILL consumed (so the scan does not re-enter its argument looking for a nested
             // `@props`), it is simply never a live declaration.
-            if (\str_starts_with($directiveName, '@') || \strtolower($directiveName) !== 'props') {
+            if (\str_starts_with($directiveName, '@') || ($directive !== 'props' && $directive !== 'aware')) {
                 continue;
             }
 
-            $offset = $segmentOffset + $fullMatches[$i][1];
             [$argsText, $localArgsOffset] = $argLists[$i];
+            $props = null;
 
-            if ($localArgsOffset === -1) {
-                // No `(...)` follows this `@props` at all: unparseable, same as a props array
-                // that isn't fully literal.
-                $propsUnknown = true;
+            if ($localArgsOffset !== -1) {
+                $argsOffset = $segmentOffset + $localArgsOffset;
+                $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
+                // Blade strips a `{{-- --}}` before compiling, so the names it splits are not the ones
+                // written here (`'co{{-- x --}}lor'` is `color`).
+                $props = \str_contains($rawArgs, '{{--') ? null : $this->parseProps($rawArgs);
+            }
+
+            if ($directive === 'aware') {
+                $awareNames = $props === null || $awareNames === null
+                    ? null
+                    : $awareNames + \array_fill_keys(\array_keys($props), true);
 
                 continue;
             }
 
-            $argsOffset = $segmentOffset + $localArgsOffset;
-            $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
-            $props = $this->parseProps($rawArgs);
-
+            // No `(...)` after this `@props` at all is unparseable, same as a non-literal array.
             if ($props === null) {
                 $propsUnknown = true;
 
                 continue;
             }
 
+            $offset = $segmentOffset + $fullMatches[$i][1];
             $line = 1 + SourceLines::breaksIn($source, 0, $offset);
 
-            foreach ($props as $propName => $optional) {
-                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional)];
+            foreach ($props as $propName => [$optional, $defaultType]) {
+                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional, $defaultType)];
             }
         }
     }
@@ -473,7 +501,8 @@ final class ContractParser
      * @param string $innerContent the raw source text between `@props(` and the matching `)`,
      *        exactly as it reads in the template
      *
-     * @return array<string, bool>|null prop name => has a literal default; null when the array isn't fully literal
+     * @return array<string, array{0: bool, 1: string|null}>|null prop name => [has a default, its
+     *         {@see self::defaultType()}]; null when the array isn't fully literal
      */
     private function parseProps(string $innerContent): ?array
     {
@@ -502,12 +531,22 @@ final class ContractParser
                 return null;
             }
 
-            if ($item->key !== null) {
+            // `ComponentAttributeBag::extractPropNames()` names an entry with an `is_numeric()` key by
+            // its value, with no default, exactly like a bare entry.
+            $numericKey = $item->key instanceof Node\Scalar\Int_
+                || ($item->key instanceof Node\Scalar\String_ && \is_numeric($item->key->value));
+
+            if ($item->key !== null && !$numericKey) {
                 if (!$item->key instanceof Node\Scalar\String_) {
                     return null;
                 }
 
-                $props[$item->key->value] = true; // carries a default value
+                // A name that is no assignable variable (`max-width`, `this`) gets no body type, and
+                // neither does one the prelude types itself (`$slot`, `$errors`).
+                $assignable = \preg_match('/^' . self::IDENTIFIER . '$/D', $item->key->value) === 1
+                    && $item->key->value !== 'this'
+                    && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$item->key->value]);
+                $props[$item->key->value] = [true, $assignable ? $this->defaultType($item->value) : null];
 
                 continue;
             }
@@ -516,10 +555,39 @@ final class ContractParser
                 return null;
             }
 
-            $props[$item->value->value] = false; // bare entry, no default
+            // An all-digit name is never a variable the body can read, and PHP would cast most to an
+            // int key: skip it here, where the key is written (#1848).
+            if (\preg_match('/^-?\d+$/D', $item->value->value) !== 1) {
+                $props[$item->value->value] = [false, null]; // bare entry, no default
+            }
         }
 
         return $props;
+    }
+
+    /**
+     * The widened type of a default that is a literal, never the literal type itself: a caller
+     * passes any value for the prop, so `'lg'` as `'lg'` would turn a `match ($size)` default arm
+     * into dead code. An array expression is `array` whatever its items, since the value is one.
+     * `null`, constants, calls and any other expression stay untyped (null here).
+     */
+    private function defaultType(Node\Expr $default): ?string
+    {
+        if ($default instanceof Node\Expr\UnaryMinus
+            && ($default->expr instanceof Node\Scalar\Int_ || $default->expr instanceof Node\Scalar\Float_)
+        ) {
+            $default = $default->expr;
+        }
+
+        return match (true) {
+            $default instanceof Node\Scalar\String_ => 'string',
+            $default instanceof Node\Scalar\Int_ => 'int',
+            $default instanceof Node\Scalar\Float_ => 'float',
+            $default instanceof Node\Expr\Array_ => 'array',
+            $default instanceof Node\Expr\ConstFetch
+                && \in_array($default->name->toLowerString(), ['true', 'false'], true) => 'bool',
+            default => null,
+        };
     }
 
     /**
@@ -698,7 +766,10 @@ final class ContractParser
 
                 foreach ($args as $arg) {
                     if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
-                        $this->names[$arg->value->value] = true;
+                        // An all-digit name is never a variable, and PHP would cast most to an int key.
+                        if (\preg_match('/^-?\d+$/D', $arg->value->value) !== 1) {
+                            $this->names[$arg->value->value] = true;
+                        }
 
                         continue;
                     }

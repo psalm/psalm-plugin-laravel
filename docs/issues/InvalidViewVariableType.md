@@ -63,7 +63,7 @@ This check is disabled by default, and needs Blade analysis enabled. Enable it i
 The check declines rather than guess. It is silent when:
 
 - The view name is not a string literal, or is namespaced (`pkg::view`).
-- The declared type is `mixed`, which is every `@props([...])` entry (`@props` records names, not types).
+- The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
 - The passed value is `mixed`, which satisfies any declaration.
 - The declared type does not parse. A `@var` docblock is free text and is never validated.
 - An `@include` is not `@include('literal', [literal array])`: `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@includeIsolated` and `@each` are not checked. See [Included templates](../blade.md#included-templates).

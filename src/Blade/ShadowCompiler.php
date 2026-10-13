@@ -27,7 +27,11 @@ final class ShadowCompiler
         $this->suppressionInjector = new SuppressionInjector();
     }
 
-    public function compile(string $templatePath, string $source): ShadowResult|BladeCompileError
+    /**
+     * @param array<string, string> $propTypes variable name (without $) => the type a `@props` literal
+     *                                         default gives the body, see {@see ContractVar::$defaultType}
+     */
+    public function compile(string $templatePath, string $source, array $propTypes = []): ShadowResult|BladeCompileError
     {
         // The prefix is absent from author text, including real PHP comments.
         $markerPrefix = MarkerComment::prefixFor($source);
@@ -44,7 +48,7 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
-        $prelude = $this->preludeBuilder->build($compiled, $source);
+        $prelude = $this->preludeBuilder->build($compiled, $source, $propTypes);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");

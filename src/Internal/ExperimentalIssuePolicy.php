@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Config;
 use Psalm\Issue\PluginIssue;
+use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 
@@ -22,6 +23,7 @@ final class ExperimentalIssuePolicy
     private const ISSUES = [
         UnknownModelAttribute::class,
         UndefinedModelRelation::class,
+        BladeCompileFailure::class,
     ];
 
     public static function apply(bool $enforced): void

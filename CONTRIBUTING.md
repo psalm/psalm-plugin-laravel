@@ -21,3 +21,8 @@ composer test
 ## Filing issues
 
 Please include a minimal reproduction, the Psalm output, and your Laravel, Psalm, and plugin versions.
+
+## LLM usage in GitHub comments
+
+When using LLMs to generate comments to maintainers for any purpose other than direct translation,
+we would highly appreciate it if you disclosed the relevant paragraphs as such via markdown quote.

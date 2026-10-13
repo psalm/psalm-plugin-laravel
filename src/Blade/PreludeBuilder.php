@@ -55,14 +55,18 @@ final class PreludeBuilder
 
     private ?Parser $parser = null;
 
-    public function build(string $compiled, string $source): string
+    /**
+     * @param array<string, string> $propTypes variable name (without $) => the type a `@props` literal
+     *                                         default gives the body: no docblock in the body states it
+     */
+    public function build(string $compiled, string $source, array $propTypes = []): string
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
             static fn(?string $type): bool => $type !== null,
         );
 
-        $declared = self::AMBIENT_TYPES + $componentTypes;
+        $declared = self::AMBIENT_TYPES + $componentTypes + $propTypes;
 
         $lines = [];
 
@@ -71,6 +75,10 @@ final class PreludeBuilder
         }
 
         foreach ($componentTypes as $name => $type) {
+            $lines[] = "/** @var {$type} \${$name} */";
+        }
+
+        foreach ($propTypes as $name => $type) {
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
