@@ -124,6 +124,28 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('string', $reported[0]['message']);
     }
 
+    /**
+     * `View::gatherData()` renders every `Renderable` data value to a string before the template sees
+     * it, so one passed for a `string` declaration is correct. Only the `Renderable` atomics are
+     * rewritten: an unrelated object and a `Renderable|int` union are still wrong, which also proves
+     * the check runs on the shapes of the silent file.
+     */
+    #[Test]
+    public function a_renderable_value_satisfies_a_string_declaration(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RenderableValue.php'), \var_export($issues, true));
+
+        $wrong = $this->forFile($issues, 'NonRenderableValue.php');
+        $this->assertCount(2, $wrong, \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($wrong, 'type'));
+
+        $messages = \implode("\n", \array_column($wrong, 'message'));
+        $this->assertStringContainsString('DateTimeImmutable', $messages);
+        $this->assertStringContainsString('Illuminate\Contracts\View\View|int', $messages);
+    }
+
     #[Test]
     public function a_with_chain_contributes_its_key_to_the_same_contract_check(): void
     {
@@ -414,7 +436,7 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('write `string|null $bad = null`', (string) $reported[0]['message']);
     }
 
-    /** A composer or creator can overwrite any key, so a call site is judged on neither presence nor type. */
+    /** A closure composer is opaque, so a call site is judged on neither presence nor type. */
     #[Test]
     public function a_composed_view_is_checked_for_neither_presence_nor_type(): void
     {
@@ -422,6 +444,39 @@ final class ViewContractValidationTest extends TestCase
 
         $this->assertSame([], $this->forFile($issues, 'ComposedWrongType.php'), \var_export($issues, true));
         $this->assertSame([], $this->forFile($issues, 'ComposedMissing.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A class composer exempts only the keys it passes: the other declared variables are still
+     * judged, and a composer-supplied key is not type-checked either, since the composer runs after
+     * the call site and may overwrite it. Wildcard and `Class@method` composers are unioned, creators
+     * and trait methods are read, and one unreadable composer leaves its view unchecked. The wildcard
+     * observers bootstrap/app.php registers on the dispatcher count as no composer at all.
+     */
+    #[Test]
+    public function a_composer_exempts_only_the_keys_it_supplies(): void
+    {
+        $reported = [];
+
+        foreach ($this->forFile($this->contractIssues('psalm.xml'), 'ComposerCallSites.php') as $issue) {
+            \preg_match("/View '([^']+)' declares \\$(\\w+)/", $issue['message'], $matches);
+            $reported[] = "{$issue['type']} {$matches[1]} \${$matches[2]}";
+        }
+
+        \sort($reported);
+
+        $this->assertSame(
+            [
+                self::WRONG_TYPE . ' composer-literal $count',
+                self::MISSING . ' composer-accessor $count',
+                self::MISSING . ' composer-created $title',
+                self::MISSING . ' composer-inherited $count',
+                self::MISSING . ' composer-literal $count',
+                self::MISSING . ' composer-wild.page $other',
+                self::MISSING . ' observed $title',
+            ],
+            $reported,
+        );
     }
 
     /**

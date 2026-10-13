@@ -75,7 +75,7 @@ The check declines rather than guess. It is silent when:
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
-- A view composer or creator is registered for the view, wildcard ones (`composing: *`, `admin.*`) included: it can add any data, so the call site's data set proves nothing.
+- The variable is one a view composer or creator supplies (see [Composers and creators](#composers-and-creators)). The other declared variables of that view are still checked; when a composer cannot be read, the whole view is skipped.
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
 - The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
@@ -87,6 +87,47 @@ though the `render()` passes only `['component' => $this]`. Property types are k
 [InvalidViewVariableType](InvalidViewVariableType.md) still checks them against the template's
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
+
+## Composers and creators
+
+A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) can
+supply any key. A creator runs inside `view()` (`Factory::make()`), after the data array is set but
+before any chained `->with()`; a composer runs at render time, after the whole call site. The plugin
+reads the method instead of running it and exempts only the keys it passes; every other declared
+variable is checked as usual. [InvalidViewVariableType](InvalidViewVariableType.md) skips those keys
+too, since the composer or creator may overwrite the passed value (a chained `->with()` beats a
+creator, so skipping it there is merely conservative).
+
+What is read:
+
+- Class composers and creators: `View::composer('x', Foo::class)`, `'Foo@method'`, `View::creator(...)`, wildcard names included. The method may be inherited or come from a trait. The keys of several composers on one view are unioned.
+- Every `$view->with('key', ...)` and `$view->with(['key' => ..., ...])` with string literal keys, chained or not, as a statement of its own.
+- `$view->name()`, `$view->getName()` and `$view->getPath()`, which only read the view: a composer may compute a value from them and pass it to `with()`.
+
+The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
+
+- is a closure, or a listener registered straight on the event dispatcher for the exact view name (`Event::listen('composing: x', ...)`);
+- passes a key that is not a string literal: a variable, `with($array)`, a spread or named arguments;
+- uses `$view` any other way: passes it on (`$this->decorate($view)`, `parent::compose($view)`), assigns, returns or captures it, uses the result of `with()`, sets a property or offset on it, calls another method on it (`withTitle()`, `nest()`, `getData()`), or calls it through `?->`;
+- calls `share()`, `extract()`, `get_defined_vars()`, `func_get_args()` or `func_get_arg()`, or a `compact()` naming `$view` or a name that is not a string literal (they reach `$view` by name or position), uses a variable variable, or calls a method or function through a computed name;
+- has no method body the plugin can find.
+
+Wildcard listeners registered straight on the dispatcher (`Event::listen('composing:*', ...)`,
+`Event::listen('*', ...)`) are ignored: the composer API never registers one, and debugging and
+monitoring packages such as Ray, Telescope or Debugbar use them to watch every view.
+
+**Accepted residual.** The composer class is read as written. A class the container rebinds, extends
+or hooks before resolving, a view factory or dispatcher subclass, a constructor that shares data, a
+protected method served by `__call()`, data reaching the view through `call_user_func()` or an
+`include`, and a wildcard dispatcher listener that adds view data are not modelled. If the keys the
+view really receives differ from what the composer's method shows, the call site reports; the fix is
+`= null` on the declaration or a suppression (below).
+
+**Limitation: composers registered after boot.** Only composers registered while the application
+boots (service providers) are read. A composer registered later, in a middleware or a controller, is
+invisible: a view whose only composer is registered at runtime is checked as if it had none, and a
+view with a boot composer plus a runtime one is checked against the boot composer's keys only. A
+`share()` inside a method the composer calls, or inside a dependency it receives, is not seen either.
 
 ### Known false positive: variables bound outside the call site
 
@@ -113,5 +154,4 @@ Application wide, suppress it through `issueHandlers` in your `psalm.xml`:
 </issueHandlers>
 ```
 
-Teaching the check to read `composer()`, `creator()`, `share()` and `@inject` bindings is tracked
-as a follow-up.
+Teaching the check to read `share()` and `@inject` bindings is tracked as a follow-up.

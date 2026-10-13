@@ -199,19 +199,6 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        // `@session`/`@context` save an outer `$value` with `if (isset($value)) {
-        // $__sessionPrevious[] = $value; }` and read the stack back behind `isset()`
-        // (CompilesSessions, CompilesContexts), so Psalm sees a conditionally created global.
-        // Gated rather than declared in the prelude: a declared list would only move the noise onto
-        // the compiler's own `isset()` guards (PreludeBuilder::undeclaredVariables(), #1558).
-        // Exact-name, so an author's own conditionally assigned `$__`-prefixed local still reports.
-        if (
-            $issue instanceof PossiblyUndefinedGlobalVariable
-            && \preg_match('/^Possibly undefined global variable \$__(?:session|context)Previous,/', $issue->message) === 1
-        ) {
-            return false;
-        }
-
         // A `Collection|array` `@foreach`/`@forelse` subject: Psalm types the loop through a
         // synthetic `getIterator()`/`current()`/`key()` call on `$__currentLoopData` and suppresses
         // these two classes around it (ForeachAnalyzer.php), but `BeforeAddIssue` fires before that
@@ -331,8 +318,9 @@ final class ShadowIssueRelocator
             // matches the whole family by prefix rather than enumerating each name, unlike
             // `component`/`errors`/`attributes`/`slot` above. Except for `$__env` (excluded below,
             // same reason as `$errors`), a `$__`-prefixed name the prelude declares gets only the
-            // generic `@var mixed` fallback ({@see PreludeBuilder::undeclaredVariables()}, #1558),
-            // never a real type (contract types never reach the prelude,
+            // generic `@var mixed` fallback ({@see PreludeBuilder::undeclaredVariables()}, #1558)
+            // or the `@session`/`@context` save stacks' `list<mixed>` (#1722), never a class type
+            // (contract types never reach the prelude,
             // {@see BladeBootstrapper}). A guard on one usually renders the INFERRED wording
             // (narrowing `mixed` drops `from_docblock`), but falsy reconciliation preserves
             // docblock provenance (`Docblock-defined type empty-mixed ... is always falsy`), so
