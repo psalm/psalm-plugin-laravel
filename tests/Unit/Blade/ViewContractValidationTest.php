@@ -216,6 +216,24 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * `createVariableFromMethod()` hands a method with parameters to the view as
+     * `Closure::fromCallable()`, so the key carries the method's own signature: a declaration that
+     * matches it passes, a mismatched one is reported, and a generic method stays a bare Closure.
+     */
+    #[Test]
+    public function a_component_method_with_parameters_is_typed_as_its_closure_signature(): void
+    {
+        $issues = $this->forFile($this->contractIssues('psalm.xml'), 'ComponentMethods.php');
+        $messages = \array_column($issues, 'message');
+        \sort($messages);
+
+        $this->assertSame([
+            "View 'component-methods' declares \$echo as \\Closure(int): int, but Closure[impure] is passed for it",
+            "View 'component-methods' declares \$label as \\Closure(int): string, but Closure[impure](string):string is passed for it",
+        ], $messages);
+    }
+
+    /**
      * `renderComponent()` ends in `$view->with($componentData)`, which merges last, so a public
      * property overrides the same key passed explicitly from `render()`.
      */

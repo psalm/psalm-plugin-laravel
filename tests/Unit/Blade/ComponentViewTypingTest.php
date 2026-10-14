@@ -39,7 +39,7 @@ final class ComponentViewTypingTest extends TestCase
             '$attributes: Illuminate\View\ComponentAttributeBag',
             '$componentName: string',
             '$footer: mixed',
-            '$format: Closure[impure]',
+            '$format: Closure[impure](string):string',
             '$isActive: Illuminate\View\InvokableComponentVariable',
             // The prelude keeps `@var mixed $items` (the template reassigns it from itself); the seed
             // lands after it.
@@ -48,6 +48,12 @@ final class ComponentViewTypingTest extends TestCase
             '$summary: Illuminate\View\InvokableComponentVariable',
             '$title: string',
             '$untyped: mixed',
+        ]];
+        // #1855: a method with parameters is its own signature; a generic one stays a bare Closure.
+        yield 'methods with parameters on a non-final class' => ['toolbar.blade.php', [
+            '$echo: Closure[impure]',
+            '$pad: Closure[impure](string, int...):string',
+            '$withTone: Closure[impure](string):App\\View\\Components\\Toolbar',
         ]];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];

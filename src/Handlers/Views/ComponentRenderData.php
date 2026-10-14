@@ -12,7 +12,9 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -146,8 +148,6 @@ final class ComponentRenderData
      * @param bool $typedOnly skip a property with no declared type or a generic declaring class
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function exposed(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
@@ -234,11 +234,9 @@ final class ComponentRenderData
     /**
      * Every public method becomes a variable of the same (cased) name, built by
      * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` for a method with no
-     * parameters at all (optional ones count), a `Closure` otherwise.
+     * parameters at all (optional ones count), a `Closure` of the method's signature otherwise.
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -263,10 +261,39 @@ final class ComponentRenderData
 
             $methods[$method->cased_name ?? $methodName] = $method->params === []
                 ? new Union([new TNamedObject(InvokableComponentVariable::class)])
-                : Type::getClosure();
+                : self::closureOf($codebase, $storage, $declaring, $method);
         }
 
         return $methods;
+    }
+
+    /**
+     * `Closure::fromCallable([$this, $name])` keeps the method's signature, so the variable is that
+     * signature with Psalm's own slots: an untyped parameter or return stays unknown, as it does for
+     * a first-class callable. It stays impure, as Psalm types `Closure::fromCallable()` itself.
+     *
+     * A generic method or declaring class stays a bare `Closure`: nothing binds its templates here.
+     */
+    private static function closureOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+    ): Union {
+        if ($method->template_types !== null || $declaring->template_types !== null) {
+            return Type::getClosure();
+        }
+
+        // `final: true` collapses `static` to the component: a subclass instance is still one, and
+        // `Component&static` means nothing to a template.
+        return TypeExpander::expandUnion(
+            $codebase,
+            new Union([new TClosure($method->params, $method->return_type)]),
+            $storage->name,
+            $storage->name,
+            $storage->parent_class,
+            final: true,
+        );
     }
 
     /**
