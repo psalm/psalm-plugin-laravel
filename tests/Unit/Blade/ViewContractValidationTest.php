@@ -569,13 +569,20 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->templateContractIssues('isolated-bare-optional.blade.php'));
     }
 
-    /** `composed`'s closure composer is opaque: neither presence (`@includeIsolated`) nor type is judged. */
+    /** A closure composer is opaque, so an `@include` value for `composed` is not type-checked. */
     #[Test]
-    public function an_include_of_a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    public function an_include_of_a_composed_view_is_not_type_checked(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('composed-include.blade.php'));
+    }
+
+    /** A closure composer is opaque, so an `@includeIsolated` array omitting `composed`'s variable is not reported. */
+    #[Test]
+    public function an_isolated_include_of_a_composed_view_is_not_checked_for_presence(): void
     {
         $this->requireIncludeIsolated();
 
-        $this->assertSame([], $this->templateContractIssues('composed-include.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('isolated-composed.blade.php'));
     }
 
     /** `@extends('layout', [...])` compiles to the `@include` call, emitted after the template body. */
