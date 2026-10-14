@@ -273,7 +273,7 @@ final class ComponentRenderData
      * `$name()` is `call_user_func()` of the method, so the wrapper carries its return type (`null`
      * for `void`). Without a declared return type the variable is `mixed`, i.e. not checked, as for a
      * generic method or declaring class: `InvokableComponentVariable<mixed>` would reject a
-     * template's correct `InvokableComponentVariable<T>` declaration.
+     * template's correct `InvokableComponentVariable<TValue>` declaration.
      */
     private static function invokableOf(
         Codebase $codebase,

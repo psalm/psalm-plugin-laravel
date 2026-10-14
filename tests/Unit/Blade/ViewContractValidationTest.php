@@ -252,9 +252,9 @@ final class ViewContractValidationTest extends TestCase
 
     /**
      * A public method with no parameters reaches the view as an `InvokableComponentVariable` of
-     * its return type, so `@var InvokableComponentVariable<T>` both satisfies the check and keeps
-     * `$name()` typed. A mismatched `T` still reports. An untyped or generic method is `mixed`, so
-     * its declaration is not checked, and the bare class name accepts any `T`.
+     * its return type, so `@var InvokableComponentVariable<TValue>` both satisfies the check and keeps
+     * `$name()` typed. A mismatched `TValue` still reports. An untyped or generic method is `mixed`, so
+     * its declaration is not checked, and the bare class name accepts any `TValue`.
      */
     #[Test]
     public function a_no_parameter_method_is_an_invokable_variable_of_its_return_type(): void

@@ -4,7 +4,7 @@
 use Illuminate\View\InvokableComponentVariable;
 
 /**
- * `T` is the wrapped closure's return type: what `Component::createVariableFromMethod()` hands a
+ * `TValue` is the wrapped closure's return type: what `Component::createVariableFromMethod()` hands a
  * view for a no-parameter public method.
  */
 function invokable_component_variable_infers_from_its_closure(): void
@@ -52,7 +52,7 @@ function invokable_component_variable_declared_with_its_type(InvokableComponentV
     /** @psalm-check-type-exact $_value = list<string> */
 }
 
-/** The bare class name stays valid: `T` is left open, so the call is mixed, as before. */
+/** The bare class name stays valid: `TValue` is left open, so the call is mixed, as before. */
 function invokable_component_variable_bare(InvokableComponentVariable $variable): void
 {
     $_value = $variable();
