@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791978876770,
+  "lastUpdate": 1791981918091,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14030,6 +14030,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1512,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "973b7a5dff204a0701d75147e00ad35f385d8677",
+          "message": "Type no-arg Blade component methods as `InvokableComponentVariable<T>` (#1863)\n\n* fix(blade): type no-arg component methods as InvokableComponentVariable<T>\n\nA template had no declaration for a no-parameter component method that both\npassed validateViewData and kept the call typed. InvokableComponentVariable now\ncarries a covariant T (its __invoke() return), and Component::data() types each\nsuch key as InvokableComponentVariable<return type>, expanded against the\ncomponent so `static` resolves. An untyped method gives <mixed>, which the type\ncheck treats like a top-level mixed and declines.\n\nCloses #1856\n\n* fix(blade): decline only the untyped-method InvokableComponentVariable<mixed>\n\nThe previous commit declined InvalidViewVariableType for any mixed nested in a\ngeneric, which also silenced a genuine mismatch such as list<mixed> passed for\nlist<int>. Key the decline on the exact shape ComponentRenderData supplies for\na method without a return type, and pin that other nested mixed still reports.\n\nRefs #1856\n\n* fix(blade): resolve trait self and static in component methods, keep the Closure check\n\n- A trait method's `self`/`parent` resolve to the using component, not the trait.\n- `static` resolves to the component as if final, so a non-final component no\n  longer leaks `Component&static` into its view.\n- An untyped method's `InvokableComponentVariable<mixed>` is compared as\n  `<never>` instead of skipped, so a `\\Closure` declaration reports again.\n- The stub constructor accepts any `\\Closure` again; only a typed\n  `\\Closure(): T` binds `T`.\n\nRefs #1856\n\n* fix(blade): keep wrapper sealing, null for void, unbound templates and intersections\n\n- Seal the stubbed InvokableComponentVariable explicitly: a stub-declared class\n  is not user-defined, so it lost the sealAll* defaults and the\n  UndefinedMagicMethod / UndefinedMagicPropertyFetch reports on a missing member.\n- __invoke() of a void closure is null, and a void component method is typed\n  InvokableComponentVariable<null>.\n- A return type carrying a method-level template is mixed: nothing binds it.\n- Comparing an untyped method's wrapper as <never> keeps its intersection types.\n\nRefs #1856\n\n* refactor(blade): share the component method expander; an unknown return type is unchecked\n\ninvokableOf() and closureOf() now take their self, parent and static resolution\nfrom one expanderFor() helper, so a no-parameter method resolves them exactly\nlike a method with parameters. Its generic-method decline also covers the\nseparate getTemplateTypes() check, which is gone.\n\nA no-parameter method without a declared return type is now mixed (not\nchecked), like a generic one, which drops the ViewContractHandler special case\nthat compared InvokableComponentVariable<mixed> as <never>.",
+          "timestamp": "2026-10-14T14:40:39+02:00",
+          "tree_id": "4cf7cd94d6ff4898b4f9a9b0af2f422b2acdb66c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/973b7a5dff204a0701d75147e00ad35f385d8677"
+        },
+        "date": 1791981916176,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.88,
+            "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
