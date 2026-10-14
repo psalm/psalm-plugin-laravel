@@ -125,13 +125,19 @@ jobs:
       # The thread counts are read as shell variables rather than interpolated as
       # ${{ env.* }}: octoscan cannot tell a literal workflow-level env from an
       # attacker-reachable one and flags every ${{ env.* }} reaching a run: block.
+      #
+      # stdout is kept for the coverage check below, and the annotations still reach the runner
+      # through tee. `shell: bash` is load-bearing: it adds pipefail, which the default `bash -e`
+      # lacks, and without it a red Psalm run would exit with tee's status 0.
       - name: Run Psalm
+        shell: bash
         run: >-
           ./vendor/bin/psalm
           --threads="$PSALM_THREADS"
           --scan-threads="$PSALM_SCAN_THREADS"
           --output-format=github
           ${{ github.event_name == 'push' && '--shepherd' || '' }}
+          | tee "$RUNNER_TEMP/psalm.out"
 
       # Split from the restore rather than one combined actions/cache step: a combined step
       # skips its save on a key hit, so a snapshot whose key does not move never rolls forward.
@@ -154,3 +160,18 @@ jobs:
         with:
           path: ~/.cache/psalm
           key: ${{ steps.psalm-cache.outputs.cache-primary-key }}
+
+      # Psalm exits 0 at any coverage, so the 100% target (docs/contributing/type-coverage.md) is
+      # read off the summary line the run above already printed instead of a second Psalm run.
+      # That line says a bare "100" only when no expression is mixed; any other figure carries
+      # decimals. A missing line fails too, so a change to Psalm's output cannot silently disable
+      # the gate. Last on purpose: the cache snapshot is valid at any coverage, and a failure here
+      # must not skip the save above.
+      - name: Check type coverage
+        run: |
+          if grep -qxF 'Psalm was able to infer types for 100% of the codebase' "$RUNNER_TEMP/psalm.out"; then
+            exit 0
+          fi
+          actual=$(grep -m1 '^Psalm was .*infer types' "$RUNNER_TEMP/psalm.out" || echo 'no summary line')
+          printf '%s\n' "::error title=Type coverage below 100%::${actual}. Fix patterns: docs/contributing/type-coverage.md. To list the files with mixed expressions: composer psalm -- --no-progress --no-suggestions --stats 2>&1 | grep -E 'mixed\)' | grep -vE '\b0 mixed'"
+          exit 1
