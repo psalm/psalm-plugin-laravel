@@ -127,6 +127,7 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
+            // A method closure is already expanded with `static` collapsed, so this pass leaves it as is.
             $expanded = TypeExpander::expandUnion(
                 $codebase,
                 $type,
@@ -261,7 +262,7 @@ final class ComponentRenderData
 
             $methods[$method->cased_name ?? $methodName] = $method->params === []
                 ? new Union([new TNamedObject(InvokableComponentVariable::class)])
-                : self::closureOf($codebase, $storage, $declaring, $method);
+                : self::closureOf($codebase, $storage, $declaring, $method, $methodName);
         }
 
         return $methods;
@@ -279,8 +280,18 @@ final class ComponentRenderData
         ClassLikeStorage $storage,
         ClassLikeStorage $declaring,
         MethodStorage $method,
+        string $methodName,
     ): Union {
         if ($method->template_types !== null || $declaring->template_types !== null) {
+            return Type::getClosure();
+        }
+
+        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
+        // only `static` is the rendered component.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
+
+        if (!$appearing instanceof ClassLikeStorage) {
             return Type::getClosure();
         }
 
@@ -289,9 +300,9 @@ final class ComponentRenderData
         return TypeExpander::expandUnion(
             $codebase,
             new Union([new TClosure($method->params, $method->return_type)]),
+            $appearing->name,
             $storage->name,
-            $storage->name,
-            $storage->parent_class,
+            $appearing->parent_class,
             final: true,
         );
     }
