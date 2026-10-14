@@ -355,7 +355,7 @@ A marker counts only where Blade compiles it, not inside a `{{-- --}}` comment o
 
 A by-reference out-argument to a callee Psalm cannot see is reported too: `{{ $obj->fill($out) }}` on a `mixed` receiver reports `PossiblyUndefinedVariable` for `$out`, because Psalm cannot tell whether the call assigns it. Assign the name first (`@php $out = null; @endphp`) or declare it with `@var mixed $out = null`.
 
-Only boot-time data is known. A share registered at runtime (a middleware, a controller), and data a class component hands a view outside the component prefixes above, are reported unless the template declares the name, ending in `= null` when call sites do not pass it.
+Only boot-time data is known. A share registered at runtime (a middleware, a controller), data a class component hands a view outside the component prefixes above, and a key a base class adds to every view it renders (a `MailMessage` subclass overriding `data()`) are reported unless the template declares the name, ending in `= null` when call sites do not pass it.
 
 Each flip of the flag recompiles every template once, because the flag's decision is part of every template's cache key. Afterwards a change to the shared names recompiles every template not skipped by its view name or a composer, and registering or removing a composer recompiles the views it reaches.
 
