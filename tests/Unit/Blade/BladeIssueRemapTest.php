@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -101,6 +102,24 @@ final class BladeIssueRemapTest extends TestCase
         }
 
         return $lines;
+    }
+
+    /**
+     * @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues
+     *
+     * @return list<string> the messages the issue type was reported with for that template
+     */
+    private function messagesFor(array $issues, string $type, string $template): array
+    {
+        $messages = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === $type && \str_ends_with($issue['file_path'], $template)) {
+                $messages[] = $issue['message'];
+            }
+        }
+
+        return $messages;
     }
 
     #[Test]
@@ -797,7 +816,7 @@ final class BladeIssueRemapTest extends TestCase
      * #1694: `@session` compiles a conditional `$__sessionPrevious[] = $value` save and later reads
      * behind `isset()`, so Psalm reports the bookkeeping array as a possibly undefined global on
      * the directive line. The author's own conditionally assigned `$__authorLocal` on line 9 must
-     * keep reporting: the gate is exact-name.
+     * keep reporting: the prelude declares only the two save stacks (#1722).
      */
     #[Test]
     public function session_previous_value_stack_is_not_reported(): void
@@ -810,6 +829,13 @@ final class BladeIssueRemapTest extends TestCase
             [9],
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // #1723: "first seen on line N" names the template line of the assignment (7), not the
+        // shadow line Psalm counted.
+        $this->assertSame(
+            ['Possibly undefined global variable $__authorLocal, first seen on line 7'],
+            $this->messagesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
         );
     }
 
@@ -826,6 +852,138 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #1722: the prelude declares the `@session`/`@context` save stacks `list<mixed>`, so neither
+     * the `array_pop()` in `@endsession`/`@endcontext` nor the append in a nested or repeated block
+     * sees a `mixed` stack. `MixedArgument` stays only on the author's own lines: the echo of the
+     * mixed session value (line 2) and `count($__authorLocal)` (line 9).
+     */
+    #[Test]
+    public function session_and_context_stacks_are_typed_under_report_mixed(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([2, 9], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
+        $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'context-previous.blade.php'), $json);
+
+        // `MixedAssignment` is genuine: `$value` comes from `session()->get()`/`context()->get()`
+        // and is popped back off a `list<mixed>`.
+        $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php') && $issue['type'] !== 'MixedAssignment'));
+        $this->assertSame([], $stacks, $json);
+    }
+
+    /**
+     * #1722: nested and repeated `@session`/`@context` blocks report nothing under the default
+     * config, with the stacks declared in the prelude rather than gated by name.
+     */
+    #[Test]
+    public function nested_and_repeated_session_and_context_blocks_report_nothing(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php')));
+        $this->assertSame([], $stacks, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * #1724: `@session`/`@context` save an outer `$value` behind a compiled `isset($value)`, which
+     * Psalm judged against the author's own `$value`: a foreach value (line 2), `null` (line 5,
+     * the `@context` twin) and a literal (line 8). The author's own `@if (isset($value))` on line
+     * 7 keeps reporting.
+     */
+    #[Test]
+    public function the_compiled_session_value_save_is_not_judged_against_an_author_value(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-value-save.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('if (isset($value)) { $__contextPrevious[] = $value; }', $this->shadowSourceFor($template));
+        $this->assertSame([7], $this->linesFor($issues, 'RedundantCondition', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $json);
+    }
+
+    /**
+     * #1724: the drop needs the save statement to be absent from the template, so an author who
+     * writes it verbatim (line 2) keeps the finding, and so does every compiled save in that
+     * template (line 3).
+     */
+    #[Test]
+    public function an_author_written_value_save_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2, 3],
+            $this->linesFor($issues, 'RedundantCondition', 'session-value-save-authored.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1810: a `Collection|array` `@foreach`/`@forelse` subject makes Psalm resolve the iterator
+     * through a synthetic `$__currentLoopData->getIterator()` call that it suppresses in plain PHP
+     * (ForeachAnalyzer.php), positioned on the variable: `PossiblyInvalidMethodCall` for the list
+     * branch (line 8), `PossiblyUndefinedMethod` for the `ArrayIterator` branch (line 3). Line 11 is
+     * a real call on the same variable, positioned on the method name, and keeps reporting.
+     */
+    #[Test]
+    public function foreach_over_a_union_subject_does_not_report_the_synthetic_iterator_call(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'foreach-union-subject.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([11], $this->linesFor($issues, 'PossiblyInvalidMethodCall', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyUndefinedMethod', $template), $json);
+    }
+
+    /**
+     * #1696: `$loop->parent` stays nullable in the ambient loop shape, so a nested loop's
+     * `$loop->parent->iteration` (line 4) and `$loop->parent->parent->iteration` (line 6, one
+     * finding per level) reported PossiblyNullPropertyFetch. An author's own nullable `->parent`
+     * on another variable (line 11) keeps reporting: the match is anchored to `$loop`.
+     */
+    #[Test]
+    public function loop_parent_is_not_reported_as_possibly_null(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            ['Cannot get property on possibly null variable $node->parent of type null|object{iteration:int}'],
+            $this->messagesFor($issues, 'PossiblyNullPropertyFetch', 'loop-parent.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * A view variable declared in a PHPDoc `@var` is required unless the declaration carries
+     * `= null`, so a `??`, `??=` or `isset()` guard on one is redundant and reports like in PHP
+     * (lines 5-7). An optional variable is declared `T|null $x = null` and its guards report
+     * nothing (lines 8-10). #1697 once dropped these findings.
+     */
+    #[Test]
+    public function a_guard_on_a_required_view_variable_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'required-guard.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+        $expected = [
+            'RedundantCondition' => [],
+            'RedundantConditionGivenDocblockType' => [5, 6, 7],
+            'DocblockTypeContradiction' => [5, 6],
+            'TypeDoesNotContainNull' => [],
+            'TypeDoesNotContainType' => [],
+        ];
+
+        foreach ($expected as $family => $lines) {
+            $this->assertSame($lines, $this->linesFor($issues, $family, $template), "{$family}: {$json}");
+        }
     }
 
     /**
@@ -852,6 +1010,28 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame([7, 8], $this->linesFor($issues, 'InvalidArgument', $template), $json);
         $this->assertSame([8], $this->linesFor($issues, 'InvalidCast', $template), $json);
         $this->assertSame([], $this->linesFor($issues, 'PossiblyFalseArgument', $template), $json);
+    }
+
+    /**
+     * KnownLimitation (#1725): the #1695 gate keys on the generated call text, not on the list
+     * item, so a non-string list item (`@aware([null])`, `@aware([$maybe])` with a nullable
+     * `$maybe`, a bare `null` next to a keyed pair) is dropped together with the artifact it is
+     * indistinguishable from. At runtime each is a bug (a null key); here none reports. Pins the
+     * silence; the caveat is on {@see ShadowIssueRelocator::isGeneratedAwareArgument()}.
+     */
+    #[Test]
+    public function a_non_string_aware_list_item_stays_silent_known_limitation(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'components/aware-non-string-item-known-limitation.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        // Guard against a vacuous pass: the list-form arm the gate drops must still be compiled.
+        $this->assertStringContainsString('$__env->getConsumableComponentData($__value', $this->shadowSourceFor($template));
+
+        foreach (['NullArgument', 'PossiblyNullArgument', 'InvalidArgument', 'NoValue'] as $family) {
+            $this->assertSame([], $this->linesFor($issues, $family, $template), $json);
+        }
     }
 
     /**
@@ -1087,6 +1267,30 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1701: `$component` is Blade's own local inside a template that writes a `<x-...>` tag, and
+     * a class-component tag types it as the tag's class for the length of its slot
+     * (`$component = Chip::resolve(...)`). A method the class has stays silent; one it lacks
+     * reports an UndefinedMethod naming the class, which only happens if the slot sees the class
+     * type rather than `mixed`.
+     */
+    #[Test]
+    public function component_is_typed_as_the_tags_class_inside_its_slot(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/class-component-slot.blade.php';
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'UndefinedMethod', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $messages = $this->messagesFor($issues, 'UndefinedMethod', $template);
+        $this->assertStringContainsString('App\\View\\Components\\Chip::missingMethod', $messages[0]);
+        $this->assertStringNotContainsString('::label', $messages[0]);
+    }
+
+    /**
      * #1553: an empty bound component attribute (`:value=""`) compiles to a dangling `'value' =>`
      * in the component's data array (here `'value' => ]`; with a sibling attribute, `'value' => ,`
      * as in the original report), a syntax error mid-shadow. Before the fix,
@@ -1146,6 +1350,206 @@ final class BladeIssueRemapTest extends TestCase
         $shadow = $this->shadowSourceFor($template);
         $this->assertStringContainsString('@var mixed $__themeViews', $shadow);
         $this->assertStringContainsString('$__componentOriginal', $shadow);
+    }
+
+    /**
+     * A template-assigned local is not view data: declaring it `@var mixed` ahead of its own
+     * assignment makes Psalm drop the `$hasAction` <-> `$action !== null` correlation after the
+     * next `if`, so the guarded `$action->attributes` read reported PossiblyNullPropertyFetch.
+     */
+    #[Test]
+    public function a_template_assigned_flag_keeps_guarding_the_nullable_it_was_derived_from(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/assigned-flag-guard.blade.php';
+
+        $this->assertStringNotContainsString('$hasAction */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** An assignment that reads its own target needs the incoming value declared. */
+    #[Test]
+    public function a_self_reading_assignment_keeps_its_mixed_declaration(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/self-reassigned.blade.php';
+
+        $this->assertStringContainsString('@var mixed $title */', $this->shadowSourceFor($template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedGlobalVariable', $template));
+        $this->assertSame([], $this->linesFor($issues, 'UndefinedVariable', $template));
+    }
+
+    /**
+     * @return iterable<string, array{0: string, 1: string, 2?: string}>
+     */
+    public static function branchAssignedLocals(): iterable
+    {
+        yield '@if' => ['locals/if.blade.php', 'label'];
+        // Declared from its literal default (#1828) rather than `mixed`, but declared all the same.
+        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size', 'string'];
+        yield '@once' => ['locals/once.blade.php', 'label'];
+        yield '<x-…> slot' => ['locals/slot.blade.php', 'label'];
+    }
+
+    /**
+     * An assignment that can be skipped (a branch, `@once`, a component slot) leaves the incoming
+     * view value as the one read after it, a `@props` default or a parent's variable in a partial,
+     * so the name keeps its prelude declaration and the read is not possibly undefined.
+     */
+    #[Test]
+    #[DataProvider('branchAssignedLocals')]
+    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name, string $type = 'mixed'): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/' . $template;
+
+        $this->assertStringContainsString("@var {$type} \${$name} */", $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function qualifiedDocblocks(): iterable
+    {
+        yield 'leading backslash' => ['contract-typed-body.blade.php'];
+        // What `blade:annotate` writes: resolves identically in the namespace-less shadow.
+        yield 'no leading backslash' => ['contract-unqualified.blade.php'];
+    }
+
+    /** A qualified raw `@var` docblock types the template body. */
+    #[Test]
+    #[DataProvider('qualifiedDocblocks')]
+    public function a_raw_var_docblock_types_the_template_body(string $template): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UndefinedMethod', 'resources/views/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** A raw docblock naming a vendor class nothing else in the project mentions still types the body. */
+    #[Test]
+    public function a_raw_var_docblock_naming_an_otherwise_unreferenced_vendor_class_types_the_body(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [2],
+            $this->linesFor($issues, 'UndefinedMagicMethod', 'resources/views/contract-vendor-class.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function propsDefaultTypes(): iterable
+    {
+        yield 'string' => ['literals.blade.php', '$size: string'];
+        yield 'int' => ['literals.blade.php', '$count: int'];
+        yield 'float' => ['literals.blade.php', '$ratio: float'];
+        yield 'false' => ['literals.blade.php', '$open: bool'];
+        yield 'upper-case TRUE' => ['literals.blade.php', '$shown: bool'];
+        yield 'empty short array' => ['literals.blade.php', '$items: array<array-key, mixed>'];
+        yield 'long array() with entries' => ['literals.blade.php', '$pairs: array<array-key, mixed>'];
+        yield 'negative int' => ['literals.blade.php', '$offset: int'];
+        yield 'negative float' => ['literals.blade.php', '$scale: float'];
+        yield 'bare name' => ['untyped.blade.php', '$title: mixed'];
+        yield 'null' => ['untyped.blade.php', '$none: mixed'];
+        yield 'constant' => ['untyped.blade.php', '$eol: mixed'];
+        yield 'call' => ['untyped.blade.php', '$upper: mixed'];
+        yield 'concatenation' => ['untyped.blade.php', '$joined: mixed'];
+        yield 'unary plus' => ['untyped.blade.php', '$plus: mixed'];
+        yield 'negated constant' => ['untyped.blade.php', '$max: mixed'];
+        yield 'variable' => ['untyped.blade.php', '$copied: mixed'];
+        yield 'interpolated string' => ['untyped.blade.php', '$line: mixed'];
+        // An explicit declaration beats the inferred default: a native docblock re-declares the
+        // name after the prelude, whether it sits before or after `@props` in the template.
+        yield 'native @var before @props' => ['declared-native.blade.php', '$size: int'];
+        yield 'native @var after @props' => ['declared-native-after.blade.php', '$size: int'];
+        // `@aware` assigns unconditionally (no `??`), so a name it shares with `@props` holds the
+        // parent's value, whichever directive comes first.
+        yield '@aware after @props' => ['aware-after.blade.php', '$color: mixed'];
+        yield '@aware before @props' => ['aware-before.blade.php', '$color: mixed'];
+        yield '@props name @aware does not share' => ['aware-before.blade.php', '$size: string'];
+        // An unreadable list may set any name first, and a later default never replaces it (`??`).
+        yield 'after an unreadable @props' => ['unreadable-first.blade.php', '$size: mixed'];
+    }
+
+    /** #1828: a `@props` entry types the body from its literal default, widened, never the literal itself. */
+    #[Test]
+    #[DataProvider('propsDefaultTypes')]
+    public function a_props_entry_is_typed_from_its_literal_default(string $template, string $trace): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            $trace,
+            $this->messagesFor($issues, 'Trace', 'resources/views/props/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * The mistakes a typed default exposes, all silent while the prop was `mixed`. The guard on
+     * line 5 is the documented cost of a default-only claim: a caller could pass an array.
+     */
+    #[Test]
+    public function misusing_a_literal_defaulted_prop_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/misuse.blade.php';
+        $reported = [];
+
+        foreach ($issues as $issue) {
+            if (\str_ends_with($issue['file_path'], $template)) {
+                $reported[] = $issue['line_from'] . ' ' . $issue['type'];
+            }
+        }
+
+        $this->assertSame(['2 InvalidPropertyFetch', '3 InvalidMethodCall', '4 InvalidPropertyFetch', '5 DocblockTypeContradiction'], $reported);
+    }
+
+    /** Blade echoes a bool as `'1'` / `''`, so a `bool` default is no `e()` argument error. */
+    #[Test]
+    public function a_bool_default_echoes_silently(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/bool-echo.blade.php';
+
+        $this->assertStringContainsString('@var bool $open */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** Widened, not `'lg'`: a `match` or comparison against another value is not a dead branch. */
+    #[Test]
+    public function a_string_default_leaves_other_values_reachable(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/match.blade.php';
+
+        $this->assertStringContainsString('@var string $size */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
@@ -1224,6 +1628,12 @@ final class BladeIssueRemapTest extends TestCase
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
 
+        // #1723: php-parser's trailing " on line N" names the template line too.
+        $this->assertSame(
+            ['Syntax error, unexpected T_ENDIF on line 3'],
+            $this->messagesFor($issues, 'ParseError', $template),
+        );
+
         // Guard against a vacuous pass: a well-formed `<x-alert />` alone already emits several
         // `endif;` lines as part of its own save/restore bookkeeping, so a bare substring check for
         // "endif" cannot fail. `renderComponent()` is only ever emitted once per genuinely opened
@@ -1239,6 +1649,66 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame(
             [2],
             $this->linesFor($issues, 'UnusedForeachValue', 'resources/views/foreach-unused-value.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * #1723: the message of `ReferenceReusedFromConfusingScope` embeds a `file:line:column`
+     * descriptor of the reference's definition (template line 4), which must not name the shadow.
+     */
+    #[Test]
+    public function a_location_descriptor_inside_a_message_names_the_template(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/reference-reused.blade.php';
+
+        $this->assertSame(
+            [8],
+            $this->linesFor($issues, 'ReferenceReusedFromConfusingScope', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $messages = $this->messagesFor($issues, 'ReferenceReusedFromConfusingScope', $template);
+        $this->assertCount(1, $messages);
+        $this->assertMatchesRegularExpression('#^\$row is possibly a reference defined at \S*reference-reused\.blade\.php:4:\d+\. #', $messages[0]);
+    }
+
+    /**
+     * #1801: Psalm analyzes a `match` as a desugared ternary and drops two families of findings
+     * on plain PHP: the positionless `TypeDoesNotContainType` of the synthesized `UnhandledMatchError`
+     * branch, and `RedundantCondition*` inside the arms (MatchAnalyzer suppresses them at runtime,
+     * which `BeforeAddIssue` does not carry). The same condition outside the match, and the
+     * unsuppressed sibling classes, must keep reporting.
+     */
+    #[Test]
+    public function a_match_reports_only_what_psalm_reports_on_plain_php(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-bool.blade.php';
+        $context = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $context);
+        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $context);
+        // Line 19 is an author `elseif` outside the match with byte-identical wording to the arm finding.
+        $this->assertSame([19], $this->linesFor($issues, 'RedundantCondition', $template), $context);
+        $this->assertSame([13], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $context);
+        $this->assertSame([14], $this->linesFor($issues, 'ParadoxicalCondition', $template), $context);
+    }
+
+    /**
+     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. The subject
+     * and a `match` used as a condition operand (the finding sits on the whole expression) are
+     * outside every arm and report on plain PHP, so they must keep reporting in a template.
+     */
+    #[Test]
+    public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [5, 12, 17, 23],
+            $this->linesFor($issues, 'RedundantCondition', 'resources/views/match-outside-arms.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }

@@ -9,43 +9,32 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
+use Psalm\Internal\Analyzer\CommentAnalyzer;
+use Psalm\Internal\Type\ParseTree;
+use Psalm\Internal\Type\ParseTreeCreator;
+use Psalm\Internal\Type\TypeTokenizer;
 
 /**
- * Extracts a {@see TemplateContract} from a Blade template: `@var`
- * declarations, `@props` entries, and the set of top-level variables the
- * compiled body reads. Read-only; wiring the result into shadow compilation
- * is a separate step.
+ * Extracts a {@see TemplateContract} from a Blade template: `@var` declarations (raw PHPDoc
+ * docblocks in `<?php` / `@php` blocks, for names the template does not bind itself), `@props`
+ * entries, and the set of top-level variables the compiled body reads. Read-only; wiring the
+ * result into shadow compilation is a separate step.
  *
  * @psalm-api
  */
 final class ContractParser
 {
-    /**
-     * The `{{-- @var T $name --}}` spelling, matched against a comment's inner content. Greedy on
-     * the type, so the name it binds is the LAST `$name` in the comment — `@var Closure(Foo $f): Bar
-     * $callback` declares `$callback`, not `$f`.
-     *
-     * Public because {@see Annotate\TemplateAnnotator} has to recognise exactly what this recognises:
-     * a declaration it reads differently is one it appends a duplicate for, forever.
-     *
-     * The name is matched as PHP matches an identifier, bytes >= 0x80 included (`$menü` is a legal
-     * variable), not as `\w`, which is ASCII-only under this pattern.
-     */
-    public const VAR_PATTERN = '/^\s*@var\s+(.+)\s+\$(' . self::IDENTIFIER . ')\s*$/';
-
     /** PHP's own variable-name grammar, as bytes. */
-    public const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
-
-    /** A raw `<?php ... ?>` block, whose docblocks are the other spelling a template declares in. */
-    private const RAW_PHP_BLOCK = '/<\?php\b.*?(?:\?>|\z)/s';
+    private const IDENTIFIER = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
 
     /**
-     * The name a `@var` docblock binds inside a raw PHP block. Greedy within the line, to bind the
-     * same (last) name {@see self::VAR_PATTERN} does; per line, because one block can hold several
-     * docblocks and a pattern greedy across them would see only the last. The name grammar is shared
-     * with that pattern, so `$menü` binds whole rather than as its ASCII prefix.
+     * What follows `@var` on one line of a comment inside a raw PHP block, minus a closing `*\/`.
+     * Per line, because one block can hold several docblocks. The tag must start the line (after
+     * optional whitespace and a `*`, `//` or `#`) or directly follow the comment's own opener: a `@var` in
+     * running text (`@deprecated Replace @var Foo $user with ...`, `* Example: /** @var T $x`) is prose,
+     * not a declaration. `(*ANYCRLF)` makes a bare `\r` end a line too, as PHP's lexer counts it.
      */
-    private const RAW_PHP_VAR = '/@var\s+[^\r\n]*\$(' . self::IDENTIFIER . ')/';
+    private const RAW_PHP_VAR = '/(*ANYCRLF)(?:^\h*(?:\*|\/\/|#)?|\A\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*$/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
@@ -72,48 +61,52 @@ final class ContractParser
     public function parse(string $source, string $compiled): TemplateContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
+        [$names, $locals] = $this->walkReads($compiled);
 
-        return new TemplateContract($vars, $this->readVariables($compiled), $propsUnknown);
+        $vars += $this->rawContractVars($source, $this->filterNames($locals, []));
+
+        return new TemplateContract($vars, $this->filterNames($names, $locals), $propsUnknown);
     }
 
     /**
      * {@see self::parseDeclarations()} plus the read set, for the UnusedViewData rule: a key the
      * call site passes that neither `$vars` nor `$readVariables` mentions is passed for nothing.
      *
-     * Same side-channel rule as parseDeclarations(): the compiled output is read here, never fed
-     * back into it.
+     * The compiled output is only read here, never fed back into it.
      */
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
         [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
 
-        // Raw declarations are consumed-only, never contract types: in a template a raw `@var` is as
-        // often a local type hint after an assignment as a stated interface, and promoting one into
-        // $vars would report MissingViewVariable at every call site that correctly omits it.
+        $vars += $this->rawContractVars($source, $localVariables);
+
+        // What is left is consumed-only: a raw declaration of a name the template binds for itself,
+        // a Blade-owned name, a non-docblock comment, or a name-first `@var $x T`.
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
     }
 
     /**
-     * The declaration half of {@see self::parse()}, from the template source alone.
-     *
-     * A side channel for call-site validation: it must not touch the compiled output, because
-     * feeding contract types into shadow compilation would change every shadow's content and
-     * fingerprint, which is a separate decision from reading the declarations.
+     * The declaration half of {@see self::parse()}: `@props` entries and, when the compiled output is
+     * given, the raw `@var` docblocks that are view data. Telling view data from a type hint on a
+     * local needs the compiled body, which is only walked when the source mentions a `@var` at all.
      */
-    public function parseDeclarations(string $source): ViewDataContract
+    public function parseDeclarations(string $source, ?string $compiled = null): ViewDataContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
+
+        if ($compiled !== null && \str_contains($source, '@var')) {
+            $vars += self::rawContractVars($source, $this->parseReads($compiled)[2]);
+        }
 
         return new ViewDataContract($vars, $propsUnknown);
     }
 
     /**
-     * Names a template declares in the raw `<?php` docblock spelling, which
-     * {@see self::parseSource()} does not read: a raw PHP block reaches the shadow byte-for-byte,
-     * so its own docblocks never pass through the Blade-comment scan above.
+     * Names a template declares in the raw docblock spelling, which {@see self::parseSource()} does
+     * not read: a raw PHP block reaches the shadow byte-for-byte.
      *
      * Tokenized rather than scanned: one raw PHP block can hold a docblock declaring `$title` AND an
      * `echo $body;` after it, and a text scan binds whichever `$name` comes last — `$body`, which is
@@ -129,29 +122,230 @@ final class ContractParser
      */
     public static function rawDeclaredNames(string $source): array
     {
-        if (\preg_match_all(self::RAW_PHP_BLOCK, $source, $blocks) < 1) {
-            return [];
+        return \array_column(self::rawDeclarations($source), 0);
+    }
+
+    /**
+     * Every raw `@var T $name` docblock in the template that is view data rather than a local: a
+     * template that writes one for a name it binds itself (`$member` after `@foreach ($members as
+     * $member)`) is typing a local, which no call site passes, and one for a Blade-owned name
+     * (`$errors`, `$slot`) is the IDE idiom for a variable Blade supplies. Only a `/** *\/` docblock
+     * counts, the one Psalm reads a `@var` from.
+     *
+     * A declaration is required unless it ends in `= null` (see {@see self::splitVar()}): a nullable
+     * or `mixed` type means "pass null explicitly", not "may be omitted".
+     *
+     * @param list<string> $locals names the template binds for itself, see {@see self::parseReads()}
+     *
+     * @return array<string, ContractVar>
+     *
+     * @psalm-pure
+     */
+    private function rawContractVars(string $source, array $locals): array
+    {
+        $vars = [];
+
+        foreach (self::rawDeclarations($source) as [$name, $type, $line, $isDoc, $optional]) {
+            if ($type === null || !$isDoc || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name]) || \in_array($name, $locals, true)) {
+                continue;
+            }
+
+            // A later declaration of the same name wins, as in a document-order walk.
+            $vars[$name] = new ContractVar($name, $type, $line, $optional);
         }
 
-        $names = [];
+        return $vars;
+    }
 
-        foreach ($blocks[0] as $block) {
-            // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
-            // not parse, so that is fine; the @ is for the warning an unterminated string emits.
-            foreach (@\token_get_all($block) as $token) {
-                if (!\is_array($token) || ($token[0] !== \T_DOC_COMMENT && $token[0] !== \T_COMMENT)) {
-                    continue;
-                }
+    /**
+     * The `T $name [description]` after a `@var`, split the way Psalm splits it: the type is the
+     * first bracket- and quote-balanced token, the name is the `$identifier` right after it, and the
+     * rest is a description, whose own `$names` bind nothing (`@var Closure(Foo $f): Bar $cb` binds
+     * `$cb`, not `$f`). Null when it does not read that way: no name, a name-first `@var $x T`,
+     * unbalanced brackets.
+     *
+     * Public because {@see Annotate\TemplateAnnotator} must bind the same name the contract does:
+     * one that read it differently would append a duplicate declaration for it, forever.
+     *
+     * A description that starts with `= null` marks the variable optional, the one way a template says
+     * a call site may omit it: `@var string|null $title = null`. Anything after the `= null` is
+     * still description.
+     *
+     * @return array{0: string, 1: string, 2: bool}|null name (without `$`), type string, optional
+     *
+     * @psalm-pure
+     */
+    public static function splitVar(string $declaration): ?array
+    {
+        $declaration = \trim($declaration);
 
-                if (\preg_match_all(self::RAW_PHP_VAR, $token[1], $matched) > 0) {
-                    foreach ($matched[1] as $name) {
-                        $names[] = $name;
-                    }
+        try {
+            $parts = CommentAnalyzer::splitDocLine($declaration);
+        } catch (\Throwable) {
+            $parts = [$declaration];
+        }
+
+        if (\count($parts) > 1 && \preg_match('/^\$(' . self::IDENTIFIER . ')\z/', $parts[1], $name) === 1) {
+            return [$name[1], $parts[0], \preg_match('/^=\s*null(?=\s|\*\/|\z)/i', \implode(' ', \array_slice($parts, 2))) === 1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a type string includes `null` (or is `mixed`), read off Psalm's type parse tree so a
+     * bracketed `(string|null)` or a `?T` counts and a `null` nested in a generic does not. False for
+     * a type that does not parse.
+     */
+    public static function allowsNull(string $type): bool
+    {
+        try {
+            $tree = (new ParseTreeCreator(TypeTokenizer::tokenize($type)))->create();
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return self::nodeAllowsNull($tree);
+    }
+
+    /** @psalm-mutation-free */
+    private static function nodeAllowsNull(ParseTree $node): bool
+    {
+        if ($node instanceof ParseTree\Value) {
+            return \in_array(\strtolower($node->value), ['null', 'mixed'], true);
+        }
+
+        if ($node instanceof ParseTree\NullableTree) {
+            return true;
+        }
+
+        if ($node instanceof ParseTree\UnionTree || $node instanceof ParseTree\EncapsulationTree || $node instanceof ParseTree\Root) {
+            foreach ($node->children as $child) {
+                if (self::nodeAllowsNull($child)) {
+                    return true;
                 }
             }
         }
 
-        return $names;
+        return false;
+    }
+
+    /**
+     * `$type` with `null` added, for an optional declaration: `T $x = null` reads as `T|null`. A type
+     * that already allows null is returned as is; a callable or intersection type is parenthesised so
+     * the `|null` does not become part of it.
+     */
+    public static function withNull(string $type): string
+    {
+        if (self::allowsNull($type)) {
+            return $type;
+        }
+
+        return (\str_contains($type, '(') || \str_contains($type, '&') ? "({$type})" : $type) . '|null';
+    }
+
+    /**
+     * Each `@var T $name [description]` line in the raw blocks, split the way Psalm splits it (see
+     * {@see self::splitVar()}). A name-first `@var $x T` still declares `$x`, with a null type: it is
+     * no contract, but a name the template states, which the annotator must not add again.
+     *
+     * @return list<array{0: string, 1: string|null, 2: int, 3: bool, 4: bool}> name, type string (null when
+     *         name-first), 1-based line, whether it sits in a `/** *\/` docblock, whether it ends in `= null`
+     *
+     * @psalm-pure
+     */
+    private static function rawDeclarations(string $source): array
+    {
+        $declarations = [];
+
+        foreach (self::rawComments($source) as [$comment, $line, $isDoc]) {
+            if (\preg_match_all(self::RAW_PHP_VAR, $comment, $matched, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE) < 1) {
+                continue;
+            }
+
+            foreach ($matched as $match) {
+                $declared = self::splitVar($match[1][0]);
+                $at = $line + SourceLines::breaksIn($comment, 0, $match[0][1]);
+
+                if ($declared !== null) {
+                    $declarations[] = [$declared[0], $declared[1], $at, $isDoc, $declared[2]];
+                } elseif (\preg_match('/^\$(' . self::IDENTIFIER . ')(?![a-zA-Z0-9_\x80-\xff])/', $match[1][0], $first) === 1) {
+                    $declarations[] = [$first[1], null, $at, $isDoc, false];
+                }
+            }
+        }
+
+        return $declarations;
+    }
+
+    /**
+     * The text of every comment inside a raw `<?php` block or an `@php ... @endphp` block that can
+     * declare a variable, the 1-based line it starts on, and the line its PHP block opens on. A doc
+     * comment counts only at statement level ({@see PhpDocBlocks}): a property, method, function or
+     * closure docblock is no declaration. A plain comment is kept (not a doc one), so a name it
+     * mentions still counts as stated. Ranges are the ones the Blade compiler itself leaves alone,
+     * so a `<?php` inside a Blade comment or `@verbatim` body is not read.
+     *
+     * @return list<array{0: string, 1: int, 2: bool, 3: int}> text, 1-based line, whether it is a
+     *         docblock, 1-based line of the enclosing block's opening
+     *
+     * @psalm-pure
+     */
+    private static function rawComments(string $source): array
+    {
+        $comments = [];
+
+        foreach (MarkerPrePass::maskedRanges($source) as [$text, $offset]) {
+            if (\str_starts_with($text, '@php')) {
+                // `@php` and `@endphp` are directives, not PHP: tokenize what sits between them.
+                $text = '<?php ' . \substr($text, 4, \str_ends_with($text, '@endphp') ? -7 : null);
+            } elseif (\stripos($text, '<?php') !== 0) {
+                continue;
+            }
+
+            $line = 1 + SourceLines::breaksIn($source, 0, $offset);
+
+            // The block can be syntactically incomplete (an unclosed `<?php` at EOF). Tokenizing does
+            // not parse, so that is fine; the @ is for the warning an unterminated string emits.
+            $tokens = @\token_get_all($text);
+            $docblocks = PhpDocBlocks::statementLevel($tokens);
+
+            foreach ($tokens as $i => $token) {
+                if (!\is_array($token)) {
+                    continue;
+                }
+
+                if ($token[0] === \T_COMMENT || isset($docblocks[$i])) {
+                    $comments[] = [$token[1], $line + $token[2] - 1, $token[0] === \T_DOC_COMMENT, $line];
+                }
+            }
+        }
+
+        return $comments;
+    }
+
+    /**
+     * What suppresses an issue reported on a declaration line: the issue types a `@psalm-suppress` tag
+     * in the declaring docblock names, and the line its PHP block opens on, where a Blade
+     * `{{-- @psalm-suppress --}}` comment above a multi-line block is recorded.
+     *
+     * @return array{0: list<string>, 1: int}
+     *
+     * @psalm-pure
+     */
+    public static function suppressionContext(string $source, int $line): array
+    {
+        foreach (self::rawComments($source) as [$comment, $start, $isDoc, $blockLine]) {
+            if (!$isDoc || $line < $start || $line > $start + SourceLines::breaksIn($comment)) {
+                continue;
+            }
+
+            \preg_match_all('/@psalm-suppress\h+([A-Za-z][A-Za-z0-9_]*)/', $comment, $matched);
+
+            return [$matched[1], $blockLine];
+        }
+
+        return [[], $line];
     }
 
     /**
@@ -161,31 +355,13 @@ final class ContractParser
     {
         $masked = MarkerPrePass::maskedRanges($source);
 
-        // Later byte offset wins on a name collision, same as a document-order walk: a `@props`
-        // entry and a `{{-- @var --}}` comment can both declare the same name, and whichever
-        // appears LATER in the template is the one the author meant to win.
         /** @var list<array{0: int, 1: string, 2: ContractVar}> $declarations */
         $declarations = [];
 
-        foreach ($masked as [$text, $offset]) {
-            // Blade strips comments before it recognises directives, so only the `{{-- --}}`
-            // ranges (never a `@verbatim` body, `@php` block, or raw `<?php` tag) are comments.
-            if (!\str_starts_with($text, '{{--')) {
-                continue;
-            }
-
-            $inner = \substr($text, 4, -4);
-
-            if (\preg_match(self::VAR_PATTERN, $inner, $matches) === 1) {
-                // Greedy capture keeps a separator space when several precede the
-                // variable name; the type string must not carry it.
-                $line = 1 + SourceLines::breaksIn($source, 0, $offset);
-                $declarations[] = [$offset, $matches[2], new ContractVar($matches[2], \rtrim($matches[1]), $line, false)];
-            }
-        }
-
         $maskedSource = MarkerPrePass::blankRanges($source, $masked);
         $propsUnknown = false;
+        /** @var array<string, true>|null $awareNames null when an `@aware` list is unreadable */
+        $awareNames = [];
 
         /*
          * A raw open-tag (raw PHP, not `@php`) is a HARD boundary a directive's argument can
@@ -213,19 +389,28 @@ final class ContractParser
         foreach ($hardBoundaries as [$hardStart, $hardEnd]) {
             $segment = \substr($maskedSource, $segmentStart, $hardStart - $segmentStart);
 
-            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown);
+            $this->scanPropsDirectives($segment, $segmentStart, $source, $declarations, $propsUnknown, $awareNames);
 
             $segmentStart = $hardEnd;
         }
 
         // Stable since PHP 8.0: several props declared by the SAME `@props(...)` call keep their
-        // array order among themselves, and a var/props tie (same byte offset) cannot happen —
-        // `{{--` and `@props` never start at the same position.
+        // array order among themselves; a later `@props` entry wins a name collision.
         \usort($declarations, static fn(array $a, array $b): int => $a[0] <=> $b[0]);
 
         $vars = [];
 
         foreach ($declarations as [, $name, $var]) {
+            // An inferred default never beats an earlier declaration of the name (an earlier `@props`
+            // entry, or an unreadable `@props` list, which may set any name first: a later default
+            // only applies through `??`), nor `@aware`, which `compileAware()` assigns without a
+            // `??` whichever directive comes first.
+            if ($var->defaultType !== null
+                && ($propsUnknown || isset($vars[$name]) || $awareNames === null || isset($awareNames[$name]))
+            ) {
+                $var = new ContractVar($name, $var->typeString, $var->declarationLine, $var->optional);
+            }
+
             $vars[$name] = $var;
         }
 
@@ -234,12 +419,20 @@ final class ContractParser
 
     /**
      * One segment's worth of {@see self::DIRECTIVE_PATTERN} matches, appending every `@props`
-     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable.
+     * entry found to `$declarations` and flagging `$propsUnknown` on anything unparseable. The
+     * names an `@aware` lists go to `$awareNames`, which an unreadable one nulls.
      *
      * @param list<array{0: int, 1: string, 2: ContractVar}> $declarations
+     * @param array<string, true>|null                       $awareNames
      */
-    private function scanPropsDirectives(string $segment, int $segmentOffset, string $source, array &$declarations, bool &$propsUnknown): void
-    {
+    private function scanPropsDirectives(
+        string $segment,
+        int $segmentOffset,
+        string $source,
+        array &$declarations,
+        bool &$propsUnknown,
+        ?array &$awareNames,
+    ): void {
         if (\preg_match_all(self::DIRECTIVE_PATTERN, $segment, $directives, \PREG_OFFSET_CAPTURE) === false) {
             $propsUnknown = true;
 
@@ -254,38 +447,46 @@ final class ContractParser
         $argLists = $directives['args'];
 
         foreach ($names as $i => [$directiveName]) {
+            $directive = \strtolower($directiveName);
+
             // A leading `@` in the captured name is Blade's own `@@props` escape: the match is
             // STILL consumed (so the scan does not re-enter its argument looking for a nested
             // `@props`), it is simply never a live declaration.
-            if (\str_starts_with($directiveName, '@') || \strtolower($directiveName) !== 'props') {
+            if (\str_starts_with($directiveName, '@') || ($directive !== 'props' && $directive !== 'aware')) {
                 continue;
             }
 
-            $offset = $segmentOffset + $fullMatches[$i][1];
             [$argsText, $localArgsOffset] = $argLists[$i];
+            $props = null;
 
-            if ($localArgsOffset === -1) {
-                // No `(...)` follows this `@props` at all: unparseable, same as a props array
-                // that isn't fully literal.
-                $propsUnknown = true;
+            if ($localArgsOffset !== -1) {
+                $argsOffset = $segmentOffset + $localArgsOffset;
+                $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
+                // Blade strips a `{{-- --}}` before compiling, so the names it splits are not the ones
+                // written here (`'co{{-- x --}}lor'` is `color`).
+                $props = \str_contains($rawArgs, '{{--') ? null : $this->parseProps($rawArgs);
+            }
+
+            if ($directive === 'aware') {
+                $awareNames = $props === null || $awareNames === null
+                    ? null
+                    : $awareNames + \array_fill_keys(\array_keys($props), true);
 
                 continue;
             }
 
-            $argsOffset = $segmentOffset + $localArgsOffset;
-            $rawArgs = \substr($source, $argsOffset + 1, \strlen($argsText) - 2);
-            $props = $this->parseProps($rawArgs);
-
+            // No `(...)` after this `@props` at all is unparseable, same as a non-literal array.
             if ($props === null) {
                 $propsUnknown = true;
 
                 continue;
             }
 
+            $offset = $segmentOffset + $fullMatches[$i][1];
             $line = 1 + SourceLines::breaksIn($source, 0, $offset);
 
-            foreach ($props as $propName => $optional) {
-                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional)];
+            foreach ($props as $propName => [$optional, $defaultType]) {
+                $declarations[] = [$offset, $propName, new ContractVar($propName, 'mixed', $line, $optional, $defaultType)];
             }
         }
     }
@@ -300,7 +501,8 @@ final class ContractParser
      * @param string $innerContent the raw source text between `@props(` and the matching `)`,
      *        exactly as it reads in the template
      *
-     * @return array<string, bool>|null prop name => has a literal default; null when the array isn't fully literal
+     * @return array<string, array{0: bool, 1: string|null}>|null prop name => [has a default, its
+     *         {@see self::defaultType()}]; null when the array isn't fully literal
      */
     private function parseProps(string $innerContent): ?array
     {
@@ -329,12 +531,22 @@ final class ContractParser
                 return null;
             }
 
-            if ($item->key !== null) {
+            // `ComponentAttributeBag::extractPropNames()` names an entry with an `is_numeric()` key by
+            // its value, with no default, exactly like a bare entry.
+            $numericKey = $item->key instanceof Node\Scalar\Int_
+                || ($item->key instanceof Node\Scalar\String_ && \is_numeric($item->key->value));
+
+            if ($item->key !== null && !$numericKey) {
                 if (!$item->key instanceof Node\Scalar\String_) {
                     return null;
                 }
 
-                $props[$item->key->value] = true; // carries a default value
+                // A name that is no assignable variable (`max-width`, `this`) gets no body type, and
+                // neither does one the prelude types itself (`$slot`, `$errors`).
+                $assignable = \preg_match('/^' . self::IDENTIFIER . '$/D', $item->key->value) === 1
+                    && $item->key->value !== 'this'
+                    && !isset(PreludeBuilder::BLADE_OWNED_NAMES[$item->key->value]);
+                $props[$item->key->value] = [true, $assignable ? $this->defaultType($item->value) : null];
 
                 continue;
             }
@@ -343,29 +555,43 @@ final class ContractParser
                 return null;
             }
 
-            $props[$item->value->value] = false; // bare entry, no default
+            // An all-digit name is never a variable the body can read, and PHP would cast most to an
+            // int key: skip it here, where the key is written (#1848).
+            if (\preg_match('/^-?\d+$/D', $item->value->value) !== 1) {
+                $props[$item->value->value] = [false, null]; // bare entry, no default
+            }
         }
 
         return $props;
     }
 
     /**
-     * Locally bound names are excluded template-wide, not per scope: an outer
-     * read of a name that a later loop or closure re-binds is dropped from the
-     * read set. The cost is one missing `mixed` declaration for a shadowed
-     * name; scope-aware tracking is not worth it for v1.
-     *
-     * @return list<string> variable names (without $)
+     * The widened type of a default that is a literal, never the literal type itself: a caller
+     * passes any value for the prop, so `'lg'` as `'lg'` would turn a `match ($size)` default arm
+     * into dead code. An array expression is `array` whatever its items, since the value is one.
+     * `null`, constants, calls and any other expression stay untyped (null here).
      */
-    private function readVariables(string $compiled): array
+    private function defaultType(Node\Expr $default): ?string
     {
-        [$names, $locals] = $this->walkReads($compiled);
+        if ($default instanceof Node\Expr\UnaryMinus
+            && ($default->expr instanceof Node\Scalar\Int_ || $default->expr instanceof Node\Scalar\Float_)
+        ) {
+            $default = $default->expr;
+        }
 
-        return $this->filterNames($names, $locals);
+        return match (true) {
+            $default instanceof Node\Scalar\String_ => 'string',
+            $default instanceof Node\Scalar\Int_ => 'int',
+            $default instanceof Node\Scalar\Float_ => 'float',
+            $default instanceof Node\Expr\Array_ => 'array',
+            $default instanceof Node\Expr\ConstFetch
+                && \in_array($default->name->toLowerString(), ['true', 'false'], true) => 'bool',
+            default => null,
+        };
     }
 
     /**
-     * The read set the UnusedViewData rule consumes. Two differences from {@see self::readVariables()}:
+     * The read set the UnusedViewData rule consumes. Two differences from {@see self::parse()}'s read set:
      * locally bound names stay in (the question is "does the template use this name at all", and
      * dropping them would report the very name a `@foreach` binds), and an unknowable body is
      * flagged rather than reported as an empty set.
@@ -494,6 +720,12 @@ final class ContractParser
              */
             private function bindLocals(?Node\Expr $target): void
             {
+                // `$row['k'] = …`, `$row[] = …` and `$a['x']['y'] = …` create `$row` / `$a` when it is
+                // unset, so the template binds it for itself, whatever it holds afterwards.
+                while ($target instanceof Node\Expr\ArrayDimFetch) {
+                    $target = $target->var;
+                }
+
                 if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
                     $this->locals[$target->name] = true;
 
@@ -534,7 +766,10 @@ final class ContractParser
 
                 foreach ($args as $arg) {
                     if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
-                        $this->names[$arg->value->value] = true;
+                        // An all-digit name is never a variable, and PHP would cast most to an int key.
+                        if (\preg_match('/^-?\d+$/D', $arg->value->value) !== 1) {
+                            $this->names[$arg->value->value] = true;
+                        }
 
                         continue;
                     }

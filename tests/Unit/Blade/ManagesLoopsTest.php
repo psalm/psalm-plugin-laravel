@@ -105,6 +105,32 @@ final class ManagesLoopsTest extends TestCase
     }
 
     /**
+     * `$loop->parent` carries the enclosing loop's own shape, so a nested read is typed rather
+     * than `mixed`. It stays nullable: a depth-1 `@if ($loop->parent)` guard must not turn into a
+     * redundant- or impossible-condition finding. Inside a `@foreach` the type comes from the
+     * `getLastLoop()` stub; in a partial with no loop of its own, from the shadow prelude.
+     */
+    #[Test]
+    public function loop_parent_carries_the_enclosing_loop_shape(): void
+    {
+        $issues = $this->analyze();
+
+        $this->assertTemplateCompiled('nested.blade.php');
+        $this->assertTemplateCompiled('included-in-loop.blade.php');
+        $this->assertPipelineReachedAnalyzer($issues);
+        $this->assertSame(
+            [['type' => 'Trace', 'file' => 'nested.blade.php', 'message' => '$parentIteration: int']],
+            $this->forFile($issues, 'nested.blade.php'),
+            \var_export($issues, true),
+        );
+        $this->assertSame(
+            [['type' => 'Trace', 'file' => 'included-in-loop.blade.php', 'message' => '$parentIteration: int|null']],
+            $this->forFile($issues, 'included-in-loop.blade.php'),
+            \var_export($issues, true),
+        );
+    }
+
+    /**
      * The `Illuminate\Contracts\Pagination\Paginator` interface itself declares no `extends
      * \Traversable` in real Laravel (it exposes `items(): array` precisely because implementers
      * are not guaranteed iterable), so a variable typed to the bare contract still reports

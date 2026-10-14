@@ -4,27 +4,36 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\Contracts\Support\Renderable;
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
+use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
 
 /**
  * Checks a `view()` call site against the contract its template declares: a
- * `{{-- @var \App\Models\User $user --}}` comment or a `@props([...])` entry.
+ * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
  * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
  * that does not satisfy the declared type ({@see InvalidViewVariableType}).
@@ -38,12 +47,17 @@ use Psalm\Type;
  * Also reports, under its own independent flag, a data key the template never reads
  * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
  *
+ * Inside a template, the `$__env->make()` call an `@include` compiles to is checked as the
+ * `Factory::make()` call site it is. `@include` passes the including scope as `$mergeData`, which
+ * leaves the key set open, so only its explicit keys are type-checked; `@includeIsolated` passes no
+ * scope and is checked in full.
+ *
  * Every check is conservative in the same direction: anything that cannot be proven declines.
  * A missing variable needs the supplied key set to be provably closed, so an open data array
  * (a spread, a dynamic key, `$mergeData`) silences it while leaving the type check on the keys that
  * ARE known.
  */
-final class ViewContractHandler implements AfterStatementAnalysisInterface
+final class ViewContractHandler implements AfterCodebasePopulatedInterface, AfterStatementAnalysisInterface
 {
     private static bool $validateViewData = false;
 
@@ -69,6 +83,15 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         self::$readSets = [];
     }
 
+    /** Resolved here, before Psalm forks its workers, so each one inherits the result. */
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
+    {
+        if (self::$validateViewData) {
+            ComposerKeyResolver::resolve($event->getCodebase());
+        }
+    }
+
     #[\Override]
     public static function afterStatementAnalysis(AfterStatementAnalysisEvent $event): ?bool
     {
@@ -77,11 +100,14 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         }
 
         $stmt = $event->getStmt();
+        $include = self::$validateViewData && $stmt instanceof Stmt\Echo_ ? self::compiledInclude($stmt) : null;
 
-        // The two statement shapes a rendering expression is the whole of. An expression nested
-        // deeper (an argument, an array element) is left alone on purpose: the check costs a walk
-        // per statement, and reaching those shapes would mean re-walking every sub-expression.
+        // The two statement shapes a rendering expression is the whole of, plus a compiled include.
+        // An expression nested deeper (an argument, an array element) is left alone on purpose: the
+        // check costs a walk per statement, and reaching those shapes would mean re-walking every
+        // sub-expression.
         $expr = match (true) {
+            $include instanceof Expr\MethodCall => $include,
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
             default => null,
         };
@@ -103,9 +129,39 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return null;
         }
 
-        self::check($chain, $contract, new CodeLocation($source, $expr), $source);
+        self::check($chain, $contract, new CodeLocation($source, $expr), $source, $include instanceof Expr\MethodCall);
 
         return null;
+    }
+
+    /**
+     * The `make()` call of `echo $__env->make('view', [...], <the including scope>)->render();`,
+     * which `@include`, `@includeIf` and `@extends` compile to, or of `@includeIsolated`'s forms
+     * without the scope: `make('view', [...])`, and `make('view')`, whose data set is closed and empty.
+     * Only a literal data array is read: `@include('view')` also compiles to two arguments, its second
+     * being the scope.
+     */
+    private static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
+    {
+        $render = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
+        $make = $render instanceof Expr\MethodCall && self::isNamed($render, 'render') ? $render->var : null;
+
+        if (!$make instanceof Expr\MethodCall
+            || !self::isNamed($make, 'make')
+            || !$make->var instanceof Expr\Variable
+            || $make->var->name !== '__env'
+        ) {
+            return null;
+        }
+
+        $data = $make->args[1] ?? null;
+
+        return \count($make->args) === 1 || ($data instanceof Arg && $data->value instanceof Expr\Array_) ? $make : null;
+    }
+
+    private static function isNamed(Expr\MethodCall $call, string $name): bool
+    {
+        return $call->name instanceof Identifier && $call->name->toLowerString() === $name;
     }
 
     private static function check(
@@ -113,13 +169,23 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         ViewDataContract $contract,
         CodeLocation $codeLocation,
         StatementsSource $source,
+        bool $include,
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        if (self::$validateViewData) {
+        // A composer (at render time) or a creator (inside `view()`, before a chained `with()`) can
+        // overwrite a key the call site passed, so for the keys it supplies neither presence nor type
+        // can be judged from the call site. A view whose composer cannot be read is exempt as a whole.
+        $composed = ContractRegistry::composedKeys($chain->viewName);
+
+        if (self::$validateViewData && $composed !== null) {
             $supplied = $chain->supplied();
 
             foreach ($contract->vars as $name => $var) {
+                if (isset($composed[$name])) {
+                    continue;
+                }
+
                 $passed = $supplied[$name] ?? null;
 
                 if ($passed === null) {
@@ -132,7 +198,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             }
         }
 
-        if (self::$reportUnusedViewData) {
+        // UnusedViewData judges `view()` call sites only.
+        if (self::$reportUnusedViewData && !$include) {
             self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
         }
     }
@@ -188,9 +255,10 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): void {
-        // `optional` is a @props entry with a literal default, which Blade fills in itself.
+        // `optional` is a @props entry with a literal default, which Blade fills in itself, or a
+        // declaration ending in `= null`.
         // `propsUnknown` means the declared set is a lower bound, so absence proves nothing about
-        // what the template needs; and an open data set proves nothing about what was passed.
+        // what the template needs, and an open data set proves nothing about what was passed.
         if ($var->optional || $contract->propsUnknown || !$chain->complete) {
             return;
         }
@@ -220,13 +288,35 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return;
         }
 
-        $declared = self::declaredType($var->typeString);
+        $codebase = $source->getCodebase();
+
+        // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof Type\Atomic\TNamedObject && !$codebase->classOrInterfaceOrEnumExists($atomic->value)) {
+                return;
+            }
+        }
+
+        $declared = self::declaredType($var->optional ? ContractParser::withNull($var->typeString) : $var->typeString);
 
         if (!$declared instanceof Type\Union || $declared->hasMixed()) {
             return;
         }
 
-        if ($source->getCodebase()->isTypeContainedByType($supplied, $declared)) {
+        // A short class name may be a `use` alias in the template's own PHP block, which the type
+        // string cannot carry: comparing against the global class of that name would be a guess.
+        foreach (PreludeBuilder::classNamesIn($var->typeString) ?? [] as $className) {
+            if (!PreludeBuilder::resolvesWithoutImport($className)) {
+                return;
+            }
+        }
+
+        // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
+        // gains no new report.
+        if (
+            $codebase->isTypeContainedByType($supplied, $declared)
+            || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
+        ) {
             return;
         }
 
@@ -238,6 +328,26 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             ),
             $suppressedIssues,
         );
+    }
+
+    /**
+     * What the template receives: `View::gatherData()` swaps every `Renderable` data value for the
+     * string it renders to. A class Psalm never scanned is not proven `Renderable` and stays as is.
+     *
+     * @psalm-mutation-free
+     */
+    private static function renderablesAsString(Type\Union $supplied, Codebase $codebase): Type\Union
+    {
+        $atomics = [];
+
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof Type\Atomic\TNamedObject
+                && ClassLineage::isA($codebase, $atomic->value, Renderable::class)
+                    ? new Type\Atomic\TString()
+                    : $atomic;
+        }
+
+        return new Type\Union($atomics);
     }
 
     /**

@@ -92,7 +92,7 @@ final class ViewNameSignatures
         // A trait, not a class: Psalm dispatches a method return-type provider on the
         // DECLARING class, which for a trait method is the trait itself (the using class
         // arrives as getCalledFqClasslikeName()), so one entry covers every TestCase.
-        // Same registration shape as ConditionableWhenHandler/TappableTapHandler.
+        // Same registration shape as ConditionableWhenHandler.
         self::ROLE_INTERACTS_WITH_VIEWS => [
             'concrete' => \Illuminate\Foundation\Testing\Concerns\InteractsWithViews::class,
             'facade' => null,

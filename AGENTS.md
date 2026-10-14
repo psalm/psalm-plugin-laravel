@@ -64,7 +64,7 @@ Gotchas:
 
 ## Git and PRs
 
-- Base PRs on `4.x`. Psalm-6-only bugs base on `3.x`.
+- `4.x` is the default branch: base PRs on it (Blade included). Psalm-6-only bugs base on `3.x`. `master` is stale, never base on it.
 - The `style: auto-fix` workflow commits style fixes back to pushed branches. Run `composer rector` and `composer cs` locally BEFORE pushing, and `git pull --ff-only` before any further local edits after a push.
 - Worktrees: run `composer install` inside the worktree; never symlink `vendor/` from the primary checkout. Write and Edit tools must target worktree-absolute paths, never the primary root.
 - Commits follow Conventional Commits. The subject describes the change, not the issue it closes; issue ref is required in the PR body and optional in the commit message body.
@@ -74,9 +74,9 @@ Gotchas:
 Each rule exists because violating it shipped a bug. The pointer holds the full story.
 
 1. Every handler in `Plugin::registerHandlers()` keeps its paired `require_once`. Rationale: decisions.md, "Class Loading and Discovery".
-2. A stub that re-declares a class must copy the `extends` / `implements` / `use` header verbatim from Laravel source. Psalm wipes the reflected interface list on re-declaration. See "Stub merging" in the contributing README.
-3. In template positions of relation stubs (the declaring-model argument of `HasRelationships` factory returns, the chainable branch of conditional returns), write `static`, never `$this`: Psalm does not late-static-substitute `$this` there. Plain fluent `@return $this` on non-generic methods is fine. Keep `TDeclaringModel` covariant (`@template-covariant`); do not make it invariant to match other tools. Full rationale: docblock of `stubs/common/Database/Eloquent/Relations/Relation.phpstub` and psalm/psalm-plugin-laravel#913.
-4. Across stub files, type annotations replace (last loaded wins) while taint annotations accumulate. Keep both kinds for one method in the SAME file.
+2. A stub that re-declares a class must repeat its `implements` clause (for an interface stub, its `extends` list) verbatim from Laravel source: Psalm resets `class_implements` / `parent_interfaces` on re-declaration and silently strips the contracts. A class's `extends` and its trait `use` survive re-declaration; copy the full header anyway so the stub stays diffable against Laravel source. See "Stub merging" in the contributing README.
+3. In template positions of relation stubs (the declaring-model argument of `HasRelationships` factory returns, the chainable branch of conditional returns), write `static`, and keep `TDeclaringModel` covariant (`@template-covariant`); do not make it invariant to match other tools. Psalm substitutes both `$this` and `static` there, but on a non-final receiver it keeps the late-static marker (`Order&static`), and an invariant slot then rejects a call-site `@return BelongsTo<..., self>`. Plain fluent `@return $this` on non-generic methods is fine. Full rationale: docblock of `stubs/common/Database/Eloquent/Relations/Relation.phpstub` and psalm/psalm-plugin-laravel#913.
+4. Across stub files that declare the same method, type annotations AND parameter-level taint annotations (`@psalm-taint-sink`, `@psalm-assert-untainted`) are last-loaded-wins; only method-level taint annotations (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`) accumulate. A version-dir override that redeclares a method must restate every `@psalm-taint-sink` of the earlier declaration, or the sink silently disappears. Keep all annotations for one method in the SAME file.
 5. A regression test must fail before the fix. For trivial stub syncs a write-then-delete throwaway test suffices; commit a type test for the fragile cases (conditional returns, template tricks, version-gated behavior). New narrowing handlers need positive AND negative coverage (handler declines, fallback stays intact).
 6. Plugin self-analysis has no baseline and must never gain one. The only baseline is the Application-fixture snapshot `tests/Application/laravel-test-psalm-baseline.xml` (refresh via `tests/Application/laravel-test.sh -u`). Never `@psalm-suppress` before trying hard to fix the issue at its source.
 7. Grep the diff for `CLAUDE` before committing. Comments and docs state facts directly and never cite agent instruction files.

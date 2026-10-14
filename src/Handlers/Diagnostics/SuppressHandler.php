@@ -72,18 +72,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         ],
     ];
 
-    /**
-     * Suppress method-level issues by FQCN.
-     * Not preferable — applications may use custom namespaces.
-     *
-     * @var array<string, array<string, list<string>>>
-     */
-    private const METHOD_LEVEL_BY_FQCN = [
-        'PossiblyUnusedMethod' => [
-            'App\Http\Middleware\RedirectIfAuthenticated' => ['handle'],
-        ],
-    ];
-
     /** @var array<string, array<string, list<string>>> */
     private const PROPERTY_LEVEL_BY_PARENT_CLASS = [
         'NonInvariantDocblockPropertyType' => [
@@ -209,7 +197,7 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             // are themselves only invoked by Laravel through reflection (router, container),
             // so Psalm marks them unreachable from any visible entry point — and `new MyMail()`
             // sitting inside them inherits that unreachability, leaving `__construct` reported
-            // as `PossiblyUnusedMethod`. Verified against IxDF's real codebase. The visibility
+            // as `PossiblyUnusedMethod`. Verified against a real-world app. The visibility
             // filter in `suppressFrameworkHookMethod()` keeps non-public constructors flagged
             // (a `protected __construct` would fail at `new` from outside the class anyway).
             //
@@ -256,13 +244,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     private const METHOD_LEVEL_BY_USED_TRAITS = [
         'PossiblyUnusedMethod' => [
             'Illuminate\Foundation\Events\Dispatchable' => ['broadcastOn'],
-            'Illuminate\Foundation\Bus\Dispatchable' => ['handle'],
-            // The combined Queueable trait Laravel 11+ uses for `make:job` scaffolds
-            // (composes Bus\Queueable, InteractsWithQueue, etc). The `handle()` entry
-            // point is invoked by the queue worker via Container::call(), not from
-            // user code — without this suppression, default queued jobs always trip
-            // PossiblyUnusedMethod.
-            'Illuminate\Foundation\Queue\Queueable' => ['handle'],
         ],
     ];
 
@@ -283,16 +264,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
         foreach (self::CLASS_LEVEL_BY_FQCN as $issue => $classNames) {
             if (\in_array($classStorage->name, $classNames, true)) {
                 self::suppress($issue, $classStorage);
-            }
-        }
-
-        foreach (self::METHOD_LEVEL_BY_FQCN as $issue => $method_by_class) {
-            foreach ($method_by_class[$classStorage->name] ?? [] as $method_name) {
-                /** @psalm-suppress RedundantFunctionCall method names in constants may contain uppercase */
-                $method_storage = $classStorage->methods[\strtolower($method_name)] ?? null;
-                if ($method_storage instanceof MethodStorage) {
-                    self::suppressFrameworkHookMethod($issue, $method_storage);
-                }
             }
         }
     }

@@ -21,8 +21,11 @@ final class MarkerPrePass
     (?<args>\((?>\/\*.*?\*\/|\/\/[^\r\n]*|#(?!\[)[^\r\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^()'"\/#]|\/(?![\/*])|#(?=\[)|(?&args))*\))
     REGEX;
 
-    /** Constructs Blade never compiles: their bodies reach the output as text, or not at all. */
-    private const INERT_PATTERN = '/@verbatim.*?@endverbatim|\{\{--.*?--\}\}/s';
+    /**
+     * Constructs Blade never compiles: their bodies reach the output as text, or not at all.
+     * `(?<!@)` mirrors BladeCompiler's own `@verbatim` regex: `@@verbatim` is escaped literal text.
+     */
+    private const INERT_PATTERN = '/(?<!@)@verbatim.*?@endverbatim|\{\{--.*?--\}\}/s';
 
     /**
      * $source with Blade comments and `@verbatim` bodies replaced by spaces of equal length
@@ -69,7 +72,9 @@ final class MarkerPrePass
         // on, and the token_get_all() check right below already tells live code from literal
         // text under whichever setting is active — matching broader here and narrowing there
         // keeps this in sync with the SAME tokenizer Blade itself compiles through.
-        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?/s';
+        // `(?<!@)` on `@verbatim`/`@php` is BladeCompiler's own rule: `@@php` is escaped literal text,
+        // so it must not open a range that swallows live markers up to the next `@endphp`.
+        $pattern = '/(?<!@)@verbatim.*?@endverbatim|(?<!@)@php.*?@endphp|\{\{--.*?--\}\}|<\?/s';
         $ranges = [];
         $cursor = 0;
         while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {

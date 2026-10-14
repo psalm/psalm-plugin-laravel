@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -13,7 +14,7 @@ use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 
 /**
- * End-to-end proof that a template's `{{-- @var --}}` / `@props` contract is enforced at the
+ * End-to-end proof that a template's `@var` docblock / `@props` contract is enforced at the
  * `view()` call sites that feed it. A real `vendor/bin/psalm` run is the only way to pin it: the
  * contract only exists after the Blade bootstrap has compiled the fixture's templates, and the
  * check reads argument types Psalm infers during analysis.
@@ -122,6 +123,28 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
         $this->assertStringContainsString('$name', $reported[0]['message']);
         $this->assertStringContainsString('string', $reported[0]['message']);
+    }
+
+    /**
+     * `View::gatherData()` renders every `Renderable` data value to a string before the template sees
+     * it, so one passed for a `string` declaration is correct. Only the `Renderable` atomics are
+     * rewritten: an unrelated object and a `Renderable|int` union are still wrong, which also proves
+     * the check runs on the shapes of the silent file.
+     */
+    #[Test]
+    public function a_renderable_value_satisfies_a_string_declaration(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RenderableValue.php'), \var_export($issues, true));
+
+        $wrong = $this->forFile($issues, 'NonRenderableValue.php');
+        $this->assertCount(2, $wrong, \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($wrong, 'type'));
+
+        $messages = \implode("\n", \array_column($wrong, 'message'));
+        $this->assertStringContainsString('DateTimeImmutable', $messages);
+        $this->assertStringContainsString('Illuminate\Contracts\View\View|int', $messages);
     }
 
     #[Test]
@@ -243,6 +266,20 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * #1828: a literal default types the template body only. A caller may pass any value for the
+     * prop, so the call site is never checked against the default's type; the declared-type case
+     * beside it proves the check itself runs.
+     */
+    #[Test]
+    public function a_props_default_type_is_never_checked_against_the_call_site(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'PropsDefaultMismatch.php'), \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE], \array_column($this->forFile($issues, 'WrongType.php'), 'type'));
+    }
+
+    /**
      * An open key set silences the missing-variable check without silencing the type check: the
      * keys that ARE known are still known.
      */
@@ -324,9 +361,274 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'NoContract.php'));
         // A spread shifts every position after it, so no argument can be read by position.
         $this->assertSame([], $this->forFile($issues, 'SpreadArgs.php'));
-        // A raw `<?php` docblock types a local the template assigns itself; it counts
-        // as declared for UnusedViewData and is never a contract a call site has to satisfy.
+        // A raw `<?php` docblock types a local the template assigns itself, so it is never a
+        // contract a call site has to satisfy.
         $this->assertSame([], $this->forFile($issues, 'RawLocalHint.php'));
+    }
+
+    /**
+     * A raw `@var` is a contract wherever it sits (a `<?php` block or `@php`), unless the name is one
+     * the template binds itself. The nullable one is optional, like a `@props` default.
+     */
+    #[Test]
+    public function a_raw_var_for_view_data_is_a_contract_and_a_nullable_one_is_optional(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $missing = $this->forFile($issues, 'RawMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+        $this->assertStringContainsString("'title'", $missing[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'RawOptional.php'), 'the nullable `$count` may be omitted');
+
+        $wrong = $this->forFile($issues, 'RawWrongType.php');
+        $this->assertCount(1, $wrong, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrong[0]['type']);
+        $this->assertStringContainsString('$title', $wrong[0]['message']);
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_loop_alias_is_not_a_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawLoopAlias.php'));
+    }
+
+    #[Test]
+    public function a_raw_var_for_a_blade_owned_name_or_in_a_plain_comment_is_no_contract(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'RawNotContracts.php'));
+    }
+
+    /** The template's own `use` alias is invisible to the contract: the type check declines, the presence check stays. */
+    #[Test]
+    public function a_short_class_name_declines_the_type_check_but_keeps_the_presence_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawShortName.php'), \var_export($issues, true));
+
+        $missing = $this->forFile($issues, 'RawShortNameMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+    }
+
+    #[Test]
+    public function a_components_public_render_leaves_the_data_set_open(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues('psalm.xml'), 'ComponentRenderPublic.php'));
+    }
+
+    #[Test]
+    public function a_raw_optional_marker_on_a_type_without_null_is_reported_at_the_declaration(): void
+    {
+        $reported = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if ($issue['type'] === 'InvalidDocblock' && \basename((string) $issue['file_name']) === 'raw-bad-optional.blade.php') {
+                $reported[] = $issue;
+            }
+        }
+
+        // `$bad` only: a bracketed or `mixed` type allows null, a native `@psalm-suppress` silences
+        // its own declaration, and a Blade suppression above the block silences a multi-line block.
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(3, $reported[0]['line_from']);
+        $this->assertStringContainsString('write `string|null $bad = null`', (string) $reported[0]['message']);
+    }
+
+    /** A closure composer is opaque, so a call site is judged on neither presence nor type. */
+    #[Test]
+    public function a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'ComposedWrongType.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComposedMissing.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A class composer exempts only the keys it passes: the other declared variables are still
+     * judged, and a composer-supplied key is not type-checked either, since the composer runs after
+     * the call site and may overwrite it. Wildcard and `Class@method` composers are unioned, creators
+     * and trait methods are read, and one unreadable composer leaves its view unchecked. The wildcard
+     * observers bootstrap/app.php registers on the dispatcher count as no composer at all.
+     */
+    #[Test]
+    public function a_composer_exempts_only_the_keys_it_supplies(): void
+    {
+        $reported = [];
+
+        foreach ($this->forFile($this->contractIssues('psalm.xml'), 'ComposerCallSites.php') as $issue) {
+            \preg_match("/View '([^']+)' declares \\$(\\w+)/", $issue['message'], $matches);
+            $reported[] = "{$issue['type']} {$matches[1]} \${$matches[2]}";
+        }
+
+        \sort($reported);
+
+        $this->assertSame(
+            [
+                self::WRONG_TYPE . ' composer-literal $count',
+                self::MISSING . ' composer-accessor $count',
+                self::MISSING . ' composer-created $title',
+                self::MISSING . ' composer-inherited $count',
+                self::MISSING . ' composer-literal $count',
+                self::MISSING . ' composer-wild.page $other',
+                self::MISSING . ' observed $title',
+            ],
+            $reported,
+        );
+    }
+
+    /**
+     * Only a statement-level docblock of the template's own scope declares: a property or method
+     * docblock, one inside a closure or an expression, and a `$row[...] = ` local are no contract,
+     * and a `use`-aliased qualified name declines the type check.
+     */
+    #[Test]
+    public function only_statement_level_docblocks_declare_and_aliased_names_decline_the_type_check(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'RawScope.php'), \var_export($issues, true));
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            $this->assertFalse(
+                $issue['type'] === 'InvalidDocblock' && \str_contains((string) $issue['message'], 'Optional view variable')
+                    && \basename((string) $issue['file_name']) === 'raw-scope.blade.php',
+                'a property docblock is not a declaration',
+            );
+        }
+    }
+
+    /**
+     * `@include` and `@includeIf` also hand the partial the includer's whole scope, so only the keys
+     * their array passes are checked, by type.
+     */
+    #[Test]
+    public function an_include_value_of_the_wrong_type_is_reported_on_its_line_and_a_mixed_one_declines(): void
+    {
+        $reported = $this->templateContractIssues('wrong-type.blade.php');
+
+        $this->assertSame([3, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+            $this->assertStringContainsString('$title as string, but int', (string) $issue['message']);
+        }
+    }
+
+    /** The partial inherits the includer's scope, so a key the array omits may still arrive. */
+    #[Test]
+    public function a_key_an_include_omits_is_not_reported(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('omitted.blade.php'));
+    }
+
+    /** `@includeIsolated` hands on no scope: its array is the whole data set, as at a `view()` call. */
+    #[Test]
+    public function an_isolated_include_omitting_a_declared_variable_is_reported_on_its_line(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $reported = $this->templateContractIssues('isolated.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+        $this->assertStringContainsString("View 'inc.card' declares \$count", (string) $reported[0]['message']);
+    }
+
+    #[Test]
+    public function an_isolated_include_passing_every_required_variable_is_not_reported(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $this->assertSame([], $this->templateContractIssues('isolated-complete.blade.php'));
+    }
+
+    /** Without an array, `@includeIsolated('view')` compiles to `make('view')`: no data at all. */
+    #[Test]
+    public function an_isolated_include_without_data_reports_every_required_variable(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $reported = $this->templateContractIssues('isolated-bare.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertSame(1, $reported[0]['line_from']);
+        $this->assertStringContainsString("View 'greeting' declares \$name", (string) $reported[0]['message']);
+    }
+
+    #[Test]
+    public function an_isolated_include_without_data_of_a_view_with_only_optional_variables_is_not_reported(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $this->assertSame([], $this->templateContractIssues('isolated-bare-optional.blade.php'));
+    }
+
+    /** `composed`'s closure composer is opaque: neither presence (`@includeIsolated`) nor type is judged. */
+    #[Test]
+    public function an_include_of_a_composed_view_is_checked_for_neither_presence_nor_type(): void
+    {
+        $this->requireIncludeIsolated();
+
+        $this->assertSame([], $this->templateContractIssues('composed-include.blade.php'));
+    }
+
+    /** `@extends('layout', [...])` compiles to the `@include` call, emitted after the template body. */
+    #[Test]
+    public function an_extends_value_of_the_wrong_type_is_reported_on_the_directive_line(): void
+    {
+        $reported = $this->templateContractIssues('extends-data.blade.php');
+
+        $this->assertCount(1, $reported, \var_export($reported, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertSame(2, $reported[0]['line_from']);
+    }
+
+    /** The includer's own UndefinedDocblockClass already reports an unknown class; no cascade. */
+    #[Test]
+    public function an_include_value_of_an_undefined_class_is_not_type_checked(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('undefined-class.blade.php'));
+    }
+
+    #[Test]
+    public function an_include_never_reports_unused_view_data(): void
+    {
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm-unused-data.xml')) as $issue) {
+            $this->assertFalse(
+                $issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'extra-key.blade.php',
+                \var_export($issue, true),
+            );
+        }
+    }
+
+    /** `@includeIsolated` arrives in Laravel 12.47; below that Blade leaves the directive as text. */
+    private function requireIncludeIsolated(): void
+    {
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            self::markTestSkipped('@includeIsolated requires Laravel >= 12.47.');
+        }
+    }
+
+    /**
+     * @return list<array<array-key, mixed>>
+     */
+    private function templateContractIssues(string $template): array
+    {
+        $issues = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if (\in_array($issue['type'], [self::MISSING, self::WRONG_TYPE], true) && \basename((string) $issue['file_name']) === $template) {
+                $issues[] = $issue;
+            }
+        }
+
+        return $issues;
     }
 
     #[Test]

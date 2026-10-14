@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -514,6 +517,129 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame([], $second->queuedResolvableClassLikes);
     }
 
+    private function appWithViewFactory(): Container
+    {
+        $app = $this->app();
+        $app->instance('view', new Factory(new EngineResolver(), $app->make('view.finder'), new Dispatcher()));
+
+        return $app;
+    }
+
+    /** `$app` is shared into every view by the framework, so no call site passes it: it is no contract. */
+    #[Test]
+    public function framework_shared_data_is_never_a_contract_but_stays_declared(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate(
+            'profile.blade.php',
+            "<?php /** @var \\Illuminate\\Foundation\\Application \$app */ ?>\n<?php /** @var string \$siteName */ ?>\n<?php /** @var int \$count */ ?>\n<p>{{ \$count }}</p>\n",
+        );
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $contract = ContractRegistry::contractFor('profile');
+        $this->assertNotNull($contract);
+        $this->assertSame(['count'], \array_keys($contract->vars));
+        $this->assertContains('siteName', $contract->rawDeclaredVariables);
+    }
+
+    #[Test]
+    public function a_marker_problem_on_a_shared_name_is_not_published(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate('profile.blade.php', "<?php /** @var string \$siteName = null */ /** @var string \$other = null */ ?>\n<p>{{ \$other }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $problems = ContractRegistry::problemsFor($this->viewDir . '/profile.blade.php');
+        $this->assertCount(1, $problems);
+        $this->assertStringContainsString('$other', $problems[0][1]);
+    }
+
+    /**
+     * A class composer (`Class`, `Class@method`), creator or wildcard composer is recorded as the
+     * class and method that will run, and the class is queued so Psalm has its storage when the keys
+     * are read. A view nobody composes records nothing: wildcard observers registered straight on
+     * the dispatcher (a debugging package's view watcher) are no composers.
+     */
+    #[Test]
+    public function class_composers_creators_and_wildcard_composers_are_recorded_as_class_and_method(): void
+    {
+        $app = $this->appWithViewFactory();
+        $view = $app->make('view');
+        $view->composer('composed', '\\App\\ProfileComposer');
+        $view->composer('composed', 'App\\Other@Build');
+        $view->creator('created', 'App\\Maker');
+        $view->composer('admin.*', 'App\\AdminComposer');
+        $view->getDispatcher()->listen('composing:*', static fn(): null => null);
+        $view->getDispatcher()->listen('*', static fn(): null => null);
+
+        foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(
+            [
+                'admin.page' => [['App\\AdminComposer', 'compose']],
+                'composed' => [['App\\ProfileComposer', 'compose'], ['App\\Other', 'build']],
+                'created' => [['App\\Maker', 'create']],
+            ],
+            $sources,
+        );
+
+        foreach (['App\\ProfileComposer', 'App\\Other', 'App\\Maker', 'App\\AdminComposer'] as $class) {
+            $this->assertContains($class, $registrar->queuedClassLikes);
+        }
+    }
+
+    /**
+     * A user closure, or a listener registered straight on the dispatcher for the exact view name,
+     * leaves the view unknown, and one such listener makes the whole view unknown.
+     */
+    #[Test]
+    public function a_listener_that_is_not_a_class_composer_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $view = $app->make('view');
+        $view->composer('closure', static fn(): null => null);
+        $view->composer('mixed', 'App\\Known');
+        $view->composer('mixed', static fn(): null => null);
+        $view->getDispatcher()->listen('composing: raw', 'App\\Listener@handle');
+
+        foreach (['closure', 'mixed', 'raw', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(['closure' => null, 'mixed' => null, 'raw' => null], $sources);
+    }
+
+    /**
+     * A `@props` entry carries no type, so it is no contract line: a prop the template overwrites
+     * at file level is a local like any other, and stays undeclared.
+     */
+    #[Test]
+    public function an_untyped_props_entry_is_not_declared_by_the_contract(): void
+    {
+        $this->writeTemplate('profile.blade.php', "@props(['size'])\n@php \$size = 'sm'; @endphp\n<p>{{ \$size }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertStringNotContainsString('$size */', (string) \file_get_contents($registrar->analyzedShadows[0]));
+    }
+
     /**
      * #1505: a compiled shadow's PHP string literal naming a class (the shape a vendor directive
      * that writes `app('Vendor\Package\Class')::method()` compiles to) must be handed to the
@@ -775,15 +901,83 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, $registrar)->boot();
 
-        // Two warnings total, not three: one because `ThrowingBladeCompiler` is a compiler
-        // SUBCLASS (unconditionally untrustworthy, #1517 F3, unrelated to this test's own point),
-        // and one aggregated compile-failure warning for the broken template — never one per
-        // failed template.
-        $this->assertCount(2, $this->progress->warnings, $this->progress->warningText());
+        // The one warning is for `ThrowingBladeCompiler` being a compiler SUBCLASS (unconditionally
+        // untrustworthy, #1517 F3, unrelated to this test's own point). The compile failure is an
+        // issue instead, so it is not named in a warning `--no-progress` would discard.
+        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+        $this->assertSame(
+            [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
+            $registrar->compileFailures,
+        );
+        $this->assertStringContainsString("skipped Blade template '{$broken}'", \implode("\n", $this->progress->debugMessages));
         // Every discovered template is reportable, not only the ones that compiled, so findings
-        // from a healthy shadow can be remapped to its template.
+        // from a healthy shadow can be remapped to its template, and the failure reported on it.
         $this->assertSame([$broken, $healthy], $registrar->reportableTemplates);
         $this->assertCount(1, $registrar->analyzedShadows);
+    }
+
+    /** One template's `@props` contract once threw out of compileAll() and disabled Blade for the run (#1848). */
+    #[Test]
+    public function an_integer_props_name_does_not_disable_blade_for_the_run(): void
+    {
+        $component = $this->writeTemplate('props-int.blade.php', "@props(['1' => 'x', '2'])\n<div>{{ \$attributes }}</div>\n");
+        $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->assertTrue($this->bootstrapper($this->app(), $registrar)->boot());
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([], $registrar->compileFailures);
+        $this->assertEqualsCanonicalizing([$component, $healthy], $registrar->reportableTemplates);
+        $this->assertCount(2, $registrar->analyzedShadows);
+    }
+
+    #[Test]
+    public function a_compile_failure_is_reported_even_when_no_template_compiled(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $registrar = new RecordingShadowRegistrar();
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        // Nothing joins the analysis, but a one-template app must not go silent under --no-progress.
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([$broken], $registrar->reportableTemplates);
+        $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
+        $this->assertSame([], $registrar->analyzedShadows);
+        $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+    }
+
+    #[Test]
+    public function a_compile_failure_stays_in_the_warning_when_no_template_compiled_and_it_cannot_be_made_reportable(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([], $registrar->compileFailures);
+        $this->assertStringContainsString("1 Blade template(s) were skipped and are not analyzed ({$broken})", $this->progress->warningText());
+    }
+
+    #[Test]
+    public function a_compile_failure_is_not_reported_when_activation_fails(): void
+    {
+        $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([], $registrar->compileFailures, 'a degraded run reports nothing from Blade');
+        $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
     }
 
 
@@ -1071,7 +1265,8 @@ final class BladeBootstrapperTest extends TestCase
         $this->bootstrapper($firstApp, $first)->boot();
 
         $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
-        $this->assertStringContainsString('compiler environment', $this->progress->warningText());
+        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $this->progress->warningText());
+        $this->assertStringContainsString("directive 'shout' (internal function", \implode('', $this->progress->debugMessages));
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1088,5 +1283,40 @@ final class BladeBootstrapperTest extends TestCase
             (string) \file_get_contents($second->analyzedShadows[0]),
             'an untrustworthy environment must force a recompile even though nothing else changed',
         );
+    }
+
+    /**
+     * #1693: the default warning stays a single line; the inputs are listed (uncapped) under --debug.
+     */
+    #[Test]
+    public function the_untrusted_environment_warning_is_short_and_inputs_are_listed_in_debug(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $compiler->directive($name, 'strtoupper');
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $text = $this->progress->warningText();
+        $this->assertStringNotContainsString("\n", \trim($text));
+        $this->assertStringContainsString('5 compiler inputs cannot be fingerprinted', $text);
+        $this->assertStringContainsString('analysis results are unaffected', $text);
+        $this->assertStringContainsString('--debug', $text);
+        $this->assertStringNotContainsString("directive 'a'", $text);
+
+        $debug = \implode('', $this->progress->debugMessages);
+
+        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
+            $this->assertStringContainsString("  - directive '{$name}'", $debug);
+        }
+
+        $this->assertStringContainsString('To restore caching', $debug);
     }
 }

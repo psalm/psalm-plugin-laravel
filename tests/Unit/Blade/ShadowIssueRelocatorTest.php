@@ -4,22 +4,38 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node\Expr\Throw_;
+use PhpParser\Node\Expr\Variable;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Aliases;
+use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
+use Psalm\FileSource;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
+use Psalm\Issue\InvalidCast;
+use Psalm\Issue\InvalidDocblock;
+use Psalm\Issue\InvalidNullableReturnType;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\NonStaticSelfCall;
+use Psalm\Issue\NoValue;
+use Psalm\Issue\NullArgument;
+use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
+use Psalm\Issue\ReferenceReusedFromConfusingScope;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
@@ -44,6 +60,19 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private const TEMPLATE_SOURCE = "<div>\n  <p>first</p>\n  <p>second</p>\n</div>\n";
 
+    /** The loop body line `CompilesComponents::compileAware()` emits. */
+    private const AWARE_SHADOW_LINE = '$$__consumeVariable = is_string($__key) ? $__env->getConsumableComponentData($__key, $__value) : $__env->getConsumableComponentData($__value);';
+
+    private const AWARE_KEYED_CALL = '$__env->getConsumableComponentData($__key';
+
+    private const AWARE_LIST_CALL = '$__env->getConsumableComponentData($__value';
+
+    private const AWARE_CALLEE = 'Illuminate\View\Factory::getConsumableComponentData';
+
+    private const AWARE_NULL_ARGUMENT = 'Argument 1 of Illuminate\View\Factory::getConsumableComponentData cannot be null, null value provided to parameter with type string';
+
+    private const AWARE_NO_VALUE = 'All possible types for this argument were invalidated - This may be dead code';
+
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -61,8 +90,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         ShadowEntry $entry,
         bool $reportMixed = false,
         bool $isComponentView = false,
+        string $templateSource = self::TEMPLATE_SOURCE,
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor(self::TEMPLATE_SOURCE));
+        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource));
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
@@ -171,6 +201,211 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
+     * #1723: Psalm prints the line of the first mention INSIDE the message. That number is a shadow
+     * line, so it must be rewritten through the issue's own line map, not left naming the shadow.
+     */
+    #[Test]
+    public function a_first_seen_line_reference_names_the_template_line(): void
+    {
+        $issue = new PossiblyUndefinedGlobalVariable(
+            'Possibly undefined global variable $__authorLocal, first seen on line 31',
+            $this->shadowLocation(40),
+            '$__authorLocal',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
+
+        $this->assertInstanceOf(PossiblyUndefinedGlobalVariable::class, $relocated);
+        $this->assertSame('Possibly undefined global variable $__authorLocal, first seen on line 2', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+        $this->assertSame('$__authorlocal', $relocated->var_name);
+    }
+
+    /** The function and closure scope wording, emitted by a different class with a two-argument constructor. */
+    #[Test]
+    public function a_first_seen_line_reference_on_a_possibly_undefined_variable_names_the_template_line(): void
+    {
+        $issue = new PossiblyUndefinedVariable(
+            'Possibly undefined variable $x, first seen on line 31',
+            $this->shadowLocation(40),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
+
+        $this->assertInstanceOf(PossiblyUndefinedVariable::class, $relocated);
+        $this->assertSame('Possibly undefined variable $x, first seen on line 2', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    #[Test]
+    public function a_parse_error_line_reference_names_the_template_line(): void
+    {
+        $issue = new ParseError('Syntax error, unexpected T_ENDIF on line 23', $this->shadowLocation(23));
+
+        $relocated = $this->relocate($issue, $this->entry([23 => 3]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Syntax error, unexpected T_ENDIF on line 3', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** A reference into the compiler-generated prelude has no template line: omit it rather than invent one. */
+    #[Test]
+    public function a_first_seen_reference_into_the_prelude_drops_the_clause(): void
+    {
+        $issue = new PossiblyUndefinedGlobalVariable(
+            'Possibly undefined global variable $__authorLocal, first seen on line 2',
+            $this->shadowLocation(40),
+            '$__authorLocal',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0, 40 => 3]));
+
+        $this->assertInstanceOf(PossiblyUndefinedGlobalVariable::class, $relocated);
+        $this->assertSame('Possibly undefined global variable $__authorLocal', $relocated->message);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** The clause is dropped BEFORE the `(unmapped)` suffix is appended, so the suffix is not part of the anchor. */
+    #[Test]
+    public function an_unmapped_parse_error_drops_the_clause_and_keeps_the_unmapped_suffix(): void
+    {
+        $issue = new ParseError('Syntax error, unexpected T_ENDIF on line 2', $this->shadowLocation(2));
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Syntax error, unexpected T_ENDIF (unmapped)', $relocated->message);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+    }
+
+    /** The class key is the gate: an identical-looking wording on any other class stays untouched. */
+    #[Test]
+    public function a_line_reference_on_an_unlisted_class_is_left_alone(): void
+    {
+        $issue = new UndefinedVariable('Cannot find referenced variable $x on line 31', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
+
+        $this->assertInstanceOf(UndefinedVariable::class, $relocated);
+        $this->assertSame('Cannot find referenced variable $x on line 31', $relocated->message);
+    }
+
+    #[Test]
+    public function a_parse_error_without_the_line_suffix_is_left_alone(): void
+    {
+        $issue = new ParseError('Interfaces cannot have properties', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([40 => 3]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Interfaces cannot have properties', $relocated->message);
+    }
+
+    /** End anchor: quoted parser text that looks like the suffix must not be rewritten, only the real tail. */
+    #[Test]
+    public function only_the_trailing_line_reference_of_a_parse_error_is_rewritten(): void
+    {
+        $issue = new ParseError('Syntax error, unexpected identifier "x on line 31" on line 23', $this->shadowLocation(23));
+
+        $relocated = $this->relocate($issue, $this->entry([23 => 3, 31 => 2]));
+
+        $this->assertInstanceOf(ParseError::class, $relocated);
+        $this->assertSame('Syntax error, unexpected identifier "x on line 31" on line 3', $relocated->message);
+    }
+
+    /**
+     * #1723: `ReferenceReusedFromConfusingScope` embeds `CodeLocation::getShortSummary()`
+     * (`<shadow file name>:<line>:<column>`) in its message. The descriptor must name the template,
+     * with the line resolved through the same map and the column kept.
+     */
+    #[Test]
+    public function a_location_descriptor_inside_a_message_names_the_template(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope(
+            '$x is possibly a reference defined at shadow.php:31:64. Reusing this variable may cause the referenced value to change.',
+            $this->shadowLocation(40),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame(
+            '$x is possibly a reference defined at resources/views/profile.blade.php:3:64. Reusing this variable may cause the referenced value to change.',
+            $relocated->message,
+        );
+        $this->assertSame(2, $relocated->code_location->getLineNumber());
+    }
+
+    /** The journey convention: a descriptor into the prelude clamps to line 1. */
+    #[Test]
+    public function a_location_descriptor_into_the_prelude_clamps_to_line_one(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at shadow.php:5:9.', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 0, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame('$x is possibly a reference defined at resources/views/profile.blade.php:1:9.', $relocated->message);
+    }
+
+    /** Only the issue's own shadow is rewritten; another file's descriptor is ordinary text. */
+    #[Test]
+    public function a_descriptor_naming_another_file_is_left_alone(): void
+    {
+        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at app/Other.php:31:64.', $this->shadowLocation(40));
+
+        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
+
+        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
+        $this->assertSame('$x is possibly a reference defined at app/Other.php:31:64.', $relocated->message);
+    }
+
+    /**
+     * `CommentAnalyzer` appends `in <absolute shadow path>:<line>` (no column) to an invalid
+     * docblock type's message; the cache path means nothing to the author and differs per machine.
+     */
+    #[Test]
+    public function an_absolute_path_and_line_inside_a_message_names_the_template(): void
+    {
+        $issue = new InvalidDocblock(
+            'array<int, string, bool> is not a valid type (Too many template parameters for array in ' . self::SHADOW . ':5)',
+            $this->shadowLocation(5),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 2]));
+
+        $this->assertInstanceOf(InvalidDocblock::class, $relocated);
+        $this->assertSame(
+            'array<int, string, bool> is not a valid type (Too many template parameters for array in resources/views/profile.blade.php:2)',
+            $relocated->message,
+        );
+    }
+
+    /**
+     * A closure's id is `strtolower(<shadow path>):<line>:<byte offset>:-:closure`, and return-type
+     * messages name it. The path differs per machine and the offset shifts with the prelude, so
+     * both go: the id becomes `<template>:<template line>:-:closure`.
+     */
+    #[Test]
+    public function a_closure_id_inside_a_message_names_the_template(): void
+    {
+        $shadow = '/tmp/Cache/Blade/Shadow.php';
+        $issue = new InvalidNullableReturnType(
+            "The declared return type 'string' for " . \strtolower($shadow) . ":5:25279:-:closure is not nullable, but the function returns 'null|string'",
+            new Raw("\n\n\n\n", $shadow, 'Shadow.php', 4, 4),
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([5 => 2]));
+
+        $this->assertInstanceOf(InvalidNullableReturnType::class, $relocated);
+        $this->assertSame(
+            "The declared return type 'string' for resources/views/profile.blade.php:2:-:closure is not nullable, but the function returns 'null|string'",
+            $relocated->message,
+        );
+    }
+
+    /**
      * #1545: `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
      * against a `VirtualMethodCall` Psalm synthesizes to model the magic call, and reports this
      * class regardless of the real receiver, duplicating the `UndefinedMagicPropertyFetch` the
@@ -213,6 +448,70 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function an_unmapped_undefined_this_property_assignment_is_still_reported_on_line_one(): void
     {
         $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
+
+        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+        $this->assertSame('Instance property Foo::$bar is not defined (unmapped)', $relocated->message);
+    }
+
+    /**
+     * A location built from a node Psalm synthesized (a desugared `match` arm's `VirtualThrow`)
+     * carries no attributes, so its line is Psalm's positionless `-1`.
+     */
+    private function positionlessLocation(): CodeLocation
+    {
+        $source = new class implements FileSource {
+            public function getFileName(): string
+            {
+                return 'shadow.php';
+            }
+
+            public function getFilePath(): string
+            {
+                return '/tmp/shadow.php';
+            }
+
+            public function getRootFileName(): string
+            {
+                return 'shadow.php';
+            }
+
+            public function getRootFilePath(): string
+            {
+                return '/tmp/shadow.php';
+            }
+
+            public function getAliases(): Aliases
+            {
+                return new Aliases();
+            }
+        };
+
+        $location = new CodeLocation($source, new Throw_(new Variable('e')));
+        $this->assertSame(-1, $location->getLineNumber());
+
+        return $location;
+    }
+
+    /**
+     * #1801: Psalm itself drops a positionless issue (IssueBuffer::isSuppressed()), so re-emitting it
+     * on template line 1 as `(unmapped)` only leaks what plain PHP never reports.
+     */
+    #[Test]
+    public function a_positionless_issue_is_declined(): void
+    {
+        $issue = new TypeDoesNotContainType('Type never does not contain never', $this->positionlessLocation(), 'never');
+
+        $this->assertNull($this->relocate($issue, $this->entry([2 => 0])));
+    }
+
+    /** The #1545 trade-off holds for the positionless shape too: it can be the only diagnostic. */
+    #[Test]
+    public function a_positionless_undefined_this_property_assignment_is_still_reported_on_line_one(): void
+    {
+        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->positionlessLocation(), 'Foo::$bar');
 
         $relocated = $this->relocate($issue, $this->entry([2 => 0]));
 
@@ -438,6 +737,111 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(PossiblyFalseArgument::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1695: `compileAware()`'s loop body, as one shadow line. Argument and cast issues on `$__value`
+     * in the list-form call, and `NoValue` on `$__key` in the keyed call, are compiler artifacts.
+     * {@see BladeIssueRemapTest} pins the same gate end to end on real compiled shadows.
+     */
+    #[Test]
+    #[DataProvider('compiledAwareIssues')]
+    public function a_compiled_aware_argument_issue_is_dropped(CodeIssue $issue): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function compiledAwareIssues(): iterable
+    {
+        yield 'NoValue on the keyed call' => [new NoValue(self::AWARE_NO_VALUE, self::awareLocation(self::AWARE_KEYED_CALL, 6))];
+        yield 'NullArgument on the list-form call' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::awareLocation(self::AWARE_LIST_CALL, 8), self::AWARE_CALLEE)];
+        yield 'InvalidCast on the list-form call' => [new InvalidCast('array<never, never> cannot be cast to string', self::awareLocation(self::AWARE_LIST_CALL, 8))];
+        yield 'ImplicitToStringCast on the list-form call' => [new ImplicitToStringCast('Argument 1 of Illuminate\View\Factory::getConsumableComponentData expects string, Foo provided with a __toString method', self::awareLocation(self::AWARE_LIST_CALL, 8))];
+    }
+
+    /**
+     * Negatives: each case differs from a dropped one above in exactly ONE gate condition, so the
+     * case goes red if that condition is removed.
+     */
+    #[Test]
+    #[DataProvider('authorAwareLookAlikes')]
+    public function an_aware_look_alike_keeps_reporting(CodeIssue $issue, string $templateSource = self::TEMPLATE_SOURCE): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        // Line 3 rather than the unmapped fallback (line 1 plus a suffix), so this is a real mapping.
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+        $this->assertSame($issue->message, $relocated->message);
+    }
+
+    /** @return iterable<string, array{0: CodeIssue, 1?: string}> */
+    public static function authorAwareLookAlikes(): iterable
+    {
+        $list = self::awareLocation(self::AWARE_LIST_CALL, 8);
+
+        yield 'issue class outside the gate' => [new UndefinedVariable('Cannot find referenced variable $__value', $list)];
+        yield 'NoValue on an assignment' => [new NoValue('All possible types for this assignment were invalidated - This may be dead code', self::awareLocation(self::AWARE_KEYED_CALL, 6))];
+        yield 'another callee' => [new NullArgument(self::AWARE_NULL_ARGUMENT, $list, 'foo')];
+        yield 'second argument' => [new NullArgument(\str_replace('Argument 1 ', 'Argument 2 ', self::AWARE_NULL_ARGUMENT), $list, self::AWARE_CALLEE)];
+        yield 'selection wider than the argument' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::awareLocation(self::AWARE_LIST_CALL, 9), self::AWARE_CALLEE)];
+        // An author's own factory: same callee and argument, so only the `$__env->` call text differs.
+        yield 'receiver other than $__env' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::awareLocation('$factory->getConsumableComponentData($__value', 8, '$factory->getConsumableComponentData($__value);'), self::AWARE_CALLEE)];
+        yield 'call text written in the template' => [
+            new NullArgument(self::AWARE_NULL_ARGUMENT, $list, self::AWARE_CALLEE),
+            "<div>\n@php \$__value = null; \$__env->getConsumableComponentData(\$__value); @endphp\n</div>\n",
+        ];
+    }
+
+    /** Same "cannot be read" case as the arity gate: an unreadable snippet is no evidence, so no drop. */
+    #[Test]
+    public function an_aware_shaped_issue_is_kept_when_its_snippet_cannot_be_read(): void
+    {
+        $relocated = $this->relocate(new NoValue(self::AWARE_NO_VALUE, $this->shadowLocation(9)), $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(NoValue::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * A shadow-line-9 location whose snippet is readable without a booted ProjectAnalyzer, selecting
+     * the $width bytes that end where $anchor ends. Offset 1000 keeps file and snippet offsets apart.
+     */
+    private static function awareLocation(string $anchor, int $width, string $snippet = self::AWARE_SHADOW_LINE): CodeLocation
+    {
+        $end = 1000 + (int) \strpos($snippet, $anchor) + \strlen($anchor);
+
+        return new class ($snippet, [$end - $width, $end]) extends CodeLocation {
+            /** @param array{int, int} $selection */
+            public function __construct(
+                private readonly string $snippetText,
+                private readonly array $selection,
+            ) {
+                // Kept issues get their message remapped, which reads the file path and name.
+                $this->file_path = '/tmp/shadow.php';
+                $this->file_name = 'shadow.php';
+                $this->raw_line_number = 9;
+            }
+
+            #[\Override]
+            public function getSnippet(): string
+            {
+                return $this->snippetText;
+            }
+
+            #[\Override]
+            public function getSelectionBounds(): array
+            {
+                return $this->selection;
+            }
+
+            #[\Override]
+            public function getSnippetBounds(): array
+            {
+                return [1000, 1000 + \strlen($this->snippetText)];
+            }
+        };
     }
 
     /**

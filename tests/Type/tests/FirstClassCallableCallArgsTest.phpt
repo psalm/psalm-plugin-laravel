@@ -49,7 +49,7 @@ function static_with(): \Closure
     return Customer::with(...);
 }
 
-// ConsoleClosureScopeHandler: Artisan::command() callback lookup.
+// First-class callable of a facade method backed by a real stub method.
 function artisan_command(): \Closure
 {
     return Artisan::command(...);

@@ -10,13 +10,14 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Guards the flag half of `bin/ci/delta-select-apps.php`: `/psalm-delta` comments are untrusted, and the flags
- * it emits run PR code in CI, so only flags declared in the registry may reach the output.
+ * it emits run PR code in CI, so only flags declared in the registry, or a `--plugin-option` within a shell-safe
+ * charset, may reach the output.
  */
 final class DeltaSelectAppsTest extends TestCase
 {
     private const REGISTRY = [
         'groups' => ['default' => 'Baseline', 'blade' => 'Blade-heavy apps'],
-        'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off'],
+        'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off', '--opt=camelKey=x' => 'Mixed case'],
         'apps' => [
             ['name' => 'alpha', 'groups' => ['default']],
             ['name' => 'beta', 'groups' => ['blade']],
@@ -42,9 +43,16 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'flag alone keeps default' => ['--blade', 'alpha', '--blade'];
         yield 'comma separated' => ['blade,--blade', 'alpha,beta', '--blade'];
         yield 'all plus flag' => ['all --no-blade', 'alpha,beta,gamma', '--no-blade'];
-        // psalm-laravel analyze is last-wins on --blade/--no-blade, so the order must survive.
+        // A later override wins in psalm-laravel analyze, so the order must survive.
         yield 'order preserved' => ['--no-blade blade --blade', 'alpha,beta', '--no-blade --blade'];
         yield 'no flag' => ['blade', 'alpha,beta', ''];
+        // Plugin option keys are camelCase, so only names and groups are case-folded.
+        yield 'flag case kept' => ['BLADE --opt=camelKey=x', 'alpha,beta', '--opt=camelKey=x'];
+        yield 'undeclared plugin option' => [
+            'blade --blade --plugin-option=blade.reportMixedIssues=true',
+            'alpha,beta',
+            '--blade --plugin-option=blade.reportMixedIssues=true',
+        ];
     }
 
     /** @param array<string, mixed> $registry */
@@ -66,12 +74,18 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'typo gets a hint' => [self::REGISTRY, 'blade --blad', '`--blad` Did you mean `--blade`?'];
         yield 'undeclared psalm flag' => [self::REGISTRY, '--set-baseline=x', '- `--set-baseline=x`'];
         yield 'unsafe flag not echoed' => [self::REGISTRY, '--$(id)', '(not echoed)'];
+        yield 'flags are case-sensitive' => [self::REGISTRY, '--opt=camelkey=x', '- `--opt=camelkey=x`'];
         yield 'help never mixes with flags' => [self::REGISTRY, 'help --blade', '`help` works only on its own'];
         yield 'registry declares no flags' => [
             \array_diff_key(self::REGISTRY, ['flags' => true]),
             '--blade',
-            'Flags: none declared.',
+            'Flags: none declared, or any `--plugin-option=KEY=VALUE`.',
         ];
+        yield 'plugin option without a value' => [self::REGISTRY, '--plugin-option=blade', '- `--plugin-option=blade`'];
+        yield 'plugin option with a second equals' => [self::REGISTRY, '--plugin-option=a=b=c', '- `--plugin-option=a=b=c`'];
+        yield 'plugin option key not starting with a letter' => [self::REGISTRY, '--plugin-option=.a=b', '- `--plugin-option=.a=b`'];
+        yield 'plugin option with shell characters' => [self::REGISTRY, '--plugin-option=blade=$(id)', '(not echoed)'];
+        yield 'plugin option with a glob' => [self::REGISTRY, '--plugin-option=blade=*', '(not echoed)'];
     }
 
     #[Test]

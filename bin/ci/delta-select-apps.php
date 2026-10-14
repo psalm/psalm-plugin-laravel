@@ -9,7 +9,7 @@ declare(strict_types=1);
  *   yq -o=json bin/ci/test-apps.yml | COMMENT_BODY='/psalm-delta octane' php delta-select-apps.php
  *   yq -o=json bin/ci/test-apps.yml | php delta-select-apps.php 'octane,vito'   # no /psalm-delta prefix
  *
- * Grammar (first line only, case-insensitive, tokens split on whitespace/commas):
+ * Grammar (first line only, tokens split on whitespace/commas, case-insensitive except flags):
  *   /psalm-delta            the `default` group
  *   /psalm-delta <tok>...   `default` plus each token: a group tag or an app name
  *                           (a group wins over an app of the same name)
@@ -18,13 +18,15 @@ declare(strict_types=1);
  *                           with other tokens is an error)
  *   /psalm-delta ... --flag a token starting with `-` is a flag for
  *                           `psalm-laravel analyze` on both sides; it must be
- *                           declared verbatim under `flags:` in the registry
+ *                           declared verbatim under `flags:` in the registry, or
+ *                           be any `--plugin-option=KEY=VALUE` (the plugin
+ *                           validates KEY and VALUE)
  *
  * Prints one JSON object: {status: run|help|error|ignore, apps_csv, label,
  * flags, matrix: {include: [...]}, reply}. The comment body is untrusted input
  * from a privileged workflow, so every output except `reply` is built only from
- * registry values, and `reply` echoes a user token only when it is plain
- * [a-z0-9_-] (a flag: the same behind a leading `-`/`--`, plus `.` and `=`).
+ * registry values or a `--plugin-option` matching a fixed shell-safe pattern, and `reply` echoes a user token only when it is plain
+ * [a-z0-9_-] (a flag: the same behind a leading `-`/`--`, plus uppercase, `.` and `=`).
  * Exit 2 = malformed registry.
  */
 
@@ -54,11 +56,13 @@ if (!isset($groups['default'])) {
 }
 
 // Flags pass to `psalm-laravel analyze` on both sides of every selected app. The workflow
-// runs PR code with them, so only exact declared strings get through.
+// runs PR code with them, so only exact declared strings get through, plus any
+// `--plugin-option` within a charset that cannot split, glob or inject in the shell steps.
+$pluginOption = '/^--plugin-option=[A-Za-z][A-Za-z0-9.]{0,79}=[A-Za-z0-9._-]{1,80}$/';
 /** @var array<string, string> $flags flag => description */
 $flags = [];
 foreach ((array) ($registry['flags'] ?? []) as $flag => $description) {
-    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[a-z0-9._-]{1,40})?$/', $flag) !== 1) {
+    if (!is_string($flag) || preg_match('/^--[a-z0-9][a-z0-9-]{0,39}(=[A-Za-z0-9._=-]{1,40})?$/', $flag) !== 1) {
         $fail('invalid flag: ' . var_export($flag, true));
     }
     $flags[$flag] = (string) $description;
@@ -103,8 +107,13 @@ $emit = static function (string $status, array $names = [], string $label = '', 
 $code = static fn(array $tokens): string => implode(', ', array_map(static fn(string $t): string => "`{$t}`", $tokens));
 
 $comment = $argc > 1 ? '/psalm-delta ' . $argv[1] : (string) getenv('COMMENT_BODY');
-$firstLine = strtolower(rtrim(explode("\n", $comment, 2)[0], "\r"));
-$tokens = preg_split('/[\s,]+/', $firstLine, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+$firstLine = rtrim(explode("\n", $comment, 2)[0], "\r");
+$isFlag = static fn(string $token): bool => str_starts_with($token, '-');
+// Flags keep their case: plugin option keys are camelCase.
+$tokens = array_map(
+    static fn(string $token): string => $isFlag($token) ? $token : strtolower($token),
+    preg_split('/[\s,]+/', $firstLine, -1, PREG_SPLIT_NO_EMPTY) ?: [],
+);
 if (array_shift($tokens) !== '/psalm-delta') {
     $emit('ignore');
 }
@@ -117,7 +126,7 @@ if ($tokens === ['help']) {
         '',
         '`/psalm-delta [token ...]` benchmarks the `default` group plus each token: a group tag or an app name, separated by spaces or commas. `/psalm-delta all` runs every app; `/psalm-delta help` shows this message.',
         '',
-        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade`. A flag the base plugin does not know crashes the base side.',
+        'A token starting with `--` is a flag passed to `psalm-laravel analyze` on both sides of every selected app, e.g. `/psalm-delta blade --blade`: a flag from the table below, or any `--plugin-option=KEY=VALUE` (keys: [docs/config.md](https://github.com/psalm/psalm-plugin-laravel/blob/4.x/docs/config.md#per-run-overrides)). A flag the base plugin does not know crashes the base side.',
         '',
         '| Group | Description | Apps |',
         '|---|---|---|',
@@ -140,12 +149,15 @@ if ($tokens === ['help']) {
     $emit('help', reply: implode("\n", $lines) . "\n");
 }
 
-$isFlag = static fn(string $token): bool => str_starts_with($token, '-');
 $runFlags = array_values(array_filter($tokens, $isFlag));
 $tokens = array_values(array_filter($tokens, static fn(string $token): bool => !$isFlag($token)));
 
 $valid = [...array_keys($groups), ...array_keys($apps), 'all'];
-$unknown = array_values(array_unique([...array_diff($tokens, $valid), ...array_diff($runFlags, array_keys($flags))]));
+$undeclared = array_filter(
+    array_diff($runFlags, array_keys($flags)),
+    static fn(string $flag): bool => preg_match($pluginOption, $flag) !== 1,
+);
+$unknown = array_values(array_unique([...array_diff($tokens, $valid), ...$undeclared]));
 if ($unknown !== []) {
     $lines = [];
     // Capped so a huge comment can't push the reply past GitHub's 65,536-char limit.
@@ -155,8 +167,8 @@ if ($unknown !== []) {
             continue;
         }
         if ($isFlag($token)) {
-            if (preg_match('/^--?[a-z0-9][a-z0-9_.=-]{0,39}$/', $token) !== 1) {
-                $lines[] = '- a flag with characters outside `[a-z0-9_.=-]` (not echoed)';
+            if (preg_match('/^--?[a-z0-9][A-Za-z0-9_.=-]{0,79}$/', $token) !== 1) {
+                $lines[] = '- a flag with characters outside `[A-Za-z0-9_.=-]` (not echoed)';
                 continue;
             }
             $candidates = array_keys($flags);
@@ -184,12 +196,12 @@ if ($unknown !== []) {
         '',
         'Groups: ' . $code(array_keys($groups)) . '.',
         'Apps: ' . $code(array_keys($apps)) . '.',
-        'Flags: ' . ($flags === [] ? 'none declared' : $code(array_keys($flags))) . '.',
+        'Flags: ' . ($flags === [] ? 'none declared' : $code(array_keys($flags))) . ', or any `--plugin-option=KEY=VALUE`.',
         'Also: `all`, `help`.',
     ]) . "\n");
 }
 
-// Every flag here matched a declared key exactly, so it is a registry value.
+// Every flag here is a declared registry value or matched $pluginOption.
 if (in_array('all', $tokens, true)) {
     $emit('run', array_keys($apps), 'all', runFlags: $runFlags);
 }

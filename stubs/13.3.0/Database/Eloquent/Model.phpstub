@@ -1,0 +1,59 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use ArrayAccess;
+use JsonSerializable;
+use Stringable;
+use Illuminate\Contracts\Broadcasting\HasBroadcastChannel;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Contracts\Support\Jsonable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Contracts\Queue\QueueableEntity;
+use Illuminate\Support\Traits\ForwardsCalls;
+
+/**
+ * Model::__call() forwards incrementEach()/decrementEach() to the protected model methods only
+ * from Laravel 13.3.0 (before that they fall through to the query builder), so they are declared
+ * here rather than in common. Like increment(), they return false when an `updating` listener
+ * cancels the update.
+ *
+ * The class header (implements, use-traits) is copied verbatim from common because
+ * re-declaring the class resets Psalm's interface list; everything else merges from common.
+ * The class-level @mixin is deliberately NOT repeated: it accumulates with the common one, and the
+ * duplicate binds Builder's TModel to Builder<Model> instead of the model.
+ *
+ * @implements \ArrayAccess<string, mixed>
+ *
+ * @psalm-consistent-constructor
+ */
+abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToString, HasBroadcastChannel, Jsonable, JsonSerializable, QueueableEntity, Stringable, UrlRoutable
+{
+    use Concerns\HasAttributes,
+            Concerns\HasEvents,
+            Concerns\HasGlobalScopes,
+            Concerns\HasRelationships,
+            Concerns\HasTimestamps,
+            Concerns\HidesAttributes,
+            Concerns\GuardsAttributes,
+            ForwardsCalls;
+
+    /**
+     * Increment each given column's value by the given amounts.
+     *
+     * @param  array<string, float|int>  $columns
+     * @param  array<string, mixed>  $extra
+     * @return int|false
+     */
+    public function incrementEach(array $columns, array $extra = []) {}
+
+    /**
+     * Decrement each given column's value by the given amounts.
+     *
+     * @param  array<string, float|int>  $columns
+     * @param  array<string, mixed>  $extra
+     * @return int|false
+     */
+    public function decrementEach(array $columns, array $extra = []) {}
+}
