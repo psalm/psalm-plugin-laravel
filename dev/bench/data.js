@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791981918091,
+  "lastUpdate": 1791987984674,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14065,6 +14065,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eaf3df6ed5066339d0ebb847b344cb60cc71e9e3",
+          "message": "refactor: name the InvokableComponentVariable template TValue (#1864)\n\nMatches the template name Laravel uses for wrapped values, so the stub\nstays aligned with the upstream class docblock.",
+          "timestamp": "2026-10-14T16:21:52+02:00",
+          "tree_id": "a9ada85aef20211c2bc979b051cbfa9edee70af1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/eaf3df6ed5066339d0ebb847b344cb60cc71e9e3"
+        },
+        "date": 1791987982686,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.84,
+            "range": "± 0.73",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1504,
             "unit": "MB"
           }
         ]
