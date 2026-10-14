@@ -12,19 +12,21 @@ use Illuminate\Support\Manager;
  * from Laravel 13.5.0 onward (laravel/framework#59659); below that its param is
  * plain `string|null` and passing an enum is a genuine `InvalidArgument`, not
  * something our handler should silently narrow through. Split out of
- * ManagerDriverDeclinesTest.phpt because that file must also pass on the
+ * ManagerDriverCreatorUnionTest.phpt because that file must also pass on the
  * Laravel 12.20 / 13.3 floor, where this call itself is a type error (#1392).
+ * The enum name is not statically resolvable, so the call falls back to the
+ * creator union (#1738).
  */
 enum DriverEnum
 {
     case Foo;
 }
 
-class EnumDeclineFooDriver
+class EnumFooDriver
 {
 }
 
-class EnumDeclineManager extends Manager
+class EnumManager extends Manager
 {
     #[\Override]
     public function getDefaultDriver()
@@ -32,16 +34,16 @@ class EnumDeclineManager extends Manager
         return 'foo';
     }
 
-    protected function createFooDriver(): EnumDeclineFooDriver
+    protected function createFooDriver(): EnumFooDriver
     {
-        return new EnumDeclineFooDriver();
+        return new EnumFooDriver();
     }
 }
 
-function enum_argument(EnumDeclineManager $manager, DriverEnum $driver): void
+function enum_argument(EnumManager $manager, DriverEnum $driver): void
 {
     $_enum = $manager->driver($driver);
-    /** @psalm-check-type-exact $_enum = mixed */
+    /** @psalm-check-type-exact $_enum = EnumFooDriver */
 }
 ?>
 --EXPECTF--
