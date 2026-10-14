@@ -253,8 +253,8 @@ final class ViewContractValidationTest extends TestCase
     /**
      * A public method with no parameters reaches the view as an `InvokableComponentVariable` of
      * its return type, so `@var InvokableComponentVariable<T>` both satisfies the check and keeps
-     * `$name()` typed. A mismatched `T` still reports; an unknown return type and the bare class
-     * name decline.
+     * `$name()` typed. A mismatched `T` still reports. An untyped or generic method is `mixed`, so
+     * its declaration is not checked, and the bare class name accepts any `T`.
      */
     #[Test]
     public function a_no_parameter_method_is_an_invokable_variable_of_its_return_type(): void
@@ -262,23 +262,10 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues('psalm.xml');
         $invokable = $this->forFile($issues, 'ComponentInvokable.php');
 
-        // An untyped method's wrapper is still not a Closure. It is Stringable, so a `string`
-        // declaration passes, as it did before the wrapper became generic.
         $this->assertSame([
             'View \'component-invokable\' declares $label as \Illuminate\View\InvokableComponentVariable<int>, but Illuminate\View\InvokableComponentVariable<string> is passed for it',
-            'View \'component-invokable\' declares $untypedAsClosure as \Closure(): int, but Illuminate\View\InvokableComponentVariable<mixed> is passed for it',
         ], \array_column($invokable, 'message'), \var_export($issues, true));
-        $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($invokable, 'type'));
-
-        // Comparing an untyped method's wrapper as `<never>` keeps the rest of the supplied type.
-        $this->assertSame([], $this->forFile($issues, 'InvokableIntersection.php'), \var_export($issues, true));
-
-        // The untyped-method decline is keyed on that one wrapper: `mixed` nested in any other
-        // generic is still a mismatch.
-        $nested = $this->forFile($issues, 'NestedMixed.php');
-        $this->assertCount(1, $nested, \var_export($issues, true));
-        $this->assertSame(self::WRONG_TYPE, $nested[0]['type']);
-        $this->assertStringContainsString('$ids', $nested[0]['message']);
+        $this->assertSame([self::WRONG_TYPE], \array_column($invokable, 'type'));
 
         $traces = [];
         $templateIssues = [];

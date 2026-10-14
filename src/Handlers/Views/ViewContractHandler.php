@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\Contracts\Support\Renderable;
-use Illuminate\View\InvokableComponentVariable;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
@@ -314,11 +313,9 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
 
         // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
         // gains no new report.
-        $compared = self::untypedMethodsAsNever($supplied);
-
         if (
-            $codebase->isTypeContainedByType($compared, $declared)
-            || $codebase->isTypeContainedByType(self::renderablesAsString($compared, $codebase), $declared)
+            $codebase->isTypeContainedByType($supplied, $declared)
+            || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
         ) {
             return;
         }
@@ -331,30 +328,6 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             ),
             $suppressedIssues,
         );
-    }
-
-    /**
-     * {@see ComponentRenderData} supplies `InvokableComponentVariable<mixed>` for a component method
-     * with no known return type. The unknown `T` must not fail an `InvokableComponentVariable<T>`
-     * declaration, but the wrapper class must still fail `string` or `Closure`, so `T` is compared
-     * as `never`, which every `T` contains. A `mixed` nested in any other generic is left as is.
-     *
-     * @psalm-mutation-free
-     */
-    private static function untypedMethodsAsNever(Type\Union $supplied): Type\Union
-    {
-        $atomics = [];
-
-        foreach ($supplied->getAtomicTypes() as $atomic) {
-            $atomics[] = $atomic instanceof Type\Atomic\TGenericObject
-                && $atomic->value === InvokableComponentVariable::class
-                && \count($atomic->type_params) === 1
-                && $atomic->type_params[0]->isMixed()
-                    ? $atomic->setTypeParams([Type::getNever()])
-                    : $atomic;
-        }
-
-        return new Type\Union($atomics);
     }
 
     /**

@@ -158,7 +158,7 @@ With `<x-alert title="Hi" />` in any template, `components/alert.blade.php` gets
 | Variable          | Type                                                                                                     |
 |-------------------|----------------------------------------------------------------------------------------------------------|
 | public property   | its declared type (`$title: string`)                                                                     |
-| public method     | `Illuminate\View\InvokableComponentVariable<T>` with no parameters, `T` being its return type (`$isActive: InvokableComponentVariable<bool>`), otherwise a `Closure` of its signature (`$format: Closure(string): string`). A generic method or class is `mixed` (not checked) |
+| public method     | `Illuminate\View\InvokableComponentVariable<T>` with no parameters, `T` being its return type (`$isActive: InvokableComponentVariable<bool>`), otherwise a `Closure` of its signature (`$format: Closure(string): string`). A generic method or class, or a method with neither parameters nor a return type, is `mixed` (not checked) |
 | `$attributes`     | `Illuminate\View\ComponentAttributeBag`                                                                  |
 | `$componentName`  | `string` (`Component::$componentName`'s declared type)                                                   |
 

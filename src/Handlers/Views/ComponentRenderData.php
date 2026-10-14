@@ -127,7 +127,7 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
-            // A method closure is already expanded with `static` collapsed, so this pass leaves it as is.
+            // A method variable is already expanded with `static` collapsed, so this pass leaves it as is.
             $expanded = TypeExpander::expandUnion(
                 $codebase,
                 $type,
@@ -261,62 +261,38 @@ final class ComponentRenderData
                 continue;
             }
 
-            if ($method->params !== []) {
-                $methods[$method->cased_name ?? $methodName] = self::closureOf($codebase, $storage, $declaring, $method, $methodName);
-
-                continue;
-            }
-
-            // A trait's `self` and `parent` are the class that uses it, which Psalm records as the
-            // method's appearing class.
-            $appearing = $declaring->is_trait
-                ? self::storage($codebase, ($storage->appearing_method_ids[$methodName] ?? $methodId)->fq_class_name)
-                : $declaring;
-
-            if (!$appearing instanceof ClassLikeStorage) {
-                return null;
-            }
-
-            $methods[$method->cased_name ?? $methodName] = new Union([
-                new TGenericObject(InvokableComponentVariable::class, [self::returnType($codebase, $storage, $declaring, $appearing, $method)]),
-            ]);
+            $methods[$method->cased_name ?? $methodName] = $method->params === []
+                ? self::invokableOf($codebase, $storage, $declaring, $method, $methodName)
+                : self::closureOf($codebase, $storage, $declaring, $method, $methodName);
         }
 
         return $methods;
     }
 
     /**
-     * `static` is the component instance itself, so it resolves to the component as if final: the
-     * late-static marker would otherwise leak into the view as `Component&static`. `mixed` when
-     * unknown: no declared return type, or one carrying a template (the generic declaring class's
-     * or the method's own), which nothing binds here.
+     * `$name()` is `call_user_func()` of the method, so the wrapper carries its return type (`null`
+     * for `void`). Without a declared return type the variable is `mixed`, i.e. not checked, as for a
+     * generic method or declaring class: `InvokableComponentVariable<mixed>` would reject a
+     * template's correct `InvokableComponentVariable<T>` declaration.
      */
-    private static function returnType(
+    private static function invokableOf(
         Codebase $codebase,
         ClassLikeStorage $storage,
         ClassLikeStorage $declaring,
-        ClassLikeStorage $appearing,
         MethodStorage $method,
+        string $methodName,
     ): Union {
-        if (!$method->return_type instanceof Union || $declaring->template_types !== null) {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure || !$method->return_type instanceof Union) {
             return Type::getMixed();
         }
 
-        $expanded = TypeExpander::expandUnion(
-            $codebase,
-            $method->return_type,
-            $appearing->name,
-            $storage->name,
-            $appearing->parent_class,
-            final: true,
-        );
+        $returnType = $expand($method->return_type);
 
-        // A method-level template is never bound here. `call_user_func()` of a void method is null.
-        return match (true) {
-            $expanded->getTemplateTypes() !== [] => Type::getMixed(),
-            $expanded->isVoid() => Type::getNull(),
-            default => $expanded,
-        };
+        return new Union([
+            new TGenericObject(InvokableComponentVariable::class, [$returnType->isVoid() ? Type::getNull() : $returnType]),
+        ]);
     }
 
     /**
@@ -334,29 +310,11 @@ final class ComponentRenderData
         MethodStorage $method,
         string $methodName,
     ): Union {
-        if ($method->template_types !== null || $declaring->template_types !== null) {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure) {
             return Type::getMixed();
         }
-
-        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
-        // only `static` is the rendered component.
-        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
-        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
-
-        if (!$appearing instanceof ClassLikeStorage) {
-            return Type::getMixed();
-        }
-
-        // `final: true` collapses `static` to the component: a subclass instance is still one, and
-        // `Component&static` means nothing to a template.
-        $expand = static fn(Union $type): Union => TypeExpander::expandUnion(
-            $codebase,
-            $type,
-            $appearing->name,
-            $storage->name,
-            $appearing->parent_class,
-            final: true,
-        );
 
         // TypeExpander skips a parameter's `@param-out` type (a gap in Psalm's own callable expansion),
         // and an unexpanded `self` there becomes the by-ref variable's type in the template.
@@ -374,6 +332,44 @@ final class ComponentRenderData
         }
 
         return $expand(new Union([new TClosure($params, $method->return_type, $method->capabilities)]));
+    }
+
+    /**
+     * Resolves a method's types as the rendered component sees them, or null when nothing can: a
+     * generic method or declaring class (no template is bound here), or an unresolvable appearing class.
+     *
+     * @return (\Closure(Union): Union)|null
+     */
+    private static function expanderFor(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): ?\Closure {
+        if ($method->template_types !== null || $declaring->template_types !== null) {
+            return null;
+        }
+
+        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
+        // only `static` is the rendered component.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
+
+        if (!$appearing instanceof ClassLikeStorage) {
+            return null;
+        }
+
+        // `final: true` collapses `static` to the component: a subclass instance is still one, and
+        // `Component&static` means nothing to a template.
+        return static fn(Union $type): Union => TypeExpander::expandUnion(
+            $codebase,
+            $type,
+            $appearing->name,
+            $storage->name,
+            $appearing->parent_class,
+            final: true,
+        );
     }
 
     /**

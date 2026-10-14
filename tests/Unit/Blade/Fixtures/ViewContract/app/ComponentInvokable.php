@@ -27,18 +27,6 @@ final class ComponentInvokable extends InvokableBase
         return 1;
     }
 
-    /** @psalm-suppress MissingReturnType */
-    public function untypedAsString()
-    {
-        return 1;
-    }
-
-    /** @psalm-suppress MissingReturnType */
-    public function untypedAsClosure()
-    {
-        return 1;
-    }
-
     public function clear(): void {}
 
     /**
