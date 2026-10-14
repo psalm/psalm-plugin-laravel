@@ -1,0 +1,79 @@
+<?php
+
+namespace Illuminate\View;
+
+use Closure;
+use Illuminate\Contracts\Support\DeferringDisplayableValue;
+use IteratorAggregate;
+use Stringable;
+use Traversable;
+
+/**
+ * Class declaration mirrors Laravel's source. Psalm wipes the reflected
+ * class_implements list when a stub re-declares the class, so the clause
+ * must be repeated verbatim or callers typed on the contracts breaks.
+ *
+ * `Component::createVariableFromMethod()` wraps a no-parameter public method,
+ * so `TValue` is that method's return type.
+ *
+ * Sealed explicitly: a stub-declared class is not user-defined, so it would lose the
+ * `sealAllMethods`/`sealAllProperties` defaults the vendor class gets. `@mixin TValue` types the
+ * calls `__call` forwards; Psalm does not resolve templated mixins for property reads, so `__get` stays sealed.
+ *
+ * @template-covariant TValue
+ *
+ * @mixin TValue
+ *
+ * @psalm-seal-methods
+ * @psalm-seal-properties
+ */
+class InvokableComponentVariable implements DeferringDisplayableValue, IteratorAggregate, Stringable
+{
+    /**
+     * @var \Closure
+     */
+    protected $callable;
+
+    /**
+     * The `|\Closure` arm keeps Laravel's own contract: an untyped or parameterised closure is
+     * accepted as before, and only a typed `\Closure(): TValue` binds `TValue`.
+     *
+     * @param  \Closure(): TValue|\Closure  $callable
+     */
+    public function __construct(Closure $callable) {}
+
+    /**
+     * @return \Illuminate\Contracts\Support\Htmlable|string
+     */
+    public function resolveDisplayableValue() {}
+
+    /**
+     * @return \ArrayIterator
+     */
+    public function getIterator(): Traversable {}
+
+    /**
+     * @param  string  $key
+     * @return mixed
+     */
+    public function __get($key) {}
+
+    /**
+     * @param  string  $method
+     * @param  array  $parameters
+     * @return mixed
+     */
+    public function __call($method, $parameters) {}
+
+    /**
+     * `call_user_func()` of a `void` closure returns `null`.
+     *
+     * @return (TValue is void ? null : TValue)
+     */
+    public function __invoke() {}
+
+    /**
+     * @return string
+     */
+    public function __toString() {}
+}

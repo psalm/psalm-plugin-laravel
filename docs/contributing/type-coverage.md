@@ -61,6 +61,91 @@ Use it only when restructuring is impossible, and take the coverage hit delibera
 
 Restructure the code instead. Plugin self-analysis has no baseline file, and none may be introduced (the only baseline in the repo is the Application-fixture snapshot).
 
+## 5. String and array callables in `array_map` count one mixed
+
+On Psalm 7.0.0-rc2, `array_map('strval', $keys)` and `array_map([self::class, 'fmt'], $keys)` each count 1 mixed and report no issue. `ArrayMapReturnTypeProvider` analyzes a synthetic call on an array fetch whose offset is mixed, and suppresses `MixedArrayOffset` but not the counter. A typed closure or a first-class callable avoids it:
+
+```php
+// BAD: counts as 1 mixed ($keys is list<int|string>)
+$names = array_map('strval', $keys);
+
+// GOOD: typed closure, no counter
+$names = array_map(static fn(int|string $key): string => (string) $key, $keys);
+
+// GOOD: first-class callable, no counter
+$names = array_map(strval(...), $keys);
+```
+
+Worked example: the shared view names in `src/Blade/BladeBootstrapper.php` (#1854).
+
+## 6. Narrow container lookups in a helper, not a local
+
+A mixed argument passed to a `mixed` parameter does not count, so a one-line narrowing helper replaces the local that would hold the mixed value:
+
+```php
+// BAD: counts as 1 mixed (assignment)
+$resolved = $container->make('view');
+
+return $resolved instanceof Factory ? $resolved : null;
+
+// GOOD: no local, no counter
+return $this->asFactory($container->make('view'));
+
+/** @psalm-pure */
+private function asFactory(mixed $resolved): ?Factory
+{
+    return $resolved instanceof Factory ? $resolved : null;
+}
+```
+
+Worked example: `asCompiler()`, `asFinder()` and `asFactory()` in `src/Blade/BladeBootstrapper.php`.
+
+## 7. Narrow a mixed local with `assert()` or an early exit
+
+When the local is needed, `assert()` or an early-exit guard on it removes both the count and the `MixedAssignment` issue. A ternary does not, and neither does a positive guard:
+
+```php
+// GOOD: no counter
+$x = $container->make('view');
+assert($x instanceof Factory);
+
+// GOOD: no counter
+$x = $container->make('view');
+if (!$x instanceof Factory) {
+    return null;
+}
+
+// BAD: counts as 1 mixed, plus MixedAssignment
+$x = $container->make('view');
+
+return $x instanceof Factory ? $x : null;
+
+// BAD: same, the positive guard narrows only inside its branch
+$x = $container->make('view');
+if ($x instanceof Factory) {
+    return $x;
+}
+
+return null;
+```
+
+## 8. Locate the expression Psalm counts
+
+`--stats` prints only per-file counts. To find the lines, back up `vendor/vimeo/psalm/src/Psalm/Internal/Codebase/Analyzer.php` and add this at the top of `incrementMixedCount()` (Psalm 7.0.0-rc2):
+
+```php
+foreach (debug_backtrace() as $frame) {
+    foreach ($frame['args'] ?? [] as $arg) {
+        if ($arg instanceof \PhpParser\Node) {
+            file_put_contents('/tmp/mixed.log', $file_path . ':' . $arg->getStartLine() . "\n", FILE_APPEND);
+            break 2;
+        }
+    }
+}
+```
+
+Run `vendor/bin/psalm --no-cache --threads=1 --no-progress --stats <file>` on a file `--stats` names, then read the log (a file, because forked workers swallow stdout). It lists every increment, so a line that `assert()` or a guard removes again (section 7) shows up too. Restore the backup afterwards.
+
 ## Trade-off: try/catch boundaries
 
 Storing a `try`-captured value in a local for use after the catch always produces a mixed assignment when the value is mixed. Two options:

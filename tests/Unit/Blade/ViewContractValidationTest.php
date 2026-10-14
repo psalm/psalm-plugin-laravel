@@ -216,6 +216,73 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * `createVariableFromMethod()` hands a method with parameters to the view as
+     * `Closure::fromCallable()`, so the key carries the method's own signature: a declaration that
+     * matches it passes, a mismatched one is reported, and a generic method is `mixed`, so its declaration is not checked.
+     */
+    #[Test]
+    public function a_component_method_with_parameters_is_typed_as_its_closure_signature(): void
+    {
+        $issues = $this->forFile($this->contractIssues('psalm.xml'), 'ComponentMethods.php');
+        $messages = \array_column($issues, 'message');
+        \sort($messages);
+
+        $this->assertSame([
+            "View 'component-methods' declares \$label as \\Closure(int): string, but Closure[impure](string):string is passed for it",
+        ], $messages);
+    }
+
+    /**
+     * `self` and `parent` in a method inherited from a parent class, or brought in by that parent's
+     * trait, resolve against the class the method appears in, not the rendered component.
+     */
+    #[Test]
+    public function an_inherited_component_methods_self_and_parent_name_its_appearing_class(): void
+    {
+        $issues = $this->forFile($this->contractIssues('psalm.xml'), 'ComponentInherited.php');
+        $messages = \array_column($issues, 'message');
+        \sort($messages);
+
+        $this->assertSame([
+            "View 'component-inherited' declares \$retParent as \\Closure(int): \\ViewContractFixture\\VcBase, but Closure[impure](int):Illuminate\\View\\Component is passed for it",
+            "View 'component-inherited' declares \$traitParent as \\Closure(int): \\ViewContractFixture\\VcBase, but Closure[impure](int):Illuminate\\View\\Component is passed for it",
+            "View 'component-inherited' declares \$traitSelf as \\Closure(int): \\ViewContractFixture\\ComponentInherited, but Closure[impure](int):ViewContractFixture\\VcBase is passed for it",
+        ], $messages);
+    }
+
+    /**
+     * A public method with no parameters reaches the view as an `InvokableComponentVariable` of
+     * its return type, so `@var InvokableComponentVariable<TValue>` both satisfies the check and keeps
+     * `$name()` typed. A mismatched `TValue` still reports. An untyped or generic method is `mixed`, so
+     * its declaration is not checked, and the bare class name accepts any `TValue`.
+     */
+    #[Test]
+    public function a_no_parameter_method_is_an_invokable_variable_of_its_return_type(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $invokable = $this->forFile($issues, 'ComponentInvokable.php');
+
+        $this->assertSame([
+            'View \'component-invokable\' declares $label as \Illuminate\View\InvokableComponentVariable<int>, but Illuminate\View\InvokableComponentVariable<string> is passed for it',
+        ], \array_column($invokable, 'message'), \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE], \array_column($invokable, 'type'));
+
+        $traces = [];
+        $templateIssues = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if (\str_ends_with((string) $issue['file_name'], 'component-invokable.blade.php')) {
+                $issue['type'] === 'Trace'
+                    ? $traces[] = (string) $issue['message']
+                    : $templateIssues[] = $issue['type'] . ': ' . $issue['message'];
+            }
+        }
+
+        $this->assertSame(['$resolved: list{int, string}'], $traces);
+        $this->assertSame([], $templateIssues);
+    }
+
+    /**
      * `renderComponent()` ends in `$view->with($componentData)`, which merges last, so a public
      * property overrides the same key passed explicitly from `render()`.
      */
