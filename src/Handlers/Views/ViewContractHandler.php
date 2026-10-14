@@ -12,6 +12,8 @@ use PhpParser\Node\Stmt;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
+use Psalm\Internal\Type\Comparator\TypeComparisonResult;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
 use Psalm\LaravelPlugin\Blade\ContractParser;
@@ -313,9 +315,14 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
 
         // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
         // gains no new report.
+        $comparison = new TypeComparisonResult();
+
         if (
-            $codebase->isTypeContainedByType($supplied, $declared)
+            UnionTypeComparator::isContainedBy($codebase, $supplied, $declared, union_comparison_result: $comparison)
             || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
+            // A nested mixed (`InvokableComponentVariable<mixed>` from an untyped method) is not
+            // proven wrong either.
+            || $comparison->type_coerced_from_mixed === true
         ) {
             return;
         }

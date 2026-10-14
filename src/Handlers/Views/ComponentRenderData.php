@@ -12,8 +12,9 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
-use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 
 /**
@@ -146,8 +147,6 @@ final class ComponentRenderData
      * @param bool $typedOnly skip a property with no declared type or a generic declaring class
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function exposed(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
@@ -233,12 +232,10 @@ final class ComponentRenderData
 
     /**
      * Every public method becomes a variable of the same (cased) name, built by
-     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` for a method with no
-     * parameters at all (optional ones count), a `Closure` otherwise.
+     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` of the method's return
+     * type for a method with no parameters at all (optional ones count), a `Closure` otherwise.
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -262,11 +259,36 @@ final class ComponentRenderData
             }
 
             $methods[$method->cased_name ?? $methodName] = $method->params === []
-                ? new Union([new TNamedObject(InvokableComponentVariable::class)])
+                ? new Union([new TGenericObject(InvokableComponentVariable::class, [self::returnType($codebase, $storage, $declaring, $method)])])
                 : Type::getClosure();
         }
 
         return $methods;
+    }
+
+    /**
+     * Expanded here rather than by the caller: `self` and `parent` belong to the declaring class,
+     * `static` to the component. `mixed` when unknown: no declared return type, or one bound to a
+     * generic declaring class's templates, which the component does not bind.
+     */
+    private static function returnType(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+    ): Union {
+        if (!$method->return_type instanceof Union || $declaring->template_types !== null) {
+            return Type::getMixed();
+        }
+
+        return TypeExpander::expandUnion(
+            $codebase,
+            $method->return_type,
+            $declaring->name,
+            $storage->name,
+            $declaring->parent_class,
+            final: $storage->final,
+        );
     }
 
     /**

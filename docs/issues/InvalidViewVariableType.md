@@ -60,7 +60,7 @@ The check declines rather than guess. It is silent when:
 
 - The view name is not a string literal, or is namespaced (`pkg::view`).
 - The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
-- The passed value is `mixed`, which satisfies any declaration.
+- The passed value is `mixed`, which satisfies any declaration. So is one that is `mixed` only inside a generic, such as the `InvokableComponentVariable<mixed>` of a component method without a return type.
 - The passed value is of a class that does not exist, which Psalm already reports where it is named.
 - The passed value is a `Renderable` (a view, for example) and the declaration accepts a `string`, because Laravel renders it to a string before the template sees it.
 - The declared type does not parse. A `@var` docblock is free text and is never validated.

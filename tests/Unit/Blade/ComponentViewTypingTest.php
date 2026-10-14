@@ -36,16 +36,18 @@ final class ComponentViewTypingTest extends TestCase
     public static function traces(): iterable
     {
         yield 'view(): props, attributes, componentName, methods; contract and slot names kept' => ['alert.blade.php', [
+            // #1856: a no-parameter method's wrapper carries its return type, so the call stays typed.
+            '$active: bool',
             '$attributes: Illuminate\View\ComponentAttributeBag',
             '$componentName: string',
             '$footer: mixed',
             '$format: Closure[impure]',
-            '$isActive: Illuminate\View\InvokableComponentVariable',
+            '$isActive: Illuminate\View\InvokableComponentVariable<bool>',
             // The prelude keeps `@var mixed $items` (the template reassigns it from itself); the seed
             // lands after it.
             '$items: list<string>',
             '$label: non-empty-string',
-            '$summary: Illuminate\View\InvokableComponentVariable',
+            '$summary: Illuminate\View\InvokableComponentVariable<string>',
             '$title: string',
             '$untyped: mixed',
         ]];

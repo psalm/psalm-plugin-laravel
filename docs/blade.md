@@ -158,9 +158,11 @@ With `<x-alert title="Hi" />` in any template, `components/alert.blade.php` gets
 | Variable          | Type                                                                                                     |
 |-------------------|----------------------------------------------------------------------------------------------------------|
 | public property   | its declared type (`$title: string`)                                                                     |
-| public method     | `Illuminate\View\InvokableComponentVariable` with no parameters, `Closure` otherwise (`$isActive`)       |
+| public method     | `Illuminate\View\InvokableComponentVariable<T>` with no parameters, `T` being its return type, `Closure` otherwise (`$isActive`) |
 | `$attributes`     | `Illuminate\View\ComponentAttributeBag`                                                                  |
 | `$componentName`  | `string` (`Component::$componentName`'s declared type)                                                   |
+
+To declare such a method in the template, write `@var \Illuminate\View\InvokableComponentVariable<bool> $isActive`: it passes [`validateViewData`](config.md#validateviewdata), and `$isActive()` is typed `bool`. A `\Closure(): bool` declaration reports `InvalidViewVariableType`, because the value is not a `Closure`. The bare class name still passes, but leaves the call `mixed`.
 
 These are exactly the keys `Component::data()` merges into the view on that path, with its precedence: a method wins a name a property also has. The view must be named literally, by a `render()` whose whole body is one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, `$this->view('name', …)`, or `'name'`; an inherited `render()` counts.
 
