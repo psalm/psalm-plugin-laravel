@@ -76,7 +76,7 @@ $names = array_map(static fn(int|string $key): string => (string) $key, $keys);
 $names = array_map(strval(...), $keys);
 ```
 
-Worked example: `BladeBootstrapper::publishTemplateFacts()` in `src/Blade/BladeBootstrapper.php`.
+Worked example: the shared view names in `src/Blade/BladeBootstrapper.php` (#1854).
 
 ## 6. Narrow container lookups in a helper, not a local
 
