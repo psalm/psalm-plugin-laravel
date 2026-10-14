@@ -251,6 +251,38 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A public method with no parameters reaches the view as an `InvokableComponentVariable` of
+     * its return type, so `@var InvokableComponentVariable<T>` both satisfies the check and keeps
+     * `$name()` typed. A mismatched `T` still reports. An untyped or generic method is `mixed`, so
+     * its declaration is not checked, and the bare class name accepts any `T`.
+     */
+    #[Test]
+    public function a_no_parameter_method_is_an_invokable_variable_of_its_return_type(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $invokable = $this->forFile($issues, 'ComponentInvokable.php');
+
+        $this->assertSame([
+            'View \'component-invokable\' declares $label as \Illuminate\View\InvokableComponentVariable<int>, but Illuminate\View\InvokableComponentVariable<string> is passed for it',
+        ], \array_column($invokable, 'message'), \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE], \array_column($invokable, 'type'));
+
+        $traces = [];
+        $templateIssues = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if (\str_ends_with((string) $issue['file_name'], 'component-invokable.blade.php')) {
+                $issue['type'] === 'Trace'
+                    ? $traces[] = (string) $issue['message']
+                    : $templateIssues[] = $issue['type'] . ': ' . $issue['message'];
+            }
+        }
+
+        $this->assertSame(['$resolved: list{int, string}'], $traces);
+        $this->assertSame([], $templateIssues);
+    }
+
+    /**
      * `renderComponent()` ends in `$view->with($componentData)`, which merges last, so a public
      * property overrides the same key passed explicitly from `render()`.
      */

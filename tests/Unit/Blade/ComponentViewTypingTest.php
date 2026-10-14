@@ -36,16 +36,18 @@ final class ComponentViewTypingTest extends TestCase
     public static function traces(): iterable
     {
         yield 'view(): props, attributes, componentName, methods; contract and slot names kept' => ['alert.blade.php', [
+            // #1856: a no-parameter method's wrapper carries its return type, so the call stays typed.
+            '$active: bool',
             '$attributes: Illuminate\View\ComponentAttributeBag',
             '$componentName: string',
             '$footer: mixed',
             '$format: Closure[impure](string):string',
-            '$isActive: Illuminate\View\InvokableComponentVariable',
+            '$isActive: Illuminate\View\InvokableComponentVariable<bool>',
             // The prelude keeps `@var mixed $items` (the template reassigns it from itself); the seed
             // lands after it.
             '$items: list<string>',
             '$label: non-empty-string',
-            '$summary: Illuminate\View\InvokableComponentVariable',
+            '$summary: Illuminate\View\InvokableComponentVariable<string>',
             '$title: string',
             '$untyped: mixed',
         ]];
@@ -55,6 +57,14 @@ final class ComponentViewTypingTest extends TestCase
             '$pad: Closure[impure](string, int...):string',
             '$target: App\\View\\Components\\Toolbar',
             '$withTone: Closure[impure](string):App\\View\\Components\\Toolbar',
+        ]];
+        // #1856: `static` resolves to the class even when it is not final, `self` in a trait to the
+        // using class.
+        yield 'no-parameter methods returning static and a trait self' => ['pill.blade.php', [
+            '$f: App\View\Components\Pill',
+            '$fresh: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
+            '$m: App\View\Components\Pill',
+            '$me: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
         ]];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];

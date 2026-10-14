@@ -23,3 +23,4 @@
 <x-frame/>
 <x-sized/>
 <x-toolbar/>
+<x-pill/>
