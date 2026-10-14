@@ -232,6 +232,13 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('$label', $invokable[0]['message']);
         $this->assertStringContainsString('InvokableComponentVariable<string>', $invokable[0]['message']);
 
+        // The untyped-method decline is keyed on that one wrapper: `mixed` nested in any other
+        // generic is still a mismatch.
+        $nested = $this->forFile($issues, 'NestedMixed.php');
+        $this->assertCount(1, $nested, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $nested[0]['type']);
+        $this->assertStringContainsString('$ids', $nested[0]['message']);
+
         $traces = [];
         $templateIssues = [];
 

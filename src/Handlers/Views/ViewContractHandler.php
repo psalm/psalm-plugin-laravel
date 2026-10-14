@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\Contracts\Support\Renderable;
+use Illuminate\View\InvokableComponentVariable;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
@@ -12,8 +13,6 @@ use PhpParser\Node\Stmt;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
-use Psalm\Internal\Type\Comparator\TypeComparisonResult;
-use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
 use Psalm\LaravelPlugin\Blade\ContractParser;
@@ -286,7 +285,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         array $suppressedIssues,
     ): void {
         // Every @props entry is mixed, and a mixed value satisfies anything we could compare it to.
-        if ($supplied->hasMixed()) {
+        if ($supplied->hasMixed() || self::isUntypedComponentMethod($supplied)) {
             return;
         }
 
@@ -315,14 +314,9 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
 
         // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
         // gains no new report.
-        $comparison = new TypeComparisonResult();
-
         if (
-            UnionTypeComparator::isContainedBy($codebase, $supplied, $declared, union_comparison_result: $comparison)
+            $codebase->isTypeContainedByType($supplied, $declared)
             || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
-            // A nested mixed (`InvokableComponentVariable<mixed>` from an untyped method) is not
-            // proven wrong either.
-            || $comparison->type_coerced_from_mixed === true
         ) {
             return;
         }
@@ -335,6 +329,27 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             ),
             $suppressedIssues,
         );
+    }
+
+    /**
+     * `InvokableComponentVariable<mixed>`: what {@see ComponentRenderData} supplies for a component
+     * method with no known return type, so it is as unproven as a plain `mixed`. Keyed on that exact
+     * shape: a `mixed` nested in any other generic keeps its report.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isUntypedComponentMethod(Type\Union $supplied): bool
+    {
+        if (!$supplied->isSingle()) {
+            return false;
+        }
+
+        $atomic = $supplied->getSingleAtomic();
+
+        return $atomic instanceof Type\Atomic\TGenericObject
+            && $atomic->value === InvokableComponentVariable::class
+            && \count($atomic->type_params) === 1
+            && $atomic->type_params[0]->isMixed();
     }
 
     /**
