@@ -325,12 +325,13 @@ final class PreludeBuilderTest extends TestCase
      * `mixed` declaration on an append target widens the appended array to
      * `mixed|non-empty-list<mixed>` and turns the compiler's own `!empty()` epilogue check into a
      * new `RiskyTruthyFalsyComparison` on the template line. Only read-only `__` names are shared
-     * globals; a written one is bookkeeping.
+     * globals; a written one is bookkeeping. #1722: the save stacks' `list<mixed>` needs the
+     * compiler's own push, so the same name written any other way is still skipped.
      */
     #[Test]
     public function a_written_underscore_prefixed_variable_keeps_the_skip(): void
     {
-        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
+        $compiled = '<?php $__sessionPrevious[] = 1;'
             . ' if (!empty($__sessionPrevious)) { echo 1; } echo $__readOnlyShared; ?>';
 
         $prelude = (new PreludeBuilder())->build($compiled, '');

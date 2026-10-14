@@ -816,7 +816,7 @@ final class BladeIssueRemapTest extends TestCase
      * #1694: `@session` compiles a conditional `$__sessionPrevious[] = $value` save and later reads
      * behind `isset()`, so Psalm reports the bookkeeping array as a possibly undefined global on
      * the directive line. The author's own conditionally assigned `$__authorLocal` on line 9 must
-     * keep reporting: the gate is exact-name.
+     * keep reporting: the prelude declares only the two save stacks (#1722).
      */
     #[Test]
     public function session_previous_value_stack_is_not_reported(): void
@@ -852,6 +852,42 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #1722: the prelude declares the `@session`/`@context` save stacks `list<mixed>`, so neither
+     * the `array_pop()` in `@endsession`/`@endcontext` nor the append in a nested or repeated block
+     * sees a `mixed` stack. `MixedArgument` stays only on the author's own lines: the echo of the
+     * mixed session value (line 2) and `count($__authorLocal)` (line 9).
+     */
+    #[Test]
+    public function session_and_context_stacks_are_typed_under_report_mixed(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([2, 9], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
+        $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'context-previous.blade.php'), $json);
+
+        // `MixedAssignment` is genuine: `$value` comes from `session()->get()`/`context()->get()`
+        // and is popped back off a `list<mixed>`.
+        $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php') && $issue['type'] !== 'MixedAssignment'));
+        $this->assertSame([], $stacks, $json);
+    }
+
+    /**
+     * #1722: nested and repeated `@session`/`@context` blocks report nothing under the default
+     * config, with the stacks declared in the prelude rather than gated by name.
+     */
+    #[Test]
+    public function nested_and_repeated_session_and_context_blocks_report_nothing(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php')));
+        $this->assertSame([], $stacks, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -1636,6 +1672,45 @@ final class BladeIssueRemapTest extends TestCase
         $messages = $this->messagesFor($issues, 'ReferenceReusedFromConfusingScope', $template);
         $this->assertCount(1, $messages);
         $this->assertMatchesRegularExpression('#^\$row is possibly a reference defined at \S*reference-reused\.blade\.php:4:\d+\. #', $messages[0]);
+    }
+
+    /**
+     * #1801: Psalm analyzes a `match` as a desugared ternary and drops two families of findings
+     * on plain PHP: the positionless `TypeDoesNotContainType` of the synthesized `UnhandledMatchError`
+     * branch, and `RedundantCondition*` inside the arms (MatchAnalyzer suppresses them at runtime,
+     * which `BeforeAddIssue` does not carry). The same condition outside the match, and the
+     * unsuppressed sibling classes, must keep reporting.
+     */
+    #[Test]
+    public function a_match_reports_only_what_psalm_reports_on_plain_php(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-bool.blade.php';
+        $context = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $context);
+        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $context);
+        // Line 19 is an author `elseif` outside the match with byte-identical wording to the arm finding.
+        $this->assertSame([19], $this->linesFor($issues, 'RedundantCondition', $template), $context);
+        $this->assertSame([13], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $context);
+        $this->assertSame([14], $this->linesFor($issues, 'ParadoxicalCondition', $template), $context);
+    }
+
+    /**
+     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. The subject
+     * and a `match` used as a condition operand (the finding sits on the whole expression) are
+     * outside every arm and report on plain PHP, so they must keep reporting in a template.
+     */
+    #[Test]
+    public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [5, 12, 17, 23],
+            $this->linesFor($issues, 'RedundantCondition', 'resources/views/match-outside-arms.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
