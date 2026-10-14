@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791933959341,
+  "lastUpdate": 1791968048141,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13960,6 +13960,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "beae6ccc78852a59813830074226009f4109819b",
+          "message": "Infer `Manager::driver()` as the union of `create*Driver()` return types when the driver name is not a literal (#1743)\n\n* feat(manager): fall back to creator union in Manager::driver()\n\nWhen the driver name cannot be resolved statically (non-literal argument,\nconfig-driven default), narrow to the union of every create{X}Driver()\ndeclared return type on the receiver. A resolved name with a missing creator\nstill declines.\n\nRefs #1738\n\n* fix(manager): decline private creators and bind inherited templates in driver()\n\nManager::createDriver() calls creators from Manager's scope, so a private\ncreator is routed to __call() and its declared type proves nothing. An\ninherited @return T is now bound through the receiver's @extends arguments\nlike a direct call; an unbindable template declines.\n\nRefs #1738\n\n* fix(manager): veto ancestor-private creators and nested templates in creator union\n\nA parent's private creator is absent from the receiver's method table but\nManager still forwards it through __call(), so the fallback now declines.\nUnbound templates are detected at any depth (e.g. list<U>). Trait visibility\nadaptation is documented and pinned as a known limitation.\n\nRefs #1738",
+          "timestamp": "2026-10-14T10:50:25+02:00",
+          "tree_id": "d57d47923056dcda36eb9cd73c6cfbe9893d9da8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/beae6ccc78852a59813830074226009f4109819b"
+        },
+        "date": 1791968046534,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.33,
+            "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
