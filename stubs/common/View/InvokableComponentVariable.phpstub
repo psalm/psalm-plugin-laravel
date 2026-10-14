@@ -26,7 +26,10 @@ class InvokableComponentVariable implements DeferringDisplayableValue, IteratorA
     protected $callable;
 
     /**
-     * @param  \Closure(): T  $callable
+     * The `|\Closure` arm keeps Laravel's own contract: an untyped or parameterised closure is
+     * accepted as before, and only a typed `\Closure(): T` binds `T`.
+     *
+     * @param  \Closure(): T|\Closure  $callable
      */
     public function __construct(Closure $callable) {}
 

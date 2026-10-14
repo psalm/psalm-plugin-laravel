@@ -22,3 +22,4 @@
 @include('components.included')
 <x-frame/>
 <x-sized/>
+<x-pill/>

@@ -285,7 +285,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         array $suppressedIssues,
     ): void {
         // Every @props entry is mixed, and a mixed value satisfies anything we could compare it to.
-        if ($supplied->hasMixed() || self::isUntypedComponentMethod($supplied)) {
+        if ($supplied->hasMixed()) {
             return;
         }
 
@@ -314,9 +314,11 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
 
         // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
         // gains no new report.
+        $compared = self::untypedMethodsAsNever($supplied);
+
         if (
-            $codebase->isTypeContainedByType($supplied, $declared)
-            || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
+            $codebase->isTypeContainedByType($compared, $declared)
+            || $codebase->isTypeContainedByType(self::renderablesAsString($compared, $codebase), $declared)
         ) {
             return;
         }
@@ -332,24 +334,27 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
     }
 
     /**
-     * `InvokableComponentVariable<mixed>`: what {@see ComponentRenderData} supplies for a component
-     * method with no known return type, so it is as unproven as a plain `mixed`. Keyed on that exact
-     * shape: a `mixed` nested in any other generic keeps its report.
+     * {@see ComponentRenderData} supplies `InvokableComponentVariable<mixed>` for a component method
+     * with no known return type. The unknown `T` must not fail an `InvokableComponentVariable<T>`
+     * declaration, but the wrapper class must still fail `string` or `Closure`, so `T` is compared
+     * as `never`, which every `T` contains. A `mixed` nested in any other generic is left as is.
      *
      * @psalm-mutation-free
      */
-    private static function isUntypedComponentMethod(Type\Union $supplied): bool
+    private static function untypedMethodsAsNever(Type\Union $supplied): Type\Union
     {
-        if (!$supplied->isSingle()) {
-            return false;
+        $atomics = [];
+
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof Type\Atomic\TGenericObject
+                && $atomic->value === InvokableComponentVariable::class
+                && \count($atomic->type_params) === 1
+                && $atomic->type_params[0]->isMixed()
+                    ? new Type\Atomic\TGenericObject(InvokableComponentVariable::class, [Type::getNever()])
+                    : $atomic;
         }
 
-        $atomic = $supplied->getSingleAtomic();
-
-        return $atomic instanceof Type\Atomic\TGenericObject
-            && $atomic->value === InvokableComponentVariable::class
-            && \count($atomic->type_params) === 1
-            && $atomic->type_params[0]->isMixed();
+        return new Type\Union($atomics);
     }
 
     /**

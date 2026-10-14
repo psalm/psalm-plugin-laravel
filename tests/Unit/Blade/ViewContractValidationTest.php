@@ -227,10 +227,13 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues('psalm.xml');
         $invokable = $this->forFile($issues, 'ComponentInvokable.php');
 
-        $this->assertCount(1, $invokable, \var_export($issues, true));
-        $this->assertSame(self::WRONG_TYPE, $invokable[0]['type']);
-        $this->assertStringContainsString('$label', $invokable[0]['message']);
-        $this->assertStringContainsString('InvokableComponentVariable<string>', $invokable[0]['message']);
+        // An untyped method's wrapper is still not a Closure. It is Stringable, so a `string`
+        // declaration passes, as it did before the wrapper became generic.
+        $this->assertSame([
+            'View \'component-invokable\' declares $label as \Illuminate\View\InvokableComponentVariable<int>, but Illuminate\View\InvokableComponentVariable<string> is passed for it',
+            'View \'component-invokable\' declares $untypedAsClosure as \Closure(): int, but Illuminate\View\InvokableComponentVariable<mixed> is passed for it',
+        ], \array_column($invokable, 'message'), \var_export($issues, true));
+        $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($invokable, 'type'));
 
         // The untyped-method decline is keyed on that one wrapper: `mixed` nested in any other
         // generic is still a mismatch.

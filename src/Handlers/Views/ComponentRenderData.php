@@ -258,23 +258,41 @@ final class ComponentRenderData
                 continue;
             }
 
-            $methods[$method->cased_name ?? $methodName] = $method->params === []
-                ? new Union([new TGenericObject(InvokableComponentVariable::class, [self::returnType($codebase, $storage, $declaring, $method)])])
-                : Type::getClosure();
+            if ($method->params !== []) {
+                $methods[$method->cased_name ?? $methodName] = Type::getClosure();
+
+                continue;
+            }
+
+            // A trait's `self` and `parent` are the class that uses it, which Psalm records as the
+            // method's appearing class.
+            $appearing = $declaring->is_trait
+                ? self::storage($codebase, ($storage->appearing_method_ids[$methodName] ?? $methodId)->fq_class_name)
+                : $declaring;
+
+            if (!$appearing instanceof ClassLikeStorage) {
+                return null;
+            }
+
+            $methods[$method->cased_name ?? $methodName] = new Union([
+                new TGenericObject(InvokableComponentVariable::class, [self::returnType($codebase, $storage, $declaring, $appearing, $method)]),
+            ]);
         }
 
         return $methods;
     }
 
     /**
-     * Expanded here rather than by the caller: `self` and `parent` belong to the declaring class,
-     * `static` to the component. `mixed` when unknown: no declared return type, or one bound to a
-     * generic declaring class's templates, which the component does not bind.
+     * `static` is the component instance itself, so it resolves to the component as if final: the
+     * late-static marker would otherwise leak into the view as `Component&static`. `mixed` when
+     * unknown: no declared return type, or one bound to a generic declaring class's templates,
+     * which the component does not bind.
      */
     private static function returnType(
         Codebase $codebase,
         ClassLikeStorage $storage,
         ClassLikeStorage $declaring,
+        ClassLikeStorage $appearing,
         MethodStorage $method,
     ): Union {
         if (!$method->return_type instanceof Union || $declaring->template_types !== null) {
@@ -284,10 +302,10 @@ final class ComponentRenderData
         return TypeExpander::expandUnion(
             $codebase,
             $method->return_type,
-            $declaring->name,
+            $appearing->name,
             $storage->name,
-            $declaring->parent_class,
-            final: $storage->final,
+            $appearing->parent_class,
+            final: true,
         );
     }
 

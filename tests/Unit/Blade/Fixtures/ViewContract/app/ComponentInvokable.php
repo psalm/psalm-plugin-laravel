@@ -8,6 +8,8 @@ use Illuminate\Contracts\View\View;
 
 final class ComponentInvokable extends InvokableBase
 {
+    use InvokableSelf;
+
     /** @return array{int, string} */
     public function columns(): array
     {
@@ -21,6 +23,18 @@ final class ComponentInvokable extends InvokableBase
 
     /** @psalm-suppress MissingReturnType */
     public function untyped()
+    {
+        return 1;
+    }
+
+    /** @psalm-suppress MissingReturnType */
+    public function untypedAsString()
+    {
+        return 1;
+    }
+
+    /** @psalm-suppress MissingReturnType */
+    public function untypedAsClosure()
     {
         return 1;
     }

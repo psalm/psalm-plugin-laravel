@@ -19,6 +19,16 @@ function invokable_component_variable_infers_from_its_closure(): void
     /** @psalm-check-type-exact $_string = string */
 }
 
+/** Laravel's constructor takes any `\Closure`: neither shape below is new trouble. */
+function invokable_component_variable_accepts_any_closure(\Closure $untyped): void
+{
+    $_fromUntyped = new InvokableComponentVariable($untyped);
+    /** @psalm-check-type-exact $_fromUntyped = InvokableComponentVariable<mixed> */
+
+    $_withParameter = new InvokableComponentVariable(static fn(int $x): int => $x);
+    /** @psalm-check-type-exact $_withParameter = InvokableComponentVariable<int> */
+}
+
 /** @param InvokableComponentVariable<list<string>> $variable */
 function invokable_component_variable_declared_with_its_type(InvokableComponentVariable $variable): void
 {

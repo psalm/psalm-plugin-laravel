@@ -51,6 +51,14 @@ final class ComponentViewTypingTest extends TestCase
             '$title: string',
             '$untyped: mixed',
         ]];
+        // #1856: `static` resolves to the class even when it is not final, `self` in a trait to the
+        // using class.
+        yield 'no-parameter methods returning static and a trait self' => ['pill.blade.php', [
+            '$f: App\View\Components\Pill',
+            '$fresh: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
+            '$m: App\View\Components\Pill',
+            '$me: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
+        ]];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];
         yield 'inherited render() returning a view name' => ['notice.blade.php', ['$message: string']];
