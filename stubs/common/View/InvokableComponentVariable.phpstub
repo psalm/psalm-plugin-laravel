@@ -17,10 +17,12 @@ use Traversable;
  * so `TValue` is that method's return type.
  *
  * Sealed explicitly: a stub-declared class is not user-defined, so it would lose the
- * `sealAllMethods`/`sealAllProperties` defaults the vendor class gets, and `__get`/`__call`
- * forward blindly to the resolved value.
+ * `sealAllMethods`/`sealAllProperties` defaults the vendor class gets. `@mixin TValue` types the
+ * calls `__call` forwards; Psalm does not resolve templated mixins for property reads, so `__get` stays sealed.
  *
  * @template-covariant TValue
+ *
+ * @mixin TValue
  *
  * @psalm-seal-methods
  * @psalm-seal-properties
