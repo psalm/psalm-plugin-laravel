@@ -235,6 +235,9 @@ final class ViewContractValidationTest extends TestCase
         ], \array_column($invokable, 'message'), \var_export($issues, true));
         $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($invokable, 'type'));
 
+        // Comparing an untyped method's wrapper as `<never>` keeps the rest of the supplied type.
+        $this->assertSame([], $this->forFile($issues, 'InvokableIntersection.php'), \var_export($issues, true));
+
         // The untyped-method decline is keyed on that one wrapper: `mixed` nested in any other
         // generic is still a mismatch.
         $nested = $this->forFile($issues, 'NestedMixed.php');

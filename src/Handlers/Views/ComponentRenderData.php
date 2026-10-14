@@ -285,8 +285,8 @@ final class ComponentRenderData
     /**
      * `static` is the component instance itself, so it resolves to the component as if final: the
      * late-static marker would otherwise leak into the view as `Component&static`. `mixed` when
-     * unknown: no declared return type, or one bound to a generic declaring class's templates,
-     * which the component does not bind.
+     * unknown: no declared return type, or one carrying a template (the generic declaring class's
+     * or the method's own), which nothing binds here.
      */
     private static function returnType(
         Codebase $codebase,
@@ -299,7 +299,7 @@ final class ComponentRenderData
             return Type::getMixed();
         }
 
-        return TypeExpander::expandUnion(
+        $expanded = TypeExpander::expandUnion(
             $codebase,
             $method->return_type,
             $appearing->name,
@@ -307,6 +307,13 @@ final class ComponentRenderData
             $appearing->parent_class,
             final: true,
         );
+
+        // A method-level template is never bound here. `call_user_func()` of a void method is null.
+        return match (true) {
+            $expanded->getTemplateTypes() !== [] => Type::getMixed(),
+            $expanded->isVoid() => Type::getNull(),
+            default => $expanded,
+        };
     }
 
     /**

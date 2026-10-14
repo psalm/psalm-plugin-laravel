@@ -8,6 +8,8 @@
  * @var \Illuminate\View\InvokableComponentVariable<\ViewContractFixture\ComponentInvokable> $me
  * @var string $untypedAsString
  * @var \Closure(): int $untypedAsClosure
+ * @var \Illuminate\View\InvokableComponentVariable<null> $clear
+ * @var \Illuminate\View\InvokableComponentVariable<list<string>> $items
  */
 $resolved = $columns();
 /** @psalm-trace $resolved */

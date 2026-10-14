@@ -29,6 +29,22 @@ function invokable_component_variable_accepts_any_closure(\Closure $untyped): vo
     /** @psalm-check-type-exact $_withParameter = InvokableComponentVariable<int> */
 }
 
+/** `call_user_func()` of a `void` closure returns `null`. */
+function invokable_component_variable_of_a_void_closure(): void
+{
+    $variable = new InvokableComponentVariable(static function (): void {});
+    $_value = $variable();
+    /** @psalm-check-type-exact $_value = null */
+}
+
+/** The stub keeps the sealing Laravel's own class gets as user code: `__get`/`__call` forward blindly. */
+function invokable_component_variable_magic_members_stay_sealed(): void
+{
+    $variable = new InvokableComponentVariable(static fn(): \stdClass => new \stdClass());
+    $variable->missing();
+    echo (string) $variable->missing;
+}
+
 /** @param InvokableComponentVariable<list<string>> $variable */
 function invokable_component_variable_declared_with_its_type(InvokableComponentVariable $variable): void
 {
@@ -55,4 +71,6 @@ function invokable_component_variable_is_covariant(): void
 }
 ?>
 --EXPECTF--
+UndefinedMagicMethod on line %d: Magic method Illuminate\View\InvokableComponentVariable::missing does not exist
+UndefinedMagicPropertyFetch on line %d: Magic instance property Illuminate\View\InvokableComponentVariable::$missing is not defined
 InvalidArgument on line %d: Argument 1 of takes_invokable_component_variable_of_string expects Illuminate\View\InvokableComponentVariable<string>, but Illuminate\View\InvokableComponentVariable<1> provided

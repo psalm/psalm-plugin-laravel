@@ -39,6 +39,18 @@ final class ComponentInvokable extends InvokableBase
         return 1;
     }
 
+    public function clear(): void {}
+
+    /**
+     * @template T
+     *
+     * @return list<T>
+     */
+    public function items(): array
+    {
+        return [];
+    }
+
     public function plain(): string
     {
         return 'plain';

@@ -350,7 +350,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
                 && $atomic->value === InvokableComponentVariable::class
                 && \count($atomic->type_params) === 1
                 && $atomic->type_params[0]->isMixed()
-                    ? new Type\Atomic\TGenericObject(InvokableComponentVariable::class, [Type::getNever()])
+                    ? $atomic->setTypeParams([Type::getNever()])
                     : $atomic;
         }
 
