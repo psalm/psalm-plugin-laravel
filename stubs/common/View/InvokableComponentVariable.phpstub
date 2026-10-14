@@ -14,13 +14,13 @@ use Traversable;
  * must be repeated verbatim or callers typed on the contracts breaks.
  *
  * `Component::createVariableFromMethod()` wraps a no-parameter public method,
- * so `T` is that method's return type.
+ * so `TValue` is that method's return type.
  *
  * Sealed explicitly: a stub-declared class is not user-defined, so it would lose the
  * `sealAllMethods`/`sealAllProperties` defaults the vendor class gets, and `__get`/`__call`
  * forward blindly to the resolved value.
  *
- * @template-covariant T
+ * @template-covariant TValue
  *
  * @psalm-seal-methods
  * @psalm-seal-properties
@@ -34,9 +34,9 @@ class InvokableComponentVariable implements DeferringDisplayableValue, IteratorA
 
     /**
      * The `|\Closure` arm keeps Laravel's own contract: an untyped or parameterised closure is
-     * accepted as before, and only a typed `\Closure(): T` binds `T`.
+     * accepted as before, and only a typed `\Closure(): TValue` binds `TValue`.
      *
-     * @param  \Closure(): T|\Closure  $callable
+     * @param  \Closure(): TValue|\Closure  $callable
      */
     public function __construct(Closure $callable) {}
 
@@ -66,7 +66,7 @@ class InvokableComponentVariable implements DeferringDisplayableValue, IteratorA
     /**
      * `call_user_func()` of a `void` closure returns `null`.
      *
-     * @return (T is void ? null : T)
+     * @return (TValue is void ? null : TValue)
      */
     public function __invoke() {}
 
