@@ -30,6 +30,17 @@ class Toolbar extends Component
         return $value;
     }
 
+    /** @param-out self $target */
+    public function outSelf(?self &$target): void
+    {
+        $target = $this;
+    }
+
+    public function nativeSelf(self $target): string
+    {
+        return $target::class;
+    }
+
     public function render(): View
     {
         return view('components.toolbar');

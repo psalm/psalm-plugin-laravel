@@ -297,14 +297,31 @@ final class ComponentRenderData
 
         // `final: true` collapses `static` to the component: a subclass instance is still one, and
         // `Component&static` means nothing to a template.
-        return TypeExpander::expandUnion(
+        $expand = static fn(Union $type): Union => TypeExpander::expandUnion(
             $codebase,
-            new Union([new TClosure($method->params, $method->return_type)]),
+            $type,
             $appearing->name,
             $storage->name,
             $appearing->parent_class,
             final: true,
         );
+
+        // TypeExpander skips a parameter's `@param-out` type (a gap in Psalm's own callable expansion),
+        // and an unexpanded `self` there becomes the by-ref variable's type in the template.
+        $params = [];
+
+        foreach ($method->params as $param) {
+            $outType = $param->out_type;
+
+            if ($outType instanceof Union) {
+                $param = clone $param;
+                $param->out_type = $expand($outType);
+            }
+
+            $params[] = $param;
+        }
+
+        return $expand(new Union([new TClosure($params, $method->return_type)]));
     }
 
     /**

@@ -53,6 +53,7 @@ final class ComponentViewTypingTest extends TestCase
         yield 'methods with parameters on a non-final class' => ['toolbar.blade.php', [
             '$echo: Closure[impure]',
             '$pad: Closure[impure](string, int...):string',
+            '$target: App\\View\\Components\\Toolbar',
             '$withTone: Closure[impure](string):App\\View\\Components\\Toolbar',
         ]];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
@@ -112,6 +113,26 @@ final class ComponentViewTypingTest extends TestCase
         }
 
         $this->assertSame(['$heading: string'], $this->tracesIn($issues, 'frame.blade.php'), 'the view was not seeded, so the silence proves nothing.');
+        $this->assertSame([], $reported);
+    }
+
+    /**
+     * A `@param-out self` must reach the template resolved: a literal `self` out-type would make the
+     * by-ref variable a `self` no other signature accepts.
+     */
+    #[Test]
+    public function a_method_closures_param_out_type_is_resolved(): void
+    {
+        $issues = $this->fixtureIssues(self::FIXTURE, self::ARGUMENTS);
+        $reported = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], 'components/toolbar.blade.php')) {
+                $reported[] = $issue['type'] . ': ' . $issue['message'];
+            }
+        }
+
+        $this->assertContains('$target: App\\View\\Components\\Toolbar', $this->tracesIn($issues, 'toolbar.blade.php'));
         $this->assertSame([], $reported);
     }
 
