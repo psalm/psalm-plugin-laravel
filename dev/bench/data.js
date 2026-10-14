@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791968048141,
+  "lastUpdate": 1791978876770,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -13995,6 +13995,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6cefdf850f17a2482257327d8db26d8c327b22fe",
+          "message": "Type Blade component methods with parameters as their real `Closure` signature (#1862)\n\n* fix(blade): type component methods with parameters as their real Closure signature\n\nComponent::createVariableFromMethod() hands such a method to the view as\nClosure::fromCallable([$this, $name]), so the view key now carries the\nmethod's parameters and return type instead of a bare Closure. A template\ndeclaring the matching \\Closure(...) no longer gets InvalidViewVariableType;\na mismatched one is still reported. Generic methods and generic declaring\nclasses keep the bare Closure, and `static` collapses to the component.\n\nCloses #1855\n\n* fix(blade): resolve self and parent in component method closures against the appearing class\n\nA method inherited from a parent class, or brought in by that parent's trait,\nreads `self` and `parent` relative to the class it appears in at runtime, not\nthe rendered component. Only `static` names the component.\n\nRefs #1855\n\n* fix(blade): expand @param-out types in component method closures\n\nTypeExpander leaves a parameter's out type untouched, so a `@param-out self`\nreached the template as a literal `self` and made the by-ref variable\nunacceptable to every other signature.\n\nRefs #1855\n\n* fix(blade): leave generic component method closures unchecked and keep the method's purity\n\nA bare Closure for a generic method rejected a template's correct \\Closure(...) declaration; mixed declines instead. The closure now carries the method's own capabilities, matching Psalm's first-class callable.",
+          "timestamp": "2026-10-14T13:51:10+02:00",
+          "tree_id": "511dbc9ad37ad8a8fa1d2d3d2c21215b9cbef40b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6cefdf850f17a2482257327d8db26d8c327b22fe"
+        },
+        "date": 1791978874837,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.14,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1512,
             "unit": "MB"
           }
         ]
