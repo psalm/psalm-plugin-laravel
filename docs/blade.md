@@ -158,11 +158,11 @@ With `<x-alert title="Hi" />` in any template, `components/alert.blade.php` gets
 | Variable          | Type                                                                                                     |
 |-------------------|----------------------------------------------------------------------------------------------------------|
 | public property   | its declared type (`$title: string`)                                                                     |
-| public method     | `Illuminate\View\InvokableComponentVariable` with no parameters (`$isActive`), otherwise a `Closure` of its signature (`$format: Closure(string): string`). A generic method or class stays a plain `Closure` |
+| public method     | `Illuminate\View\InvokableComponentVariable` with no parameters (`$isActive`), otherwise a `Closure` of its signature (`$format: Closure(string): string`). A generic method or class is `mixed` (not checked) |
 | `$attributes`     | `Illuminate\View\ComponentAttributeBag`                                                                  |
 | `$componentName`  | `string` (`Component::$componentName`'s declared type)                                                   |
 
-The method closure is what `Closure::fromCallable()` returns at runtime: parameter and return types as Psalm reads them (docblock first), optional and variadic parameters kept, `self` and `parent` resolved against the class the method appears in (for a trait method, the class using the trait), `static` resolved to the component class, and always impure. The same type is what [`validateViewData`](config.md#validateviewdata) compares against a template's `@var \Closure(...)` declaration on the `render()` path, so a declaration matching the method passes and a mismatched one is reported.
+The method closure is what `Closure::fromCallable()` returns at runtime: parameter and return types as Psalm reads them (docblock first), optional and variadic parameters kept, `self` and `parent` resolved against the class the method appears in (for a trait method, the class using the trait), `static` resolved to the component class, and the method's own purity kept. The same type is what [`validateViewData`](config.md#validateviewdata) compares against a template's `@var \Closure(...)` declaration on the `render()` path, so a declaration matching the method passes and a mismatched one is reported.
 
 These are exactly the keys `Component::data()` merges into the view on that path, with its precedence: a method wins a name a property also has. The view must be named literally, by a `render()` whose whole body is one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, `$this->view('name', …)`, or `'name'`; an inherited `render()` counts.
 

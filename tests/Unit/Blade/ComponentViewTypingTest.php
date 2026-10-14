@@ -49,9 +49,9 @@ final class ComponentViewTypingTest extends TestCase
             '$title: string',
             '$untyped: mixed',
         ]];
-        // #1855: a method with parameters is its own signature; a generic one stays a bare Closure.
+        // #1855: a method with parameters is its own signature; a generic one is `mixed`.
         yield 'methods with parameters on a non-final class' => ['toolbar.blade.php', [
-            '$echo: Closure[impure]',
+            '$echo: mixed',
             '$pad: Closure[impure](string, int...):string',
             '$target: App\\View\\Components\\Toolbar',
             '$withTone: Closure[impure](string):App\\View\\Components\\Toolbar',

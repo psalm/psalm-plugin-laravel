@@ -271,9 +271,10 @@ final class ComponentRenderData
     /**
      * `Closure::fromCallable([$this, $name])` keeps the method's signature, so the variable is that
      * signature with Psalm's own slots: an untyped parameter or return stays unknown, as it does for
-     * a first-class callable. It stays impure, as Psalm types `Closure::fromCallable()` itself.
+     * a first-class callable, and the method's own purity carries over.
      *
-     * A generic method or declaring class stays a bare `Closure`: nothing binds its templates here.
+     * A generic method or declaring class is `mixed`, i.e. not checked: nothing binds its templates
+     * here, and a bare `Closure` would reject a template's correct `\Closure(...)` declaration.
      */
     private static function closureOf(
         Codebase $codebase,
@@ -283,7 +284,7 @@ final class ComponentRenderData
         string $methodName,
     ): Union {
         if ($method->template_types !== null || $declaring->template_types !== null) {
-            return Type::getClosure();
+            return Type::getMixed();
         }
 
         // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
@@ -292,7 +293,7 @@ final class ComponentRenderData
         $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
 
         if (!$appearing instanceof ClassLikeStorage) {
-            return Type::getClosure();
+            return Type::getMixed();
         }
 
         // `final: true` collapses `static` to the component: a subclass instance is still one, and
@@ -321,7 +322,7 @@ final class ComponentRenderData
             $params[] = $param;
         }
 
-        return $expand(new Union([new TClosure($params, $method->return_type)]));
+        return $expand(new Union([new TClosure($params, $method->return_type, $method->capabilities)]));
     }
 
     /**
