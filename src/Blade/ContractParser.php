@@ -97,8 +97,9 @@ final class ContractParser
     /**
      * The names a contract template reads that nothing in it declares, binds or captures, and the
      * booted app does not provide: the ones the prelude leaves undeclared so Psalm reports them
-     * (#1827). Empty when the template declares no view variable, is a component or Livewire view,
-     * or its read set is not provably whole.
+     * (#1827). Empty when the template declares no view variable (a name the app provides to every
+     * view, or `$message`, is none), is a component or Livewire view, or its read set is not
+     * provably whole.
      *
      * @param array<string, true> $provided names the booted application supplies to every view
      *
@@ -118,14 +119,16 @@ final class ContractParser
             return [];
         }
 
-        if (\array_diff_key($this->rawContractVars($source, $this->filterNames($locals, [])), $provided) === []) {
+        $known = $provided + self::ALWAYS_PROVIDED;
+
+        if (\array_diff_key($this->rawContractVars($source, $this->filterNames($locals, [])), $known) === []) {
             return [];
         }
 
         // Every raw `@var` counts, not only view data: a name-first or non-doc one still states the name.
         $declared = \array_fill_keys(self::rawDeclaredNames($source), true);
 
-        return $this->filterNames($names, $locals + $captured + $declared + $provided + self::ALWAYS_PROVIDED);
+        return $this->filterNames($names, $locals + $captured + $declared + $known);
     }
 
     /**

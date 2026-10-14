@@ -37,6 +37,28 @@ final class ContractParserTest extends TestCase
         return $this->parser->parseDataContract($source, $this->compiler->compileString($source));
     }
 
+    /** @param array<string, true> $provided */
+    private function undeclared(string $source, array $provided = ['app' => true]): array
+    {
+        return $this->parser->undeclaredReads($source, $this->compiler->compileString($source), $provided);
+    }
+
+    /** `$message` reaches every mail view and a shared name every view: a `@var` for either is an IDE hint, not a contract. */
+    #[Test]
+    public function a_declaration_for_a_name_every_view_receives_does_not_activate_undeclared_reads(): void
+    {
+        $this->assertSame([], $this->undeclared("<?php /** @var \\Illuminate\\Mail\\Message \$message */ ?>\n{{ \$subject }}\n"));
+        $this->assertSame([], $this->undeclared("<?php /** @var string \$siteName */ ?>\n{{ \$subject }}\n", ['siteName' => true]));
+    }
+
+    #[Test]
+    public function a_real_declaration_activates_undeclared_reads_next_to_one_that_does_not_count(): void
+    {
+        $source = "<?php /** @var \\Illuminate\\Mail\\Message \$message */ ?>\n<?php /** @var string \$title */ ?>\n{{ \$title }} {{ \$subject }}\n";
+
+        $this->assertSame(['subject'], $this->undeclared($source));
+    }
+
     #[Test]
     public function extracts_a_var_comment_declaration(): void
     {
