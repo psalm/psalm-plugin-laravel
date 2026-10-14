@@ -59,6 +59,35 @@ function invokable_component_variable_bare(InvokableComponentVariable $variable)
     /** @psalm-check-type-exact $_value = mixed */
 }
 
+final class InvokableComponentVariablePlan
+{
+    public function label(): string
+    {
+        return 'Pro';
+    }
+}
+
+/**
+ * `__call` forwards to the resolved value, so `@mixin TValue` types it. The wrapper's own methods win.
+ *
+ * @param InvokableComponentVariable<InvokableComponentVariablePlan> $plan
+ * @param InvokableComponentVariable<\Illuminate\Support\Collection<int, InvokableComponentVariablePlan>> $plans
+ */
+function invokable_component_variable_forwards_method_calls(InvokableComponentVariable $plan, InvokableComponentVariable $plans): void
+{
+    $_label = $plan->label();
+    /** @psalm-check-type-exact $_label = string */
+
+    $_count = $plans->count();
+    /** @psalm-check-type-exact $_count = int<0, max> */
+
+    $_first = $plans->first();
+    /** @psalm-check-type-exact $_first = InvokableComponentVariablePlan|null */
+
+    $_iterator = $plans->getIterator();
+    /** @psalm-check-type-exact $_iterator = \ArrayIterator<array-key, mixed> */
+}
+
 /** @param InvokableComponentVariable<string> $_variable */
 function takes_invokable_component_variable_of_string(InvokableComponentVariable $_variable): void {}
 
