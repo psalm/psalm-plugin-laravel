@@ -234,11 +234,7 @@ final class BladeBootstrapper
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
         // (which skips ShadowCompiler) still gets them. Composer classes ride along: nothing
         // references one in code position, yet the key resolver needs their storage.
-        $pendingViews = \array_column($this->pendingContracts, 0);
-        // Flag on: the read the per-template gate already made, narrowed to what this call reads without it.
-        $composerSources = $this->reportUndeclaredVariables
-            ? \array_intersect_key($this->composerSources, \array_flip($pendingViews))
-            : ComposerSourceReader::read($this->viewFactory(), $pendingViews);
+        $composerSources = ComposerSourceReader::read($this->viewFactory(), \array_column($this->pendingContracts, 0));
         $composerClasses = \array_column(\array_merge(...\array_values(\array_filter($composerSources))), 0);
         $this->registrar->queueClassLikesForScanning([...PreludeBuilder::ambientClassNames(), ...$composerClasses]);
 

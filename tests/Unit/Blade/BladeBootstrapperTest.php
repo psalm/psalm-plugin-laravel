@@ -662,35 +662,6 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame(['plain'], $this->namesLeftUndeclared($registrar, 'composed', 'created', 'admin', 'closure', 'plain'));
     }
 
-    /** The flag adds a gate in front of the 4.x composer read; what that read registers must not move. */
-    #[Test]
-    public function the_flag_does_not_change_which_composer_sources_and_classes_are_registered(): void
-    {
-        $registered = [];
-
-        foreach ([false, true] as $flag) {
-            ContractRegistry::reset();
-            $app = $this->appWithViewFactory();
-            $view = $app->make('view');
-            $view->composer('composed', 'App\\ProfileComposer');
-            $view->composer('closure', static fn(): null => null);
-
-            foreach (['composed', 'closure', 'plain'] as $name) {
-                $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
-            }
-
-            $registrar = new RecordingShadowRegistrar();
-            (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, false, $flag))->boot();
-
-            $sources = ContractRegistry::composerSources();
-            \ksort($sources);
-            $registered[] = [$sources, $registrar->queuedClassLikes];
-        }
-
-        $this->assertSame($registered[0], $registered[1]);
-        $this->assertSame(['closure' => null, 'composed' => [['App\\ProfileComposer', 'compose']]], $registered[0][0]);
-    }
-
     /** `class_exists()` would autoload each alias target, and an autoloader that throws would take Blade down with it. */
     #[Test]
     public function component_alias_targets_are_never_autoloaded(): void
