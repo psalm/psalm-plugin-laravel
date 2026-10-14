@@ -14,6 +14,7 @@ use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 
@@ -126,6 +127,7 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
+            // A method closure is already expanded with `static` collapsed, so this pass leaves it as is.
             $expanded = TypeExpander::expandUnion(
                 $codebase,
                 $type,
@@ -233,7 +235,8 @@ final class ComponentRenderData
     /**
      * Every public method becomes a variable of the same (cased) name, built by
      * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` of the method's return
-     * type for a method with no parameters at all (optional ones count), a `Closure` otherwise.
+     * type for a method with no parameters at all (optional ones count), a `Closure` of the method's
+     * signature otherwise.
      *
      * @return array<string, Union>|null
      */
@@ -259,7 +262,7 @@ final class ComponentRenderData
             }
 
             if ($method->params !== []) {
-                $methods[$method->cased_name ?? $methodName] = Type::getClosure();
+                $methods[$method->cased_name ?? $methodName] = self::closureOf($codebase, $storage, $declaring, $method, $methodName);
 
                 continue;
             }
@@ -314,6 +317,63 @@ final class ComponentRenderData
             $expanded->isVoid() => Type::getNull(),
             default => $expanded,
         };
+    }
+
+    /**
+     * `Closure::fromCallable([$this, $name])` keeps the method's signature, so the variable is that
+     * signature with Psalm's own slots: an untyped parameter or return stays unknown, as it does for
+     * a first-class callable, and the method's own purity carries over.
+     *
+     * A generic method or declaring class is `mixed`, i.e. not checked: nothing binds its templates
+     * here, and a bare `Closure` would reject a template's correct `\Closure(...)` declaration.
+     */
+    private static function closureOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        if ($method->template_types !== null || $declaring->template_types !== null) {
+            return Type::getMixed();
+        }
+
+        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
+        // only `static` is the rendered component.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
+
+        if (!$appearing instanceof ClassLikeStorage) {
+            return Type::getMixed();
+        }
+
+        // `final: true` collapses `static` to the component: a subclass instance is still one, and
+        // `Component&static` means nothing to a template.
+        $expand = static fn(Union $type): Union => TypeExpander::expandUnion(
+            $codebase,
+            $type,
+            $appearing->name,
+            $storage->name,
+            $appearing->parent_class,
+            final: true,
+        );
+
+        // TypeExpander skips a parameter's `@param-out` type (a gap in Psalm's own callable expansion),
+        // and an unexpanded `self` there becomes the by-ref variable's type in the template.
+        $params = [];
+
+        foreach ($method->params as $param) {
+            $outType = $param->out_type;
+
+            if ($outType instanceof Union) {
+                $param = clone $param;
+                $param->out_type = $expand($outType);
+            }
+
+            $params[] = $param;
+        }
+
+        return $expand(new Union([new TClosure($params, $method->return_type, $method->capabilities)]));
     }
 
     /**
