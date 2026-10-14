@@ -6,7 +6,7 @@ nav_order: 7
 
 # Keeping self-analysis at 100% type coverage
 
-Plugin self-analysis must report `Psalm was able to infer types for 100% of the codebase`. Verify with:
+Plugin self-analysis must report `Psalm was able to infer types for 100% of the codebase`. The Psalm workflow fails a pull request that drops below 100%. Verify locally with:
 
 ```bash
 composer psalm -- --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
