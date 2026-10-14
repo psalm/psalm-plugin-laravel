@@ -334,7 +334,9 @@ Has no effect under `<blade value="false" />`: the read sets only exist once the
 <blade reportUndeclaredVariables="true" />
 ```
 
-In a template that declares at least one view variable with a native `@var` docblock (see [Declaring view variables](blade.md#declaring-view-variables); a name the application shares into every view does not count), report every read of a variable the template neither declares nor binds itself. Psalm reports it as `UndefinedGlobalVariable` (`UndefinedVariable` inside an arrow function) at the template line, on each read. A typo such as `{{ $titel }}` next to `/** @var string $title */` is caught. A template without a declaration stays silent.
+In a template that declares at least one view variable with a native `@var` docblock (see [Declaring view variables](blade.md#declaring-view-variables); a name the application shares into every view, and `$message`, do not count), report every read of a variable the template neither declares nor binds itself. Psalm reports it as `UndefinedGlobalVariable` (`UndefinedVariable` inside an arrow function) at the template line, on each read. A typo such as `{{ $titel }}` next to `/** @var string $title */` is caught. A template without a declaration stays silent.
+
+The rule takes the declarations as the template's whole interface, so it fits an exhaustive contract, such as the one `blade:annotate` writes. A template whose `@var` is only an IDE hint for one variable reports every other read, data that arrives through an `@include` included.
 
 Never reported:
 
@@ -346,7 +348,7 @@ A whole template is skipped when something outside it can supply data the plugin
 
 - a component view: the source writes `@props`, `@aware`, `$attributes` or `$slot`, or the view is named under `components.` (or `ns::components.`), under a registered anonymous component path or namespace, or by a `Blade::component()` alias whose target is a view rather than a class;
 - a Livewire view: a `livewire.` or `livewire::` view name, or a `wire:` attribute, `$wire`, `@this`, `@entangle`, `$this` or an inline `new class` in the source;
-- a view with a composer or creator registered under its name, wildcards included. A wildcard composer (`View::composer('*', ...)`, as a debugging tool's view watcher registers) therefore skips every template;
+- a view a composer or creator reaches, wildcard composers (`View::composer('admin.*', ...)`) included. A wildcard listener registered directly on the event dispatcher, such as a debugging tool's view watcher, is no composer and skips nothing;
 - a template whose reads cannot be listed: a variable variable (`$$name`), `extract()`, a `compact()` with a non-literal argument, `include`, `require` or `eval`, or a body the PHP parser rejects.
 
 A marker counts only where Blade compiles it, not inside a `{{-- --}}` comment or an `@verbatim` body.
@@ -355,7 +357,7 @@ A by-reference out-argument to a callee Psalm cannot see is reported too: `{{ $o
 
 Only boot-time data is known. A share registered at runtime (a middleware, a controller), and data a class component hands a view outside the component prefixes above, are reported unless the template declares the name, ending in `= null` when call sites do not pass it.
 
-Each flip of the flag recompiles every template once, because the flag's decision is part of every template's cache key. Afterwards a change to the shared names recompiles the templates that are not skipped, and registering or removing a composer recompiles the views it matches.
+Each flip of the flag recompiles every template once, because the flag's decision is part of every template's cache key. Afterwards a change to the shared names recompiles every template not skipped by its view name or a composer, and registering or removing a composer recompiles the views it reaches.
 
 Has no effect under `<blade value="false" />`: the shadows it changes only exist once the compile pass has run.
 
