@@ -580,8 +580,9 @@ final class BladeBootstrapper
     {
         $this->factory = $this->viewFactory();
         $this->providedNames = $this->sharedNames($this->factory);
-        \ksort($this->providedNames);
-        $this->providedHash = \hash('xxh128', \implode(',', \array_keys($this->providedNames)));
+        \ksort($this->providedNames, \SORT_STRING);
+        // Serialized, not joined: a name may contain any separator.
+        $this->providedHash = \hash('xxh128', \serialize(\array_keys($this->providedNames)));
 
         $viewNames = [];
 
@@ -607,9 +608,10 @@ final class BladeBootstrapper
             ),
         );
 
-        // An alias naming a view rather than a class is rendered as an anonymous component.
+        // An alias naming a view rather than a class is rendered as an anonymous component. Not
+        // `class_exists()`: it autoloads, and a view name never contains a backslash.
         $this->aliasedViews = \array_fill_keys(\array_merge(...\array_values(\array_map(
-            static fn(mixed $target): array => \is_string($target) && !\class_exists($target) ? [\str_replace('/', '.', $target)] : [],
+            static fn(mixed $target): array => \is_string($target) && !\str_contains($target, '\\') ? [\str_replace('/', '.', $target)] : [],
             $compiler->getClassComponentAliases(),
         ))), true);
     }
