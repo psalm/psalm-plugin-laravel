@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791987984674,
+  "lastUpdate": 1791990300700,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14100,6 +14100,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1504,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "81032753ab77dcbe7bd50310f15875a4cdc908f9",
+          "message": "feat: type method calls forwarded by InvokableComponentVariable (#1865)\n\nDeclares `@mixin TValue` on the stub, so `__call` forwarding to the\nresolved value is typed, matching the mixin added upstream in\nlaravel/framework#62018. Property reads stay sealed: Psalm does not\nresolve templated mixins for property fetches.",
+          "timestamp": "2026-10-14T17:02:07+02:00",
+          "tree_id": "9d73e2bb54d78b44993210afc0c0ecd5b0c5d0a3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/81032753ab77dcbe7bd50310f15875a4cdc908f9"
+        },
+        "date": 1791990298773,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.44,
+            "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
