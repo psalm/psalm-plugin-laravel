@@ -14,10 +14,20 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TConditional;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TKeyOf;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TTemplateIndexedAccess;
+use Psalm\Type\Atomic\TTemplateKeyOf;
 use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\Atomic\TTemplateParamClass;
+use Psalm\Type\Atomic\TTemplatePropertiesOf;
+use Psalm\Type\Atomic\TTemplateValueOf;
+use Psalm\Type\Atomic\TValueOf;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -96,6 +106,12 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
             return null;
         }
 
+        // Psalm also dispatches this provider for a proxy that reaches the collection through `@mixin`; only a
+        // receiver that IS an Eloquent collection is promised Eloquent-only methods such as load().
+        if (!ClassLineage::isA($codebase, $receiverAtomic->value, EloquentCollection::class)) {
+            return null;
+        }
+
         // map() keeps the receiver's keys, which are Eloquent\Collection's TKey as the receiver binds it: a subclass
         // may fix it (`extends Collection<string, TModel>`) or move it to another template slot.
         $keyType ??= self::eloquentKeyType($codebase, $receiverAtomic);
@@ -115,8 +131,6 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
      * `Eloquent\Collection::TKey` for the receiver, read through the ancestry the way Psalm flattened it: each
      * ancestor's template is stated in its DIRECT child's terms, so a forwarded template is followed up the chain
      * until it reaches the receiver's own template (matched by defining class) or a concrete type.
-     *
-     * @psalm-capabilities read-props
      */
     private static function eloquentKeyType(Codebase $codebase, TNamedObject $receiver): ?Union
     {
@@ -135,7 +149,9 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
         for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
             $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
             if (!$forwarded instanceof TTemplateParam) {
-                return $value->hasTemplate() ? null : $value;
+                // The key is stated in the subclass's own templates (`key-of<Data>`), which are not substituted
+                // here: decline rather than leak them. Templates of the calling function are fine.
+                return self::containsClassTemplate($value) ? null : $value;
             }
 
             if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
@@ -148,6 +164,39 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
         }
 
         return null;
+    }
+
+    /**
+     * Whether a template declared by a class (not by the calling function) appears at any depth.
+     */
+    private static function containsClassTemplate(Union $type): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                // The visitor does not descend into the operand of an unresolved `key-of<>` / `value-of<>`, which only
+                // survives expansion when it depends on a template.
+                $classTemplate = $type instanceof TKeyOf
+                    || $type instanceof TValueOf
+                    || (
+                        ($type instanceof TTemplateParam
+                            || $type instanceof TTemplateKeyOf
+                            || $type instanceof TTemplateValueOf
+                            || $type instanceof TTemplateIndexedAccess
+                            || $type instanceof TTemplateParamClass
+                            || $type instanceof TTemplatePropertiesOf
+                            || $type instanceof TConditional)
+                        && !\str_starts_with($type->defining_class, 'fn-')
+                    );
+
+                return $classTemplate ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return !$visitor->traverse($type);
     }
 
     /**
