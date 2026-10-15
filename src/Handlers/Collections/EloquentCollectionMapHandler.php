@@ -14,6 +14,7 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TCallable;
+use Psalm\Type\Atomic\TClassConstant;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TConditional;
 use Psalm\Type\Atomic\TGenericObject;
@@ -150,6 +151,12 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
         for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
             $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
             if (!$forwarded instanceof TTemplateParam) {
+                // `self::KEY` is resolved against the class that wrote it, which the flattened ancestry no longer
+                // names: expanding it here would read an override in the receiver. A qualified constant is fine.
+                if (self::containsRelativeClassConstant($value)) {
+                    return null;
+                }
+
                 // A concrete `key-of<array{a: int}>` or constant-backed key only becomes a literal once expanded.
                 // What still names the subclass's own templates (`key-of<Data>`) is not substituted here: decline
                 // rather than leak it.
@@ -168,6 +175,24 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
         }
 
         return null;
+    }
+
+    private static function containsRelativeClassConstant(Union $type): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                $relative = $type instanceof TClassConstant
+                    && \in_array(\strtolower($type->fq_classlike_name), ['self', 'static', 'parent'], true);
+
+                return $relative ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return !$visitor->traverse($type);
     }
 
     /**

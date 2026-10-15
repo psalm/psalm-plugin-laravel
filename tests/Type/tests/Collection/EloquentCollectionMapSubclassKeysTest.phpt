@@ -54,6 +54,24 @@ final class ConstantKeyCollection extends Collection
 }
 
 /**
+ * The `self::KEY` is written on this class, but the flattened ancestry loses who wrote it: a child that overrides
+ * KEY would make the handler read 'child' while the runtime keys stay 'base'.
+ *
+ * @extends Collection<self::KEY, Part>
+ */
+class BaseKeyedParts extends Collection
+{
+    /** @psalm-suppress MissingClassConstType */
+    public const KEY = 'base';
+}
+
+final class ChildKeyedParts extends BaseKeyedParts
+{
+    /** @psalm-suppress InvalidClassConstantType */
+    public const KEY = 'child';
+}
+
+/**
  * Forwards calls to a collection through @mixin, but returns whatever its __call() builds: a plain
  * Support\Collection, so Eloquent-only methods must not be promised on a map result.
  *
@@ -101,6 +119,14 @@ function concrete_key_of_is_expanded(ConcreteKeyOfCollection $parts): Collection
 function constant_key_is_expanded(ConstantKeyCollection $parts): Collection
 {
     return $parts->map(static fn (Part $p): Part => $p);
+}
+
+function relative_class_constant_key_declines(ChildKeyedParts $parts): void
+{
+    $_mapped = $parts->map(static fn (Part $p): Part => $p);
+    // Declined: the stub's Support\Collection stands (Psalm leaves the `self::KEY` key unresolved), and the
+    // handler does not invent the child's 'child'.
+    /** @psalm-check-type-exact $_mapped = SupportCollection<Illuminate\Database\Eloquent\Collection::KEY, Part> */
 }
 
 /**
