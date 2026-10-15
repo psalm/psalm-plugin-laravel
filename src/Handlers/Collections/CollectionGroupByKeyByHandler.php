@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -79,6 +80,16 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
 
         $innerKey = !($preserve instanceof Union) || $preserve->isFalse() ? Type::getInt()
             : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
+
+        // The outer map holds collections, which violates Eloquent\Collection's `TModel of Model` bound, so an
+        // Eloquent receiver gets a Support\Collection outer. The groups name their class instead of using
+        // `static`: a `static` nested in another class's generic is re-bound to that outer class on later
+        // calls (`->get()`), which yields `Eloquent&Support&static` and brings the bound error back.
+        if (ClassLineage::isA($source->getCodebase(), $class, EloquentCollection::class)) {
+            return new Union([new TGenericObject(Collection::class, [$key,
+                new Union([new TGenericObject($class, [$innerKey, $value])]),
+            ])]);
+        }
 
         return new Union([new TGenericObject($class, [$key,
             new Union([(new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true)]),

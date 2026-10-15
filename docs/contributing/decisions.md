@@ -248,6 +248,39 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
+## Eloquent Collection
+
+### Value-changing inherited methods return `Support\Collection`, with named `Eloquent\Collection` groups
+
+**Decision:** `stubs/common/Database/Eloquent/Collection.phpstub` re-declares the `Support\Collection` methods whose `static<K, V>` return can hold non-model values (`chunk`, `chunkWhile`, `split`, `splitIn`, `sliding`, `groupBy`, `partition`, `mapToGroups`, `mapToDictionary`, `mapSpread`, `mapInto`, `flatMap`, `combine`, `crossJoin`, `concat`, `mergeRecursive`, `collapseWithKeys`, `times`, plus `map`/`mapWithKeys`). The outer collection is `Illuminate\Support\Collection<...>`; groups of models are written as `\Illuminate\Database\Eloquent\Collection<TKey|int, TModel>`, never `static<...>`. `CollectionGroupByKeyByHandler` emits the same shape for Eloquent receivers. `ensure()` stays inherited: it returns `$this`, so `static` is correct. Signatures that differ on Laravel 13.3.0+ (`sliding()` positive-int params, `split()`/`splitIn()` `never` for a non-positive count, `times()` extra constructor args) live in `stubs/13.3.0/Database/Eloquent/Collection.phpstub`.
+
+**Why:**
+- Psalm checks the inherited `static<K, V>` against `TModel of Model`, so any non-model `V` reports `InvalidTemplateParam` (#1699). `Support\Collection` is a supertype of the runtime `Eloquent\Collection`, so the widened declaration never lies, even where the runtime outer is an Eloquent collection (`chunk`, `split`).
+- A `static` nested inside another class's generic is re-bound to the OUTER class on later calls: `$chunks->first()` came back as `Eloquent<..>&Support<..>&static`, which re-triggers the bound error. Hence the explicit class name for inner groups (this also fixes Laravel's own `partition()` docblock, `static<TKey, TModel>` inside `Support\Collection`).
+- `combine()` is keyed by the models cast to strings at runtime, so its key is `array-key`, not `TModel`.
+
+**Accepted regression:** `concat()`, `mergeRecursive()` and `times()` over models no longer stay `Eloquent\Collection` (a caller loses `->load()`); only `map()`/`mapWithKeys()` get a handler (below). A conditional `(V is Model ? static<..> : Support<..>)` return cannot replace the stub: Psalm keeps the dead branch and bound-checks it (vimeo/psalm#11867). `flatMap()` is not a regression: Laravel's `collapse()` always returns a `Support\Collection`.
+
+**See:** [#1699](https://github.com/psalm/psalm-plugin-laravel/issues/1699), `tests/Type/tests/Collection/EloquentCollectionInheritedMethodsTemplateBoundTest.phpt`.
+
+### `map()`/`mapWithKeys()` are narrowed by a handler; stub-only widening was rejected
+
+**Decision:** The stub returns `Support\Collection<TKey, TMapValue>` for both. `EloquentCollectionMapHandler` answers `Eloquent\Collection<TKey, V>` only when every atomic of the callback's returned value (for `mapWithKeys`, the array value) is a `Model` subtype (a template param bounded by `Model` counts); any other shape, a union receiver, or a callback of unknown return type declines. A plain `Eloquent\Collection` receiver keeps `&static`; a userland subclass gets the base `Eloquent\Collection`, since its own `TModel` bound is not known to the handler.
+
+**Probed dead ends:**
+- Stub-only `Support\Collection` (the #1699 proposal) loses `Eloquent\Collection` for a map of models: `->load()` disappears, `Eloquent\Collection<int, Tag>` parameters reject the result, and `CollectionMapTest` fails (`MoreSpecificReturnType` / `LessSpecificReturnStatement`).
+- The previous conditional `(TMapValue is Model ? static<TKey, TMapValue> : Support<TKey, TMapValue>)` kept the `static<...>` arm for a scalar `TMapValue` and reported `InvalidTemplateParam` (the scalar `map()->unique()->values()` chain).
+
+**See:** `tests/Type/tests/Collection/EloquentCollectionMapTemplateBoundTest.phpt`, `CollectionMapTest.phpt`.
+
+### Subclasses get the stub overrides through an `AfterCodebasePopulated` repair
+
+**Decision:** `EloquentCollectionSubclassInheritanceRepair` rewrites `declaring_method_ids`, `appearing_method_ids` and `inheritable_method_ids` to `Eloquent\Collection` for every class extending it, for each method `Eloquent\Collection` declares whose id on the subclass still points at an ancestor of `Eloquent\Collection` (i.e. `Support\Collection`) and which the subclass does not declare or import from a trait itself.
+
+**Why:** A stub re-declaration of an INHERITED method (one Laravel's `Eloquent\Collection` does not declare) does not reach a subclass populated earlier: `Populator::inheritMethodsFromParent()` skips an id that is already set, so custom collections (`#[CollectedBy]`, `newCollection()`, the `PriceCollection::chunk()` of #1699) keep resolving `chunk()` to `Support\Collection`. Methods vendor `Eloquent\Collection` declares (`map`, `find`, `partition`) are unaffected. Without the hook the stub override fixes direct `Eloquent\Collection` receivers only (`EloquentCollectionSubclassTemplateBoundTest` fails without it).
+
+**Remove when:** Psalm applies a stub's re-declaration of an inherited method to subclasses (same family as vimeo/psalm#12158); until then this is the plugin-side workaround, kept in one class per the upstream-workarounds rule.
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
