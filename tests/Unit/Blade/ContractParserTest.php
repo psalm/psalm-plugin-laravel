@@ -794,6 +794,34 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function a_multi_line_raw_var_type_keeps_going_past_an_asterisk_only_line(): void
+    {
+        $source = "<?php\n/**\n * @var array{\n *   a: int,\n *\n *   b: int\n * } \$data\n */\n?>\n";
+
+        $this->assertSame('array{ a: int, b: int }', $this->dataContract($source)->vars['data']->typeString ?? null);
+        $this->assertSame(['data'], ContractParser::rawDeclaredNames($source));
+    }
+
+    #[Test]
+    public function a_multi_line_raw_var_type_stops_at_an_empty_line(): void
+    {
+        // Psalm's DocblockParser ends a tag at a truly empty line, so the shape never closes.
+        $source = "<?php\n/**\n * @var array{\n *   a: int,\n\n *   b: int\n * } \$data\n */\n?>\n";
+
+        $this->assertSame([], \array_keys($this->dataContract($source)->vars));
+        $this->assertSame([], ContractParser::rawDeclaredNames($source));
+    }
+
+    #[Test]
+    public function a_name_first_raw_var_never_binds_a_name_from_the_next_line(): void
+    {
+        $source = "<?php\n/**\n * @var \$user\n * \$other is described\n */\n?>\n";
+
+        $this->assertSame([], \array_keys($this->dataContract($source)->vars));
+        $this->assertSame(['user'], ContractParser::rawDeclaredNames($source));
+    }
+
+    #[Test]
     public function a_raw_var_without_a_name_after_its_type_declares_nothing(): void
     {
         $source = "<?php\n/**\n * @var int the count\n * @var \$name string\n * @var array<int \$x\n */\n?>\n";

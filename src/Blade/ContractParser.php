@@ -282,7 +282,9 @@ final class ContractParser
     /**
      * A tag whose first line does not split on its own (`@var array{` opening a multi-line shape),
      * read with its continuation lines the way Psalm's `DocblockParser` joins them: every following
-     * line up to a blank one, the next tag, or the end of the comment.
+     * line up to an empty one, the next tag, or the end of the comment. A ` *` line does not end the
+     * tag; it is skipped, as Psalm strips it after joining. A name-first `@var $x` never continues:
+     * Psalm binds nothing for it, and joining would bind a `$name` from the next line.
      *
      * @return array{0: string, 1: string, 2: bool}|null see {@see self::splitVar()}
      *
@@ -290,19 +292,31 @@ final class ContractParser
      */
     private static function splitContinuedVar(string $first, string $rest): ?array
     {
+        if (\str_starts_with($first, '$')) {
+            return null;
+        }
+
         $joined = $first;
 
         foreach (\preg_split('/\r\n|\r|\n/', $rest) ?: [] as $i => $continuation) {
-            // The first piece is what is left of the tag's own line: nothing, or the comment's `*/`.
+            // The first piece is the rest of the tag's own line, which the tag's match already consumed.
             if ($i === 0) {
                 continue;
             }
 
             $continuation = (string) \preg_replace('/\h*\*\/.*\z/s', '', $continuation, count: $closed);
+            if (\trim($continuation) === '') {
+                break;
+            }
+
             $body = (string) \preg_replace('/^\h*\*?\h*/', '', $continuation);
 
-            if ($body === '' || \str_starts_with($body, '@')) {
+            if (\str_starts_with($body, '@')) {
                 break;
+            }
+
+            if ($body === '') {
+                continue;
             }
 
             $joined .= "\n" . $continuation;
