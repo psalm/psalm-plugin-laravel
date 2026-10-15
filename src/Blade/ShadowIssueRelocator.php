@@ -785,9 +785,11 @@ final class ShadowIssueRelocator
      * Illuminate\View\ComponentAttributeBag` (`compileClassComponentOpening()`'s data merge and
      * `ComponentTagCompiler::componentString()`'s ignored-parameter strip). With `$attributes` typed
      * from the bookkeeping ({@see PreludeBuilder}), the `instanceof` is redundant after the `isset()`
-     * in a plain caller too, where the name-based gate above does not reach (#1873). The expression
-     * must be absent from the template, so an author who writes it keeps the finding; in that
-     * template every compiled copy keeps it too.
+     * in a plain caller too, where the name-based gate above does not reach (#1873). Only in a shadow
+     * whose prelude typed `$attributes` that way, and only when the expression is absent from the
+     * template as Blade rewrites it (comments and component-class markers removed), so an author
+     * who writes it, even split by text Blade removes, keeps the finding. Residual: an author's
+     * copy in text that never executes (`@verbatim`, plain markup) keeps every compiled copy too.
      *
      * @psalm-mutation-free
      */
@@ -795,8 +797,9 @@ final class ShadowIssueRelocator
     {
         $check = 'isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag';
 
-        return self::selectedText($issue->code_location) === $check
-            && !TemplateSnippetMatcher::occursIn($check, $target->templateSource, $target->markerPrefix());
+        return $target->attributesFromTag
+            && self::selectedText($issue->code_location) === $check
+            && !TemplateSnippetMatcher::occursInWithRawTextRewrites($check, $target->templateSource, $target->markerPrefix());
     }
 
     /**

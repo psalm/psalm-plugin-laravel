@@ -190,11 +190,13 @@ final class PreludeBuilder
      * (`CompilesComponents::compileClassComponentOpening()`/`compileEndComponentClass()`), keyed
      * on the compiled save `if (isset($component)) { $__componentOriginal<hash> = $component; }`.
      *
-     * Only a name that would otherwise fall to `mixed` and that the live source never names: a
-     * template that declares, reads, or assigns `$component` keeps today's typing (#1701), and one
-     * naming `$attributes` is a component view typed by {@see componentTypesFor()}. Nullable, since
-     * a page renders outside any component. Each saved original gets the same type: assigned only
-     * inside the save's `if`, Psalm reads it as `mixed` in the restore's `isset()` branch.
+     * Only a name that would otherwise fall to `mixed` and that the source never names: a template
+     * that declares, reads, or assigns `$component` keeps today's typing (#1701), and one naming
+     * `$attributes` is a component view typed by {@see componentTypesFor()}. The source is read as
+     * Blade rewrites it around the compile: `{{-- --}}` removed before, the component-class markers
+     * after, either of which can join an author's `$compo{{-- --}}nent` into a real read. Nullable,
+     * since a page renders outside any component. Each saved original gets the same type: assigned
+     * only inside the save's `if`, Psalm reads it as `mixed` in the restore's `isset()` branch.
      *
      * @param list<string> $undeclared names that would get the `mixed` fallback
      * @return array<string, string> variable name (without $) => type
@@ -207,11 +209,21 @@ final class PreludeBuilder
             return [];
         }
 
-        $live = MarkerPrePass::blankInertText($source);
+        $authored = \str_replace(
+            ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'],
+            '',
+            (string) \preg_replace('/\{\{--.*?--\}\}/s', '', $source),
+        );
+        $typed = [];
+
+        foreach (['component', 'attributes'] as $name) {
+            $typed[$name] = \in_array($name, $undeclared, true) && \preg_match('/\$' . $name . '\b/', $authored) !== 1;
+        }
+
         $types = [];
 
         foreach ($saves as [, $name, $hash]) {
-            if (\in_array($name, $undeclared, true) && \preg_match('/\$' . $name . '\b/', $live) !== 1) {
+            if ($typed[$name]) {
                 $type = ($name === 'component' ? self::COMPONENT_TYPE : self::COMPONENT_ATTRIBUTES_TYPE) . '|null';
                 $types[$name] = $type;
                 $types["__{$name}Original{$hash}"] = $type;
@@ -219,6 +231,20 @@ final class PreludeBuilder
         }
 
         return $types;
+    }
+
+    /**
+     * Whether a shadow's prelude types `$attributes` from tag bookkeeping
+     * ({@see tagBookkeepingTypes()}): the one prelude declaration of it with that exact spelling.
+     *
+     * @psalm-pure
+     */
+    public static function declaresTagAttributes(string $shadow): bool
+    {
+        $end = \strpos($shadow, "\n?>\n");
+
+        return $end !== false
+            && \str_contains(\substr($shadow, 0, $end), "\n/** @var " . self::COMPONENT_ATTRIBUTES_TYPE . '|null $attributes */');
     }
 
     /**

@@ -393,6 +393,33 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $attributes */', $prelude);
     }
 
+    /** Blade removes `{{-- --}}` before compiling and its tag markers after, so text they split still reads `$component`. */
+    #[Test]
+    #[DataProvider('splitComponentReads')]
+    public function a_component_read_split_by_text_blade_removes_keeps_it_mixed(string $source): void
+    {
+        $prelude = (new PreludeBuilder())->build(self::compiledTag('5194778a'), $source . "\n<x-alert/>");
+
+        $this->assertStringContainsString('@var mixed $component */', $prelude);
+        $this->assertStringNotContainsString('$__componentOriginal', $prelude);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function splitComponentReads(): iterable
+    {
+        yield 'Blade comment' => ['{{ $compo{{-- split --}}nent->id() }}'];
+        yield 'component-class marker' => ['{{ $compo##BEGIN-COMPONENT-CLASS##nent->id() }}'];
+    }
+
+    #[Test]
+    public function a_longer_identifier_does_not_block_the_bookkeeping_types(): void
+    {
+        $prelude = (new PreludeBuilder())->build(self::compiledTag('5194778a'), "{{ \$componentName }} {{ \$attributesCount }}\n<x-alert/>");
+
+        $this->assertStringContainsString('@var \\Illuminate\\View\\Component|null $component */', $prelude);
+        $this->assertStringContainsString('@var \\Illuminate\\View\\ComponentAttributeBag|null $attributes */', $prelude);
+    }
+
     #[Test]
     public function a_commented_component_mention_still_counts_as_bookkeeping_only(): void
     {
@@ -422,6 +449,21 @@ final class PreludeBuilderTest extends TestCase
         $this->assertSame(1, \substr_count($prelude, '$__componentOriginalaaaa */'));
         $this->assertSame(1, \substr_count($prelude, '$__componentOriginalbbbb */'));
         $this->assertSame(1, \substr_count($prelude, '$__attributesOriginalbbbb */'));
+    }
+
+    #[Test]
+    public function only_a_prelude_typing_attributes_from_a_tag_declares_tag_attributes(): void
+    {
+        $builder = new PreludeBuilder();
+        $compiled = self::compiledTag('5194778a');
+
+        $this->assertTrue(PreludeBuilder::declaresTagAttributes($builder->build($compiled, '<x-alert/>') . $compiled));
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build($compiled, "@props(['type'])\n<x-alert/>") . $compiled));
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build($compiled, "@aware(['type'])\n<x-alert/>") . $compiled));
+
+        // The same text after the prelude is template code, not a declaration.
+        $body = "<?php\n/** @var \\Illuminate\\View\\ComponentAttributeBag|null \$attributes */\n?>\n";
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build('<?php echo 1; ?>', '') . $body));
     }
 
     /** What `CompilesComponents::compileClassComponentOpening()` and `compileEndComponentClass()` emit for `<x-alert>Hi</x-alert>`. */
