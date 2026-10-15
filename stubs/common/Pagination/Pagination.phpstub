@@ -10,7 +10,7 @@ use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
  * must be repeated verbatim or callers typed on the contracts break.
  *
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @mixin \Illuminate\Support\Collection<TKey, TValue>
  */
@@ -92,7 +92,7 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
@@ -106,7 +106,7 @@ class Paginator extends AbstractPaginator implements \Illuminate\Contracts\Suppo
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
@@ -120,7 +120,7 @@ class LengthAwarePaginator extends AbstractPaginator implements \Illuminate\Cont
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @mixin \Illuminate\Support\Collection<TKey, TValue>
  */
@@ -188,7 +188,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>

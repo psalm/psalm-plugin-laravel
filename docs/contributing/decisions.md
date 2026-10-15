@@ -413,6 +413,19 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - The plugin does not model Laravel's conditional `@return` (`''` vs `non-empty-string`): the wrong types are an upstream docblock bug, and `[null]` renders `''`, so the upstream `non-empty-string` is unsound for nullable items. Fix it in laravel/framework, not here.
 - A top-level `null` `$array` stays rejected.
 
+## Variance
+
+### Paginators are covariant in `TValue`; `Support\Collection` stays invariant
+
+**Decision:** The three paginator contracts and the five paginator classes in `stubs/common/Pagination/` and `stubs/common/Contracts/Pagination.phpstub` declare `@template-covariant TValue`, exactly as Laravel does; `TKey` stays invariant (#1860, paginator half). The contracts use Laravel's `TValue` name, not the former `TItem`. `Support\Collection` and `Eloquent\Collection` variance is a separate decision (#410) and is not changed here.
+
+**Why:** Laravel 13.36 types `BelongsToMany` results as `TRelatedModel&object{pivot: TPivotModel}`, so `$post->tags()->paginate()` is a `LengthAwarePaginator<int, Tag&object{pivot: Pivot}>`. With an invariant `TValue` it could not be returned as, or passed to, `LengthAwarePaginator<int, Tag>`, a type Laravel itself accepts. A paginator is read-mostly, so covariance is sound for the common surface; writes go through `setCollection()` / `through()`, which `@psalm-this-out` rebinds to the new value type instead of mutating in place.
+
+**Boundaries:**
+- Accepted hole: a callee that writes through `offsetSet`, or through a forwarded `push`/`put` (`@mixin` / `__call` onto the wrapped collection), on a widened paginator is not caught. Laravel's own PHPDoc has the same hole.
+- Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
+- Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens
