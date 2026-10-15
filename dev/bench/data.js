@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791990300700,
+  "lastUpdate": 1792073064656,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14135,6 +14135,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb762985307560815385188ca4eb3145aa778df7",
+          "message": "Fix invalid docblocks in `ColumnDefinition`, `IndexDefinition` and `Application` stubs (#1868)\n\n* fix(stubs): correct invalid docblocks in schema and Application stubs\n\nPsalm master reports docblock issues found in stubs (vimeo/psalm#12334),\nwhich surfaced three invalid docblocks (#1867):\n\n- ColumnDefinition / IndexDefinition: a prose line began with `@method`,\n  so it was parsed as a tag (\"Badly-formatted @method string\"). Reword so\n  no docblock line starts with the tag.\n- Application::getProviders(): `array{int?, ServiceProvider}` is not a\n  valid shape. Laravel keys providers by class name\n  (markAsRegistered()) and Arr::where() preserves keys, so the return\n  type is `array<class-string<ServiceProvider>, ServiceProvider>`.\n\nA valid stub docblock no longer leaves the reflected class's sealed\nmagic-method flag untouched (the invalid one aborted docblock parsing,\nwhich kept it), so restate it with `@psalm-seal-methods` on both schema\nstubs to keep unknown fluent modifiers reported.\n\nAdd a type test pinning the getProviders() return type.\n\n* docs: note stub docblocks reset magic-member sealing\n\nA stub class docblock replaces the reflected class's seal flag, so stubs must restate @psalm-seal-methods/@psalm-seal-properties (#1867).",
+          "timestamp": "2026-10-15T16:00:56+02:00",
+          "tree_id": "3730258b17f2a68c77529405a1f6cd514f1eb1ca",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bb762985307560815385188ca4eb3145aa778df7"
+        },
+        "date": 1792073062402,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.83,
+            "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
