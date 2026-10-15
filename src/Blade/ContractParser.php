@@ -105,6 +105,24 @@ final class ContractParser
     }
 
     /**
+     * The type the template's last raw `@var` docblock declares for `$name`, or null when none does.
+     *
+     * @psalm-pure
+     */
+    public static function rawDeclaredType(string $source, string $name): ?string
+    {
+        $type = null;
+
+        foreach (self::rawDeclarations($source) as [$declared, $declaredType, , $isDoc]) {
+            if ($declared === $name && $isDoc && $declaredType !== null) {
+                $type = $declaredType;
+            }
+        }
+
+        return $type;
+    }
+
+    /**
      * Names a template declares in the raw docblock spelling, which {@see self::parseSource()} does
      * not read: a raw PHP block reaches the shadow byte-for-byte.
      *

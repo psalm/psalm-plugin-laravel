@@ -4,3 +4,8 @@
     <footer>{{ $footer }}</footer>
 @endif
 {{ $footer ?? '' }}
+@if (isset($footer))
+    @if (isset($footer)) {{ $footer }} @endif
+    {{ $footer ?? '' }}
+    @php $footer ??= new \Illuminate\View\ComponentSlot(); @endphp
+@endif

@@ -990,7 +990,9 @@ final class BladeIssueRemapTest extends TestCase
      * #1871: a named slot declared non-null in a component view keeps the required-variable
      * semantics above, and its `isset()` (line 10), `??` (13) and `??=` (14) guards name the
      * optional declaration. Not hinted: `$slot` (15, dropped as an ambient guard since #1525), a
-     * non-slot type (16), the optional declaration (reports nothing) and a plain page.
+     * non-slot type (16), a plain page, and the optional declaration: its first guards report
+     * nothing, and the ones nested inside an `isset()` (lines 8-10) are redundant through narrowing,
+     * which the hint would misread as the declaration's fault.
      */
     #[Test]
     public function a_guard_on_a_required_named_slot_reports_with_the_optional_hint(): void
@@ -1015,17 +1017,33 @@ final class BladeIssueRemapTest extends TestCase
             $json,
         );
 
-        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
-            $this->assertSame([], $this->linesFor($issues, $family, 'components/named-slot-optional.blade.php'), "{$family}: {$json}");
+        $template = 'components/named-slot-optional.blade.php';
+        $expected = [
+            'RedundantCondition' => [],
+            'RedundantConditionGivenDocblockType' => [8, 9, 10],
+            'DocblockTypeContradiction' => [9, 10],
+            'TypeDoesNotContainNull' => [],
+            'TypeDoesNotContainType' => [],
+        ];
+
+        foreach ($expected as $family => $lines) {
+            $this->assertSame($lines, $this->linesFor($issues, $family, $template), "{$family}: {$json}");
         }
+
+        $this->assertNoNamedSlotHint($issues, $template);
 
         $template = 'resources/views/named-slot-plain.blade.php';
         $this->assertSame([2, 3], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
         $this->assertSame([3], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $json);
+        $this->assertNoNamedSlotHint($issues, $template);
+    }
 
+    /** @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues */
+    private function assertNoNamedSlotHint(array $issues, string $template): void
+    {
         foreach (['RedundantConditionGivenDocblockType', 'DocblockTypeContradiction'] as $family) {
             foreach ($this->messagesFor($issues, $family, $template) as $message) {
-                $this->assertStringNotContainsString('named slots', $message);
+                $this->assertStringNotContainsString('named slots', $message, $template);
             }
         }
     }
