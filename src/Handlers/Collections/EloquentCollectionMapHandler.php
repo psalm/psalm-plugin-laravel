@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -58,9 +59,7 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
 
         $args = $event->getCallArgs();
         $stmt = $event->getStmt();
-        $templateParams = $event->getTemplateTypeParameters();
-        if (\count($args) !== 1 || $args[0]->unpack || !$stmt instanceof \PhpParser\Node\Expr\MethodCall
-            || $templateParams === null || \count($templateParams) !== 2) {
+        if (\count($args) !== 1 || $args[0]->unpack || !$stmt instanceof \PhpParser\Node\Expr\MethodCall) {
             return null;
         }
 
@@ -69,7 +68,8 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
 
         // A union receiver is analysed once per atomic; answering for one arm would speak for all of them.
         $receiver = $nodeTypes->getType($stmt->var);
-        if (!$receiver instanceof Union || !$receiver->isSingle()) {
+        $receiverAtomic = $receiver instanceof Union && $receiver->isSingle() ? $receiver->getSingleAtomic() : null;
+        if (!$receiverAtomic instanceof TNamedObject || $receiverAtomic->extra_types !== []) {
             return null;
         }
 
@@ -80,7 +80,7 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
         }
 
         if ($method === 'map') {
-            $keyType = $templateParams[0];
+            $keyType = null;
             $valueType = $returned;
         } else {
             $keyAndValue = self::arrayKeyAndValue($returned);
@@ -91,16 +91,63 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
             [$keyType, $valueType] = $keyAndValue;
         }
 
-        if (!self::isAllModels($valueType, $source->getCodebase())) {
+        $codebase = $source->getCodebase();
+        if (!self::isAllModels($valueType, $codebase)) {
+            return null;
+        }
+
+        // map() keeps the receiver's keys, which are Eloquent\Collection's TKey as the receiver binds it: a subclass
+        // may fix it (`extends Collection<string, TModel>`) or move it to another template slot.
+        $keyType ??= self::eloquentKeyType($codebase, $receiverAtomic);
+        if (!$keyType instanceof Union) {
             return null;
         }
 
         // Plain receivers keep Psalm's `&static` marker (the stub's former `static<...>` branch). A userland
-        // subclass has its own TModel bound that is not known here, so it widens to the base Eloquent class.
+        // subclass may bind TModel more tightly than Model, so it widens to the base Eloquent class.
         $called = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $isPlainReceiver = \strtolower($called) === \strtolower(EloquentCollection::class);
 
         return new Union([new TGenericObject(EloquentCollection::class, [$keyType, $valueType], is_static: $isPlainReceiver)]);
+    }
+
+    /**
+     * `Eloquent\Collection::TKey` for the receiver, read through the ancestry the way Psalm flattened it: each
+     * ancestor's template is stated in its DIRECT child's terms, so a forwarded template is followed up the chain
+     * until it reaches the receiver's own template (matched by defining class) or a concrete type.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function eloquentKeyType(Codebase $codebase, TNamedObject $receiver): ?Union
+    {
+        $typeParams = $receiver instanceof TGenericObject ? $receiver->type_params : [];
+        if (\strcasecmp($receiver->value, EloquentCollection::class) === 0) {
+            return $typeParams[0] ?? null;
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get($receiver->value);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
+
+        $value = $storage->template_extended_params[EloquentCollection::class]['TKey'] ?? null;
+        for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
+            $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
+            if (!$forwarded instanceof TTemplateParam) {
+                return $value->hasTemplate() ? null : $value;
+            }
+
+            if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
+                $position = \array_search($forwarded->param_name, \array_keys($storage->template_types ?? []), true);
+
+                return $position === false ? null : ($typeParams[$position] ?? null);
+            }
+
+            $value = $storage->template_extended_params[$forwarded->defining_class][$forwarded->param_name] ?? null;
+        }
+
+        return null;
     }
 
     /**
