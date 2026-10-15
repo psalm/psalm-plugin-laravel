@@ -24,7 +24,7 @@ class Application extends Container implements ApplicationContract, CachesConfig
     /**
      * Get the registered service provider instances if any exist.
      * @param \Illuminate\Support\ServiceProvider|string $provider
-     * @psalm-return array{int?, \Illuminate\Support\ServiceProvider}
+     * @psalm-return array<class-string<\Illuminate\Support\ServiceProvider>, \Illuminate\Support\ServiceProvider>
      */
     public function getProviders($provider) {}
 }
