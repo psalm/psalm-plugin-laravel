@@ -987,6 +987,50 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1871: a named slot declared non-null in a component view keeps the required-variable
+     * semantics above, and its `isset()` (line 10), `??` (13) and `??=` (14) guards name the
+     * optional declaration. Not hinted: `$slot` (15, dropped as an ambient guard since #1525), a
+     * non-slot type (16), the optional declaration (reports nothing) and a plain page.
+     */
+    #[Test]
+    public function a_guard_on_a_required_named_slot_reports_with_the_optional_hint(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+        $hint = static fn(string $name): string
+            => " (named slots are optional: declare `\\Illuminate\\View\\ComponentSlot|null \${$name} = null`)";
+
+        $template = 'components/named-slot-guard.blade.php';
+        $this->assertSame([10, 13, 14, 16], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
+        $this->assertSame([
+            'Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null' . $hint('footer'),
+            'Docblock-defined type Illuminate\View\ComponentSlot for $header is never null' . $hint('header'),
+            'Docblock-defined type Illuminate\View\ComponentSlot for $header is never null' . $hint('header'),
+            'Docblock-defined type string for $title is never null',
+        ], $this->messagesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
+        $this->assertSame([13, 14], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $json);
+        $this->assertSame(
+            \array_fill(0, 2, 'Cannot resolve types for $header - docblock-defined type Illuminate\View\ComponentSlot does not contain null' . $hint('header')),
+            $this->messagesFor($issues, 'DocblockTypeContradiction', $template),
+            $json,
+        );
+
+        foreach (self::AMBIENT_GUARD_FAMILIES as $family) {
+            $this->assertSame([], $this->linesFor($issues, $family, 'components/named-slot-optional.blade.php'), "{$family}: {$json}");
+        }
+
+        $template = 'resources/views/named-slot-plain.blade.php';
+        $this->assertSame([2, 3], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
+        $this->assertSame([3], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $json);
+
+        foreach (['RedundantConditionGivenDocblockType', 'DocblockTypeContradiction'] as $family) {
+            foreach ($this->messagesFor($issues, $family, $template) as $message) {
+                $this->assertStringNotContainsString('named slots', $message);
+            }
+        }
+    }
+
+    /**
      * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
      * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
      * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`

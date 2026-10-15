@@ -902,6 +902,55 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
+     * #1871: a guard on a named slot declared non-null in a component view keeps reporting, with a
+     * hint naming the optional declaration.
+     */
+    #[Test]
+    #[DataProvider('namedSlotGuards')]
+    public function a_named_slot_guard_in_a_component_view_carries_the_optional_hint(CodeIssue $issue): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: true);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame(
+            $issue->message . ' (named slots are optional: declare `\Illuminate\View\ComponentSlot|null $footer = null`)',
+            $relocated->message,
+        );
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function namedSlotGuards(): iterable
+    {
+        yield 'isset' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null)];
+        yield '??' => [new DocblockTypeContradiction('Cannot resolve types for $footer - docblock-defined type Illuminate\View\ComponentSlot does not contain null', self::staticShadowLocation(9), null)];
+    }
+
+    #[Test]
+    #[DataProvider('unhintedGuards')]
+    public function a_guard_outside_the_named_slot_shape_carries_no_hint(CodeIssue $issue, bool $isComponentView): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: $isComponentView);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame($issue->message, $relocated->message);
+    }
+
+    /** @return iterable<string, array{CodeIssue, bool}> */
+    public static function unhintedGuards(): iterable
+    {
+        yield 'outside a component view' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), false];
+        yield '?? outside a component view' => [new DocblockTypeContradiction('Cannot resolve types for $footer - docblock-defined type Illuminate\View\ComponentSlot does not contain null', self::staticShadowLocation(9), null), false];
+        yield 'another type' => [new RedundantConditionGivenDocblockType('Docblock-defined type string for $title is never null', self::staticShadowLocation(9), null), true];
+        yield 'not a null guard' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is always Illuminate\View\ComponentSlot', self::staticShadowLocation(9), null), true];
+        yield 'inferred type' => [new RedundantCondition('Type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), true];
+    }
+
+    private static function staticShadowLocation(int $line): Raw
+    {
+        return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
+    }
+
+    /**
      * `Reconciler::triggerIssueForImpossible()`'s INFERRED-branch siblings of
      * `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`: the
      * shape a `@props` view's nested `<x-...>` tag actually hits, since `@props` replaces the

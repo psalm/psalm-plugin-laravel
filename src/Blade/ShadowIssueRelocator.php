@@ -403,7 +403,7 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = self::remapMessage($issue, $target);
+        $message = self::remapMessage($issue, $target) . self::namedSlotHint($issue, $target);
 
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
@@ -523,6 +523,34 @@ final class ShadowIssueRelocator
         ) ?? $message;
 
         return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
+    }
+
+    /**
+     * A raw `@var \Illuminate\View\ComponentSlot $footer` declares a required variable, so its
+     * `isset()`/`??`/`??=` guard reports as redundant. A caller can omit any named slot, though, so
+     * the guard is usually right and the declaration is what to fix; the finding names the fix
+     * (#1871). Matches the whole message of the two docblock-branch wordings those guards produce
+     * on exactly this type. `$slot` never reaches here: the ambient gate drops its guards in a
+     * component view.
+     *
+     * @psalm-mutation-free
+     */
+    private static function namedSlotHint(CodeIssue $issue, ShadowTarget $target): string
+    {
+        if (
+            !$target->isComponentView
+            || !$issue instanceof RedundantConditionGivenDocblockType && !$issue instanceof DocblockTypeContradiction
+            || \preg_match(
+                '/^(?|Docblock-defined type Illuminate\\\View\\\ComponentSlot for \$(\w+) is never null'
+                    . '|Cannot resolve types for \$(\w+) - docblock-defined type Illuminate\\\View\\\ComponentSlot does not contain null)\z/',
+                $issue->message,
+                $matches,
+            ) !== 1
+        ) {
+            return '';
+        }
+
+        return " (named slots are optional: declare `\\Illuminate\\View\\ComponentSlot|null \${$matches[1]} = null`)";
     }
 
     /**
