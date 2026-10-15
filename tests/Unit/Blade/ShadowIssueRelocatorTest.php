@@ -951,6 +951,56 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
+    /** A tag's compiled `isset($attributes) && $attributes instanceof ...` check, both places Blade emits it. */
+    private const ATTRIBUTES_CHECK = 'isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag';
+
+    private const ATTRIBUTES_CHECK_LINES = [
+        'resolve() data merge' => '$component = Illuminate\View\AnonymousComponent::resolve([\'view\' => \'components.alert\',\'data\' => []] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : []));',
+        'ignored-parameter strip' => 'if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag):',
+    ];
+
+    private const ATTRIBUTES_ALWAYS = 'Docblock-defined type Illuminate\View\ComponentAttributeBag for $attributes is always Illuminate\View\ComponentAttributeBag';
+
+    /** #1873: outside a component view, typing `$attributes` from the tag makes the compiled `instanceof` redundant. */
+    #[Test]
+    #[DataProvider('compiledAttributesChecks')]
+    public function a_compiled_attributes_check_is_dropped_outside_a_component_view(string $line): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(self::ATTRIBUTES_ALWAYS, self::awareLocation(self::ATTRIBUTES_CHECK, \strlen(self::ATTRIBUTES_CHECK), $line), null);
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function compiledAttributesChecks(): iterable
+    {
+        foreach (self::ATTRIBUTES_CHECK_LINES as $name => $line) {
+            yield $name => [$line];
+        }
+    }
+
+    /** Negatives: each differs from the dropped case in ONE gate condition. */
+    #[Test]
+    #[DataProvider('attributesCheckLookAlikes')]
+    public function an_attributes_check_look_alike_keeps_reporting(int $width, string $templateSource = self::TEMPLATE_SOURCE): void
+    {
+        $location = self::awareLocation(self::ATTRIBUTES_CHECK, $width, self::ATTRIBUTES_CHECK_LINES['ignored-parameter strip']);
+        $relocated = $this->relocate(new RedundantConditionGivenDocblockType(self::ATTRIBUTES_ALWAYS, $location, null), $this->entry([9 => 3]), templateSource: $templateSource);
+
+        $this->assertInstanceOf(RedundantConditionGivenDocblockType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{0: int, 1?: string}> */
+    public static function attributesCheckLookAlikes(): iterable
+    {
+        yield 'selection is only the instanceof' => [\strlen('$attributes instanceof Illuminate\View\ComponentAttributeBag')];
+        yield 'check written in the template' => [
+            \strlen(self::ATTRIBUTES_CHECK),
+            "<div>\n@if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag) x @endif\n</div>\n",
+        ];
+    }
+
     /**
      * #1532: unlike `$attributes`/`$slot`, `$component` is dropped even OUTSIDE a component view —
      * its narrowed type comes from a PRECEDING `<x-...>` tag's compiled `resolve()` call, a shape a plain page
