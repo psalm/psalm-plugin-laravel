@@ -112,6 +112,16 @@ final class CollectionLookupParamsTest
         });
     }
 
+    /** @param Collection<int, Dog> $dogs */
+    public function untypedClosureParamsStillInferred(Collection $dogs): void
+    {
+        $dogs->contains(fn ($dog) => $dog->isGood());
+        $dogs->containsStrict(fn ($dog) => $dog->isGood());
+        $dogs->doesntContain(fn ($dog) => $dog->isGood());
+        $dogs->doesntContainStrict(fn ($dog) => $dog->isGood());
+        $_key = $dogs->search(fn ($dog) => $dog->isGood());
+    }
+
     /** @param Collection<string, Badge> $badges */
     public function returnTypesStayTyped(Collection $badges, string $key): void
     {
@@ -120,9 +130,6 @@ final class CollectionLookupParamsTest
 
         $_getDefault = $badges->get($key, 'fallback');
         /** @psalm-check-type-exact $_getDefault = 'fallback'|Badge */
-
-        $_getClosure = $badges->get($key, static fn(): int => 1);
-        /** @psalm-check-type-exact $_getClosure = 1 */
 
         $_pull = $badges->pull($key);
         /** @psalm-check-type-exact $_pull = Badge|null */

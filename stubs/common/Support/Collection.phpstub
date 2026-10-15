@@ -332,7 +332,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Accepts extra positional args beyond ($key, $operator, $value); they are
      * forwarded to contains() via func_get_args().
      *
-     * @param  mixed  $key
+     * @param  (callable(TValue, TKey): bool)|mixed  $key
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return bool
@@ -348,7 +348,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * them to containsStrict() via func_get_args(). The third parameter mirrors
      * Laravel's signature even though containsStrict() only consumes two.
      *
-     * @param  mixed  $key
+     * @param  (callable(TValue, TKey): bool)|mixed  $key
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return bool
@@ -431,20 +431,20 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function forget($keys) {}
 
     /**
-     * @param  array-key  $offset
+     * @param  array-key  $key
      * @return bool
      */
-    public function offsetExists($offset): bool {}
+    public function offsetExists($key): bool {}
 
     /**
-     * @param  array-key  $offset
+     * @param  array-key  $key
      * @return TValue
      */
-    public function offsetGet($offset): mixed {}
+    public function offsetGet($key): mixed {}
 
     /**
-     * @param  array-key  $offset
+     * @param  array-key  $key
      * @return void
      */
-    public function offsetUnset($offset): void {}
+    public function offsetUnset($key): void {}
 }
