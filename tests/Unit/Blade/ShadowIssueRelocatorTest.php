@@ -880,6 +880,13 @@ final class ShadowIssueRelocatorTest extends TestCase
             self::mixedAssignment($restore, '<?php $attributes', 11, 'attributes'),
             "<div>\n@php \$attributes = \$__attributesOriginal" . self::COMPONENT_HASH . "; @endphp\n</div>\n",
         ];
+        // String literals that only look like a Blade comment: stripping `{{-- ... --}}` from the
+        // template would remove the author's statement between them.
+        yield 'statement written between comment look-alikes' => [
+            self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message'),
+            "<div>\n@php \$open = '{{--'; if (isset(\$__messageOriginal)) { \$message = \$__messageOriginal; } \$close = '--}}'; @endphp\n</div>\n",
+        ];
+        yield 'issue class outside the Mixed family' => [new UndefinedVariable('Cannot find referenced variable $attributes', self::selectionLocation('<?php $attributes', 11, $restore))];
     }
 
     /** `MixedAssignment` on the $width bytes of $snippet that end where $anchor ends. */

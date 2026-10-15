@@ -77,11 +77,12 @@ final class ShadowIssueRelocator
     /**
      * The compiled save/restore statements whose assignment `MixedAssignment` reports (#1872):
      * `statement` is what must be absent from the template, `target` where Psalm positions the
-     * issue. The `$__*Original*` saves are not here: Psalm never reports a `$_`-prefixed target.
+     * issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var id
+     * starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
      */
     private const SAVE_RESTORE_PATTERNS = [
         // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
-        '/<\?php (?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};) \?>/',
+        '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
         // CompilesErrors::compileEnderror()
         '/(?<statement>if \(isset\(\$__messageOriginal\)\) \{ (?<target>\$message) = \$__messageOriginal; \})/',
         // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
@@ -802,6 +803,8 @@ final class ShadowIssueRelocator
     /**
      * Whether an issue sits on the assignment target of one of {@see self::SAVE_RESTORE_PATTERNS}
      * whose statement is absent from the template, so an author who writes one keeps the finding.
+     * Absent both raw and with Blade comments stripped, see
+     * {@see TemplateSnippetMatcher::occursInRawOrStripped()}.
      *
      * @psalm-mutation-free
      */
@@ -818,7 +821,7 @@ final class ShadowIssueRelocator
 
             foreach ($matches as $match) {
                 if ($match['target'][1] === $selection->start) {
-                    return !TemplateSnippetMatcher::occursIn($match['statement'][0], $target->templateSource, $target->markerPrefix());
+                    return !TemplateSnippetMatcher::occursInRawOrStripped($match['statement'][0], $target->templateSource, $target->markerPrefix());
                 }
             }
         }
