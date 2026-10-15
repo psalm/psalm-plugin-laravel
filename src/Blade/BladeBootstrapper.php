@@ -81,6 +81,9 @@ final class BladeBootstrapper
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
 
+    /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
+    private array $compileFailures = [];
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
@@ -172,11 +175,27 @@ final class BladeBootstrapper
         }
 
         $manifest->flush();
-        $this->reportFailures($failures);
 
         if ($shadows === []) {
+            // Nothing joins the analysis and no template fact is published, but a compile failure
+            // still gets its issue: an app whose every template fails would otherwise go silent
+            // under --no-progress.
+            $reported = $this->compileFailures !== []
+                && $this->registrar->markTemplatesReportable(\array_keys($this->compileFailures));
+
+            if ($reported) {
+                $this->reportCompileFailures();
+            }
+
+            $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+
             return false;
         }
+
+        // The run is about to activate and report each compile failure as an issue, so the warning
+        // keeps only the rest. If activation fails after all, the degradation warning covers every
+        // template.
+        $this->reportFailures($failures, $this->compileFailures);
 
         // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry.
         // Config::reportIssueInFile() consults only this project-file list.
@@ -191,8 +210,11 @@ final class BladeBootstrapper
 
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
-        // (which skips ShadowCompiler) still gets them.
-        $this->registrar->queueClassLikesForScanning(PreludeBuilder::ambientClassNames());
+        // (which skips ShadowCompiler) still gets them. Composer classes ride along: nothing
+        // references one in code position, yet the key resolver needs their storage.
+        $composerSources = ComposerSourceReader::read($this->viewFactory(), \array_column($this->pendingContracts, 0));
+        $composerClasses = \array_column(\array_merge(...\array_values(\array_filter($composerSources))), 0);
+        $this->registrar->queueClassLikesForScanning([...PreludeBuilder::ambientClassNames(), ...$composerClasses]);
 
         // #1505: a vendor directive can compile a class name into a string literal, invisible to
         // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
@@ -240,8 +262,17 @@ final class BladeBootstrapper
         }
 
         $this->publishTemplateFacts();
+        ContractRegistry::registerComposerSources($composerSources);
+        $this->reportCompileFailures();
 
         return true;
+    }
+
+    private function reportCompileFailures(): void
+    {
+        foreach ($this->compileFailures as $templatePath => [$source, $message]) {
+            $this->registrar->reportCompileFailure($templatePath, $source, $message);
+        }
     }
 
     /**
@@ -266,7 +297,10 @@ final class BladeBootstrapper
         }
 
         $factory = $this->viewFactory();
-        $shared = ['app' => true] + \array_fill_keys(\array_map('strval', \array_keys($factory?->getShared() ?? [])), true);
+        $shared = ['app' => true] + \array_fill_keys(
+            \array_map(static fn(int|string $name): string => (string) $name, \array_keys($factory?->getShared() ?? [])),
+            true,
+        );
 
         // A shared name is no contract, so a marker problem on its declaration is not one either.
         foreach ($this->pendingProblems as $templatePath => $problems) {
@@ -275,10 +309,6 @@ final class BladeBootstrapper
 
         foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
             ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
-
-            if ($this->hasComposer($factory, $viewName)) {
-                ContractRegistry::markComposed($viewName);
-            }
         }
 
         ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
@@ -333,23 +363,47 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $shadow = $compiler->compile($template, $source);
+            // A `@props` literal default types the body through the prelude: no docblock states it (#1828).
+            $propTypes = [];
 
-            if ($shadow instanceof BladeCompileError) {
-                $failures[$shadow->templatePath] = $shadow->message;
-                $this->claimNameOnly($template, $roots);
+            // A contract parse that throws costs its own template, as a compile failure does, never
+            // the whole run (#1848).
+            try {
+                if (\stripos($source, '@props') !== false) {
+                    foreach ($parser->parseDeclarations($source)->vars as $name => $var) {
+                        if ($var->defaultType !== null) {
+                            $propTypes[$name] = $var->defaultType;
+                        }
+                    }
+                }
+            } catch (\Throwable $throwable) {
+                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
 
-            // Built AFTER compile so the read set comes off compiled output.
-            $contract = $this->collectDataIncludes
-                ? $parser->parseDataContract($source, $shadow->contents)
-                : $parser->parseDeclarations($source, $shadow->contents);
+            $shadow = $compiler->compile($template, $source, $propTypes);
 
-            // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
-            // from "collected nothing".
-            $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+            if ($shadow instanceof BladeCompileError) {
+                $this->skipUncompiled($shadow, $source, $roots, $failures);
+
+                continue;
+            }
+
+            try {
+                // Built AFTER compile so the read set comes off compiled output.
+                $contract = $this->collectDataIncludes
+                    ? $parser->parseDataContract($source, $shadow->contents)
+                    : $parser->parseDeclarations($source, $shadow->contents);
+
+                // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
+                // from "collected nothing".
+                $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+            } catch (\Throwable $throwable) {
+                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+
+                continue;
+            }
 
             try {
                 $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
@@ -363,6 +417,19 @@ final class BladeBootstrapper
         }
 
         return $shadows;
+    }
+
+    /**
+     * Skips a template this pass could not compile; it is reported as a `BladeCompileFailure`.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     * @param array<string, string>                  $failures
+     */
+    private function skipUncompiled(BladeCompileError $error, string $source, array $roots, array &$failures): void
+    {
+        $failures[$error->templatePath] = $error->message;
+        $this->compileFailures[$error->templatePath] = [$source, $error->message];
+        $this->claimNameOnly($error->templatePath, $roots);
     }
 
     /**
@@ -489,32 +556,13 @@ final class BladeBootstrapper
         );
     }
 
-    /**
-     * Whether a view composer or creator, wildcard ones included, is registered for the view: it can
-     * add any data, so the call site's data set proves nothing about what the template receives.
-     */
-    private function hasComposer(?Factory $factory, string $viewName): bool
-    {
-        try {
-            $events = $factory?->getDispatcher();
-
-            return $events !== null
-                && ($events->hasListeners("composing: {$viewName}") || $events->hasListeners("creating: {$viewName}"));
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
     private function viewFactory(): ?Factory
     {
         try {
-            /** @psalm-suppress MixedAssignment the container resolves any service */
-            $factory = $this->app->bound('view') ? $this->app->make('view') : null;
+            return $this->asFactory($this->app->bound('view') ? $this->app->make('view') : null);
         } catch (\Throwable) {
             return null;
         }
-
-        return $factory instanceof Factory ? $factory : null;
     }
 
     private function resolveCompiler(): ?BladeCompiler
@@ -701,6 +749,14 @@ final class BladeBootstrapper
     }
 
     /**
+     * @psalm-pure
+     */
+    private function asFactory(mixed $resolved): ?Factory
+    {
+        return $resolved instanceof Factory ? $resolved : null;
+    }
+
+    /**
      * @psalm-mutation-free
      */
     private function asFactoryFinder(mixed $resolved): ?FileViewFinder
@@ -795,15 +851,19 @@ final class BladeBootstrapper
      * some templates are not covered.
      *
      * @param array<string, string> $failures
+     * @param array<string, array{0: string, 1: string}> $reportedAsIssues templates left out of the
+     *        warning, because each is reported as a `BladeCompileFailure` instead
      */
-    private function reportFailures(array $failures): void
+    private function reportFailures(array $failures, array $reportedAsIssues = []): void
     {
-        if ($failures === []) {
-            return;
-        }
-
         foreach ($failures as $path => $reason) {
             $this->output->debug("Laravel plugin: skipped Blade template '{$path}': {$reason}\n");
+        }
+
+        $failures = \array_diff_key($failures, $reportedAsIssues);
+
+        if ($failures === []) {
+            return;
         }
 
         $count = \count($failures);

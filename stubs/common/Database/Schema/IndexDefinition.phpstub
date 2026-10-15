@@ -8,14 +8,19 @@ namespace Illuminate\Database\Schema;
  * Laravel declares these only as class-level @method tags on IndexDefinition, dispatched
  * at runtime through Fluent::__call(). Because the class carries @method tags, Psalm seals
  * its magic methods (ClassLikeStorage::$sealed_methods = true) regardless of the
- * sealAllMethods setting, so a modifier absent from the *installed* Laravel version's
- * @method block resolves to no pseudo-method and raises UndefinedMagicMethod. Laravel's
- * block has grown over time (nullsNotDistinct/online/lock are recent additions), so older
+ * sealAllMethods setting, so a modifier absent from the *installed* Laravel version's @method
+ * block resolves to no pseudo-method and raises UndefinedMagicMethod. Laravel's block has grown
+ * over time (nullsNotDistinct/online/lock are recent additions), so older
  * installs legitimately lack some tags. Declaring each modifier as a real method resolves
  * it before the sealed magic-method path on every supported Laravel version.
  *
  * Parameter types mirror Laravel's @method annotations verbatim, including lock()'s
  * literal-string union ('none'|'shared'|'default'|'exclusive').
+ *
+ * The stub docblock replaces the sealing flag that Laravel's @method tags set on the reflected
+ * class, so the seal is restated here to keep unknown modifiers reported.
+ *
+ * @psalm-seal-methods
  */
 class IndexDefinition extends \Illuminate\Support\Fluent
 {

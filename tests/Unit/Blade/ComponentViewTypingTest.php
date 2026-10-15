@@ -36,18 +36,35 @@ final class ComponentViewTypingTest extends TestCase
     public static function traces(): iterable
     {
         yield 'view(): props, attributes, componentName, methods; contract and slot names kept' => ['alert.blade.php', [
+            // #1856: a no-parameter method's wrapper carries its return type, so the call stays typed.
+            '$active: bool',
             '$attributes: Illuminate\View\ComponentAttributeBag',
             '$componentName: string',
             '$footer: mixed',
-            '$format: Closure[impure]',
-            '$isActive: Illuminate\View\InvokableComponentVariable',
+            '$format: Closure[impure](string):string',
+            '$isActive: Illuminate\View\InvokableComponentVariable<bool>',
             // The prelude keeps `@var mixed $items` (the template reassigns it from itself); the seed
             // lands after it.
             '$items: list<string>',
             '$label: non-empty-string',
-            '$summary: Illuminate\View\InvokableComponentVariable',
+            '$summary: Illuminate\View\InvokableComponentVariable<string>',
             '$title: string',
             '$untyped: mixed',
+        ]];
+        // #1855: a method with parameters is its own signature; a generic one is `mixed`.
+        yield 'methods with parameters on a non-final class' => ['toolbar.blade.php', [
+            '$echo: mixed',
+            '$pad: Closure[impure](string, int...):string',
+            '$target: App\\View\\Components\\Toolbar',
+            '$withTone: Closure[impure](string):App\\View\\Components\\Toolbar',
+        ]];
+        // #1856: `static` resolves to the class even when it is not final, `self` in a trait to the
+        // using class.
+        yield 'no-parameter methods returning static and a trait self' => ['pill.blade.php', [
+            '$f: App\View\Components\Pill',
+            '$fresh: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
+            '$m: App\View\Components\Pill',
+            '$me: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
         ]];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];
@@ -66,6 +83,16 @@ final class ComponentViewTypingTest extends TestCase
         yield 'a ->with() link after the view call' => ['withed.blade.php', ['$title: mixed']];
         yield 'named arguments' => ['named.blade.php', ['$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
+        // #1828: `data()` (and `render()`'s own data) hand the view its values before `@props`
+        // falls back to a default, so a class's view never takes a type from a literal default.
+        // The reset touches only what the prelude typed from a default: Blade's own names keep theirs.
+        yield '@props defaults in a seeded view' => ['sized.blade.php', [
+            '$errors: Illuminate\Support\ViewErrorBag',
+            '$size: mixed',
+            '$slot: Illuminate\View\ComponentSlot',
+            '$tone: mixed',
+        ]];
+        yield '@props defaults in an unseeded view' => ['untagged.blade.php', ['$size: mixed']];
     }
 
     /**
@@ -96,6 +123,26 @@ final class ComponentViewTypingTest extends TestCase
         }
 
         $this->assertSame(['$heading: string'], $this->tracesIn($issues, 'frame.blade.php'), 'the view was not seeded, so the silence proves nothing.');
+        $this->assertSame([], $reported);
+    }
+
+    /**
+     * A `@param-out self` must reach the template resolved: a literal `self` out-type would make the
+     * by-ref variable a `self` no other signature accepts.
+     */
+    #[Test]
+    public function a_method_closures_param_out_type_is_resolved(): void
+    {
+        $issues = $this->fixtureIssues(self::FIXTURE, self::ARGUMENTS);
+        $reported = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], 'components/toolbar.blade.php')) {
+                $reported[] = $issue['type'] . ': ' . $issue['message'];
+            }
+        }
+
+        $this->assertContains('$target: App\\View\\Components\\Toolbar', $this->tracesIn($issues, 'toolbar.blade.php'));
         $this->assertSame([], $reported);
     }
 

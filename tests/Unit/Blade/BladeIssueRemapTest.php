@@ -816,7 +816,7 @@ final class BladeIssueRemapTest extends TestCase
      * #1694: `@session` compiles a conditional `$__sessionPrevious[] = $value` save and later reads
      * behind `isset()`, so Psalm reports the bookkeeping array as a possibly undefined global on
      * the directive line. The author's own conditionally assigned `$__authorLocal` on line 9 must
-     * keep reporting: the gate is exact-name.
+     * keep reporting: the prelude declares only the two save stacks (#1722).
      */
     #[Test]
     public function session_previous_value_stack_is_not_reported(): void
@@ -852,6 +852,42 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #1722: the prelude declares the `@session`/`@context` save stacks `list<mixed>`, so neither
+     * the `array_pop()` in `@endsession`/`@endcontext` nor the append in a nested or repeated block
+     * sees a `mixed` stack. `MixedArgument` stays only on the author's own lines: the echo of the
+     * mixed session value (line 2) and `count($__authorLocal)` (line 9).
+     */
+    #[Test]
+    public function session_and_context_stacks_are_typed_under_report_mixed(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([2, 9], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
+        $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'context-previous.blade.php'), $json);
+
+        // `MixedAssignment` is genuine: `$value` comes from `session()->get()`/`context()->get()`
+        // and is popped back off a `list<mixed>`.
+        $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php') && $issue['type'] !== 'MixedAssignment'));
+        $this->assertSame([], $stacks, $json);
+    }
+
+    /**
+     * #1722: nested and repeated `@session`/`@context` blocks report nothing under the default
+     * config, with the stacks declared in the prelude rather than gated by name.
+     */
+    #[Test]
+    public function nested_and_repeated_session_and_context_blocks_report_nothing(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php')));
+        $this->assertSame([], $stacks, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -1348,12 +1384,13 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}>
+     * @return iterable<string, array{0: string, 1: string, 2?: string}>
      */
     public static function branchAssignedLocals(): iterable
     {
         yield '@if' => ['locals/if.blade.php', 'label'];
-        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size'];
+        // Declared from its literal default (#1828) rather than `mixed`, but declared all the same.
+        yield '@props default overridden in a branch' => ['locals/props.blade.php', 'size', 'string'];
         yield '@once' => ['locals/once.blade.php', 'label'];
         yield '<x-…> slot' => ['locals/slot.blade.php', 'label'];
     }
@@ -1361,16 +1398,16 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * An assignment that can be skipped (a branch, `@once`, a component slot) leaves the incoming
      * view value as the one read after it, a `@props` default or a parent's variable in a partial,
-     * so the name keeps its `mixed` declaration and the read is not possibly undefined.
+     * so the name keeps its prelude declaration and the read is not possibly undefined.
      */
     #[Test]
     #[DataProvider('branchAssignedLocals')]
-    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name): void
+    public function a_local_assigned_in_a_skippable_block_stays_declared(string $template, string $name, string $type = 'mixed'): void
     {
         $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/' . $template;
 
-        $this->assertStringContainsString("@var mixed \${$name} */", $this->shadowSourceFor($template));
+        $this->assertStringContainsString("@var {$type} \${$name} */", $this->shadowSourceFor($template));
         $this->assertSame(
             [],
             $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
@@ -1411,6 +1448,106 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame(
             [2],
             $this->linesFor($issues, 'UndefinedMagicMethod', 'resources/views/contract-vendor-class.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function propsDefaultTypes(): iterable
+    {
+        yield 'string' => ['literals.blade.php', '$size: string'];
+        yield 'int' => ['literals.blade.php', '$count: int'];
+        yield 'float' => ['literals.blade.php', '$ratio: float'];
+        yield 'false' => ['literals.blade.php', '$open: bool'];
+        yield 'upper-case TRUE' => ['literals.blade.php', '$shown: bool'];
+        yield 'empty short array' => ['literals.blade.php', '$items: array<array-key, mixed>'];
+        yield 'long array() with entries' => ['literals.blade.php', '$pairs: array<array-key, mixed>'];
+        yield 'negative int' => ['literals.blade.php', '$offset: int'];
+        yield 'negative float' => ['literals.blade.php', '$scale: float'];
+        yield 'bare name' => ['untyped.blade.php', '$title: mixed'];
+        yield 'null' => ['untyped.blade.php', '$none: mixed'];
+        yield 'constant' => ['untyped.blade.php', '$eol: mixed'];
+        yield 'call' => ['untyped.blade.php', '$upper: mixed'];
+        yield 'concatenation' => ['untyped.blade.php', '$joined: mixed'];
+        yield 'unary plus' => ['untyped.blade.php', '$plus: mixed'];
+        yield 'negated constant' => ['untyped.blade.php', '$max: mixed'];
+        yield 'variable' => ['untyped.blade.php', '$copied: mixed'];
+        yield 'interpolated string' => ['untyped.blade.php', '$line: mixed'];
+        // An explicit declaration beats the inferred default: a native docblock re-declares the
+        // name after the prelude, whether it sits before or after `@props` in the template.
+        yield 'native @var before @props' => ['declared-native.blade.php', '$size: int'];
+        yield 'native @var after @props' => ['declared-native-after.blade.php', '$size: int'];
+        // `@aware` assigns unconditionally (no `??`), so a name it shares with `@props` holds the
+        // parent's value, whichever directive comes first.
+        yield '@aware after @props' => ['aware-after.blade.php', '$color: mixed'];
+        yield '@aware before @props' => ['aware-before.blade.php', '$color: mixed'];
+        yield '@props name @aware does not share' => ['aware-before.blade.php', '$size: string'];
+        // An unreadable list may set any name first, and a later default never replaces it (`??`).
+        yield 'after an unreadable @props' => ['unreadable-first.blade.php', '$size: mixed'];
+    }
+
+    /** #1828: a `@props` entry types the body from its literal default, widened, never the literal itself. */
+    #[Test]
+    #[DataProvider('propsDefaultTypes')]
+    public function a_props_entry_is_typed_from_its_literal_default(string $template, string $trace): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertContains(
+            $trace,
+            $this->messagesFor($issues, 'Trace', 'resources/views/props/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * The mistakes a typed default exposes, all silent while the prop was `mixed`. The guard on
+     * line 5 is the documented cost of a default-only claim: a caller could pass an array.
+     */
+    #[Test]
+    public function misusing_a_literal_defaulted_prop_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/misuse.blade.php';
+        $reported = [];
+
+        foreach ($issues as $issue) {
+            if (\str_ends_with($issue['file_path'], $template)) {
+                $reported[] = $issue['line_from'] . ' ' . $issue['type'];
+            }
+        }
+
+        $this->assertSame(['2 InvalidPropertyFetch', '3 InvalidMethodCall', '4 InvalidPropertyFetch', '5 DocblockTypeContradiction'], $reported);
+    }
+
+    /** Blade echoes a bool as `'1'` / `''`, so a `bool` default is no `e()` argument error. */
+    #[Test]
+    public function a_bool_default_echoes_silently(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/bool-echo.blade.php';
+
+        $this->assertStringContainsString('@var bool $open */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /** Widened, not `'lg'`: a `match` or comparison against another value is not a dead branch. */
+    #[Test]
+    public function a_string_default_leaves_other_values_reachable(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/props/match.blade.php';
+
+        $this->assertStringContainsString('@var string $size */', $this->shadowSourceFor($template));
+        $this->assertSame(
+            [],
+            \array_values(\array_filter($issues, static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template))),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
     }
@@ -1535,6 +1672,45 @@ final class BladeIssueRemapTest extends TestCase
         $messages = $this->messagesFor($issues, 'ReferenceReusedFromConfusingScope', $template);
         $this->assertCount(1, $messages);
         $this->assertMatchesRegularExpression('#^\$row is possibly a reference defined at \S*reference-reused\.blade\.php:4:\d+\. #', $messages[0]);
+    }
+
+    /**
+     * #1801: Psalm analyzes a `match` as a desugared ternary and drops two families of findings
+     * on plain PHP: the positionless `TypeDoesNotContainType` of the synthesized `UnhandledMatchError`
+     * branch, and `RedundantCondition*` inside the arms (MatchAnalyzer suppresses them at runtime,
+     * which `BeforeAddIssue` does not carry). The same condition outside the match, and the
+     * unsuppressed sibling classes, must keep reporting.
+     */
+    #[Test]
+    public function a_match_reports_only_what_psalm_reports_on_plain_php(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/match-bool.blade.php';
+        $context = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'TypeDoesNotContainType', $template), $context);
+        $this->assertSame([], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $context);
+        // Line 19 is an author `elseif` outside the match with byte-identical wording to the arm finding.
+        $this->assertSame([19], $this->linesFor($issues, 'RedundantCondition', $template), $context);
+        $this->assertSame([13], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $context);
+        $this->assertSame([14], $this->linesFor($issues, 'ParadoxicalCondition', $template), $context);
+    }
+
+    /**
+     * #1801 negative: MatchAnalyzer only suppresses `RedundantCondition*` over the arms. The subject
+     * and a `match` used as a condition operand (the finding sits on the whole expression) are
+     * outside every arm and report on plain PHP, so they must keep reporting in a template.
+     */
+    #[Test]
+    public function a_match_keeps_the_redundant_conditions_psalm_reports_outside_its_arms(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [5, 12, 17, 23],
+            $this->linesFor($issues, 'RedundantCondition', 'resources/views/match-outside-arms.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**

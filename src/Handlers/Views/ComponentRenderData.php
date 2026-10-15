@@ -12,8 +12,10 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
-use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 
 /**
@@ -125,6 +127,7 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
+            // A method variable is already expanded with `static` collapsed, so this pass leaves it as is.
             $expanded = TypeExpander::expandUnion(
                 $codebase,
                 $type,
@@ -146,8 +149,6 @@ final class ComponentRenderData
      * @param bool $typedOnly skip a property with no declared type or a generic declaring class
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function exposed(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
@@ -233,12 +234,11 @@ final class ComponentRenderData
 
     /**
      * Every public method becomes a variable of the same (cased) name, built by
-     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` for a method with no
-     * parameters at all (optional ones count), a `Closure` otherwise.
+     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` of the method's return
+     * type for a method with no parameters at all (optional ones count), a `Closure` of the method's
+     * signature otherwise.
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -262,11 +262,114 @@ final class ComponentRenderData
             }
 
             $methods[$method->cased_name ?? $methodName] = $method->params === []
-                ? new Union([new TNamedObject(InvokableComponentVariable::class)])
-                : Type::getClosure();
+                ? self::invokableOf($codebase, $storage, $declaring, $method, $methodName)
+                : self::closureOf($codebase, $storage, $declaring, $method, $methodName);
         }
 
         return $methods;
+    }
+
+    /**
+     * `$name()` is `call_user_func()` of the method, so the wrapper carries its return type (`null`
+     * for `void`). Without a declared return type the variable is `mixed`, i.e. not checked, as for a
+     * generic method or declaring class: `InvokableComponentVariable<mixed>` would reject a
+     * template's correct `InvokableComponentVariable<TValue>` declaration.
+     */
+    private static function invokableOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure || !$method->return_type instanceof Union) {
+            return Type::getMixed();
+        }
+
+        $returnType = $expand($method->return_type);
+
+        return new Union([
+            new TGenericObject(InvokableComponentVariable::class, [$returnType->isVoid() ? Type::getNull() : $returnType]),
+        ]);
+    }
+
+    /**
+     * `Closure::fromCallable([$this, $name])` keeps the method's signature, so the variable is that
+     * signature with Psalm's own slots: an untyped parameter or return stays unknown, as it does for
+     * a first-class callable, and the method's own purity carries over.
+     *
+     * A generic method or declaring class is `mixed`, i.e. not checked: nothing binds its templates
+     * here, and a bare `Closure` would reject a template's correct `\Closure(...)` declaration.
+     */
+    private static function closureOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure) {
+            return Type::getMixed();
+        }
+
+        // TypeExpander skips a parameter's `@param-out` type (a gap in Psalm's own callable expansion),
+        // and an unexpanded `self` there becomes the by-ref variable's type in the template.
+        $params = [];
+
+        foreach ($method->params as $param) {
+            $outType = $param->out_type;
+
+            if ($outType instanceof Union) {
+                $param = clone $param;
+                $param->out_type = $expand($outType);
+            }
+
+            $params[] = $param;
+        }
+
+        return $expand(new Union([new TClosure($params, $method->return_type, $method->capabilities)]));
+    }
+
+    /**
+     * Resolves a method's types as the rendered component sees them, or null when nothing can: a
+     * generic method or declaring class (no template is bound here), or an unresolvable appearing class.
+     *
+     * @return (\Closure(Union): Union)|null
+     */
+    private static function expanderFor(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): ?\Closure {
+        if ($method->template_types !== null || $declaring->template_types !== null) {
+            return null;
+        }
+
+        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
+        // only `static` is the rendered component.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
+
+        if (!$appearing instanceof ClassLikeStorage) {
+            return null;
+        }
+
+        // `final: true` collapses `static` to the component: a subclass instance is still one, and
+        // `Component&static` means nothing to a template.
+        return static fn(Union $type): Union => TypeExpander::expandUnion(
+            $codebase,
+            $type,
+            $appearing->name,
+            $storage->name,
+            $appearing->parent_class,
+            final: true,
+        );
     }
 
     /**
