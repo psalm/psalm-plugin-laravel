@@ -243,6 +243,7 @@ final class Plugin implements PluginEntryPointInterface
         Blade\Annotate\AnnotationCollector::reset();
         Blade\Annotate\AnnotationWriter::reset();
         Blade\BladeIssueRemapHandler::reset();
+        Blade\CompilerEnvironment::reset();
         Blade\ContractRegistry::reset();
         Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
@@ -984,8 +985,8 @@ final class Plugin implements PluginEntryPointInterface
      * project files and before it starts scanning them.
      *
      * Holds no static state, so there is nothing to reset between invocations: every run recompiles
-     * from the manifest on disk, whose fingerprints carry the Laravel version, the plugin version,
-     * and the booted `BladeCompiler`'s own registration surface (see
+     * from the manifest on disk, whose fingerprints carry the Laravel version, the plugin version
+     * and source, and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
      * @param bool $annotating the annotate codemod is driving this run, which needs the read sets

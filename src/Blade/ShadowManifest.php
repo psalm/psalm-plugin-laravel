@@ -20,12 +20,11 @@ final class ShadowManifest
     private const MANIFEST_FILE = 'manifest.php';
 
     /**
-     * Bump when anything the plugin writes around a shadow changes for the same source: the marker
-     * pass, the prelude ({@see PreludeBuilder}), suppression injection, or the `$attributes`
-     * restore-point re-assert ({@see AttributesRestoreReassert}). It also invalidates a changed
-     * manifest-entry layout. The shadow's own compiled bytes are never fingerprinted (see class
-     * docblock), so this is the only lever that self-invalidates plugin-side derived facts such as
-     * the {@see ViewDataContract} cached in slot 5.
+     * Ordinary pipeline edits (marker pass, {@see PreludeBuilder}, suppression injection, the
+     * {@see AttributesRestoreReassert} re-assert) need no bump: the plugin's own source is part of
+     * the environment hash ({@see CompilerEnvironment::describe()}), so any change to it already
+     * invalidates every shadow and the {@see ViewDataContract} cached in slot 5. Bump only to mark
+     * a deliberate format or semantic migration, e.g. a changed manifest-entry layout.
      */
     private const MARKER_PASS_VERSION = 8;
 

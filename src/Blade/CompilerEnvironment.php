@@ -14,6 +14,8 @@ use Illuminate\View\Compilers\BladeCompiler;
  * whether component tag compilation is even on. {@see ShadowManifest::fingerprint()} folds the
  * result in so an application that edits its own directives (or swaps a compiler subclass)
  * invalidates its shadow cache instead of reusing bytes compiled against a different environment.
+ * The plugin's own source is folded in too ({@see self::hashPluginSource()}), so a plugin upgrade
+ * invalidates the shadows its older code wrote.
  *
  * The whole descriptor is a single nested, JSON-safe structure (scalars tagged with their PHP
  * type, arrays represented as a LIST of `[key, value]` pairs) hashed with exactly one
@@ -56,21 +58,41 @@ use Illuminate\View\Compilers\BladeCompiler;
  */
 final class CompilerEnvironment
 {
+    /** {@see self::hashPluginSource()} of the plugin's own root, once per invocation. */
+    private static ?string $ownSourceHash = null;
+
+    public static function reset(): void
+    {
+        self::$ownSourceHash = null;
+    }
+
     /**
+     * @param ?string $pluginRoot the plugin checkout whose source is hashed; null for this plugin's
+     *                            own root (tests point it at a fixture tree)
+     *
      * @return array{0: string, 1: bool, 2: list<string>} the environment hash, whether every input
      *         that fed it could be resolved deterministically, and the callable inputs that could not
      *         (e.g. `directive 'ray' (closure bound to Foo)`), for the user-facing warning
      */
-    public static function describe(BladeCompiler $compiler): array
+    public static function describe(BladeCompiler $compiler, ?string $pluginRoot = null): array
     {
         try {
             $trustworthy = true;
+            $pluginSource = $pluginRoot === null
+                ? (self::$ownSourceHash ??= self::hashPluginSource(\dirname(__DIR__, 2)))
+                : self::hashPluginSource($pluginRoot);
+
+            if ($pluginSource === null) {
+                $trustworthy = false;
+            }
+
             /** @var array<string, string> $fileHashes path => sha1_file(), cached within this call */
             $fileHashes = [];
             /** @var list<string> $reasons */
             $reasons = [];
 
             $descriptor = [
+                'pluginSource' => $pluginSource,
                 'class' => self::describeCompilerClass($compiler, $trustworthy),
                 'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), 'directive', $compiler, $fileHashes, $trustworthy, $reasons),
                 'extensions' => self::describeCallableMap($compiler->getExtensions(), 'extension', $compiler, $fileHashes, $trustworthy, $reasons),
@@ -91,6 +113,61 @@ final class CompilerEnvironment
         } catch (\Throwable) {
             return ['', false, []];
         }
+    }
+
+    /**
+     * A dev install reports the same Composer version for every commit, so the plugin's own code
+     * is hashed instead (#1869): sorted package-relative paths plus contents of `src/**.php` and
+     * `stubs/**.phpstub`, each length-prefixed so no path/content boundary shift can collide.
+     * Mtimes are left out so identical checkouts hash equal on any machine. The iterators accept
+     * `phar://` roots.
+     *
+     * @return ?string null when a source directory is missing or anything under it is unreadable,
+     *                 never a stable placeholder that would let stale shadows survive
+     */
+    private static function hashPluginSource(string $root): ?string
+    {
+        $files = [];
+
+        try {
+            foreach (['src' => '.php', 'stubs' => '.phpstub'] as $directory => $extension) {
+                $base = $root . '/' . $directory;
+
+                if (!\is_dir($base)) {
+                    return null;
+                }
+
+                $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(
+                    $base,
+                    \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::CURRENT_AS_PATHNAME | \FilesystemIterator::UNIX_PATHS,
+                ));
+
+                /** @var string $path */
+                foreach ($iterator as $path) {
+                    if (\str_ends_with($path, $extension)) {
+                        $files[\str_replace('\\', '/', \substr($path, \strlen($root) + 1))] = $path;
+                    }
+                }
+            }
+        } catch (\UnexpectedValueException) {
+            // An unreadable subdirectory throws from getChildren().
+            return null;
+        }
+
+        \ksort($files, \SORT_STRING);
+        $context = \hash_init('xxh128');
+
+        foreach ($files as $relative => $path) {
+            $contents = @\file_get_contents($path);
+
+            if ($contents === false) {
+                return null;
+            }
+
+            \hash_update($context, \pack('J', \strlen($relative)) . $relative . \pack('J', \strlen($contents)) . $contents);
+        }
+
+        return \hash_final($context);
     }
 
     /**
