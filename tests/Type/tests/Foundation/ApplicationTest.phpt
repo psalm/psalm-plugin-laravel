@@ -18,5 +18,16 @@ function returns_string(Application $application): string
 {
     return $application->environment();
 }
+
+/**
+ * Laravel keys the registered providers by their class name (Application::markAsRegistered()),
+ * and Arr::where() in getProviders() preserves those keys, so the result is not a list.
+ *
+ * @return array<class-string<\Illuminate\Support\ServiceProvider>, \Illuminate\Support\ServiceProvider>
+ */
+function returns_providers_keyed_by_class(Application $application): array
+{
+    return $application->getProviders(\Illuminate\Support\ServiceProvider::class);
+}
 ?>
 --EXPECTF--
