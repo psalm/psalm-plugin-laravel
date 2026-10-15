@@ -7,6 +7,8 @@ use Illuminate\Contracts\Pagination\CursorPaginator as CursorPaginatorContract;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator as LengthAwarePaginatorContract;
 use Illuminate\Contracts\Pagination\Paginator as PaginatorContract;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Pagination\AbstractCursorPaginator;
+use Illuminate\Pagination\AbstractPaginator;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
@@ -30,6 +32,12 @@ function simple_contract_takes_model(PaginatorContract $_p): void {}
 
 /** @param CursorPaginatorContract<int, Model> $_p */
 function cursor_contract_takes_model(CursorPaginatorContract $_p): void {}
+
+/** @param AbstractPaginator<int, Model> $_p */
+function abstract_takes_model(AbstractPaginator $_p): void {}
+
+/** @param AbstractCursorPaginator<int, Model> $_p */
+function abstract_cursor_takes_model(AbstractCursorPaginator $_p): void {}
 
 /** @param LengthAwarePaginator<int, MechanicSpecialization> $_p */
 function length_aware_takes_specialization(LengthAwarePaginator $_p): void {}
@@ -61,6 +69,9 @@ function widen_every_paginator(
     simple_contract_takes_model($simpleContract);
     cursor_contract_takes_model($cursor);
     cursor_contract_takes_model($cursorContract);
+    abstract_takes_model($lengthAware);
+    abstract_takes_model($simple);
+    abstract_cursor_takes_model($cursor);
 }
 
 /** @param LengthAwarePaginator<int, Mechanic> $paginator */

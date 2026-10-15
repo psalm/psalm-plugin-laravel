@@ -422,7 +422,11 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Why:** Laravel 13.36 types `BelongsToMany` results as `TRelatedModel&object{pivot: TPivotModel}`, so `$post->tags()->paginate()` is a `LengthAwarePaginator<int, Tag&object{pivot: Pivot}>`. With an invariant `TValue` it could not be returned as, or passed to, `LengthAwarePaginator<int, Tag>`, a type Laravel itself accepts. A paginator is read-mostly, so covariance is sound for the common surface; writes go through `setCollection()` / `through()`, which `@psalm-this-out` rebinds to the new value type instead of mutating in place.
 
 **Boundaries:**
-- Accepted hole: a callee that writes through `offsetSet`, or through a forwarded `push`/`put` (`@mixin` / `__call` onto the wrapped collection), on a widened paginator is not caught. Laravel's own PHPDoc has the same hole.
+- Accepted hole: a helper typed `LengthAwarePaginator<int, Model>` that receives a `LengthAwarePaginator<int, MechanicSpecialization>` can replace its items in place, and the caller keeps reading the narrower type. Not caught:
+  - `$p->getCollection()->transform(fn (Model $_): Model => new Mechanic())`: `getCollection()` returns the live wrapped collection, not a copy.
+  - `$p->through(...)` and `$p->setCollection(...)`: both mutate the same object at runtime; `@psalm-this-out` rebinds only the static type of the callee's receiver variable, never the caller's alias.
+  - `offsetSet`, and a forwarded `push`/`put` (`@mixin` / `__call` onto the wrapped collection).
+  Laravel's own PHPDoc has the same hole. Pinned by `PaginatorCovarianceKnownLimitationTest.phpt`.
 - Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
 - Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
 

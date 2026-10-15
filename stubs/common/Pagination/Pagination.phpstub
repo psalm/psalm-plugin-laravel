@@ -9,6 +9,9 @@ use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
  * class_implements list when a stub re-declares the class, so the clause
  * must be repeated verbatim or callers typed on the contracts break.
  *
+ * TValue is covariant like Laravel's, so a helper typed on a wider TValue can mutate the caller's
+ * narrower paginator in place (getCollection()/through()/setCollection()); see decisions.md.
+ *
  * @template TKey of array-key
  * @template-covariant TValue
  *
