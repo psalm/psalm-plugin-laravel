@@ -75,6 +75,21 @@ final class ShadowIssueRelocator
     ];
 
     /**
+     * The compiled save/restore statements whose assignment `MixedAssignment` reports (#1872):
+     * `statement` is what must be absent from the template, `target` where Psalm positions the
+     * issue. The `$__*Original*` saves are not here: Psalm never reports a `$_`-prefixed target.
+     */
+    private const SAVE_RESTORE_PATTERNS = [
+        // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
+        '/<\?php (?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};) \?>/',
+        // CompilesErrors::compileEnderror()
+        '/(?<statement>if \(isset\(\$__messageOriginal\)\) \{ (?<target>\$message) = \$__messageOriginal; \})/',
+        // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
+        '/(?<statement>if \(isset\(\$value\)\) \{ (?<target>\$__(?:session|context)Previous)\[\] = \$value; \})/',
+        '/(?<statement>if \(isset\(\$__(?<kind>session|context)Previous\) && !empty\(\$__\k<kind>Previous\)\) \{ (?<target>\$value) = array_pop\(\$__\k<kind>Previous\); \})/',
+    ];
+
+    /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
      * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
      *                                                     through; a journey crosses files, so one
@@ -399,6 +414,14 @@ final class ShadowIssueRelocator
         // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
         // by default, both on a mapped template line and on the prelude's own unmapped lines below.
         if ($issue instanceof MixedIssue && !$reportMixed) {
+            return false;
+        }
+
+        // The restores Laravel compiles around a `<x-...>` tag, `@error` and `@session`/`@context`,
+        // and the stack push of the last two, assign a value that is `mixed` on every mention: the
+        // prelude's fallback type for a saved `$__*Original*` name, or a session value. That is
+        // `MixedAssignment` on code the author never wrote, 91% of `Mixed*` in one real app (#1872).
+        if ($issue instanceof MixedIssue && self::isGeneratedSaveRestore($issue, $target)) {
             return false;
         }
 
@@ -774,6 +797,33 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursIn($save[0], $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether an issue sits on the assignment target of one of {@see self::SAVE_RESTORE_PATTERNS}
+     * whose statement is absent from the template, so an author who writes one keeps the finding.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedSaveRestore(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        foreach (self::SAVE_RESTORE_PATTERNS as $pattern) {
+            \preg_match_all($pattern, $selection->snippet, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE);
+
+            foreach ($matches as $match) {
+                if ($match['target'][1] === $selection->start) {
+                    return !TemplateSnippetMatcher::occursIn($match['statement'][0], $target->templateSource, $target->markerPrefix());
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
