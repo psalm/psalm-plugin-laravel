@@ -78,18 +78,20 @@ final class CompilerEnvironment
     {
         try {
             $trustworthy = true;
-            $pluginSource = $pluginRoot === null
-                ? (self::$ownSourceHash ??= self::hashPluginSource(\dirname(__DIR__, 2)))
-                : self::hashPluginSource($pluginRoot);
-
-            if ($pluginSource === null) {
-                $trustworthy = false;
-            }
-
             /** @var array<string, string> $fileHashes path => sha1_file(), cached within this call */
             $fileHashes = [];
             /** @var list<string> $reasons */
             $reasons = [];
+
+            $root = $pluginRoot ?? \dirname(__DIR__, 2);
+            $pluginSource = $pluginRoot === null
+                ? (self::$ownSourceHash ??= self::hashPluginSource($root))
+                : self::hashPluginSource($root);
+
+            if ($pluginSource === null) {
+                $trustworthy = false;
+                $reasons[] = "plugin source (src/, stubs/ under {$root}) missing or unreadable";
+            }
 
             $descriptor = [
                 'pluginSource' => $pluginSource,
@@ -120,7 +122,7 @@ final class CompilerEnvironment
      * is hashed instead (#1869): sorted package-relative paths plus contents of `src/**.php` and
      * `stubs/**.phpstub`, each length-prefixed so no path/content boundary shift can collide.
      * Mtimes are left out so identical checkouts hash equal on any machine. The iterators accept
-     * `phar://` roots.
+     * `phar://` roots. Symlinked subdirectories are not followed.
      *
      * @return ?string null when a source directory is missing or anything under it is unreadable,
      *                 never a stable placeholder that would let stale shadows survive
@@ -145,7 +147,9 @@ final class CompilerEnvironment
                 /** @var string $path */
                 foreach ($iterator as $path) {
                     if (\str_ends_with($path, $extension)) {
-                        $files[\str_replace('\\', '/', \substr($path, \strlen($root) + 1))] = $path;
+                        $relative = \substr($path, \strlen($root) + 1);
+                        // On POSIX a backslash is a filename byte: rewriting it could merge two files into one key.
+                        $files[\DIRECTORY_SEPARATOR === '\\' ? \str_replace('\\', '/', $relative) : $relative] = $path;
                     }
                 }
             }
@@ -159,8 +163,11 @@ final class CompilerEnvironment
 
         foreach ($files as $relative => $path) {
             $contents = @\file_get_contents($path);
+            // A read that fails midway returns the bytes read so far, not false.
+            \clearstatcache(true, $path);
+            $size = @\filesize($path);
 
-            if ($contents === false) {
+            if ($contents === false || $size === false || \strlen($contents) !== $size) {
                 return null;
             }
 

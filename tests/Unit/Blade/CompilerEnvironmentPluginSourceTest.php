@@ -104,6 +104,11 @@ final class CompilerEnvironmentPluginSourceTest extends TestCase
         [$renamed] = $this->describe($plugin);
         \rename($plugin . '/stubs/common/View/Renamed.phpstub', $plugin . '/stubs/common/View/Factory.phpstub');
 
+        $stub = $plugin . '/stubs/common/View/Factory.phpstub';
+        \file_put_contents($stub, "<?php\n// factorY\n");
+        [$editedStub] = $this->describe($plugin);
+        \file_put_contents($stub, "<?php\n// factory\n");
+
         \file_put_contents($plugin . '/src/README.md', 'not source');
         [$ignored] = $this->describe($plugin);
 
@@ -112,6 +117,7 @@ final class CompilerEnvironmentPluginSourceTest extends TestCase
         $this->assertNotSame($base, $addedStub);
         $this->assertNotSame($base, $deleted);
         $this->assertNotSame($base, $renamed);
+        $this->assertNotSame($base, $editedStub);
         $this->assertSame($base, $ignored, 'only .php under src/ and .phpstub under stubs/ count');
     }
 
@@ -167,6 +173,74 @@ final class CompilerEnvironmentPluginSourceTest extends TestCase
 
         $this->assertFalse($this->describe($file)[1]);
         $this->assertFalse($this->describe($directory)[1]);
+    }
+
+    #[Test]
+    public function an_untrusted_plugin_source_names_its_root_in_the_reasons(): void
+    {
+        [, $trusted, $reasons] = $this->describe($this->root . '/absent');
+
+        $this->assertFalse($trusted);
+        $this->assertSame(["plugin source (src/, stubs/ under {$this->root}/absent) missing or unreadable"], $reasons);
+    }
+
+    /** `file_get_contents()` returns the bytes read so far, not `false`, when a read fails midway. */
+    #[Test]
+    public function a_read_that_fails_midway_is_untrusted(): void
+    {
+        $plugin = $this->tree('plugin', self::TREE);
+        TruncatingStreamWrapper::register();
+
+        try {
+            TruncatingStreamWrapper::$failingSuffix = '';
+            $intact = $this->describe(TruncatingStreamWrapper::SCHEME . '://' . $plugin);
+            TruncatingStreamWrapper::$failingSuffix = '/src/Plugin.php';
+            $truncated = $this->describe(TruncatingStreamWrapper::SCHEME . '://' . $plugin);
+        } finally {
+            TruncatingStreamWrapper::$failingSuffix = '';
+            TruncatingStreamWrapper::unregister();
+        }
+
+        $this->assertSame($this->describe($plugin), $intact, 'the wrapper alone must not change the hash');
+        $this->assertFalse($truncated[1]);
+    }
+
+    /** On POSIX a backslash is an ordinary filename byte, not a separator to normalize. */
+    #[Test]
+    public function a_backslash_in_a_posix_filename_does_not_merge_with_a_subdirectory(): void
+    {
+        if (\DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('a backslash is a separator on Windows');
+        }
+
+        $both = $this->tree('both', ['src/a\\b.php' => '<?php 1', 'src/a/b.php' => '<?php 2', 'stubs/s.phpstub' => '']);
+        $slashOnly = $this->tree('slash', ['src/a/b.php' => '<?php 2', 'stubs/s.phpstub' => '']);
+        $backslashOnly = $this->tree('backslash', ['src/a\\b.php' => '<?php 1', 'stubs/s.phpstub' => '']);
+
+        $this->assertNotSame($this->describe($both)[0], $this->describe($slashOnly)[0]);
+        $this->assertNotSame($this->describe($both)[0], $this->describe($backslashOnly)[0]);
+    }
+
+    /**
+     * Pins the digest to byte-sorted relative paths. Depth-first traversal visits `src/a/z.php`
+     * before `src/a.php` even under a sorted readdir (`a` < `a.php`), while the byte order is
+     * `src/a-b.php` < `src/a.php` < `src/a/z.php`, so dropping the sort changes the digest.
+     */
+    #[Test]
+    public function the_digest_follows_byte_sorted_relative_paths(): void
+    {
+        $files = ['src/a/z.php' => 'z', 'src/a.php' => 'a', 'src/a-b.php' => 'ab', 'stubs/s.phpstub' => 's'];
+        $plugin = $this->tree('sorted', $files);
+
+        $context = \hash_init('xxh128');
+
+        foreach (['src/a-b.php', 'src/a.php', 'src/a/z.php', 'stubs/s.phpstub'] as $relative) {
+            \hash_update($context, \pack('J', \strlen($relative)) . $relative . \pack('J', \strlen($files[$relative])) . $files[$relative]);
+        }
+
+        $hash = new \ReflectionMethod(CompilerEnvironment::class, 'hashPluginSource');
+
+        $this->assertSame(\hash_final($context), $hash->invoke(null, $plugin));
     }
 
     #[Test]

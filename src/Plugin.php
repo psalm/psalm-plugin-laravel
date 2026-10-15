@@ -984,10 +984,10 @@ final class Plugin implements PluginEntryPointInterface
      * still join the analysis — Psalm calls `Config::initializePlugins()` after it has queued the
      * project files and before it starts scanning them.
      *
-     * Holds no static state, so there is nothing to reset between invocations: every run recompiles
-     * from the manifest on disk, whose fingerprints carry the Laravel version, the plugin version
-     * and source, and the booted `BladeCompiler`'s own registration surface (see
-     * `Blade\CompilerEnvironment::describe()`).
+     * Its only per-run static state is the plugin-source hash `Blade\CompilerEnvironment` memoizes,
+     * cleared by `resetInvocationState()`. Freshness comes from the manifest on disk, whose
+     * fingerprints carry the Laravel version, the plugin version and source, and the booted
+     * `BladeCompiler`'s own registration surface (see `Blade\CompilerEnvironment::describe()`).
      *
      * @param bool $annotating the annotate codemod is driving this run, which needs the read sets
      *                         the UnusedViewData pass collects whether or not that rule is on

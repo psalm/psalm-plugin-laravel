@@ -159,8 +159,8 @@ final class BladeBootstrapper
                 $this->output->debug(
                     "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
                     . \implode('', \array_map(static fn(string $input): string => "  - {$input}\n", $untrustedInputs))
-                    . "To restore caching, declare such callbacks `static fn` / `static function` that capture no objects, "
-                    . "or register a static method (`[Foo::class, 'bar']`).\n",
+                    . "To restore caching for a callback, declare it `static fn` / `static function` capturing no objects, "
+                    . "or register a static method (`[Foo::class, 'bar']`). For the plugin source, check its file permissions.\n",
                 );
             }
         }
