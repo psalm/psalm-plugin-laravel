@@ -121,12 +121,15 @@ function constant_key_is_expanded(ConstantKeyCollection $parts): Collection
     return $parts->map(static fn (Part $p): Part => $p);
 }
 
+/** @param Collection<'child', Part> $_parts */
+function takes_eloquent_child_keyed(Collection $_parts): void {}
+
 function relative_class_constant_key_declines(ChildKeyedParts $parts): void
 {
     $_mapped = $parts->map(static fn (Part $p): Part => $p);
-    // Declined: the stub's Support\Collection stands (Psalm leaves the `self::KEY` key unresolved), and the
-    // handler does not invent the child's 'child'.
-    /** @psalm-check-type-exact $_mapped = SupportCollection<Illuminate\Database\Eloquent\Collection::KEY, Part> */
+    // Declined: the result must not be promised as an Eloquent collection with the child's key, so it is
+    // rejected here; a narrowed result would be accepted silently.
+    takes_eloquent_child_keyed($_mapped);
 }
 
 /**
@@ -149,3 +152,4 @@ function mixin_receiver_declines(CollectionProxy $proxy): void
 }
 ?>
 --EXPECTF--
+ArgumentTypeCoercion on line %d: Argument 1 of takes_eloquent_child_keyed expects Illuminate\Database\Eloquent\Collection<'child', App\Models\Part>, but parent type Illuminate\Support\Collection<%s, App\Models\Part> provided
