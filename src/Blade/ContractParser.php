@@ -264,7 +264,8 @@ final class ContractParser
             }
 
             foreach ($matched as $match) {
-                $declared = self::splitVar($match[1][0]);
+                $declared = self::splitVar($match[1][0])
+                    ?? self::splitContinuedVar($match[1][0], \substr($comment, $match[0][1] + \strlen($match[0][0])));
                 $at = $line + SourceLines::breaksIn($comment, 0, $match[0][1]);
 
                 if ($declared !== null) {
@@ -276,6 +277,48 @@ final class ContractParser
         }
 
         return $declarations;
+    }
+
+    /**
+     * A tag whose first line does not split on its own (`@var array{` opening a multi-line shape),
+     * read with its continuation lines the way Psalm's `DocblockParser` joins them: every following
+     * line up to a blank one, the next tag, or the end of the comment.
+     *
+     * @return array{0: string, 1: string, 2: bool}|null see {@see self::splitVar()}
+     *
+     * @psalm-pure
+     */
+    private static function splitContinuedVar(string $first, string $rest): ?array
+    {
+        $joined = $first;
+
+        foreach (\preg_split('/\r\n|\r|\n/', $rest) ?: [] as $i => $continuation) {
+            // The first piece is what is left of the tag's own line: nothing, or the comment's `*/`.
+            if ($i === 0) {
+                continue;
+            }
+
+            $continuation = (string) \preg_replace('/\h*\*\/.*\z/s', '', $continuation, count: $closed);
+            $body = (string) \preg_replace('/^\h*\*?\h*/', '', $continuation);
+
+            if ($body === '' || \str_starts_with($body, '@')) {
+                break;
+            }
+
+            $joined .= "\n" . $continuation;
+
+            if ($closed > 0) {
+                break;
+            }
+        }
+
+        if ($joined === $first) {
+            return null;
+        }
+
+        $declared = self::splitVar($joined);
+
+        return $declared === null ? null : [$declared[0], CommentAnalyzer::sanitizeDocblockType($declared[1]), $declared[2]];
     }
 
     /**

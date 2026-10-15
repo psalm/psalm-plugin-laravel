@@ -780,6 +780,20 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function a_raw_var_type_spanning_several_lines_is_read_as_psalm_reads_it(): void
+    {
+        $source = "<?php\n/**\n * @var array{\n *     retryRate: float,\n *     manualRate: float,\n * } \$data The rates\n"
+            . " * @var array<string, string> \$countryNames\n */\n?>\n";
+
+        $vars = $this->dataContract($source)->vars;
+
+        $this->assertSame(['data', 'countryNames'], \array_keys($vars));
+        $this->assertSame('array{ retryRate: float, manualRate: float}', $vars['data']->typeString);
+        $this->assertSame(3, $vars['data']->declarationLine);
+        $this->assertSame(['data', 'countryNames'], ContractParser::rawDeclaredNames($source));
+    }
+
+    #[Test]
     public function a_raw_var_without_a_name_after_its_type_declares_nothing(): void
     {
         $source = "<?php\n/**\n * @var int the count\n * @var \$name string\n * @var array<int \$x\n */\n?>\n";
