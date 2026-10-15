@@ -822,6 +822,37 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function an_ignore_var_tag_turns_every_raw_var_of_its_docblock_into_no_contract(): void
+    {
+        // Psalm's DocblockParser::resolveTags() drops every `@var` of a docblock carrying either tag.
+        // The names still count as stated: the annotator must not append to a docblock Psalm ignores.
+        $sources = [
+            "<?php\n/**\n * @var array{\n *   id: int,\n * } \$data\n * @psalm-ignore-var\n */\n?>\n",
+            "<?php\n/**\n * @ignore-var\n * @var array{id: int} \$data\n */\n?>\n",
+            "<?php /** @var int \$data\n * @psalm-ignore-var */ ?>\n",
+        ];
+
+        foreach ($sources as $source) {
+            $this->assertSame([], \array_keys($this->dataContract($source)->vars), $source);
+            $this->assertSame(['data'], ContractParser::rawDeclaredNames($source), $source);
+        }
+
+        $other = "<?php /** @psalm-ignore-var */ ?>\n<?php\n/**\n * @var int \$data\n * @psalm-ignore-variable-method\n */\n?>\n";
+        $this->assertSame(['data'], \array_keys($this->dataContract($other)->vars), 'only a tag of that exact name, in the same docblock');
+    }
+
+    #[Test]
+    public function a_multi_line_raw_var_type_continues_over_crlf_but_not_over_a_bare_cr(): void
+    {
+        // Psalm splits a docblock on LF only and strips CR after.
+        $crlf = "<?php\r\n/**\r\n * @var array{\r\n *   id: int\r\n * } \$data\r\n */\r\n?>\r\n";
+        $this->assertSame('array{ id: int }', $this->dataContract($crlf)->vars['data']->typeString ?? null);
+
+        $cr = "<?php\r/**\r * @var array{\r * id:int\r * } \$data\r */\r?>";
+        $this->assertSame([], \array_keys($this->dataContract($cr)->vars));
+    }
+
+    #[Test]
     public function a_raw_var_without_a_name_after_its_type_declares_nothing(): void
     {
         $source = "<?php\n/**\n * @var int the count\n * @var \$name string\n * @var array<int \$x\n */\n?>\n";

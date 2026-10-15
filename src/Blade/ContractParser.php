@@ -34,6 +34,13 @@ final class ContractParser
      * running text (`@deprecated Replace @var Foo $user with ...`, `* Example: /** @var T $x`) is prose,
      * not a declaration. `(*ANYCRLF)` makes a bare `\r` end a line too, as PHP's lexer counts it.
      */
+    /**
+     * A docblock-level `@ignore-var` / `@psalm-ignore-var` tag, which makes Psalm drop every `@var` of
+     * that docblock (`DocblockParser::resolveTags()`). Tag names run to the first character outside
+     * `[\w\-\\:]`, as Psalm reads them, so `@psalm-ignore-variable-method` is another tag.
+     */
+    private const IGNORE_VAR = '/(?:^\h*\*?\h*|\A\/\*+\h*)@(?:psalm-)?ignore-var(?![\w\-\\\\:])/m';
+
     private const RAW_PHP_VAR = '/(*ANYCRLF)(?:^\h*(?:\*|\/\/|#)?|\A\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*$/m';
 
     /**
@@ -250,7 +257,7 @@ final class ContractParser
      * no contract, but a name the template states, which the annotator must not add again.
      *
      * @return list<array{0: string, 1: string|null, 2: int, 3: bool, 4: bool}> name, type string (null when
-     *         name-first), 1-based line, whether it sits in a `/** *\/` docblock, whether it ends in `= null`
+     *         name-first or under `@psalm-ignore-var`), 1-based line, whether it sits in a `/** *\/` docblock, whether it ends in `= null`
      *
      * @psalm-pure
      */
@@ -263,13 +270,16 @@ final class ContractParser
                 continue;
             }
 
+            // Still stated, like a name-first line: the annotator must not append to a docblock Psalm ignores.
+            $ignored = $isDoc && \preg_match(self::IGNORE_VAR, $comment) === 1;
+
             foreach ($matched as $match) {
                 $declared = self::splitVar($match[1][0])
                     ?? self::splitContinuedVar($match[1][0], \substr($comment, $match[0][1] + \strlen($match[0][0])));
                 $at = $line + SourceLines::breaksIn($comment, 0, $match[0][1]);
 
                 if ($declared !== null) {
-                    $declarations[] = [$declared[0], $declared[1], $at, $isDoc, $declared[2]];
+                    $declarations[] = [$declared[0], $ignored ? null : $declared[1], $at, $isDoc, $declared[2]];
                 } elseif (\preg_match('/^\$(' . self::IDENTIFIER . ')(?![a-zA-Z0-9_\x80-\xff])/', $match[1][0], $first) === 1) {
                     $declarations[] = [$first[1], null, $at, $isDoc, false];
                 }
@@ -298,7 +308,8 @@ final class ContractParser
 
         $joined = $first;
 
-        foreach (\preg_split('/\r\n|\r|\n/', $rest) ?: [] as $i => $continuation) {
+        // Split on LF only, CR dropped, as Psalm splits: a bare-CR docblock is one line to it.
+        foreach (\explode("\n", \str_replace("\r", "", $rest)) as $i => $continuation) {
             // The first piece is the rest of the tag's own line, which the tag's match already consumed.
             if ($i === 0) {
                 continue;
