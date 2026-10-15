@@ -96,7 +96,7 @@ Full model: [Purity and Capabilities](purity.md).
 | `@psalm-override-property-visibility` | | class | Let `@property` override real property visibility |
 | `@psalm-override-method-visibility` | | class | Let `@method` override real method visibility |
 
-Defaults depend on `sealAllProperties` / `sealAllMethods` in `psalm.xml`.
+Defaults depend on `sealAllProperties` / `sealAllMethods` in `psalm.xml`, but only for user-defined classes (`ClassLikeStorage::hasSealedMethods()` / `hasSealedProperties()`). A stub class docblock replaces the reflected class's seal flag, so a stub that re-declares a class Laravel seals through `@method` / `@property` tags must restate `@psalm-seal-methods` / `@psalm-seal-properties`, otherwise the class resolves to unsealed.
 
 ## Class contracts
 
