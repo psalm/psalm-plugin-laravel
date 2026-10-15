@@ -34,14 +34,14 @@ final class ContractParser
      * running text (`@deprecated Replace @var Foo $user with ...`, `* Example: /** @var T $x`) is prose,
      * not a declaration. `(*ANYCRLF)` makes a bare `\r` end a line too, as PHP's lexer counts it.
      */
+    private const RAW_PHP_VAR = '/(*ANYCRLF)(?:^\h*(?:\*|\/\/|#)?|\A\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*$/m';
+
     /**
      * A docblock-level `@ignore-var` / `@psalm-ignore-var` tag, which makes Psalm drop every `@var` of
      * that docblock (`DocblockParser::resolveTags()`). Tag names run to the first character outside
      * `[\w\-\\:]`, as Psalm reads them, so `@psalm-ignore-variable-method` is another tag.
      */
     private const IGNORE_VAR = '/(?:^\h*\*?\h*|\A\/\*+\h*)@(?:psalm-)?ignore-var(?![\w\-\\\\:])/m';
-
-    private const RAW_PHP_VAR = '/(*ANYCRLF)(?:^\h*(?:\*|\/\/|#)?|\A\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*$/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
