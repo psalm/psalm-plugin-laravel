@@ -41,6 +41,19 @@ final class MetadataCollection extends Collection {}
 final class KeyOfCollection extends Collection {}
 
 /**
+ * A `key-of<>` over a concrete operand expands to a literal key, which map() must keep.
+ *
+ * @extends Collection<key-of<array{first: int}>, Part>
+ */
+final class ConcreteKeyOfCollection extends Collection {}
+
+/** @extends Collection<ConstantKeyCollection::KEY, Part> */
+final class ConstantKeyCollection extends Collection
+{
+    public const KEY = 'fixed';
+}
+
+/**
  * Forwards calls to a collection through @mixin, but returns whatever its __call() builds: a plain
  * Support\Collection, so Eloquent-only methods must not be promised on a map result.
  *
@@ -76,6 +89,18 @@ function reordered_templates_use_the_bound_key(MetadataCollection $items): void
 {
     $_same = $items->map(static fn (Part $p): Part => $p);
     /** @psalm-check-type-exact $_same = Collection<int, Part> */
+}
+
+/** @return Collection<'first', Part> */
+function concrete_key_of_is_expanded(ConcreteKeyOfCollection $parts): Collection
+{
+    return $parts->map(static fn (Part $p): Part => $p);
+}
+
+/** @return Collection<'fixed', Part> */
+function constant_key_is_expanded(ConstantKeyCollection $parts): Collection
+{
+    return $parts->map(static fn (Part $p): Part => $p);
 }
 
 /**

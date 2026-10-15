@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -149,9 +150,12 @@ final class EloquentCollectionMapHandler implements MethodReturnTypeProviderInte
         for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
             $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
             if (!$forwarded instanceof TTemplateParam) {
-                // The key is stated in the subclass's own templates (`key-of<Data>`), which are not substituted
-                // here: decline rather than leak them. Templates of the calling function are fine.
-                return self::containsClassTemplate($value) ? null : $value;
+                // A concrete `key-of<array{a: int}>` or constant-backed key only becomes a literal once expanded.
+                // What still names the subclass's own templates (`key-of<Data>`) is not substituted here: decline
+                // rather than leak it.
+                $expanded = TypeExpander::expandUnion($codebase, $value, $storage->name, $storage->name, null);
+
+                return self::containsClassTemplate($expanded) ? null : $expanded;
             }
 
             if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
