@@ -95,6 +95,15 @@ Psalm keeps no global function table for ordinary project code: `Functions::func
 - Types only: a seeded `Union` has no `parent_nodes`, so no taint flows from a property.
 - A seeded shadow counts as a component view for `ShadowTarget::$isComponentView` (`BladeIssueRemapHandler::resolveTarget()`), so the relocator's `attributes|slot` guard drop also covers a nested tag's compiled `isset($attributes)` / `instanceof` bookkeeping in a view that never names `$attributes`. `AttributesRestoreReassert` keeps its source-only gate: it runs at compile time, before the registry exists, and such a view has no `$attributes` read for it to protect.
 
+#### Checking a class component tag's constructor arguments
+
+`Blade\ComponentArgumentHandler` (`AfterStatementAnalysis`, registered from `registerHandlers()` on the `$bladeActive` gate) checks a tag's data against the component's constructor (#1936, [user docs](../blade.md#class-component-arguments)). Nothing is rewritten in the shadow and nothing is static.
+
+- Matched on the whole compiled statement, `$component = X::resolve([...] + (isset($attributes) && $attributes instanceof ...ComponentAttributeBag ? $attributes->all() : []));` (`compileClassComponentOpening()`), in a path `ShadowRegistry` knows. The receiver must inherit `Component::resolve()` through `declaring_method_ids`, which is also the component test.
+- The literal keys are already constructor parameter names: `ComponentTagCompiler::partitionDataAndAttributes()` split the tag with the booted class's real constructor and camelCased them. A non-literal item declines the statement.
+- Emits Psalm's own `InvalidArgument` and `TooFewArguments` (as `RawDeclarationHandler` emits `InvalidDocblock`), which the remap relocates like any shadow issue. The comparison adds PHP's weak-mode scalar coercions (`Component::resolve()` and the container both call the constructor in weak mode), so it is not Psalm's `ArgumentAnalyzer`, which reports a numeric string attribute as `InvalidScalarArgument`.
+- `TooFewArguments` needs `PreludeBuilder::isComponentView()` false and no `ComponentViewRegistry` seed: anywhere `$attributes` is set, the compiled `+ $attributes->all()` can supply the parameter.
+
 #### Remapping a shadow issue onto its template
 
 Neither registration makes a finding visible by itself: an issue Psalm raises in a shadow is located in a file that is deliberately unreportable, so it dies in the reportability gate. `Blade\BladeIssueRemapHandler` (`BeforeAddIssueInterface`, registered from `registerHandlers()` only when the compile step activated) is the only channel from shadow analysis to user-visible output.
