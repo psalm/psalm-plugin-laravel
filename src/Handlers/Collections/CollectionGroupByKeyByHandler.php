@@ -47,6 +47,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return null;
         }
 
+        $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $templates = $event->getTemplateTypeParameters();
         if ($arg->isSingleStringLiteral()) {
             $stmt = $event->getStmt();
@@ -60,9 +61,12 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
                 $method === 'groupby',
             );
             $value = $templates[1] ?? ($model === null ? null : new Union([new TNamedObject($model)]));
-        } elseif (self::returnsMixed($arg)) {
+        } elseif (self::returnsMixed($arg)
+            && \in_array(\strtolower($class), ['illuminate\support\collection', 'illuminate\database\eloquent\collection'], true)
+        ) {
             // Laravel casts group/key values to array keys at runtime, but Psalm carries `mixed` through the stub's
             // TGroupKey/TNewKey conditional, so the outer key would be `array-key|mixed` and break `static<TKey, ...>` calls.
+            // Subclasses are skipped: their template list may be reordered, so the receiver's args are not TKey/TValue.
             $key = Type::getArrayKey();
             $value = $templates[1] ?? null;
         } else {
@@ -73,7 +77,6 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return null;
         }
 
-        $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         if ($method === 'keyby') {
             return new Union([new TGenericObject($class, [$key, $value], is_static: true)]);
         }
@@ -95,13 +98,16 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
     /** @psalm-mutation-free */
     private static function returnsMixed(Union $arg): bool
     {
+        $mixed = false;
         foreach ($arg->getAtomicTypes() as $atomic) {
-            if (($atomic instanceof TClosure || $atomic instanceof TCallable) && $atomic->return_type?->hasMixed() === true) {
-                return true;
+            if (!$atomic instanceof TClosure && !$atomic instanceof TCallable) {
+                return false;
             }
+
+            $mixed = $mixed || $atomic->return_type?->hasMixed() === true;
         }
 
-        return false;
+        return $mixed;
     }
 
     /** @psalm-mutation-free */
