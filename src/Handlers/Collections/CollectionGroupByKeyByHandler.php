@@ -49,11 +49,11 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
 
         $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
         $templates = $event->getTemplateTypeParameters();
+        $stmt = $event->getStmt();
+        $lhs = $stmt instanceof \PhpParser\Node\Expr\MethodCall
+            ? $source->getNodeTypeProvider()->getType($stmt->var)
+            : null;
         if ($arg->isSingleStringLiteral()) {
-            $stmt = $event->getStmt();
-            $lhs = $stmt instanceof \PhpParser\Node\Expr\MethodCall
-                ? $source->getNodeTypeProvider()->getType($stmt->var)
-                : null;
             $model = ModelPropertyResolver::resolveExactlyOneModelClass($templates, 1, $lhs, $source->getCodebase());
             $key = $model === null ? null : self::resolveKeyType(
                 ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $arg->getSingleStringLiteral()->value),
@@ -61,12 +61,11 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
                 $method === 'groupby',
             );
             $value = $templates[1] ?? ($model === null ? null : new Union([new TNamedObject($model)]));
-        } elseif (self::returnsMixed($arg)
-            && \in_array(\strtolower($class), ['illuminate\support\collection', 'illuminate\database\eloquent\collection'], true)
-        ) {
+        } elseif (self::returnsMixed($arg) && self::isExactBaseCollection($lhs)) {
             // Laravel casts group/key values to array keys at runtime, but Psalm carries `mixed` through the stub's
             // TGroupKey/TNewKey conditional, so the outer key would be `array-key|mixed` and break `static<TKey, ...>` calls.
-            // Subclasses are skipped: their template list may be reordered, so the receiver's args are not TKey/TValue.
+            // The receiver expression must be exactly a base collection: subclasses may reorder templates, and template
+            // or intersection receivers make the answer disagree with what Psalm merges for the other members.
             $key = Type::getArrayKey();
             $value = $templates[1] ?? null;
         } else {
@@ -108,6 +107,24 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         return $mixed;
+    }
+
+    /** @psalm-mutation-free */
+    private static function isExactBaseCollection(?Union $lhs): bool
+    {
+        if (!$lhs instanceof Union) {
+            return false;
+        }
+
+        foreach ($lhs->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []
+                || !\in_array(\strtolower($atomic->value), ['illuminate\support\collection', 'illuminate\database\eloquent\collection'], true)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @psalm-mutation-free */

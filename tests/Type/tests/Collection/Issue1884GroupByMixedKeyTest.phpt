@@ -74,5 +74,40 @@ function fixed_template_subclass_defers(Issue1884FixedCollection $c): void
     $_keyed = $c->keyBy(fn (Customer $r): mixed => $r->unknown_prop ?? 'unknown');
     /** @psalm-check-type-exact $_keyed = Issue1884FixedCollection */
 }
+
+/**
+ * @template C of Collection<array-key, Customer>
+ * @param C $c
+ * @param callable(Customer): mixed $by
+ * @return C
+ */
+function template_receiver_defers(Collection $c, callable $by): Collection
+{
+    return $c->keyBy($by);
+}
+
+/**
+ * @param Collection<string, Customer>&Issue1884Reversed<Customer, string> $c
+ * @param callable(Customer): mixed $by
+ */
+function intersection_receiver_defers(Collection $c, callable $by): void
+{
+    $_count = $c->keyBy($by)->count();
+    /** @psalm-check-type-exact $_count = int<0, max> */
+}
+
+/** @param Collection<int, Customer>|\Illuminate\Database\Eloquent\Collection<int, Customer> $c */
+function receiver_union_and_chained_static_still_answer($c): void
+{
+    $_keyed = $c->keyBy(fn ($r) => $r->unknown_prop ?? 'unknown');
+    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>&static|\Illuminate\Database\Eloquent\Collection<array-key, Customer>&static */
+}
+
+/** @param Collection<int, Customer> $c */
+function chained_static_receiver_still_answers(Collection $c): void
+{
+    $_chained = $c->map(fn (Customer $r) => $r)->keyBy(fn ($r) => $r->unknown_prop ?? 'unknown');
+    /** @psalm-check-type-exact $_chained = Collection<array-key, Customer>&static */
+}
 ?>
 --EXPECTF--
