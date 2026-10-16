@@ -869,11 +869,55 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame([2, 9], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
         $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'context-previous.blade.php'), $json);
 
-        // `MixedAssignment` is genuine: `$value` comes from `session()->get()`/`context()->get()`
-        // and is popped back off a `list<mixed>`.
+        // `MixedAssignment` on `$value = session()->get()`/`context()->get()` is genuine; the
+        // stack push and pop of that value are dropped (#1872).
         $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
             => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php') && $issue['type'] !== 'MixedAssignment'));
         $this->assertSame([], $stacks, $json);
+    }
+
+    /**
+     * #1872: the compiled save/restore bookkeeping of a plain `<x-...>` tag (line 1), nested tags
+     * (line 2), a multi-line tag (line 5), `@error` (line 8) and `@session`/`@context` (lines 9 to
+     * 14) reports no `MixedAssignment`. Left: the `$value = session()->get()`/`context()->get()`
+     * read on lines 9 and 12, which is not a save or restore.
+     */
+    #[Test]
+    public function compiled_save_restore_bookkeeping_reports_no_mixed_assignment(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $template = 'mixed-bookkeeping.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        // Guard against a vacuous pass: every construct must have compiled its restore.
+        $shadow = $this->shadowSourceFor('resources/views/' . $template, 'psalm-blade-report-mixed.xml');
+        foreach (['$attributes = $__attributesOriginal', '$message = $__messageOriginal;', '$__sessionPrevious[] = $value;', '$value = array_pop($__contextPrevious);'] as $statement) {
+            $this->assertStringContainsString($statement, $shadow);
+        }
+
+        $this->assertSame([9, 12], $this->linesFor($issues, 'MixedAssignment', $template), $json);
+        $this->assertSame(
+            ['Unable to determine the type that $value is being assigned to', 'Unable to determine the type that $value is being assigned to'],
+            $this->messagesFor($issues, 'MixedAssignment', $template),
+            $json,
+        );
+    }
+
+    /**
+     * #1872 negative: an author's own `$attributes` assignment (line 1) does not have the compiled
+     * shape, and an author who writes the compiled restore verbatim (line 2) keeps the finding. The
+     * tag's own restore (line 3) differs from line 2 by its hash and is still dropped.
+     */
+    #[Test]
+    public function an_author_written_save_restore_look_alike_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+
+        $this->assertSame(
+            [1, 2],
+            $this->linesFor($issues, 'MixedAssignment', 'mixed-bookkeeping-authored.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
