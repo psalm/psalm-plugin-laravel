@@ -46,6 +46,11 @@ class Route
      * declares natively: with both the stub and the reflected source declaring that implicit
      * conditional, Psalm 7 collapses the call to the getter branch.
      *
+     * Known limitation: a possibly-empty unpack (`domain(...$args)`) misses the getter branch, a
+     * subclass override with a native-only return still resolves through this conditional, and a
+     * first-class callable (`domain(...)`) leaves `TDomain` unresolved (InvalidArgument on call);
+     * Laravel 13.18+'s native type behaves the same. Pinned by RouteDomainKnownLimitation.phpt.
+     *
      * @template TDomain of \BackedEnum|string|null
      *
      * @param  TDomain  $domain
