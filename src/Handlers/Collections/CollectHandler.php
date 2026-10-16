@@ -48,6 +48,11 @@ final class CollectHandler implements FunctionReturnTypeProviderInterface
             return null;
         }
 
+        // A named first argument is the input only when it names the input parameter (`value:`); another name would be a PHP error.
+        if ($args[0]->name !== null && $args[0]->name->toString() !== 'value') {
+            return null;
+        }
+
         $source = $event->getStatementsSource();
         $argType = $source->getNodeTypeProvider()->getType($args[0]->value);
 

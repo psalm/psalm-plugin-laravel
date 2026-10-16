@@ -155,10 +155,11 @@ final class CollectionInputTypeResolver
     {
         // Psalm treats the WHOLE argument leniently at an invariant param as soon as one literal is present
         // (`Collection<'a'|'b', Parent|int>` accepts `['a' => $child, 'b' => 1]`), so scalar literals are
-        // widened only when nothing else in the union relies on that leniency. Enum cases are strict anyway.
+        // widened only when EVERY atomic is one (an enum case next to `1` keeps the leniency, and still widens
+        // to its enum below: enum cases are strict anyway).
         $widenScalars = true;
         foreach ($type->getAtomicTypes() as $atomic) {
-            if (!self::isWidenableScalarLiteral($atomic) && !$atomic instanceof TEnumCase) {
+            if (!self::isWidenableScalarLiteral($atomic)) {
                 $widenScalars = false;
                 break;
             }
@@ -176,13 +177,19 @@ final class CollectionInputTypeResolver
 
     /**
      * A class-string literal is excluded: widening it breaks `new $class()` and `Collection<int, class-string<I>>` targets.
+     * So is a callable-string literal (`'strlen'`, `'A::b'`): widened to `string`, it stops being callable.
      *
      * @psalm-pure
      */
     private static function isWidenableScalarLiteral(Atomic $atomic): bool
     {
-        return ($atomic instanceof TLiteralString && !$atomic instanceof TLiteralClassString)
-            || $atomic instanceof TLiteralInt
+        if ($atomic instanceof TLiteralString) {
+            return !$atomic instanceof TLiteralClassString
+                && !\str_contains($atomic->value, '::')
+                && !\function_exists($atomic->value);
+        }
+
+        return $atomic instanceof TLiteralInt
             || $atomic instanceof TLiteralFloat
             || $atomic instanceof TTrue
             || $atomic instanceof TFalse;

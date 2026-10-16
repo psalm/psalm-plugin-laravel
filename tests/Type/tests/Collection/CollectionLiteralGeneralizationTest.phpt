@@ -28,7 +28,7 @@ class GeneralizedChild extends GeneralizedParent implements GeneralizedContract
     public function __construct(public int $value = 0) {}
 }
 
-enum GeneralizedSuit: string
+enum GeneralizedSuit: string implements GeneralizedContract
 {
     case Hearts = 'h';
     case Spades = 's';
@@ -223,6 +223,42 @@ function generalizedLeniencyCalls(GeneralizedChild $child): void
         $_instance = new $class(1);
         /** @psalm-check-type-exact $_instance = GeneralizedChild */
     }
+}
+
+/** @param Collection<'a'|'b', GeneralizedContract|int> $mixed */
+function generalizedEnumMixedParam(Collection $mixed): int
+{
+    return $mixed->count();
+}
+
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @extends Collection<TKey, TValue>
+ */
+final class GeneralizedTagged extends Collection
+{
+    /** @param array<TKey, TValue> $items */
+    public function __construct(array $items, public string $tag)
+    {
+        parent::__construct($items);
+    }
+}
+
+function generalizedGateAndNamedArgs(): void
+{
+    // An enum case next to a scalar literal: the case widens, the literal keeps the param-wide leniency.
+    generalizedEnumMixedParam(collect(['a' => GeneralizedSuit::Hearts, 'b' => 1]));
+
+    // A callable-string literal stays callable (`string` would not be).
+    foreach (collect(['strlen']) as $callable) {
+        $_length = $callable('x');
+        /** @psalm-check-type-exact $_length = int<1, max> */
+    }
+
+    // The first NAMED argument is `tag`, not the input: declined, the subclass keeps its own binding.
+    $_tagged = GeneralizedTagged::make(tag: 'x', items: [1, 2]);
+    /** @psalm-check-type-exact $_tagged = GeneralizedTagged<int<0, 1>, 1|2> */
 }
 
 function generalizedUnpacked(): void

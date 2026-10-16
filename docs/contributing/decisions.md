@@ -432,7 +432,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 ### Collection literal generalization (#1766)
 
-**Decision:** `CollectionInputTypeResolver` widens the literals an array argument binds at construction (`collect()`, `Collection::make()`, `LazyCollection::make()`). Values: literal `int`/`string`/`float`/`true`/`false` become `int`/`string`/`float`/`bool`, but only when the value union holds nothing except such literals and enum cases; an enum case always becomes its enum. Class-string literals, shaped rows (`[['id' => 1]]`) and every other atomic are kept as is. Keys: only `int<a, b>` ranges become `int`. Declines (stub binding stays) for `[]`, an unpacked first argument, and when nothing was widened.
+**Decision:** `CollectionInputTypeResolver` widens the literals an array argument binds at construction (`collect()`, `Collection::make()`, `LazyCollection::make()`). Values: literal `int`/`string`/`float`/`true`/`false` become `int`/`string`/`float`/`bool`, but only when EVERY atomic of the value union is such a literal (an enum case or any other atomic disqualifies it); an enum case always becomes its enum, its companion scalar literal stays literal. A callable-string literal (`'strlen'`, `'A::b'`) counts as non-widenable, since `string` is not callable. Class-string literals, shaped rows (`[['id' => 1]]`) and every other atomic are kept as is. Keys: only `int<a, b>` ranges become `int`. Declines (stub binding stays) for `[]`, an unpacked first argument, a named first argument that is not the input parameter (`Sub::make(tag: ..., items: ...)`), and when nothing was widened.
 
 **Why:**
 - The stub binds `[$a, $b]` verbatim as `Collection<int<0, 1>, Item>` and `[1]` as `Collection<0, 1>`; the invariant templates then reject correct code (`@return Collection<int, Item>`, `->prepend(2)`, `->diff([1])`). PHPStan generalizes the templates at construction; this matches it.
@@ -440,14 +440,14 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Rejected / dead ends (probed):**
 - Widening literal class-strings (to `string` or `class-string<Foo>`): `new $class(1)` over `collect([Foo::class])` gains `UnsafeInstantiation`, `Collection<int, class-string<I>>` targets are newly rejected and `app($class)` loses the container literal. The literal keeps Psalm's invariant leniency, so it stays.
-- Widening scalar literals next to another atomic: Psalm's leniency applies to the whole param once one literal is present, so `collect(['a' => $child, 'b' => 1])` passed to `Collection<'a'|'b', ParentClass|int>` passes on base and failed after widening. Hence the "only literals and enum cases" gate; enum cases are strict anyway.
+- Widening scalar literals next to another atomic (objects, enum cases, class-strings, callable strings): Psalm's leniency applies to the whole param once one literal is present, so `collect(['a' => $child, 'b' => 1])` passed to `Collection<'a'|'b', ParentClass|int>` passes on base and failed after widening. Hence the "every atomic is a widenable literal" gate; enum cases are strict, so they widen on their own.
 - Widening shaped-row values: `collect([['id' => 1]])` passed to `Collection<int, array<string, int>>` is accepted on base (the nested literal keeps Psalm's invariant leniency) and rejected after widening, so rows stay untouched.
 - A `new Collection([...])` handler (`AfterExpressionAnalysis` overriding the `New_` type): Psalm 7 already types the constructor with placeholder templates that accept every probed target, so the handler removed no false positives. It added errors (`new Collection([$child, $child])` passed to `Collection<int, ParentClass>` is accepted on base, rejected with it) and dropped the node's data-flow parent nodes.
 - Unpacked first argument (`collect(...$args)`): both providers decline, since the element type is not the array being unpacked.
 
 **Accepted cost:**
 - A collection built only from literals, passed to an explicit `Collection<int, mixed>` / `Collection<array-key, mixed>` param, now meets the invariant check like any non-literal collection (literal values were lenient before).
-- An all-literal collection declared as a refined scalar (`Collection<int, positive-int>` from `collect([1])`, `non-empty-string`) now meets the invariant check like any non-literal collection.
+- An all-literal collection checked against any declared value type other than the general type itself (`mixed`, `int|string`, `scalar`, `positive-int`, `non-empty-string`) now meets the invariant check like any non-literal collection.
 - A literal string value loses non-falsiness once widened to `string`, so truthiness checks on elements (`$a = $c[$k] ?? null; if ($a && ...)`) can report `RiskyTruthyFalsyComparison`.
 - `collect(['x', 'y'])[$c->count() - 1]` is no longer flagged as an out-of-range key, because the `int<0, 1>` key range is gone.
 

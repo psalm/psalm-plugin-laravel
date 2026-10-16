@@ -62,6 +62,11 @@ final class CollectionMakeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        // A named first argument is the input only when it names the input parameter (`make(tag: ..., items: ...)`).
+        if ($args[0]->name !== null && $args[0]->name->toString() !== 'items') {
+            return null;
+        }
+
         $source = $event->getSource();
         $argType = $source->getNodeTypeProvider()->getType($args[0]->value);
 
