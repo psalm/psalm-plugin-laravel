@@ -29,8 +29,6 @@ final class BladeShadowPruneTest extends TestCase
         'app/Greeter.php',
         // bootstrap/app.php require_once's the `<x-chip>` class component (#1701) unconditionally too.
         'app/View/Components/Chip.php',
-        // bootstrap/app.php require_once's #1908's directive stand-ins unconditionally too.
-        'app/Providers/CompiledResidualStubProvider.php',
         'app/Providers/LivewireStubProvider.php',
         // bootstrap/app.php require_once's both of these unconditionally (#1505's
         // RouteHelperStubProvider); the scratch copy's boot fatals without them, whether or not any

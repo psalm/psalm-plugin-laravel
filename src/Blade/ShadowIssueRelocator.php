@@ -30,7 +30,6 @@ use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
-use Psalm\Issue\RiskyTruthyFalsyComparison;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
@@ -113,8 +112,19 @@ final class ShadowIssueRelocator
         // is real rather than free: a closure written inside `@php` or a raw PHP block CAN carry
         // native types and a docblock, so an author's own missing closure type is silenced too.
         // Accepted because it is a signature warning on code that is never called from outside the
-        // template, against a family that is otherwise pure precompiler noise (#1498).
-        if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
+        // template, against a family that is otherwise pure precompiler noise (#1498). Livewire's
+        // `$__split` closure also draws `MissingPureAnnotation` on every tag (#1908), same trade-off.
+        if (
+            $issue instanceof MissingClosureParamType
+            || $issue instanceof MissingClosureReturnType
+            || ($issue instanceof MissingPureAnnotation && \str_starts_with($issue->message, '{closure} '))
+        ) {
+            return false;
+        }
+
+        // `@entangle('tab')` compiles to `'tab'->value()` (#1908). An author's own method call on a
+        // string literal is a fatal error on the first render, so the message alone identifies it.
+        if ($issue instanceof InvalidMethodCall && \preg_match("/^Cannot call method on '[^']*' variable/", $issue->message) === 1) {
             return false;
         }
 
@@ -386,48 +396,6 @@ final class ShadowIssueRelocator
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
-            return false;
-        }
-
-        // Vendor directives compile code the author never wrote (#1908), told apart by the same
-        // discriminator as the arity gate: the text Psalm points at is absent from the template.
-        // Livewire tags compile to `$__split = function ($name, $params = []) {...}`, whose first
-        // line is Psalm's single-line location for the closure. `@entangle('tab')` compiles to
-        // `'tab'->value()`; the `->` keeps a `value()` call elsewhere in the template from masking
-        // it, and only a string literal receiver counts: `@entangle($count)` with an int, or an
-        // author's `$errors = []` reaching `@error`'s `$errors->getBag()`, is the author's bug.
-        // Filament's `@endcapture` compiles to `new HtmlString(ob_get_clean())`, and `@inertia`
-        // to an `elseif (config(...))` operand Psalm can prove always falsy.
-        if (
-            (
-                $issue instanceof MissingPureAnnotation
-                && \str_starts_with($issue->message, '{closure} must be marked ')
-                && self::isCompiledText(self::selectedText($issue->code_location), $target)
-            )
-            || (
-                $issue instanceof InvalidMethodCall
-                && \preg_match("/^Cannot call method on '(?:[^'\\\\]|\\\\.)*' variable \\z/", $issue->message) === 1
-                && self::isCompiledText(self::methodCallExpression($issue->code_location), $target)
-            )
-            || ($issue instanceof PossiblyFalseArgument && self::isCompiledCall($issue->code_location, $target))
-            || (
-                ($issue instanceof TypeDoesNotContainType || $issue instanceof RedundantCondition)
-                && \str_starts_with($issue->message, 'Operand of type ')
-                && self::isCompiledCall($issue->code_location, $target)
-            )
-        ) {
-            return false;
-        }
-
-        // Directives keep their own state in `$__` variables. Inertia's `@inertia`/`@inertiaHead`
-        // assign `$__inertiaSsrResponse` under `if (!isset($__inertiaSsrDispatched))` and then test
-        // it, so its definedness and truthiness report on the directive line (#1908). Limited to
-        // classes about control flow: a value issue on a `$__` variable can be the author's data,
-        // as `@foreach` copies its subject into `$__currentLoopData`.
-        if (
-            ($issue instanceof PossiblyUndefinedGlobalVariable || $issue instanceof PossiblyUndefinedVariable || $issue instanceof RiskyTruthyFalsyComparison)
-            && self::isCompiledVariable($issue, $target)
-        ) {
             return false;
         }
 
@@ -964,73 +932,6 @@ final class ShadowIssueRelocator
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
-    }
-
-    /**
-     * Whether $text, cut out of the shadow, is absent from the template, so the compiler wrote it.
-     * Absent raw, with Blade comments stripped, and with Blade's raw-text rewrites mirrored: each
-     * way an author's own text can differ from the template only turns a drop into a keep. Null
-     * (unreadable) is no evidence and keeps the issue. So is text holding a PHP tag: Blade put it
-     * there inside the author's own text, a directive in a string argument (`'x'->value('@csrf')`)
-     * or a closure whose first line ends at `@endphp`.
-     *
-     * @psalm-pure
-     */
-    private static function isCompiledText(?string $text, ShadowTarget $target): bool
-    {
-        if ($text === null || \trim($text) === '' || \preg_match('/<\?(?:php|=)|\?>/i', $text) === 1) {
-            return false;
-        }
-
-        $prefix = $target->markerPrefix();
-
-        return !TemplateSnippetMatcher::occursInRawOrStripped($text, $target->templateSource, $prefix)
-            && !TemplateSnippetMatcher::occursInWithRawTextRewrites($text, $target->templateSource, $prefix);
-    }
-
-    /**
-     * Whether an issue selects exactly a `$__`-prefixed variable the template never mentions.
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function isCompiledVariable(CodeIssue $issue, ShadowTarget $target): bool
-    {
-        $variable = self::selectedText($issue->code_location);
-
-        return $variable !== null
-            && \preg_match('/^\$__[A-Za-z_]\w*$/', $variable) === 1
-            && self::isCompiledText($variable, $target);
-    }
-
-    /**
-     * `->name(...)` for a method call issue located on the method name, or null when the name does
-     * not directly follow `->`/`?->`.
-     *
-     * @psalm-external-mutation-free
-     */
-    private static function methodCallExpression(CodeLocation $location): ?string
-    {
-        $selection = ShadowSelection::of($location);
-
-        if (!$selection instanceof ShadowSelection || !TemplateSnippetMatcher::endsAt($selection->snippet, $selection->start, '->')) {
-            return null;
-        }
-
-        $call = TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
-
-        return $call === null ? null : '->' . $call;
-    }
-
-    /**
-     * Whether an issue selects exactly a whole call, and that call is absent from the template.
-     *
-     * @psalm-external-mutation-free
-     */
-    private static function isCompiledCall(CodeLocation $location, ShadowTarget $target): bool
-    {
-        $call = self::selectedText($location);
-
-        return $call !== null && self::callExpression($location) === $call && self::isCompiledText($call, $target);
     }
 
     /**
