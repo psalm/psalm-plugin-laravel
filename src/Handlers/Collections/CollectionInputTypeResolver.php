@@ -29,10 +29,10 @@ use Psalm\Type\Atomic\TTrue;
 use Psalm\Type\Union;
 
 /**
- * Resolves the argument passed to collect() / Collection::make() / LazyCollection::make() / `new
- * Collection(...)` to the TKey/TValue Union pair Laravel's runtime actually produces, for the input
- * shapes the stub's own template inference can't bind: null, scalars, and UnitEnum cases; plus
- * array inputs whose literal types the stub would otherwise bind verbatim (see generalize*()).
+ * Resolves the argument passed to collect() / Collection::make() / LazyCollection::make() to the
+ * TKey/TValue Union pair Laravel's runtime actually produces, for the input shapes the stub's own
+ * template inference can't bind: null, scalars, and UnitEnum cases; plus array inputs whose literal
+ * types the stub would otherwise bind verbatim (see resolveArray()).
  *
  * Returns null ("defer to the stub's own template inference") for every other shape, including
  * plain objects: the stub's own widened-but-unbound `object` union member already infers
@@ -166,21 +166,9 @@ final class CollectionInputTypeResolver
                 $atomic instanceof TLiteralFloat => new TFloat(),
                 $atomic instanceof TTrue, $atomic instanceof TFalse => new TBool(),
                 $atomic instanceof TEnumCase => new TNamedObject($atomic->value),
-                // Row shapes (`[['id' => 1]]`): widen the values inside, keep the shape and its keys.
-                $atomic instanceof TKeyedArray => self::generalizeRow($atomic),
                 default => $atomic,
             };
         });
-    }
-
-    private static function generalizeRow(TKeyedArray $row): Atomic
-    {
-        $properties = [];
-        foreach ($row->properties as $key => $property) {
-            $properties[$key] = self::generalizeValue($property)->setPossiblyUndefined($property->possibly_undefined);
-        }
-
-        return $row->setProperties($properties);
     }
 
     /**

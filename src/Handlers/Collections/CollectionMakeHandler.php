@@ -57,6 +57,11 @@ final class CollectionMakeHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        // `collect(...$args)`: the first element of $args is the input, not $args itself.
+        if ($args[0]->unpack) {
+            return null;
+        }
+
         $source = $event->getSource();
         $argType = $source->getNodeTypeProvider()->getType($args[0]->value);
 

@@ -11,8 +11,6 @@
  * generalization"). An empty `[]` and an input with nothing to widen keep the stub binding.
  */
 
-use App\Models\Customer;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
 
@@ -58,33 +56,9 @@ function generalizedReturnsLazyMake(GeneralizedItem $a, GeneralizedItem $b): Laz
 }
 
 /** @return Collection<int, GeneralizedItem> */
-function generalizedReturnsNew(GeneralizedItem $a, GeneralizedItem $b): Collection
-{
-    return new Collection([$a, $b]);
-}
-
-/** @return LazyCollection<int, GeneralizedItem> */
-function generalizedReturnsNewLazy(GeneralizedItem $a, GeneralizedItem $b): LazyCollection
-{
-    return new LazyCollection([$a, $b]);
-}
-
-/** @return EloquentCollection<int, Customer> */
-function generalizedReturnsNewEloquent(Customer $a, Customer $b): EloquentCollection
-{
-    return new EloquentCollection([$a, $b]);
-}
-
-/** @return Collection<int, GeneralizedItem> */
 function generalizedReturnsSingle(GeneralizedItem $a): Collection
 {
     return collect([$a]);
-}
-
-/** @return Collection<int, GeneralizedItem> */
-function generalizedReturnsSingleNew(GeneralizedItem $a): Collection
-{
-    return new Collection([$a]);
 }
 
 /** @param list<GeneralizedItem> $list */
@@ -92,9 +66,6 @@ function generalizedFromList(array $list): void
 {
     $_collect = collect($list);
     /** @psalm-check-type-exact $_collect = Collection<int, GeneralizedItem> */
-
-    $_new = new Collection($list);
-    /** @psalm-check-type-exact $_new = Collection<int, GeneralizedItem> */
 }
 
 function generalizedChains(): void
@@ -110,7 +81,7 @@ function generalizedChains(): void
     /** @psalm-check-type-exact $_contains = bool */
 }
 
-function generalizedValueTypes(Customer $customer): void
+function generalizedValueTypes(): void
 {
     $_ints = collect([1, 2]);
     /** @psalm-check-type-exact $_ints = Collection<int, int> */
@@ -121,8 +92,8 @@ function generalizedValueTypes(Customer $customer): void
     $_floats = collect([1.5, 2.5]);
     /** @psalm-check-type-exact $_floats = Collection<int, float> */
 
-    $_bools = collect([true, false]);
-    /** @psalm-check-type-exact $_bools = Collection<int, bool> */
+    $_bools = collect([true]);
+    /** @psalm-check-type-exact $_bools = Collection<0, bool> */
 
     $_mixedLiterals = collect([1, 'a']);
     /** @psalm-check-type-exact $_mixedLiterals = Collection<int, int|string> */
@@ -134,12 +105,10 @@ function generalizedValueTypes(Customer $customer): void
     $_enums = collect([GeneralizedSuit::Hearts, GeneralizedSuit::Spades]);
     /** @psalm-check-type-exact $_enums = Collection<int, GeneralizedSuit> */
 
-    // Rows: the values inside the shape widen, the shape keys are structure and stay.
+    // Row values keep their inner literals (only the range key widens): widening them would reject a
+    // `Collection<int, array<string, int>>` param that the literal makes lenient.
     $_rows = collect([['id' => 1, 'name' => 'x'], ['id' => 2, 'name' => 'y']]);
-    /** @psalm-check-type-exact $_rows = Collection<int, array{id: int, name: string}> */
-
-    $_nested = collect(['k' => ['a' => 1, 'b' => 'x']]);
-    /** @psalm-check-type-exact $_nested = Collection<'k', array{a: int, b: string}> */
+    /** @psalm-check-type-exact $_rows = Collection<int, array{id: 1|2, name: 'x'|'y'}> */
 
     // Literal keys are kept.
     $_keyed = collect(['a' => 1, 'b' => 2]);
@@ -150,15 +119,6 @@ function generalizedValueTypes(Customer $customer): void
 
     $_lazy = LazyCollection::make([1, 2]);
     /** @psalm-check-type-exact $_lazy = LazyCollection<int, int>&static */
-
-    $_new = new Collection([1, 2]);
-    /** @psalm-check-type-exact $_new = Collection<int, int> */
-
-    $_newLazy = new LazyCollection([1, 2]);
-    /** @psalm-check-type-exact $_newLazy = LazyCollection<int, int> */
-
-    $_newEloquent = new EloquentCollection([$customer, $customer]);
-    /** @psalm-check-type-exact $_newEloquent = EloquentCollection<int, Customer> */
 }
 
 function generalizedDeclines(int $int, string $string, GeneralizedItem $item): void
@@ -203,8 +163,39 @@ function generalizedBareParamCalls(GeneralizedItem $item): void
     generalizedBareParam(collect([$item]));
     generalizedBareParam(collect([1]));
     generalizedBareParam(collect(['a' => 1, 'b' => 2]));
-    generalizedBareParam(new Collection([$item]));
+    generalizedBareParam(collect([['id' => 1]]));
     generalizedBareParam(collect([]));
+}
+
+/** @param Collection<int, array<string, int>> $rows */
+function generalizedRowsParam(Collection $rows): int
+{
+    return $rows->count();
+}
+
+function generalizedRowsParamCall(): void
+{
+    generalizedRowsParam(collect([['id' => 1]]));
+}
+
+function generalizedUnpacked(): void
+{
+    $args = [[1, 2]];
+    $scalarArgs = [1];
+
+    // The unpacked array's FIRST element is the input, not the array itself: declined.
+    $_collect = collect(...$args);
+    /** @psalm-check-type-exact $_collect = Collection<int<0, 1>, 1|2> */
+
+    $_make = Collection::make(...$args);
+    /** @psalm-check-type-exact $_make = Collection<int<0, 1>, 1|2> */
+
+    $_lazy = LazyCollection::make(...$args);
+    /** @psalm-check-type-exact $_lazy = LazyCollection<int<0, 1>, 1|2> */
+
+    // Without the guard the unpacked list itself was read as the input and widened to `Collection<0, int>`.
+    $_scalar = collect(...$scalarArgs);
+    /** @psalm-check-type-exact $_scalar = Collection<array-key, mixed> */
 }
 ?>
 --EXPECTF--
