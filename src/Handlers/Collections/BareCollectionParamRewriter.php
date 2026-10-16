@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 use Illuminate\Support\Enumerable;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeStorage;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TGenericObject;
@@ -34,6 +35,16 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
      */
     private array $omittedArguments = [];
 
+    /**
+     * Classes whose bounds are being expanded on the current path.
+     *
+     * @var array<lowercase-string, true>
+     */
+    private array $expanding = [];
+
+    /** Count of cycles found while expanding bounds; a parameter that hit one is left alone. */
+    private int $cycles = 0;
+
     /** @psalm-mutation-free */
     public function __construct(private readonly Codebase $codebase) {}
 
@@ -45,7 +56,12 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
             }
 
             $type = $param->type;
+            $cyclesBefore = $this->cycles;
             $this->traverse($type);
+
+            if ($this->cycles !== $cyclesBefore) {
+                continue;
+            }
 
             // Psalm tells a native-only parameter from a docblock one by the identity of the two types,
             // and only infers a closure literal's parameter from the expected callable for the former
@@ -62,10 +78,10 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
     protected function enterNode(TypeNode &$type): ?int
     {
         if ($type instanceof TNamedObject && $type::class === TNamedObject::class) {
-            $arguments = $this->omittedArguments($type);
+            $generic = $this->expand($type);
 
-            if ($arguments !== null) {
-                $type = new TGenericObject($type->value, $arguments);
+            if ($generic instanceof \Psalm\Type\Atomic\TGenericObject) {
+                $type = $generic;
             }
 
             return self::DONT_TRAVERSE_CHILDREN;
@@ -84,12 +100,10 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
     }
 
     /**
-     * The arguments Psalm expands a bare use of the class to, each marked omitted; null when Psalm leaves
-     * the class bare (not a collection, no templates, or only `mixed` bounds).
-     *
-     * @return non-empty-list<Union>|null
+     * What Psalm expands a bare use of the class to, with the arguments marked omitted; null when Psalm
+     * leaves the class bare (not a collection, no templates, or only `mixed` bounds) or it cannot be expanded.
      */
-    private function omittedArguments(TNamedObject $type): ?array
+    private function expand(TNamedObject $type): ?TGenericObject
     {
         if ($type->extra_types !== [] || !$this->codebase->classOrInterfaceExists($type->value)) {
             return null;
@@ -108,24 +122,59 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
 
         $key = \strtolower($storage->name);
 
-        if (\array_key_exists($key, $this->omittedArguments)) {
-            return $this->omittedArguments[$key];
+        if (!\array_key_exists($key, $this->omittedArguments)) {
+            $this->omittedArguments[$key] = $this->omittedArgumentsOf($storage);
         }
 
-        $arguments = null;
+        $arguments = $this->omittedArguments[$key];
 
-        if ($storage->template_types !== null
-            && $storage->template_types !== []
-            && \array_any($storage->template_types, static fn(array $bounds): bool => !self::bound($bounds)->hasMixed())
-            && $this->isEnumerable($storage->name)
+        if ($arguments === null) {
+            return null;
+        }
+
+        // The bounds may name collections themselves (`@template C of Collection`), and those bare uses
+        // are expanded as well, so one pass is final: a second pass over the result changes nothing.
+        // Cycles (`@template T of SelfRef` on SelfRef) would never end. Leaving only the inner use bare
+        // would not be stable (a second pass would expand it), so the whole parameter is left alone.
+        if (isset($this->expanding[$key])) {
+            ++$this->cycles;
+
+            return null;
+        }
+
+        $this->expanding[$key] = true;
+
+        // Bounds belong to the class storage: the visitor is copy-on-write, so they are never mutated.
+        foreach ($arguments as &$argument) {
+            $this->traverse($argument);
+        }
+
+        unset($argument, $this->expanding[$key]);
+
+        return new TGenericObject($type->value, $arguments);
+    }
+
+    /**
+     * The arguments Psalm expands a bare use of the class to, each marked omitted; null when Psalm leaves
+     * the class bare (not a collection, no templates, or only `mixed` bounds).
+     *
+     * @return non-empty-list<Union>|null
+     * @psalm-capabilities read-props
+     */
+    private function omittedArgumentsOf(ClassLikeStorage $storage): ?array
+    {
+        if ($storage->template_types === null
+            || $storage->template_types === []
+            || !\array_any($storage->template_types, static fn(array $bounds): bool => !self::bound($bounds)->hasMixed())
+            || !$this->isEnumerable($storage->name)
         ) {
-            $arguments = \array_values(\array_map(
-                static fn(array $bounds): Union => self::bound($bounds)->setProperties(['had_template' => true]),
-                $storage->template_types,
-            ));
+            return null;
         }
 
-        return $this->omittedArguments[$key] = $arguments;
+        return \array_values(\array_map(
+            static fn(array $bounds): Union => self::bound($bounds)->setProperties(['had_template' => true]),
+            $storage->template_types,
+        ));
     }
 
     /**

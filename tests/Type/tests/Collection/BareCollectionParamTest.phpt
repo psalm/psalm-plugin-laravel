@@ -27,6 +27,28 @@ final class Dog {}
 final class Pack extends Collection {}
 
 /**
+ * @template C of Collection
+ * @extends Collection<int, C>
+ */
+final class Nested extends Collection {}
+
+/**
+ * @template T of SelfRef
+ * @extends Collection<int, T>
+ */
+final class SelfRef extends Collection {}
+
+function takeNestedBound(Nested $nested): int
+{
+    return $nested->count();
+}
+
+function takeSelfRef(SelfRef $selfRef): int
+{
+    return $selfRef->count();
+}
+
+/**
  * @template TKey of array-key
  */
 final class Box
@@ -132,6 +154,16 @@ function accepts(
     takeFree($dogs);
     takeAliasedCollection($dogs);
     takeAliasedNonCollection(new Dog());
+}
+
+/**
+ * @param Nested<Collection<int, Dog>> $nested
+ * @param SelfRef<SelfRef> $selfRef
+ */
+function acceptsNestedBounds(Nested $nested, SelfRef $selfRef): int
+{
+    // A bare collection inside the bound of a bare collection is "any instantiation" as well.
+    return takeNestedBound($nested) + takeSelfRef($selfRef);
 }
 
 /**
