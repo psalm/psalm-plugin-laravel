@@ -262,15 +262,15 @@ final class ShadowIssueRelocator
         // gate cannot tell that apart from this shape by class alone.
         //
         // `$component`, unlike `$attributes`/`$slot`, is never given a type by
-        // `componentTypesFor()` in ANY template — the prelude only ever falls it through to the
-        // generic `mixed` bucket for undeclared names — so `isComponentView` carries no signal for
+        // `componentTypesFor()` in ANY template — the prelude gives it `mixed` or, from a tag's
+        // bookkeeping, a nullable `Component` (#1873) — so `isComponentView` carries no signal for
         // it. Its narrowed type comes entirely from the compiled `<Component>::resolve()` call one
         // `<x-...>` tag runs before the NEXT tag's own opening save guard re-checks
         // `isset($component)` against that still-live narrowing; that shape fires for a nested `<x-...>` tag inside a
         // PLAIN page just as much as inside a component view (#1532), so this name drops
-        // unconditionally. `$attributes`/`$slot` keep the `isComponentView` requirement: outside a
-        // component view neither name is ever declared by the prelude, so a local variable an
-        // author happens to name `$attributes`/`$slot` there is untouched (#1525).
+        // unconditionally. `$attributes`/`$slot` keep the `isComponentView` requirement, so a local
+        // variable an author happens to name `$attributes`/`$slot` in a plain page is untouched
+        // (#1525); a plain caller's compiled `$attributes` check has its own shape gate below.
         //
         // Trade-off this gate does NOT avoid: it cannot tell compiler-generated bookkeeping apart
         // from an author's OWN `@if (isset($attributes))`/`instanceof`/`@php $component = ...` check
@@ -377,6 +377,10 @@ final class ShadowIssueRelocator
             }
 
             if (self::isGeneratedValueSave($issue, $target)) {
+                return false;
+            }
+
+            if (self::isGeneratedAttributesCheck($issue, $target)) {
                 return false;
             }
         }
@@ -878,6 +882,28 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursIn($save[0], $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether an issue sits on a tag's compiled `isset($attributes) && $attributes instanceof
+     * Illuminate\View\ComponentAttributeBag` (`compileClassComponentOpening()`'s data merge and
+     * `ComponentTagCompiler::componentString()`'s ignored-parameter strip). With `$attributes` typed
+     * from the bookkeeping ({@see PreludeBuilder}), the `instanceof` is redundant after the `isset()`
+     * in a plain caller too, where the name-based gate above does not reach (#1873). Only in a shadow
+     * whose prelude typed `$attributes` that way, and only when the expression is absent from the
+     * template as Blade rewrites it (comments and component-class markers removed), so an author
+     * who writes it, even split by text Blade removes, keeps the finding. Residual: an author's
+     * copy in text that never executes (`@verbatim`, plain markup) keeps every compiled copy too.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedAttributesCheck(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $check = 'isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag';
+
+        return $target->attributesFromTag
+            && self::selectedText($issue->code_location) === $check
+            && !TemplateSnippetMatcher::occursInWithRawTextRewrites($check, $target->templateSource, $target->markerPrefix());
     }
 
     /**

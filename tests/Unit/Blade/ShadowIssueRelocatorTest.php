@@ -107,8 +107,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         bool $reportMixed = false,
         bool $isComponentView = false,
         string $templateSource = self::TEMPLATE_SOURCE,
+        bool $attributesFromTag = false,
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource));
+        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource), $attributesFromTag);
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
@@ -1288,6 +1289,68 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(RedundantConditionGivenDocblockType::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** A tag's compiled `isset($attributes) && $attributes instanceof ...` check, both places Blade emits it. */
+    private const ATTRIBUTES_CHECK = 'isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag';
+
+    private const ATTRIBUTES_CHECK_LINES = [
+        'resolve() data merge' => '$component = Illuminate\View\AnonymousComponent::resolve([\'view\' => \'components.alert\',\'data\' => []] + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : []));',
+        'ignored-parameter strip' => 'if (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag):',
+    ];
+
+    private const ATTRIBUTES_ALWAYS = 'Docblock-defined type Illuminate\View\ComponentAttributeBag for $attributes is always Illuminate\View\ComponentAttributeBag';
+
+    /** #1873: outside a component view, typing `$attributes` from the tag makes the compiled `instanceof` redundant. */
+    #[Test]
+    #[DataProvider('compiledAttributesChecks')]
+    public function a_compiled_attributes_check_is_dropped_outside_a_component_view(string $line): void
+    {
+        $issue = new RedundantConditionGivenDocblockType(self::ATTRIBUTES_ALWAYS, self::selectionLocation(self::ATTRIBUTES_CHECK, \strlen(self::ATTRIBUTES_CHECK), $line), null);
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), attributesFromTag: true));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function compiledAttributesChecks(): iterable
+    {
+        foreach (self::ATTRIBUTES_CHECK_LINES as $name => $line) {
+            yield $name => [$line];
+        }
+    }
+
+    /** Negatives: each differs from the dropped case in ONE gate condition. */
+    #[Test]
+    #[DataProvider('attributesCheckLookAlikes')]
+    public function an_attributes_check_look_alike_keeps_reporting(int $width, string $templateSource = self::TEMPLATE_SOURCE, bool $attributesFromTag = true): void
+    {
+        $location = self::selectionLocation(self::ATTRIBUTES_CHECK, $width, self::ATTRIBUTES_CHECK_LINES['ignored-parameter strip']);
+        $issue = new RedundantConditionGivenDocblockType(self::ATTRIBUTES_ALWAYS, $location, null);
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource, attributesFromTag: $attributesFromTag);
+
+        $this->assertInstanceOf(RedundantConditionGivenDocblockType::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{0: int, 1?: string, 2?: bool}> */
+    public static function attributesCheckLookAlikes(): iterable
+    {
+        yield 'prelude did not type $attributes from a tag' => [\strlen(self::ATTRIBUTES_CHECK), self::TEMPLATE_SOURCE, false];
+        yield 'selection is only the instanceof' => [\strlen('$attributes instanceof Illuminate\View\ComponentAttributeBag')];
+        yield 'check written in the template' => [
+            \strlen(self::ATTRIBUTES_CHECK),
+            "<div>\n@if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag) x @endif\n</div>\n",
+        ];
+        // Blade strips its own `##BEGIN-COMPONENT-CLASS##` marker from the compiled output, so this compiles to the check.
+        yield 'check split by a stripped marker' => [
+            \strlen(self::ATTRIBUTES_CHECK),
+            "@php \$attr##BEGIN-COMPONENT-CLASS##ibutes = new \\Illuminate\\View\\ComponentAttributeBag;\n"
+                . "if (isset(\$attr##BEGIN-COMPONENT-CLASS##ibutes) && \$attr##BEGIN-COMPONENT-CLASS##ibutes instanceof Illuminate\\View\\ComponentAttributeBag) {} @endphp\n",
+        ];
+        yield 'check split by a Blade comment' => [
+            \strlen(self::ATTRIBUTES_CHECK),
+            "<div>\n@if (isset(\$attr{{-- x --}}ibutes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag) x @endif\n</div>\n",
+        ];
     }
 
     /**

@@ -26,10 +26,10 @@ final class PreludeBuilderTest extends TestCase
     }
 
     #[Test]
-    public function component_is_never_declared_as_a_class(): void
+    public function component_outside_tag_bookkeeping_is_not_declared_as_a_class(): void
     {
         // Laravel never passes `$component` as view data (only ManagesComponents::componentData()'s
-        // slot/data merge reaches a view); it is only a local in the CALLER's compiled output.
+        // slot/data merge reaches a view); only a tag's compiled save types it (#1873).
         $prelude = (new PreludeBuilder())->build('<?php if (isset($component)) {} ?>', '');
 
         $this->assertStringNotContainsString('Illuminate\View\Component ', $prelude);
@@ -361,6 +361,136 @@ final class PreludeBuilderTest extends TestCase
         $this->assertSame(1, \substr_count($prelude, '$__env'));
         $this->assertStringContainsString('@var \Illuminate\View\Factory $__env */', $prelude);
         $this->assertStringNotContainsString('@var mixed $__env', $prelude);
+    }
+
+    /**
+     * #1873: a caller mentions `$component`/`$attributes` only through a tag's compiled
+     * save/restore, so both get their runtime types, and so does each saved original: Psalm types a
+     * variable assigned only inside an `if` as `mixed` in a later `isset()` branch, which is where
+     * the restore reads it.
+     */
+    #[Test]
+    public function a_tag_callers_bookkeeping_names_get_their_runtime_types(): void
+    {
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), '<x-alert>Hi</x-alert>');
+
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $component */', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $__componentOriginal5194778a */', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $attributes */', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $__attributesOriginal5194778a */', $prelude);
+        $this->assertStringNotContainsString('@var mixed', $prelude);
+    }
+
+    /** #1701: a declared, read, or view-data `$component` keeps today's typing; only the bookkeeping-only case changes. */
+    #[Test]
+    public function a_template_that_names_component_keeps_it_mixed(): void
+    {
+        $source = "@php /** @var \\App\\Foo \$component */ @endphp\n<x-alert>Hi</x-alert>\n{{ \$component->id() }}";
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), $source);
+
+        $this->assertStringContainsString('@var mixed $component */', $prelude);
+        $this->assertStringNotContainsString('$__componentOriginal', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $attributes */', $prelude);
+    }
+
+    /** Blade removes `{{-- --}}` before compiling and its tag markers after, so text they split still reads `$component`. */
+    #[Test]
+    #[DataProvider('splitComponentReads')]
+    public function a_component_read_split_by_text_blade_removes_keeps_it_mixed(string $source): void
+    {
+        $prelude = (new PreludeBuilder())->build(self::compiledTag('5194778a'), $source . "\n<x-alert/>");
+
+        $this->assertStringContainsString('@var mixed $component */', $prelude);
+        $this->assertStringNotContainsString('$__componentOriginal', $prelude);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function splitComponentReads(): iterable
+    {
+        yield 'Blade comment' => ['{{ $compo{{-- split --}}nent->id() }}'];
+        yield 'component-class marker' => ['{{ $compo##BEGIN-COMPONENT-CLASS##nent->id() }}'];
+    }
+
+    #[Test]
+    public function a_longer_identifier_does_not_block_the_bookkeeping_types(): void
+    {
+        $prelude = (new PreludeBuilder())->build(self::compiledTag('5194778a'), "{{ \$componentName }} {{ \$attributesCount }}\n<x-alert/>");
+
+        $this->assertStringContainsString('@var \\Illuminate\\View\\Component|null $component */', $prelude);
+        $this->assertStringContainsString('@var \\Illuminate\\View\\ComponentAttributeBag|null $attributes */', $prelude);
+    }
+
+    #[Test]
+    public function a_commented_component_mention_still_counts_as_bookkeeping_only(): void
+    {
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), "{{-- \$component --}}\n<x-alert>Hi</x-alert>");
+
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $component */', $prelude);
+    }
+
+    /** A component view keeps its own `$attributes` typing, restore re-assert included (#1543); `$component` is typed as in any caller. */
+    #[Test]
+    public function a_component_view_keeps_its_attributes_typing(): void
+    {
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), "@props(['type'])\n<x-alert>Hi</x-alert>");
+
+        $this->assertStringContainsString('@var ?\Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+        $this->assertSame(1, \substr_count($prelude, ' $attributes */'));
+        $this->assertStringNotContainsString('$__attributesOriginal', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $component */', $prelude);
+    }
+
+    #[Test]
+    public function every_tags_saved_original_is_declared_once(): void
+    {
+        $compiled = $this->compiledTag('aaaa') . $this->compiledTag('bbbb') . $this->compiledTag('aaaa');
+        $prelude = (new PreludeBuilder())->build($compiled, '<x-a/><x-b/><x-a/>');
+
+        $this->assertSame(1, \substr_count($prelude, '$__componentOriginalaaaa */'));
+        $this->assertSame(1, \substr_count($prelude, '$__componentOriginalbbbb */'));
+        $this->assertSame(1, \substr_count($prelude, '$__attributesOriginalbbbb */'));
+    }
+
+    #[Test]
+    public function only_a_prelude_typing_attributes_from_a_tag_declares_tag_attributes(): void
+    {
+        $builder = new PreludeBuilder();
+        $compiled = self::compiledTag('5194778a');
+
+        $this->assertTrue(PreludeBuilder::declaresTagAttributes($builder->build($compiled, '<x-alert/>') . $compiled));
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build($compiled, "@props(['type'])\n<x-alert/>") . $compiled));
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build($compiled, "@aware(['type'])\n<x-alert/>") . $compiled));
+
+        // The same text after the prelude is template code, not a declaration.
+        $body = "<?php\n/** @var \\Illuminate\\View\\ComponentAttributeBag|null \$attributes */\n?>\n";
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build('<?php echo 1; ?>', '') . $body));
+    }
+
+    /** What `CompilesComponents::compileClassComponentOpening()` and `compileEndComponentClass()` emit for `<x-alert>Hi</x-alert>`. */
+    private function compiledTag(string $hash): string
+    {
+        return <<<PHP
+            <?php if (isset(\$component)) { \$__componentOriginal{$hash} = \$component; } ?>
+            <?php if (isset(\$attributes)) { \$__attributesOriginal{$hash} = \$attributes; } ?>
+            <?php \$component = Illuminate\\View\\AnonymousComponent::resolve(['view' => 'components.alert','data' => []] + (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag ? \$attributes->all() : [])); ?>
+            <?php \$component->withName('alert'); ?>
+            <?php if (\$component->shouldRender()): ?>
+            <?php \$__env->startComponent(\$component->resolveView(), \$component->data()); ?>
+            <?php if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag): ?>
+            <?php \$attributes = \$attributes->except(\\Illuminate\\View\\AnonymousComponent::ignoredParameterNames()); ?>
+            <?php endif; ?>
+            <?php \$component->withAttributes([]); ?>Hi <?php echo \$__env->renderComponent(); ?>
+            <?php endif; ?>
+            <?php if (isset(\$__attributesOriginal{$hash})): ?>
+            <?php \$attributes = \$__attributesOriginal{$hash}; ?>
+            <?php unset(\$__attributesOriginal{$hash}); ?>
+            <?php endif; ?>
+            <?php if (isset(\$__componentOriginal{$hash})): ?>
+            <?php \$component = \$__componentOriginal{$hash}; ?>
+            <?php unset(\$__componentOriginal{$hash}); ?>
+            <?php endif; ?>
+
+            PHP;
     }
 
     #[Test]
