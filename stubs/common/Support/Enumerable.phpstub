@@ -46,4 +46,48 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * )
      */
     public function sum($callback = null);
+
+    /**
+     * Merge the collection with the given items.
+     *
+     * Independent key template, as on Collection: the input keys need not match TKey.
+     *
+     * @template TMergeKey of array-key
+     * @template TMergeValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMergeKey, TMergeValue>|iterable<TMergeKey, TMergeValue>  $items
+     * @return static<TKey|TMergeKey, TValue|TMergeValue>
+     */
+    public function merge($items);
+
+    /**
+     * Retrieve duplicate items.
+     *
+     * Laravel's interface docblock types the callback as returning bool, while the
+     * implementations accept any value (Collection::duplicates() uses `callable(TValue): TMapValue`).
+     *
+     * @template TMapValue
+     *
+     * @param  (callable(TValue): TMapValue)|string|null  $callback
+     * @param  bool  $strict
+     * @return static
+     */
+    public function duplicates($callback = null, $strict = false);
+
+    /**
+     * Retrieve duplicate items using strict comparison.
+     *
+     * @template TMapValue
+     *
+     * @param  (callable(TValue): TMapValue)|string|null  $callback
+     * @return static
+     */
+    public function duplicatesStrict($callback = null);
+
+    /**
+     * Count the number of items in the collection.
+     *
+     * @return int<0, max>
+     */
+    public function count(): int;
 }
