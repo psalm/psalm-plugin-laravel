@@ -25,7 +25,7 @@ function simple_items(Paginator $paginator): void
 function cursor_items(CursorPaginator $paginator): void
 {
     $_items = $paginator->items();
-    /** @psalm-check-type-exact $_items = array<string, int> */
+    /** @psalm-check-type-exact $_items = array<int|string, int> */
 }
 
 /** @param PaginatorContract<string, int> $paginator */
@@ -39,6 +39,17 @@ function contract_items(PaginatorContract $paginator): void
 function cursor_contract_items(CursorPaginatorContract $paginator): void
 {
     $_items = $paginator->items();
-    /** @psalm-check-type-exact $_items = array<string, int> */
+    /** @psalm-check-type-exact $_items = array<int|string, int> */
 }
+function cursor_items_constructed_from_named_keys(): void
+{
+    // setItems() ends with values(), so the runtime list is reindexed whatever the input keys were.
+    $paginator = new CursorPaginator(['named' => 42], 10);
+    $_items = $paginator->items();
+    /** @psalm-check-type-exact $_items = array<'named'|int, 42> */
+
+    $_first = $_items[0];
+    /** @psalm-check-type-exact $_first = 42 */
+}
+
 --EXPECTF--
