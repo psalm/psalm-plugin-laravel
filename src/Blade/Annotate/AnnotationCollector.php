@@ -60,8 +60,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     /**
      * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
      * the project is big enough, and a worker's statics never reach the parent that runs
-     * AfterAnalysis — where, seeing nothing collected, the writer would declare `mixed` for every
-     * variable of every template. False in the parent of a forked run is what discriminates it.
+     * AfterAnalysis — where, seeing nothing collected, the writer would report every variable of
+     * every template untyped. False in the parent of a forked run is what discriminates it.
      */
     private static bool $analyzed = false;
 
@@ -136,7 +136,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     /**
      * Literal view names of every rendering call nested in an expression the chain declined. Over-
-     * marking is the safe direction: the worst it costs is a `mixed` where a type was provable.
+     * marking is the safe direction: the worst it costs is a name left undeclared where a type was provable.
      *
      * @return list<string>
      */
@@ -214,7 +214,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     /**
      * The type to declare for one variable, or null when nothing was proven and the caller should
-     * fall back to `mixed`.
+     * leave it undeclared.
      */
     public static function typeFor(string $viewName, string $name): ?string
     {
@@ -248,7 +248,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         // The template comment is read back by Psalm on the next run. A type whose id does not
         // survive that round trip is no annotation at all. Any throwable counts: the fallback is
-        // `mixed`, which is never wrong.
+        // no declaration, which is never wrong.
         try {
             Type::parseString($id);
         } catch (\Throwable) {

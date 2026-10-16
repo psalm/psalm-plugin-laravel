@@ -149,8 +149,11 @@ configure_plugin_repo() {
         $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
         $repos = $d["repositories"] ?? [];
         if (array_is_list($repos) === false && $repos !== []) { $repos = array_values($repos); }
-        // Drop any prior plugin path repo, prepend ours.
-        $repos = array_values(array_filter($repos, fn($r) => strpos(json_encode($r), "psalm-plugin-laravel") === false));
+        // Drop any prior plugin path repo, prepend ours. Match by name: local
+        // runs link temp-dir checkouts whose path lacks "psalm-plugin-laravel",
+        // and stale entries pointing at deleted temp dirs break `composer update`.
+        $repos = array_values(array_filter($repos, fn($r) => ($r["name"] ?? null) !== "psalm/plugin-laravel"
+            && !str_contains(json_encode($r, JSON_UNESCAPED_SLASHES), "psalm-plugin-laravel")));
         array_unshift($repos, ["name" => "psalm/plugin-laravel", "type" => "path", "url" => $argv[2], "options" => ["symlink" => true]]);
         $d["repositories"] = $repos;
         if ($argv[3] === "1") {

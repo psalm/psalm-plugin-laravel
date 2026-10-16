@@ -204,9 +204,7 @@ final class BladeIssueRemapTest extends TestCase
 
     /**
      * Every class name PreludeBuilder can emit into a prelude, see PreludeBuilder::ambientClassNames().
-     * `Illuminate\View\Component` never appears in a real prelude any more (#1525: `$component` is
-     * never declared), so its assertion below is vacuous — kept as a regression guard against
-     * reintroducing that declaration.
+     * `Illuminate\View\Component` appears in a caller's prelude from tag bookkeeping (#1873).
      */
     private const AMBIENT_CLASSES = [
         'Illuminate\View\Factory',
@@ -604,8 +602,9 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1525 acceptance (a) + (b): `compiler-bookkeeping.blade.php` is a plain CALLER template
      * (`<x-alert>Hi</x-alert>` on line 1, no `@props`/`@aware`/`$attributes`/`$slot` of its own),
-     * so neither `$component` nor `$attributes` is declared a type in its own prelude any more —
-     * both fall through to `mixed`, and Psalm cannot judge a `mixed` guard redundant.
+     * so its prelude types `$component` and `$attributes` only from the tag's bookkeeping, nullable
+     * (#1873). The compiled `isset()` guards stay undecidable; the `instanceof` after the `isset()`
+     * is redundant and dropped by its compiled-shape gate.
      */
     #[Test]
     public function ambient_guards_in_a_non_component_caller_report_nothing(): void
@@ -623,6 +622,33 @@ final class BladeIssueRemapTest extends TestCase
 
         // Guard against a vacuous pass: the tag must have actually compiled.
         $this->assertStringContainsString('$__componentOriginal', $this->allShadowSources());
+    }
+
+    /**
+     * #1873: a plain caller's `<x-...>` save/restore reads only names the prelude types from that
+     * bookkeeping (`$component`, `$attributes`, each saved original), so the tag's own line reports
+     * no `Mixed*` and no ambient guard, single and nested. Under `psalm-blade-report-mixed.xml`:
+     * the default config drops every `MixedIssue`.
+     */
+    #[Test]
+    public function a_plain_callers_tag_bookkeeping_is_typed(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+
+        foreach (['resources/views/compiler-bookkeeping.blade.php', 'resources/views/nested-component-tags.blade.php'] as $template) {
+            $onTagLine = \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)
+                    && $issue['line_from'] === 1
+                    && (\str_starts_with($issue['type'], 'Mixed') || \in_array($issue['type'], self::AMBIENT_GUARD_FAMILIES, true)),
+            ));
+
+            $this->assertSame([], $onTagLine, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+            $this->assertStringContainsString(
+                '@var \Illuminate\View\Component|null $component */',
+                $this->shadowSourceFor($template, 'psalm-blade-report-mixed.xml'),
+            );
+        }
     }
 
     /**
@@ -869,11 +895,55 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame([2, 9], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
         $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'context-previous.blade.php'), $json);
 
-        // `MixedAssignment` is genuine: `$value` comes from `session()->get()`/`context()->get()`
-        // and is popped back off a `list<mixed>`.
+        // `MixedAssignment` on `$value = session()->get()`/`context()->get()` is genuine; the
+        // stack push and pop of that value are dropped (#1872).
         $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
             => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php') && $issue['type'] !== 'MixedAssignment'));
         $this->assertSame([], $stacks, $json);
+    }
+
+    /**
+     * #1872: the compiled save/restore bookkeeping of a plain `<x-...>` tag (line 1), nested tags
+     * (line 2), a multi-line tag (line 5), `@error` (line 8) and `@session`/`@context` (lines 9 to
+     * 14) reports no `MixedAssignment`. Left: the `$value = session()->get()`/`context()->get()`
+     * read on lines 9 and 12, which is not a save or restore.
+     */
+    #[Test]
+    public function compiled_save_restore_bookkeeping_reports_no_mixed_assignment(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $template = 'mixed-bookkeeping.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        // Guard against a vacuous pass: every construct must have compiled its restore.
+        $shadow = $this->shadowSourceFor('resources/views/' . $template, 'psalm-blade-report-mixed.xml');
+        foreach (['$attributes = $__attributesOriginal', '$message = $__messageOriginal;', '$__sessionPrevious[] = $value;', '$value = array_pop($__contextPrevious);'] as $statement) {
+            $this->assertStringContainsString($statement, $shadow);
+        }
+
+        $this->assertSame([9, 12], $this->linesFor($issues, 'MixedAssignment', $template), $json);
+        $this->assertSame(
+            ['Unable to determine the type that $value is being assigned to', 'Unable to determine the type that $value is being assigned to'],
+            $this->messagesFor($issues, 'MixedAssignment', $template),
+            $json,
+        );
+    }
+
+    /**
+     * #1872 negative: an author's own `$attributes` assignment (line 1) does not have the compiled
+     * shape, and an author who writes the compiled restore verbatim (line 2) keeps the finding. The
+     * tag's own restore (line 3) differs from line 2 by its hash and is still dropped.
+     */
+    #[Test]
+    public function an_author_written_save_restore_look_alike_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+
+        $this->assertSame(
+            [1, 2],
+            $this->linesFor($issues, 'MixedAssignment', 'mixed-bookkeeping-authored.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
@@ -987,6 +1057,68 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1871: a named slot declared non-null in a component view keeps the required-variable
+     * semantics above, and its `isset()` (line 10), `??` (13) and `??=` (14) guards name the
+     * optional declaration. Not hinted: `$slot` (15, dropped as an ambient guard since #1525), a
+     * non-slot type (16), a plain page, and the optional declaration: its first guards report
+     * nothing, and the ones nested inside an `isset()` (lines 8-10) are redundant through narrowing,
+     * which the hint would misread as the declaration's fault.
+     */
+    #[Test]
+    public function a_guard_on_a_required_named_slot_reports_with_the_optional_hint(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+        $hint = static fn(string $name): string
+            => " (named slots are optional: declare `\\Illuminate\\View\\ComponentSlot|null \${$name} = null`)";
+
+        $template = 'components/named-slot-guard.blade.php';
+        $this->assertSame([10, 13, 14, 16], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
+        $this->assertSame([
+            'Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null' . $hint('footer'),
+            'Docblock-defined type Illuminate\View\ComponentSlot for $header is never null' . $hint('header'),
+            'Docblock-defined type Illuminate\View\ComponentSlot for $header is never null' . $hint('header'),
+            'Docblock-defined type string for $title is never null',
+        ], $this->messagesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
+        $this->assertSame([13, 14], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $json);
+        $this->assertSame(
+            \array_fill(0, 2, 'Cannot resolve types for $header - docblock-defined type Illuminate\View\ComponentSlot does not contain null' . $hint('header')),
+            $this->messagesFor($issues, 'DocblockTypeContradiction', $template),
+            $json,
+        );
+
+        $template = 'components/named-slot-optional.blade.php';
+        $expected = [
+            'RedundantCondition' => [],
+            'RedundantConditionGivenDocblockType' => [8, 9, 10],
+            'DocblockTypeContradiction' => [9, 10],
+            'TypeDoesNotContainNull' => [],
+            'TypeDoesNotContainType' => [],
+        ];
+
+        foreach ($expected as $family => $lines) {
+            $this->assertSame($lines, $this->linesFor($issues, $family, $template), "{$family}: {$json}");
+        }
+
+        $this->assertNoNamedSlotHint($issues, $template);
+
+        $template = 'resources/views/named-slot-plain.blade.php';
+        $this->assertSame([2, 3], $this->linesFor($issues, 'RedundantConditionGivenDocblockType', $template), $json);
+        $this->assertSame([3], $this->linesFor($issues, 'DocblockTypeContradiction', $template), $json);
+        $this->assertNoNamedSlotHint($issues, $template);
+    }
+
+    /** @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues */
+    private function assertNoNamedSlotHint(array $issues, string $template): void
+    {
+        foreach (['RedundantConditionGivenDocblockType', 'DocblockTypeContradiction'] as $family) {
+            foreach ($this->messagesFor($issues, $family, $template) as $message) {
+                $this->assertStringNotContainsString('named slots', $message, $template);
+            }
+        }
+    }
+
+    /**
      * #1695: `compileAware()`'s generated loop calls `getConsumableComponentData($__value)` in the
      * list-form arm, which only runs for an int key at runtime. Psalm does not correlate the two
      * `is_string($__key)` ternaries, so every keyed non-string default reaches that arm: `null`
@@ -1087,6 +1219,27 @@ final class BladeIssueRemapTest extends TestCase
         // The opening tag compiled rather than surviving as literal text.
         $shadow = $this->shadowSourceFor($template);
         $this->assertStringContainsString('->renderComponent()', $shadow);
+        $this->assertStringNotContainsString('<x-alert', $shadow);
+    }
+
+    /**
+     * A precompiler owning its own tag prefix (`<native:...>`, `<flux:...>`) matches attributes as
+     * strictly as ComponentTagCompiler. A marker inside a multi-line `<foo:alert>` left the opener
+     * uncompiled, and the closer's orphan `endif` lost the template to a `ParseError` (#1910).
+     */
+    #[Test]
+    public function a_multiline_prefixed_precompiled_tag_compiles_without_a_parse_error(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/prefixed-precompiled-tag.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), $json);
+        $this->assertSame([13], $this->linesFor($issues, self::ISSUE, $template), $json);
+
+        // Both openers compiled rather than surviving as literal text.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertSame(2, \substr_count($shadow, '->renderComponent()'));
         $this->assertStringNotContainsString('<x-alert', $shadow);
     }
 
@@ -1197,7 +1350,7 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1532: `$component` is never given a type by
      * {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::componentTypesFor()} in ANY template (the
-     * prelude only ever declares it `mixed` through the undeclared-name fallback), unlike
+     * prelude declares it `mixed` or, from tag bookkeeping, a nullable `Component`), unlike
      * `$attributes`/`$slot`, whose docblock-vs-inferred split only exists inside a component view.
      * `nested-component-tags.blade.php` is a plain page (no `@props`/`@aware`/`$attributes`/
      * `$slot`), so `isComponentView` is false, yet it nests one `<x-alert>` tag inside another's

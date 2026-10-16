@@ -60,6 +60,8 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'spread arguments' => ['$view->with(...$args);', null];
         yield 'named arguments' => ['$view->with(key: "a", value: 1);', null];
         yield 'with as a first-class callable' => ['$view->with(...);', null];
+        yield 'accessor as a first-class callable' => ['$view->with("a", 1); $getter = $view->getName(...);', null];
+        yield 'accessor as a first-class callable ending a chain' => ['$view->with("a", 1)->getPath(...);', null];
         yield 'view passed to a method' => ['$this->decorate($view);', null];
         yield 'view passed to the parent' => ['parent::compose($view);', null];
         yield 'view stored in a property' => ['$this->view = $view;', null];
