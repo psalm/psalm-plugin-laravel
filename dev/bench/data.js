@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792183570624,
+  "lastUpdate": 1792184017135,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14590,6 +14590,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab2d5f0ae69b6dc7a84288046771983abdabba81",
+          "message": "fix(collections): restrict filter() callback-param narrowing to exact base receivers and non-scope-relative params #1912 (#1916)",
+          "timestamp": "2026-10-16T22:50:13+02:00",
+          "tree_id": "f06f2be42807a09f2c822d01671b794b722f99d3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ab2d5f0ae69b6dc7a84288046771983abdabba81"
+        },
+        "date": 1792184015515,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.71,
+            "range": "± 0.33",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
