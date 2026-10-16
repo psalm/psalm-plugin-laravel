@@ -34,20 +34,22 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
     /**
      * Get the sum of the given values.
      *
-     * At runtime, the accumulator starts at 0 and uses the + operator,
-     * so the result is always int|float (non-numeric values throw TypeError).
-     *
-     * When called without arguments, the return type narrows based on TValue:
-     * - Collection<_, int>::sum() → int (matches array_sum behavior for int arrays)
-     * - Collection<_, float>::sum() → float
+     * At runtime, the accumulator starts at int 0 and adds with the + operator, so the result is
+     * always int|float (a non-numeric string throws TypeError, a numeric string is added as a number)
+     * and an empty collection yields int 0 whatever the item type. Only an int source narrows:
+     * - Collection<_, int>::sum() → int
+     * - Collection<_, float>::sum() → int|float (empty collection)
      * - Otherwise → int|float
      *
-     * @template TCallbackReturn of int|float
+     * The callback is called with the item only on every 12.x release; 13.x also passes the key
+     * (`stubs/13/`).
      *
-     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @template TCallbackReturn of int|float|numeric-string
+     *
+     * @param  (callable(TValue): TCallbackReturn)|string|null  $callback
      * @return ($callback is null
-     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
-     *  : ($callback is string ? int|float : TCallbackReturn)
+     *  ? (TValue is int ? int : int|float)
+     *  : ($callback is string ? int|float : (TCallbackReturn is int ? int : int|float))
      * )
      */
     public function sum($callback = null);
