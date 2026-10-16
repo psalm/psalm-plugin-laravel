@@ -708,6 +708,7 @@ final class PluginConfigTest extends TestCase
             'blade=true',
             'blade.validateViewData=true',
             'blade.reportUnusedViewData=true',
+            'blade.reportUndeclaredVariables=true',
             'blade.reportMixedIssues=true',
             'experimental=true',
             'failOnInternalError=true',
@@ -727,6 +728,7 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->bladeEnabled);
         $this->assertTrue($config->bladeValidateViewData);
         $this->assertTrue($config->bladeReportUnusedViewData);
+        $this->assertTrue($config->bladeReportUndeclaredVariables);
         $this->assertTrue($config->bladeReportMixedIssues);
         $this->assertTrue($config->experimental);
         $this->assertTrue($config->failOnInternalError);

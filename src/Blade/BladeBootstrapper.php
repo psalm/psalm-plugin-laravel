@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory;
@@ -39,6 +40,8 @@ final class BladeBootstrapper
         private readonly string $shadowDir,
         /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
         private readonly bool $collectDataIncludes = false,
+        /** Opt-in (#1827): a contract template's undeclared reads stay out of the prelude's `mixed` net. */
+        private readonly bool $reportUndeclaredVariables = false,
         /**
          * Test seam: vendor dir for the hint-root filter. Null derives it from
          * laravel/framework's install path (the plugin's own vendor, in a unit test).
@@ -80,6 +83,29 @@ final class BladeBootstrapper
 
     /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
     private array $viewsRenderedByName = [];
+
+    private ?Factory $factory = null;
+
+    /** @var list<string> view-name prefixes an anonymous `<x-…>` tag resolves to (#1827) */
+    private array $componentViewPrefixes = ['components.'];
+
+    /** @var array<string, true> views a `Blade::component()` alias renders as an anonymous component */
+    private array $aliasedViews = [];
+
+    /** @var array<string, true> names every view receives from the booted app: `$app` and `View::share()` keys */
+    private array $providedNames = [];
+
+    /** @var array<string, true> views another template renders with `@component`, whose `@slot`s it never lists */
+    private array $componentTargets = [];
+
+    /** @var array<string, true> views another template renders with `@each`, which hands them `$key` */
+    private array $eachTargets = [];
+
+    /** @var list<string> directories, separator-terminated, whose templates a framework renders with data no call site lists */
+    private array $frameworkRenderedDirectories = [];
+
+    /** @var array<array-key, list<array{0: string, 1: string}>|null> every view a composer or creator reaches, read once up front (#1827) */
+    private array $composerSources = [];
 
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
     private array $compileFailures = [];
@@ -167,6 +193,10 @@ final class BladeBootstrapper
 
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
         $manifest->load();
+
+        if ($this->reportUndeclaredVariables) {
+            $this->collectProvidedFacts($compiler, $templates, $roots);
+        }
 
         $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
 
@@ -297,10 +327,7 @@ final class BladeBootstrapper
         }
 
         $factory = $this->viewFactory();
-        $shared = ['app' => true] + \array_fill_keys(
-            \array_map(static fn(int|string $name): string => (string) $name, \array_keys($factory?->getShared() ?? [])),
-            true,
-        );
+        $shared = $this->sharedNames($factory);
 
         // A shared name is no contract, so a marker problem on its declaration is not one either.
         foreach ($this->pendingProblems as $templatePath => $problems) {
@@ -355,6 +382,14 @@ final class BladeBootstrapper
             // silently disables the marker strip (ShadowTarget).
             ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
 
+            // The decision is app state the shadow bakes in, so it is a cache input: a template cached
+            // under another decision must recompile.
+            $provided = $this->providedFor($template, $roots);
+            $manifest->salt($template, !$this->reportUndeclaredVariables ? '' : 'undeclared:' . ($provided === null
+                ? 'declined'
+                // Serialized, not joined: a name may contain any separator.
+                : \hash('xxh128', \serialize(\array_keys($provided)))));
+
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
                 $shadows[$template] = $shadowPath;
@@ -382,7 +417,7 @@ final class BladeBootstrapper
                 continue;
             }
 
-            $shadow = $compiler->compile($template, $source, $propTypes);
+            $shadow = $compiler->compile($template, $source, $propTypes, $provided);
 
             if ($shadow instanceof BladeCompileError) {
                 $this->skipUncompiled($shadow, $source, $roots, $failures);
@@ -527,6 +562,177 @@ final class BladeBootstrapper
 
             $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
         }
+    }
+
+    /**
+     * `$app` and whatever a provider `share()`d: the data every view receives, which no call site passes.
+     *
+     * @return array<string, true>
+     *
+     * @psalm-capabilities read-props
+     */
+    private function sharedNames(?Factory $factory): array
+    {
+        return ['app' => true] + \array_fill_keys(
+            \array_map(static fn(int|string $name): string => (string) $name, \array_keys($factory?->getShared() ?? [])),
+            true,
+        );
+    }
+
+    /**
+     * @param list<string>                           $templates
+     * @param list<array{0: string, 1: string|null}> $roots
+     */
+    private function collectProvidedFacts(BladeCompiler $compiler, array $templates, array $roots): void
+    {
+        $this->factory = $this->viewFactory();
+        $this->providedNames = $this->sharedNames($this->factory);
+        \ksort($this->providedNames, \SORT_STRING);
+        $this->frameworkRenderedDirectories = $this->frameworkRenderedDirectories();
+
+        $parser = new ContractParser();
+
+        $viewNames = [];
+
+        foreach ($templates as $template) {
+            foreach (ViewName::resolve($template, $roots) as [, $viewName]) {
+                $viewNames[] = $viewName;
+            }
+
+            $source = @\file_get_contents($template);
+            [$components, $each] = $source === false ? [[], []] : $parser->renderTargets($source);
+            $this->componentTargets += \array_fill_keys($components, true);
+            $this->eachTargets += \array_fill_keys($each, true);
+        }
+
+        $this->composerSources = ComposerSourceReader::read($this->factory, \array_values(\array_unique($viewNames)));
+
+        // Closures take `mixed`, so the untyped getters add no mixed locals (docs/contributing/type-coverage.md).
+        // `array_values()` below: these maps are string-keyed, and a string key in a spread is a named argument.
+        $this->componentViewPrefixes = \array_merge(
+            $this->componentViewPrefixes,
+            ...\array_values(\array_map(
+                static fn(mixed $directory): array => \is_string($directory) ? [$directory . '.'] : [],
+                $compiler->getAnonymousComponentNamespaces(),
+            )),
+            ...\array_map(
+                static fn(mixed $hash): array => \is_string($hash) ? [$hash . '::'] : [],
+                \array_column($compiler->getAnonymousComponentPaths(), 'prefixHash'),
+            ),
+        );
+
+        // An alias naming a view rather than a class is rendered as an anonymous component. Not
+        // `class_exists()`: it autoloads, and a view name never contains a backslash.
+        $this->aliasedViews = \array_fill_keys(\array_merge(...\array_values(\array_map(
+            static fn(mixed $target): array => \is_string($target) && !\str_contains($target, '\\') ? [\str_replace('/', '.', $target)] : [],
+            $compiler->getClassComponentAliases(),
+        ))), true);
+    }
+
+    /**
+     * Laravel's mail markdown component directories (`<x-mail::button>`, `@component('mail::button')`:
+     * the `mail` namespace only exists while a markdown mail renders) and Livewire's view directories,
+     * where a component's public properties reach a view that need carry no Livewire markup.
+     *
+     * @return list<string>
+     */
+    private function frameworkRenderedDirectories(): array
+    {
+        try {
+            $config = $this->app->bound('config') ? $this->app->make('config') : null;
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if (!$config instanceof Repository) {
+            return [];
+        }
+
+        // Livewire merges its config whenever it is installed; v3 has `view_path`, v4 adds the rest.
+        $entries = \is_array($config->get('livewire'))
+            ? [
+                $config->get('mail.markdown.paths'),
+                $config->get('livewire.view_path'),
+                $config->get('livewire.component_locations'),
+                $config->get('livewire.component_namespaces'),
+            ]
+            : [$config->get('mail.markdown.paths')];
+
+        // Closures take `mixed`, so the untyped config values add no mixed locals.
+        $directories = \array_merge(...\array_map(
+            static fn(mixed $entry): array => \is_array($entry) ? \array_values($entry) : [$entry],
+            $entries,
+        ));
+
+        return \array_values(\array_filter(\array_map(
+            static function (mixed $directory): ?string {
+                $resolved = \is_string($directory) ? \realpath($directory) : false;
+
+                // Canonicalized as resolveRoots() canonicalizes the roots every template path starts with.
+                return $resolved === false
+                    ? null
+                    : \rtrim(PathCaseCanonicalizer::canonicalize($resolved), \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+            },
+            $directories,
+        )));
+    }
+
+    /**
+     * The names the booted app provides to this template, or null when the template keeps its
+     * `mixed` net: a component or Livewire view, or one whose data a composer or creator (wildcard
+     * ones included) or a `@component` slot can add to, none of which a template's own source lists.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     *
+     * @return array<string, true>|null
+     *
+     * @psalm-capabilities read-props
+     */
+    private function providedFor(string $template, array $roots): ?array
+    {
+        if (!$this->reportUndeclaredVariables || !$this->factory instanceof Factory) {
+            return null;
+        }
+
+        foreach ($this->frameworkRenderedDirectories as $directory) {
+            if (\str_starts_with($template, $directory)) {
+                return null;
+            }
+        }
+
+        $names = ViewName::resolve($template, $roots);
+
+        if ($names === []) {
+            return null;
+        }
+
+        $provided = $this->providedNames;
+
+        foreach ($names as [, $viewName]) {
+            if (isset($this->aliasedViews[$viewName])
+                || isset($this->componentTargets[$viewName])
+                || \str_contains($viewName, '::components.')
+                || \str_starts_with($viewName, 'livewire.')
+                || \str_starts_with($viewName, 'livewire::')
+                || \array_key_exists($viewName, $this->composerSources)
+            ) {
+                return null;
+            }
+
+            foreach ($this->componentViewPrefixes as $prefix) {
+                if (\str_starts_with($viewName, $prefix)) {
+                    return null;
+                }
+            }
+
+            if (isset($this->eachTargets[$viewName])) {
+                $provided['key'] = true;
+            }
+        }
+
+        \ksort($provided, \SORT_STRING);
+
+        return $provided;
     }
 
     /**

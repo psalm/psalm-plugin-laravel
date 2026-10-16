@@ -18,6 +18,8 @@ final class ShadowCompiler
 
     private readonly SuppressionInjector $suppressionInjector;
 
+    private ?ContractParser $contractParser = null;
+
     /**
      * @psalm-mutation-free
      */
@@ -30,8 +32,10 @@ final class ShadowCompiler
     /**
      * @param array<string, string> $propTypes variable name (without $) => the type a `@props` literal
      *                                         default gives the body, see {@see ContractVar::$defaultType}
+     * @param array<string, true>|null $provided names the booted app supplies to every view; non-null
+     *                                         opts the template into undeclared-variable reporting (#1827)
      */
-    public function compile(string $templatePath, string $source, array $propTypes = []): ShadowResult|BladeCompileError
+    public function compile(string $templatePath, string $source, array $propTypes = [], ?array $provided = null): ShadowResult|BladeCompileError
     {
         // The prefix is absent from author text, including real PHP comments.
         $markerPrefix = MarkerComment::prefixFor($source);
@@ -48,7 +52,8 @@ final class ShadowCompiler
             $compiled = AttributesRestoreReassert::apply($compiled);
         }
 
-        $prelude = $this->preludeBuilder->build($compiled, $source, $propTypes);
+        $omit = $provided === null ? [] : ($this->contractParser ??= new ContractParser())->undeclaredReads($source, $compiled, $provided);
+        $prelude = $this->preludeBuilder->build($compiled, $source, $propTypes, $omit);
         $content = $prelude . $compiled;
 
         $preludeLines = \substr_count($prelude, "\n");
