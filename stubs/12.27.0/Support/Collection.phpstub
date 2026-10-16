@@ -1,0 +1,45 @@
+<?php
+
+namespace Illuminate\Support;
+
+use ArrayAccess;
+use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
+use Illuminate\Support\Traits\EnumeratesValues;
+use Illuminate\Support\Traits\Macroable;
+use Illuminate\Support\Traits\TransformsToResourceCollection;
+
+/**
+ * Laravel 12.27.0 resolves a pure UnitEnum group key through `enum_value()` in `groupBy()`, where
+ * earlier releases map only a BackedEnum and throw for a pure enum. (`keyBy()` enum support starts
+ * earlier, in 12.26.4: `stubs/12.26.4/`.)
+ * Only this method is declared: the rest merges from `common`.
+ * `TValue` stays invariant like the `common` stub (Laravel declares it covariant).
+ *
+ * @template TKey of array-key
+ * @template TValue
+ * @implements \ArrayAccess<TKey, TValue>
+ * @implements \Illuminate\Support\Enumerable<TKey, TValue>
+ */
+class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerable
+{
+    /**
+     * @use \Illuminate\Support\Traits\EnumeratesValues<TKey, TValue>
+     */
+    use EnumeratesValues, Macroable, TransformsToResourceCollection;
+
+    /**
+     * Group an associative array by a field or using a callback.
+     *
+     * @template TGroupKey of array-key|\UnitEnum|\Stringable
+     *
+     * @param  (callable(TValue, TKey): TGroupKey)|array|string  $groupBy
+     * @param  bool  $preserveKeys
+     * @return static<
+     *  ($groupBy is (array|string)
+     *      ? array-key
+     *      : (TGroupKey is \UnitEnum ? array-key : (TGroupKey is \Stringable ? string : TGroupKey))),
+     *  static<($preserveKeys is true ? TKey : int), ($groupBy is array ? mixed : TValue)>
+     * >
+     */
+    public function groupBy($groupBy, $preserveKeys = false) {}
+}

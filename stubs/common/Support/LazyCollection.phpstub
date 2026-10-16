@@ -177,4 +177,19 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Pad collection to the specified length with a value.
+     *
+     * The generator re-yields every item under its own key, so string keys are kept (a negative
+     * size delegates to Collection::pad(), which keeps them too); the appended values take int keys.
+     * Laravel's docblock declares `int`.
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
 }
