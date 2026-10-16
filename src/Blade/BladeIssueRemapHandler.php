@@ -294,8 +294,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return [];
         }
 
-        // Over-matching (a `$` later on the docblock line) only keeps findings.
-        \preg_match_all('/@(?:psalm-|phpstan-)?var\h[^\n]*?\$(\w+)/', (string) \strstr($shadow, "\n?>\n"), $declared);
+        // Spans lines to the first `$`, for a multi-line type; over-matching only keeps findings.
+        \preg_match_all('/@(?:psalm-|phpstan-)?var\s[^$]*?\$(\w+)/', (string) \strstr($shadow, "\n?>\n"), $declared);
 
         return \array_diff_key(
             \array_fill_keys($fallback, true),

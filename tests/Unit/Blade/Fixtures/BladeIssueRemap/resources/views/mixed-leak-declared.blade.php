@@ -6,3 +6,13 @@ x
 @if(\BladeIssueRemapFixture\Gate::userCan('x', $book))
 {{ $book->getUrl('/c') }}
 @endif
+<?php
+/**
+ * @var array{
+ *   k?: mixed
+ * } $multi
+ */
+?>
+@if($multi['k'] ?? false)
+x
+@endif

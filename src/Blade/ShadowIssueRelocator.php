@@ -262,10 +262,13 @@ final class ShadowIssueRelocator
 
         // Array access on a possible `ArrayAccess` runs a virtual `offsetGet()`/`offsetExists()` call
         // with these two suppressed (ArrayFetchAnalyzer.php), lost the same way (#1909). It takes the
-        // array expression's position, which `[` follows; a real call's method name is followed by
-        // `(`. Not Mixed-gated: plain PHP suppresses it for a declared `array|ArrayAccess` too.
+        // array expression's position, which `[` follows; a real instance call's method name is
+        // followed by `(`. A static or `new` call's `MixedMethodCall` covers the whole call, so only
+        // the instance path's wording counts. Not Mixed-gated: plain PHP suppresses it for a
+        // declared `array|ArrayAccess` too.
         if (
-            ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof MixedMethodCall)
+            ($issue instanceof PossiblyInvalidMethodCall
+                || ($issue instanceof MixedMethodCall && \str_starts_with($issue->message, 'Cannot determine the type of ')))
             && self::selectionFollowedBy($issue->code_location, '[')
         ) {
             return false;
@@ -1000,7 +1003,11 @@ final class ShadowIssueRelocator
         $message = $messages[$issue::class] ?? null;
         $selection = ShadowSelection::of($issue->code_location);
 
-        if ($subject === null || !$selection instanceof ShadowSelection || ($message !== null && \preg_match($message, $issue->message) !== 1)) {
+        if ($subject === null || !$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        if ($message !== null && \preg_match($message, $issue->message) !== 1) {
             return false;
         }
 
@@ -1011,7 +1018,7 @@ final class ShadowIssueRelocator
             $names = self::readNames($selected);
         } elseif ($subject === 'receiver') {
             // Not after `->`, `::`, `$` or `\`: `$a->$b->m()` and `A::$b->m()` have a fetch receiver.
-            if (\preg_match('/(?<![\w$>:\\\\])\$(\w+)\h*\??->\h*\z/', \substr($selection->snippet, 0, $selection->start), $receiver) === 1) {
+            if (\preg_match('/(?<![\w$>:\\\\])\$(\w+)\s*\??->\s*\z/', \substr($selection->snippet, 0, $selection->start), $receiver) === 1) {
                 $names = [$receiver[1]];
             }
         } elseif (\preg_match('/\A(?:new\h+)?\$(\w+)/', $selected, $class) === 1) {

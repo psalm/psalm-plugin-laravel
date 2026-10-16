@@ -1982,8 +1982,9 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1909: the same findings on a variable the template declares (raw `@var` and `@psalm-var`),
-     * assigns, or binds as a loop alias keep reporting with `reportMixedIssues` off.
+     * #1909: the same findings on a variable the template declares (raw `@var`, multi-line included,
+     * and `@psalm-var`), assigns, binds as a loop alias, or gets from a class component keep
+     * reporting with `reportMixedIssues` off.
      */
     #[Test]
     public function findings_about_declared_and_local_variables_keep_reporting(): void
@@ -1991,9 +1992,12 @@ final class BladeIssueRemapTest extends TestCase
         $issues = $this->analyze('psalm.xml');
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
 
-        $this->assertSame([2], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-declared.blade.php'), $json);
+        $this->assertSame([2, 16], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-declared.blade.php'), $json);
         $this->assertSame([7], $this->linesFor($issues, 'UndefinedMagicMethod', 'mixed-leak-declared.blade.php'), $json);
         $this->assertSame([2, 6], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-local.blade.php'), $json);
+        // Typed by the class component's properties, though its prelude still writes `@var mixed`.
+        $this->assertSame([2], $this->linesFor($issues, 'UndefinedMagicMethod', 'components/mixed-leak-card.blade.php'), $json);
+        $this->assertSame([4], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'components/mixed-leak-card.blade.php'), $json);
     }
 
     /**

@@ -14,6 +14,7 @@ require_once __DIR__ . '/../app/Providers/RouteHelperStubProvider.php';
 // `<x-chip>` resolves to this class by Laravel's naming convention (`App\View\Components\Chip`), and
 // ComponentTagCompiler only treats a tag as a class component when the class is already loadable.
 require_once __DIR__ . '/../app/View/Components/Chip.php';
+require_once __DIR__ . '/../app/View/Components/MixedLeakCard.php';
 // Makes RouteGenerator declared in-process, exactly what a real vendor package's own composer
 // autoloader would do — and what the #1505 fix's class_exists($n, false) gate relies on, since
 // this fixture's vendor/autoload.php is a deliberate no-op stub (see PsalmShadowRegistrar).

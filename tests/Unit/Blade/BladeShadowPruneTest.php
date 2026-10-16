@@ -27,8 +27,10 @@ final class BladeShadowPruneTest extends TestCase
 
     private const COPIED_FILES = [
         'app/Greeter.php',
-        // bootstrap/app.php require_once's the `<x-chip>` class component (#1701) unconditionally too.
+        // bootstrap/app.php require_once's the `<x-chip>` (#1701) and `<x-mixed-leak-card>` (#1909)
+        // class components unconditionally too.
         'app/View/Components/Chip.php',
+        'app/View/Components/MixedLeakCard.php',
         'app/Providers/LivewireStubProvider.php',
         // bootstrap/app.php require_once's both of these unconditionally (#1505's
         // RouteHelperStubProvider); the scratch copy's boot fatals without them, whether or not any

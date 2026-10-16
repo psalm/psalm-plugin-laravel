@@ -86,6 +86,16 @@ final class ShadowIssueRelocatorTest extends TestCase
     /** `CompilesComponents::newComponentHash()` output: xxh128, 32 lowercase hex characters. */
     private const COMPONENT_HASH = '5194778a3a7b899dcee5619d0610f5cf';
 
+    private const RISKY_MIXED = 'Operand of type false|mixed contains type mixed, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.';
+
+    private const RISKY_SNIPPET = "<?php if(\$endpoint['body_params'] ?? false): ?>";
+
+    private const MAGIC_SNIPPET = "<?php echo e(\$book->getUrl('/c')); ?>";
+
+    private const STRIP_SNIPPET = "<?php echo e(strip_tags(str_replace([\"\\n\"], ' ', \$status['content']))); ?>";
+
+    private const OFFSET_SNIPPET = "<?php echo e(\$acct['avatar']); ?>";
+
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -1658,16 +1668,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
-    private const RISKY_MIXED = 'Operand of type false|mixed contains type mixed, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.';
-
-    private const RISKY_SNIPPET = "<?php if(\$endpoint['body_params'] ?? false): ?>";
-
-    private const MAGIC_SNIPPET = "<?php echo e(\$book->getUrl('/c')); ?>";
-
-    private const STRIP_SNIPPET = "<?php echo e(strip_tags(str_replace([\"\\n\"], ' ', \$status['content']))); ?>";
-
-    private const OFFSET_SNIPPET = "<?php echo e(\$acct['avatar']); ?>";
-
     /**
      * #1909: array access on a possible `ArrayAccess` runs a virtual `offsetGet()` call that Psalm
      * analyzes with `PossiblyInvalidMethodCall`/`MixedMethodCall` suppressed. The re-emit lost that
@@ -1706,6 +1706,22 @@ final class ShadowIssueRelocatorTest extends TestCase
         );
 
         $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * A static call's `MixedMethodCall` is positioned on the whole call (AtomicStaticCallAnalyzer.php),
+     * so an offset read on its result puts `[` after it too; only the instance path's message is
+     * the virtual call's.
+     */
+    #[Test]
+    public function a_static_mixed_method_call_followed_by_an_offset_keeps_reporting(): void
+    {
+        $issue = new MixedMethodCall(
+            'Cannot call method on an unknown class',
+            self::selectionLocation('$cls::make()', 12, "<?php echo e(\$cls::make()['k']); ?>"),
+        );
+
+        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
     }
 
     /**
