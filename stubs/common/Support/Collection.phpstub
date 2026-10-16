@@ -219,6 +219,74 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function put($key, $value) {}
 
     /**
+     * Push an item onto the beginning of the collection.
+     *
+     * Same model as push()/put(): independent templates plus `@psalm-this-out`, so a value (or key)
+     * outside the current types widens the collection instead of raising InvalidArgument.
+     *
+     * @template TPrependValue
+     * @template TPrependKey of array-key
+     *
+     * @param  TPrependValue  $value
+     * @param  TPrependKey|null  $key
+     * @psalm-this-out static<($key is null ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
+     * @return static<($key is null ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
+     */
+    public function prepend($value, $key = null) {}
+
+    /**
+     * Prepend one or more items to the beginning of the collection.
+     *
+     * @template TUnshiftValue
+     *
+     * @param  TUnshiftValue  ...$values
+     * @psalm-this-out static<TKey|int, TValue|TUnshiftValue>
+     * @return static<TKey|int, TValue|TUnshiftValue>
+     */
+    public function unshift(...$values) {}
+
+    /**
+     * Add an item to the collection.
+     *
+     * @template TAddValue
+     *
+     * @param  TAddValue  $item
+     * @psalm-this-out static<TKey|int, TValue|TAddValue>
+     * @return static<TKey|int, TValue|TAddValue>
+     */
+    public function add($item) {}
+
+    /**
+     * Splice a portion of the underlying collection array.
+     *
+     * Returns the removed slice (original items), while the receiver gains the replacement values.
+     * The receiver's key type stays `TKey` as in Laravel: array_splice() also renumbers integer keys
+     * and gives the replacement integer keys, which is not modelled here.
+     *
+     * @template TSpliceValue
+     *
+     * @param  int  $offset
+     * @param  int|null  $length
+     * @param  array<array-key, TSpliceValue>  $replacement
+     * @psalm-this-out static<TKey, TValue|TSpliceValue>
+     * @return static<TKey, TValue>
+     */
+    public function splice($offset, $length = null, $replacement = []) {}
+
+    /**
+     * Get an item from the collection by key or add it to the collection if it does not exist.
+     *
+     * @template TGetOrPutKey of array-key
+     * @template TGetOrPutValue
+     *
+     * @param  TGetOrPutKey  $key
+     * @param  TGetOrPutValue|(\Closure(): TGetOrPutValue)  $value
+     * @psalm-this-out static<TKey|TGetOrPutKey, TValue|TGetOrPutValue>
+     * @return TValue|TGetOrPutValue
+     */
+    public function getOrPut($key, $value) {}
+
+    /**
      * Count the number of items in the collection.
      *
      * @psalm-mutation-free
