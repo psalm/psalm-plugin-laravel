@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792186730756,
+  "lastUpdate": 1792187209118,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14660,6 +14660,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b8c593ffe2e200af74535070adf92ee4ea0038c",
+          "message": "Fix `Eloquent\\Collection` and paginator return types: `findOrFail`, `pad`/`zip`, `flip`, `modelKeys`, `items` (#1915)\n\n* fix(stubs): keep the key template in paginator items() #1914\n\n* fix(stubs): type Eloquent collection findOrFail, pad, zip, flip and modelKeys #1914\n\n* fix(stubs): type collection toArray() so Arrayable items become arrays #1914\n\n* fix(stubs): allow int keys in cursor paginator items() #1914\n\n* fix(stubs): declare toArray() on the collection classes instead of the trait #1914\n\n* fix(stubs): keep the array arm of toArray() for generic Arrayable items #1914\n\n* fix(stubs): return the rebound paginator from setCollection() #1914\n\n* revert(stubs): keep Laravel's toArray() return type #1914\n\nA conditional toArray() return is unsound on Psalm 7.0.0-rc2: class placement drops the Arrayable arm for concrete Arrayable classes, and the narrower Eloquent return breaks custom collections that return array<int, Model>. Trait placement broke subclass overrides. Recorded as a dead end in decisions.md.\n\n* revert(stubs): return $this from setCollection() again #1914\n\nstatic<TSetKey, TSetValue> is applied positionally to subclasses that reshape the template list (Page<T> extends AbstractPaginator<int, T> types items as int; extra templates are dropped).\nA userland @return $this setCollection() override also reports ImplementedReturnTypeMismatch.\n\n* docs(stubs): pin chained setCollection() keeping old paginator templates #1914\n\n* fix(stubs): include null in zip() inner values for unequal lengths\n\nCollection::zip() runs array_map(), which pads the shorter input with null,\nand LazyCollection::zip() iterates until every input is exhausted. Applies to\nSupport, Eloquent and Lazy collections.",
+          "timestamp": "2026-10-16T23:42:47+02:00",
+          "tree_id": "d9ad98172af5b030b987b30de6aa7ed7a82c7dc4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/4b8c593ffe2e200af74535070adf92ee4ea0038c"
+        },
+        "date": 1792187207156,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.32,
+            "range": "± 0.45",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
