@@ -80,4 +80,16 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * @return static<(TFlatMapKey is int ? int : TFlatMapKey), TFlatMapValue>
      */
     public function flatMap(callable $callback);
+
+    /**
+     * Same closure-default handling as `LazyCollection::get()`.
+     *
+     * @template TGetDefault
+     * @template TGetClosureReturn
+     *
+     * @param  TKey  $key
+     * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
+     * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
+     */
+    public function get($key, $default = null);
 }

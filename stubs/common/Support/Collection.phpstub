@@ -99,6 +99,24 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function get($key, $default = null) {}
 
     /**
+     * Get the last item from the collection.
+     *
+     * A closure default only runs when no item matches, so its result joins `TValue`.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TLastDefault
+     * @template TLastClosureReturn
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TLastDefault|(\Closure(): TLastClosureReturn)  $default
+     * @return ($default is \Closure ? TLastClosureReturn|TValue : (TLastDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function last(?callable $callback = null, $default = null) {}
+
+    /**
      * @template TCount of int
      * @param  TCount  $count
      * @return (
@@ -115,7 +133,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  TKey  $key
      * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
-     * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
+     * @return ($default is \Closure ? TPullClosureReturn|TValue : (TPullDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      */
@@ -127,10 +145,11 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-mutation-free
      *
      * @template TValueDefault
+     * @template TValueClosureReturn
      *
      * @param  string|int  $key
-     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
-     * @return mixed|TValueDefault
+     * @param  TValueDefault|(\Closure(): TValueClosureReturn)  $default
+     * @return ($default is \Closure ? mixed|TValueClosureReturn : mixed|TValueDefault)
      *
      * @psalm-flow ($default) -> return
      */

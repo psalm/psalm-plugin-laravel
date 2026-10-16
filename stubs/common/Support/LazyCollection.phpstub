@@ -96,6 +96,23 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public static function make($items = [], ...$args) {}
 
     /**
+     * A closure default only runs when the key is missing, so its result joins `TValue`; Laravel's
+     * single default template binds to the Closure itself when one is passed.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TGetDefault
+     * @template TGetClosureReturn
+     *
+     * @param  TKey|null  $key
+     * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
+     * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function get($key, $default = null) {}
+
+    /**
      * Get one or a specified number of items randomly from the collection.
      *
      * No argument → a single random element (TValue). With $number → a
