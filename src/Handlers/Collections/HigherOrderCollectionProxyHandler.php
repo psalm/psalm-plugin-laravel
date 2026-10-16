@@ -129,6 +129,16 @@ final class HigherOrderCollectionProxyHandler implements
             return;
         }
 
+        // A receiver union of several collections cannot be modelled from one branch: keep
+        // Psalm's own resolution instead of the single-collection override or fallback.
+        $proxyExpr = $expr->var;
+        if ($proxyExpr instanceof PropertyFetch) {
+            $receiverType = $source->getNodeTypeProvider()->getType($proxyExpr->var);
+            if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $source->getCodebase())) > 1) {
+                return;
+            }
+        }
+
         foreach ($calleeType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject || \strtolower($atomic->value) !== self::PROXY_CLASS_LOWER) {
                 continue;
@@ -429,22 +439,42 @@ final class HigherOrderCollectionProxyHandler implements
     /**
      * Extract TKey, TValue, and the collection class from a Union type.
      *
+     * Declines (null) when the union holds more than one collection atomic: taking the first
+     * would silently drop the other branches' item types.
+     *
      * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      * @psalm-mutation-free
      */
     private static function extractCollectionInfoFromType(Union $collectionType, Codebase $codebase): ?array
     {
-        foreach ($collectionType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
-                continue;
-            }
+        $atomics = self::collectionAtomics($collectionType, $codebase);
 
-            if (ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
-                return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+        if (\count($atomics) !== 1) {
+            return null;
+        }
+
+        return [$atomics[0]->type_params[0], $atomics[0]->type_params[1], $atomics[0]->value];
+    }
+
+    /**
+     * @return list<TGenericObject> the generic Enumerable atomics of the union
+     * @psalm-mutation-free
+     */
+    private static function collectionAtomics(Union $collectionType, Codebase $codebase): array
+    {
+        $atomics = [];
+
+        foreach ($collectionType->getAtomicTypes() as $atomic) {
+            if (
+                $atomic instanceof TGenericObject
+                && \count($atomic->type_params) >= 2
+                && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)
+            ) {
+                $atomics[] = $atomic;
             }
         }
 
-        return null;
+        return $atomics;
     }
 
     /**
