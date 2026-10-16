@@ -48,4 +48,37 @@ trait EnumeratesValues
      * @return static<TMakeKey, TMakeValue>
      */
     public static function make($items = [], ...$args) {}
+
+    /**
+     * Native signatures with `@return $this`: Laravel's `$this|TWhenEmptyReturnType` collapses to
+     * `mixed` here, and the callback's own return type is added back by
+     * `ConditionableWhenHandler`. The callable's receiver param is typed per call site by
+     * `CollectionCallbackParamsHandler`.
+     *
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return $this
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
 }

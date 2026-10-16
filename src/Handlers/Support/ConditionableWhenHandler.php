@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Support;
 
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\EnumeratesValues;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
@@ -37,6 +38,9 @@ use Psalm\Type\Union;
  * Only the two-argument `when($value, $callback)` form is inspected; the 0/1-arg
  * `HigherOrderWhenProxy` branch and the `$default` argument defer to the stub's `$this`.
  *
+ * The Collection empty family (`whenEmpty()` and friends, callback first) is narrowed the same
+ * way; their stubs live on `EnumeratesValues`, which is registered too.
+ *
  * Registered on the `Conditionable` trait: Psalm dispatches a method return-type provider on
  * the declaring class, which for a trait method is the trait, so one registration covers every
  * host (Builder, Collection, Stringable, Request, user classes). The precise receiver type
@@ -47,28 +51,42 @@ use Psalm\Type\Union;
 final class ConditionableWhenHandler implements MethodReturnTypeProviderInterface
 {
     /**
+     * Position of the callback arg per method: after `$value` for when()/unless(), first for the
+     * Collection empty family.
+     */
+    private const CALLBACK_POSITION = [
+        'when' => 1,
+        'unless' => 1,
+        'whenempty' => 0,
+        'whennotempty' => 0,
+        'unlessempty' => 0,
+        'unlessnotempty' => 0,
+    ];
+
+    /**
      * @return list<string>
      * @psalm-pure
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        // The declaring class of a trait method is the trait, and Psalm dispatches on it,
-        // so this single entry covers every class that uses Conditionable.
-        return [Conditionable::class];
+        // The declaring class of a trait method is the trait, and Psalm dispatches on it, so
+        // these two entries cover every class that uses Conditionable (when/unless) or
+        // EnumeratesValues (the empty family).
+        return [Conditionable::class, EnumeratesValues::class];
     }
 
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        $method = $event->getMethodNameLowercase();
-        if ($method !== 'when' && $method !== 'unless') {
+        $position = self::CALLBACK_POSITION[$event->getMethodNameLowercase()] ?? null;
+        if ($position === null) {
             return null;
         }
 
-        // Need at least the callback ($args[1]); the 0/1-arg proxy branch defers to the stub.
+        // Need the callback arg; the 0/1-arg when() proxy branch defers to the stub.
         $args = $event->getCallArgs();
-        if (\count($args) < 2) {
+        if (\count($args) <= $position) {
             return null;
         }
 
@@ -87,7 +105,7 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        $callbackReturn = self::callableReturn($source, $args[1]->value);
+        $callbackReturn = self::callableReturn($source, $args[$position]->value);
         if (! $callbackReturn instanceof Union) {
             return null; // callback return undeterminable (e.g. string callable) — defer to stub
         }
