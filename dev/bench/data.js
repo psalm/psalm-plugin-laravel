@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792184017135,
+  "lastUpdate": 1792186730756,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14625,6 +14625,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3999feddd232b30b876905717b23ccbee053313c",
+          "message": "Resolve dynamic `where{Column}` calls from migration schema columns (#1934)\n\n* fix(eloquent): resolve dynamic where columns from migration schema\n\nDynamic where{Column} validated suffixes only against @property entries, so\nmodels without docblocks reported UndefinedMagicMethod or fell to mixed. Merge\ncomplete migration-schema columns into both the lowercase existence match and\nthe camel-cased precise match (Str::snake(segment) vs exact column name),\ntype the single argument via ModelPropertyHandler, and never cache a negative\nverdict while the metadata registry has no entry for the model.\n\nRefs #1932\n\n* fix(eloquent): keep macros, real methods and per-model unions ahead of schema where\n\nBuilder/relation macros and real methods declared on the concrete model now win\nover a schema-derived dynamic where, a relation's related-model union must\naccept the column on every alternative, and the existence match normalizes\nunderscores in the method suffix like it does for columns.\n\nRefs #1932\n\n* fix(eloquent): gate dynamic where on the layer Laravel dispatches through\n\nScope the macro and pseudo-method veto per dispatch layer (Eloquent builder and\nthe model's custom builder for direct calls, plus Relation macros for relation\nchains; Query builder macros no longer veto), let only public real methods\nshadow a dynamic where, decline multi-atomic relation receivers, and type a\nrelated-model union's argument as the union of its alternatives' column types.\n\nRefs #1932\n\n* fix(eloquent): refine schema-typed dynamic where arguments\n\nKeep Query builder macro arguments untyped (the fluent return is unchanged),\nhonour trait visibility adaptations when deciding whether a real method\nshadows a dynamic where, and widen schema int ranges to int for the argument\ntype since Laravel binds any int.\n\nRefs #1932\n\n* refactor(eloquent): drop unreachable dynamic where guards",
+          "timestamp": "2026-10-16T23:36:17+02:00",
+          "tree_id": "559ce495959558e60f476ee20afbc302541cb4bf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3999feddd232b30b876905717b23ccbee053313c"
+        },
+        "date": 1792186728912,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.71,
+            "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
