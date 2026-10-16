@@ -413,6 +413,20 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - The plugin does not model Laravel's conditional `@return` (`''` vs `non-empty-string`): the wrong types are an upstream docblock bug, and `[null]` renders `''`, so the upstream `non-empty-string` is unsound for nullable items. Fix it in laravel/framework, not here.
 - A top-level `null` `$array` stays rejected.
 
+## Collections
+
+### In-place writes widen through `@psalm-this-out`; two receiver shapes are an accepted limitation
+
+**Decision:** `Support\Collection::push()`/`put()`/`prepend()`/`unshift()`/`add()`/`splice()`/`getOrPut()` take fresh value (and key) templates and declare `@psalm-this-out static<...>`, so writing a value outside the current `TValue` widens the receiver instead of reporting `InvalidArgument` (#1890). `$c[] = $v` (`offsetSet`) stays strict because `@psalm-this-out` does not apply to array-access writes. `transform()` already works through Laravel's own `@phpstan-this-out`.
+
+**Accepted limitation:** the model misbehaves for two receiver shapes, and `push()`/`put()` share both defects:
+- A generic subclass that reshapes the template list (`Bag<T> extends Collection<int, T>`): `static<TKey, TValue>` is applied positionally to `Bag`'s own templates, so `Bag<User>` becomes `Bag<int, User>` and `first()` turns into `int|null`. Psalm does not route the arguments through `template_extended_params`.
+- A union of different receiver classes (`Support\Collection|Eloquent\Collection`): this-out replaces the whole variable type with one branch and discards the unaffected branches, so a later `instanceof` reports a redundant or impossible condition.
+
+Both are Psalm-side defects. The stub does not work around them: a per-shape workaround would be spread across every in-place writer, and the common receivers (plain `Collection`, `Eloquent\Collection`, fixed-template subclasses) are correct.
+
+**Boundaries:** `splice()` keeps its receiver key type `TKey` (`array_splice()` renumbers integer keys, which is not modelled) and returns the removed slice, so only its this-out carries the replacement values. `getOrPut()` leaves the key unbounded because Laravel accepts `mixed`.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens

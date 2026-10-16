@@ -224,13 +224,17 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Same model as push()/put(): independent templates plus `@psalm-this-out`, so a value (or key)
      * outside the current types widens the collection instead of raising InvalidArgument.
      *
+     * Laravel branches on the argument count, not on null: `prepend($v)` appends an integer key, while
+     * `prepend($v, null)` inserts the string key `''`. The explicit-null case therefore falls to
+     * `TPrependKey`, which stays `array-key` (sound, not exact).
+     *
      * @template TPrependValue
      * @template TPrependKey of array-key
      *
      * @param  TPrependValue  $value
      * @param  TPrependKey|null  $key
-     * @psalm-this-out static<($key is null ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
-     * @return static<($key is null ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
+     * @psalm-this-out static<(func_num_args() is 1 ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
+     * @return static<(func_num_args() is 1 ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
      */
     public function prepend($value, $key = null) {}
 
@@ -276,12 +280,15 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Get an item from the collection by key or add it to the collection if it does not exist.
      *
-     * @template TGetOrPutKey of array-key
+     * The key is deliberately unbounded: Laravel declares `mixed`, and null, bool and float keys are
+     * accepted at runtime (coerced by PHP). A non-array-key argument widens the key type to `array-key`.
+     *
+     * @template TGetOrPutKey
      * @template TGetOrPutValue
      *
      * @param  TGetOrPutKey  $key
      * @param  TGetOrPutValue|(\Closure(): TGetOrPutValue)  $value
-     * @psalm-this-out static<TKey|TGetOrPutKey, TValue|TGetOrPutValue>
+     * @psalm-this-out static<TKey|(TGetOrPutKey is array-key ? TGetOrPutKey : array-key), TValue|TGetOrPutValue>
      * @return TValue|TGetOrPutValue
      */
     public function getOrPut($key, $value) {}

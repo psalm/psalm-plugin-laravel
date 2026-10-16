@@ -70,6 +70,38 @@ function get_or_put_widens_key_and_value(Collection $ints, int $id, float $defau
     consume($ints);
 }
 
+/** @param Collection<string, int> $ints */
+function get_or_put_string_key_keeps_key_type(Collection $ints, string $key): void
+{
+    $ints->getOrPut($key, 1);
+    /** @psalm-check-type-exact $ints = Collection<string, int>&static */
+    consume($ints);
+}
+
+/** @param Collection<string, int> $ints */
+function get_or_put_accepts_nullable_key(Collection $ints, ?string $key): void
+{
+    $ints->getOrPut($key, 1);
+    /** @psalm-check-type-exact $ints = Collection<array-key, int>&static */
+    consume($ints);
+}
+
+/** @param Collection<string, int> $ints */
+function prepend_omitted_key_adds_int_key(Collection $ints): void
+{
+    $ints->prepend(1);
+    /** @psalm-check-type-exact $ints = Collection<int|string, int>&static */
+    consume($ints);
+}
+
+/** @param Collection<string, int> $ints */
+function prepend_explicit_null_key_is_not_an_int_key(Collection $ints): void
+{
+    $ints->prepend(1, null);
+    /** @psalm-check-type-exact $ints = Collection<array-key, int>&static */
+    consume($ints);
+}
+
 function fluent_chain_widens(string $name, int $count): void
 {
     $chain = collect()->add($name)->prepend($count);
