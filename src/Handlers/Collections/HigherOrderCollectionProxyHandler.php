@@ -158,7 +158,7 @@ final class HigherOrderCollectionProxyHandler implements
             if ($proxyMethod === null) {
                 // Unknown proxy shape — fall back to Enumerable<TKey, TValue> to at least
                 // allow chaining of collection methods without InvalidMethodCall.
-                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null));
+                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null, $source->getCodebase()));
                 return;
             }
 
@@ -167,7 +167,7 @@ final class HigherOrderCollectionProxyHandler implements
             $collectionInfo = self::extractCollectionInfoFromExpr($expr, $source);
             if ($collectionInfo === null) {
                 // Couldn't find the collection — fall back to Enumerable.
-                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null));
+                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null, $source->getCodebase()));
                 return;
             }
 
@@ -469,26 +469,31 @@ final class HigherOrderCollectionProxyHandler implements
      * @param Union|null $tCollection absent when the vendor annotation is the pre-13.31 `<TKey, TValue>`
      * @psalm-mutation-free
      */
-    private static function enumerableFallback(Union $tValue, ?Union $tCollection): Union
+    private static function enumerableFallback(Union $tValue, ?Union $tCollection, Codebase $codebase): Union
     {
         return new Union([
-            new TGenericObject(Enumerable::class, [self::enumerableKey($tCollection), $tValue]),
+            new TGenericObject(Enumerable::class, [self::enumerableKey($tCollection, $codebase), $tValue]),
         ]);
     }
 
     /**
-     * The key type of a generic `Enumerable` (the proxy's TCollection), or `array-key` for anything else
-     * (no TCollection, an unresolved template, a non-generic subclass, a union).
+     * The key type the proxy's TCollection binds to `Enumerable::TKey`, resolved through the class ancestry
+     * ({@see ClassLineage::projectedTemplate()}) so a subclass that reorders its templates still yields its
+     * key. `array-key` when that is not provable (no TCollection, non-generic or unknown class, a union).
      *
      * @psalm-mutation-free
      */
-    private static function enumerableKey(?Union $tCollection): Union
+    private static function enumerableKey(?Union $tCollection, Codebase $codebase): Union
     {
         if ($tCollection?->isSingle() === true) {
             $atomic = $tCollection->getSingleAtomic();
 
-            if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2) {
-                return $atomic->type_params[0];
+            if ($atomic instanceof TNamedObject) {
+                $key = ClassLineage::projectedTemplate($codebase, $atomic, Enumerable::class, 'TKey');
+
+                if ($key instanceof Union) {
+                    return $key;
+                }
             }
         }
 

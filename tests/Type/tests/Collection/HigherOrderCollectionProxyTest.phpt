@@ -5,6 +5,8 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Enumerable;
+use Illuminate\Support\HigherOrderCollectionProxy;
 use Illuminate\Support\LazyCollection;
 
 class Customer extends Model
@@ -19,6 +21,18 @@ class Customer extends Model
 
 /** @extends EloquentCollection<int, Customer> */
 final class CustomerCollection extends EloquentCollection {}
+
+/**
+ * Reorders the templates: its first type argument is the item, not the key.
+ *
+ * @template TValue
+ * @template TKey of array-key
+ * @extends Collection<TKey, TValue>
+ */
+final class ValuesFirstCollection extends Collection {}
+
+/** @param Enumerable<int, mixed> $_items */
+function takesIntKeyedEnumerable(Enumerable $_items): void {}
 
 /**
  * HigherOrderCollectionProxy: $collection->each->method() pattern.
@@ -394,8 +408,23 @@ final class HigherOrderCollectionProxyTest
     public function subclassReceiverFallsBackToEnumerable(CustomerCollection $users): void
     {
         $_result = $users->each->getKey();
+        // The key comes from the subclass's `@extends EloquentCollection<int, Customer>`: `int`, not `array-key`.
+        takesIntKeyedEnumerable($_result);
         $_count = $_result->count();
         /** @psalm-check-type-exact $_count = int */
+    }
+
+    /**
+     * A proxy held in a variable takes the fallback path. The key of its TCollection is resolved through the
+     * class ancestry, not read from slot 0 of the generic: `ValuesFirstCollection<Customer, string>` is keyed
+     * by `string`.
+     *
+     * @param HigherOrderCollectionProxy<'each', Customer, ValuesFirstCollection<Customer, string>> $proxy
+     */
+    public function reorderedTemplatesKeyComesFromAncestry(HigherOrderCollectionProxy $proxy): void
+    {
+        $_result = $proxy->getKey();
+        /** @psalm-check-type-exact $_result = Enumerable<string, Customer> */
     }
 }
 
