@@ -6,16 +6,33 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Psalm\Codebase;
 use Psalm\Type;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\Scalar;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TBool;
+use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TEnumCase;
+use Psalm\Type\Atomic\TFalse;
+use Psalm\Type\Atomic\TFloat;
+use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TIntRange;
+use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TLiteralClassString;
+use Psalm\Type\Atomic\TLiteralFloat;
+use Psalm\Type\Atomic\TLiteralInt;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TString;
+use Psalm\Type\Atomic\TTrue;
 use Psalm\Type\Union;
 
 /**
- * Resolves the argument passed to collect() / Collection::make() / LazyCollection::make() to the
- * TKey/TValue Union pair Laravel's runtime actually produces, for the three input shapes the
- * stub's own template inference can't bind: null, scalars, and UnitEnum cases.
+ * Resolves the argument passed to collect() / Collection::make() / LazyCollection::make() / `new
+ * Collection(...)` to the TKey/TValue Union pair Laravel's runtime actually produces, for the input
+ * shapes the stub's own template inference can't bind: null, scalars, and UnitEnum cases; plus
+ * array inputs whose literal types the stub would otherwise bind verbatim (see generalize*()).
  *
  * Returns null ("defer to the stub's own template inference") for every other shape, including
  * plain objects: the stub's own widened-but-unbound `object` union member already infers
@@ -54,6 +71,14 @@ final class CollectionInputTypeResolver
 
         $atomic = \reset($atomics);
 
+        // Array input: the stub binds the literal shape verbatim (`[$a, $b]` -> `Collection<int<0, 1>, A>`,
+        // `[1]` -> `Collection<0, 1>`), which makes correct code like `@return Collection<int, Item>` or
+        // `->prepend(2)` fail on the invariant templates (#1766). Widen the way PHPStan's template
+        // generalization does.
+        if ($atomic instanceof TKeyedArray || $atomic instanceof TArray) {
+            return self::resolveArray($atomic);
+        }
+
         if ($atomic instanceof TNull) {
             // Arr::wrap(null) === [] -> same empty result as collect()/collect([]).
             $never = self::$neverUnion ??= Type::getNever();
@@ -89,5 +114,90 @@ final class CollectionInputTypeResolver
         }
 
         return null;
+    }
+
+    /**
+     * Declines (null) for `[]` (never keys/values keep their empty-collection meaning) and when
+     * there was nothing to widen, so the stub binding and its diagnostics stay untouched.
+     *
+     * @return array{Union, Union}|null
+     */
+    private static function resolveArray(TKeyedArray|TArray $array): ?array
+    {
+        if ($array instanceof TKeyedArray) {
+            $keyType = $array->getGenericKeyType();
+            $valueType = $array->getGenericValueType();
+        } else {
+            [$keyType, $valueType] = $array->type_params;
+        }
+
+        if ($keyType->isNever() || $valueType->isNever()) {
+            return null;
+        }
+
+        // Literal keys stay: Psalm skips the invariant check for an argument holding a literal, so
+        // `Collection<0, A>` / `Collection<'x', A>` already satisfy `Collection<int|string, A>`, while
+        // widening them would add errors at bare `Collection` params. Only ranges (`int<0, 1>`, `int<0, max>`)
+        // are strict, and they are the actual false positives.
+        $newKey = self::mapAtomics($keyType, static fn(Atomic $atomic): Atomic => $atomic instanceof TIntRange
+            ? new TInt()
+            : $atomic);
+        $newValue = self::generalizeValue($valueType);
+
+        if ($newKey === $keyType && $newValue === $valueType) {
+            return null;
+        }
+
+        return [$newKey, $newValue];
+    }
+
+    private static function generalizeValue(Union $type): Union
+    {
+        return self::mapAtomics($type, static function (Atomic $atomic): Atomic {
+            // Order matters: TLiteralClassString extends TLiteralString, and `'Foo::class'` must stay a
+            // `class-string<Foo>` rather than decay to `string`.
+            if ($atomic instanceof TLiteralClassString) {
+                return new TClassString($atomic->value, new TNamedObject($atomic->value));
+            }
+
+            return match (true) {
+                $atomic instanceof TLiteralString => new TString(),
+                $atomic instanceof TLiteralInt => new TInt(),
+                $atomic instanceof TLiteralFloat => new TFloat(),
+                $atomic instanceof TTrue, $atomic instanceof TFalse => new TBool(),
+                $atomic instanceof TEnumCase => new TNamedObject($atomic->value),
+                // Row shapes (`[['id' => 1]]`): widen the values inside, keep the shape and its keys.
+                $atomic instanceof TKeyedArray => self::generalizeRow($atomic),
+                default => $atomic,
+            };
+        });
+    }
+
+    private static function generalizeRow(TKeyedArray $row): Atomic
+    {
+        $properties = [];
+        foreach ($row->properties as $key => $property) {
+            $properties[$key] = self::generalizeValue($property)->setPossiblyUndefined($property->possibly_undefined);
+        }
+
+        return $row->setProperties($properties);
+    }
+
+    /**
+     * Returns $type itself when no atomic changed, so callers can detect "nothing widened" by identity.
+     *
+     * @param callable(Atomic): Atomic $map
+     */
+    private static function mapAtomics(Union $type, callable $map): Union
+    {
+        $changed = false;
+        $atomics = [];
+        foreach ($type->getAtomicTypes() as $atomic) {
+            $mapped = $map($atomic);
+            $changed = $changed || $mapped !== $atomic;
+            $atomics[] = $mapped;
+        }
+
+        return $changed ? new Union($atomics) : $type;
     }
 }

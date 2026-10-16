@@ -428,6 +428,20 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - Disclosed gap: producer internals like `Factory::viewInstance()` are protected, so a producer subclass inheriting the mapped method but overriding the construction still narrows to the stock concrete. Accepted (matches the Cache manager precedent). A substitute implementation yields a false negative (a stock-only method resolves though the substitute lacks it), plus a false positive (a substitute-only method flagged undefined) when the stock concrete is not Macroable. The View concrete's `__call` masks the false positive; a non-Macroable producer such as PasswordBroker would exhibit it. Standard apps return the stock concrete, and a call site that hits the gap can suppress locally.
 - Excluded: driver-variant surfaces (Auth guards, Hash, Queue, Broadcast, Redis, Filesystem) where the concrete depends on runtime config.
 
+## Collection Typing
+
+### Collection literal generalization (#1766)
+
+**Decision:** `CollectionInputTypeResolver` widens the literals an array argument binds at construction (`collect()`, `Collection::make()`, `LazyCollection::make()`, `new Collection|LazyCollection|Eloquent\Collection(...)`). Values: literal `int`/`string`/`float`/`true`/`false` become `int`/`string`/`float`/`bool`, an enum case becomes its enum, a literal class-string becomes `class-string<Foo>`, shape rows widen their inner values (keys kept). Keys: only `int<a, b>` ranges become `int`. Declines (stub binding stays) for `[]` and when nothing was widened.
+
+**Why:**
+- The stub binds `[$a, $b]` verbatim as `Collection<int<0, 1>, Item>` and `[1]` as `Collection<0, 1>`; the invariant templates then reject correct code (`@return Collection<int, Item>`, `->prepend(2)`, `->diff([1])`). PHPStan generalizes the templates at construction; this matches it.
+- Literal KEYS stay: `GenericTypeComparator` skips the invariant reverse check when the input param holds a literal, so `Collection<0, A>` and `Collection<'x', A>` already satisfy `Collection<int|string, A>`. Probed: widening them adds errors at bare `Collection` and `Collection<array-key, mixed>` params; only range keys were strict.
+
+**Accepted cost:**
+- A collection built only from literals, passed to an explicit `Collection<int, mixed>` / `Collection<array-key, mixed>` param, now meets the invariant check like any non-literal collection (literal values were lenient before).
+- `collect(['x', 'y'])[$c->count() - 1]` is no longer flagged as an out-of-range key, because the `int<0, 1>` key range is gone.
+
 ## Third-Party Package Support
 
 ### Plugin covers Laravel framework only, not third-party packages
