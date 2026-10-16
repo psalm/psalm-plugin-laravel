@@ -54,8 +54,9 @@ final class CollectionClosureDefaultTest
         $_lazyClosure = $lazy->get(1, static fn (): string => 'none');
         /** @psalm-check-type-exact $_lazyClosure = 'none'|int */
 
+        // A null key returns null early; the default is never evaluated.
         $_lazyNullKey = $lazy->get(null, static fn (): string => 'none');
-        /** @psalm-check-type-exact $_lazyNullKey = 'none'|int */
+        /** @psalm-check-type-exact $_lazyNullKey = null */
 
         $_enumerableClosure = $enumerable->get(1, static fn (): string => 'none');
         /** @psalm-check-type-exact $_enumerableClosure = 'none'|int */

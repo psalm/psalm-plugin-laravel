@@ -34,6 +34,7 @@ final class UnionProxyListB extends Collection
  * A receiver union of two collection types is not narrowed through a higher-order proxy:
  * picking one collection atomic would silently drop the other branch's item type, so a method
  * only one branch has stays unresolved (mixed) instead of being typed from the first branch.
+ * The `$sole` proxy (Laravel 13.33+) is covered in HigherOrderSoleProxyTest.
  */
 final class HigherOrderProxyUnionReceiverTest
 {
@@ -42,13 +43,10 @@ final class HigherOrderProxyUnionReceiverTest
      */
     public function unionReceiver($items): void
     {
-        $_sole = $items->sole->enabled();
-        /** @psalm-check-type-exact $_sole = bool */
-
         $_first = $items->first->enabled();
         /** @psalm-check-type-exact $_first = bool */
 
-        $_onlyA = $items->sole->onlyA();
+        $_onlyA = $items->first->onlyA();
         /** @psalm-check-type-exact $_onlyA = mixed */
     }
 
@@ -59,8 +57,8 @@ final class HigherOrderProxyUnionReceiverTest
      */
     public function unionWithNonGenericSubclass($items): void
     {
-        $_sole = $items->sole->enabled();
-        /** @psalm-check-type-exact $_sole = mixed */
+        $_enabled = $items->first->enabled();
+        /** @psalm-check-type-exact $_enabled = mixed */
 
         $_onlyA = $items->first->onlyA();
         /** @psalm-check-type-exact $_onlyA = mixed */

@@ -14,7 +14,8 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
+ * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  *
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
@@ -39,7 +40,6 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sole
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
@@ -97,7 +97,8 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
 
     /**
      * A closure default only runs when the key is missing, so its result joins `TValue`; Laravel's
-     * single default template binds to the Closure itself when one is passed.
+     * single default template binds to the Closure itself when one is passed. A null key returns
+     * null early without evaluating the default (unlike `Collection::get()`, which looks up `''`).
      *
      * @psalm-mutation-free
      *
@@ -106,7 +107,7 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      *
      * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
-     * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
+     * @return ($key is null ? null : ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue)))
      *
      * @psalm-flow ($default) -> return
      */

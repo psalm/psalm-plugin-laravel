@@ -2,19 +2,11 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Collection;
-use Illuminate\Support\HigherOrderCollectionProxy;
 use Illuminate\Support\LazyCollection;
 
-final class SoleFlag
-{
-    public function enabled(): bool
-    {
-        return true;
-    }
-}
-
 /**
- * Small return-type fixes on `combine()` and `unwrap()`, plus the `$sole` higher-order proxy.
+ * Small return-type fixes on `combine()` and `unwrap()`. The `$sole` proxy (Laravel 13.33+) is
+ * covered in HigherOrderSoleProxyTest.
  * `times()` is covered for contextual typing of untyped callbacks.
  */
 final class CollectionFactoryAndCombineTypesTest
@@ -68,24 +60,6 @@ final class CollectionFactoryAndCombineTypesTest
 
         $_fromArray = Collection::unwrap(['a' => true]);
         /** @psalm-check-type-exact $_fromArray = array<'a', true> */
-    }
-
-    /**
-     * `$sole` proxies a method call to `sole()`, which returns the selected item itself.
-     *
-     * @param Collection<int, SoleFlag> $items
-     * @param LazyCollection<int, SoleFlag> $lazy
-     */
-    public function soleProxy(Collection $items, LazyCollection $lazy): void
-    {
-        $_proxy = $items->sole;
-        /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<int, SoleFlag> */
-
-        $_item = $items->sole->enabled();
-        /** @psalm-check-type-exact $_item = SoleFlag */
-
-        $_lazyItem = $lazy->sole->enabled();
-        /** @psalm-check-type-exact $_lazyItem = SoleFlag */
     }
 }
 ?>
