@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -26,7 +27,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Collection::class, EloquentCollection::class];
+        return [Collection::class, EloquentCollection::class, LazyCollection::class];
     }
 
     #[\Override]

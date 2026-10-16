@@ -164,6 +164,8 @@ final class ModelPropertyResolver
      *                                                     (e.g. `$customer->vehicles()` for `$customer->vehicles()->pluck()`).
      *                                                     Used as a fallback when the event's template parameters are
      *                                                     unsubstituted templates (Psalm's @mixin chain limitation).
+     * @param class-string $collectionClass                 Class of the returned collection;
+     *                                                     LazyCollection::pluck() stays lazy.
      */
     public static function resolvePluckReturnType(
         array $args,
@@ -172,6 +174,7 @@ final class ModelPropertyResolver
         NodeTypeProvider $nodeTypeProvider,
         Codebase $codebase,
         ?\PhpParser\Node\Expr $lhsExpr = null,
+        string $collectionClass = Collection::class,
     ): ?Union {
         if ($args === []) {
             return null;
@@ -238,7 +241,7 @@ final class ModelPropertyResolver
         [$keyType, $propertyType] = $resolved;
 
         return new Union([
-            new TGenericObject(Collection::class, [$keyType, $propertyType]),
+            new TGenericObject($collectionClass, [$keyType, $propertyType]),
         ]);
     }
 

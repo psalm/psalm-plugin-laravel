@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -52,7 +53,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
     ];
 
     /**
-     * Three call shapes (across five registered classes) reach the same
+     * Three call shapes (across six registered classes) reach the same
      * column-narrowing logic; each surfaces the aggregated model differently.
      * {@see \Psalm\Internal\Analyzer\Statements\Expression\Call\Method\MethodCallReturnTypeFetcher}
      * dispatches return-type providers on two legs: the premixin (receiver) class and the
@@ -67,14 +68,14 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      *   for this provider to read the column. Registering the abstract base suffices: the
      *   methods are inherited, so every subclass call's declaring method id is `Relation::{m}`
      *   and the declaring-class leg fires.
-     * - {@see Collection} / {@see EloquentCollection} — the in-memory path
-     *   (`$model->rel->sum('col')`). Both are registered so the receiver-class leg fires for
-     *   each; the aggregated model is the collection's value parameter, picked up by
-     *   {@see self::resolveModelClass()} scanning all template params.
+     * - {@see Collection} / {@see EloquentCollection} / {@see LazyCollection} — the in-memory
+     *   path (`$model->rel->sum('col')`, `Model::cursor()->sum('col')`). All are registered so
+     *   the receiver-class leg fires for each; the aggregated model is the collection's value
+     *   parameter, picked up by {@see self::resolveModelClass()} scanning all template params.
      *
      * Custom collection subclasses (newCollection() / #[CollectedBy]) are not narrowed on the
-     * in-memory read — they resolve to `mixed`; LazyCollection is likewise out of scope. The
-     * relation-level path still narrows those models via `rel()->sum('col')`.
+     * in-memory read — they resolve to `mixed`. The relation-level
+     * path still narrows those models via `rel()->sum('col')`.
      *
      * Unlike the pluck handlers (a Builder/Collection split sharing a Util resolver), all
      * shapes live in one handler because the column resolver this uses,
@@ -94,6 +95,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
             Relation::class,
             Collection::class,
             EloquentCollection::class,
+            LazyCollection::class,
         ];
     }
 
