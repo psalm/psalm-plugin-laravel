@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Collections;
 
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
 use PhpParser\Node\Arg;
@@ -16,11 +17,14 @@ use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Instanceof_;
+use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Name\FullyQualified;
+use PhpParser\Node\NullableType;
 use PhpParser\Node\Stmt\Return_;
+use PhpParser\Node\UnionType;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\TypeComparisonResult;
@@ -102,7 +106,10 @@ use Psalm\Type\Union;
  *   "5" passes `int` and stays a string), and so does a param unrelated to TValue (Psalm's
  *   InvalidArgument stays). For filter/where the predicate matcher above then runs on the
  *   narrowed TValue; reject() gets only the param narrowing. Closure and arrow-fn literals
- *   only. Return type only: ArgumentTypeCoercion is still reported.
+ *   only. Return type only: ArgumentTypeCoercion is still reported. Param narrowing also needs
+ *   an exact-base receiver (Collection, LazyCollection or Eloquent\Collection, no intersection
+ *   or template) and declines `self`/`static`/`parent` param types (closures can be rebound).
+ *   reject()/where() on an Eloquent\Collection receiver never reach this handler.
  *
  * Not covered (intentionally, 80/20):
  * - Numeric falsy types (0, 0.0) are not narrowed — Psalm has no `non-zero-int` atomic
@@ -202,7 +209,9 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         $source = $event->getSource();
-        $paramNarrowed = self::narrowByParamType($closure, $templateTypeParameters[1], $source);
+        $paramNarrowed = self::isExactBaseReceiver($event, $source)
+            ? self::narrowByParamType($closure, $templateTypeParameters[1], $source)
+            : null;
         $narrowed = $matchPredicate
             ? self::narrowByPredicate($closure, $paramNarrowed ?? $templateTypeParameters[1], $source)
             : null;
@@ -213,6 +222,39 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         }
 
         return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
+    }
+
+    /**
+     * Param narrowing rewrites TValue positionally, which is only right for the three classes
+     * whose `(TKey, TValue)` templates map one-to-one. A subclass with a different template
+     * layout (`Bag<V, M> extends Collection<int, V>`), a template-bounded receiver
+     * (`C of Collection`) or an intersection would receive a type it does not declare.
+     */
+    private static function isExactBaseReceiver(MethodReturnTypeProviderEvent $event, StatementsSource $source): bool
+    {
+        $stmt = $event->getStmt();
+        $exact = [\strtolower(Collection::class), \strtolower(LazyCollection::class), \strtolower(EloquentCollection::class)];
+        if (!$stmt instanceof MethodCall
+            || !\in_array(\strtolower($event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName()), $exact, true)
+        ) {
+            return false;
+        }
+
+        $receiver = $source->getNodeTypeProvider()->getType($stmt->var);
+        if (!$receiver instanceof Union) {
+            return false;
+        }
+
+        foreach ($receiver->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject
+                || $atomic->extra_types !== []
+                || !\in_array(\strtolower($atomic->value), $exact, true)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static function narrowByPredicate(Closure|ArrowFunction $closure, Union $tValue, StatementsSource $source): ?Union
@@ -270,6 +312,15 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         $signature = self::closureType($closure, $source)?->params[0]->signature_type ?? null;
         if ($param === null || $param->variadic || $param->byRef || !$signature instanceof Union) {
             return null;
+        }
+
+        // Closures can be rebound, and Psalm resolves `self` to the lexical class (`parent` stays
+        // unexpanded), so the declared signature does not tell what the callback receives.
+        $nativeTypes = $param->type instanceof UnionType ? $param->type->types : [$param->type instanceof NullableType ? $param->type->type : $param->type];
+        foreach ($nativeTypes as $native) {
+            if ($native instanceof Name && $native->isSpecialClassName()) {
+                return null;
+            }
         }
 
         $classes = [];

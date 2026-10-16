@@ -439,7 +439,11 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - The param's NATIVE type must be only class/interface/enum names and optionally `null`. Untyped, `mixed`, scalar, array, `object`, `iterable`, `callable` decline.
 - Gate: TValue is `mixed`, or the param's non-null part is contained by TValue without coercion. An unrelated param keeps today's result and Psalm's `InvalidArgument`. A template-derived atomic in TValue declines.
 - Per TValue atomic: kept when the param accepts it (preserves generics such as `Dog<int>`), replaced by the param's classes it contains (`mixed`/`object`/supertype) otherwise, dropped if neither. `null` survives only when the param is nullable and TValue had `null`/`mixed`.
+- Param narrowing needs an exact-base receiver: the dispatched class and every atomic of the receiver expression type are exactly `Support\Collection`, `LazyCollection` or `Eloquent\Collection`, with no intersection and no template (`C of Collection`). Subclasses with another template layout (`WithMetadata<V, M> extends Collection<int, V>`) would get the positional `(TKey, TValue)` result applied to their own templates. A receiver union of the three classes still narrows per branch.
+- A param typed `self`/`static`/`parent` declines: closures can be rebound, so the lexical class is not what the callback receives.
 - filter/where then run the existing predicate matcher on the narrowed TValue and fall back to the param-narrowed result when it yields nothing. `reject()` gets only param narrowing (predicate inversion is a separate matter).
+
+**Limitation:** `reject()`/`where()` on an `Eloquent\Collection` receiver do not reach the handler (declared on `EnumeratesValues`; the handler stays registered for `Support\Collection` and `LazyCollection` only), so only `filter()` narrows there.
 
 **Rejected (probed dead end): narrowing scalar params when the user's file declares `strict_types=1`.** The coercion mode of a call is decided by the CALLING file. The caller is `Arr::where()`/`array_filter()` (`Collection`), a generator in `LazyCollection::filter()`, or `EnumeratesValues::reject()`'s wrapper. None of those Laravel files declares `strict_types`, and `array_filter` is internal, so callbacks run in coercive mode regardless of the user's file: `fn (int $x)` accepts `"5"` and the original `"5"` stays in the result.
 
