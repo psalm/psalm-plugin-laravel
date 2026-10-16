@@ -6,10 +6,12 @@ namespace Psalm\LaravelPlugin\Handlers\Support;
 
 use Illuminate\Support\Traits\Conditionable;
 use Illuminate\Support\Traits\EnumeratesValues;
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic;
@@ -84,9 +86,11 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        // Need the callback arg; the 0/1-arg when() proxy branch defers to the stub.
+        // Need the callback arg, bound by name or position; the 0/1-arg when() proxy branch and
+        // unpacked args defer to the stub.
         $args = $event->getCallArgs();
-        if (\count($args) <= $position) {
+        $callbackArg = ArgUtil::boundTo($args, 'callback', $position);
+        if (!$callbackArg instanceof Arg || \array_filter($args, static fn(Arg $arg): bool => $arg->unpack) !== []) {
             return null;
         }
 
@@ -105,7 +109,7 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        $callbackReturn = self::callableReturn($source, $args[$position]->value);
+        $callbackReturn = self::callableReturn($source, $callbackArg->value);
         if (! $callbackReturn instanceof Union) {
             return null; // callback return undeterminable (e.g. string callable) — defer to stub
         }

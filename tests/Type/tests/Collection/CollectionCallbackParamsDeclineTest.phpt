@@ -34,6 +34,12 @@ function test_wrong_shape_is_reported(Collection $c): void
     $c->chunkWhile(fn ($v, $k, Customer $chunk) => decline_sink($chunk));
 }
 
+/** @param Collection<int, Customer> $c */
+function test_empty_family_third_param_is_reported(Collection $c): void
+{
+    $c->whenEmpty(fn ($x, $condition, $third) => decline_sink($third));
+}
+
 /** @param LazyCollection<int, Customer> $l */
 function test_lazy_chunk_is_a_collection(LazyCollection $l): void
 {
@@ -69,6 +75,8 @@ InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::t
 MissingClosureParamType on line %d: Parameter $extra has no provided type
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::pipe expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):bool, but Closure[impure](App\Models\Customer):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::chunkWhile expects callable[impure](App\Models\Customer, int, Illuminate\Support\Collection<int, App\Models\Customer>&static):bool, but Closure[impure](App\Models\Customer, int, App\Models\Customer):bool provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::whenEmpty expects callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>, true), but Closure[impure](Illuminate\Support\Collection<int, App\Models\Customer>, true, mixed):bool provided
+MissingClosureParamType on line %d: Parameter $third has no provided type
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\LazyCollection::chunkWhile expects callable[impure](App\Models\Customer, int, Illuminate\Support\Collection<int, App\Models\Customer>):bool, but Closure[impure](App\Models\Customer, int, Illuminate\Support\LazyCollection):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):mixed, but Closure[impure](static=):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):mixed, but Closure[impure](static...):bool provided

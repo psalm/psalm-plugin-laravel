@@ -11,6 +11,8 @@ use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Identifier;
+use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
@@ -19,16 +21,23 @@ use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
+use Psalm\Type;
 use Psalm\Type\Atomic\TCallable;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
  * Types the call-site receiver into the callable params of the Collection / LazyCollection
  * methods that hand `$this` to a closure: `tap()`, `pipe()`, `whenEmpty()` / `whenNotEmpty()` /
- * `unlessEmpty()` / `unlessNotEmpty()` (callback and `$default`: param 0) and
- * `Collection::chunkWhile()` (callback: param 2, the chunk). A stub callable cannot spell the
+ * `unlessEmpty()` / `unlessNotEmpty()` (callback and `$default`: param 0, followed by the
+ * `$value` Laravel's `when()` passes on: `true` for the callback, `false` for `$default`) and
+ * `Collection::chunkWhile()` (callback: param 2, the chunk). The chunk is a plain
+ * `Illuminate\Support\Collection` of the receiver's key/value types, never the receiver class:
+ * Laravel converts the chunks to the receiver class only after the callback ran. A stub callable cannot spell the
  * receiver: `callable($this)` expands to a class-name-only type that rejects an untyped closure
  * param (`static`), and widening it to `callable`/`mixed` degrades the param to `mixed`
  * (docs/contributing/decisions.md). Only the slot is replaced, so `pipe()` keeps inferring
@@ -48,8 +57,9 @@ use Psalm\Type\Union;
  *  - the call has unpacked args, or the receiver is not exactly one object of the dispatched class
  *    (unions would re-analyze the closure per atomic, last one wins).
  *
- * `LazyCollection::chunkWhile()` is left alone: Laravel passes it a plain `Collection` chunk,
- * which its own docblock already declares.
+ * `LazyCollection::chunkWhile()` is left alone: it passes a plain `Collection` chunk too, which
+ * its own docblock already declares. A chunk whose key/value types cannot be read exactly off the
+ * receiver (a subclass forwarding them through a non-trivial type) keeps the stub callable.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1900
  */
@@ -173,12 +183,19 @@ final class CollectionCallbackParamsHandler implements
             return null;
         }
 
+        $slotType = $method === 'chunkwhile'
+            ? self::chunkType($codebase, $receiver)
+            : new Union([$receiver]);
+        if (!$slotType instanceof Union) {
+            return null;
+        }
+
         $result = [];
         $changed = false;
         foreach ($params as $position => $param) {
             $literal = CallbackCallSite::closureLiteral(ArgUtil::boundTo($args, $param->name, $position));
             $type = isset($slots[$param->name]) && $literal !== null && $param->type instanceof Union
-                ? self::withReceiverSlot($source, $param->type, $slots[$param->name], $receiver, $literal)
+                ? self::withSlot($source, $param, $slots[$param->name], $slotType, $literal)
                 : null;
 
             $changed = $changed || $type instanceof Union;
@@ -189,18 +206,20 @@ final class CollectionCallbackParamsHandler implements
     }
 
     /**
-     * The param type with the receiver put into its callable's slot, or null to keep it. A stub
-     * callable without params (`callable $callback`) gets a single receiver param.
+     * The param type with `$slotType` put into its callable's slot, or null to keep it. A stub
+     * callable without params (`callable $callback`) gets the receiver and the `$value` Laravel's
+     * `when()` forwards: `true` for `$callback`, `false` for `$default`.
      */
-    private static function withReceiverSlot(
+    private static function withSlot(
         StatementsAnalyzer $source,
-        Union $type,
+        FunctionLikeParameter $param,
         int $offset,
-        TNamedObject $receiver,
+        Union $slotType,
         Closure|ArrowFunction $literal,
     ): ?Union {
+        $type = $param->type;
         $literalParam = $literal->params[$offset] ?? null;
-        if ($literalParam === null || $literalParam->variadic || $literalParam->default !== null) {
+        if (!$type instanceof Union || $literalParam === null || $literalParam->variadic || $literalParam->default !== null) {
             return null;
         }
 
@@ -209,22 +228,25 @@ final class CollectionCallbackParamsHandler implements
             return null;
         }
 
-        $computed = new Union([$receiver]);
         $atomics = [];
         $replaced = false;
         foreach ($type->getAtomicTypes() as $atomic) {
             if ($atomic instanceof TCallable) {
                 $callableParams = $atomic->params ?? [];
                 if ($callableParams === [] && $offset === 0) {
-                    $callableParams = [new FunctionLikeParameter('instance', false, is_optional: false)];
+                    $value = $param->name === 'default' ? Type::getFalse() : Type::getTrue();
+                    $callableParams = [
+                        new FunctionLikeParameter('instance', false, is_optional: false),
+                        new FunctionLikeParameter('value', false, $value, $value, is_optional: false),
+                    ];
                 }
 
                 if (isset($callableParams[$offset])) {
                     $callableParams[$offset] = new FunctionLikeParameter(
                         $callableParams[$offset]->name,
                         false,
-                        $computed,
-                        $computed,
+                        $slotType,
+                        $slotType,
                         is_optional: false,
                     );
                     $atomic = $atomic->replace($callableParams, $atomic->return_type);
@@ -236,5 +258,62 @@ final class CollectionCallbackParamsHandler implements
         }
 
         return $replaced ? new Union($atomics) : null;
+    }
+
+    /**
+     * `Collection<TKey, TValue>` in the receiver's terms, or null when they cannot be read exactly.
+     *
+     * @psalm-mutation-free
+     */
+    private static function chunkType(Codebase $codebase, TNamedObject $receiver): ?Union
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($receiver->value);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
+
+        $key = self::collectionTemplate($storage, $receiver, 'TKey');
+        $value = self::collectionTemplate($storage, $receiver, 'TValue');
+
+        return $key instanceof Union && $value instanceof Union
+            ? new Union([new TGenericObject(Collection::class, [$key, $value])])
+            : null;
+    }
+
+    /**
+     * What `Collection`'s `$template` is for this receiver: the receiver's own type param, or the
+     * concrete type a subclass binds it to. `template_extended_params` states each ancestor's
+     * template in its direct child's terms, so a forwarded template is followed up to the receiver.
+     *
+     * @psalm-mutation-free
+     */
+    private static function collectionTemplate(ClassLikeStorage $storage, TNamedObject $receiver, string $template): ?Union
+    {
+        $class = Collection::class;
+        for ($hops = 0; $hops < 8; ++$hops) {
+            if (\strcasecmp($class, $storage->name) === 0) {
+                $position = \array_search($template, \array_keys($storage->template_types ?? []), true);
+
+                return $position !== false && $receiver instanceof TGenericObject
+                    ? ($receiver->type_params[$position] ?? null)
+                    : null;
+            }
+
+            $value = $storage->template_extended_params[$class][$template] ?? null;
+            if (!$value instanceof Union) {
+                return null;
+            }
+
+            $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
+            if (!$forwarded instanceof TTemplateParam) {
+                return $value->hasTemplate() ? null : $value;
+            }
+
+            $class = $forwarded->defining_class;
+            $template = $forwarded->param_name;
+        }
+
+        return null;
     }
 }

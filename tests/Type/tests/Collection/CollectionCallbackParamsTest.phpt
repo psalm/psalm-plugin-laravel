@@ -130,6 +130,22 @@ function test_collection_empty_family(Collection $c): void
     callback_params_sink($typed);
     $c->whenEmpty(fn ($x) => callback_params_sink($x));
     $c->whenEmpty(callback: fn ($x) => $x->count(), default: fn ($x) => $x->count());
+
+    $c->whenEmpty(function ($x, $value) {
+        /** @psalm-check-type-exact $value = true */
+        callback_params_sink($value);
+    }, function ($x, $value) {
+        /** @psalm-check-type-exact $value = false */
+        callback_params_sink($value);
+    });
+    $c->unlessNotEmpty(fn ($x, bool $condition) => $condition);
+
+    $named = $c->whenEmpty(default: fn () => null, callback: fn () => 'yes');
+    /** @psalm-check-type-exact $named = 'yes'|Collection<int, Customer>&static */
+    callback_params_sink($named);
+    $namedWhen = $c->when(true, default: fn () => 7, callback: fn () => 'yes');
+    /** @psalm-check-type-exact $namedWhen = 'yes'|Collection<int, Customer>&static */
+    callback_params_sink($namedWhen);
 }
 
 /** @param LazyCollection<int, Customer> $l */
@@ -176,7 +192,7 @@ function test_eloquent_collection(EloquentCollection $e): void
     $e->chunkWhile(function ($v, $k, $chunk) {
         /** @psalm-check-type-exact $v = Customer */
         callback_params_sink($v);
-        /** @psalm-check-type-exact $chunk = EloquentCollection<int, Customer> */
+        /** @psalm-check-type-exact $chunk = Collection<int, Customer> */
         callback_params_sink($chunk);
         callback_params_sink($k);
         return true;
@@ -201,7 +217,7 @@ function test_subclasses(CallbackParamsCustomerList $list): void
     $list->chunkWhile(function ($v, $k, $chunk) {
         /** @psalm-check-type-exact $v = Customer */
         callback_params_sink($v);
-        /** @psalm-check-type-exact $chunk = CallbackParamsCustomerList */
+        /** @psalm-check-type-exact $chunk = Collection<int, Customer> */
         callback_params_sink($chunk);
         callback_params_sink($k);
         return true;
@@ -214,6 +230,13 @@ function test_reordered_templates(CallbackParamsReordered $r): void
     $r->tap(function ($x) {
         /** @psalm-check-type-exact $x = CallbackParamsReordered<Customer, int> */
         callback_params_sink($x);
+    });
+    $r->chunkWhile(function ($v, $k, $chunk) {
+        /** @psalm-check-type-exact $v = Customer */
+        callback_params_sink($v);
+        /** @psalm-check-type-exact $chunk = Collection<int, Customer> */
+        callback_params_sink($chunk);
+        return true;
     });
 }
 
