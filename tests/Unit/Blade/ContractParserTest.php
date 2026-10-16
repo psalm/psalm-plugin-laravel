@@ -63,12 +63,12 @@ final class ContractParserTest extends TestCase
     public static function scopedBindings(): iterable
     {
         yield 'an arrow parameter named like a declaration leaves it a contract' => [
-            "<?php /** @var string \$title */ ?>\n{{ \$title }}\n@php \$format = static fn (string \$title): string => strtoupper(\$title); @endphp\n{{ \$titel }}\n",
-            ['titel'],
+            "<?php /** @var string \$title */ ?>\n{{ \$title }}\n@php \$format = static fn (string \$title): string => strtoupper(\$title); @endphp\n{{ \$subtitle }}\n",
+            ['subtitle'],
         ];
         yield 'a declaration the template normalises in place stays a contract' => [
-            "<?php /** @var string \$title */ ?>\n@php \$title = \$title ?? 'Untitled'; @endphp\n{{ \$titel }}\n",
-            ['titel'],
+            "<?php /** @var string \$title */ ?>\n@php \$title = \$title ?? 'Untitled'; @endphp\n{{ \$subtitle }}\n",
+            ['subtitle'],
         ];
         yield 'a name only an arrow parameter binds is undeclared outside the arrow' => [
             "<?php /** @var list<int> \$ids */ ?>\n{{ implode(',', array_map(fn (int \$n) => \$n, \$ids)) }} {{ \$n }}\n",
@@ -100,12 +100,12 @@ final class ContractParserTest extends TestCase
             [],
         ];
         yield 'an address that spells a directive is text' => [
-            "<?php /** @var string \$title */ ?>\n<a href=\"mailto:help@this.example\">{{ \$titel }}</a>\n",
-            ['titel'],
+            "<?php /** @var string \$title */ ?>\n<a href=\"mailto:help@this.example\">{{ \$subtitle }}</a>\n",
+            ['subtitle'],
         ];
         yield 'an escaped directive is text' => [
-            "<?php /** @var string \$title */ ?>\n<code>@@entangle('x')</code> {{ \$titel }}\n",
-            ['titel'],
+            "<?php /** @var string \$title */ ?>\n<code>@@entangle('x')</code> {{ \$subtitle }}\n",
+            ['subtitle'],
         ];
     }
 

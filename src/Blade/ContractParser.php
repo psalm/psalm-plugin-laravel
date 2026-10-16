@@ -1097,7 +1097,7 @@ final class ContractParser
                 }
 
                 if (!\array_key_exists($function, $this->byReference)) {
-                    $this->byReference[$function] = self::byReferenceParameters($function);
+                    $this->byReference[$function] = $this->byReferenceParameters($function);
                 }
 
                 $parameters = $this->byReference[$function];
@@ -1132,7 +1132,7 @@ final class ContractParser
              *
              * @psalm-capabilities read-props
              */
-            private static function byReferenceParameters(string $function): ?array
+            private function byReferenceParameters(string $function): ?array
             {
                 if (!\function_exists($function)) {
                     return null;
