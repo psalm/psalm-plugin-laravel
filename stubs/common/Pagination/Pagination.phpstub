@@ -9,8 +9,11 @@ use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
  * class_implements list when a stub re-declares the class, so the clause
  * must be repeated verbatim or callers typed on the contracts break.
  *
+ * TValue is covariant like Laravel's, so a helper typed on a wider TValue can mutate the caller's
+ * narrower paginator in place (getCollection()/through()/setCollection()); see decisions.md.
+ *
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @mixin \Illuminate\Support\Collection<TKey, TValue>
  */
@@ -92,7 +95,7 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
@@ -106,7 +109,7 @@ class Paginator extends AbstractPaginator implements \Illuminate\Contracts\Suppo
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
@@ -120,7 +123,7 @@ class LengthAwarePaginator extends AbstractPaginator implements \Illuminate\Cont
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @mixin \Illuminate\Support\Collection<TKey, TValue>
  */
@@ -188,7 +191,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
