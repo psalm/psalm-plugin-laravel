@@ -1049,14 +1049,17 @@ final class ContractParserTest extends TestCase
         $this->assertNotNull($locals);
         \ksort($locals);
         $this->assertSame(['arg' => true, 'ep' => true, 'fn' => true, 'it' => true, 'k' => true], $locals);
-        $this->assertSame([], $this->parser->localNames('<?php echo $$name; extract(["a" => 1]); ?>'));
+        // `$$name` is what `@props` compiles to, so it binds nothing listable but keeps the set known;
+        // `extract()` binds names the walk cannot list, so the set is unknown.
+        $this->assertSame([], $this->parser->localNames('<?php echo $$name; ?>'));
+        $this->assertNull($this->parser->localNames('<?php extract(["book" => 1]); ?>'));
 
         // A compound assignment and an internal function's by-reference output bind; a by-value
         // argument does not, whatever the callee.
-        $locals = $this->parser->localNames('<?php $cls .= "X"; preg_match("/x/", $subject, $matches); \\sort($list); in_array($needle, $hay); ?>');
+        $locals = $this->parser->localNames('<?php $cls .= "X"; $settings["cls"] .= "X"; preg_match("/x/", $subject, $matches); \\sort($list); in_array($needle, $hay); ?>');
         $this->assertNotNull($locals);
         \ksort($locals);
-        $this->assertSame(['cls' => true, 'list' => true, 'matches' => true], $locals);
+        $this->assertSame(['cls' => true, 'list' => true, 'matches' => true, 'settings' => true], $locals);
         $this->assertNull($this->parser->localNames('<?php $x = ; ?>'));
     }
 }

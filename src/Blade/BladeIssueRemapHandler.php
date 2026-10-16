@@ -58,6 +58,16 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         self::$reportMixedIssues = $reportMixedIssues;
     }
 
+    /**
+     * A target resolved before the component seeds exist (an issue Psalm reports while still
+     * scanning, such as `InvalidDocblock`) would keep a seeded name undeclared, so the seed build
+     * drops every cached target.
+     */
+    public static function forgetTargets(): void
+    {
+        self::$targets = [];
+    }
+
     public static function reset(): void
     {
         self::$remapping = false;

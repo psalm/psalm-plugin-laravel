@@ -2024,6 +2024,8 @@ final class BladeIssueRemapTest extends TestCase
         // Typed by the class component's properties, though its prelude still writes `@var mixed`.
         $this->assertSame([2], $this->linesFor($issues, 'UndefinedMagicMethod', 'components/mixed-leak-card.blade.php'), $json);
         $this->assertSame([4], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'components/mixed-leak-card.blade.php'), $json);
+        // Its malformed docblock reports while Psalm still scans, before the seed exists.
+        $this->assertSame([6], $this->linesFor($issues, 'UndefinedMagicMethod', 'components/mixed-leak-scan-card.blade.php'), $json);
     }
 
     /**

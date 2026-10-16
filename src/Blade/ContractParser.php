@@ -695,15 +695,16 @@ final class ContractParser
     /**
      * Every name the compiled body binds for itself, bookkeeping included, plus the names it
      * writes without binding (a compound assignment, an internal function's by-reference output);
-     * null when it does not parse, which a caller must read as "unknown", never as "binds nothing".
+     * null when it does not parse or calls `extract()`, which a caller must read as "unknown", never
+     * as "binds nothing".
      *
      * @return array<string, true>|null
      */
     public function localNames(string $compiled): ?array
     {
-        [, $locals, , $parsed, $written] = $this->walkReads($compiled);
+        [, $locals, , $parsed, $written, $extracts] = $this->walkReads($compiled);
 
-        return $parsed ? $locals + $written : null;
+        return $parsed && !$extracts ? $locals + $written : null;
     }
 
     /**
@@ -738,9 +739,10 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool, 4: array<string, true>}
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool, 4: array<string, true>, 5: bool}
      *         names read, the names the body binds for itself, whether it hides which names it
-     *         reads, whether it parsed, and the names {@see self::localNames()} adds
+     *         reads, whether it parsed, the names {@see self::localNames()} adds, and whether it
+     *         calls `extract()`
      */
     private function walkReads(string $compiled): array
     {
@@ -751,7 +753,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true, false, []];
+            return [[], [], true, false, [], false];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -762,6 +764,9 @@ final class ContractParser
             public array $locals = [];
 
             public bool $unknown = false;
+
+            /** `extract()` binds names no static walk can list, unlike `$$name`, which `@props` compiles to. */
+            public bool $extracts = false;
 
             /** @var array<string, true> written but still read first, so no local for the read sets */
             public array $written = [];
@@ -777,8 +782,17 @@ final class ContractParser
                     $this->bindLocals($node->var);
                 }
 
-                if ($node instanceof Node\Expr\AssignOp && $node->var instanceof Node\Expr\Variable && \is_string($node->var->name)) {
-                    $this->written[$node->var->name] = true;
+                if ($node instanceof Node\Expr\AssignOp) {
+                    // `$a['k'] .= 'X'` writes `$a` just as `$a .= 'X'` does.
+                    $target = $node->var;
+
+                    while ($target instanceof Node\Expr\ArrayDimFetch) {
+                        $target = $target->var;
+                    }
+
+                    if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
+                        $this->written[$target->name] = true;
+                    }
                 }
 
                 if ($node instanceof Node\Stmt\Foreach_) {
@@ -900,6 +914,7 @@ final class ContractParser
             {
                 if ($name === 'extract') {
                     $this->unknown = true;
+                    $this->extracts = true;
 
                     return;
                 }
@@ -929,6 +944,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown, true, $visitor->written];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, true, $visitor->written, $visitor->extracts];
     }
 }

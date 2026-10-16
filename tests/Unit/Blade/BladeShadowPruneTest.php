@@ -31,6 +31,7 @@ final class BladeShadowPruneTest extends TestCase
         // class components unconditionally too.
         'app/View/Components/Chip.php',
         'app/View/Components/MixedLeakCard.php',
+        'app/View/Components/MixedLeakScanCard.php',
         'app/Providers/LivewireStubProvider.php',
         'app/Providers/PrefixedTagStubProvider.php',
         // bootstrap/app.php require_once's both of these unconditionally (#1505's
