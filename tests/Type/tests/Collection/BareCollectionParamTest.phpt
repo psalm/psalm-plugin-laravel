@@ -35,6 +35,20 @@ final class Box
     public function __construct(public int|string $key) {}
 }
 
+// class_alias() names resolve for the existence check but have no storage of their own.
+class_alias(Collection::class, 'AliasCollection');
+class_alias(Dog::class, 'AliasDog');
+
+function takeAliasedCollection(AliasCollection $c): int
+{
+    return $c->count();
+}
+
+function takeAliasedNonCollection(AliasDog $d): string
+{
+    return $d::class;
+}
+
 final class Consumer
 {
     public function takeBare(Collection $c): void
@@ -116,6 +130,8 @@ function accepts(
     $consumer->takeEnumerable($dogs);
     $consumer->takePack($pack);
     takeFree($dogs);
+    takeAliasedCollection($dogs);
+    takeAliasedNonCollection(new Dog());
 }
 
 /**

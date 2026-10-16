@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Support\Enumerable;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Storage\FunctionLikeStorage;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TGenericObject;
@@ -94,7 +95,17 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
             return null;
         }
 
-        $storage = $this->codebase->classlike_storage_provider->get($type->value);
+        // classOrInterfaceExists() resolves class_alias() names, the storage provider does not.
+        $name = $this->codebase->classlikes->getUnAliasedName($type->value);
+
+        // A class Psalm knows to exist may still have no storage (e.g. a PHP 8.4 builtin enum such as
+        // PropertyHookType): not proven to be a collection, so leave the type bare.
+        try {
+            $storage = $this->codebase->classlike_storage_provider->get($name);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
+
         $key = \strtolower($storage->name);
 
         if (\array_key_exists($key, $this->omittedArguments)) {
