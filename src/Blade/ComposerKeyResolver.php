@@ -34,29 +34,40 @@ final class ComposerKeyResolver
         $composed = [];
 
         foreach (ContractRegistry::composerSources() as $viewName => $sources) {
-            $keys = [];
-
-            foreach ($sources ?? [] as [$class, $method]) {
-                $id = "{$class}::{$method}";
-
-                if (!\array_key_exists($id, $methods)) {
-                    $methods[$id] = self::keysOfMethod($codebase, $class, $method);
-                }
-
-                // One unreadable composer leaves the whole view unknown.
-                if ($methods[$id] === null) {
-                    $sources = null;
-
-                    break;
-                }
-
-                $keys += $methods[$id];
-            }
-
-            $composed[$viewName] = $sources === null ? null : $keys;
+            $composed[$viewName] = self::keysOf($codebase, $sources, $methods);
         }
 
         ContractRegistry::registerComposedKeys($composed);
+    }
+
+    /**
+     * The keys the composers and creators of one view pass, null when one is unreadable.
+     *
+     * @param list<array{0: string, 1: string}>|null $sources {@see ContractRegistry::composerSources()}
+     * @param array<string, array<array-key, true>|null> $methods class::method => keys, memoized
+     *
+     * @return array<array-key, true>|null
+     */
+    public static function keysOf(Codebase $codebase, ?array $sources, array &$methods = []): ?array
+    {
+        $keys = [];
+
+        foreach ($sources ?? [] as [$class, $method]) {
+            $id = "{$class}::{$method}";
+
+            if (!\array_key_exists($id, $methods)) {
+                $methods[$id] = self::keysOfMethod($codebase, $class, $method);
+            }
+
+            // One unreadable composer leaves the whole view unknown.
+            if ($methods[$id] === null) {
+                return null;
+            }
+
+            $keys += $methods[$id];
+        }
+
+        return $sources === null ? null : $keys;
     }
 
     /** @return array<array-key, true>|null */

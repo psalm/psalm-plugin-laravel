@@ -266,8 +266,10 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             Config::getInstance()->shortenFileName($entry->templatePath),
             // A view typed from its class is a component view whatever its source says: its seed
             // types `$attributes` non-null, so a nested tag's compiled save/strip guards on it are
-            // the compiler's, even with no `@props` or `$attributes` mention (#1804).
-            PreludeBuilder::isComponentView($templateSource) || ComponentViewRegistry::seedFor($shadowPath) !== null,
+            // the compiler's, even with no `@props` or `$attributes` mention (#1804). A Livewire seed
+            // types no `$attributes`.
+            PreludeBuilder::isComponentView($templateSource)
+                || (ComponentViewRegistry::seedFor($shadowPath) !== null && ComponentViewRegistry::boundClassFor($shadowPath) === null),
             // Falling back to the live bytes only when boot recorded nothing: no worse than having
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
