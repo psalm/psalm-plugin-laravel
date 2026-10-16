@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792150117675,
+  "lastUpdate": 1792156316409,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14415,6 +14415,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "22792b5a2039b749bb97e8ec26e422eb18037ec1",
+          "message": "Type `$component` and `$attributes` in Blade caller templates instead of `mixed` (#1878)\n\n* fix(blade): type $component and $attributes from tag bookkeeping\n\nA template that mentions $component/$attributes only through a compiled\n<x-...> save/restore now declares them Component|null and\nComponentAttributeBag|null, and gives each saved original the same type.\nPsalm reads a variable assigned only inside an if as mixed in a later\nisset() branch, so the restore stayed mixed without that.\n\nThe compiled isset($attributes) && instanceof check, now redundant in a\nplain caller, is dropped by a compiled-shape gate.\n\nRefs #1873\n\n* fix(blade): read Blade-rewritten source in tag bookkeeping checks\n\nBlade removes `{{-- --}}` before compiling and the component-class\nmarkers after, so `$compo{{-- --}}nent` is a real `$component` read: the\nbookkeeping typing now checks author names against that rewritten text.\n\nThe compiled `$attributes` check is dropped only in a shadow whose\nprelude typed `$attributes` from a tag, and only when the expression is\nabsent from the rewrite-mirrored source.\n\nRefs #1873",
+          "timestamp": "2026-10-16T15:07:25+02:00",
+          "tree_id": "039f3bf6cf8f84c7a010c1df57c41e5b3871c8f5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/22792b5a2039b749bb97e8ec26e422eb18037ec1"
+        },
+        "date": 1792156314397,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.6,
+            "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
