@@ -31,17 +31,6 @@ final class CustomerCollection extends EloquentCollection {}
  */
 final class ValuesFirstCollection extends Collection {}
 
-/**
- * Declares a compound key mapping: the key is `K|int`, so it names an unresolved template.
- *
- * @template K of array-key
- * @template V
- * @extends Collection<K|int, V>
- */
-final class KeysCollection extends Collection {}
-
-/** @param Enumerable<int, Customer> $_items */
-function takesIntKeyedCustomers(Enumerable $_items): void {}
 
 /**
  * HigherOrderCollectionProxy: $collection->each->method() pattern.
@@ -422,20 +411,6 @@ final class HigherOrderCollectionProxyTest
     }
 
     /**
-     * A key mapping that still names a template (`@extends Collection<K|int, V>`) proves nothing about the
-     * key: it falls back to `array-key` instead of leaking the unresolved `K` into the caller. The int
-     * consumer is therefore reported with `array-key` (not `(TKey as array-key)|int`) as the provided key.
-     *
-     * @param HigherOrderCollectionProxy<'each', Customer, KeysCollection<int, Customer>> $proxy
-     */
-    public function compoundKeyMappingDeclines(HigherOrderCollectionProxy $proxy): void
-    {
-        $_result = $proxy->getKey();
-        /** @psalm-check-type-exact $_result = Enumerable<array-key, Customer> */
-        takesIntKeyedCustomers($_result);
-    }
-
-    /**
      * A proxy held in a variable takes the fallback path. The key of its TCollection is resolved through the
      * class ancestry, not read from slot 0 of the generic: `ValuesFirstCollection<Customer, string>` is keyed
      * by `string`.
@@ -451,4 +426,3 @@ final class HigherOrderCollectionProxyTest
 
 ?>
 --EXPECTF--
-MixedArgumentTypeCoercion on line %d: Argument 1 of takesIntKeyedCustomers expects Illuminate\Support\Enumerable<int, Customer>, but parent type Illuminate\Support\Enumerable<array-key, Customer> provided

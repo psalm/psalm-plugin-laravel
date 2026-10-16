@@ -481,6 +481,10 @@ final class HigherOrderCollectionProxyHandler implements
      * ({@see ClassLineage::projectedTemplate()}) so a subclass that reorders its templates still yields its
      * key. `array-key` when that is not provable (no TCollection, non-generic or unknown class, a union).
      *
+     * Caveat: the projected key is kept only when it is a flat union of plain int/string key types. A compound
+     * `@extends` mapping that still names a template (`Collection<K|int, V>`) falls back to `array-key` rather
+     * than leak the unresolved template; see HigherOrderProxyCompoundKeyKnownLimitation.phpt.
+     *
      * @psalm-mutation-free
      */
     private static function enumerableKey(?Union $tCollection, Codebase $codebase): Union
@@ -491,13 +495,39 @@ final class HigherOrderCollectionProxyHandler implements
             if ($atomic instanceof TNamedObject) {
                 $key = ClassLineage::projectedTemplate($codebase, $atomic, Enumerable::class, 'TKey');
 
-                if ($key instanceof Union) {
+                if ($key instanceof Union && self::isPlainKey($key)) {
                     return $key;
                 }
             }
         }
 
         return Type::getArrayKey();
+    }
+
+    /**
+     * Whether every atomic of a key type is an exact int/string key class (no template, no nested type).
+     *
+     * @psalm-mutation-free
+     */
+    private static function isPlainKey(Union $key): bool
+    {
+        foreach ($key->getAtomicTypes() as $atomic) {
+            if (!\in_array($atomic::class, [
+                Type\Atomic\TInt::class,
+                Type\Atomic\TLiteralInt::class,
+                Type\Atomic\TIntRange::class,
+                Type\Atomic\TString::class,
+                Type\Atomic\TLiteralString::class,
+                Type\Atomic\TNonEmptyString::class,
+                Type\Atomic\TNonFalsyString::class,
+                Type\Atomic\TNumericString::class,
+                Type\Atomic\TArrayKey::class,
+            ], true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
