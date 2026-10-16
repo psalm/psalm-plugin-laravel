@@ -122,4 +122,42 @@ class Collection extends BaseCollection implements QueueableCollection
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * These methods store the given items, and later model operations (modelKeys(), load(), ...) call getKey() on them, so values stay models.
+     *
+     * @template TUnionKey of array-key
+     * @template TUnionModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TUnionKey, TUnionModel>|iterable<TUnionKey, TUnionModel>  $items
+     * @return static<TKey|TUnionKey, TModel|TUnionModel>
+     */
+    public function union($items) {}
+
+    /**
+     * @template TReplaceKey of array-key
+     * @template TReplaceModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TReplaceKey, TReplaceModel>|iterable<TReplaceKey, TReplaceModel>  $items
+     * @return static<TKey|TReplaceKey, TModel|TReplaceModel>
+     */
+    public function replace($items) {}
+
+    /**
+     * @template TReplaceRecursiveKey of array-key
+     * @template TReplaceRecursiveModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TReplaceRecursiveKey, TReplaceRecursiveModel>|iterable<TReplaceRecursiveKey, TReplaceRecursiveModel>  $items
+     * @return static<TKey|TReplaceRecursiveKey, TModel|TReplaceRecursiveModel>
+     */
+    public function replaceRecursive($items) {}
+
+    /**
+     * @template TMergeRecursiveKey of array-key
+     * @template TMergeRecursiveModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMergeRecursiveKey, TMergeRecursiveModel>|iterable<TMergeRecursiveKey, TMergeRecursiveModel>  $items
+     * @return static<TKey|TMergeRecursiveKey, TModel|TMergeRecursiveModel>
+     */
+    public function mergeRecursive($items) {}
 }

@@ -381,4 +381,138 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Compared against only, never stored, so the input is not bound to TKey/TValue.
+     *
+     * Known gap: a receiver typed as this base class may be an Eloquent\Collection at runtime, whose
+     * diff()/intersect() narrow the input to models, so `diff([1])` is accepted here (see
+     * EloquentCollectionWideningKnownLimitation.phpt).
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function diff($items) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function diffAssoc($items) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function diffKeys($items) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function intersect($items) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function intersectAssoc($items) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function intersectByKeys($items) {}
+
+    /**
+     * array_udiff() sorts each side with the callback, so it receives values from both collections.
+     *
+     * @template TDiffUsingValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TDiffUsingValue>|iterable<array-key, TDiffUsingValue>  $items
+     * @param  callable(TValue|TDiffUsingValue, TValue|TDiffUsingValue): int  $callback
+     * @return static
+     */
+    public function diffUsing($items, callable $callback) {}
+
+    /**
+     * @template TIntersectUsingValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TIntersectUsingValue>|iterable<array-key, TIntersectUsingValue>  $items
+     * @param  callable(TValue|TIntersectUsingValue, TValue|TIntersectUsingValue): int  $callback
+     * @return static
+     */
+    public function intersectUsing($items, callable $callback) {}
+
+    /**
+     * The array_*_uassoc()/array_diff_ukey() callback compares KEYS of both sides, not values.
+     *
+     * @template TDiffAssocUsingKey of array-key
+     * @template TDiffAssocUsingValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TDiffAssocUsingKey, TDiffAssocUsingValue>|iterable<TDiffAssocUsingKey, TDiffAssocUsingValue>  $items
+     * @param  callable(TKey|TDiffAssocUsingKey, TKey|TDiffAssocUsingKey): int  $callback
+     * @return static
+     */
+    public function diffAssocUsing($items, callable $callback) {}
+
+    /**
+     * @template TDiffKeysUsingKey of array-key
+     * @template TDiffKeysUsingValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TDiffKeysUsingKey, TDiffKeysUsingValue>|iterable<TDiffKeysUsingKey, TDiffKeysUsingValue>  $items
+     * @param  callable(TKey|TDiffKeysUsingKey, TKey|TDiffKeysUsingKey): int  $callback
+     * @return static
+     */
+    public function diffKeysUsing($items, callable $callback) {}
+
+    /**
+     * Laravel documents the callback as callable(TValue, TValue), but array_intersect_uassoc() passes keys.
+     *
+     * @template TIntersectAssocUsingKey of array-key
+     * @template TIntersectAssocUsingValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TIntersectAssocUsingKey, TIntersectAssocUsingValue>|iterable<TIntersectAssocUsingKey, TIntersectAssocUsingValue>  $items
+     * @param  callable(TKey|TIntersectAssocUsingKey, TKey|TIntersectAssocUsingKey): int  $callback
+     * @return static
+     */
+    public function intersectAssocUsing($items, callable $callback) {}
+
+    /**
+     * The result holds entries of both collections, so it widens to the union of the key and value types.
+     *
+     * @template TUnionKey of array-key
+     * @template TUnionValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TUnionKey, TUnionValue>|iterable<TUnionKey, TUnionValue>  $items
+     * @return static<TKey|TUnionKey, TValue|TUnionValue>
+     */
+    public function union($items) {}
+
+    /**
+     * @template TReplaceKey of array-key
+     * @template TReplaceValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TReplaceKey, TReplaceValue>|iterable<TReplaceKey, TReplaceValue>  $items
+     * @return static<TKey|TReplaceKey, TValue|TReplaceValue>
+     */
+    public function replace($items) {}
+
+    /**
+     * @template TReplaceRecursiveKey of array-key
+     * @template TReplaceRecursiveValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TReplaceRecursiveKey, TReplaceRecursiveValue>|iterable<TReplaceRecursiveKey, TReplaceRecursiveValue>  $items
+     * @return static<TKey|TReplaceRecursiveKey, TValue|TReplaceRecursiveValue>
+     */
+    public function replaceRecursive($items) {}
+
+    /**
+     * @template TMergeRecursiveKey of array-key
+     * @template TMergeRecursiveValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMergeRecursiveKey, TMergeRecursiveValue>|iterable<TMergeRecursiveKey, TMergeRecursiveValue>  $items
+     * @return static<TKey|TMergeRecursiveKey, TValue|TMergeRecursiveValue>
+     */
+    public function mergeRecursive($items) {}
 }
