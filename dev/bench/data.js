@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792146799861,
+  "lastUpdate": 1792148686843,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14345,6 +14345,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "326ada1ab52ac54eda53146ae25e4c980cdf2455",
+          "message": "fix(taint): specialize e(), decrypt() and encrypt() taint flow per call site (#1907)\n\nTheir escape/unescape only touches some taint kinds, and @psalm-flow without\n@psalm-taint-specialize pools every other kind into one global return node.\nBlade compiles every {{ }} to e(), so one {{ decrypt($x) }} reported every\necho of the app as a secret leak.\n\nThe #1007 caution that specialize breaks within-callsite flow on these stubs\nno longer holds on Psalm 7.0.0-rc2; a guard test pins that flow.",
+          "timestamp": "2026-10-16T12:59:15+02:00",
+          "tree_id": "5d3953c3c1cdff8a141a8e18e69a325cc06c66ee",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/326ada1ab52ac54eda53146ae25e4c980cdf2455"
+        },
+        "date": 1792148685108,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.8,
+            "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
             "unit": "MB"
           }
         ]
