@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Support;
 
 use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\EnumeratesValues;
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNever;
@@ -37,6 +41,9 @@ use Psalm\Type\Union;
  * Only the two-argument `when($value, $callback)` form is inspected; the 0/1-arg
  * `HigherOrderWhenProxy` branch and the `$default` argument defer to the stub's `$this`.
  *
+ * The Collection empty family (`whenEmpty()` and friends, callback first) is narrowed the same
+ * way; their stubs live on `EnumeratesValues`, which is registered too.
+ *
  * Registered on the `Conditionable` trait: Psalm dispatches a method return-type provider on
  * the declaring class, which for a trait method is the trait, so one registration covers every
  * host (Builder, Collection, Stringable, Request, user classes). The precise receiver type
@@ -47,29 +54,52 @@ use Psalm\Type\Union;
 final class ConditionableWhenHandler implements MethodReturnTypeProviderInterface
 {
     /**
+     * Position of the callback arg per method: after `$value` for when()/unless(), first for the
+     * Collection empty family.
+     */
+    private const CALLBACK_POSITION = [
+        'when' => 1,
+        'unless' => 1,
+        'whenempty' => 0,
+        'whennotempty' => 0,
+        'unlessempty' => 0,
+        'unlessnotempty' => 0,
+    ];
+
+    /**
      * @return list<string>
      * @psalm-pure
      */
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        // The declaring class of a trait method is the trait, and Psalm dispatches on it,
-        // so this single entry covers every class that uses Conditionable.
-        return [Conditionable::class];
+        // The declaring class of a trait method is the trait, and Psalm dispatches on it, so
+        // these two entries cover every class that uses Conditionable (when/unless) or
+        // EnumeratesValues (the empty family).
+        return [Conditionable::class, EnumeratesValues::class];
     }
 
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
-        $method = $event->getMethodNameLowercase();
-        if ($method !== 'when' && $method !== 'unless') {
+        $position = self::CALLBACK_POSITION[$event->getMethodNameLowercase()] ?? null;
+        if ($position === null) {
             return null;
         }
 
-        // Need at least the callback ($args[1]); the 0/1-arg proxy branch defers to the stub.
+        // Need the callback arg, bound by name or position; the 0/1-arg when() proxy branch defers
+        // to the stub. An unpack at or before the callback's position makes the binding ambiguous,
+        // a trailing one does not.
         $args = $event->getCallArgs();
-        if (\count($args) < 2) {
+        $callbackArg = ArgUtil::boundTo($args, 'callback', $position);
+        if (!$callbackArg instanceof Arg) {
             return null;
+        }
+
+        foreach ($args as $offset => $arg) {
+            if ($arg->unpack && $offset <= $position) {
+                return null;
+            }
         }
 
         $source = $event->getSource();
@@ -87,17 +117,24 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        $callbackReturn = self::callableReturn($source, $args[1]->value);
+        $callbackReturn = self::callableReturn($source, $callbackArg->value);
         if (! $callbackReturn instanceof Union) {
             return null; // callback return undeterminable (e.g. string callable) — defer to stub
         }
 
-        $receiverClasses = self::classNames($receiver);
+        // Laravel returns `$default(...)`'s result too when the value is falsy (`when`) or the
+        // collection is not empty (`unlessEmpty`...), so its return type joins the union. A
+        // default that is absent or a literal `null` adds nothing; one of unknown type declines.
+        $defaultReturn = self::defaultReturn($source, ArgUtil::boundTo($args, 'default', $position + 1));
+        if ($defaultReturn === false) {
+            return null;
+        }
+
         $codebase = $source->getCodebase();
 
         $extra = [];
-        foreach ($callbackReturn->getAtomicTypes() as $atomic) {
-            if (self::narrowsBeyondReceiver($atomic, $receiver, $receiverClasses, $codebase)) {
+        foreach ([...$callbackReturn->getAtomicTypes(), ...($defaultReturn?->getAtomicTypes() ?? [])] as $atomic) {
+            if (self::narrowsBeyondReceiver($atomic, $receiver, $codebase)) {
                 $extra[] = $atomic;
             }
         }
@@ -123,46 +160,77 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
      *  - null / void / never — `$callback(...) ?? $this` yields `$this`;
      *  - mixed — an untyped callback; unioning it discards the stub's `$this` and reintroduces
      *    the mixed leak #704 fixed;
-     *  - the same class as the receiver, regardless of template args — the fluent case; unioning
-     *    a sibling generic (`Builder<Model>` beside `Builder<Customer>`) only widens the type and
-     *    breaks variance against a declared return;
-     *  - anything already contained by the receiver type.
-     *
-     * @param array<string, true> $receiverClasses lowercased receiver class names
+     *  - anything already contained by the receiver type (the fluent case);
+     *  - a same-class atomic that merely widens the receiver's generics (`Builder<Model>` beside
+     *    `Builder<Customer>`, what a `Builder $q` param hands back): unioning it only widens the
+     *    type and breaks variance against a declared return. A same-class atomic with
+     *    incomparable generics (`Collection<int, string>` beside `Collection<int, int>`) is a
+     *    different value at runtime and is kept.
      */
     private static function narrowsBeyondReceiver(
         Atomic $atomic,
         Union $receiver,
-        array $receiverClasses,
         Codebase $codebase,
     ): bool {
         if ($atomic instanceof TNull || $atomic instanceof TVoid || $atomic instanceof TNever || $atomic instanceof TMixed) {
             return false;
         }
 
-        if ($atomic instanceof TNamedObject && isset($receiverClasses[\strtolower($atomic->value)])) {
+        $union = new Union([$atomic]);
+        if (UnionTypeComparator::isContainedBy($codebase, $union, $receiver)) {
             return false;
         }
 
-        return ! UnionTypeComparator::isContainedBy($codebase, new Union([$atomic]), $receiver);
+        return !$atomic instanceof TNamedObject || !self::widensReceiver($codebase, $atomic, $receiver);
     }
 
     /**
-     * Lowercased class names of the receiver's object atomics, as a set.
-     *
-     * @return array<string, true>
-     * @psalm-mutation-free
+     * Whether the atomic is a receiver class whose every type param is comparable (one contains
+     * the other) with the receiver's: the same value seen through wider generics, not another one.
      */
-    private static function classNames(Union $receiver): array
+    private static function widensReceiver(Codebase $codebase, TNamedObject $atomic, Union $receiver): bool
     {
-        $names = [];
-        foreach ($receiver->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject) {
-                $names[\strtolower($atomic->value)] = true;
+        foreach ($receiver->getAtomicTypes() as $candidate) {
+            if (!$candidate instanceof TNamedObject || \strcasecmp($candidate->value, $atomic->value) !== 0) {
+                continue;
             }
+
+            $own = $atomic instanceof TGenericObject ? $atomic->type_params : [];
+            $theirs = $candidate instanceof TGenericObject ? $candidate->type_params : [];
+            if (\count($own) !== \count($theirs)) {
+                return $own === [] || $theirs === [];
+            }
+
+            foreach ($own as $position => $param) {
+                if (!UnionTypeComparator::isContainedBy($codebase, $param, $theirs[$position])
+                    && !UnionTypeComparator::isContainedBy($codebase, $theirs[$position], $param)
+                ) {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
-        return $names;
+        return false;
+    }
+
+    /**
+     * The `$default` arg's callback return: null for an absent, unpacked or literal-null arg, false when
+     * it cannot be determined.
+     */
+    private static function defaultReturn(StatementsAnalyzer $source, ?Arg $arg): Union|false|null
+    {
+        if (!$arg instanceof Arg || $arg->unpack) {
+            return null;
+        }
+
+        $type = $source->getNodeTypeProvider()->getType($arg->value);
+        if ($type instanceof Union && $type->isNull()) {
+            return null;
+        }
+
+        return self::callableReturn($source, $arg->value) ?? false;
     }
 
     /**

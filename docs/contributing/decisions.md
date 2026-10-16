@@ -248,6 +248,28 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
+### Collection `tap()`/`pipe()`/`chunkWhile()`/`whenEmpty()` callback params via a params provider
+
+**Decision:** `CollectionCallbackParamsHandler` replaces one param of the stub's `callable` per call site with the receiver type: param 0 for `tap()`, `pipe()` and the `whenEmpty()`/`whenNotEmpty()`/`unlessEmpty()`/`unlessNotEmpty()` family (`$callback` and `$default`), param 2 (the chunk) for `Collection::chunkWhile()`. The chunk is a plain `Support\Collection` of the receiver's key/value types (Laravel converts chunks to the receiver class only after the callback), resolved through `template_extended_params`, and declined when not exact. The empty family's callable is `callable(<receiver>, true)` for `$callback` and `(<receiver>, false)` for `$default`, as `when()` invokes them. Closure/arrow-fn literals with an untyped param at that slot only; everything else keeps the stub callable. The mechanism is that of `ConditionableCallbackParamsHandler` (per-host `registerClosure`, first-`Arg` stash, shared helpers in `CallbackCallSite`). The empty family's stubs are native `callable` with `@return $this`, and `ConditionableWhenHandler` adds the callback's return type back.
+
+**Why not a stub-only signature** (`#1900`):
+- `callable($this)` as Laravel writes it expands to the class name without generics and rejects an untyped closure param (`static`).
+- `callable`/`callable(mixed)`: the untyped closure param becomes `mixed` (`MissingClosureParamType`, `MixedAssignment`), the loss the handler exists to avoid.
+- `callable(Enumerable<TKey, TValue>)`: typed closures (`fn (Collection $c)`) get `ArgumentTypeCoercion`.
+- `callable(static<TKey, TValue>)`: still fails for untyped closures.
+- `callable(self<...>)` in the trait stub: crashes Psalm.
+- `@return $this|T` on the empty family collapses to `mixed` on Psalm 7 rc2, the same limit `Conditionable.phpstub` documents.
+
+**Details:**
+- The receiver is read from the call's left-hand side (never from template slots or names), so subclasses that fix, reorder or rename templates are typed correctly. Only the slot is replaced, so `pipe()` still infers its template return type from the closure.
+- A typed closure param stays as written (the stub callable stands, so `tap(fn (User $x))` is still reported); an untyped param with a default, a variadic param, a missing param and a late-bound `self`/`static`/`parent` declaration in any param decline too.
+- `LazyCollection::chunkWhile()` is not touched: Laravel passes it a `Collection` chunk and its docblock already says so. A method re-declared outside `EnumeratesValues`/`Collection` (userland override) declines.
+- Union receivers decline, as for `when()`. The empty family's callable is `(<receiver>, true|false)`, as `when()` invokes it: a closure may take the value as a 2nd param (a declared type or default there is kept as written; an untyped defaulted one declines), a third required param is reported. Chunk key/value types containing any template or template-derived type (`list<T>`, `class-string<T>`, `key-of<T>`, conditionals) decline. `ConditionableWhenHandler` also unions `$default`'s return type and keeps a same-class callback return whose generics are incomparable with the receiver's (`Collection<int, string>` beside `Collection<int, int>`), dropping only widenings.
+
+**Out of scope:** `Enumerable`-typed receivers (the interface declares its own `when()`/`tap()` docs; `test_enumerable_receiver_unchanged` pins the current behavior), `LazyCollection::tapEach()`.
+
+**See:** [#1900](https://github.com/psalm/psalm-plugin-laravel/issues/1900), `tests/Type/tests/Collection/CollectionCallbackParamsTest.phpt`, `CollectionCallbackParamsDeclineTest.phpt`.
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
