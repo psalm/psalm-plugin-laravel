@@ -90,7 +90,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TGetDefault
      * @template TGetClosureReturn
      *
-     * @param  TKey  $key
+     * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
      * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
      *
@@ -440,6 +440,42 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function has($key) {}
+
+    /**
+     * Determine if any of the keys exist in the collection.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
+
+    /**
+     * Get all items except for those with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function except($keys) {}
+
+    /**
+     * Get the items with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string|null  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function only($keys) {}
 
     /**
      * Determine if an item is not contained in the collection.
