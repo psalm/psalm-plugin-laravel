@@ -442,6 +442,10 @@ Both are Psalm-side defects. The stub does not work around them: a per-shape wor
 
 **Boundaries:** `first`, `each`, `every`, `contains`, `partition`, `sortBy`, `keyBy`, `groupBy` do not qualify (early exit, or the result is not a kept subset). The receiver variable is not narrowed, and `Enumerable`-typed receivers and higher-order proxies are not covered.
 
+### `toArray()` keeps Laravel's return type (probed dead end, Psalm 7.0.0-rc2)
+
+**Rejected:** a conditional `toArray()` return that maps `Arrayable` items to `array<array-key, mixed>`. On the `EnumeratesValues` trait the template is not remapped through `@extends`, so a subclass `toArray(): array` override reports `InvalidReturnType`. On the class stubs, Psalm's conditional evaluation drops the `Arrayable` arm for concrete `Arrayable` classes and for generic `Arrayable`-plus-scalar unions, which is unsound. A narrower `Eloquent\Collection` return (`array<TKey, array<array-key, mixed>>`) breaks custom serializer overrides that only satisfy `Arrayable<TKey, TValue>`.
+
 ## Variance
 
 ### Paginators are covariant in `TValue`; `Support\Collection` stays invariant

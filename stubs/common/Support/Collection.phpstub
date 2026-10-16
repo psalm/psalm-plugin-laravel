@@ -499,15 +499,4 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function select($keys) {}
-
-    /**
-     * The runtime maps each Arrayable item through its own `toArray()`; other values pass through.
-     * The object gate keeps the array arm when a generic Arrayable (`Collection<string, int>`) sits in a union
-     * with a scalar; a bare `TValue is Arrayable` collapsed that union to the scalar arm.
-     * Declared here, not on the EnumeratesValues trait: the trait template is not remapped through
-     * `@extends`, so a subclass `toArray(): array` override reported InvalidReturnType.
-     *
-     * @return array<TKey, (TValue is object ? (TValue is \Illuminate\Contracts\Support\Arrayable ? array<array-key, mixed> : TValue) : TValue)>
-     */
-    public function toArray() {}
 }

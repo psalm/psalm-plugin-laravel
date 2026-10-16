@@ -172,11 +172,4 @@ class Collection extends BaseCollection implements QueueableCollection
      * @return array<TKey, array-key>
      */
     public function modelKeys() {}
-
-    /**
-     * Every item is a Model, which is Arrayable, so each one is mapped through its own `toArray()`.
-     *
-     * @return array<TKey, array<array-key, mixed>>
-     */
-    public function toArray() {}
 }
