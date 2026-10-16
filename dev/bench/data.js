@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792172366645,
+  "lastUpdate": 1792183570624,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14550,6 +14550,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.45,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "25b568cf0564207a48825268a2348b603d1dfd78",
+          "message": "Follow Laravel's `HigherOrderCollectionProxy<TMethod, TValue, TCollection>` template shape (#1923)\n\n* feat(collections): declare HigherOrderCollectionProxy with Laravel's <TMethod, TValue, TCollection> shape #1920\n\nThe proxy stub and the Collection, LazyCollection and Eloquent\\Collection\n@property-read blocks follow Laravel 13.31+ on every supported version, so\nuser code written against the 3-argument type checks. The receiver class is\nspelled out because `static` stays unparameterized in a stub property;\nTCollection is covariant and bounded by bare Enumerable because the stub\nEnumerable's invariant TKey rejects Laravel's own bound.\n\nHigherOrderCollectionProxyHandler reads TValue at index 1 and derives the\nEnumerable fallback key from TCollection.\n\n* fix(collections): resolve the proxy fallback key through the class ancestry #1920\n\nThe Enumerable fallback of HigherOrderCollectionProxyHandler read the key from\nslot 0 of the proxy's TCollection, so a subclass that reorders its templates\n(`ValuesFirst<TValue, TKey>`) produced Enumerable<Item, Item>. The key now comes\nfrom ClassLineage::projectedTemplate(), the ancestor-template walk\nRelationCallbackParamsHandler already used, which moves there and is shared.\n\n* fix(collections): decline template-derived key mappings in projectedTemplate #1920\n\nClassLineage::projectedTemplate() returned an ancestor mapping such as\n`Collection<K|int, V>` as is, leaking an unresolved template into the\nproxy fallback's Enumerable key. A mapping is now accepted only when every\nnode is a plain scalar or class atomic (exact-class whitelist); anything\nelse declines to `array-key`.\n\nThe precision assertion that needs Laravel 13.31+'s vendor annotation moves\ninto a version-gated phpt, so the ^12.20 cell keeps only the chaining check.\n\n* fix(collections): guard the proxy fallback key at the handler, not in projectedTemplate #1920\n\nThe exact-class whitelist inside the shared ClassLineage::projectedTemplate()\nregressed RelationCallbackParamsHandler for `@extends Builder<Customer&object{...}>`\nand `Builder<GenericModel<T>>`. projectedTemplate() returns the raw mapping again;\nHigherOrderCollectionProxyHandler keeps a projected key only when it is a flat\nunion of plain int/string key types, else `array-key`.",
+          "timestamp": "2026-10-16T22:41:29+02:00",
+          "tree_id": "9a1d57d8ebbd748619851404885dacaa3a847674",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/25b568cf0564207a48825268a2348b603d1dfd78"
+        },
+        "date": 1792183569408,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.22,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
