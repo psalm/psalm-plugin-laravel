@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -28,7 +29,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Collection::class, EloquentCollection::class];
+        return [Collection::class, EloquentCollection::class, LazyCollection::class];
     }
 
     #[\Override]
@@ -48,6 +49,10 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        if (ModelPropertyResolver::isLazyCollectionSubclass($class, $source->getCodebase())) {
+            return null;
+        }
+
         $templates = $event->getTemplateTypeParameters();
         $stmt = $event->getStmt();
         $lhs = $stmt instanceof \PhpParser\Node\Expr\MethodCall
@@ -59,6 +64,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
                 ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $arg->getSingleStringLiteral()->value),
                 $source->getCodebase(),
                 $method === 'groupby',
+                $class === LazyCollection::class && $method === 'keyby',
             );
             $value = $templates[1] ?? ($model === null ? null : new Union([new TNamedObject($model)]));
         } elseif (self::returnsMixed($arg) && self::isBaseCollection($class) && self::isExactBaseCollection($lhs)) {
@@ -90,9 +96,12 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         $innerKey = !($preserve instanceof Union) || $preserve->isFalse() ? Type::getInt()
             : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
 
-        return new Union([new TGenericObject($class, [$key,
-            new Union([(new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true)]),
-        ], is_static: true)]);
+        // LazyCollection::groupBy() is passthru() over collect()->groupBy(): the groups are eager Collections
+        $group = $class === LazyCollection::class
+            ? new TGenericObject(Collection::class, [$innerKey, $value])
+            : (new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true);
+
+        return new Union([new TGenericObject($class, [$key, new Union([$group])], is_static: true)]);
     }
 
     /** @psalm-mutation-free */
@@ -133,7 +142,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
     }
 
     /** @psalm-mutation-free */
-    private static function resolveKeyType(?Union $type, \Psalm\Codebase $codebase, bool $groupBy): ?Union
+    private static function resolveKeyType(?Union $type, \Psalm\Codebase $codebase, bool $groupBy, bool $lazyKeyBy): ?Union
     {
         if (!$type instanceof Union) {
             return null;
@@ -152,7 +161,8 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         foreach ($atomics as $atomic) {
-            if (!$atomic instanceof TInt && !$atomic instanceof TBool) {
+            // Lazy keyBy() yields the raw key from a generator: no array-key coercion turns bool into int
+            if (!$atomic instanceof TInt && ($lazyKeyBy || !$atomic instanceof TBool)) {
                 return null;
             }
         }

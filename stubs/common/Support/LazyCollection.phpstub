@@ -194,4 +194,143 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Merge the collection with the given items.
+     *
+     * Independent key template, as on Collection: the input keys need not match TKey.
+     *
+     * @template TMergeKey of array-key
+     * @template TMergeValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TMergeKey, TMergeValue>|iterable<TMergeKey, TMergeValue>  $items
+     * @return static<TKey|TMergeKey, TValue|TMergeValue>
+     */
+    public function merge($items) {}
+
+    /**
+     * Count the number of items in the collection.
+     *
+     * @return int<0, max>
+     */
+    public function count(): int {}
+
+    /**
+     * Group an associative array by a field or using a callback.
+     *
+     * Runtime is passthru() over collect()->groupBy(), so the groups are eager Collections.
+     *
+     * @template TGroupKey of array-key|\UnitEnum|\Stringable
+     *
+     * @param  (callable(TValue, TKey): TGroupKey)|array|string  $groupBy
+     * @param  bool  $preserveKeys
+     * @return static<
+     *  ($groupBy is (array|string)
+     *      ? array-key
+     *      : (TGroupKey is \UnitEnum ? array-key : (TGroupKey is \Stringable ? string : TGroupKey))),
+     *  \Illuminate\Support\Collection<($preserveKeys is true ? TKey : int), ($groupBy is array ? mixed : TValue)>
+     * >
+     */
+    public function groupBy($groupBy, $preserveKeys = false) {}
+
+    /**
+     * Key an associative array by a field or using a callback.
+     *
+     * @template TNewKey of array-key|\UnitEnum
+     *
+     * @param  (callable(TValue, TKey): TNewKey)|array|string  $keyBy
+     * @return static<($keyBy is (array|string) ? array-key : (TNewKey is \UnitEnum ? array-key : TNewKey)), TValue>
+     */
+    public function keyBy($keyBy) {}
+
+    /**
+     * Get the sum of the given values.
+     *
+     * Same contract as Collection::sum(): the accumulator starts at 0, so the result is
+     * always int|float, narrowed from TValue when no callback is given.
+     *
+     * @template TCallbackReturn of int|float
+     *
+     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @return ($callback is null
+     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
+     *  : ($callback is string ? int|float : TCallbackReturn)
+     * )
+     */
+    public function sum($callback = null) {}
+
+    /**
+     * Get a value from the first item in the collection.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TValueDefault
+     *
+     * @param  string|int  $key
+     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
+     * @return mixed|TValueDefault
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function value($key, $default = null) {}
+
+    /**
+     * Pad collection to the specified length with a value.
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
+
+    /**
+     * Cross join with the given lists, returning all possible permutations.
+     *
+     * @template TCrossJoinKey
+     * @template TCrossJoinValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TCrossJoinKey, TCrossJoinValue>|iterable<TCrossJoinKey, TCrossJoinValue>  ...$arrays
+     * @return static<int, array<int, TValue|TCrossJoinValue>>
+     */
+    public function crossJoin(...$arrays) {}
+
+    /**
+     * Run a dictionary map over the items.
+     *
+     * @template TMapToDictionaryKey of array-key
+     * @template TMapToDictionaryValue
+     *
+     * @param  callable(TValue, TKey): array<TMapToDictionaryKey, TMapToDictionaryValue>  $callback
+     * @return static<TMapToDictionaryKey, array<int, TMapToDictionaryValue>>
+     */
+    public function mapToDictionary(callable $callback) {}
+
+    /**
+     * Retrieve duplicate items from the collection.
+     *
+     * The result holds the values projected through $callback (or data_get() for a string
+     * selector), keyed by the original keys; Laravel's own `@return static` is wrong.
+     *
+     * @template TMapValue
+     *
+     * @param  (callable(TValue): TMapValue)|string|null  $callback
+     * @param  bool  $strict
+     * @return static<TKey, ($callback is null ? TValue : ($callback is string ? mixed : TMapValue))>
+     */
+    public function duplicates($callback = null, $strict = false) {}
+
+    /**
+     * Retrieve duplicate items from the collection using strict comparison.
+     *
+     * The result holds the values projected through $callback (or data_get() for a string
+     * selector), keyed by the original keys; Laravel's own `@return static` is wrong.
+     *
+     * @template TMapValue
+     *
+     * @param  (callable(TValue): TMapValue)|string|null  $callback
+     * @return static<TKey, ($callback is null ? TValue : ($callback is string ? mixed : TMapValue))>
+     */
+    public function duplicatesStrict($callback = null) {}
 }

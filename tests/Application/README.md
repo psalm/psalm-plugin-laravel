@@ -116,6 +116,7 @@ These models test specific Psalm plugin features (PK types, traits) and are not 
 | `Secret`            | Extends abstract UUID model + custom collection via `newCollection()` |
 | `Shop`              | Non-generic relationship resolution testing (#497)                    |
 | `InheritedBuilderModel` / `InheritedBuilderChild` | Non-final base with generic `InheritedModelBuilder` (via `newEloquentBuilder()`), SoftDeletes, and a legacy scope; the final child inherits the builder (so one builder maps to two models), overrides the scope with an extra optional parameter, and alone declares `scopeChildOnly()` (#1620) |
+| `UnionColumnIntModel` / `UnionColumnOtherIntModel` / `UnionColumnTextModel` / `UnionColumnOwnerModel` | Same `rank` column typed int, int, string, float, with two `MorphTo` relations on the owner: pluck and aggregates over a union of models resolve the column per model (#1894) |
 
 ### Contributing
 
