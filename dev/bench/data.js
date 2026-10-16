@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792171121371,
+  "lastUpdate": 1792172093723,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14485,6 +14485,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "39753ef811709e56c9d3da7d49312f4dd63ace4a",
+          "message": "Keep the paginator type on `fragment()` setter chains on Laravel < 13.18 (#1928)\n\n* fix(stubs): restore conditional fragment() return on paginators\n\nLaravel declares the flat `$this|string|null` on every 12.x and on 13.x\nbefore 13.18.0, so `$p->fragment('x')->links()` reports PossiblyNullReference\nand PossiblyInvalidMethodCall. Re-stub fragment() on the paginator classes and\ncontracts with an explicit `@template TFragment` conditional: the implicit\n`($fragment is null ? ...)` form collapses against Laravel 13.18.0+'s native\none on Psalm 7, the explicit template resolves on every version.\n\nFixes #1925\n\n* test(stubs): pin fragment() possibly-empty unpack as known limitation",
+          "timestamp": "2026-10-16T19:32:27+02:00",
+          "tree_id": "8b6fd5d79c9bce41c29006fe1592116ef995a81c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/39753ef811709e56c9d3da7d49312f4dd63ace4a"
+        },
+        "date": 1792172092040,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.14,
+            "range": "± 0.77",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1514,
             "unit": "MB"
           }
         ]
