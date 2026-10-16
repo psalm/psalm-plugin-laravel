@@ -81,4 +81,64 @@ trait EnumeratesValues
      * @return $this
      */
     public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * Psalm drops Laravel's reflected `($callback is callable ? ...)` conditional, so `max()` and
+     * `min()` fell back to `mixed`. `is null` and `is string` come first because the callable
+     * branch first does not resolve. `TValue|null` is spelled out: the `?TValue` shorthand inside
+     * a conditional makes Psalm return `mixed`. A string column stays `mixed` here; the Eloquent
+     * collection handler narrows it when the column is a known model attribute.
+     *
+     * @template TMaxResult
+     *
+     * @param  (callable(TValue): TMaxResult)|string|null  $callback
+     * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMaxResult|null))
+     */
+    public function max($callback = null) {}
+
+    /**
+     * @template TMinResult
+     *
+     * @param  (callable(TValue): TMinResult)|string|null  $callback
+     * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMinResult|null))
+     */
+    public function min($callback = null) {}
+
+    /**
+     * Laravel returns `static<TFlatMapKey, TFlatMapValue>`, but a list-shaped callback result binds
+     * the key to a literal (`0`, `int<0, max>`), which an invariant `Collection<int, V>` target
+     * rejects. An int key is therefore widened to `int`; string keys survive. Larastan's
+     * array-shape conditional does not bind its key template in Psalm.
+     *
+     * @template TFlatMapKey of array-key
+     * @template TFlatMapValue
+     *
+     * @param  callable(TValue, TKey): (\Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>|array<TFlatMapKey, TFlatMapValue>)  $callback
+     * @return static<(TFlatMapKey is int ? int : TFlatMapKey), TFlatMapValue>
+     */
+    public function flatMap(callable $callback) {}
+
+    /**
+     * Laravel returns `static<TKey, TValue>`, which leaks the unresolved class templates from a
+     * static call; the decoded JSON has no known shape.
+     *
+     * @param  string  $json
+     * @param  int  $depth
+     * @param  int  $flags
+     * @return static<array-key, mixed>
+     */
+    public static function fromJson($json, $depth = 512, $flags = 0, ...$args) {}
+
+    /**
+     * Laravel's `static<TUnwrapKey, TUnwrapValue>` parameter resolves to the unbound class
+     * templates on a static call, and the invariant `Collection<array-key, mixed>` rejects any
+     * concrete collection.
+     *
+     * @template TUnwrapKey of array-key
+     * @template TUnwrapValue
+     *
+     * @param  array<TUnwrapKey, TUnwrapValue>|\Illuminate\Support\Enumerable<TUnwrapKey, TUnwrapValue>  $value
+     * @return array<TUnwrapKey, TUnwrapValue>
+     */
+    public static function unwrap($value) {}
 }

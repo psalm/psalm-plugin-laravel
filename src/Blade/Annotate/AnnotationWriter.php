@@ -20,6 +20,9 @@ use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
  * step. By AfterAnalysis every call site has been seen, which is also what makes the
  * every-producer-agrees rule answerable at all.
  *
+ * A name no call site types is listed back instead of declared: a `mixed` declaration adds no
+ * type, yet makes the name required at every call site and hides that it is still untyped.
+ *
  * Insertion only (see {@see TemplateAnnotator} for where). A variable the template already declares is never rewritten, in either spelling —
  * narrowing a declaration a human wrote needs a containment check this release does not make.
  *
@@ -56,8 +59,8 @@ final class AnnotationWriter implements AfterAnalysisInterface
     public static function run(AnnotateRequest $request): void
     {
         // A parent that analysed nothing is a forked run: every producer type is in a worker that
-        // has already exited, so every variable would be declared `mixed` — across the whole view
-        // tree, silently, with exit code 0. Refuse rather than write that.
+        // has already exited, so every variable would be reported untyped — across the whole view
+        // tree, with exit code 0. Refuse rather than report that.
         if (!AnnotationCollector::sawAnalysis()) {
             $request->publishError(
                 'the analysis ran in forked workers, whose results never reach the writing process. '
@@ -76,9 +79,20 @@ final class AnnotationWriter implements AfterAnalysisInterface
 
         $changed = [];
         $failures = [];
+        $unknown = [];
         $diff = '';
 
-        foreach (self::plans() as $templatePath => [$vars, $optional]) {
+        foreach (self::plans() as $templatePath => [$planned, $optional]) {
+            $vars = \array_filter($planned, static fn(?string $type): bool => $type !== null);
+
+            if (\count($vars) < \count($planned)) {
+                $unknown[$templatePath] = \array_keys(\array_diff_key($planned, $vars));
+            }
+
+            if ($vars === []) {
+                continue;
+            }
+
             try {
                 $hunk = self::apply($templatePath, $vars, $request->dryRun, $optional);
             } catch (\Throwable $throwable) {
@@ -98,16 +112,16 @@ final class AnnotationWriter implements AfterAnalysisInterface
             $diff .= $hunk;
         }
 
-        $request->publish($changed, $failures, $diff);
+        $request->publish($changed, $failures, $diff, $unknown);
     }
 
     /**
      * One plan per template FILE, not per view name: a published override is claimed under both its
      * default-root name and its namespace's qualified name, and annotating the file twice would
-     * report it twice. A name the two names' call sites type differently falls back to `mixed`.
+     * report it twice. A name the two names' call sites type differently has no type.
      *
-     * @return array<string, array{0: array<string, string>, 1: array<string, true>}> template path =>
-     *         [variable name => type string, the names a closed call site omits]
+     * @return array<string, array{0: array<string, string|null>, 1: array<string, true>}> template path =>
+     *         [variable name => type string (null when unknown), the names a closed call site omits]
      */
     private static function plans(): array
     {
@@ -124,9 +138,8 @@ final class AnnotationWriter implements AfterAnalysisInterface
             }
 
             foreach (self::plan((string) $viewName, $contract) as $name => $type) {
-                $existing = $plans[$templatePath][$name] ?? null;
-
-                $plans[$templatePath][$name] = $existing === null || $existing === $type ? $type : 'mixed';
+                $plans[$templatePath][$name] = !\array_key_exists($name, $plans[$templatePath] ?? [])
+                    || $plans[$templatePath][$name] === $type ? $type : null;
 
                 // Optional only when every name this file is rendered under agrees.
                 if (!AnnotationCollector::isOptional((string) $viewName, $name)) {
@@ -155,7 +168,8 @@ final class AnnotationWriter implements AfterAnalysisInterface
     /**
      * The variables one view name needs declared, and the type to declare each as.
      *
-     * @return array<string, string> variable name (without `$`) => type string
+     * @return array<string, string|null> variable name (without `$`) => type string, null when no
+     *         call site proves one (`mixed` included)
      */
     public static function plan(string $viewName, ViewDataContract $contract): array
     {
@@ -187,7 +201,8 @@ final class AnnotationWriter implements AfterAnalysisInterface
 
             // A name some closed call site omits is still declared, but as `T|null $x = null`
             // (see plans()): a plain declaration would report MissingViewVariable at that call site.
-            $plan[$name] = AnnotationCollector::typeFor($viewName, $name) ?? 'mixed';
+            $type = AnnotationCollector::typeFor($viewName, $name);
+            $plan[$name] = $type === 'mixed' ? null : $type;
         }
 
         return $plan;
