@@ -95,11 +95,27 @@ function prepend_omitted_key_adds_int_key(Collection $ints): void
 }
 
 /** @param Collection<string, int> $ints */
-function prepend_explicit_null_key_is_not_an_int_key(Collection $ints): void
+function prepend_explicit_null_key_adds_empty_string_key(Collection $ints): void
 {
     $ints->prepend(1, null);
-    /** @psalm-check-type-exact $ints = Collection<array-key, int>&static */
+    /** @psalm-check-type-exact $ints = Collection<string, int>&static */
     consume($ints);
+}
+
+/** @param Collection<int, string> $names */
+function prepend_explicit_null_key_on_int_keys(Collection $names, string $name): void
+{
+    $names->prepend($name, null);
+    /** @psalm-check-type-exact $names = Collection<''|int, string>&static */
+    consume($names);
+}
+
+/** @param Collection<int, string> $names */
+function prepend_nullable_int_key_may_add_empty_string_key(Collection $names, string $name, ?int $key): void
+{
+    $names->prepend($name, $key);
+    /** @psalm-check-type-exact $names = Collection<''|int, string>&static */
+    consume($names);
 }
 
 function fluent_chain_widens(string $name, int $count): void

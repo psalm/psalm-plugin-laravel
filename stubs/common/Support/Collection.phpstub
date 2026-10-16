@@ -224,17 +224,16 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Same model as push()/put(): independent templates plus `@psalm-this-out`, so a value (or key)
      * outside the current types widens the collection instead of raising InvalidArgument.
      *
-     * Laravel branches on the argument count, not on null: `prepend($v)` appends an integer key, while
-     * `prepend($v, null)` inserts the string key `''`. The explicit-null case therefore falls to
-     * `TPrependKey`, which stays `array-key` (sound, not exact).
+     * Laravel branches on the argument count, not on null: `prepend($v)` gets an integer key, while
+     * `prepend($v, null)` inserts the string key `''`.
      *
      * @template TPrependValue
      * @template TPrependKey of array-key
      *
      * @param  TPrependValue  $value
      * @param  TPrependKey|null  $key
-     * @psalm-this-out static<(func_num_args() is 1 ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
-     * @return static<(func_num_args() is 1 ? TKey|int : TKey|TPrependKey), TValue|TPrependValue>
+     * @psalm-this-out static<(func_num_args() is 1 ? TKey|int : ($key is null ? TKey|'' : TKey|TPrependKey)), TValue|TPrependValue>
+     * @return static<(func_num_args() is 1 ? TKey|int : ($key is null ? TKey|'' : TKey|TPrependKey)), TValue|TPrependValue>
      */
     public function prepend($value, $key = null) {}
 
