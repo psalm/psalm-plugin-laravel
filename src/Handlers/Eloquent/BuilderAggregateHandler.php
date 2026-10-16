@@ -73,6 +73,9 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      *   the receiver-class leg fires for each; the aggregated model is the collection's value
      *   parameter, picked up by {@see self::resolveModelClass()} scanning all template params.
      *
+     * An ambiguous first model-bearing slot (`A|B`, or a model mixed with non-models) declines, so a
+     * custom relation that reorders its templates with a union declaring model loses narrowing.
+     *
      * Custom collection subclasses (newCollection() / #[CollectedBy]) are not narrowed on the
      * in-memory read — they resolve to `mixed`. The relation-level
      * path still narrows those models via `rel()->sum('col')`.

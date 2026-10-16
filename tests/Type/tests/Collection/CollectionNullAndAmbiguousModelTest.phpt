@@ -11,6 +11,7 @@
 use App\Models\CollectionGroupingModel as M;
 use App\Models\Customer;
 use App\Models\Invoice;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\LazyCollection;
@@ -30,6 +31,51 @@ function null_elements_keep_the_column_type(Collection $c, LazyCollection $l): v
     /** @psalm-check-type-exact $_cp = Collection<int, int|null> */
     $_lp = $l->pluck('nullable_id');
     /** @psalm-check-type-exact $_lp = LazyCollection<int, int|null> */
+
+    // data_get() on a null element yields null
+    $_cn = $c->pluck('foreign_id');
+    /** @psalm-check-type-exact $_cn = Collection<int, int|null> */
+    $_ln = $l->pluck('foreign_id');
+    /** @psalm-check-type-exact $_ln = LazyCollection<int, int|null> */
+}
+
+/**
+ * @param Collection<int, M> $c
+ * @param LazyCollection<int, M> $l
+ */
+function no_null_element_stays_non_null(Collection $c, LazyCollection $l): void
+{
+    $_c = $c->pluck('foreign_id');
+    /** @psalm-check-type-exact $_c = Collection<int, int> */
+    $_l = $l->pluck('foreign_id');
+    /** @psalm-check-type-exact $_l = LazyCollection<int, int> */
+}
+
+/**
+ * @param Collection<int, M|null>|Collection<string, M|null> $items
+ * @return Collection<int, int|null>
+ */
+function outer_union_of_nullable_collections(Collection $items): Collection
+{
+    return $items->pluck('nullable_id');
+}
+
+/**
+ * @param LazyCollection<int, M|null>|LazyCollection<string, M|null> $items
+ * @return LazyCollection<int, int|null>
+ */
+function outer_union_of_nullable_lazy_collections(LazyCollection $items): LazyCollection
+{
+    return $items->pluck('nullable_id');
+}
+
+/**
+ * @param Collection<int, M|null>|EloquentCollection<int, M> $items
+ * @return Collection<int, int|null>
+ */
+function outer_union_of_collection_and_eloquent_collection(Collection $items): Collection
+{
+    return $items->pluck('nullable_id');
 }
 
 /** @return Collection<int, string>|null */

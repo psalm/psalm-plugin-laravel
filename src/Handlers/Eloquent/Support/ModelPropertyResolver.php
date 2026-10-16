@@ -82,9 +82,10 @@ final class ModelPropertyResolver
         int $modelTemplateIndex,
         ?Union $lhsType,
         Codebase $codebase,
+        bool $ignoreNull = false,
     ): ?string {
         $template = $templateParams[$modelTemplateIndex] ?? null;
-        $modelClass = self::extractExactlyOneModelFromUnion($template, $codebase);
+        $modelClass = self::extractExactlyOneModelFromUnion($template, $codebase, $ignoreNull);
         if ($modelClass !== null || !$lhsType instanceof Union
             || $template !== null && self::extractModelFromUnion($template, $codebase) !== null) {
             return $modelClass;
@@ -92,7 +93,7 @@ final class ModelPropertyResolver
 
         foreach ($lhsType->getAtomicTypes() as $atomic) {
             $atomicType = new Union([$atomic]);
-            $resolved = self::extractModelFromLhsType($atomicType, $modelTemplateIndex, $codebase)
+            $resolved = self::extractModelFromLhsType($atomicType, $modelTemplateIndex, $codebase, $ignoreNull)
                 ?? self::extractModelFromLhsBuilderExtends($atomicType, $codebase)
                 ?? self::extractModelFromLhsCollectionExtends($atomicType, $codebase);
 
@@ -202,7 +203,8 @@ final class ModelPropertyResolver
             return null;
         }
 
-        $modelClass = self::extractExactlyOneModelFromUnion($templateParams[$modelTemplateIndex] ?? null, $codebase, ignoreNull: true);
+        $modelSlot = $templateParams[$modelTemplateIndex] ?? null;
+        $modelClass = self::extractExactlyOneModelFromUnion($modelSlot, $codebase, ignoreNull: true);
         $receiverType = $lhsExpr instanceof \PhpParser\Node\Expr ? $nodeTypeProvider->getType($lhsExpr) : null;
 
         // When the call is reached via Psalm's @mixin chain (e.g. $relation->pluck()
@@ -212,7 +214,7 @@ final class ModelPropertyResolver
         // type carries the concrete generic arguments.
         if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
             $lhsType = $receiverType;
-            $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex, $codebase);
+            $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex, $codebase, ignoreNull: true);
 
             // Custom Builder subclasses declared as `/** @extends Builder<Task> */
             // final class TaskBuilder extends Builder {}` are not themselves generic,
@@ -255,7 +257,7 @@ final class ModelPropertyResolver
         ));
         if ($modelClass === null
             || (\count($receivers) > 1
-                && self::resolveExactlyOneModelClass(null, $modelTemplateIndex, new Union($receivers), $codebase) !== $modelClass)) {
+                && self::resolveExactlyOneModelClass(null, $modelTemplateIndex, new Union($receivers), $codebase, ignoreNull: true) !== $modelClass)) {
             return null;
         }
 
@@ -271,6 +273,11 @@ final class ModelPropertyResolver
         }
 
         [$keyType, $propertyType] = $resolved;
+
+        // data_get() on a null element yields null, and the null-neutral model check dropped that atomic
+        if ($modelSlot?->isNullable() === true && $modelClass === self::extractExactlyOneModelFromUnion($modelSlot, $codebase, ignoreNull: true)) {
+            $propertyType = Type::combineUnionTypes($propertyType, Type::getNull());
+        }
 
         return new Union([
             new TGenericObject($collectionClass, [$keyType, $propertyType]),
@@ -357,7 +364,7 @@ final class ModelPropertyResolver
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    private static function extractModelFromLhsType(?Union $lhsType, int $modelTemplateIndex, Codebase $codebase): ?string
+    private static function extractModelFromLhsType(?Union $lhsType, int $modelTemplateIndex, Codebase $codebase, bool $ignoreNull = false): ?string
     {
         if (!$lhsType instanceof Union) {
             return null;
@@ -369,7 +376,7 @@ final class ModelPropertyResolver
             }
 
             $modelType = $atomic->type_params[$modelTemplateIndex] ?? null;
-            $modelClass = self::extractExactlyOneModelFromUnion($modelType, $codebase);
+            $modelClass = self::extractExactlyOneModelFromUnion($modelType, $codebase, $ignoreNull);
             if ($modelClass !== null) {
                 return $modelClass;
             }
