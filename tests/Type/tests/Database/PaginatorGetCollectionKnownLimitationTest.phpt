@@ -41,7 +41,7 @@ function set_collection_with_plain_collection_of_models_holds_plain_support_coll
     $paginator->setCollection(collect([new Customer()]));
 
     $_collection = $paginator->getCollection();
-    /** @psalm-check-type-exact $_collection = Illuminate\Database\Eloquent\Collection<0, Customer> */
+    /** @psalm-check-type-exact $_collection = Illuminate\Database\Eloquent\Collection<int, Customer> */
 }
 
 /**

@@ -130,7 +130,7 @@ function custom_collection_answer_preserves_non_int_receiver_key(): void
     $paginator->setCollection(collect(['a' => new WorkOrder()]));
 
     $_collection = $paginator->getCollection();
-    /** @psalm-check-type-exact $_collection = App\Collections\WorkOrderCollection<'a', WorkOrder> */
+    /** @psalm-check-type-exact $_collection = App\Collections\WorkOrderCollection<string, WorkOrder> */
 }
 ?>
 --EXPECTF--

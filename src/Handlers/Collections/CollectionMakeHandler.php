@@ -14,9 +14,10 @@ use Psalm\Type\Union;
 /**
  * Narrows `Collection::make($x)` / `LazyCollection::make($x)` (and subclass calls, e.g.
  * `\Illuminate\Database\Eloquent\Collection::make($x)`) for inputs the stub's own template
- * inference can't bind: null, scalars, and UnitEnum cases. Every other shape - WeakMap,
- * Jsonable, JsonSerializable, plain objects - defers to the stub's own widened-but-unbound
- * `object` template branch, which already infers the sound `Collection<array-key, mixed>`.
+ * inference can't bind: null, scalars, and UnitEnum cases; for arrays it widens literal and range
+ * keys (vimeo/psalm#10985). Every other shape - WeakMap, Jsonable, JsonSerializable, plain
+ * objects - defers to the stub's own widened-but-unbound `object` template branch, which already
+ * infers the sound `Collection<array-key, mixed>`.
  *
  * Psalm resolves a static call by first trying the CALLED class against the provider registry;
  * on a miss it falls back to `getDeclaringMethodId()` and retries the registry with that class
