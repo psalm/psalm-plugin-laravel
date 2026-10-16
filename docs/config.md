@@ -344,7 +344,7 @@ For some but not all of the family back, first set `reportMixedIssues="true"`, t
 
 By default Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if a view directory cannot be read and no template was found elsewhere, if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. With [`failOnInternalError`](#failoninternalerror) enabled, that disable fails the run instead. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
 
-Psalm's `--no-progress` installs a progress implementation that discards warnings, so the disable warning is written to STDERR directly in that mode. Other Blade warnings stay invisible under that flag.
+Psalm's `--no-progress` installs a progress implementation that discards warnings, and Psalm also picks it by itself when an AI agent runs it outside CI, so the disable warning is written to STDERR directly in that mode. Other Blade warnings stay invisible under that flag.
 
 ## Per-run overrides
 

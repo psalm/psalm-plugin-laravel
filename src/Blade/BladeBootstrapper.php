@@ -90,10 +90,18 @@ final class BladeBootstrapper
 
     private ?string $disabledReason = null;
 
+    private ?\Throwable $disabledCause = null;
+
     /** Why boot() disabled Blade analysis; null when it activated or merely found nothing to analyze. */
     public function disabledReason(): ?string
     {
         return $this->disabledReason;
+    }
+
+    /** The throwable behind {@see disabledReason()}, when a crash caused it. */
+    public function disabledCause(): ?\Throwable
+    {
+        return $this->disabledCause;
     }
 
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
@@ -102,7 +110,7 @@ final class BladeBootstrapper
         try {
             return $this->run();
         } catch (\Throwable $throwable) {
-            $this->degrade($throwable::class . ': ' . $throwable->getMessage());
+            $this->degrade($throwable::class . ': ' . $throwable->getMessage(), $throwable);
 
             return false;
         }
@@ -581,7 +589,7 @@ final class BladeBootstrapper
         try {
             $compiler = $this->asCompiler($this->app->make('blade.compiler'));
         } catch (\Throwable $throwable) {
-            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage());
+            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage(), $throwable);
 
             return null;
         }
@@ -931,9 +939,10 @@ final class BladeBootstrapper
         );
     }
 
-    private function degrade(string $cause): void
+    private function degrade(string $cause, ?\Throwable $previous = null): void
     {
         $this->disabledReason = 'Blade template analysis is disabled for this run, because ' . $cause . '.';
+        $this->disabledCause = $previous;
 
         if ($this->failOnInternalError) {
             return;
@@ -943,9 +952,10 @@ final class BladeBootstrapper
         $this->output->warning($message);
 
         // Blade is opt-in, so a silent disable hides a feature the user asked for; VoidProgress
-        // (--no-progress, CI) drops warnings.
-        if ($this->output instanceof VoidProgress) {
-            \fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+        // (--no-progress, CI) drops warnings. Silenced: Psalm turns the notice of a write to a closed
+        // STDERR into an exception, which would skip registering the whole plugin.
+        if ($this->output instanceof VoidProgress && \defined('STDERR')) {
+            @\fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
         }
     }
 }

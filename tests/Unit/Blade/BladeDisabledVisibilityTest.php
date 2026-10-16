@@ -82,6 +82,29 @@ final class BladeDisabledVisibilityTest extends TestCase
         $this->assertSame(1, \substr_count($stderr, self::MESSAGE), $stderr);
     }
 
+    /**
+     * A write to a closed STDERR raises a notice Psalm turns into an exception; unguarded, it skipped
+     * registering the whole plugin, so `app('config')` lost its type and reported `MixedMethodCall`.
+     */
+    #[Test]
+    public function a_closed_stderr_keeps_the_plugin_registered(): void
+    {
+        $copy = $this->fixtureCopy();
+        \file_put_contents(
+            $copy . '/app/ConfigReader.php',
+            "<?php\n\ndeclare(strict_types=1);\n\nnamespace BladeDisabledFixture;\n\nfunction configValue(): mixed\n{\n    return app('config')->get('app.name');\n}\n",
+        );
+
+        $process = new Process(
+            ['bash', '-c', 'exec 2>&-; exec "$0" "$@"', \PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+            $copy,
+        );
+        $process->setTimeout(300);
+        $process->run();
+
+        $this->assertSame([], \json_decode($process->getOutput(), true), $process->getOutput());
+    }
+
     #[Test]
     public function fail_on_internal_error_turns_the_disable_into_a_failed_run(): void
     {

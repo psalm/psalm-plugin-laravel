@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\BladeDisabledException;
 use Psalm\LaravelPlugin\Internal\InternalErrorClassifier;
 
 #[CoversClass(InternalErrorClassifier::class)]
@@ -101,5 +102,27 @@ final class InternalErrorClassifierTest extends TestCase
         $hint = InternalErrorClassifier::hint(new \RuntimeException('boom'));
 
         $this->assertNotNull($hint);
+    }
+
+    /** #1930: a Blade disable is thrown from the plugin's own file but is mostly a project setting. */
+    #[Test]
+    public function a_blade_disable_without_a_crash_points_at_project_settings(): void
+    {
+        $hint = InternalErrorClassifier::hint(new BladeDisabledException('Blade template analysis is disabled for this run'));
+
+        $this->assertNotNull($hint);
+        $this->assertStringContainsString('project setting', $hint);
+        $this->assertStringNotContainsString('likely a plugin bug', $hint);
+    }
+
+    #[Test]
+    public function a_blade_disable_caused_by_a_crash_is_classified_by_the_crash(): void
+    {
+        $crash = new \RuntimeException('boom');
+
+        $this->assertSame(
+            InternalErrorClassifier::hint($crash),
+            InternalErrorClassifier::hint(new BladeDisabledException('Blade template analysis is disabled for this run', 0, $crash)),
+        );
     }
 }
