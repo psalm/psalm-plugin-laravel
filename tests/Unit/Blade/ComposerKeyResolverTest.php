@@ -70,6 +70,8 @@ final class ComposerKeyResolverTest extends TestCase
         yield 'result of with passed on' => ['$this->decorate($view->with("a", 1));', null];
         yield 'view captured by a closure' => ['$f = function () use ($view) { $view->with("a", 1); };', null];
         yield 'view used in an arrow function' => ['$f = fn() => $view->with("a", 1);', null];
+        yield 'accessor in an arrow function' => ['$view->with("a", 1); $getter = fn() => $view->getName();', null];
+        yield 'accessor in a static arrow function' => ['$view->with("a", 1); $getter = static fn() => $view->getName();', null];
         yield 'returned view' => ['return $view;', null];
         yield 'returned with call' => ['return $view->with("a", 1);', null];
         yield 'magic property set' => ['$view->title = "x";', null];

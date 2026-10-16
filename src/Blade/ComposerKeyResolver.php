@@ -152,6 +152,10 @@ final class ComposerKeyResolver
                 default => false,
             },
             $node instanceof Expr\Variable => !\is_string($node->name),
+            // An arrow function auto-captures the view by value, so even an accessor call inside it leaves the view in reach.
+            // A shadowing parameter of the same name is declined too: conservative, not worth a scope check.
+            $node instanceof Expr\ArrowFunction => \is_string($view)
+                && (new NodeFinder())->findFirst([$node->expr], static fn(Node $inner): bool => $inner instanceof Expr\Variable && $inner->name === $view) instanceof Node,
             default => false,
         };
     }
