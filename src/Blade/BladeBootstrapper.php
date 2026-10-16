@@ -11,6 +11,7 @@ use Illuminate\View\FileViewFinder;
 use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
 use Psalm\LaravelPlugin\Internal\VendorDirectory;
 use Psalm\Progress\Progress;
+use Psalm\Progress\VoidProgress;
 
 /**
  * Compiles every Blade template of the analyzed application into a shadow PHP file and hands both
@@ -20,7 +21,8 @@ use Psalm\Progress\Progress;
  * `Config::initializePlugins()` is on the stack, before Psalm starts scanning.
  *
  * Nothing here throws. Every failure disables Blade analysis for the run with one warning naming
- * the cause, because an opt-in extra is never worth failing an analysis over.
+ * the cause, recorded in {@see disabledReason()} so the caller can escalate it under
+ * `failOnInternalError`.
  *
  * @internal
  */
@@ -39,8 +41,10 @@ final class BladeBootstrapper
         private readonly string $shadowDir,
         /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
         private readonly bool $collectDataIncludes = false,
+        /** The caller escalates a disable, so the warning is left to that one report. */
+        private readonly bool $failOnInternalError = false,
         /**
-         * Test seam: vendor dir for the hint-root filter. Null derives it from
+         * Test seam: vendor dir for the hint-root filter and the untrusted-input split. Null derives it from
          * laravel/framework's install path (the plugin's own vendor, in a unit test).
          */
         private readonly ?string $vendorDirOverride = null,
@@ -84,13 +88,29 @@ final class BladeBootstrapper
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
     private array $compileFailures = [];
 
+    private ?string $disabledReason = null;
+
+    private ?\Throwable $disabledCause = null;
+
+    /** Why boot() disabled Blade analysis; null when it activated or merely found nothing to analyze. */
+    public function disabledReason(): ?string
+    {
+        return $this->disabledReason;
+    }
+
+    /** The throwable behind {@see disabledReason()}, when a crash caused it. */
+    public function disabledCause(): ?\Throwable
+    {
+        return $this->disabledCause;
+    }
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
         try {
             return $this->run();
         } catch (\Throwable $throwable) {
-            $this->degrade($throwable::class . ': ' . $throwable->getMessage());
+            $this->degrade($throwable::class . ': ' . $throwable->getMessage(), $throwable);
 
             return false;
         }
@@ -119,8 +139,8 @@ final class BladeBootstrapper
         $templates = $this->findTemplates($roots, $failures);
 
         if ($templates === [] && $failures === []) {
-            // Not a failure (an API-only app is normal), but worth surfacing under --no-progress:
-            // the shape of #1497, a real view tree that discovered nothing.
+            // Not a failure (an API-only app is normal), but the shape of #1497, a real view tree
+            // that discovered nothing. Unlike a disable, VoidProgress (--no-progress) drops it.
             $this->output->warning(
                 'Laravel plugin: Blade template analysis is enabled, but no Blade templates were discovered.',
             );
@@ -143,26 +163,7 @@ final class BladeBootstrapper
         [$environmentHash, $trustedEnvironment, $untrustedInputs] = CompilerEnvironment::describe($compiler);
 
         if (!$trustedEnvironment) {
-            $count = \count($untrustedInputs);
-
-            // Psalm has no verbose level: the full list goes to --debug so the default warning stays one line.
-            $this->output->warning(
-                'Laravel plugin: Blade shadow cache skipped for this run ('
-                . ($count === 0
-                    ? 'the compiler environment cannot be fingerprinted'
-                    : ($count === 1 ? '1 compiler input cannot' : "{$count} compiler inputs cannot") . ' be fingerprinted')
-                . '): every template is recompiled. Slower only; analysis results are unaffected.'
-                . ($count === 0 ? '' : ' Run with --debug to list the inputs.'),
-            );
-
-            if ($count > 0) {
-                $this->output->debug(
-                    "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
-                    . \implode('', \array_map(static fn(string $input): string => "  - {$input}\n", $untrustedInputs))
-                    . "To restore caching, declare such callbacks `static fn` / `static function` that capture no objects, "
-                    . "or register a static method (`[Foo::class, 'bar']`).\n",
-                );
-            }
+            $this->reportUntrustedEnvironment($untrustedInputs);
         }
 
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
@@ -188,6 +189,16 @@ final class BladeBootstrapper
             }
 
             $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+
+            // Unreadable view roots and nothing found elsewhere: the user asked for Blade and got none of it.
+            if ($templates === [] && $failures !== []) {
+                $this->degrade(
+                    'no Blade template was discovered and ' . \count($failures) . ' view director'
+                    . (\count($failures) === 1 ? 'y' : 'ies') . ' could not be read ('
+                    . \implode(', ', \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME))
+                    . (\count($failures) > self::FAILURES_TO_NAME ? ', ...' : '') . ')',
+                );
+            }
 
             return false;
         }
@@ -578,7 +589,7 @@ final class BladeBootstrapper
         try {
             $compiler = $this->asCompiler($this->app->make('blade.compiler'));
         } catch (\Throwable $throwable) {
-            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage());
+            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage(), $throwable);
 
             return null;
         }
@@ -876,8 +887,75 @@ final class BladeBootstrapper
         );
     }
 
-    private function degrade(string $cause): void
+    /**
+     * @param list<array{input: string, file: ?string}> $inputs
+     */
+    private function reportUntrustedEnvironment(array $inputs): void
     {
-        $this->output->warning('Laravel plugin: Blade template analysis is disabled for this run, because ' . $cause . '.');
+        $vendorDir = $this->vendorDirectory();
+        $projectInputs = [];
+        $vendorInputs = [];
+
+        foreach ($inputs as ['input' => $input, 'file' => $file]) {
+            $line = "  - {$input}" . ($file === null ? '' : " in {$file}") . "\n";
+
+            // An unknown file counts as project code: the user may still be able to fix it.
+            // Canonicalized like the hint roots (#1552): a mis-cased invocation path survives realpath().
+            if ($file !== null && $vendorDir !== null && $this->isUnderVendorDirectory(PathCaseCanonicalizer::canonicalize($file), $vendorDir)) {
+                $vendorInputs[] = $line;
+            } else {
+                $projectInputs[] = $line;
+            }
+        }
+
+        $count = \count($inputs);
+
+        // Psalm has no verbose level: the full list goes to --debug so the default warning stays one line.
+        $summary = 'Laravel plugin: Blade shadow cache skipped for this run ('
+            . ($count === 0
+                ? 'the compiler environment cannot be fingerprinted'
+                : ($count === 1 ? '1 compiler input cannot' : "{$count} compiler inputs cannot") . ' be fingerprinted')
+            . '): every template is recompiled. Slower only; analysis results are unaffected.';
+
+        // Vendor callbacks are not the user's to change, and the cost is about a second per run.
+        if ($count > 0 && $projectInputs === []) {
+            $this->output->debug($summary . "\nCompiler inputs declared in vendor packages:\n" . \implode('', $vendorInputs));
+
+            return;
+        }
+
+        $this->output->warning($summary . ($count === 0 ? '' : ' Run with --debug to list the inputs.'));
+
+        if ($count === 0) {
+            return;
+        }
+
+        $this->output->debug(
+            "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
+            . \implode('', $projectInputs)
+            . "To restore caching for a callback above, declare it `static fn` / `static function` capturing no objects, "
+            . "or register a static method (`[Foo::class, 'bar']`). A compiler subclass or compiler state is never fingerprinted.\n"
+            . ($vendorInputs === [] ? '' : "Also declared in vendor packages:\n" . \implode('', $vendorInputs)),
+        );
+    }
+
+    private function degrade(string $cause, ?\Throwable $previous = null): void
+    {
+        $this->disabledReason = 'Blade template analysis is disabled for this run, because ' . $cause . '.';
+        $this->disabledCause = $previous;
+
+        if ($this->failOnInternalError) {
+            return;
+        }
+
+        $message = 'Laravel plugin: ' . $this->disabledReason;
+        $this->output->warning($message);
+
+        // Blade is opt-in, so a silent disable hides a feature the user asked for; VoidProgress
+        // (--no-progress, CI) drops warnings. Silenced: Psalm turns the notice of a write to a closed
+        // STDERR into an exception, which would skip registering the whole plugin.
+        if ($this->output instanceof VoidProgress && \defined('STDERR')) {
+            @\fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+        }
     }
 }
