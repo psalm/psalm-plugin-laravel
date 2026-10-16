@@ -76,7 +76,7 @@ final class CollectionInputTypeResolver
         // `->prepend(2)` fail on the invariant templates (#1766). Widen the way PHPStan's template
         // generalization does.
         if ($atomic instanceof TKeyedArray || $atomic instanceof TArray) {
-            return self::resolveArray($atomic);
+            return self::resolveArray($atomic, $codebase);
         }
 
         if ($atomic instanceof TNull) {
@@ -122,7 +122,7 @@ final class CollectionInputTypeResolver
      *
      * @return array{Union, Union}|null
      */
-    private static function resolveArray(TKeyedArray|TArray $array): ?array
+    private static function resolveArray(TKeyedArray|TArray $array, Codebase $codebase): ?array
     {
         if ($array instanceof TKeyedArray) {
             $keyType = $array->getGenericKeyType();
@@ -142,7 +142,7 @@ final class CollectionInputTypeResolver
         $newKey = self::mapAtomics($keyType, static fn(Atomic $atomic): Atomic => $atomic instanceof TIntRange
             ? new TInt()
             : $atomic);
-        $newValue = self::generalizeValue($valueType);
+        $newValue = self::generalizeValue($valueType, $codebase);
 
         if ($newKey === $keyType && $newValue === $valueType) {
             return null;
@@ -151,7 +151,7 @@ final class CollectionInputTypeResolver
         return [$newKey, $newValue];
     }
 
-    private static function generalizeValue(Union $type): Union
+    private static function generalizeValue(Union $type, Codebase $codebase): Union
     {
         // Psalm treats the WHOLE argument leniently at an invariant param as soon as one literal is present
         // (`Collection<'a'|'b', Parent|int>` accepts `['a' => $child, 'b' => 1]`), so scalar literals are
@@ -159,7 +159,7 @@ final class CollectionInputTypeResolver
         // to its enum below: enum cases are strict anyway).
         $widenScalars = true;
         foreach ($type->getAtomicTypes() as $atomic) {
-            if (!self::isWidenableScalarLiteral($atomic)) {
+            if (!self::isWidenableScalarLiteral($atomic, $codebase)) {
                 $widenScalars = false;
                 break;
             }
@@ -177,16 +177,20 @@ final class CollectionInputTypeResolver
 
     /**
      * A class-string literal is excluded: widening it breaks `new $class()` and `Collection<int, class-string<I>>` targets.
-     * So is a callable-string literal (`'strlen'`, `'A::b'`): widened to `string`, it stops being callable.
-     *
-     * @psalm-pure
+     * So is a callable-string literal (`'strlen'`, `'A::b'`, a function declared in the analyzed code):
+     * widened to `string`, it stops being callable.
      */
-    private static function isWidenableScalarLiteral(Atomic $atomic): bool
+    private static function isWidenableScalarLiteral(Atomic $atomic, Codebase $codebase): bool
     {
         if ($atomic instanceof TLiteralString) {
-            return !$atomic instanceof TLiteralClassString
-                && !\str_contains($atomic->value, '::')
-                && !\function_exists($atomic->value);
+            if ($atomic instanceof TLiteralClassString || \str_contains($atomic->value, '::') || \function_exists($atomic->value)) {
+                return false;
+            }
+
+            $functionId = \strtolower(\ltrim($atomic->value, '\\'));
+
+            return !$codebase->functions->hasStubbedFunction($functionId)
+                && !$codebase->functions->isDeclaredInCode($functionId);
         }
 
         return $atomic instanceof TLiteralInt

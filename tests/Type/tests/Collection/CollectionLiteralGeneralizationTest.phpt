@@ -245,6 +245,16 @@ final class GeneralizedTagged extends Collection
     }
 }
 
+function generalizedLocalCallback(string $value): int
+{
+    return \strlen($value);
+}
+
+function generalizedTakesCallable(callable $callback): void
+{
+    $callback('x');
+}
+
 function generalizedGateAndNamedArgs(): void
 {
     // An enum case next to a scalar literal: the case widens, the literal keeps the param-wide leniency.
@@ -254,6 +264,17 @@ function generalizedGateAndNamedArgs(): void
     foreach (collect(['strlen']) as $callable) {
         $_length = $callable('x');
         /** @psalm-check-type-exact $_length = int<1, max> */
+    }
+
+    // Same for a function declared only in the analyzed code (`function_exists()` cannot see it).
+    foreach (collect(['generalizedLocalCallback']) as $callback) {
+        generalizedTakesCallable($callback);
+    }
+    foreach (Collection::make(['generalizedLocalCallback']) as $callback) {
+        generalizedTakesCallable($callback);
+    }
+    foreach (LazyCollection::make(['generalizedLocalCallback']) as $callback) {
+        generalizedTakesCallable($callback);
     }
 
     // The first NAMED argument is `tag`, not the input: declined, the subclass keeps its own binding.
