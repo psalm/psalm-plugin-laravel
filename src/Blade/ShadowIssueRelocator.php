@@ -34,7 +34,6 @@ use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedMagicMethod;
-use Psalm\Issue\UndefinedMagicPropertyFetch;
 use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
@@ -920,37 +919,51 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * An undefined-member issue on a literal `$this->name` that the bound Livewire class's `__get()` /
-     * `__call()` would answer. A fetch selects the whole `$this->name`, a magic call only its name.
+     * An undefined member of the bound Livewire class, read through `$this`, that its `__get()` /
+     * `__call()` would answer. The class named in the message must be the bound one: `$this` in a
+     * class the template declares is that class.
      */
     private static function isLivewireMagicOnThis(CodeIssue $issue): bool
     {
         $magic = match (true) {
-            $issue instanceof UndefinedThisPropertyFetch, $issue instanceof UndefinedMagicPropertyFetch => '__get',
+            $issue instanceof UndefinedThisPropertyFetch => '__get',
             $issue instanceof UndefinedMagicMethod => '__call',
             default => null,
         };
+        $shadowPath = $issue->code_location->file_path;
+        $bound = ComponentViewRegistry::boundClassFor($shadowPath);
+
+        if ($magic === null || $bound === null || !ComponentViewRegistry::boundClassDeclares($shadowPath, $magic)) {
+            return false;
+        }
 
         if (
-            $magic === null
-            || !ComponentViewRegistry::boundClassDeclares($issue->code_location->file_path, $magic)
-            || \preg_match('/::\$?(\w++) (?:is not defined|does not exist)\z/', $issue->message, $member) !== 1
+            \preg_match('/ ([\w\\\\]++)::\$?(\w++) (?:is not defined|does not exist)\z/', $issue->message, $member) !== 1
+            || \strcasecmp($member[1], $bound) !== 0
         ) {
             return false;
         }
 
-        $selection = ShadowSelection::of($issue->code_location);
-
-        if (!$selection instanceof ShadowSelection) {
-            return false;
+        // Psalm raises it only for a fetch on the `$this` variable, however that is spelled.
+        if ($issue instanceof UndefinedThisPropertyFetch) {
+            return true;
         }
 
-        $selected = \substr($selection->snippet, $selection->start, $selection->end - $selection->start);
-        $name = \preg_quote($member[1], '/');
+        // Any other receiver of the class may be a genuine typo. A call is located on its name alone,
+        // so `$this` must lead it, possibly parenthesized or commented. (Psalm leaves a `{'name'}()`
+        // call unresolved, so it never gets here.)
+        $selection = ShadowSelection::of($issue->code_location);
+        $gap = '(?:\s|\/\*(?:[^*]|\*(?!\/))*+\*\/)';
 
-        return \preg_match('/\A\$this\s*+->\s*+' . $name . '\z/i', $selected) === 1
-            || (\preg_match('/\A' . $name . '\z/i', $selected) === 1
-                && \preg_match('/\$this\s*+->\s*+\z/', \substr($selection->snippet, 0, $selection->start)) === 1);
+        return $selection instanceof ShadowSelection
+            && \preg_match(
+                '/\A' . \preg_quote($member[2], '/') . '\z/i',
+                \substr($selection->snippet, $selection->start, $selection->end - $selection->start),
+            ) === 1
+            && \preg_match(
+                '/\$this(?:\)|' . $gap . ')*+\??->' . $gap . '*+\z/',
+                \substr($selection->snippet, 0, $selection->start),
+            ) === 1;
     }
 
     /**

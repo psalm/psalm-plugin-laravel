@@ -67,6 +67,18 @@ final class LivewireViewTypingTest extends TestCase
             '$page: int',
             '$this: App\Livewire\GenericPost',
         ]];
+        // A composer runs after Livewire merges the properties, so the key it passes wins.
+        yield 'a key a readable composer passes' => ['composed.blade.php', [
+            '$count: int',
+            '$this: App\Livewire\Composed',
+            '$title: mixed',
+        ]];
+        yield 'an unreadable composer: no property is known' => ['composed-closure.blade.php', [
+            '$page: mixed',
+            '$this: App\Livewire\ComposedClosure',
+        ]];
+        // Lazy loading renders a placeholder() view with that component's own properties.
+        yield "another component's placeholder() view" => ['placeheld.blade.php', ['$this: mixed', '$title: mixed']];
         yield 'two Livewire classes' => ['twin.blade.php', ['$this: mixed', '$tone: mixed']];
         yield 'a Livewire class and a Blade component' => ['shared.blade.php', ['$this: mixed', '$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$this: mixed', '$title: mixed']];
@@ -114,6 +126,8 @@ final class LivewireViewTypingTest extends TestCase
             "InvalidScalarArgument @7: Argument 1 of App\\Livewire\\ShowPost::rename expects int, but 'x' provided",
             'UndefinedMagicPropertyFetch @9: Magic instance property App\Livewire\ShowPost::$total is not defined',
             'UndefinedMagicMethod @9: Magic method App\Livewire\ShowPost::nope does not exist',
+            // `$this` inside a class the template declares is that class, not the component.
+            'UndefinedThisPropertyFetch @10: Instance property LocalProbe::$missing is not defined',
         ], $this->reportedIn($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS), 'livewire/show-post.blade.php'));
     }
 

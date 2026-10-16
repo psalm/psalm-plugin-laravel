@@ -51,7 +51,8 @@ use Psalm\Type\Union;
  * `HandleComponents::getView()`: no tag is needed (Livewire always calls `render()`), the seed is
  * `$this` plus the public properties ({@see ComponentRenderData::livewirePropertiesFor()}), which
  * `Utils::generateBladeView()` merges after `render()`'s own data, so they keep a key `render()` also
- * passes. A Volt component only contests its view.
+ * passes, though not one a view composer passes (it runs later). A Volt component only contests its
+ * view, as any view a `placeholder()` spells does.
  *
  * Static because Psalm instantiates event handlers itself and hands them no plugin state.
  *
@@ -144,7 +145,7 @@ final class ComponentViewRegistry
         // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
 
-        /** @var array<string, array<string, array{0: ClassLikeStorage, 1: array<array-key, true>}>> $byTemplate template path => class => [storage, render() keys] */
+        /** @var array<string, array<string, array{0: ClassLikeStorage, 1: array<array-key, true>, 2: string}>> $byTemplate template path => class => [storage, render() keys, view name] */
         $byTemplate = [];
         /** @var array<string, true> $contested template path => true */
         $contested = [];
@@ -163,12 +164,23 @@ final class ComponentViewRegistry
         $claimed = [];
         /** @var array<string, true> $rivals template path => true, spelled by a render() outside the recognised shape */
         $rivals = [];
+        /** @var array<string, true> $placeholders declaring Livewire placeholder() => true, already read */
+        $placeholders = [];
 
         foreach (ClassLikeStorageProvider::getAll() as $storage) {
             $livewire = isset($storage->parent_classes[self::LIVEWIRE]);
 
             if ($storage->abstract || (!$livewire && !isset($storage->parent_classes[self::COMPONENT]))) {
                 continue;
+            }
+
+            // Lazy loading renders a literal placeholder() view with this component's properties.
+            $placeholder = $livewire ? ($storage->declaring_method_ids['placeholder'] ?? null) : null;
+
+            if ($placeholder instanceof MethodIdentifier && !isset($placeholders[(string) $placeholder])) {
+                $placeholders[(string) $placeholder] = true;
+                $resolved = self::declaredInProject($codebase, $placeholder) ? ClassMethodResolver::resolve($codebase, $placeholder) : null;
+                self::contestNamedViews($resolved['classMethod']->stmts ?? [], $templates, $rivals);
             }
 
             $render = $storage->declaring_method_ids['render'] ?? null;
@@ -221,7 +233,7 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, $view[1]];
+            $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, $view[1], $view[0]];
         }
 
         $contested += $rivals;
@@ -266,7 +278,7 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            [$storage, $renderKeys] = \reset($claims);
+            [$storage, $renderKeys, $viewName] = \reset($claims);
             $livewire = isset($storage->parent_classes[self::LIVEWIRE]);
 
             if (!$livewire && !isset(self::$tagRendered[\strtolower($storage->name)])) {
@@ -276,6 +288,11 @@ final class ComponentViewRegistry
             $vars = self::seedVariables($codebase, $storage, $renderKeys, $templatePath, $parser);
 
             if ($livewire && $vars !== null) {
+                // A composer runs on `composing`, after Livewire's `with()`, so a key it passes replaces
+                // the property; an unreadable one may replace any.
+                $sources = ContractRegistry::composerSources();
+                $composed = \array_key_exists($viewName, $sources) ? ComposerKeyResolver::keysOf($codebase, $sources[$viewName]) : [];
+                $vars = $composed === null ? [] : \array_diff_key($vars, $composed);
                 $vars['this'] = new Union([new TNamedObject($storage->name)]);
                 self::$bound[$shadowPath] = $storage->name;
                 self::$boundMagic[$shadowPath] = \array_fill_keys(
@@ -378,10 +395,22 @@ final class ComponentViewRegistry
 
         $view = $returned instanceof Expr ? self::viewOf($codebase, $returned, $livewire) : null;
 
-        if ($view !== null) {
-            return $view;
+        if ($view === null) {
+            self::contestNamedViews($stmts, $templates, $contested);
         }
 
+        return $view;
+    }
+
+    /**
+     * Marks every known view a method body spells, since it may render that view with other data.
+     *
+     * @param array<array-key, \PhpParser\Node> $stmts
+     * @param array<array-key, string>          $templates view name => template path
+     * @param array<string, true>               $contested template path => true, appended to
+     */
+    private static function contestNamedViews(array $stmts, array $templates, array &$contested): void
+    {
         foreach ((new NodeFinder())->findInstanceOf($stmts, String_::class) as $string) {
             $templatePath = $templates[$string->value] ?? null;
 
@@ -389,8 +418,6 @@ final class ComponentViewRegistry
                 $contested[$templatePath] = true;
             }
         }
-
-        return null;
     }
 
     /**

@@ -7,3 +7,10 @@
 @php $this->rename('x'); @endphp
 @php $other = new \App\Livewire\ShowPost(); @endphp
 {{ $other->total }} {{ $other->nope() }}
+@php class LocalProbe { public function read(): mixed { return $this->missing; } } @endphp
+{{ $this->{'braced'} }}
+{{ ($this)->wrapped }}
+{{ $this /* c */ ->commented }}
+{{ ($this)->wrappedCall() }}
+{{ $this->{'bracedCall'}() }}
+{{ $this /* c */ ->commentedCall() }}
