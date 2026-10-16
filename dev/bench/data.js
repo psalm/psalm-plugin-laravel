@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792148686843,
+  "lastUpdate": 1792150117675,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14380,6 +14380,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db61ba5d7addbf56a23194712307ae22961e68aa",
+          "message": "Resolve `mixed` group keys of `groupBy()`/`keyBy()` callbacks to `array-key` (#1906)\n\n* fix(collections): resolve mixed groupBy/keyBy callback keys to array-key #1884\n\n* fix(collections): decline remapped subclasses and mixed groupBy arg unions #1884\n\n* fix(collections): gate mixed groupBy keys on the receiver expression type #1884\n\n* fix(collections): require the dispatched class to be a base collection too #1884",
+          "timestamp": "2026-10-16T13:23:44+02:00",
+          "tree_id": "da48fc3542129c7c3092617f66bf7aff59999b6a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/db61ba5d7addbf56a23194712307ae22961e68aa"
+        },
+        "date": 1792150116551,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.87,
+            "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
