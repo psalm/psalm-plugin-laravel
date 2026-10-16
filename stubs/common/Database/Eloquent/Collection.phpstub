@@ -124,7 +124,7 @@ class Collection extends BaseCollection implements QueueableCollection
     public function select($keys) {}
 
     /**
-     * Eloquent collection methods call getKey() on every item, so values stay models.
+     * These methods store the given items, and later model operations (modelKeys(), load(), ...) call getKey() on them, so values stay models.
      *
      * @template TUnionKey of array-key
      * @template TUnionModel of \Illuminate\Database\Eloquent\Model

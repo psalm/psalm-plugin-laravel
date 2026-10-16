@@ -418,7 +418,8 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Decision:** `diff*`/`intersect*` take `iterable<array-key, mixed>` (callback variants: method templates), and `union`/`replace`/`replaceRecursive`/`mergeRecursive` return `static<TKey|K, TValue|V>` (#1892). Laravel's docblocks bind these inputs to `TKey`/`TValue`, which rejects `$dogs->diff($cats)` although the input is only compared against.
 
 **Why / boundaries:**
-- `Eloquent\Collection` redeclares `union`/`replace`/`replaceRecursive`/`mergeRecursive` with `TModel`-bound templates (`getKey()` is called on every item); its own `diff()`/`intersect()` keep `iterable<array-key, TModel>`. Accepted hole: a base-typed `Collection<int, Model>` receiver may be an Eloquent collection at runtime and accepts `diff([1])` (pinned by `CollectionDiffEloquentReceiverKnownLimitation.phpt`).
+- `Eloquent\Collection` redeclares `union`/`replace`/`replaceRecursive`/`mergeRecursive` with `TModel`-bound templates: they STORE the given items and later model operations (`modelKeys()`, `load()`, ...) call `getKey()` on them. The bounds hold on `Eloquent\Collection` receivers only; user subclasses resolve the inherited Support declaration (vimeo/psalm#12158) until a declaring-method repair is in place. Its own `diff()`/`intersect()` keep `iterable<array-key, TModel>`.
+- Accepted holes, pinned by `EloquentCollectionWideningKnownLimitation.phpt`: a base-typed `Collection<int, Model>` receiver may be an Eloquent collection at runtime and accepts `diff([1])`; a custom subclass accepts `union([1])`.
 - Holes kept from Laravel's docblocks: `mergeRecursive` nests arrays on colliding string keys and renumbers int keys, Traversable numeric-string keys become `int`, and positional `static<...>` is wrong on generic subclasses that reshape their templates.
 - `intersectAssocUsing`'s callback receives KEYS (Laravel documents it as values); verified against `array_intersect_uassoc`.
 

@@ -387,7 +387,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * Known gap: a receiver typed as this base class may be an Eloquent\Collection at runtime, whose
      * diff()/intersect() narrow the input to models, so `diff([1])` is accepted here (see
-     * CollectionDiffEloquentReceiverKnownLimitation.phpt).
+     * EloquentCollectionWideningKnownLimitation.phpt).
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
      * @return static
