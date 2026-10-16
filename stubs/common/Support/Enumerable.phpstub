@@ -51,4 +51,22 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * )
      */
     public function sum($callback = null);
+
+    /**
+     * Same conditional as the `EnumeratesValues` trait stub (see the note there).
+     *
+     * @template TMaxResult
+     *
+     * @param  (callable(TValue): TMaxResult)|string|null  $callback
+     * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMaxResult|null))
+     */
+    public function max($callback = null);
+
+    /**
+     * @template TMinResult
+     *
+     * @param  (callable(TValue): TMinResult)|string|null  $callback
+     * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMinResult|null))
+     */
+    public function min($callback = null);
 }
