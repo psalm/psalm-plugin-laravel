@@ -20,10 +20,12 @@ use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidDocblock;
+use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidNullableReturnType;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
+use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedArgument;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\NonStaticSelfCall;
@@ -32,11 +34,13 @@ use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyNullArgument;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\ReferenceReusedFromConfusingScope;
+use Psalm\Issue\RiskyTruthyFalsyComparison;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
@@ -73,6 +77,11 @@ final class ShadowIssueRelocatorTest extends TestCase
     private const AWARE_NULL_ARGUMENT = 'Argument 1 of Illuminate\View\Factory::getConsumableComponentData cannot be null, null value provided to parameter with type string';
 
     private const AWARE_NO_VALUE = 'All possible types for this argument were invalidated - This may be dead code';
+
+    /** The closure Livewire's `@livewire`/`<livewire:...>` compiles (RenderComponent::livewire()). */
+    private const SPLIT_CLOSURE = 'function ($name, $params = []) {';
+
+    private const CLOSURE_PURITY = '{closure} must be marked @psalm-pure to aid security analysis, run with --alter --issues=MissingPureAnnotation to fix this';
 
     /** `CompilesComponents::newComponentHash()` output: xxh128, 32 lowercase hex characters. */
     private const COMPONENT_HASH = '5194778a3a7b899dcee5619d0610f5cf';
@@ -887,6 +896,137 @@ final class ShadowIssueRelocatorTest extends TestCase
             "<div>\n@php \$open = '{{--'; if (isset(\$__messageOriginal)) { \$message = \$__messageOriginal; } \$close = '--}}'; @endphp\n</div>\n",
         ];
         yield 'issue class outside the Mixed family' => [new UndefinedVariable('Cannot find referenced variable $attributes', self::selectionLocation('<?php $attributes', 11, $restore))];
+    }
+
+    /**
+     * #1908: code a vendor directive compiles, with the template holding only the directive. Each
+     * case is the vendor's compiled shape and where Psalm locates the issue on it.
+     */
+    #[Test]
+    #[DataProvider('compiledDirectiveIssues')]
+    public function an_issue_on_compiled_directive_code_is_dropped(CodeIssue $issue, string $templateSource): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 2]), templateSource: $templateSource));
+    }
+
+    /** @return iterable<string, array{CodeIssue, string}> */
+    public static function compiledDirectiveIssues(): iterable
+    {
+        yield 'Livewire $__split closure' => [
+            new MissingPureAnnotation(self::CLOSURE_PURITY, self::selectionLocation(self::SPLIT_CLOSURE, \strlen(self::SPLIT_CLOSURE), '$__split = ' . self::SPLIT_CLOSURE)),
+            "<div>\n  @livewire('counter')\n</div>\n",
+        ];
+
+        foreach (['value' => 'value()', 'hasModifier' => "hasModifier('live')"] as $method => $call) {
+            yield "@entangle literal ->{$method}()" => [
+                new InvalidMethodCall("Cannot call method on 'tab' variable ", self::selectionLocation("'tab'->{$method}", \strlen($method), "<?php echo e('tab'->{$call}); ?>")),
+                "<div x-data=\"{ tab: @entangle('tab') }\"></div>\n",
+            ];
+        }
+
+        yield '@inertia possibly undefined response' => [
+            new PossiblyUndefinedGlobalVariable('Possibly undefined global variable $__inertiaSsrResponse, first seen on line 9', self::inertiaLocation(), '$__inertiaSsrResponse'),
+            "<head>\n  @inertiaHead\n</head>\n",
+        ];
+        yield '@inertia truthy response check' => [
+            new RiskyTruthyFalsyComparison('Operand of type Inertia\Ssr\Response|mixed|null contains type mixed, which can be falsy and truthy.', self::inertiaLocation(), null),
+            "<head>\n  @inertiaHead\n</head>\n",
+        ];
+        yield '@inertia always falsy response' => [
+            new TypeDoesNotContainType('Operand of type null is always falsy', self::inertiaLocation(), 'null falsy'),
+            "<head>\n  @inertiaHead\n</head>\n",
+        ];
+        yield '@endcapture ob_get_clean() argument' => [
+            new PossiblyFalseArgument(
+                'Argument 1 of Illuminate\Support\HtmlString::__construct cannot be false, possibly string value expected',
+                self::selectionLocation('ob_get_clean()', 14, 'return new \Illuminate\Support\HtmlString(ob_get_clean()); };'),
+                'Illuminate\Support\HtmlString::__construct',
+            ),
+            "@capture(\$badge)\n  <b>badge</b>\n@endcapture\n",
+        ];
+    }
+
+    /**
+     * Negatives: each differs from a dropped case above in ONE gate condition, mostly by the
+     * template author having written the same text.
+     */
+    #[Test]
+    #[DataProvider('authoredDirectiveLookAlikes')]
+    public function an_authored_look_alike_of_compiled_directive_code_keeps_reporting(CodeIssue $issue, string $templateSource): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 2]), templateSource: $templateSource);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame(2, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{CodeIssue, string}> */
+    public static function authoredDirectiveLookAlikes(): iterable
+    {
+        $closure = self::selectionLocation(self::SPLIT_CLOSURE, \strlen(self::SPLIT_CLOSURE), '$split = ' . self::SPLIT_CLOSURE);
+
+        yield 'closure written in @php' => [
+            new MissingPureAnnotation(self::CLOSURE_PURITY, $closure),
+            "<div>\n@php \$split = function (\$name, \$params = []) { return [\$name, \$params]; }; @endphp\n</div>\n",
+        ];
+        // String literals that only look like a Blade comment: stripping `{{-- ... --}}` from the
+        // template would remove the author's closure between them.
+        yield 'closure written between comment look-alikes' => [
+            new MissingPureAnnotation(self::CLOSURE_PURITY, $closure),
+            "<div>\n@php \$o = '{{--'; \$split = function (\$name, \$params = []) { return []; }; \$c = '--}}'; @endphp\n</div>\n",
+        ];
+        yield 'named function, not a closure' => [
+            new MissingPureAnnotation('split must be marked @psalm-pure to aid security analysis, run with --alter --issues=MissingPureAnnotation to fix this', $closure),
+            self::TEMPLATE_SOURCE,
+        ];
+        yield 'method call on a literal written in an echo' => [
+            new InvalidMethodCall("Cannot call method on 'tab' variable ", self::selectionLocation("'tab'->value", 5, "<?php echo e('tab'->value()); ?>")),
+            "<div>\n{{ 'tab'->value() }}\n</div>\n",
+        ];
+        yield '$__ variable written in the template' => [
+            new RiskyTruthyFalsyComparison('Operand of type false|string contains type string, which can be falsy and truthy.', self::selectionLocation('if ($__authorFlag', 13, '<?php if ($__authorFlag): ?>'), null),
+            "<div>\n@if (\$__authorFlag) set @endif\n</div>\n",
+        ];
+        yield 'compiled variable without the $__ prefix' => [
+            new PossiblyUndefinedGlobalVariable('Possibly undefined global variable $value, first seen on line 9', self::selectionLocation('if ($value', 6, '<?php if ($value) { echo $value; } ?>'), '$value'),
+            self::TEMPLATE_SOURCE,
+        ];
+        yield '$__ variable written in the template, operand shape' => [
+            new TypeDoesNotContainType('Operand of type null is always falsy', self::selectionLocation('if ($__authorFlag', 13, '<?php if ($__authorFlag): ?>'), 'null falsy'),
+            "<div>\n@if (\$__authorFlag) set @endif\n</div>\n",
+        ];
+        // `@foreach` copies the author's subject into `$__currentLoopData`: a null subject is the
+        // author's bug, located on a compiled variable.
+        yield 'value issue on a compiled $__ variable' => [
+            new PossiblyNullArgument('Argument 1 of Illuminate\View\Factory::addLoop cannot be null, possibly null value provided', self::selectionLocation('addLoop($__currentLoopData', 18, '<?php $__currentLoopData = $items; $__env->addLoop($__currentLoopData); ?>'), 'Illuminate\View\Factory::addLoop'),
+            self::TEMPLATE_SOURCE,
+        ];
+        yield 'ob_get_clean() written in @php' => [
+            new PossiblyFalseArgument(
+                'Argument 1 of Illuminate\Support\HtmlString::__construct cannot be false, possibly string value expected',
+                self::selectionLocation('ob_get_clean()', 14, '<?php $html = new \Illuminate\Support\HtmlString(ob_get_clean()); ?>'),
+                'Illuminate\Support\HtmlString::__construct',
+            ),
+            "<div>\n@php \$html = new \\Illuminate\\Support\\HtmlString(ob_get_clean()); @endphp\n</div>\n",
+        ];
+        yield 'false argument that is not a call' => [
+            new PossiblyFalseArgument(
+                'Argument 1 of Illuminate\Support\HtmlString::__construct cannot be false, possibly string value expected',
+                self::selectionLocation('($html', 5, '<?php return new \Illuminate\Support\HtmlString($html); ?>'),
+                'Illuminate\Support\HtmlString::__construct',
+            ),
+            self::TEMPLATE_SOURCE,
+        ];
+    }
+
+    /** `if ($__inertiaSsrResponse)` in Inertia's one-line compiled `@inertia`/`@inertiaHead`. */
+    private static function inertiaLocation(): CodeLocation
+    {
+        return self::selectionLocation(
+            'if ($__inertiaSsrResponse',
+            \strlen('$__inertiaSsrResponse'),
+            '<?php if (!isset($__inertiaSsrDispatched)) { $__inertiaSsrDispatched = true; $__inertiaSsrResponse = app(\Inertia\Ssr\Gateway::class)->dispatch($page); } if ($__inertiaSsrResponse) { echo $__inertiaSsrResponse->head; } ?>',
+        );
     }
 
     /** `MixedAssignment` on the $width bytes of $snippet that end where $anchor ends. */

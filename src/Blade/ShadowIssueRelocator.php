@@ -12,9 +12,11 @@ use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidCast;
+use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
+use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
@@ -28,6 +30,7 @@ use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
+use Psalm\Issue\RiskyTruthyFalsyComparison;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
@@ -376,9 +379,45 @@ final class ShadowIssueRelocator
             if (self::isGeneratedValueSave($issue, $target)) {
                 return false;
             }
+
+            // An always-true or always-false condition on a compiled `$__` variable: the Inertia
+            // gate below, for the operand wording these classes share (IfConditionalAnalyzer).
+            if (\str_starts_with($issue->message, 'Operand of type ') && self::isCompiledVariable($issue, $target)) {
+                return false;
+            }
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
+            return false;
+        }
+
+        // Vendor directives compile code the author never wrote (#1908), told apart by the same
+        // discriminator as the arity gate: the text Psalm points at is absent from the template.
+        // Livewire tags compile to `$__split = function ($name, $params = []) {...}`, whose first
+        // line is Psalm's single-line location for the closure. `@entangle('tab')` compiles to
+        // `'tab'->value()`; the `->` keeps a `value()` helper call elsewhere in the template from
+        // masking it. Filament's `@endcapture` compiles to `new HtmlString(ob_get_clean())`.
+        if (
+            (
+                $issue instanceof MissingPureAnnotation
+                && \str_starts_with($issue->message, '{closure} must be marked ')
+                && self::isCompiledText(self::selectedText($issue->code_location), $target)
+            )
+            || ($issue instanceof InvalidMethodCall && self::isCompiledText(self::methodCallExpression($issue->code_location), $target))
+            || ($issue instanceof PossiblyFalseArgument && self::isCompiledCallArgument($issue->code_location, $target))
+        ) {
+            return false;
+        }
+
+        // Directives keep their own state in `$__` variables. Inertia's `@inertia`/`@inertiaHead`
+        // assign `$__inertiaSsrResponse` under `if (!isset($__inertiaSsrDispatched))` and then test
+        // it, so its definedness and truthiness report on the directive line (#1908). Limited to
+        // classes about control flow: a value issue on a `$__` variable can be the author's data,
+        // as `@foreach` copies its subject into `$__currentLoopData`.
+        if (
+            ($issue instanceof PossiblyUndefinedGlobalVariable || $issue instanceof PossiblyUndefinedVariable || $issue instanceof RiskyTruthyFalsyComparison)
+            && self::isCompiledVariable($issue, $target)
+        ) {
             return false;
         }
 
@@ -893,6 +932,72 @@ final class ShadowIssueRelocator
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+    }
+
+    /**
+     * Whether $text, cut out of the shadow, is absent from the template, so the compiler wrote it.
+     * Absent raw, with Blade comments stripped, and with Blade's raw-text rewrites mirrored: each
+     * way an author's own text can differ from the template only turns a drop into a keep. Null
+     * (unreadable) is no evidence and keeps the issue.
+     *
+     * @psalm-pure
+     */
+    private static function isCompiledText(?string $text, ShadowTarget $target): bool
+    {
+        if ($text === null || \trim($text) === '') {
+            return false;
+        }
+
+        $prefix = $target->markerPrefix();
+
+        return !TemplateSnippetMatcher::occursInRawOrStripped($text, $target->templateSource, $prefix)
+            && !TemplateSnippetMatcher::occursInWithRawTextRewrites($text, $target->templateSource, $prefix);
+    }
+
+    /**
+     * Whether an issue selects exactly a `$__`-prefixed variable the template never mentions.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isCompiledVariable(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $variable = self::selectedText($issue->code_location);
+
+        return $variable !== null
+            && \preg_match('/^\$__[A-Za-z_]\w*$/', $variable) === 1
+            && self::isCompiledText($variable, $target);
+    }
+
+    /**
+     * `->name(...)` for a method call issue located on the method name, or null when the name does
+     * not directly follow `->`/`?->`.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function methodCallExpression(CodeLocation $location): ?string
+    {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection || !TemplateSnippetMatcher::endsAt($selection->snippet, $selection->start, '->')) {
+            return null;
+        }
+
+        $call = TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+
+        return $call === null ? null : '->' . $call;
+    }
+
+    /**
+     * Whether an argument issue selects an argument that is a whole call, and that call is
+     * absent from the template.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function isCompiledCallArgument(CodeLocation $location, ShadowTarget $target): bool
+    {
+        $argument = self::selectedText($location);
+
+        return $argument !== null && self::callExpression($location) === $argument && self::isCompiledText($argument, $target);
     }
 
     /**

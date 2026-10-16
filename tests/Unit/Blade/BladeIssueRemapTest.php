@@ -349,6 +349,46 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #1908: vendor directives compile code the author never wrote, and Psalm reports on it: a
+     * `$__split` closure without purity annotations (Livewire tags), a method call on the
+     * `@entangle` literal, Inertia's conditionally assigned SSR response, and Filament's
+     * `ob_get_clean()` argument.
+     */
+    #[Test]
+    public function issues_on_compiled_vendor_directive_code_are_dropped(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'MissingPureAnnotation', 'resources/views/livewire-fp.blade.php'), $json);
+
+        foreach (['MissingPureAnnotation', 'InvalidMethodCall', 'PossiblyUndefinedGlobalVariable', 'RiskyTruthyFalsyComparison', 'PossiblyFalseArgument'] as $type) {
+            $this->assertSame([], $this->linesFor($issues, $type, 'resources/views/compiled-residuals.blade.php'), $json);
+        }
+
+        // Guard against a vacuous pass: each directive compiled the shape whose issue is dropped.
+        $shadow = $this->shadowSourceFor('resources/views/compiled-residuals.blade.php');
+
+        foreach (["'tab'->value()", 'if ($__inertiaSsrResponse)', 'HtmlString(ob_get_clean())'] as $compiled) {
+            $this->assertStringContainsString($compiled, $shadow);
+        }
+    }
+
+    /** #1908 negatives: the same shapes written by the template author keep reporting. */
+    #[Test]
+    public function the_same_shapes_written_by_the_author_keep_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+        $template = 'resources/views/compiled-residuals-authored.blade.php';
+
+        $this->assertSame([2], $this->linesFor($issues, 'MissingPureAnnotation', $template), $json);
+        $this->assertSame([3], $this->linesFor($issues, 'InvalidMethodCall', $template), $json);
+        $this->assertSame([5], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', $template), $json);
+        $this->assertSame([6], $this->linesFor($issues, 'PossiblyFalseArgument', $template), $json);
+    }
+
+    /**
      * Blade REWRITES the lines it compiles, so a gate that matched generated shadow lines against
      * the raw template verbatim only ever recognised `<?php ?>` blocks as author-written. Every
      * other compiled syntax (`{{ }}`, `{!! !!}`, `@php`) turns into `echo`/`e()` text the template
