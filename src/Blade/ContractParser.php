@@ -66,6 +66,9 @@ final class ContractParser
     /** Livewire markup or code: the component's public properties reach its view with no call site naming them. */
     private const LIVEWIRE_MARKERS = '/\bwire:[\w.-]+|@this\b|@entangle\b|\$wire\b|\$this\b|\bnew\s+class\b/';
 
+    /** The by-name render directives that hand their target data no call site of it lists; `\B@` as {@see self::DIRECTIVE_PATTERN}. */
+    private const RENDER_TARGET_PATTERN = '/\B@(?<name>@?(?:componentFirst|component|each))[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . '/i';
+
     /** Laravel injects `$message` into every mail view, and `@error` binds it. */
     private const ALWAYS_PROVIDED = ['message' => true];
 
@@ -139,6 +142,55 @@ final class ContractParser
         $declared = \array_fill_keys(self::rawDeclaredNames($source), true);
 
         return $this->filterNames($reads, $locals + $outArguments + $captured + $declared + $known);
+    }
+
+    /**
+     * The views this template renders through a directive that hands them data their own `@var`s
+     * cannot anticipate: `@component('alert')` / `@componentFirst([...])`, whose `@slot`s become
+     * the target's variables, and `@each('row', ...)`, which adds `$key`
+     * (`Factory::renderEach()`). Literal view names only; a class target is a class component.
+     *
+     * @return array{0: list<string>, 1: list<string>} `@component` targets, `@each` targets
+     */
+    public function renderTargets(string $source): array
+    {
+        $targets = [[], []];
+
+        if (\preg_match_all(self::RENDER_TARGET_PATTERN, MarkerPrePass::blankInertText($source), $matches, \PREG_SET_ORDER) < 1) {
+            return $targets;
+        }
+
+        foreach ($matches as $match) {
+            if (\str_starts_with($match['name'], '@')) {
+                continue;
+            }
+
+            try {
+                $statement = ($this->parser()->parse('<?php f' . $match['args'] . ';') ?? [])[0] ?? null;
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (!$statement instanceof Node\Stmt\Expression || !$statement->expr instanceof Node\Expr\FuncCall) {
+                continue;
+            }
+
+            $first = $statement->expr->args[0] ?? null;
+            $value = $first instanceof Node\Arg ? $first->value : null;
+            $kind = \strtolower($match['name']) === 'each' ? 1 : 0;
+
+            foreach ($value instanceof Node\Expr\Array_ ? $value->items : [$value] as $literal) {
+                if ($literal instanceof Node\ArrayItem) {
+                    $literal = $literal->value;
+                }
+
+                if ($literal instanceof Node\Scalar\String_ && !\str_contains($literal->value, '\\')) {
+                    $targets[$kind][] = \str_replace('/', '.', $literal->value);
+                }
+            }
+        }
+
+        return $targets;
     }
 
     /**

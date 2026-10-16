@@ -94,7 +94,11 @@ final class BladeBootstrapper
     /** @var array<string, true> names every view receives from the booted app: `$app` and `View::share()` keys */
     private array $providedNames = [];
 
-    private string $providedHash = '';
+    /** @var array<string, true> views another template renders with `@component`, whose `@slot`s it never lists */
+    private array $componentTargets = [];
+
+    /** @var array<string, true> views another template renders with `@each`, which hands them `$key` */
+    private array $eachTargets = [];
 
     /** @var array<array-key, list<array{0: string, 1: string}>|null> every view a composer or creator reaches, read once up front (#1827) */
     private array $composerSources = [];
@@ -377,7 +381,10 @@ final class BladeBootstrapper
             // The decision is app state the shadow bakes in, so it is a cache input: a template cached
             // under another decision must recompile.
             $provided = $this->providedFor($template, $roots);
-            $manifest->salt($template, !$this->reportUndeclaredVariables ? '' : 'undeclared:' . ($provided === null ? 'declined' : $this->providedHash));
+            $manifest->salt($template, !$this->reportUndeclaredVariables ? '' : 'undeclared:' . ($provided === null
+                ? 'declined'
+                // Serialized, not joined: a name may contain any separator.
+                : \hash('xxh128', \serialize(\array_keys($provided)))));
 
             if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
                 $shadowPath = $manifest->shadowPathFor($template, $source);
@@ -577,8 +584,8 @@ final class BladeBootstrapper
         $this->factory = $this->viewFactory();
         $this->providedNames = $this->sharedNames($this->factory);
         \ksort($this->providedNames, \SORT_STRING);
-        // Serialized, not joined: a name may contain any separator.
-        $this->providedHash = \hash('xxh128', \serialize(\array_keys($this->providedNames)));
+
+        $parser = new ContractParser();
 
         $viewNames = [];
 
@@ -586,6 +593,11 @@ final class BladeBootstrapper
             foreach (ViewName::resolve($template, $roots) as [, $viewName]) {
                 $viewNames[] = $viewName;
             }
+
+            $source = @\file_get_contents($template);
+            [$components, $each] = $source === false ? [[], []] : $parser->renderTargets($source);
+            $this->componentTargets += \array_fill_keys($components, true);
+            $this->eachTargets += \array_fill_keys($each, true);
         }
 
         $this->composerSources = ComposerSourceReader::read($this->factory, \array_values(\array_unique($viewNames)));
@@ -615,7 +627,7 @@ final class BladeBootstrapper
     /**
      * The names the booted app provides to this template, or null when the template keeps its
      * `mixed` net: a component or Livewire view, or one whose data a composer or creator (wildcard
-     * ones included) can add to, none of which a template's own source lists.
+     * ones included) or a `@component` slot can add to, none of which a template's own source lists.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      *
@@ -635,8 +647,11 @@ final class BladeBootstrapper
             return null;
         }
 
+        $provided = $this->providedNames;
+
         foreach ($names as [, $viewName]) {
             if (isset($this->aliasedViews[$viewName])
+                || isset($this->componentTargets[$viewName])
                 || \str_contains($viewName, '::components.')
                 || \str_starts_with($viewName, 'livewire.')
                 || \str_starts_with($viewName, 'livewire::')
@@ -650,9 +665,15 @@ final class BladeBootstrapper
                     return null;
                 }
             }
+
+            if (isset($this->eachTargets[$viewName])) {
+                $provided['key'] = true;
+            }
         }
 
-        return $this->providedNames;
+        \ksort($provided, \SORT_STRING);
+
+        return $provided;
     }
 
     /**

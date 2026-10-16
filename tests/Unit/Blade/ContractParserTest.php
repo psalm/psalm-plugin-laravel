@@ -93,6 +93,24 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
+    public function render_targets_are_the_literal_views_of_component_and_each_directives(): void
+    {
+        $source = <<<'BLADE'
+            @component('partials/badge') @endcomponent
+            @componentFirst(['custom.alert', 'alert']) @endcomponent
+            @component(App\View\Components\Card::class) @endcomponent
+            @@component('escaped.text')
+            {{-- @component('commented.out') --}}
+            @each('partials.row', $rows, 'row', 'partials.empty')
+            BLADE;
+
+        $this->assertSame(
+            [['partials.badge', 'custom.alert', 'alert'], ['partials.row']],
+            $this->parser->renderTargets($source),
+        );
+    }
+
+    #[Test]
     public function extracts_a_var_comment_declaration(): void
     {
         $contract = $this->parse("<?php /** @var \\App\\Models\\User \$user */ ?>\n{{ \$user->name }}\n");
