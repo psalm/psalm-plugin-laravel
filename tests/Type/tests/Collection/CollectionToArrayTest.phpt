@@ -47,4 +47,24 @@ function to_array_lazy(LazyCollection $lazy): void
     $_array = $lazy->toArray();
     /** @psalm-check-type-exact $_array = array<int, array<array-key, mixed>|int> */
 }
+/** @extends Collection<int, int> */
+final class IntsWithToArrayOverride extends Collection
+{
+    #[\Override]
+    public function toArray(): array
+    {
+        return parent::toArray();
+    }
+}
+
+/** @extends EloquentCollection<int, Customer> */
+final class CustomerCollectionWithToArrayOverride extends EloquentCollection
+{
+    #[\Override]
+    public function toArray(): array
+    {
+        return parent::toArray();
+    }
+}
+
 --EXPECTF--
