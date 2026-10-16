@@ -125,4 +125,55 @@ class Collection extends BaseCollection implements QueueableCollection
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Find a model in the collection by key or throw an exception.
+     *
+     * An array or Arrayable key returns the static collection from find(); any other key returns one model.
+     *
+     * @template TFindKey
+     *
+     * @param  TFindKey  $key
+     * @psalm-return (TFindKey is \Illuminate\Database\Eloquent\Model ? TModel : (TFindKey is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? static<TKey, TModel> : TModel))
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function findOrFail($key) {}
+
+    /**
+     * Runs on toBase()->pad(), and array_pad() keeps string keys.
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return \Illuminate\Support\Collection<TKey|int, TModel|TPadValue>
+     */
+    public function pad($size, $value) {}
+
+    /**
+     * Runs on toBase()->zip(), and array_map() pads the shorter side with null.
+     *
+     * @template TZipValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, TModel|TZipValue|null>>
+     *
+     * @psalm-variadic
+     */
+    public function zip($items) {}
+
+    /**
+     * Runs on toBase()->flip(), and array_flip() skips object values, so the result is always empty.
+     *
+     * @return \Illuminate\Support\Collection<array-key, TKey>
+     */
+    public function flip() {}
+
+    /**
+     * array_map() preserves the keys.
+     *
+     * @return array<TKey, array-key>
+     */
+    public function modelKeys() {}
 }
