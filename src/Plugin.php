@@ -786,6 +786,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
 
+        // Drops the `expects never` argument issues of read-only lookups on an empty collection (#1814).
+        // Registered BEFORE the Blade remap on purpose: Psalm's dispatcher stops at the first handler
+        // that returns a bool, so a drop here spares the remap the cost of rebuilding the issue.
+        require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
+
         // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
         // nothing the shadow analysis finds is visible without it. Registered LAST of the
         // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
