@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792156316409,
+  "lastUpdate": 1792171121371,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14445,6 +14445,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.6,
             "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0340da02cd9efad5ce9c47fd0f58877fc9f00a4d",
+          "message": "Drop compiled Livewire closure purity and `@entangle` literal-receiver findings in Blade (#1921)\n\n* fix(blade): drop MissingPureAnnotation and compiled-call residuals from Livewire and Inertia directives #1908\n\nVendor directives compile code the template author never wrote. Drop\nMissingPureAnnotation on a closure, InvalidMethodCall, and PossiblyFalseArgument\non a whole-call argument when that text is absent from the template, and the\ndefinedness/truthiness classes on a $__ variable the template never mentions.\n\n* fix(blade): gate @inertia config() operand and literal-receiver method calls #1908\n\nThe always-falsy operand on compiled @inertia is its config() call, not\n$__inertiaSsrResponse: gate the operand wording on a whole compiled call\nabsent from the template instead. Narrow the InvalidMethodCall drop to a\nstring literal receiver so author-supplied receivers keep reporting.\n\n* fix(blade): keep #1908 drops off author text holding injected PHP tags\n\nA directive inside an author's string argument and a closure whose first\nline ends at @endphp put PHP tags into the compiled text, which then reads\nas absent from the template. Keep such issues.\n\n* refactor(blade): replace #1908 text gates with two class-level drops\n\nLivewire's `$__split` closure accounts for almost all #1908 findings, so\n`MissingPureAnnotation` on a closure joins the existing unconditional\n`MissingClosureParamType`/`MissingClosureReturnType` drop. `@entangle`'s\n`'tab'->value()` is dropped by message alone: a method call on a string\nliteral is a runtime fatal, so an author never ships one.\n\nThe Inertia and Filament residuals (a handful per app) are left as a\ndocumented known limit instead of four source-text gates and a fixture\nprovider faking vendor directives.\n\n* fix(blade): keep author-written literal-receiver method calls reporting #1908\n\nGate the InvalidMethodCall drop on the call, receiver included, being\nabsent from the template source, so an author's own 'x'->value() keeps\nits finding while @entangle's compiled calls stay dropped.",
+          "timestamp": "2026-10-16T19:15:09+02:00",
+          "tree_id": "c9feaecb892f181575ebe94e80b051f55b07eb79",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0340da02cd9efad5ce9c47fd0f58877fc9f00a4d"
+        },
+        "date": 1792171119580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.05,
+            "range": "± 0.34",
             "unit": "s"
           },
           {
