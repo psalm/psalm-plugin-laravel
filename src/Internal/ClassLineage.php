@@ -7,9 +7,25 @@ namespace Psalm\LaravelPlugin\Internal;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Type\Atomic\TArrayKey;
+use Psalm\Type\Atomic\TBool;
+use Psalm\Type\Atomic\TFalse;
+use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TIntRange;
+use Psalm\Type\Atomic\TLiteralInt;
+use Psalm\Type\Atomic\TLiteralString;
+use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNonEmptyString;
+use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TNumericString;
+use Psalm\Type\Atomic\TString;
 use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\Atomic\TTrue;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -126,7 +142,7 @@ final class ClassLineage
         for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
             $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
             if (!$forwarded instanceof TTemplateParam) {
-                return $value;
+                return self::isTemplateFree($value) ? $value : null;
             }
 
             if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
@@ -139,6 +155,58 @@ final class ClassLineage
         }
 
         return null;
+    }
+
+    /**
+     * True when every node of the type is a plain scalar, class or generic-class atomic: no template
+     * reference of any kind survives (`K|int`, `key-of<T>`, `T[K]`, conditionals, `class-string<T>`).
+     * A whitelist of exact classes, not a blacklist of template shapes, so a node kind nobody
+     * anticipated declines instead of leaking an unresolved template into a caller's scope.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isTemplateFree(Union $type): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            public bool $free = true;
+
+            /** @psalm-external-mutation-free */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                if (!\in_array($type::class, [
+                    Union::class,
+                    TInt::class,
+                    TLiteralInt::class,
+                    TIntRange::class,
+                    TString::class,
+                    TLiteralString::class,
+                    TNonEmptyString::class,
+                    TNumericString::class,
+                    TArrayKey::class,
+                    TNamedObject::class,
+                    TGenericObject::class,
+                    TMixed::class,
+                    TNull::class,
+                    TBool::class,
+                    TTrue::class,
+                    TFalse::class,
+                    TFloat::class,
+                ], true)) {
+                    $this->free = false;
+
+                    return self::STOP_TRAVERSAL;
+                }
+
+                return null;
+            }
+        };
+
+        // The visitor mutates only its own flag, a local object: the call is observably pure.
+        /** @psalm-suppress ImpureMethodCall */
+        $visitor->traverse($type);
+
+        return $visitor->free;
     }
 
     /**

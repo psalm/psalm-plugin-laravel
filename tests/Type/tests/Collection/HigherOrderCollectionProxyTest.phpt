@@ -31,8 +31,17 @@ final class CustomerCollection extends EloquentCollection {}
  */
 final class ValuesFirstCollection extends Collection {}
 
-/** @param Enumerable<int, mixed> $_items */
-function takesIntKeyedEnumerable(Enumerable $_items): void {}
+/**
+ * Declares a compound key mapping: the key is `K|int`, so it names an unresolved template.
+ *
+ * @template K of array-key
+ * @template V
+ * @extends Collection<K|int, V>
+ */
+final class KeysCollection extends Collection {}
+
+/** @param Enumerable<int, Customer> $_items */
+function takesIntKeyedCustomers(Enumerable $_items): void {}
 
 /**
  * HigherOrderCollectionProxy: $collection->each->method() pattern.
@@ -408,10 +417,22 @@ final class HigherOrderCollectionProxyTest
     public function subclassReceiverFallsBackToEnumerable(CustomerCollection $users): void
     {
         $_result = $users->each->getKey();
-        // The key comes from the subclass's `@extends EloquentCollection<int, Customer>`: `int`, not `array-key`.
-        takesIntKeyedEnumerable($_result);
         $_count = $_result->count();
         /** @psalm-check-type-exact $_count = int */
+    }
+
+    /**
+     * A key mapping that still names a template (`@extends Collection<K|int, V>`) proves nothing about the
+     * key: it falls back to `array-key` instead of leaking the unresolved `K` into the caller. The int
+     * consumer is therefore reported with `array-key` (not `(TKey as array-key)|int`) as the provided key.
+     *
+     * @param HigherOrderCollectionProxy<'each', Customer, KeysCollection<int, Customer>> $proxy
+     */
+    public function compoundKeyMappingDeclines(HigherOrderCollectionProxy $proxy): void
+    {
+        $_result = $proxy->getKey();
+        /** @psalm-check-type-exact $_result = Enumerable<array-key, Customer> */
+        takesIntKeyedCustomers($_result);
     }
 
     /**
@@ -430,3 +451,4 @@ final class HigherOrderCollectionProxyTest
 
 ?>
 --EXPECTF--
+MixedArgumentTypeCoercion on line %d: Argument 1 of takesIntKeyedCustomers expects Illuminate\Support\Enumerable<int, Customer>, but parent type Illuminate\Support\Enumerable<array-key, Customer> provided
