@@ -121,6 +121,22 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
+    public function skips_a_multiline_prefixed_precompiled_tag_body(): void
+    {
+        // #1910: precompilers owning a tag prefix (`<native:...>`, `<flux:...>`) match as strictly.
+        $source = "<native:top-bar\n    title=\"{{ \$t }}\"\n>\n    x\n</native:top-bar\n>\ndone\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayNotHasKey(1, $skip);
+        $this->assertArrayHasKey(2, $skip);
+        $this->assertArrayHasKey(3, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
+        $this->assertArrayNotHasKey(5, $skip);
+        $this->assertArrayHasKey(6, $skip); // the wrapped closing tag's `>`
+        $this->assertArrayNotHasKey(7, $skip);
+    }
+
+    #[Test]
     public function a_less_than_x_dash_comparison_does_not_open_a_component_tag(): void
     {
         // ComponentTagCompiler wants whitespace, `/` or `>` after the tag name; `x-1)` is not one.
@@ -136,6 +152,18 @@ final class MarkerPrePassTest extends TestCase
         // trying both ways to consume each `{{ }}`: exponential without the possessive outer loop,
         // and a failed preg_match_all drops every component-tag skip in the template.
         $source = "<x-alert\n" . \str_repeat("    {{ \$a }}\n", 40) . "    title=\"unterminated\n<x-foo\n    class='a'\n/>\n";
+        $tagLine = 43;
+
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayHasKey($tagLine + 1, $skip);
+        $this->assertArrayHasKey($tagLine + 2, $skip);
+    }
+
+    #[Test]
+    public function a_never_closed_prefixed_tag_does_not_disarm_later_prefixed_tags(): void
+    {
+        $source = "<flux:modal\n" . \str_repeat("    {{ \$a }}\n", 40) . "    title=\"unterminated\n<flux:button\n    class='a'\n/>\n";
         $tagLine = 43;
 
         $skip = MarkerPrePass::computeSkipLines($source);

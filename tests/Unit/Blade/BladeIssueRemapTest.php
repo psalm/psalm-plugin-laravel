@@ -1222,6 +1222,27 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringNotContainsString('<x-alert', $shadow);
     }
 
+    /**
+     * A precompiler owning its own tag prefix (`<native:...>`, `<flux:...>`) matches attributes as
+     * strictly as ComponentTagCompiler. A marker inside a multi-line `<foo:alert>` left the opener
+     * uncompiled, and the closer's orphan `endif` lost the template to a `ParseError` (#1910).
+     */
+    #[Test]
+    public function a_multiline_prefixed_precompiled_tag_compiles_without_a_parse_error(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/prefixed-precompiled-tag.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), $json);
+        $this->assertSame([13], $this->linesFor($issues, self::ISSUE, $template), $json);
+
+        // Both openers compiled rather than surviving as literal text.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertSame(2, \substr_count($shadow, '->renderComponent()'));
+        $this->assertStringNotContainsString('<x-alert', $shadow);
+    }
+
     /** The keyed-arm gate declines when the template itself contains the generated call text. */
     #[Test]
     public function an_author_written_keyed_call_keeps_reporting_no_value(): void
