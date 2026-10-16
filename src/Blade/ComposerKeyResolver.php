@@ -180,7 +180,8 @@ final class ComposerKeyResolver
 
     private static function isReadOnly(Expr\MethodCall $call): bool
     {
-        return $call->name instanceof Identifier && \in_array($call->name->toLowerString(), ['name', 'getname', 'getpath'], true);
+        // A first-class callable (`$view->getName(...)`) keeps the view bound, so it can still be mutated.
+        return !$call->isFirstClassCallable() && $call->name instanceof Identifier && \in_array($call->name->toLowerString(), ['name', 'getname', 'getpath'], true);
     }
 
     /** @return array<array-key, true>|null */

@@ -4,14 +4,29 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Str;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
+use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TIntRange;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -178,12 +193,16 @@ final class DynamicWhereResolver
      *
      * Used by the method-existence provider where the AST isn't available. Performs a
      * bounded backtracking match: try to consume the suffix as `prop( (and|or) prop )*`
-     * for any combination of declared @property entries on the model.
+     * for any combination of declared @property entries and complete-schema migration
+     * columns on the model (see {@see schemaColumns}).
      *
      * Returns `true` iff at least one partition validates. False positives are bounded
-     * by the property set (a `where<X>` call only matches when every lowercase
-     * substring lines up with a real property), so this widens existence but cannot
-     * confirm a column that isn't declared.
+     * by the candidate set (a `where<X>` call only matches when every lowercase
+     * substring lines up with a real property or column), so this widens existence but
+     * cannot confirm a column that isn't declared. Schema columns are compared with
+     * underscores stripped, so `line_1` also matches `whereline1`, which Laravel would
+     * resolve to the column `line1`; the strict {@see resolveColumnType} rejects it and
+     * the callers then return no type instead of a guessed one.
      *
      * Multi-segment behaviour: with no uppercase boundaries to anchor against, the
      * match could in principle find multiple valid partitions for ambiguous property
@@ -201,13 +220,112 @@ final class DynamicWhereResolver
             return false;
         }
 
-        $normalized = self::getNormalizedProperties($codebase, $modelClass);
+        $candidates = \array_keys(self::getNormalizedProperties($codebase, $modelClass) ?? []);
 
-        if ($normalized === null || $normalized === []) {
+        foreach (self::schemaColumns($modelClass) ?? [] as $columnName => $_column) {
+            $candidates[] = \strtolower(\str_replace('_', '', $columnName));
+        }
+
+        // Underscores are stripped on both sides, so `whereuser_id` (Laravel queries `user_id`) matches too.
+        return $candidates !== []
+            && self::partitionExists(\str_replace('_', '', \substr($methodNameLower, 5)), $candidates);
+    }
+
+    /**
+     * {@see resolveColumnType} for a relation's related-model union (`HasMany<A|B, P>`). Every
+     * alternative must be a model that accepts the suffix, otherwise one branch would query a
+     * missing column. The argument type is typed only when every alternative is, as their union.
+     *
+     * @return false|Union|null Same contract as {@see resolveColumnType}
+     */
+    public static function resolveColumnTypeForModels(
+        Codebase $codebase,
+        Union $relatedModels,
+        string $originalMethodName,
+    ): false|Union|null {
+        $combined = null;
+        $untyped = false;
+
+        foreach ($relatedModels->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
+                return false;
+            }
+
+            $columnType = self::resolveColumnType($codebase, $atomic->value, $originalMethodName, true);
+
+            if ($columnType === false) {
+                return false;
+            }
+
+            $untyped = $untyped || !$columnType instanceof \Psalm\Type\Union;
+            $combined = $columnType instanceof Union
+                ? ($combined instanceof Union ? Type::combineUnionTypes($combined, $columnType) : $columnType)
+                : $combined;
+        }
+
+        return $untyped ? null : ($combined ?? false);
+    }
+
+    /**
+     * Whether a macro or `@method` pseudo-method owned by a layer that Laravel consults BEFORE its
+     * forwarding to `Query\Builder` claims this name: `Eloquent\Builder::__call` dispatches its macros
+     * and the model's custom builder (the plugin models local macros as that builder's pseudo-methods),
+     * and `Relation::__call` its own macros first, but only on relation receivers. `Query\Builder` macros
+     * never change the Eloquent wrapper's return value, so they do not claim it. Runtime macros come
+     * from {@see MacroRegistry} (available before population); pseudo-methods from storage.
+     *
+     * @param class-string<Model> $modelClass
+     */
+    private static function isBuilderMethodOwned(Codebase $codebase, string $modelClass, string $methodNameLower, bool $viaRelation): bool
+    {
+        $owners = [EloquentBuilder::class, ModelMethodHandler::getBuilderClassForModel($modelClass)];
+
+        if ($viaRelation) {
+            $owners[] = Relation::class;
+        }
+
+        foreach ($owners as $owner) {
+            if (self::declaresMacro($codebase, $owner, $methodNameLower)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Runtime macros come from {@see MacroRegistry}; `@method` pseudo-methods from class storage.
+     */
+    private static function declaresMacro(Codebase $codebase, string $owner, string $methodNameLower): bool
+    {
+        if (MacroRegistry::get($owner, $methodNameLower) instanceof MacroDefinition) {
+            return true;
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($owner));
+        } catch (\InvalidArgumentException) {
             return false;
         }
 
-        return self::partitionExists(\substr($methodNameLower, 5), \array_keys($normalized));
+        return isset($storage->pseudo_methods[$methodNameLower]) || isset($storage->declaring_pseudo_method_ids[$methodNameLower]);
+    }
+
+    /**
+     * Schema-derived argument type: Laravel binds any int, so an unsigned/increments column's
+     * `int<0, max>` is widened to `int`. Nullability and every other atomic are kept.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function widenIntRanges(Union $type): Union
+    {
+        $atomics = [];
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof TIntRange ? new TInt() : $atomic;
+        }
+
+        return new Union($atomics);
     }
 
     /**
@@ -223,6 +341,10 @@ final class DynamicWhereResolver
      * Pseudo-property entries are normalised by stripping `$` and underscores and
      * lowercasing (so `$email_address` collapses to `emailaddress`); each segment goes
      * through the same normalisation and the call is rejected on the first mismatch.
+     * A segment without a `@property` match falls back to the model's complete migration
+     * schema, compared as `Str::snake($segment)` against the exact column name, exactly as
+     * Laravel builds the query. Unwarmed or partial metadata leaves the `@property`-only
+     * behaviour.
      *
      * Return values:
      *   - `false`: at least one segment doesn't match a declared property. Caller skips
@@ -240,7 +362,13 @@ final class DynamicWhereResolver
         Codebase $codebase,
         string $modelClass,
         string $originalMethodName,
+        bool $viaRelation = false,
     ): false|Union|null {
+        // Not cached: a cheap lookup, and the layers consulted depend on the receiver.
+        if (self::isBuilderMethodOwned($codebase, $modelClass, \strtolower($originalMethodName), $viaRelation)) {
+            return false;
+        }
+
         $key = $modelClass . ':' . $originalMethodName;
 
         if (\array_key_exists($key, self::$columnTypeCache)) {
@@ -263,27 +391,55 @@ final class DynamicWhereResolver
             return self::$columnTypeCache[$key] = false;
         }
 
+        $schemaColumns = self::schemaColumns($modelClass);
+
         $matchedColumnTypes = [];
         foreach ($segments as $segment) {
             $segmentKey = \strtolower($segment);
 
-            if ($segmentKey === '' || !isset($normalized[$segmentKey])) {
+            if ($segmentKey === '') {
                 return self::$columnTypeCache[$key] = false;
             }
 
-            $matchedColumnTypes[] = $normalized[$segmentKey];
+            // `@property` wins over the schema, as it does for property reads.
+            if (isset($normalized[$segmentKey])) {
+                $matchedColumnTypes[] = $normalized[$segmentKey];
+
+                continue;
+            }
+
+            // Laravel's `Query\Builder::addDynamic()` queries `Str::snake($segment)`, so the
+            // schema is matched against that exact column name (`line_1` is unreachable).
+            $columnName = Str::snake($segment);
+
+            if ($columnName === '' || !isset($schemaColumns[$columnName])) {
+                return self::$columnTypeCache[$key] = false;
+            }
+
+            $schemaType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
+            $matchedColumnTypes[] = $schemaType instanceof Union ? self::widenIntRanges($schemaType) : null;
         }
 
+        // Multi-segment calls and schema columns without a resolvable type are valid but untyped.
         if (\count($matchedColumnTypes) !== 1) {
             return self::$columnTypeCache[$key] = null;
         }
 
         $columnType = $matchedColumnTypes[0];
 
+        if (!$columnType instanceof Union) {
+            return self::$columnTypeCache[$key] = null;
+        }
+
         // Object/array column types (Carbon, BackedEnum, json casts) skip the typed-param
         // hand-off Laravel coerces strings/ints to these at the query layer, so narrowing
         // to the property type would mass-regress real codebases.
         if ($columnType->hasObjectType() || $columnType->hasArray()) {
+            return self::$columnTypeCache[$key] = null;
+        }
+
+        // A Query\Builder macro keeps the fluent return but receives the raw arguments, not a column value.
+        if (self::declaresMacro($codebase, QueryBuilder::class, \strtolower($originalMethodName))) {
             return self::$columnTypeCache[$key] = null;
         }
 
@@ -371,6 +527,25 @@ final class DynamicWhereResolver
         }
 
         return self::$normalizedPropertiesCache[$cacheKey] = $normalized;
+    }
+
+    /**
+     * Migration columns usable as dynamic-where candidates, or null unless the model's schema
+     * section is authoritative: an unwarmed or partial entry keeps the `@property`-only
+     * behaviour, since an empty schema there proves nothing.
+     *
+     * @param class-string<Model> $modelClass
+     * @return array<non-empty-string, ColumnInfo>|null
+     */
+    private static function schemaColumns(string $modelClass): ?array
+    {
+        $metadata = ModelMetadataRegistry::for($modelClass);
+
+        if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_SCHEMA)) {
+            return null;
+        }
+
+        return $metadata->schema()->all();
     }
 
     /**
