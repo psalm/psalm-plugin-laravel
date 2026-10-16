@@ -80,11 +80,12 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
-    public function falls_back_to_mixed_when_two_call_sites_disagree(): void
+    public function lists_rather_than_declares_a_name_two_call_sites_disagree_on(): void
     {
-        $this->annotate();
+        $result = $this->annotate();
 
-        $this->assertSame("<?php\n/**\n * @var mixed \$flag\n */\n?>\n" . self::TEMPLATES['conflict'], $this->template('conflict'));
+        $this->assertSame(self::TEMPLATES['conflict'], $this->template('conflict'));
+        $this->assertSame(['flag'], $this->unknownFor($result, 'conflict'));
     }
 
     #[Test]
@@ -148,13 +149,13 @@ final class AnnotateEndToEndTest extends TestCase
     public function never_declares_a_name_the_template_binds_for_itself(): void
     {
         // `@php($heading = ...)` and a closure parameter are template locals, not inputs: declaring
-        // either reports MissingViewVariable at every correct call site.
-        $this->annotate();
+        // either reports MissingViewVariable at every correct call site. The only call site is one the
+        // plugin cannot read, so `$rows` is listed, not declared `mixed`.
+        $result = $this->annotate(dryRun: true);
 
-        $this->assertSame(
-            "<?php\n/**\n * @var mixed \$rows\n */\n?>\n" . self::TEMPLATES['locals'],
-            $this->template('locals'),
-        );
+        $this->assertSame(self::TEMPLATES['locals'], $this->template('locals'));
+        $this->assertSame(['rows'], $this->unknownFor($result, 'locals'));
+        $this->assertStringNotContainsString('locals.blade.php', (string) ($result['diff'] ?? ''));
     }
 
     #[Test]
@@ -199,7 +200,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(8, $result['changed']);
+        $this->assertCount(6, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -232,6 +233,24 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertIsArray($decoded, 'the annotate pass never reported back');
 
         return $decoded;
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     *
+     * @return mixed the names listed as type-unknown for one template
+     */
+    private function unknownFor(array $result, string $name): mixed
+    {
+        $this->assertIsArray($result['unknown'] ?? null);
+
+        foreach ($result['unknown'] as $path => $names) {
+            if (\str_ends_with((string) $path, "/{$name}.blade.php")) {
+                return $names;
+            }
+        }
+
+        return null;
     }
 
     private function runPsalm(?string $controlFile): void

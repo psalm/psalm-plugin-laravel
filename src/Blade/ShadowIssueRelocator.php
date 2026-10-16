@@ -75,6 +75,22 @@ final class ShadowIssueRelocator
     ];
 
     /**
+     * The compiled save/restore statements whose assignment `MixedAssignment` reports (#1872):
+     * `statement` is what must be absent from the template, `target` where Psalm positions the
+     * issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var id
+     * starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
+     */
+    private const SAVE_RESTORE_PATTERNS = [
+        // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
+        '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
+        // CompilesErrors::compileEnderror()
+        '/(?<statement>if \(isset\(\$__messageOriginal\)\) \{ (?<target>\$message) = \$__messageOriginal; \})/',
+        // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
+        '/(?<statement>if \(isset\(\$value\)\) \{ (?<target>\$__(?:session|context)Previous)\[\] = \$value; \})/',
+        '/(?<statement>if \(isset\(\$__(?<kind>session|context)Previous\) && !empty\(\$__\k<kind>Previous\)\) \{ (?<target>\$value) = array_pop\(\$__\k<kind>Previous\); \})/',
+    ];
+
+    /**
      * @param ShadowTarget                    $target      the shadow the issue was found in
      * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
      *                                                     through; a journey crosses files, so one
@@ -406,8 +422,16 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // The restores Laravel compiles around a `<x-...>` tag, `@error` and `@session`/`@context`,
+        // and the stack push of the last two, assign a value that is `mixed` on every mention: the
+        // prelude's fallback type for a saved `$__*Original*` name, or a session value. That is
+        // `MixedAssignment` on code the author never wrote, 91% of `Mixed*` in one real app (#1872).
+        if ($issue instanceof MixedIssue && self::isGeneratedSaveRestore($issue, $target)) {
+            return false;
+        }
+
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = self::remapMessage($issue, $target);
+        $message = self::remapMessage($issue, $target) . self::namedSlotHint($issue, $target);
 
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
@@ -527,6 +551,41 @@ final class ShadowIssueRelocator
         ) ?? $message;
 
         return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
+    }
+
+    /**
+     * A raw `@var \Illuminate\View\ComponentSlot $footer` declares a required variable, so its
+     * `isset()`/`??`/`??=` guard reports as redundant. A caller can omit any named slot, though, so
+     * the guard is usually right and the declaration is what to fix; the finding names the fix
+     * (#1871). Matches the whole message of the two docblock-branch wordings those guards produce
+     * on exactly this type, and only when the template's own declaration of the name excludes
+     * null: an optional slot narrowed by an outer `isset()` renders the same wording. `$slot`
+     * never reaches here: the ambient gate drops its guards in a component view.
+     */
+    private static function namedSlotHint(CodeIssue $issue, ShadowTarget $target): string
+    {
+        $name = '([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)';
+
+        if (
+            !$target->isComponentView
+            || !$issue instanceof RedundantConditionGivenDocblockType && !$issue instanceof DocblockTypeContradiction
+            || \preg_match(
+                '/^(?|Docblock-defined type Illuminate\\\View\\\ComponentSlot for \$' . $name . ' is never null'
+                    . '|Cannot resolve types for \$' . $name . ' - docblock-defined type Illuminate\\\View\\\ComponentSlot does not contain null)\z/',
+                $issue->message,
+                $matches,
+            ) !== 1
+        ) {
+            return '';
+        }
+
+        $declared = ContractParser::rawDeclaredType($target->templateSource, $matches[1]);
+
+        if ($declared === null || ContractParser::allowsNull($declared)) {
+            return '';
+        }
+
+        return " (named slots are optional: declare `\\Illuminate\\View\\ComponentSlot|null \${$matches[1]} = null`)";
     }
 
     /**
@@ -800,6 +859,35 @@ final class ShadowIssueRelocator
         return $target->attributesFromTag
             && self::selectedText($issue->code_location) === $check
             && !TemplateSnippetMatcher::occursInWithRawTextRewrites($check, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether an issue sits on the assignment target of one of {@see self::SAVE_RESTORE_PATTERNS}
+     * whose statement is absent from the template, so an author who writes one keeps the finding.
+     * Absent both raw and with Blade comments stripped, see
+     * {@see TemplateSnippetMatcher::occursInRawOrStripped()}.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedSaveRestore(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        foreach (self::SAVE_RESTORE_PATTERNS as $pattern) {
+            \preg_match_all($pattern, $selection->snippet, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE);
+
+            foreach ($matches as $match) {
+                if ($match['target'][1] === $selection->start) {
+                    return !TemplateSnippetMatcher::occursInRawOrStripped($match['statement'][0], $target->templateSource, $target->markerPrefix());
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

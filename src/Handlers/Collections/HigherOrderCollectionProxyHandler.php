@@ -52,6 +52,7 @@ use Psalm\Type\Union;
  * - boolean (contains, every, some) → bool
  * - aggregation (avg, sum) → numeric types
  * - first/last → TValue|null
+ * - sole → TValue
  *
  * Template params (TKey, TValue) and the concrete collection class are extracted
  * from the COLLECTION expression (the receiver of the property fetch), not from the
@@ -126,6 +127,16 @@ final class HigherOrderCollectionProxyHandler implements
 
         if (!$calleeType instanceof Union) {
             return;
+        }
+
+        // A receiver union of several collections cannot be modelled from one branch: keep
+        // Psalm's own resolution instead of the single-collection override or fallback.
+        $proxyExpr = $expr->var;
+        if ($proxyExpr instanceof PropertyFetch) {
+            $receiverType = $source->getNodeTypeProvider()->getType($proxyExpr->var);
+            if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $source->getCodebase())) > 1) {
+                return;
+            }
         }
 
         foreach ($calleeType->getAtomicTypes() as $atomic) {
@@ -307,6 +318,11 @@ final class HigherOrderCollectionProxyHandler implements
             return Type::combineUnionTypes($tValue, Type::getNull());
         }
 
+        // sole — returns the single matching item (throws when none or several match), never null
+        if ($proxyMethod === 'sole') {
+            return $tValue;
+        }
+
         // max/min — use reduce() with null as the initial value, so null is always a possible result
         // for empty collections (common with empty query results). The method return type is included
         // to preserve precision (e.g. getPrice(): int → int|null instead of mixed|null).
@@ -423,22 +439,43 @@ final class HigherOrderCollectionProxyHandler implements
     /**
      * Extract TKey, TValue, and the collection class from a Union type.
      *
+     * Declines (null) when the union holds more than one collection atomic, generic or not:
+     * taking one would silently drop the other branches' item types.
+     *
      * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      * @psalm-mutation-free
      */
     private static function extractCollectionInfoFromType(Union $collectionType, Codebase $codebase): ?array
     {
-        foreach ($collectionType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
-                continue;
-            }
+        $atomics = self::collectionAtomics($collectionType, $codebase);
 
-            if (ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
-                return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+        if (\count($atomics) !== 1) {
+            return null;
+        }
+
+        $atomic = $atomics[0];
+        if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
+            return null;
+        }
+
+        return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+    }
+
+    /**
+     * @return list<TNamedObject> every named-object atomic of the union that is an Enumerable
+     * @psalm-mutation-free
+     */
+    private static function collectionAtomics(Union $collectionType, Codebase $codebase): array
+    {
+        $atomics = [];
+
+        foreach ($collectionType->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
+                $atomics[] = $atomic;
             }
         }
 
-        return null;
+        return $atomics;
     }
 
     /**

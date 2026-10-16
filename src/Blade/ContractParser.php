@@ -37,6 +37,13 @@ final class ContractParser
     private const RAW_PHP_VAR = '/(*ANYCRLF)(?:^\h*(?:\*|\/\/|#)?|\A\/\*+)\h*@var\h+(.+?)\h*(?:\*\/)?\h*$/m';
 
     /**
+     * A docblock-level `@ignore-var` / `@psalm-ignore-var` tag, which makes Psalm drop every `@var` of
+     * that docblock (`DocblockParser::resolveTags()`). Tag names run to the first character outside
+     * `[\w\-\\:]`, as Psalm reads them, so `@psalm-ignore-variable-method` is another tag.
+     */
+    private const IGNORE_VAR = '/(?:^\h*\*?\h*|\A\/\*+\h*)@(?:psalm-)?ignore-var(?![\w\-\\\\:])/m';
+
+    /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex
      * (`/\B@(@?\w+(?:::\w+)?)([ \t]*)(\( ( [\S\s]*? ) \))?/x`), matched left-to-right over the
      * MASKED source: `\B@` (not `(?<!@)`) so a mid-word `@` — `a@example(...)` — is never read as
@@ -102,6 +109,24 @@ final class ContractParser
         }
 
         return new ViewDataContract($vars, $propsUnknown);
+    }
+
+    /**
+     * The type the template's last raw `@var` docblock declares for `$name`, or null when none does.
+     *
+     * @psalm-pure
+     */
+    public static function rawDeclaredType(string $source, string $name): ?string
+    {
+        $type = null;
+
+        foreach (self::rawDeclarations($source) as [$declared, $declaredType, , $isDoc]) {
+            if ($declared === $name && $isDoc && $declaredType !== null) {
+                $type = $declaredType;
+            }
+        }
+
+        return $type;
     }
 
     /**
@@ -250,7 +275,7 @@ final class ContractParser
      * no contract, but a name the template states, which the annotator must not add again.
      *
      * @return list<array{0: string, 1: string|null, 2: int, 3: bool, 4: bool}> name, type string (null when
-     *         name-first), 1-based line, whether it sits in a `/** *\/` docblock, whether it ends in `= null`
+     *         name-first or under `@psalm-ignore-var`), 1-based line, whether it sits in a `/** *\/` docblock, whether it ends in `= null`
      *
      * @psalm-pure
      */
@@ -263,12 +288,16 @@ final class ContractParser
                 continue;
             }
 
+            // Still stated, like a name-first line: the annotator must not append to a docblock Psalm ignores.
+            $ignored = $isDoc && \preg_match(self::IGNORE_VAR, $comment) === 1;
+
             foreach ($matched as $match) {
-                $declared = self::splitVar($match[1][0]);
+                $declared = self::splitVar($match[1][0])
+                    ?? self::splitContinuedVar($match[1][0], \substr($comment, $match[0][1] + \strlen($match[0][0])));
                 $at = $line + SourceLines::breaksIn($comment, 0, $match[0][1]);
 
                 if ($declared !== null) {
-                    $declarations[] = [$declared[0], $declared[1], $at, $isDoc, $declared[2]];
+                    $declarations[] = [$declared[0], $ignored ? null : $declared[1], $at, $isDoc, $declared[2]];
                 } elseif (\preg_match('/^\$(' . self::IDENTIFIER . ')(?![a-zA-Z0-9_\x80-\xff])/', $match[1][0], $first) === 1) {
                     $declarations[] = [$first[1], null, $at, $isDoc, false];
                 }
@@ -276,6 +305,63 @@ final class ContractParser
         }
 
         return $declarations;
+    }
+
+    /**
+     * A tag whose first line does not split on its own (`@var array{` opening a multi-line shape),
+     * read with its continuation lines the way Psalm's `DocblockParser` joins them: every following
+     * line up to an empty one, the next tag, or the end of the comment. A ` *` line does not end the
+     * tag; it is skipped, as Psalm strips it after joining. A name-first `@var $x` never continues:
+     * Psalm binds nothing for it, and joining would bind a `$name` from the next line.
+     *
+     * @return array{0: string, 1: string, 2: bool}|null see {@see self::splitVar()}
+     *
+     * @psalm-pure
+     */
+    private static function splitContinuedVar(string $first, string $rest): ?array
+    {
+        if (\str_starts_with($first, '$')) {
+            return null;
+        }
+
+        $joined = $first;
+
+        // Split on LF only, CR dropped, as Psalm splits: a bare-CR docblock is one line to it.
+        foreach (\explode("\n", \str_replace("\r", "", $rest)) as $i => $continuation) {
+            // The first piece is the rest of the tag's own line, which the tag's match already consumed.
+            if ($i === 0) {
+                continue;
+            }
+
+            $continuation = (string) \preg_replace('/\h*\*\/.*\z/s', '', $continuation, count: $closed);
+            if (\trim($continuation) === '') {
+                break;
+            }
+
+            $body = (string) \preg_replace('/^\h*\*?\h*/', '', $continuation);
+
+            if (\str_starts_with($body, '@')) {
+                break;
+            }
+
+            if ($body === '') {
+                continue;
+            }
+
+            $joined .= "\n" . $continuation;
+
+            if ($closed > 0) {
+                break;
+            }
+        }
+
+        if ($joined === $first) {
+            return null;
+        }
+
+        $declared = self::splitVar($joined);
+
+        return $declared === null ? null : [$declared[0], CommentAnalyzer::sanitizeDocblockType($declared[1]), $declared[2]];
     }
 
     /**
