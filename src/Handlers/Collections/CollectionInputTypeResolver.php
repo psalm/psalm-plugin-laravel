@@ -10,7 +10,6 @@ use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\Scalar;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
-use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TEnumCase;
 use Psalm\Type\Atomic\TFalse;
@@ -31,8 +30,9 @@ use Psalm\Type\Union;
 /**
  * Resolves the argument passed to collect() / Collection::make() / LazyCollection::make() to the
  * TKey/TValue Union pair Laravel's runtime actually produces, for the input shapes the stub's own
- * template inference can't bind: null, scalars, and UnitEnum cases; plus array inputs whose literal
- * types the stub would otherwise bind verbatim (see resolveArray()).
+ * template inference can't bind: null, scalars, and UnitEnum cases; plus array inputs whose scalar
+ * literals and range keys the stub would otherwise bind verbatim (see resolveArray(), and decisions.md,
+ * "Collection literal generalization", for what is deliberately kept).
  *
  * Returns null ("defer to the stub's own template inference") for every other shape, including
  * plain objects: the stub's own widened-but-unbound `object` union member already infers
@@ -153,22 +153,39 @@ final class CollectionInputTypeResolver
 
     private static function generalizeValue(Union $type): Union
     {
-        return self::mapAtomics($type, static function (Atomic $atomic): Atomic {
-            // Order matters: TLiteralClassString extends TLiteralString, and `'Foo::class'` must stay a
-            // `class-string<Foo>` rather than decay to `string`.
-            if ($atomic instanceof TLiteralClassString) {
-                return new TClassString($atomic->value, new TNamedObject($atomic->value));
+        // Psalm treats the WHOLE argument leniently at an invariant param as soon as one literal is present
+        // (`Collection<'a'|'b', Parent|int>` accepts `['a' => $child, 'b' => 1]`), so scalar literals are
+        // widened only when nothing else in the union relies on that leniency. Enum cases are strict anyway.
+        $widenScalars = true;
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (!self::isWidenableScalarLiteral($atomic) && !$atomic instanceof TEnumCase) {
+                $widenScalars = false;
+                break;
             }
+        }
 
-            return match (true) {
-                $atomic instanceof TLiteralString => new TString(),
-                $atomic instanceof TLiteralInt => new TInt(),
-                $atomic instanceof TLiteralFloat => new TFloat(),
-                $atomic instanceof TTrue, $atomic instanceof TFalse => new TBool(),
-                $atomic instanceof TEnumCase => new TNamedObject($atomic->value),
-                default => $atomic,
-            };
+        return self::mapAtomics($type, static fn(Atomic $atomic): Atomic => match (true) {
+            $atomic instanceof TEnumCase => new TNamedObject($atomic->value),
+            !$widenScalars => $atomic,
+            $atomic instanceof TLiteralString => new TString(),
+            $atomic instanceof TLiteralInt => new TInt(),
+            $atomic instanceof TLiteralFloat => new TFloat(),
+            default => new TBool(),
         });
+    }
+
+    /**
+     * A class-string literal is excluded: widening it breaks `new $class()` and `Collection<int, class-string<I>>` targets.
+     *
+     * @psalm-pure
+     */
+    private static function isWidenableScalarLiteral(Atomic $atomic): bool
+    {
+        return ($atomic instanceof TLiteralString && !$atomic instanceof TLiteralClassString)
+            || $atomic instanceof TLiteralInt
+            || $atomic instanceof TLiteralFloat
+            || $atomic instanceof TTrue
+            || $atomic instanceof TFalse;
     }
 
     /**

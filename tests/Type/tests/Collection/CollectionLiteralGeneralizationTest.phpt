@@ -19,6 +19,15 @@ final class GeneralizedItem
     public int $id = 1;
 }
 
+interface GeneralizedContract {}
+
+class GeneralizedParent {}
+
+class GeneralizedChild extends GeneralizedParent implements GeneralizedContract
+{
+    public function __construct(public int $value = 0) {}
+}
+
 enum GeneralizedSuit: string
 {
     case Hearts = 'h';
@@ -95,15 +104,25 @@ function generalizedValueTypes(): void
     $_bools = collect([true]);
     /** @psalm-check-type-exact $_bools = Collection<0, bool> */
 
+    $_falses = collect([false]);
+    /** @psalm-check-type-exact $_falses = Collection<0, bool> */
+
     $_mixedLiterals = collect([1, 'a']);
     /** @psalm-check-type-exact $_mixedLiterals = Collection<int, int|string> */
 
-    // A class-string literal must stay `class-string<Foo>`, not decay to `string`.
-    $_classStrings = collect([GeneralizedItem::class, GeneralizedItem::class]);
-    /** @psalm-check-type-exact $_classStrings = Collection<int, class-string<GeneralizedItem>> */
+    // A class-string literal stays a literal: widening it to `string` or `class-string<Foo>` breaks
+    // `new $class()`, `app($class)` and `Collection<int, class-string<I>>` targets.
+    $_classStrings = collect([GeneralizedItem::class]);
+    /** @psalm-check-type-exact $_classStrings = Collection<0, GeneralizedItem::class> */
 
     $_enums = collect([GeneralizedSuit::Hearts, GeneralizedSuit::Spades]);
     /** @psalm-check-type-exact $_enums = Collection<int, GeneralizedSuit> */
+
+    // A single case of a multi-case enum binds the case itself (`@psalm-check-type-exact` does not tell
+    // `enum(X::A)` from `X`, so the `prepend()` of another case below is the assertion).
+    $_singleEnum = collect([GeneralizedSuit::Hearts]);
+    /** @psalm-check-type-exact $_singleEnum = Collection<0, GeneralizedSuit> */
+    $_singleEnum->prepend(GeneralizedSuit::Spades);
 
     // Row values keep their inner literals (only the range key widens): widening them would reject a
     // `Collection<int, array<string, int>>` param that the literal makes lenient.
@@ -129,6 +148,10 @@ function generalizedDeclines(int $int, string $string, GeneralizedItem $item): v
 
     $_emptyMake = Collection::make([]);
     /** @psalm-check-type-exact $_emptyMake = Collection<never, never> */
+
+    // Scalar literals next to another atomic stay: the literal is what makes Psalm lenient at the whole param.
+    $_mixedUnion = collect(['a' => $item, 'b' => 1]);
+    /** @psalm-check-type-exact $_mixedUnion = Collection<'a'|'b', 1|GeneralizedItem> */
 
     // Non-literal values are kept as they are.
     $_ints = collect([$int, $int]);
@@ -178,10 +201,35 @@ function generalizedRowsParamCall(): void
     generalizedRowsParam(collect([['id' => 1]]));
 }
 
+/** @param Collection<'a'|'b', GeneralizedParent|int> $mixed */
+function generalizedMixedUnionParam(Collection $mixed): int
+{
+    return $mixed->count();
+}
+
+/** @param Collection<int, class-string<GeneralizedContract>> $classes */
+function generalizedClassStringParam(Collection $classes): int
+{
+    return $classes->count();
+}
+
+function generalizedLeniencyCalls(GeneralizedChild $child): void
+{
+    generalizedMixedUnionParam(collect(['a' => $child, 'b' => 1]));
+    generalizedClassStringParam(collect([GeneralizedChild::class]));
+    generalizedClassStringParam(collect([GeneralizedChild::class, GeneralizedChild::class]));
+
+    foreach (collect([GeneralizedChild::class]) as $class) {
+        $_instance = new $class(1);
+        /** @psalm-check-type-exact $_instance = GeneralizedChild */
+    }
+}
+
 function generalizedUnpacked(): void
 {
     $args = [[1, 2]];
     $scalarArgs = [1];
+    $makeArgs = [1];
 
     // The unpacked array's FIRST element is the input, not the array itself: declined.
     $_collect = collect(...$args);
@@ -196,6 +244,12 @@ function generalizedUnpacked(): void
     // Without the guard the unpacked list itself was read as the input and widened to `Collection<0, int>`.
     $_scalar = collect(...$scalarArgs);
     /** @psalm-check-type-exact $_scalar = Collection<array-key, mixed> */
+
+    $_makeScalar = Collection::make(...$makeArgs);
+    /** @psalm-check-type-exact $_makeScalar = Collection<array-key, mixed> */
+
+    $_lazyScalar = LazyCollection::make(...$makeArgs);
+    /** @psalm-check-type-exact $_lazyScalar = LazyCollection<array-key, mixed> */
 }
 ?>
 --EXPECTF--
