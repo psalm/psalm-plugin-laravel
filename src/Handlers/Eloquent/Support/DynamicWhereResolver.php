@@ -216,7 +216,7 @@ final class DynamicWhereResolver
      */
     public static function methodMatchesColumns(Codebase $codebase, string $modelClass, string $methodNameLower): bool
     {
-        if (!self::isDynamicWhereMethod($methodNameLower) || self::isBuilderMethodOwned($codebase, $modelClass, $methodNameLower, false)) {
+        if (!self::isDynamicWhereMethod($methodNameLower)) {
             return false;
         }
 
@@ -229,19 +229,6 @@ final class DynamicWhereResolver
         // Underscores are stripped on both sides, so `whereuser_id` (Laravel queries `user_id`) matches too.
         return $candidates !== []
             && self::partitionExists(\str_replace('_', '', \substr($methodNameLower, 5)), $candidates);
-    }
-
-    /**
-     * True while the metadata registry has no entry for the model yet: existence providers can
-     * fire before `AfterCodebasePopulated` warms it, so schema columns were not consulted and a
-     * negative where{Column} verdict is provisional. Callers MUST NOT cache a negative verdict
-     * while this holds. A warmed entry is final, even when its schema section is partial.
-     *
-     * @param class-string<Model> $modelClass
-     */
-    public static function isRegistryPending(string $modelClass): bool
-    {
-        return !ModelMetadataRegistry::for($modelClass) instanceof ModelMetadata;
     }
 
     /**
@@ -357,7 +344,7 @@ final class DynamicWhereResolver
      * A segment without a `@property` match falls back to the model's complete migration
      * schema, compared as `Str::snake($segment)` against the exact column name, exactly as
      * Laravel builds the query. Unwarmed or partial metadata leaves the `@property`-only
-     * behaviour, and a negative is not cached while the registry has no entry.
+     * behaviour.
      *
      * Return values:
      *   - `false`: at least one segment doesn't match a declared property. Caller skips
@@ -426,8 +413,7 @@ final class DynamicWhereResolver
             $columnName = Str::snake($segment);
 
             if ($columnName === '' || !isset($schemaColumns[$columnName])) {
-                // A registry miss means schema columns were not consulted: do not cache.
-                return self::isRegistryPending($modelClass) ? false : self::$columnTypeCache[$key] = false;
+                return self::$columnTypeCache[$key] = false;
             }
 
             $schemaType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
