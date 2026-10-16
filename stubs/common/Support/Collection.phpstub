@@ -478,11 +478,12 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Zip the collection together with one or more arrays.
      *
      * Accepts variadic iterables via func_get_args().
+     * array_map() pads the shorter side with null.
      *
      * @template TZipValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
-     * @return static<int, static<int, TValue|TZipValue>>
+     * @return static<int, static<int, TValue|TZipValue|null>>
      *
      * @psalm-variadic
      */

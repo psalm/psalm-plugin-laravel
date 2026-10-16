@@ -9,7 +9,7 @@ namespace Illuminate\Contracts\Pagination;
 interface Paginator
 {
     /**
-     * @return array<TValue>
+     * @return array<TKey, TValue>
      */
     public function items(): array;
 
@@ -45,7 +45,9 @@ interface LengthAwarePaginator extends Paginator
 interface CursorPaginator
 {
     /**
-     * @return array<TValue>
+     * CursorPaginator::setItems() reindexes with values(), and setCollection() may install other keys, so keys are not just TKey.
+     *
+     * @return array<TKey|int, TValue>
      */
     public function items(): array;
 

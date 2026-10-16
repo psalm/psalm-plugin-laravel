@@ -65,13 +65,13 @@ function lazy_collection_doesnt_contain_strict_variadic(LazyCollection $c): void
 function lazy_collection_zip_variadic(LazyCollection $c, LazyCollection $other): void
 {
     $_one = $c->zip($other);
-    /** @psalm-check-type-exact $_one = LazyCollection<int, LazyCollection<int, string>&static>&static */
+    /** @psalm-check-type-exact $_one = LazyCollection<int, LazyCollection<int, null|string>&static>&static */
 
     $_two = $c->zip($other, ['x', 'y']);
-    /** @psalm-check-type-exact $_two = LazyCollection<int, LazyCollection<int, string>&static>&static */
+    /** @psalm-check-type-exact $_two = LazyCollection<int, LazyCollection<int, null|string>&static>&static */
 
     $_three = $c->zip($other, ['x', 'y'], ['a', 'b']);
-    /** @psalm-check-type-exact $_three = LazyCollection<int, LazyCollection<int, string>&static>&static */
+    /** @psalm-check-type-exact $_three = LazyCollection<int, LazyCollection<int, null|string>&static>&static */
 }
 ?>
 --EXPECTF--
