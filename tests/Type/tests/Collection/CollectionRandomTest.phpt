@@ -136,6 +136,30 @@ final class CollectionRandomTest
         $_eloquentMany = $this->getCustomers()->random(2);
         /** @psalm-check-type-exact $_eloquentMany = EloquentCollection<int, Customer>&static */
     }
+
+    /**
+     * `$preserveKeys = true` keeps the source keys; a plain bool yields both shapes.
+     *
+     * @param  BaseCollection<string, Customer>  $base
+     * @param  LazyCollection<string, Customer>  $lazy
+     */
+    public function randomPreserveKeys(BaseCollection $base, LazyCollection $lazy, bool $flag): void
+    {
+        $_preserved = $base->random(2, true);
+        /** @psalm-check-type-exact $_preserved = BaseCollection<string, Customer>&static */
+
+        $_notPreserved = $base->random(2, false);
+        /** @psalm-check-type-exact $_notPreserved = BaseCollection<int, Customer>&static */
+
+        $_unknown = $base->random(2, $flag);
+        /** @psalm-check-type-exact $_unknown = BaseCollection<int, Customer>&static|BaseCollection<string, Customer>&static */
+
+        $_lazyPreserved = $lazy->random(2, true);
+        /** @psalm-check-type-exact $_lazyPreserved = LazyCollection<string, Customer>&static */
+
+        $_lazyUnknown = $lazy->random(2, $flag);
+        /** @psalm-check-type-exact $_lazyUnknown = LazyCollection<int, Customer>&static|LazyCollection<string, Customer>&static */
+    }
 }
 ?>
 --EXPECTF--
