@@ -25,6 +25,11 @@ final class UnionProxyB
     }
 }
 
+/** @extends Collection<int, UnionProxyB> */
+final class UnionProxyListB extends Collection
+{
+}
+
 /**
  * A receiver union of two collection types is not narrowed through a higher-order proxy:
  * picking one collection atomic would silently drop the other branch's item type, so a method
@@ -44,6 +49,20 @@ final class HigherOrderProxyUnionReceiverTest
         /** @psalm-check-type-exact $_first = bool */
 
         $_onlyA = $items->sole->onlyA();
+        /** @psalm-check-type-exact $_onlyA = mixed */
+    }
+
+    /**
+     * A non-generic subclass branch (a named object) counts as a collection too.
+     *
+     * @param Collection<int, UnionProxyA>|UnionProxyListB $items
+     */
+    public function unionWithNonGenericSubclass($items): void
+    {
+        $_sole = $items->sole->enabled();
+        /** @psalm-check-type-exact $_sole = mixed */
+
+        $_onlyA = $items->first->onlyA();
         /** @psalm-check-type-exact $_onlyA = mixed */
     }
 }

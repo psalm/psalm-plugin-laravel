@@ -439,8 +439,8 @@ final class HigherOrderCollectionProxyHandler implements
     /**
      * Extract TKey, TValue, and the collection class from a Union type.
      *
-     * Declines (null) when the union holds more than one collection atomic: taking the first
-     * would silently drop the other branches' item types.
+     * Declines (null) when the union holds more than one collection atomic, generic or not:
+     * taking one would silently drop the other branches' item types.
      *
      * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      * @psalm-mutation-free
@@ -453,11 +453,16 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
-        return [$atomics[0]->type_params[0], $atomics[0]->type_params[1], $atomics[0]->value];
+        $atomic = $atomics[0];
+        if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
+            return null;
+        }
+
+        return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
     }
 
     /**
-     * @return list<TGenericObject> the generic Enumerable atomics of the union
+     * @return list<TNamedObject> every named-object atomic of the union that is an Enumerable
      * @psalm-mutation-free
      */
     private static function collectionAtomics(Union $collectionType, Codebase $codebase): array
@@ -465,11 +470,7 @@ final class HigherOrderCollectionProxyHandler implements
         $atomics = [];
 
         foreach ($collectionType->getAtomicTypes() as $atomic) {
-            if (
-                $atomic instanceof TGenericObject
-                && \count($atomic->type_params) >= 2
-                && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)
-            ) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
                 $atomics[] = $atomic;
             }
         }
