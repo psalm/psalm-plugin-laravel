@@ -52,6 +52,7 @@ use Psalm\Type\Union;
  * - boolean (contains, every, some) → bool
  * - aggregation (avg, sum) → numeric types
  * - first/last → TValue|null
+ * - sole → TValue
  *
  * Template params (TKey, TValue) and the concrete collection class are extracted
  * from the COLLECTION expression (the receiver of the property fetch), not from the
@@ -305,6 +306,11 @@ final class HigherOrderCollectionProxyHandler implements
         // first/last — returns TValue|null
         if ($proxyMethod === 'first' || $proxyMethod === 'last') {
             return Type::combineUnionTypes($tValue, Type::getNull());
+        }
+
+        // sole — returns the single matching item (throws when none or several match), never null
+        if ($proxyMethod === 'sole') {
+            return $tValue;
         }
 
         // max/min — use reduce() with null as the initial value, so null is always a possible result

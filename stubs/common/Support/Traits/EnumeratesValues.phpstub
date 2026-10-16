@@ -86,17 +86,6 @@ trait EnumeratesValues
     public function flatMap(callable $callback) {}
 
     /**
-     * The callback only maps; without one the items are `range(1, $number)`, not `never`.
-     *
-     * @template TTimesValue
-     *
-     * @param  int  $number
-     * @param  (callable(int): TTimesValue)|null  $callback
-     * @return ($callback is null ? static<int, int> : static<int, TTimesValue>)
-     */
-    public static function times($number, ?callable $callback = null, ...$args) {}
-
-    /**
      * Laravel returns `static<TKey, TValue>`, which leaks the unresolved class templates from a
      * static call; the decoded JSON has no known shape.
      *

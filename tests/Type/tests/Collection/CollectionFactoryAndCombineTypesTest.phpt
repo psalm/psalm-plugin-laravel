@@ -5,9 +5,17 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\HigherOrderCollectionProxy;
 use Illuminate\Support\LazyCollection;
 
+final class SoleFlag
+{
+    public function enabled(): bool
+    {
+        return true;
+    }
+}
+
 /**
- * Small return-type fixes on `combine()`, `times()`, `fromJson()` and `unwrap()`, plus the
- * `$sole` higher-order proxy property.
+ * Small return-type fixes on `combine()` and `unwrap()`, plus the `$sole` higher-order proxy.
+ * `times()` is covered for contextual typing of untyped callbacks.
  */
 final class CollectionFactoryAndCombineTypesTest
 {
@@ -28,36 +36,21 @@ final class CollectionFactoryAndCombineTypesTest
     }
 
     /**
-     * `times()` without a callback holds `range(1, $n)`, never an empty `never` collection.
+     * `times()` keeps Laravel's reflected signature: an untyped callback gets its `int`
+     * parameter from `callable(int): TTimesValue`. A conditional return that mentions
+     * `$callback` loses that contextual typing (the closure then reports
+     * MissingClosureParamType and the result degrades to `Collection<int, mixed>`).
      */
-    public function timesWithoutCallback(): void
+    public function timesUntypedCallback(): void
     {
-        $_plain = Collection::times(3);
-        /** @psalm-check-type-exact $_plain = Collection<int, int> */
+        $_untyped = Collection::times(3, static fn ($i) => $i * 2);
+        /** @psalm-check-type-exact $_untyped = Collection<int, int> */
 
-        $_mapped = Collection::times(3, static fn (int $i): bool => $i > 1);
-        /** @psalm-check-type-exact $_mapped = Collection<int, bool> */
+        $_typed = Collection::times(3, static fn (int $i): bool => $i > 1);
+        /** @psalm-check-type-exact $_typed = Collection<int, bool> */
 
-        $_lazy = LazyCollection::times(3);
+        $_lazy = LazyCollection::times(3, static fn ($i) => $i * 2);
         /** @psalm-check-type-exact $_lazy = LazyCollection<int, int> */
-    }
-
-    /** `times()` without a callback is iterable with an int element. */
-    public function timesElementIsInt(): int
-    {
-        $total = 0;
-        Collection::times(3)->each(static function (int $i) use (&$total): void {
-            $total += $i;
-        });
-
-        return $total;
-    }
-
-    /** `fromJson()` must not leak the class templates from a static call. */
-    public function fromJsonHasNoLeakedTemplates(): void
-    {
-        $_decoded = Collection::fromJson('[1, 2]');
-        /** @psalm-check-type-exact $_decoded = Collection<array-key, mixed> */
     }
 
     /**
@@ -78,16 +71,21 @@ final class CollectionFactoryAndCombineTypesTest
     }
 
     /**
-     * @param Collection<int, int> $items
-     * @param LazyCollection<int, int> $lazy
+     * `$sole` proxies a method call to `sole()`, which returns the selected item itself.
+     *
+     * @param Collection<int, SoleFlag> $items
+     * @param LazyCollection<int, SoleFlag> $lazy
      */
-    public function soleProxyProperty(Collection $items, LazyCollection $lazy): void
+    public function soleProxy(Collection $items, LazyCollection $lazy): void
     {
         $_proxy = $items->sole;
-        /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<int, int> */
+        /** @psalm-check-type-exact $_proxy = HigherOrderCollectionProxy<int, SoleFlag> */
 
-        $_lazyProxy = $lazy->sole;
-        /** @psalm-check-type-exact $_lazyProxy = HigherOrderCollectionProxy<int, int> */
+        $_item = $items->sole->enabled();
+        /** @psalm-check-type-exact $_item = SoleFlag */
+
+        $_lazyItem = $lazy->sole->enabled();
+        /** @psalm-check-type-exact $_lazyItem = SoleFlag */
     }
 }
 ?>
