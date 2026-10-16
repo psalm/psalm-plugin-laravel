@@ -551,6 +551,17 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Accepted limitation:** the class is read as written. A container rebinding, extender or before-resolving hook, a factory or dispatcher subclass, a constructor that shares data, a protected method served by `__call()`, a `share()` hidden in a helper or an injected dependency, and view data added by a wildcard listener registered straight on the dispatcher (taken for an observer, such as a debugging package's view watcher, and skipped) are not seen; if the real keys differ, the call site reports, and the fix is `= null` on the declaration or a suppression. Composers registered after boot (middleware, a controller) are not read: a view whose only composer is registered at runtime is checked as if it had none, while a view with a boot composer plus a runtime one is checked against the boot keys only.
 
+### Component tag arguments report Psalm's own argument issues, under weak-mode coercion (#1936)
+
+**Decision:** `Blade\ComponentArgumentHandler` reads the compiled `X::resolve([...] + ...)` statement and emits `InvalidArgument` / `TooFewArguments` for a definite constructor mismatch, comparing each value plus its PHP weak-mode coercions against the parameter type.
+
+**Why:** the tag compiles to a constructor call in all but syntax, so Psalm's own argument issues say it, and existing `<issueHandlers>` (`referencedFunction` included) apply. Laravel's two paths into the constructor (`new static(...)` in `Component.php`, `ReflectionClass::newInstanceArgs()` in the container) both run in weak mode, so a static attribute `count="3"` is correct code for an `int` parameter. Psalm reports `new Alert(count: '3')` and `new Alert(count: 'many')` alike as `InvalidScalarArgument` (coercible scalars); what is left after the coercions are removed is a certain `TypeError`, hence `InvalidArgument` throughout.
+
+**Rejected alternatives:**
+- **Rewriting the tag to `new Alert(...)` in the shadow** (bladestan's approach): changes the shadow's bytes and line map for every tag, and Psalm's `ArgumentAnalyzer` then reports every numeric string attribute as `InvalidScalarArgument`.
+- **`InvalidViewVariableType` / `MissingViewVariable`:** those mean a `view()` data contract and sit behind the opt-in `validateViewData`; a constructor `TypeError` is neither.
+- **A new plugin issue:** two classes and two docs pages for what Psalm's own issues already say.
+
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 
 **Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.
