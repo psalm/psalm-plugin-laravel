@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792172093723,
+  "lastUpdate": 1792172366645,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14520,6 +14520,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1514,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fbde39033310ab70649b4bc525d45c91349589e7",
+          "message": "Skip Blade line markers inside any multi-line prefixed precompiled tag (`<flux:...>`, `<native:...>`) (#1927)\n\n* test(blade): cover multi-line prefixed precompiled tags in MarkerPrePass #1910\n\n* fix(blade): skip line markers inside any multi-line prefixed precompiled tag #1910\n\nMarkerPrePass only skipped markers inside multi-line x- and livewire: tags. Other\nprecompilers that own a tag prefix (NativePHP native:, Flux flux:) match attributes as\nstrictly as ComponentTagCompiler, so a marker between attributes left the opener\nuncompiled and the closer's orphan endif lost the template to a ParseError.\n\n* fix(blade): keep a pseudo prefixed tag from swallowing later lines or component skips #1910\n\nRestore the x-/livewire: patterns unchanged and match other prefixes with separate\npatterns: a JIT failure on a pathological pseudo tag can no longer drop the component\nskips, and an unquoted < ends the match so a pseudo tag in a script cannot extend over\nunrelated lines.",
+          "timestamp": "2026-10-16T19:36:04+02:00",
+          "tree_id": "693549de2ca41354072b93c6aa2ccb922239629e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fbde39033310ab70649b4bc525d45c91349589e7"
+        },
+        "date": 1792172365460,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.45,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
