@@ -63,13 +63,15 @@ function eloquent_wrong_key(EloquentCollection $customers): bool
  * Emptiness proves no entries exist, not that the argument is usable: array_key_exists() throws a
  * TypeError for an object key even on an empty collection, and an Eloquent collection only looks up models.
  */
-function invalid_arguments_on_empty_receivers(): bool
+function invalid_arguments_on_empty_receivers(bool $flag): bool
 {
     $customers = new EloquentCollection();
 
     return collect()->get(new \stdClass()) === null
         && collect()->has(new \stdClass())
-        && $customers->contains(new \stdClass());
+        && $customers->contains(new \stdClass())
+        // The displayed type `'it's'|stdClass` does not round-trip through Psalm's type parser.
+        && collect()->has($flag ? "it's" : new \stdClass());
 }
 
 /** @param KeptLookupBag<never, never> $bag */
@@ -89,4 +91,5 @@ InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collectio
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::get expects null, but stdClass provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but stdClass provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::contains expects callable[impure](never, never):bool|int|string, but stdClass provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but 'it's'|stdClass provided
 InvalidArgument on line %d: Argument 1 of KeptLookupBag::get expects never, but 'name' provided

@@ -133,7 +133,9 @@ final class EmptyCollectionLookupIssueHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        if (!$storage instanceof ClassLikeStorage) {
+        // `getId()` does not escape quotes (`'it's'|stdClass`), so the parser can read a different type
+        // back; trust it only when it round-trips losslessly.
+        if (!$storage instanceof ClassLikeStorage || $provided->getId() !== $matches[2]) {
             return null;
         }
 
