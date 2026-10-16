@@ -87,12 +87,15 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function first(callable $callback = null, $default = null) {}
 
     /**
+     * Lookup params (here and in has/hasAny/pull/forget/except/only/contains/search/offset*) take
+     * array-key/mixed rather than TKey/TValue: Collection<never, never> would otherwise reject every key.
+     *
      * @psalm-mutation-free
      *
      * @template TGetDefault
      * @template TGetClosureReturn
      *
-     * @param  TKey  $key
+     * @param  array-key|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
      * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
      *
@@ -133,7 +136,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TPullDefault
      * @template TPullClosureReturn
      *
-     * @param  TKey  $key
+     * @param  array-key  $key
      * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
      * @return ($default is \Closure ? TPullClosureReturn|TValue : (TPullDefault | TValue))
      *
@@ -178,7 +181,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @psalm-mutation-free
      *
-     * @param  TValue|(callable(TValue,TKey): bool)  $value
+     * @param  mixed|(callable(TValue,TKey): bool)  $value
      * @param  bool  $strict
      * @return TKey|false
      */
@@ -436,7 +439,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * Accepts an array of keys or variadic key arguments via func_get_args().
      *
-     * @param  TKey|array<array-key, TKey>  $key
+     * @param  array-key|array<array-key, array-key>  $key
      * @return bool
      *
      * @psalm-variadic
@@ -449,7 +452,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Accepts extra positional args beyond ($key, $operator, $value); they are
      * forwarded to contains() via func_get_args().
      *
-     * @param  (callable(TValue, TKey): bool)|TValue|array-key  $key
+     * @param  (callable(TValue, TKey): bool)|mixed  $key
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return bool
@@ -465,7 +468,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * them to containsStrict() via func_get_args(). The third parameter mirrors
      * Laravel's signature even though containsStrict() only consumes two.
      *
-     * @param  (callable(TValue, TKey): bool)|TValue|array-key  $key
+     * @param  (callable(TValue, TKey): bool)|mixed  $key
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return bool
@@ -501,4 +504,67 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * @param  array-key|array<array-key, array-key>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
+
+    /**
+     * @param  (callable(TValue, TKey): bool)|mixed|string  $key
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return bool
+     */
+    public function contains($key, $operator = null, $value = null) {}
+
+    /**
+     * @param  (callable(TValue): bool)|mixed|array-key  $key
+     * @param  mixed  $value
+     * @return bool
+     */
+    public function containsStrict($key, $value = null) {}
+
+    /**
+     * @param  \Illuminate\Support\Enumerable<array-key, array-key>|array<array-key, array-key>|string  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function except($keys) {}
+
+    /**
+     * @param  \Illuminate\Support\Enumerable<array-key, array-key>|array<array-key, array-key>|string|null  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function only($keys) {}
+
+    /**
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, array-key>|iterable<array-key, array-key>|array-key  $keys
+     * @return $this
+     */
+    public function forget($keys) {}
+
+    /**
+     * @param  array-key  $key
+     * @return bool
+     */
+    public function offsetExists($key): bool {}
+
+    /**
+     * @param  array-key  $key
+     * @return TValue
+     */
+    public function offsetGet($key): mixed {}
+
+    /**
+     * @param  array-key  $key
+     * @return void
+     */
+    public function offsetUnset($key): void {}
 }

@@ -248,6 +248,20 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
+## Collections
+
+### Read-only lookup params take `array-key`/`mixed`, not `TKey`/`TValue`
+
+**Decision:** `Support\Collection::get/has/hasAny/pull/forget/except/only/offsetExists/offsetGet/offsetUnset` take `array-key` (or arrays of it), and `contains/containsStrict/doesntContain/doesntContainStrict/search` take `mixed`. The `callable(TValue, TKey): bool` arm stays on the five value methods so untyped closures keep inferring their params. Return types still derive from `TValue`/`TKey`. Write methods (`put`/`push`/...) are unchanged.
+
+**Why:** A lookup cannot corrupt the collection, so tying its argument to `TKey`/`TValue` only produces false positives: `Collection<never, never>` (bare `collect()`, or a ternary/`if` merge with it) accepts no key at all, `collect([$a, $b])` has the literal key range `int<0, 1>`, and `Collection<int, Dog>` is legitimately asked about an `Animal`. `forget`/`pull` mutate but only remove, so their key is safe to widen too. `offset*` is redeclared because array-access syntax (`$c['x']`, `isset($c['x'])`) dispatches to it; the parameter is `$key` in `common` and `$offset` in `stubs/13/` (Laravel 13 renamed it).
+
+**Dead end:** a conditional param `(TKey is never ? array-key : TKey)` keeps the strict check for non-empty collections. Psalm unions both branches of a conditional param type, so it regains no true positive and equals plain `array-key`.
+
+**Accepted cost:** `Collection<int, X>->get('name')` is no longer reported, and a `mixed` argument reports `MixedArgument ... expecting array-key` (previously `expecting <TKey>`). A predicate Closure with a wrong param type (`contains(fn (string $d): bool => ...)` on `Collection<int, Dog>`) is no longer reported either: once the value arm is `mixed`, any object, Closures included, is a valid lookup value.
+
+**See:** [#1814](https://github.com/psalm/psalm-plugin-laravel/issues/1814), `tests/Type/tests/Collection/CollectionLookupParamsTest.phpt`.
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
