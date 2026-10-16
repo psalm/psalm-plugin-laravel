@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792145796242,
+  "lastUpdate": 1792146799861,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14310,6 +14310,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1512,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "06d7a74166b99652eb9b61237b55d50119403d89",
+          "message": "Drop `Mixed*` on compiled `<x-...>`, `@error` and `@session` save/restore bookkeeping (#1877)\n\n* fix(blade): drop Mixed* on compiled component, @error and @session save/restore #1872\n\nUnder reportMixedIssues, the restores Laravel compiles around <x-...> tags, @error and @session/@context (and the stack push of the last two) assign a value that is mixed on every mention, so each reported MixedAssignment on code the author never wrote. Dropped only on the exact compiled statement whose target the issue points at, and only when that statement is absent from the template.\n\n* fix(blade): keep save/restore Mixed* when the statement survives only outside comment stripping #1872\n\nThe template-absence check stripped {{-- --}} spans lexically, so an author statement between '{{--' and '--}}' string literals was read as compiler output. The gate now also checks the raw template. Also drops the redundant <?php anchor on the component restore pattern, pins the MixedIssue guard with a negative test, and documents the precompiler residual.",
+          "timestamp": "2026-10-16T12:29:34+02:00",
+          "tree_id": "fa294f99415b893b00f916c5b1d76747fbcf4423",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/06d7a74166b99652eb9b61237b55d50119403d89"
+        },
+        "date": 1792146798077,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.14,
+            "range": "± 0.49",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
