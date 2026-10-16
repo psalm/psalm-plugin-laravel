@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792143547456,
+  "lastUpdate": 1792144948149,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14240,6 +14240,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ff0ab1068ae64766b4de3337713f9348c5aba5f",
+          "message": "Hint the optional declaration on a guarded Blade named slot (#1876)\n\n* fix(blade): hint the optional declaration on a guarded named slot\n\nA raw `@var \\Illuminate\\View\\ComponentSlot $footer` in a component view\ndeclares a required variable, so its isset/??/??= guard reports as\nredundant even though a caller may omit any named slot. The relocated\nRedundantConditionGivenDocblockType / DocblockTypeContradiction finding\nnow ends with a hint naming `ComponentSlot|null $footer = null`.\nNothing is dropped or newly emitted.\n\nRefs #1871\n\n* fix(blade): skip the named slot hint when the slot is declared nullable\n\nAn optional slot (`ComponentSlot|null $footer = null`) narrowed by an\nouter isset() renders the same \"never null\" wording, and the hint then\nrecommended the declaration already present. The hint now requires the\ntemplate's own raw `@var` for that name to exclude null, read through a\nnew ContractParser::rawDeclaredType(). Variable names follow PHP\nidentifier grammar, so non-ASCII names are matched.\n\nRefs #1871",
+          "timestamp": "2026-10-16T11:57:56+02:00",
+          "tree_id": "1ee054490b42e2645077c7c3892ae21118b23f3c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2ff0ab1068ae64766b4de3337713f9348c5aba5f"
+        },
+        "date": 1792144947010,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.15,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1510,
             "unit": "MB"
           }
         ]
