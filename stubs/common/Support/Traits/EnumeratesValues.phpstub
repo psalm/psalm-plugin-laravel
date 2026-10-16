@@ -108,4 +108,11 @@ trait EnumeratesValues
      * @return array<TUnwrapKey, TUnwrapValue>
      */
     public static function unwrap($value) {}
+
+    /**
+     * The runtime maps each Arrayable item through its own `toArray()`; other values pass through.
+     *
+     * @return array<TKey, (TValue is \Illuminate\Contracts\Support\Arrayable ? array<array-key, mixed> : TValue)>
+     */
+    public function toArray() {}
 }
