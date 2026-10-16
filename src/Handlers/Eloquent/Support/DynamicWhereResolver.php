@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 use Psalm\Type\Union;
@@ -178,12 +183,16 @@ final class DynamicWhereResolver
      *
      * Used by the method-existence provider where the AST isn't available. Performs a
      * bounded backtracking match: try to consume the suffix as `prop( (and|or) prop )*`
-     * for any combination of declared @property entries on the model.
+     * for any combination of declared @property entries and complete-schema migration
+     * columns on the model (see {@see schemaColumns}).
      *
      * Returns `true` iff at least one partition validates. False positives are bounded
-     * by the property set (a `where<X>` call only matches when every lowercase
-     * substring lines up with a real property), so this widens existence but cannot
-     * confirm a column that isn't declared.
+     * by the candidate set (a `where<X>` call only matches when every lowercase
+     * substring lines up with a real property or column), so this widens existence but
+     * cannot confirm a column that isn't declared. Schema columns are compared with
+     * underscores stripped, so `line_1` also matches `whereline1`, which Laravel would
+     * resolve to the column `line1`; the strict {@see resolveColumnType} rejects it and
+     * the callers then return no type instead of a guessed one.
      *
      * Multi-segment behaviour: with no uppercase boundaries to anchor against, the
      * match could in principle find multiple valid partitions for ambiguous property
@@ -201,13 +210,26 @@ final class DynamicWhereResolver
             return false;
         }
 
-        $normalized = self::getNormalizedProperties($codebase, $modelClass);
+        $candidates = \array_keys(self::getNormalizedProperties($codebase, $modelClass) ?? []);
 
-        if ($normalized === null || $normalized === []) {
-            return false;
+        foreach (self::schemaColumns($modelClass) ?? [] as $columnName => $_column) {
+            $candidates[] = \strtolower(\str_replace('_', '', $columnName));
         }
 
-        return self::partitionExists(\substr($methodNameLower, 5), \array_keys($normalized));
+        return $candidates !== [] && self::partitionExists(\substr($methodNameLower, 5), $candidates);
+    }
+
+    /**
+     * True while the metadata registry has no entry for the model yet: existence providers can
+     * fire before `AfterCodebasePopulated` warms it, so schema columns were not consulted and a
+     * negative where{Column} verdict is provisional. Callers MUST NOT cache a negative verdict
+     * while this holds. A warmed entry is final, even when its schema section is partial.
+     *
+     * @param class-string<Model> $modelClass
+     */
+    public static function isRegistryPending(string $modelClass): bool
+    {
+        return !ModelMetadataRegistry::for($modelClass) instanceof ModelMetadata;
     }
 
     /**
@@ -223,6 +245,10 @@ final class DynamicWhereResolver
      * Pseudo-property entries are normalised by stripping `$` and underscores and
      * lowercasing (so `$email_address` collapses to `emailaddress`); each segment goes
      * through the same normalisation and the call is rejected on the first mismatch.
+     * A segment without a `@property` match falls back to the model's complete migration
+     * schema, compared as `Str::snake($segment)` against the exact column name, exactly as
+     * Laravel builds the query. Unwarmed or partial metadata leaves the `@property`-only
+     * behaviour, and a negative is not cached while the registry has no entry.
      *
      * Return values:
      *   - `false`: at least one segment doesn't match a declared property. Caller skips
@@ -263,22 +289,45 @@ final class DynamicWhereResolver
             return self::$columnTypeCache[$key] = false;
         }
 
+        $schemaColumns = self::schemaColumns($modelClass);
+
         $matchedColumnTypes = [];
         foreach ($segments as $segment) {
             $segmentKey = \strtolower($segment);
 
-            if ($segmentKey === '' || !isset($normalized[$segmentKey])) {
+            if ($segmentKey === '') {
                 return self::$columnTypeCache[$key] = false;
             }
 
-            $matchedColumnTypes[] = $normalized[$segmentKey];
+            // `@property` wins over the schema, as it does for property reads.
+            if (isset($normalized[$segmentKey])) {
+                $matchedColumnTypes[] = $normalized[$segmentKey];
+
+                continue;
+            }
+
+            // Laravel's `Query\Builder::addDynamic()` queries `Str::snake($segment)`, so the
+            // schema is matched against that exact column name (`line_1` is unreachable).
+            $columnName = Str::snake($segment);
+
+            if ($columnName === '' || !isset($schemaColumns[$columnName])) {
+                // A registry miss means schema columns were not consulted: do not cache.
+                return self::isRegistryPending($modelClass) ? false : self::$columnTypeCache[$key] = false;
+            }
+
+            $matchedColumnTypes[] = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
         }
 
+        // Multi-segment calls and schema columns without a resolvable type are valid but untyped.
         if (\count($matchedColumnTypes) !== 1) {
             return self::$columnTypeCache[$key] = null;
         }
 
         $columnType = $matchedColumnTypes[0];
+
+        if (!$columnType instanceof Union) {
+            return self::$columnTypeCache[$key] = null;
+        }
 
         // Object/array column types (Carbon, BackedEnum, json casts) skip the typed-param
         // hand-off Laravel coerces strings/ints to these at the query layer, so narrowing
@@ -371,6 +420,25 @@ final class DynamicWhereResolver
         }
 
         return self::$normalizedPropertiesCache[$cacheKey] = $normalized;
+    }
+
+    /**
+     * Migration columns usable as dynamic-where candidates, or null unless the model's schema
+     * section is authoritative: an unwarmed or partial entry keeps the `@property`-only
+     * behaviour, since an empty schema there proves nothing.
+     *
+     * @param class-string<Model> $modelClass
+     * @return array<non-empty-string, ColumnInfo>|null
+     */
+    private static function schemaColumns(string $modelClass): ?array
+    {
+        $metadata = ModelMetadataRegistry::for($modelClass);
+
+        if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_SCHEMA)) {
+            return null;
+        }
+
+        return $metadata->schema()->all();
     }
 
     /**

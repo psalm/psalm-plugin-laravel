@@ -637,6 +637,16 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return self::$unresolvedCache[$key] = true;
         }
 
+        // The registry may not be warmed yet (existence providers can fire before
+        // AfterCodebasePopulated), so a dynamic-where miss is provisional: answer without caching.
+        if (
+            DynamicWhereResolver::isEnabled()
+            && DynamicWhereResolver::isDynamicWhereMethod($methodName)
+            && DynamicWhereResolver::isRegistryPending($modelClass)
+        ) {
+            return false;
+        }
+
         return self::$unresolvedCache[$key] = false;
     }
 
