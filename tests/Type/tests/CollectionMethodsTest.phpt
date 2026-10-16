@@ -147,11 +147,11 @@ final class CollectionTypes
         return $collection->isEmpty() ? $collection->first() : null;
     }
 
-    public function isNotEmpty_assertions_works(): null
+    public function isNotEmpty_first_stays_sound(): ?string
     {
         $collection = $this->getCollection();
 
-        return $collection->isNotEmpty() ? null : $collection->first();
+        return $collection->isNotEmpty() ? $collection->first() : null;
     }
 
     /**

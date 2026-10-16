@@ -16,7 +16,8 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
+ * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  *
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
@@ -98,12 +99,30 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function get($key, $default = null) {}
 
     /**
+     * Get the last item from the collection.
+     *
+     * A closure default only runs when no item matches, so its result joins `TValue`.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TLastDefault
+     * @template TLastClosureReturn
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TLastDefault|(\Closure(): TLastClosureReturn)  $default
+     * @return ($default is \Closure ? TLastClosureReturn|TValue : (TLastDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function last(?callable $callback = null, $default = null) {}
+
+    /**
      * @template TCount of int
      * @param  TCount  $count
      * @return (
      *     TCount is 1
      *     ? TValue|null
-     *     : static
+     *     : static<int, TValue>
      * )
      */
     public function pop($count = 1) {}
@@ -114,7 +133,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  TKey  $key
      * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
-     * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
+     * @return ($default is \Closure ? TPullClosureReturn|TValue : (TPullDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      */
@@ -126,10 +145,11 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-mutation-free
      *
      * @template TValueDefault
+     * @template TValueClosureReturn
      *
      * @param  string|int  $key
-     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
-     * @return mixed|TValueDefault
+     * @param  TValueDefault|(\Closure(): TValueClosureReturn)  $default
+     * @return ($default is \Closure ? mixed|TValueClosureReturn : mixed|TValueDefault)
      *
      * @psalm-flow ($default) -> return
      */
@@ -138,9 +158,16 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @psalm-mutation-free
      *
+     * Unused method template: workaround for vimeo/psalm#11837, a conditional return in a stub
+     * that re-declares a reflected method otherwise collapses to its first branch.
+     *
+     * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
+     *
+     * @template TUnused
+     *
      * @param  (callable(self<TKey, TValue>): int)|int|null  $number
      * @param  bool  $preserveKeys
-     * @return ($number is null ? TValue : static<int, TValue>)
+     * @return ($number is null ? TValue : ($preserveKeys is true ? static<TKey, TValue> : static<int, TValue>))
      *
      * @throws \InvalidArgumentException
      */
@@ -161,10 +188,28 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return (
      *     TCount is 1
      *     ? TValue|null
-     *     : static
+     *     : static<int, TValue>
      * )
      */
     public function shift($count = 1) {}
+
+    /**
+     * Shuffled items are renumbered (the runtime shuffles into a list).
+     *
+     * @return static<int, TValue>
+     */
+    public function shuffle() {}
+
+    /**
+     * Appends each item with `push()`, so the source keys are discarded and appended items get
+     * int keys.
+     *
+     * @template TConcatValue
+     *
+     * @param  iterable<array-key, TConcatValue>  $source
+     * @return static<TKey|int, TValue|TConcatValue>
+     */
+    public function concat($source) {}
 
     /**
      * Merge the collection with the given items.
@@ -315,7 +360,6 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Determine if the collection is not empty.
      *
      * @psalm-mutation-free
-     * @psalm-assert-if-false null $this->first()
      * @return bool
      */
     public function isNotEmpty() {}
@@ -326,7 +370,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TCombineValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TCombineValue>|iterable<array-key, TCombineValue>  $values
-     * @return static<TValue, TCombineValue>
+     * @return static<array-key, TCombineValue>
      */
     public function combine($values) {}
 
