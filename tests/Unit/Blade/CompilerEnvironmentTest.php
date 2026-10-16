@@ -177,6 +177,19 @@ final class CompilerEnvironmentTest extends TestCase
         $this->assertSame([['input' => "directive 'mine' (internal function or eval()'d code)", 'file' => null]], $reasons);
     }
 
+    /** Non-callable state has no declaring file, so it is named once as a whole. */
+    #[Test]
+    public function undescribable_compiler_state_is_named_without_a_file(): void
+    {
+        $compiler = $this->compiler();
+        (new \ReflectionProperty(BladeCompiler::class, 'echoFormat'))->setValue($compiler, new \stdClass());
+
+        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
+        $this->assertSame([['input' => 'compiler state that cannot be read or described', 'file' => null]], $reasons);
+    }
+
     /** A subclass is untrusted on its own, so it must be named too, or the input count would hide it. */
     #[Test]
     public function a_compiler_subclass_is_named_with_its_declaring_file(): void

@@ -1394,4 +1394,60 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertStringNotContainsString("directive 'vendored'", \substr($debug, 0, $advice), 'the advice must not cover vendor inputs');
         $this->assertStringContainsString("directive 'vendored'", \substr($debug, $advice));
     }
+
+    #[Test]
+    public function a_vendor_input_reached_under_a_mis_cased_path_still_counts_as_vendor(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $vendorDir = $this->root . '/Fake-Vendor';
+        \mkdir($vendorDir, 0o777, true);
+        $this->writeTemplate('profile.blade.php', "<p>@vendored</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+        // Included under the lower-case spelling, so reflection reports that spelling.
+        $compiler->directive('vendored', $this->untrustedDirectiveDeclaredIn($this->root . '/fake-vendor/acme/directives'));
+        (new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, vendorDirOverride: $vendorDir))->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+    }
+
+    /** The caller throws instead (Plugin::initBladeAnalysis()), so warning here would report the disable twice. */
+    #[Test]
+    public function a_disable_under_fail_on_internal_error_is_recorded_without_a_warning(): void
+    {
+        $app = new Container();
+        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
+
+        $bootstrapper = new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, failOnInternalError: true);
+
+        $this->assertFalse($bootstrapper->boot());
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabledReason());
+    }
+
+    /** Unreadable view roots with nothing found elsewhere leave Blade with nothing: a disable, not a silent zero. */
+    #[Test]
+    public function unreadable_view_roots_with_no_template_discovered_disable_blade(): void
+    {
+        $nested = $this->viewDir . '/protected';
+        \mkdir($nested, 0o777, true);
+        $this->writeTemplate('protected/unreachable.blade.php', "{{ \$x }}\n");
+        \chmod($nested, 0o000);
+
+        try {
+            $bootstrapper = $this->bootstrapper($this->app(), new RecordingShadowRegistrar());
+            $this->assertFalse($bootstrapper->boot());
+        } finally {
+            \chmod($nested, 0o777);
+        }
+
+        $this->assertStringContainsString('1 view directory could not be read', (string) $bootstrapper->disabledReason());
+        $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
+        $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
+    }
 }

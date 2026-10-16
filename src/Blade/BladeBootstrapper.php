@@ -131,8 +131,8 @@ final class BladeBootstrapper
         $templates = $this->findTemplates($roots, $failures);
 
         if ($templates === [] && $failures === []) {
-            // Not a failure (an API-only app is normal), but worth surfacing under --no-progress:
-            // the shape of #1497, a real view tree that discovered nothing.
+            // Not a failure (an API-only app is normal), but the shape of #1497, a real view tree
+            // that discovered nothing. Unlike a disable, VoidProgress (--no-progress) drops it.
             $this->output->warning(
                 'Laravel plugin: Blade template analysis is enabled, but no Blade templates were discovered.',
             );
@@ -181,6 +181,16 @@ final class BladeBootstrapper
             }
 
             $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+
+            // Unreadable view roots and nothing found elsewhere: the user asked for Blade and got none of it.
+            if ($templates === [] && $failures !== []) {
+                $this->degrade(
+                    'no Blade template was discovered and ' . \count($failures) . ' view director'
+                    . (\count($failures) === 1 ? 'y' : 'ies') . ' could not be read ('
+                    . \implode(', ', \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME))
+                    . (\count($failures) > self::FAILURES_TO_NAME ? ', ...' : '') . ')',
+                );
+            }
 
             return false;
         }
@@ -882,7 +892,8 @@ final class BladeBootstrapper
             $line = "  - {$input}" . ($file === null ? '' : " in {$file}") . "\n";
 
             // An unknown file counts as project code: the user may still be able to fix it.
-            if ($file !== null && $vendorDir !== null && $this->isUnderVendorDirectory($file, $vendorDir)) {
+            // Canonicalized like the hint roots (#1552): a mis-cased invocation path survives realpath().
+            if ($file !== null && $vendorDir !== null && $this->isUnderVendorDirectory(PathCaseCanonicalizer::canonicalize($file), $vendorDir)) {
                 $vendorInputs[] = $line;
             } else {
                 $projectInputs[] = $line;
@@ -914,8 +925,8 @@ final class BladeBootstrapper
         $this->output->debug(
             "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
             . \implode('', $projectInputs)
-            . "To restore caching, declare such callbacks `static fn` / `static function` that capture no objects, "
-            . "or register a static method (`[Foo::class, 'bar']`).\n"
+            . "To restore caching for a callback above, declare it `static fn` / `static function` capturing no objects, "
+            . "or register a static method (`[Foo::class, 'bar']`). A compiler subclass or compiler state is never fingerprinted.\n"
             . ($vendorInputs === [] ? '' : "Also declared in vendor packages:\n" . \implode('', $vendorInputs)),
         );
     }
