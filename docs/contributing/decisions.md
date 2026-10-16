@@ -590,3 +590,13 @@ Evidence (Psalm 7.0.0-rc1, laravel/framework 13.34, `--threads=1` and `--threads
 - **Upstream cache-key hook** (plugin contribution known before `initProviders`): worth an upstream issue, nothing needs it today.
 
 Known separate defect, not caused by overrides: a Blade shadow with a syntax error loses its `ParseError` on a warm run (the parser cache replays the broken shadow's statements); it reproduces with the XML `<blade />` alone.
+
+### MorphTo relation generics use Psalm's declared type
+
+**Decision:** The AST relation parser does not reconstruct a `MorphTo` related-model generic from raw PHPDoc. Since its target model is selected at runtime and the parser has no static factory class-string to resolve, `relationType()` declines it; Psalm's declared return type supplies a documented generic such as `MorphTo<Model&HasTitle, self>`.
+
+**Why:** Psalm 7 preserves the declared intersection on external calls to an autoloaded model and resolves aliases, traits, inheritance, and receiver context. Reconstructing the first generic slot from raw PHPDoc produced `App\Models\Model&HasTitle` and an `UndefinedClass` issue in the #1753 regression. Property access already reads the generic from Psalm's effective relation type, so its separate raw-PHPDoc fallback duplicated the same broken resolution path.
+
+**Rejected:** A broader provider gate that declined for all explicit generic relation returns. It changed established non-MorphTo behavior: partial generic declarations with defaulted slots and `$this` receiver cases rely on AST binding to preserve concrete relation templates.
+
+**Callback consumers:** `RelationCallbackParamsHandler` keeps using the AST-only `relationType()` helper for relation objects passed to eager-load callbacks. It explicitly declines `MorphTo` before eager resolution, so removing raw MorphTo reconstruction does not change callback relation typing.
