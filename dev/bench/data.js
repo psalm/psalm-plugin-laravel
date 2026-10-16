@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792139347570,
+  "lastUpdate": 1792143547456,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14205,6 +14205,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4d0f1fb672dc5f52744f1784b24262bdd7ed580",
+          "message": "Fix `Collection` return types: `random($n)`, `max()`/`min()`, renumbered keys, `flatMap` keys, `Closure` defaults (#1898)\n\n* fix(collections): drop isNotEmpty first() assertion that leaked raw templates\n\nThe negated assertion stored first()'s unresolved declared return type in the\ntrue branch. isNotEmpty() now carries no assertion, so first() stays Value|null.\n\nRefs #1897\n\n* fix(collections): return static<int, TValue> from random() with a number\n\nAn unused method template routes around vimeo/psalm#11837, which collapsed the\nconditional return to the TValue branch on Collection, LazyCollection and Enumerable.\n\nRefs #1897\n\n* fix(collections): type max() and min() instead of falling back to mixed\n\nRestates Laravel's reflected conditional in the EnumeratesValues and Enumerable\nstubs with the null and string branches first, which Psalm resolves.\n\nRefs #1897\n\n* fix(collections): renumber keys in pop(), shift(), shuffle() and concat() results\n\nThese methods build a list at runtime, so int keys replace the source keys.\npop() and shift() keep an override because Laravel 12.20 documents only a union.\n\nRefs #1897\n\n* fix(collections): widen int keys returned by flatMap() to int\n\nA list-shaped callback result bound the key to 0 or int<0, max>, which an invariant\nCollection<int, V> target rejected. String keys are preserved.\n\nRefs #1897\n\n* fix(collections): fix combine(), times(), fromJson() and unwrap() types, add sole proxy\n\n- combine() keys are array-key, not the item type\n- times() without a callback is Collection<int, int>\n- fromJson() and unwrap() no longer leak class templates from static calls\n- declare the $sole higher-order proxy property\n\nRefs #1897\n\n* fix(collections): stop binding closure defaults to the Closure in last(), pull(), value() and get()\n\nLaravel's single default template resolves to the Closure itself when one is passed.\nSplit the return on the default being a Closure, as first() already does, and add the\nget() override to LazyCollection and Enumerable.\n\nRefs #1897\n\n* fix(collections): restore times() callback inference and type the sole proxy\n\n- drop the times() conditional return: any mention of $callback in the return type\n  loses contextual typing of untyped callbacks (no form kept both)\n- the $sole proxy returns the selected item, not the proxied method's result\n\nRefs #1897\n\n* fix(collections): keep source keys in random() when preserveKeys is true\n\nRefs #1897\n\n* test(collections): drop vacuous max/min, value() assertions\n\nRefs #1897\n\n* fix(collections): decline higher-order proxy narrowing on collection unions\n\nRefs #1897\n\n* fix(collections): count non-generic collection subclasses in proxy union decline\n\nRefs #1897\n\n* fix(collections): null key on LazyCollection::get() and gate $sole to Laravel 13.33 #1897\n\n- LazyCollection::get() returns null for a null key without evaluating the default.\n- Laravel added the sole higher-order proxy in 13.33.0; the common stubs declared it for every\n  version. Laravel 13.33+ declares it itself, so the plugin stubs drop it; sole coverage moves to\n  version-gated type tests.",
+          "timestamp": "2026-10-16T11:35:29+02:00",
+          "tree_id": "75e42621d785c4a5f78bfe220fa3a01055d45637",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c4d0f1fb672dc5f52744f1784b24262bdd7ed580"
+        },
+        "date": 1792143545310,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.31,
+            "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
