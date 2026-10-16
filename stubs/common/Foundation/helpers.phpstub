@@ -163,6 +163,7 @@ function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain
  * @psalm-taint-unescape user_secret
  * @psalm-taint-unescape system_secret
  * @psalm-flow ($value) -> return
+ * @psalm-taint-specialize
  */
 function decrypt($value, $unserialize = true) {}
 
@@ -195,6 +196,7 @@ function dispatch_sync($job, $handler = null) {}
  * @psalm-taint-escape user_secret
  * @psalm-taint-escape system_secret
  * @psalm-flow ($value) -> return
+ * @psalm-taint-specialize
  */
 function encrypt($value, $serialize = true): string {}
 

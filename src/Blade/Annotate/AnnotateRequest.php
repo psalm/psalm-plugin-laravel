@@ -56,14 +56,17 @@ final class AnnotateRequest
     /**
      * @param array<string, list<string>> $changed  template path => names declared for it
      * @param array<string, string>       $failures template path => why it was left alone
+     * @param array<string, list<string>> $unknown  template path => names read but left undeclared,
+     *                                              since no call site types them
      */
-    public function publish(array $changed, array $failures, string $diff): void
+    public function publish(array $changed, array $failures, string $diff, array $unknown = []): void
     {
         $this->write([
             'dryRun' => $this->dryRun,
             'changed' => $changed,
             'failures' => $failures,
             'diff' => $diff,
+            'unknown' => $unknown,
         ]);
     }
 
