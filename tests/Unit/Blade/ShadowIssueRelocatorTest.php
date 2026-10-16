@@ -590,13 +590,40 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertInstanceOf(MissingPureAnnotation::class, $this->relocate($issue, $this->entry([9 => 3])));
     }
 
-    /** #1908: `@entangle('tab')` compiles to `'tab'->value()`. */
+    /** #1908: Livewire's `@entangle('tab')` compiles to `'tab'->value()` and `'tab'->hasModifier('live')`. */
     #[Test]
-    public function a_method_call_on_a_string_literal_is_dropped(): void
+    #[DataProvider('compiledEntangleCalls')]
+    public function a_compiled_method_call_on_a_string_literal_is_dropped(string $anchor, int $width): void
+    {
+        $shadow = "window.Livewire.find('<?php echo e(\$__livewire->getId()); ?>').entangle('<?php echo e('tab'->value()); ?>')<?php echo e('tab'->hasModifier('live') ? '.live' : ''); ?>";
+        $issue = new InvalidMethodCall("Cannot call method on 'tab' variable ", self::selectionLocation($anchor, $width, $shadow));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), templateSource: "<div x-data=\"{ open: @entangle('tab') }\"></div>\n"));
+    }
+
+    /** @return iterable<string, array{string, int}> */
+    public static function compiledEntangleCalls(): iterable
+    {
+        yield 'value()' => ["'tab'->value", 5];
+        yield 'hasModifier()' => ["'tab'->hasModifier", 11];
+    }
+
+    #[Test]
+    public function an_authored_method_call_on_a_string_literal_keeps_reporting(): void
+    {
+        $issue = new InvalidMethodCall("Cannot call method on 'x' variable ", self::selectionLocation("'x'->value", 5, "<?php echo e('x'->value()); ?>"));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: "<div>\n  {{ 'x'->value() }}\n</div>\n");
+
+        $this->assertInstanceOf(InvalidMethodCall::class, $relocated);
+    }
+
+    #[Test]
+    public function a_method_call_on_a_string_literal_at_an_unreadable_location_keeps_reporting(): void
     {
         $issue = new InvalidMethodCall("Cannot call method on 'tab' variable ", $this->shadowLocation(9));
 
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+        $this->assertInstanceOf(InvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
     }
 
     #[Test]

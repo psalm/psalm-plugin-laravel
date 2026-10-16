@@ -122,9 +122,8 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        // `@entangle('tab')` compiles to `'tab'->value()` (#1908). An author's own method call on a
-        // string literal is a fatal error on the first render, so the message alone identifies it.
-        if ($issue instanceof InvalidMethodCall && \preg_match("/^Cannot call method on '[^']*' variable/", $issue->message) === 1) {
+        // `@entangle('tab')` compiles to `'tab'->value()` (#1908), call text the template never holds.
+        if ($issue instanceof InvalidMethodCall && self::isGeneratedLiteralReceiverCall($issue, $target)) {
             return false;
         }
 
@@ -872,6 +871,39 @@ final class ShadowIssueRelocator
         return $target->attributesFromTag
             && self::selectedText($issue->code_location) === $check
             && !TemplateSnippetMatcher::occursInWithRawTextRewrites($check, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether an issue sits on a method call whose receiver is a string literal (`'tab'->value()`,
+     * what `@entangle('tab')` compiles to) and that call, receiver included, is absent from the
+     * template, so an author's own `{{ 'x'->value() }}` keeps the finding. Psalm positions the issue
+     * on the method name, so the receiver is read back off the shadow text right before it; a
+     * receiver on an earlier line is unreadable and keeps the finding.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function isGeneratedLiteralReceiverCall(InvalidMethodCall $issue, ShadowTarget $target): bool
+    {
+        if (\preg_match("/^Cannot call method on '[^']*' variable/", $issue->message) !== 1) {
+            return false;
+        }
+
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        $call = TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+
+        if (
+            $call === null
+            || \preg_match('/(?:\'(?:[^\'\\\\]|\\\\.)*+\'|"(?:[^"\\\\]|\\\\.)*+")\s*+\??->\s*+\z/', \substr($selection->snippet, 0, $selection->start), $receiver) !== 1
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursInWithRawTextRewrites($receiver[0] . $call, $target->templateSource, $target->markerPrefix());
     }
 
     /**
