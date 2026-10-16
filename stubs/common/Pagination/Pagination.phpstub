@@ -67,11 +67,25 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      */
     public function through(callable $callback) {}
 
-    // `fragment()` is intentionally NOT stubbed. Laravel 13.18.0 (#60586) added the
-    // conditional `@return (... : $this)` natively; a stub conditional collapses against
-    // the reflected one on Psalm beta19 and the reflected `$this` setter branch is itself
-    // unresolvable, so the refined chainable return is no longer achievable. The native
-    // (degraded) type stands until the upstream Psalm merge bug is fixed.
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * Laravel declares the flat `$this|string|null` on every 12.x and on 13.x before 13.18.0,
+     * which breaks `->fragment('x')->links()` chains (the next call lands on `string|null`).
+     * The conditional keeps the getter `string|null` and the setter chainable.
+     *
+     * The template is explicit, not the implicit `($fragment is null ? ...)` form Laravel 13.18.0+
+     * declares natively: with both the stub and the reflected source declaring that implicit
+     * conditional, the setter branch is lost (call returns `string|null`) on Psalm 7, while an
+     * explicitly templated stub resolves on every Laravel version. The setter branch is `$this`
+     * (as in Laravel 13.18.0+), which resolves to the receiver with its `<TKey, TValue>`.
+     *
+     * @template TFragment of string|null
+     *
+     * @param  TFragment  $fragment
+     * @return (TFragment is null ? string|null : $this)
+     */
+    public function fragment($fragment = null) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
@@ -167,7 +181,15 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      */
     public function through(callable $callback) {}
 
-    // `fragment()` intentionally not stubbed; see AbstractPaginator::fragment() above.
+    /**
+     * Get / set the URL fragment to be appended to URLs. See `AbstractPaginator::fragment()`.
+     *
+     * @template TFragment of string|null
+     *
+     * @param  TFragment  $fragment
+     * @return (TFragment is null ? string|null : $this)
+     */
+    public function fragment($fragment = null) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
