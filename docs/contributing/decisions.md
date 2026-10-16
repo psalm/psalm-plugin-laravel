@@ -430,6 +430,20 @@ Both are Psalm-side defects. The stub does not work around them: a per-shape wor
 ### `groupBy()`/`keyBy()` with a `mixed`-returning callback is answered by a handler, not the stub
 
 Laravel casts group/key values to array keys at runtime, but the stub's `TGroupKey`/`TNewKey` conditional keeps `mixed` in the outer key (`array-key|mixed`), so the next `static<TKey, ...>` call reports `InvalidTemplateParam` (#1884). Rewriting those conditionals did not help (two attempts, probed dead end); `CollectionGroupByKeyByHandler` answers `array-key` for callbacks whose return type contains `mixed` and declines for every typed callback.
+### `filter()`/`reject()`/`where()` narrow TValue from a class-typed closure parameter (#1912)
+
+**Decision:** `CollectionFilterHandler` narrows the result TValue of `filter(Closure)`, `where(Closure)` and `reject(Closure)` from the closure's first parameter. Laravel calls the callback for every element and keeps the original item, and PHP never coerces an object into a class type, so any non-instance throws `TypeError`: every surviving element is an instance of the parameter type. Return type only; `ArgumentTypeCoercion` / `MixedArgumentTypeCoercion` are still reported.
+
+**Rules:**
+- Exactly one argument, a `Closure`/arrow-fn literal (no first-class callables or callable strings), first param non-variadic and non-by-ref.
+- The param's NATIVE type must be only class/interface/enum names and optionally `null`. Untyped, `mixed`, scalar, array, `object`, `iterable`, `callable` decline.
+- Gate: TValue is `mixed`, or the param's non-null part is contained by TValue without coercion. An unrelated param keeps today's result and Psalm's `InvalidArgument`. A template-derived atomic in TValue declines.
+- Per TValue atomic: kept when the param accepts it (preserves generics such as `Dog<int>`), replaced by the param's classes it contains (`mixed`/`object`/supertype) otherwise, dropped if neither. `null` survives only when the param is nullable and TValue had `null`/`mixed`.
+- filter/where then run the existing predicate matcher on the narrowed TValue and fall back to the param-narrowed result when it yields nothing. `reject()` gets only param narrowing (predicate inversion is a separate matter).
+
+**Rejected (probed dead end): narrowing scalar params when the user's file declares `strict_types=1`.** The coercion mode of a call is decided by the CALLING file. The caller is `Arr::where()`/`array_filter()` (`Collection`), a generator in `LazyCollection::filter()`, or `EnumeratesValues::reject()`'s wrapper. None of those Laravel files declares `strict_types`, and `array_filter` is internal, so callbacks run in coercive mode regardless of the user's file: `fn (int $x)` accepts `"5"` and the original `"5"` stays in the result.
+
+**Boundaries:** `first`, `each`, `every`, `contains`, `partition`, `sortBy`, `keyBy`, `groupBy` do not qualify (early exit, or the result is not a kept subset). The receiver variable is not narrowed, and `Enumerable`-typed receivers and higher-order proxies are not covered.
 
 ## Variance
 
