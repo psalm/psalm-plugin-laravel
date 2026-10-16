@@ -19,6 +19,11 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * shipped on Collection so Enumerable-typed callers keep the narrowing
      * instead of falling back to Laravel's reflected static<int, TValue>|TValue.
      *
+     * Unused method template: workaround for vimeo/psalm#11837, a conditional return in a stub
+     * that re-declares a reflected method otherwise collapses to its first branch.
+     *
+     * @template TUnused
+     *
      * @param  int|null  $number
      * @return ($number is null ? TValue : static<int, TValue>)
      *
