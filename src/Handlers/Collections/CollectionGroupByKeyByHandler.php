@@ -61,11 +61,12 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
                 $method === 'groupby',
             );
             $value = $templates[1] ?? ($model === null ? null : new Union([new TNamedObject($model)]));
-        } elseif (self::returnsMixed($arg) && self::isExactBaseCollection($lhs)) {
+        } elseif (self::returnsMixed($arg) && self::isBaseCollection($class) && self::isExactBaseCollection($lhs)) {
             // Laravel casts group/key values to array keys at runtime, but Psalm carries `mixed` through the stub's
             // TGroupKey/TNewKey conditional, so the outer key would be `array-key|mixed` and break `static<TKey, ...>` calls.
-            // The receiver expression must be exactly a base collection: subclasses may reorder templates, and template
-            // or intersection receivers make the answer disagree with what Psalm merges for the other members.
+            // Both the dispatched class and the receiver expression must be exactly a base collection: subclasses may
+            // reorder templates (`$this` inside one can still be typed as the base), and template or intersection
+            // receivers make the answer disagree with what Psalm merges for the other members.
             $key = Type::getArrayKey();
             $value = $templates[1] ?? null;
         } else {
@@ -109,6 +110,12 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         return $mixed;
     }
 
+    /** @psalm-pure */
+    private static function isBaseCollection(string $class): bool
+    {
+        return \in_array(\strtolower($class), ['illuminate\support\collection', 'illuminate\database\eloquent\collection'], true);
+    }
+
     /** @psalm-mutation-free */
     private static function isExactBaseCollection(?Union $lhs): bool
     {
@@ -117,9 +124,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         foreach ($lhs->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []
-                || !\in_array(\strtolower($atomic->value), ['illuminate\support\collection', 'illuminate\database\eloquent\collection'], true)
-            ) {
+            if (!$atomic instanceof TNamedObject || $atomic->extra_types !== [] || !self::isBaseCollection($atomic->value)) {
                 return false;
             }
         }

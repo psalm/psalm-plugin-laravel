@@ -12,7 +12,17 @@ final class Issue1884FixedCollection extends Collection {}
  * @template K of array-key
  * @extends Collection<K, V>
  */
-final class Issue1884Reversed extends Collection {}
+final class Issue1884Reversed extends Collection
+{
+    /**
+     * @psalm-if-this-is Collection<string, int>
+     * @param callable(int): mixed $by
+     */
+    public function firstKeyed(callable $by): ?int
+    {
+        return $this->keyBy($by)->first();
+    }
+}
 
 /** @param Issue1884Reversed<Customer, string> $c */
 function remapped_template_subclass_defers(Issue1884Reversed $c): void
