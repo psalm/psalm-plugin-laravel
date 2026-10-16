@@ -403,7 +403,7 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = self::remapMessage($issue, $target);
+        $message = self::remapMessage($issue, $target) . self::namedSlotHint($issue, $target);
 
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
@@ -523,6 +523,41 @@ final class ShadowIssueRelocator
         ) ?? $message;
 
         return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
+    }
+
+    /**
+     * A raw `@var \Illuminate\View\ComponentSlot $footer` declares a required variable, so its
+     * `isset()`/`??`/`??=` guard reports as redundant. A caller can omit any named slot, though, so
+     * the guard is usually right and the declaration is what to fix; the finding names the fix
+     * (#1871). Matches the whole message of the two docblock-branch wordings those guards produce
+     * on exactly this type, and only when the template's own declaration of the name excludes
+     * null: an optional slot narrowed by an outer `isset()` renders the same wording. `$slot`
+     * never reaches here: the ambient gate drops its guards in a component view.
+     */
+    private static function namedSlotHint(CodeIssue $issue, ShadowTarget $target): string
+    {
+        $name = '([a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)';
+
+        if (
+            !$target->isComponentView
+            || !$issue instanceof RedundantConditionGivenDocblockType && !$issue instanceof DocblockTypeContradiction
+            || \preg_match(
+                '/^(?|Docblock-defined type Illuminate\\\View\\\ComponentSlot for \$' . $name . ' is never null'
+                    . '|Cannot resolve types for \$' . $name . ' - docblock-defined type Illuminate\\\View\\\ComponentSlot does not contain null)\z/',
+                $issue->message,
+                $matches,
+            ) !== 1
+        ) {
+            return '';
+        }
+
+        $declared = ContractParser::rawDeclaredType($target->templateSource, $matches[1]);
+
+        if ($declared === null || ContractParser::allowsNull($declared)) {
+            return '';
+        }
+
+        return " (named slots are optional: declare `\\Illuminate\\View\\ComponentSlot|null \${$matches[1]} = null`)";
     }
 
     /**

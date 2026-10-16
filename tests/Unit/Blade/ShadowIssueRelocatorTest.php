@@ -901,6 +901,66 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
+    /** Declares `$footer` and `$füß` as required named slots; line 3 is the mapped one. */
+    private const NAMED_SLOT_SOURCE = "<?php /** @var \\Illuminate\\View\\ComponentSlot \$footer */ ?>\n<?php /** @var \\Illuminate\\View\\ComponentSlot \$füß Optional. */ ?>\n<p>x</p>\n";
+
+    /**
+     * #1871: a guard on a named slot declared non-null in a component view keeps reporting, with a
+     * hint naming the optional declaration.
+     */
+    #[Test]
+    #[DataProvider('namedSlotGuards')]
+    public function a_named_slot_guard_in_a_component_view_carries_the_optional_hint(CodeIssue $issue, string $name): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: true, templateSource: self::NAMED_SLOT_SOURCE);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame(
+            $issue->message . " (named slots are optional: declare `\\Illuminate\\View\\ComponentSlot|null \${$name} = null`)",
+            $relocated->message,
+        );
+    }
+
+    /** @return iterable<string, array{CodeIssue, string}> */
+    public static function namedSlotGuards(): iterable
+    {
+        yield 'isset' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), 'footer'];
+        yield '??' => [new DocblockTypeContradiction('Cannot resolve types for $footer - docblock-defined type Illuminate\View\ComponentSlot does not contain null', self::staticShadowLocation(9), null), 'footer'];
+        yield 'non-ASCII name' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $füß is never null', self::staticShadowLocation(9), null), 'füß'];
+    }
+
+    #[Test]
+    #[DataProvider('unhintedGuards')]
+    public function a_guard_outside_the_named_slot_shape_carries_no_hint(CodeIssue $issue, bool $isComponentView, string $templateSource = self::NAMED_SLOT_SOURCE): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: $isComponentView, templateSource: $templateSource);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame($issue->message, $relocated->message);
+    }
+
+    /** @return iterable<string, array{0: CodeIssue, 1: bool, 2?: string}> */
+    public static function unhintedGuards(): iterable
+    {
+        $guard = static fn(): RedundantConditionGivenDocblockType => new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null);
+
+        yield 'outside a component view' => [$guard(), false];
+        yield '?? outside a component view' => [new DocblockTypeContradiction('Cannot resolve types for $footer - docblock-defined type Illuminate\View\ComponentSlot does not contain null', self::staticShadowLocation(9), null), false];
+        yield 'another type' => [new RedundantConditionGivenDocblockType('Docblock-defined type string for $title is never null', self::staticShadowLocation(9), null), true];
+        yield 'not a null guard' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is always Illuminate\View\ComponentSlot', self::staticShadowLocation(9), null), true];
+        yield 'inferred wording' => [new RedundantCondition('Type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), true];
+        yield 'docblock wording on another class' => [new RedundantCondition('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), true];
+        // Narrowed by an outer `isset()`: Psalm renders the same wording, but the declaration is fine.
+        yield 'declared optional' => [$guard(), true, "<?php /** @var \\Illuminate\\View\\ComponentSlot|null \$footer = null */ ?>\n\n<p>x</p>\n"];
+        yield 'declared nullable' => [$guard(), true, "<?php /** @var ?\\Illuminate\\View\\ComponentSlot \$footer */ ?>\n\n<p>x</p>\n"];
+        yield 'not declared in the template' => [$guard(), true, self::TEMPLATE_SOURCE];
+    }
+
+    private static function staticShadowLocation(int $line): Raw
+    {
+        return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
+    }
+
     /**
      * `Reconciler::triggerIssueForImpossible()`'s INFERRED-branch siblings of
      * `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`: the
