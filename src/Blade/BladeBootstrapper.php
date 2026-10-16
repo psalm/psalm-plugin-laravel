@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory;
@@ -99,6 +100,9 @@ final class BladeBootstrapper
 
     /** @var array<string, true> views another template renders with `@each`, which hands them `$key` */
     private array $eachTargets = [];
+
+    /** @var list<string> directories, separator-terminated, whose templates a framework renders with data no call site lists */
+    private array $frameworkRenderedDirectories = [];
 
     /** @var array<array-key, list<array{0: string, 1: string}>|null> every view a composer or creator reaches, read once up front (#1827) */
     private array $composerSources = [];
@@ -584,6 +588,7 @@ final class BladeBootstrapper
         $this->factory = $this->viewFactory();
         $this->providedNames = $this->sharedNames($this->factory);
         \ksort($this->providedNames, \SORT_STRING);
+        $this->frameworkRenderedDirectories = $this->frameworkRenderedDirectories();
 
         $parser = new ContractParser();
 
@@ -625,6 +630,54 @@ final class BladeBootstrapper
     }
 
     /**
+     * Laravel's mail markdown component directories (`<x-mail::button>`, `@component('mail::button')`:
+     * the `mail` namespace only exists while a markdown mail renders) and Livewire's view directories,
+     * where a component's public properties reach a view that need carry no Livewire markup.
+     *
+     * @return list<string>
+     */
+    private function frameworkRenderedDirectories(): array
+    {
+        try {
+            $config = $this->app->bound('config') ? $this->app->make('config') : null;
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if (!$config instanceof Repository) {
+            return [];
+        }
+
+        // Livewire merges its config whenever it is installed; v3 has `view_path`, v4 adds the rest.
+        $entries = \is_array($config->get('livewire'))
+            ? [
+                $config->get('mail.markdown.paths'),
+                $config->get('livewire.view_path'),
+                $config->get('livewire.component_locations'),
+                $config->get('livewire.component_namespaces'),
+            ]
+            : [$config->get('mail.markdown.paths')];
+
+        // Closures take `mixed`, so the untyped config values add no mixed locals.
+        $directories = \array_merge(...\array_map(
+            static fn(mixed $entry): array => \is_array($entry) ? \array_values($entry) : [$entry],
+            $entries,
+        ));
+
+        return \array_values(\array_filter(\array_map(
+            static function (mixed $directory): ?string {
+                $resolved = \is_string($directory) ? \realpath($directory) : false;
+
+                // Canonicalized as resolveRoots() canonicalizes the roots every template path starts with.
+                return $resolved === false
+                    ? null
+                    : \rtrim(PathCaseCanonicalizer::canonicalize($resolved), \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+            },
+            $directories,
+        )));
+    }
+
+    /**
      * The names the booted app provides to this template, or null when the template keeps its
      * `mixed` net: a component or Livewire view, or one whose data a composer or creator (wildcard
      * ones included) or a `@component` slot can add to, none of which a template's own source lists.
@@ -639,6 +692,12 @@ final class BladeBootstrapper
     {
         if (!$this->reportUndeclaredVariables || !$this->factory instanceof Factory) {
             return null;
+        }
+
+        foreach ($this->frameworkRenderedDirectories as $directory) {
+            if (\str_starts_with($template, $directory)) {
+                return null;
+            }
         }
 
         $names = ViewName::resolve($template, $roots);

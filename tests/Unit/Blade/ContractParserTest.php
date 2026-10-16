@@ -92,6 +92,31 @@ final class ContractParserTest extends TestCase
         $this->assertSame($expected, $this->undeclared($source));
     }
 
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function livewireMarkers(): iterable
+    {
+        yield 'a functional Volt component' => [
+            "<?php use function Livewire\\Volt\\{state}; state(['count' => 0]); /** @var string \$title */ ?>\n{{ \$title }} {{ \$count }}\n",
+            [],
+        ];
+        yield 'an address that spells a directive is text' => [
+            "<?php /** @var string \$title */ ?>\n<a href=\"mailto:help@this.example\">{{ \$titel }}</a>\n",
+            ['titel'],
+        ];
+        yield 'an escaped directive is text' => [
+            "<?php /** @var string \$title */ ?>\n<code>@@entangle('x')</code> {{ \$titel }}\n",
+            ['titel'],
+        ];
+    }
+
+    /** @param list<string> $expected */
+    #[Test]
+    #[DataProvider('livewireMarkers')]
+    public function only_live_livewire_markup_keeps_the_net(string $source, array $expected): void
+    {
+        $this->assertSame($expected, $this->undeclared($source));
+    }
+
     #[Test]
     public function render_targets_are_the_literal_views_of_component_and_each_directives(): void
     {

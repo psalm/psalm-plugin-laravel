@@ -63,8 +63,12 @@ final class ContractParser
      */
     private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
-    /** Livewire markup or code: the component's public properties reach its view with no call site naming them. */
-    private const LIVEWIRE_MARKERS = '/\bwire:[\w.-]+|@this\b|@entangle\b|\$wire\b|\$this\b|\bnew\s+class\b/';
+    /**
+     * Livewire markup or code: the component's public properties reach its view with no call site
+     * naming them. `@this`/`@entangle` take Blade's `\B@` boundary, so `help@this.example` is text,
+     * and `@@entangle` is the escaped spelling; `Livewire\Volt\` is a functional Volt component's import.
+     */
+    private const LIVEWIRE_MARKERS = '/\bwire:[\w.-]+|\B(?<!@)@(?:this|entangle)\b|\$wire\b|\$this\b|\bnew\s+class\b|\bLivewire\\\\Volt\\\\/';
 
     /** The by-name render directives that hand their target data no call site of it lists; `\B@` as {@see self::DIRECTIVE_PATTERN}. */
     private const RENDER_TARGET_PATTERN = '/\B@(?<name>@?(?:componentFirst|component|each))[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . '/i';
