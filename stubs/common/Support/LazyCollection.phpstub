@@ -165,6 +165,21 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public function hasAny($key) {}
 
     /**
+     * Zip the collection together with one or more arrays.
+     *
+     * Accepts variadic iterables via func_get_args(). Iterates until every input is exhausted,
+     * so an exhausted iterator contributes null.
+     *
+     * @template TZipValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
+     * @return static<int, static<int, TValue|TZipValue|null>>
+     *
+     * @psalm-variadic
+     */
+    public function zip($items) {}
+
+    /**
      * Select specific values from the items within the collection.
      *
      * Arr::select() maps every item to an array holding only the requested keys and

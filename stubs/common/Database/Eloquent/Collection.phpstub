@@ -150,10 +150,12 @@ class Collection extends BaseCollection implements QueueableCollection
     public function pad($size, $value) {}
 
     /**
+     * Runs on toBase()->zip(), and array_map() pads the shorter side with null.
+     *
      * @template TZipValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
-     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, TModel|TZipValue>>
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, TModel|TZipValue|null>>
      *
      * @psalm-variadic
      */

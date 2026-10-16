@@ -23,8 +23,9 @@ function eloquent_pad_zip_flip(EloquentCollection $customers): void
     $_padded = $customers->pad(5, 'x');
     /** @psalm-check-type-exact $_padded = Illuminate\Support\Collection<int|string, Customer|'x'> */
 
+    // array_map() pads the shorter side with null, and lengths are unknown statically.
     $_zipped = $customers->zip(['a', 'b']);
-    /** @psalm-check-type-exact $_zipped = Illuminate\Support\Collection<int, Illuminate\Support\Collection<int, 'a'|'b'|Customer>> */
+    /** @psalm-check-type-exact $_zipped = Illuminate\Support\Collection<int, Illuminate\Support\Collection<int, 'a'|'b'|Customer|null>> */
 
     $_flipped = $customers->flip();
     /** @psalm-check-type-exact $_flipped = Illuminate\Support\Collection<array-key, string> */
