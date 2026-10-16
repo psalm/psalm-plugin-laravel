@@ -1954,4 +1954,64 @@ final class BladeIssueRemapTest extends TestCase
 
         $this->fail("no shadow was compiled for {$template}");
     }
+
+    /**
+     * #1909: an undeclared variable is `mixed`, and Psalm narrows (`?? false`, `?->`) or coerces (a
+     * `mixed` argument to `?BaseModel`) it into findings outside the Mixed family. They are the
+     * fallback type's artifact, so `reportMixedIssues` governs them too.
+     */
+    #[Test]
+    public function findings_about_undeclared_variables_follow_report_mixed_issues(): void
+    {
+        $template = 'mixed-leak-undeclared.blade.php';
+        $expected = [
+            'RiskyTruthyFalsyComparison' => [1, 4],
+            'UndefinedMagicMethod' => [8],
+            'PossiblyInvalidArgument' => [10],
+            'PossiblyInvalidCast' => [10],
+        ];
+
+        foreach (['psalm.xml' => false, 'psalm-blade-report-mixed.xml' => true] as $config => $reported) {
+            $issues = $this->analyze($config);
+            $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+            foreach ($expected as $type => $lines) {
+                $this->assertSame($reported ? $lines : [], $this->linesFor($issues, $type, $template), "{$config} {$type}: {$json}");
+            }
+        }
+    }
+
+    /**
+     * #1909: the same findings on a variable the template declares (raw `@var` and `@psalm-var`),
+     * assigns, or binds as a loop alias keep reporting with `reportMixedIssues` off.
+     */
+    #[Test]
+    public function findings_about_declared_and_local_variables_keep_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([2], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-declared.blade.php'), $json);
+        $this->assertSame([7], $this->linesFor($issues, 'UndefinedMagicMethod', 'mixed-leak-declared.blade.php'), $json);
+        $this->assertSame([2, 6], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-local.blade.php'), $json);
+    }
+
+    /**
+     * #1909: `$acct['avatar']` on a possible `ArrayAccess` runs a virtual `offsetGet()` that Psalm
+     * analyzes with `PossiblyInvalidMethodCall` suppressed (ArrayFetchAnalyzer.php); the re-emit lost
+     * that suppression under either config.
+     */
+    #[Test]
+    public function array_access_on_a_possible_array_access_does_not_report_the_virtual_offset_call(): void
+    {
+        foreach (['psalm.xml', 'psalm-blade-report-mixed.xml'] as $config) {
+            $issues = $this->analyze($config);
+
+            $this->assertSame(
+                [],
+                $this->linesFor($issues, 'PossiblyInvalidMethodCall', 'undeclared-isset-offset.blade.php'),
+                $config . ': ' . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+            );
+        }
+    }
 }

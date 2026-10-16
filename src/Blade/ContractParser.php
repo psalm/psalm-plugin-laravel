@@ -693,6 +693,19 @@ final class ContractParser
     }
 
     /**
+     * Every name the compiled body binds for itself, bookkeeping included; null when it does not
+     * parse, which a caller must read as "unknown", never as "binds nothing".
+     *
+     * @return array<string, true>|null
+     */
+    public function localNames(string $compiled): ?array
+    {
+        [, $locals, , $parsed] = $this->walkReads($compiled);
+
+        return $parsed ? $locals : null;
+    }
+
+    /**
      * @param array<string, true> $names
      * @param array<string, true> $excluded
      *
@@ -724,8 +737,9 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool} names read, the
+     *         names the body binds for itself, whether it hides which names it reads, and whether
+     *         it parsed
      */
     private function walkReads(string $compiled): array
     {
@@ -736,7 +750,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, false];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -869,6 +883,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, true];
     }
 }

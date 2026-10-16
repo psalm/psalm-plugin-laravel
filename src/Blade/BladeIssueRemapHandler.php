@@ -260,6 +260,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return null;
         }
 
+        $shadow = (string) @\file_get_contents($shadowPath);
+
         return new ShadowTarget(
             $entry,
             $templateSource,
@@ -271,7 +273,35 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             // Falling back to the live bytes only when boot recorded nothing: no worse than having
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
-            PreludeBuilder::declaresTagAttributes((string) @\file_get_contents($shadowPath)),
+            PreludeBuilder::declaresTagAttributes($shadow),
+            self::$reportMixedIssues ? [] : self::undeclaredNames($shadow, $shadowPath),
+        );
+    }
+
+    /**
+     * #1909: the names only the prelude's `mixed` fallback types. A body docblock in any `@var`
+     * spelling, a name the template binds itself, or a component seed types the name later, so it
+     * is subtracted. A body that does not parse turns the gate off instead.
+     *
+     * @return array<string, true>
+     */
+    private static function undeclaredNames(string $shadow, string $shadowPath): array
+    {
+        $fallback = PreludeBuilder::fallbackNames($shadow);
+        $locals = $fallback === [] ? null : (new ContractParser())->localNames($shadow);
+
+        if ($locals === null) {
+            return [];
+        }
+
+        // Over-matching (a `$` later on the docblock line) only keeps findings.
+        \preg_match_all('/@(?:psalm-|phpstan-)?var\h[^\n]*?\$(\w+)/', (string) \strstr($shadow, "\n?>\n"), $declared);
+
+        return \array_diff_key(
+            \array_fill_keys($fallback, true),
+            $locals,
+            \array_fill_keys($declared[1], true),
+            ComponentViewRegistry::seedFor($shadowPath) ?? [],
         );
     }
 }

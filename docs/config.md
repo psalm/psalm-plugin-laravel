@@ -275,7 +275,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; a `@props([...])` entry is typed in the body from a literal default (`'lg'` as `string`) and is `mixed` otherwise. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; a `@props([...])` entry is typed in the body from a literal default (`'lg'` as `string`) and is `mixed` otherwise. The `Mixed*` issues that fallback would otherwise produce are suppressed by default, along with the other findings derived from it; see [`reportMixedIssues`](#reportmixedissues).
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -335,6 +335,15 @@ Has no effect under `<blade value="false" />`: the read sets only exist once the
 ```
 
 Every template variable the plugin cannot prove a type for is `mixed` (see the notes above), so `MixedArgument`, `MixedAssignment`, and the rest of Psalm's `MixedIssue` family are overwhelmingly noise about the prelude's own fallback rather than a real template bug. They are dropped at the point issues are relocated onto the template, before Psalm's own suppression accounting sees them.
+
+The flag also governs findings outside the family that Psalm derives from that `mixed` (#1909). An undeclared `$x` narrowed by `$x['k'] ?? false` or `$x?->p` reports `RiskyTruthyFalsyComparison`, and one passed to a typed parameter is treated as that type afterwards, so `$x->typo()` reports `UndefinedMagicMethod`. With the flag off, these are dropped when every variable the finding is about is undeclared:
+
+- `RiskyTruthyFalsyComparison` and `UnhandledMatchCondition`, only when the message names `mixed`
+- `PossiblyInvalidArgument` and `PossiblyInvalidCast` (every variable the argument or cast operand reads)
+- `PossiblyInvalidMethodCall`, `UndefinedMagicMethod`, `UndefinedMethod` and `PossiblyUndefinedMethod` (a bare `$x->` or `$x?->` receiver)
+- `InvalidStringClass` (`new $x`, `$x::`)
+
+A variable counts as declared once the template types it (a `@var`, `@psalm-var` or `@phpstan-var` docblock in its body, a `@props` literal default, a class component's data) or binds it itself (an assignment, a loop alias, a closure parameter), so findings on those keep reporting, even when the value came from an undeclared variable. A `@props` entry without a literal default is still undeclared. Taint and arity findings are never dropped this way. Residuals are listed under [Known limits](blade.md#known-limits).
 
 Set `reportMixedIssues="true"` to opt back in and see them at the template's file and line, same as any other issue type. Opting in restores only findings that map to a real template line: a `Mixed*` finding on an unmapped line (the prelude that declares the fallback types) stays dropped unconditionally, because it can only ever describe the fallback itself, and so does one on Laravel's compiled save/restore bookkeeping (see [Compiler-generated code](blade.md#compiler-generated-code)). No recompile needed either way: the flag changes only which issues are reported, never what the compile pass collects, so flipping it reuses a warm shadow cache.
 

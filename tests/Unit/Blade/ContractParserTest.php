@@ -1039,4 +1039,17 @@ final class ContractParserTest extends TestCase
         $this->assertSame([['InvalidDocblock'], 2], ContractParser::suppressionContext($source, 5));
         $this->assertSame([[], 9], ContractParser::suppressionContext($source, 9));
     }
+
+    /** #1909: every name the body binds itself; null when it does not parse, never an empty set. */
+    #[Test]
+    public function local_names_are_the_names_the_body_binds(): void
+    {
+        $locals = $this->parser->localNames('<?php $ep = $endpoint; foreach ($items as $k => [$it]) {} $fn = fn($arg) => $arg; ?>');
+
+        $this->assertNotNull($locals);
+        \ksort($locals);
+        $this->assertSame(['arg' => true, 'ep' => true, 'fn' => true, 'it' => true, 'k' => true], $locals);
+        $this->assertSame([], $this->parser->localNames('<?php echo $$name; extract($data); ?>'));
+        $this->assertNull($this->parser->localNames('<?php $x = ; ?>'));
+    }
 }

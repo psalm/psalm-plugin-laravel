@@ -33,6 +33,8 @@ final class ShadowTarget
      *                                 time, so a template edited since the compile would yield a
      *                                 prefix matching nothing in the shadow.
      * @param bool   $attributesFromTag {@see PreludeBuilder::declaresTagAttributes()} on the shadow
+     * @param array<string, true> $undeclaredNames names the shadow types only through the prelude's
+     *                                             `mixed` fallback; empty turns the #1909 gate off
      */
     public function __construct(
         public readonly ShadowEntry $entry,
@@ -41,6 +43,7 @@ final class ShadowTarget
         public readonly bool $isComponentView,
         private readonly string $markerPrefix,
         public readonly bool $attributesFromTag = false,
+        public readonly array $undeclaredNames = [],
     ) {}
 
     public function markerPrefix(): string
