@@ -71,6 +71,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Get the first item from the collection passing the given truth test.
      *
+     * A closure default only runs when nothing matches, so its result joins `TValue`.
+     *
      * @psalm-mutation-free
      *
      * @template TFirstDefault
@@ -78,13 +80,15 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  (callable(TValue, TKey): bool)|null  $callback
      * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
-     * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
+     * @return ($default is \Closure ? TFirstDefaultFromClosure|TValue : (TFirstDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      */
     public function first(callable $callback = null, $default = null) {}
 
     /**
+     * A closure default only runs when the key is missing, so its result joins `TValue`.
+     *
      * @psalm-mutation-free
      *
      * @template TGetDefault
@@ -92,7 +96,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  TKey  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
-     * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
+     * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      */
