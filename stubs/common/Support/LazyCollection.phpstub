@@ -39,6 +39,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sole
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc

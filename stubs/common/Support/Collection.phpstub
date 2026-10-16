@@ -41,6 +41,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
+ * @property-read HigherOrderCollectionProxy<TKey, TValue> $sole
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
  * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
@@ -274,7 +275,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TCombineValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TCombineValue>|iterable<array-key, TCombineValue>  $values
-     * @return static<TValue, TCombineValue>
+     * @return static<array-key, TCombineValue>
      */
     public function combine($values) {}
 

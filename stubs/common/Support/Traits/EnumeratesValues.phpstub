@@ -84,4 +84,39 @@ trait EnumeratesValues
      * @return static<(TFlatMapKey is int ? int : TFlatMapKey), TFlatMapValue>
      */
     public function flatMap(callable $callback) {}
+
+    /**
+     * The callback only maps; without one the items are `range(1, $number)`, not `never`.
+     *
+     * @template TTimesValue
+     *
+     * @param  int  $number
+     * @param  (callable(int): TTimesValue)|null  $callback
+     * @return ($callback is null ? static<int, int> : static<int, TTimesValue>)
+     */
+    public static function times($number, ?callable $callback = null, ...$args) {}
+
+    /**
+     * Laravel returns `static<TKey, TValue>`, which leaks the unresolved class templates from a
+     * static call; the decoded JSON has no known shape.
+     *
+     * @param  string  $json
+     * @param  int  $depth
+     * @param  int  $flags
+     * @return static<array-key, mixed>
+     */
+    public static function fromJson($json, $depth = 512, $flags = 0, ...$args) {}
+
+    /**
+     * Laravel's `static<TUnwrapKey, TUnwrapValue>` parameter resolves to the unbound class
+     * templates on a static call, and the invariant `Collection<array-key, mixed>` rejects any
+     * concrete collection.
+     *
+     * @template TUnwrapKey of array-key
+     * @template TUnwrapValue
+     *
+     * @param  array<TUnwrapKey, TUnwrapValue>|\Illuminate\Support\Enumerable<TUnwrapKey, TUnwrapValue>  $value
+     * @return array<TUnwrapKey, TUnwrapValue>
+     */
+    public static function unwrap($value) {}
 }
