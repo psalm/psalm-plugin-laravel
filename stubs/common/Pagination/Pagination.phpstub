@@ -43,12 +43,14 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * Returns the rebound type like `through()`: a chained `@return $this` would keep the old templates.
+     *
      * @template TSetKey of array-key
      * @template TSetValue
      *
      * @param  \Illuminate\Support\Collection<TSetKey, TSetValue>  $collection
      * @psalm-this-out static<TSetKey, TSetValue>
-     * @return $this
+     * @return static<TSetKey, TSetValue>
      */
     public function setCollection(\Illuminate\Support\Collection $collection) {}
 
@@ -145,12 +147,14 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * Returns the rebound type like `through()`: a chained `@return $this` would keep the old templates.
+     *
      * @template TSetKey of array-key
      * @template TSetValue
      *
      * @param  \Illuminate\Support\Collection<TSetKey, TSetValue>  $collection
      * @psalm-this-out static<TSetKey, TSetValue>
-     * @return $this
+     * @return static<TSetKey, TSetValue>
      */
     public function setCollection(\Illuminate\Support\Collection $collection) {}
 
