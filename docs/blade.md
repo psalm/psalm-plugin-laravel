@@ -175,6 +175,35 @@ Left `mixed`, as before:
 * **The whole view**, when two component classes render it (whether through two `render()` methods or one inherited by both), another component's `render()` outside the shape above names it too, no compiled `<x-…>` or `@component(Foo::class)` renders the class, or `data()` is not knowable: the class overrides `data()`, an extraction method (`extractPublicProperties()`, `extractPublicMethods()`, `createVariableFromMethod()`, `ignoredMethods()`, `shouldIgnore()`), or redeclares `$except` (an `$except` assigned at runtime, say in the constructor, is not seen: its names are still typed). It also stays `mixed` when any template renders the view by name (`@include`, `@includeIf`/`When`/`Unless`/`First`, `@each`, `@extends`, `@component('name')`), which hands it none of the `data()` keys. The data arguments must be literal arrays passed positionally: `compact(…)`, a variable, named arguments, or a `->with()` after the call decline too. An unqualified `view()` that a function of the component's own namespace shadows, and a `$this->view()` the class overrides, do not count as the shapes above.
 * **One key**, when `render()`'s own data array passes it too (which value wins depends on how the view was rendered), any template passes a named slot of that name (`<x-slot:title>` overrides it), Blade sets it itself (`$slot`, `$errors`, `$loop`, `$__env`), the template declares it itself (a raw `@var` docblock, which wins), or the property has no declared type or belongs to a generic class.
 
+## Livewire component views
+
+The view a Livewire component's `render()` returns is typed from the component class (Livewire 3 and 4). No Livewire code runs during analysis; the mapping is read from `render()`:
+
+```php
+final class ShowPost extends Component
+{
+    public Post $post;
+
+    public function save(): void {}
+
+    public function render(): View
+    {
+        return view('livewire.show-post')->layout('layouts.app');
+    }
+}
+```
+
+`livewire/show-post.blade.php` gets:
+
+| Variable        | Type                                                                                         |
+|-----------------|----------------------------------------------------------------------------------------------|
+| `$this`         | the component class (`$this->save()` is checked), with the class's own scope: a protected method is callable, as at runtime |
+| public property | its declared type (`$post: Post`), when the property is non-static and declared on the component (not on Livewire's base class) |
+
+`render()` must be one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, or `'name'`, with a literal name. Unlike a class component, any positional data argument and a trailing `->with()`, `->layout()`, `->extends()`, `->section()`, `->slot()`, `->title()`, `->layoutData()` or `->response()` are fine: Livewire merges the properties after `render()`'s data, so a property keeps its type even when `render()` passes the same key. The values `render()` itself passes stay `mixed`.
+
+Left `mixed`, as before: a view two classes render (two Livewire components, or a Livewire and a Blade component), a view any template renders by name (`@include`, `@each`, `@extends`, ...), a view another component's `render()` outside the shape above names, a component with no `render()` (Livewire derives the view from the component name), a Volt component, and an anonymous class (a Livewire 4 single or multi-file component). A private, protected, static, or untyped property stays `mixed` too.
+
 ## What gets reported
 
 One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
@@ -355,6 +384,7 @@ Annotating changes what the other checks see, which is the point: the declaratio
 * **A non-string `@aware` list item is not reported.** `@aware([null])`, `@aware([$n])` with a nullable `$n`, and a bare `null` next to a keyed pair are silenced along with the compiled `@aware` loop's own argument issues (see [Compiler-generated code](#compiler-generated-code)), because the two cannot be told apart. Each is a bug at runtime (a null key).
 * **A component view that writes a `<x-...>` tag BEFORE its own `@props`/`@aware`/`$attributes` marker, and reads `$attributes->` between the two, can get a non-null assertion it has not earned (#1543).** A nested tag's compiled bookkeeping re-asserts `$attributes` as non-null right after its own save/restore `endif`s (see [Ambient variables](#ambient-variables)), unconditionally — it cannot tell whether a read that follows comes before or after the marker that makes `$attributes` genuinely non-null (`@props`'s own `??=` guard, in particular). Verified narrow: a read placed after the marker, the normal case, is unaffected either way, and a read after the tag or inside its own body is correctly typed regardless of which of `@props`, `@aware`, or a bare mention declared the view a component. The one case this re-assert skips outright is a template that itself assigns to (or `unset()`s) `$attributes` anywhere in its own source: the assertion cannot prove Laravel's `isset($attributes)`-gated save/restore ran again after that write, so the re-assert is withheld for the whole template and the original nullable/mixed typing (and its pre-#1543 false positives) applies instead.
 * **Class component view typing is a lower bound on detection and an assumption about the render path.** Only a compiled `<x-…>` tag or `@component(Foo::class)` proves a class is rendered as a component; `<x-dynamic-component>`, `Blade::renderComponent()`, and tags inside package views under `vendor/` are not seen, so their views stay `mixed`. Once one tag is seen, the view is typed as the tag renders it: a controller (or a manual `$component->render()`) rendering the SAME view gets none of the `data()` keys at runtime, and the template is still typed as if it did. A template that renders it by name (`@include` and friends) is seen and declines; PHP call sites are not, because they are only known during analysis. A named slot whose name is an expression (`<x-slot :name="$x">`) is not seen either.
+* **Livewire view typing assumes the property is set.** An uninitialized typed property reaches the view as `null` (an `array` one as `[]`), while the seed types it as declared, the same assumption `mount()` normally makes true. Undefined `$this->method()` calls and `$this->computed` reads stay silent against the real Livewire class, whose `__call()`/`__get()` accept any name. A plain `view('livewire.name')` call outside a component's `render()` (a controller, a route) is not seen, so it does not stop the view from being typed from its component.
 * **Taint does not flow from a component's properties into its view.** The seeded types carry no data-flow node, so a property holding request input reaches `{!! $title !!}` without `TaintedHtml`. Keys passed through `render()`'s own data array are not typed at all yet.
 * **A `false` sentinel `@props` default types the body `bool`.** `'icon' => false` with string callers makes `{{ strtoupper($icon) }}` under `@if ($icon)` report `InvalidScalarArgument`. Declare the real type with a raw `<?php /** @var string|false $icon */ ?>`.
 * **A `[]` `@props` default types the body `array`.** With `Collection` callers, an `@if ($items instanceof Collection)` guard reports `DocblockTypeContradiction`. Declare the real type the same way.

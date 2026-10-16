@@ -46,6 +46,9 @@ final class ComponentRenderData
 {
     private const COMPONENT = 'illuminate\view\component';
 
+    /** `Utils::getPublicPropertiesDefinedOnSubclass()` drops what these declare. */
+    private const LIVEWIRE_BASES = ['livewire\component' => true, 'livewire\volt\component' => true];
+
     /** Userland overrides that can add names or change the values `data()` returns. */
     private const OPENING_OVERRIDES = ['data', 'extractpublicproperties', 'extractpublicmethods', 'createvariablefrommethod'];
 
@@ -120,10 +123,30 @@ final class ComponentRenderData
 
         $exposed = self::exposed($codebase, $storage, true);
 
-        if ($exposed === null) {
-            return null;
-        }
+        return $exposed === null ? null : self::expandedAgainst($codebase, $storage, $exposed);
+    }
 
+    /**
+     * The public properties Livewire hands its component's view (`HandleComponents::getView()`):
+     * declared, public and non-static, minus those of Livewire's own base classes, typed as
+     * {@see self::guaranteedFor()} types them. No name is reserved, unlike `Component::data()`.
+     *
+     * @return array<string, Union>|null null when a declaring class could not be resolved
+     */
+    public static function livewirePropertiesFor(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        $properties = self::publicProperties($codebase, $storage, true, true);
+
+        return $properties === null ? null : self::expandedAgainst($codebase, $storage, $properties);
+    }
+
+    /**
+     * @param array<string, Union> $exposed
+     *
+     * @return array<string, Union>
+     */
+    private static function expandedAgainst(Codebase $codebase, ClassLikeStorage $storage, array $exposed): array
+    {
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
@@ -156,7 +179,7 @@ final class ComponentRenderData
             return null;
         }
 
-        $data = self::publicProperties($codebase, $storage, $typedOnly);
+        $data = self::publicProperties($codebase, $storage, $typedOnly, false);
 
         if ($data === null) {
             return null;
@@ -192,18 +215,19 @@ final class ComponentRenderData
 
     /**
      * @param bool $typedOnly skip a property with no declared type, or one a generic class declares
+     * @param bool $livewire  Livewire's filter instead of `Component::data()`'s
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
      *
      * @psalm-mutation-free
      */
-    private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
+    private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly, bool $livewire): ?array
     {
         $properties = [];
 
         foreach ($storage->declaring_property_ids as $name => $declaringClass) {
-            if (self::ignored($name)) {
+            if ($livewire ? isset(self::LIVEWIRE_BASES[\strtolower($declaringClass)]) : self::ignored($name)) {
                 continue;
             }
 
