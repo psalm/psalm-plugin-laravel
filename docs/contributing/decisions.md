@@ -427,6 +427,10 @@ Both are Psalm-side defects. The stub does not work around them: a per-shape wor
 
 **Boundaries:** `splice()` keeps its receiver key type `TKey` (`array_splice()` renumbers integer keys, which is not modelled) and returns the removed slice, so only its this-out carries the replacement values. `getOrPut()` leaves the key unbounded because Laravel accepts `mixed`.
 
+### `groupBy()`/`keyBy()` with a `mixed`-returning callback is answered by a handler, not the stub
+
+Laravel casts group/key values to array keys at runtime, but the stub's `TGroupKey`/`TNewKey` conditional keeps `mixed` in the outer key (`array-key|mixed`), so the next `static<TKey, ...>` call reports `InvalidTemplateParam` (#1884). Rewriting those conditionals did not help (two attempts, probed dead end); `CollectionGroupByKeyByHandler` answers `array-key` for callbacks whose return type contains `mixed` and declines for every typed callback.
+
 ## Variance
 
 ### Paginators are covariant in `TValue`; `Support\Collection` stays invariant

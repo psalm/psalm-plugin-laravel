@@ -12,6 +12,8 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TBool;
+use Psalm\Type\Atomic\TCallable;
+use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TNamedObject;
@@ -40,39 +42,44 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         $source = $event->getSource();
-        $column = $source->getNodeTypeProvider()->getType($args[0]->value);
-        if (!$column instanceof Union || !$column->isSingleStringLiteral()) {
+        $arg = $source->getNodeTypeProvider()->getType($args[0]->value);
+        if (!$arg instanceof Union) {
             return null;
         }
 
-        $stmt = $event->getStmt();
-        $lhs = $stmt instanceof \PhpParser\Node\Expr\MethodCall
-            ? $source->getNodeTypeProvider()->getType($stmt->var)
-            : null;
-        $model = ModelPropertyResolver::resolveExactlyOneModelClass(
-            $event->getTemplateTypeParameters(),
-            1,
-            $lhs,
-            $source->getCodebase(),
-        );
-        $key = $model === null ? null : self::resolveKeyType(
-            ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $column->getSingleStringLiteral()->value),
-            $source->getCodebase(),
-            $method === 'groupby',
-        );
-        if ($model === null || !$key instanceof \Psalm\Type\Union) {
+        $templates = $event->getTemplateTypeParameters();
+        if ($arg->isSingleStringLiteral()) {
+            $stmt = $event->getStmt();
+            $lhs = $stmt instanceof \PhpParser\Node\Expr\MethodCall
+                ? $source->getNodeTypeProvider()->getType($stmt->var)
+                : null;
+            $model = ModelPropertyResolver::resolveExactlyOneModelClass($templates, 1, $lhs, $source->getCodebase());
+            $key = $model === null ? null : self::resolveKeyType(
+                ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $arg->getSingleStringLiteral()->value),
+                $source->getCodebase(),
+                $method === 'groupby',
+            );
+            $value = $templates[1] ?? ($model === null ? null : new Union([new TNamedObject($model)]));
+        } elseif (self::returnsMixed($arg)) {
+            // Laravel casts group/key values to array keys at runtime, but Psalm carries `mixed` through the stub's
+            // TGroupKey/TNewKey conditional, so the outer key would be `array-key|mixed` and break `static<TKey, ...>` calls.
+            $key = Type::getArrayKey();
+            $value = $templates[1] ?? null;
+        } else {
+            return null;
+        }
+
+        if (!$key instanceof Union || !$value instanceof Union) {
             return null;
         }
 
         $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
-        $value = $event->getTemplateTypeParameters()[1] ?? new Union([new TNamedObject($model)]);
-
         if ($method === 'keyby') {
             return new Union([new TGenericObject($class, [$key, $value], is_static: true)]);
         }
 
+        $innerKey = $templates[0] ?? null;
         $preserve = isset($args[1]) ? $source->getNodeTypeProvider()->getType($args[1]->value) : null;
-        $innerKey = $event->getTemplateTypeParameters()[0] ?? null;
         if (!$innerKey instanceof Union) {
             return null;
         }
@@ -83,6 +90,18 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         return new Union([new TGenericObject($class, [$key,
             new Union([(new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true)]),
         ], is_static: true)]);
+    }
+
+    /** @psalm-mutation-free */
+    private static function returnsMixed(Union $arg): bool
+    {
+        foreach ($arg->getAtomicTypes() as $atomic) {
+            if (($atomic instanceof TClosure || $atomic instanceof TCallable) && $atomic->return_type?->hasMixed() === true) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @psalm-mutation-free */
