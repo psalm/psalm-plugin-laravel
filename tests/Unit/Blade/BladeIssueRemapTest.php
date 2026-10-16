@@ -204,9 +204,7 @@ final class BladeIssueRemapTest extends TestCase
 
     /**
      * Every class name PreludeBuilder can emit into a prelude, see PreludeBuilder::ambientClassNames().
-     * `Illuminate\View\Component` never appears in a real prelude any more (#1525: `$component` is
-     * never declared), so its assertion below is vacuous — kept as a regression guard against
-     * reintroducing that declaration.
+     * `Illuminate\View\Component` appears in a caller's prelude from tag bookkeeping (#1873).
      */
     private const AMBIENT_CLASSES = [
         'Illuminate\View\Factory',
@@ -604,8 +602,9 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1525 acceptance (a) + (b): `compiler-bookkeeping.blade.php` is a plain CALLER template
      * (`<x-alert>Hi</x-alert>` on line 1, no `@props`/`@aware`/`$attributes`/`$slot` of its own),
-     * so neither `$component` nor `$attributes` is declared a type in its own prelude any more —
-     * both fall through to `mixed`, and Psalm cannot judge a `mixed` guard redundant.
+     * so its prelude types `$component` and `$attributes` only from the tag's bookkeeping, nullable
+     * (#1873). The compiled `isset()` guards stay undecidable; the `instanceof` after the `isset()`
+     * is redundant and dropped by its compiled-shape gate.
      */
     #[Test]
     public function ambient_guards_in_a_non_component_caller_report_nothing(): void
@@ -623,6 +622,33 @@ final class BladeIssueRemapTest extends TestCase
 
         // Guard against a vacuous pass: the tag must have actually compiled.
         $this->assertStringContainsString('$__componentOriginal', $this->allShadowSources());
+    }
+
+    /**
+     * #1873: a plain caller's `<x-...>` save/restore reads only names the prelude types from that
+     * bookkeeping (`$component`, `$attributes`, each saved original), so the tag's own line reports
+     * no `Mixed*` and no ambient guard, single and nested. Under `psalm-blade-report-mixed.xml`:
+     * the default config drops every `MixedIssue`.
+     */
+    #[Test]
+    public function a_plain_callers_tag_bookkeeping_is_typed(): void
+    {
+        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+
+        foreach (['resources/views/compiler-bookkeeping.blade.php', 'resources/views/nested-component-tags.blade.php'] as $template) {
+            $onTagLine = \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => \str_ends_with($issue['file_path'], $template)
+                    && $issue['line_from'] === 1
+                    && (\str_starts_with($issue['type'], 'Mixed') || \in_array($issue['type'], self::AMBIENT_GUARD_FAMILIES, true)),
+            ));
+
+            $this->assertSame([], $onTagLine, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+            $this->assertStringContainsString(
+                '@var \Illuminate\View\Component|null $component */',
+                $this->shadowSourceFor($template, 'psalm-blade-report-mixed.xml'),
+            );
+        }
     }
 
     /**
@@ -1196,6 +1222,27 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertStringNotContainsString('<x-alert', $shadow);
     }
 
+    /**
+     * A precompiler owning its own tag prefix (`<native:...>`, `<flux:...>`) matches attributes as
+     * strictly as ComponentTagCompiler. A marker inside a multi-line `<foo:alert>` left the opener
+     * uncompiled, and the closer's orphan `endif` lost the template to a `ParseError` (#1910).
+     */
+    #[Test]
+    public function a_multiline_prefixed_precompiled_tag_compiles_without_a_parse_error(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/prefixed-precompiled-tag.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'ParseError', $template), $json);
+        $this->assertSame([13], $this->linesFor($issues, self::ISSUE, $template), $json);
+
+        // Both openers compiled rather than surviving as literal text.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertSame(2, \substr_count($shadow, '->renderComponent()'));
+        $this->assertStringNotContainsString('<x-alert', $shadow);
+    }
+
     /** The keyed-arm gate declines when the template itself contains the generated call text. */
     #[Test]
     public function an_author_written_keyed_call_keeps_reporting_no_value(): void
@@ -1303,7 +1350,7 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1532: `$component` is never given a type by
      * {@see \Psalm\LaravelPlugin\Blade\PreludeBuilder::componentTypesFor()} in ANY template (the
-     * prelude only ever declares it `mixed` through the undeclared-name fallback), unlike
+     * prelude declares it `mixed` or, from tag bookkeeping, a nullable `Component`), unlike
      * `$attributes`/`$slot`, whose docblock-vs-inferred split only exists inside a component view.
      * `nested-component-tags.blade.php` is a plain page (no `@props`/`@aware`/`$attributes`/
      * `$slot`), so `isComponentView` is false, yet it nests one `<x-alert>` tag inside another's

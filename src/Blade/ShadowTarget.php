@@ -32,6 +32,7 @@ final class ShadowTarget
      *                                 of the template, and $templateSource is read at relocation
      *                                 time, so a template edited since the compile would yield a
      *                                 prefix matching nothing in the shadow.
+     * @param bool   $attributesFromTag {@see PreludeBuilder::declaresTagAttributes()} on the shadow
      */
     public function __construct(
         public readonly ShadowEntry $entry,
@@ -39,6 +40,7 @@ final class ShadowTarget
         public readonly string $templateName,
         public readonly bool $isComponentView,
         private readonly string $markerPrefix,
+        public readonly bool $attributesFromTag = false,
     ) {}
 
     public function markerPrefix(): string

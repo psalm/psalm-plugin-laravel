@@ -439,7 +439,11 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - The param's NATIVE type must be only class/interface/enum names and optionally `null`. Untyped, `mixed`, scalar, array, `object`, `iterable`, `callable` decline.
 - Gate: TValue is `mixed`, or the param's non-null part is contained by TValue without coercion. An unrelated param keeps today's result and Psalm's `InvalidArgument`. A template-derived atomic in TValue declines.
 - Per TValue atomic: kept when the param accepts it (preserves generics such as `Dog<int>`), replaced by the param's classes it contains (`mixed`/`object`/supertype) otherwise, dropped if neither. `null` survives only when the param is nullable and TValue had `null`/`mixed`.
+- Param narrowing needs an exact-base receiver: the dispatched class and every atomic of the receiver expression type are exactly `Support\Collection`, `LazyCollection` or `Eloquent\Collection`, with no intersection and no template (`C of Collection`). Subclasses with another template layout (`WithMetadata<V, M> extends Collection<int, V>`) would get the positional `(TKey, TValue)` result applied to their own templates. A receiver union of the three classes still narrows per branch.
+- A param typed `self`/`static`/`parent` declines: closures can be rebound, so the lexical class is not what the callback receives.
 - filter/where then run the existing predicate matcher on the narrowed TValue and fall back to the param-narrowed result when it yields nothing. `reject()` gets only param narrowing (predicate inversion is a separate matter).
+
+**Limitation:** `reject()`/`where()` on an `Eloquent\Collection` receiver do not reach the handler (declared on `EnumeratesValues`; the handler stays registered for `Support\Collection` and `LazyCollection` only), so only `filter()` narrows there.
 
 **Rejected (probed dead end): narrowing scalar params when the user's file declares `strict_types=1`.** The coercion mode of a call is decided by the CALLING file. The caller is `Arr::where()`/`array_filter()` (`Collection`), a generator in `LazyCollection::filter()`, or `EnumeratesValues::reject()`'s wrapper. None of those Laravel files declares `strict_types`, and `array_filter` is internal, so callbacks run in coercive mode regardless of the user's file: `fn (int $x)` accepts `"5"` and the original `"5"` stays in the result.
 
@@ -454,6 +458,16 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 **Rejected:** `@return static<TSetKey, TSetValue>` on `setCollection()`. It is applied positionally to subclasses that reshape the template list (`Page<T> extends AbstractPaginator<int, T>` types its items as `int`; extra templates such as `TMeta` are dropped), and a userland `@return $this` override reports `ImplementedReturnTypeMismatch`.
 
 **Accepted limitation:** `$p->setCollection($c)->items()` keeps the receiver's old keys and values, while `$p->setCollection($c); $p->items()` rebinds through `@psalm-this-out`. Pinned by `PaginatorSetCollectionChainKnownLimitationTest`.
+### `HigherOrderCollectionProxy` uses Laravel 13.31+'s `<TMethod, TValue, TCollection>` on every version (#1920)
+
+**Decision:** `stubs/common/Support/HigherOrderCollectionProxy.phpstub` declares `TMethod of string`, `TValue` (covariant) and `TCollection of Enumerable` (covariant); the `Collection`, `LazyCollection` and `Eloquent\Collection` stubs type `$map` as `HigherOrderCollectionProxy<'map', TValue, Collection<TKey, TValue>>`. The runtime proxy is identical on all supported Laravel versions (12.20-13.30 only lack the annotation), so the shape lives in `common`, and user code written against Laravel's 3-argument type checks on every cell. `HigherOrderCollectionProxyHandler` reads TValue at index 1 and takes the `Enumerable` fallback key from TCollection (index 2), `array-key` otherwise.
+
+**Rejected (probed dead ends, Psalm 7.0.0-rc2):**
+- **Laravel's verbatim `static` as the third argument.** In a class-stub `@property-read` it resolves to `Collection&static`, an unparameterized object: TKey/TValue are lost for `Collection<int, X>`, `LazyCollection` and `Eloquent\Collection`, so the `HigherOrderCollectionProxy<'map', X, Collection<int, X>>` parameter reports `MixedArgumentTypeCoercion`. Each stub spells its own class out instead.
+- **Laravel's bound `TCollection of Enumerable<array-key, TValue>`.** The stub `Enumerable` declares an invariant `TKey`, so `Collection<int, X>` violates the bound and a user `@param` with the 3-argument shape reports `InvalidTemplateParam`. `Enumerable<array-key, mixed>` fails the same way; only the bare `Enumerable` bound passes.
+- **Invariant `TCollection`.** `HigherOrderCollectionProxy<string, X, Enumerable<int, X>>` then rejects `$collection->map` (`InvalidArgument`); covariance accepts it. `TMethod` stays invariant (as in Laravel): a `'map'` proxy given to a `'filter'` parameter is reported.
+
+**Accepted limitation:** a non-generic subclass (`final class UserCollection extends Eloquent\Collection` with `@extends`) and a template-bound receiver (`@template C of Collection<int, X>`) still resolve their proxy from the vendor trait annotation or lose TValue; this is unchanged by the 3-argument shape. The handler keeps a `count >= 2` guard because that vendor annotation is still `<TKey, TValue>` on Laravel 12.20-13.30, where dropping the guard turns `$subclass->each->method()` into `mixed`.
 
 ## Variance
 

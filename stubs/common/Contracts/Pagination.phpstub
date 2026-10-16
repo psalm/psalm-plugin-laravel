@@ -13,9 +13,20 @@ interface Paginator
      */
     public function items(): array;
 
-    // `fragment()` is intentionally not stubbed: Laravel 13.18.0 (#60586) added the
-    // conditional return natively and a stub conditional collapses against the reflected
-    // one (Psalm beta19 merge bug), so the refined return is no longer achievable.
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * Laravel declares the flat `$this|string|null` on every 12.x and on 13.x before 13.18.0,
+     * which breaks `->fragment('x')->links()` chains (the next call lands on `string|null`).
+     * The conditional keeps the getter `string|null` and the setter chainable. See
+     * `AbstractPaginator::fragment()` for why the template is explicit.
+     *
+     * @template TFragment of string|null
+     *
+     * @param  TFragment  $fragment
+     * @return (TFragment is null ? string|null : $this)
+     */
+    public function fragment($fragment = null);
 }
 
 /**
@@ -40,5 +51,13 @@ interface CursorPaginator
      */
     public function items(): array;
 
-    // `fragment()` intentionally not stubbed; see `Paginator::fragment()` above.
+    /**
+     * Get / set the URL fragment to be appended to URLs. See `Paginator::fragment()`.
+     *
+     * @template TFragment of string|null
+     *
+     * @param  TFragment  $fragment
+     * @return (TFragment is null ? string|null : $this)
+     */
+    public function fragment($fragment = null);
 }
