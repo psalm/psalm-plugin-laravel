@@ -34,7 +34,7 @@ function length_aware_fragment(LengthAwarePaginator $paginator): void
     /** @psalm-check-type-exact $_set = LengthAwarePaginator<int, string>&static */
 
     $_chained = $paginator->fragment('foo')->items();
-    /** @psalm-check-type-exact $_chained = array<string> */
+    /** @psalm-check-type-exact $_chained = array<int, string> */
 }
 
 /** @param Paginator<int, string> $paginator */
@@ -47,7 +47,7 @@ function simple_paginator_fragment(Paginator $paginator): void
     /** @psalm-check-type-exact $_set = Paginator<int, string>&static */
 
     $_chained = $paginator->fragment('foo')->items();
-    /** @psalm-check-type-exact $_chained = array<string> */
+    /** @psalm-check-type-exact $_chained = array<int, string> */
 }
 
 /** @param CursorPaginator<int, string> $paginator */
@@ -60,7 +60,7 @@ function cursor_paginator_fragment(CursorPaginator $paginator): void
     /** @psalm-check-type-exact $_set = CursorPaginator<int, string>&static */
 
     $_chained = $paginator->fragment('foo')->items();
-    /** @psalm-check-type-exact $_chained = array<string> */
+    /** @psalm-check-type-exact $_chained = array<int, string> */
 }
 
 /** @param LengthAwarePaginatorContract<int, string> $paginator */
@@ -73,7 +73,7 @@ function length_aware_contract_fragment(LengthAwarePaginatorContract $paginator)
     /** @psalm-check-type-exact $_set = LengthAwarePaginatorContract<int, string>&static */
 
     $_chained = $paginator->fragment('foo')->items();
-    /** @psalm-check-type-exact $_chained = array<string> */
+    /** @psalm-check-type-exact $_chained = array<int, string> */
 }
 
 /** @param CursorPaginatorContract<int, string> $paginator */
