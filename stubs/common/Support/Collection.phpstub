@@ -241,7 +241,6 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Determine if the collection is not empty.
      *
      * @psalm-mutation-free
-     * @psalm-assert-if-false null $this->first()
      * @return bool
      */
     public function isNotEmpty() {}
