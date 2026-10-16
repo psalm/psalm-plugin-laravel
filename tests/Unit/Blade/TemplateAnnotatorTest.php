@@ -287,6 +287,15 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function recognises_a_declaration_whose_array_shape_spans_several_lines(): void
+    {
+        $source = "<?php\n/**\n * @var array{\n *     retryRate: float,\n *     manualRate: float,\n * } \$data\n"
+            . " * @var array<string, string> \$countryNames\n */\n?>\n{{ \$data['retryRate'] }}\n";
+
+        $this->assertNull(TemplateAnnotator::annotate($source, ['data' => 'array<string, float>', 'countryNames' => 'array<string, string>']));
+    }
+
+    #[Test]
     public function recognises_a_raw_php_declaration_whose_type_contains_a_variable(): void
     {
         $source = "<?php /** @var Closure(Foo \$f): Bar \$callback */ ?>\n<p>x</p>\n";

@@ -9,15 +9,18 @@ use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
  * class_implements list when a stub re-declares the class, so the clause
  * must be repeated verbatim or callers typed on the contracts break.
  *
+ * TValue is covariant like Laravel's, so a helper typed on a wider TValue can mutate the caller's
+ * narrower paginator in place (getCollection()/through()/setCollection()); see decisions.md.
+ *
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @mixin \Illuminate\Support\Collection<TKey, TValue>
  */
 abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illuminate\Contracts\Support\Htmlable, \Stringable
 {
     /**
-     * @return array<TValue>
+     * @return array<TKey, TValue>
      */
     public function items(): array {}
 
@@ -40,6 +43,10 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * Known limitation: only the assigned form (`$p->setCollection($c); $p->items()`) rebinds the
+     * templates through `@psalm-this-out`; a chained `$p->setCollection($c)->items()` keeps the old
+     * ones, since `@return static<TSetKey, TSetValue>` breaks subclasses that reshape the template list.
+     *
      * @template TSetKey of array-key
      * @template TSetValue
      *
@@ -64,11 +71,29 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      */
     public function through(callable $callback) {}
 
-    // `fragment()` is intentionally NOT stubbed. Laravel 13.18.0 (#60586) added the
-    // conditional `@return (... : $this)` natively; a stub conditional collapses against
-    // the reflected one on Psalm beta19 and the reflected `$this` setter branch is itself
-    // unresolvable, so the refined chainable return is no longer achievable. The native
-    // (degraded) type stands until the upstream Psalm merge bug is fixed.
+    /**
+     * Get / set the URL fragment to be appended to URLs.
+     *
+     * Laravel declares the flat `$this|string|null` on every 12.x and on 13.x before 13.18.0,
+     * which breaks `->fragment('x')->links()` chains (the next call lands on `string|null`).
+     * The conditional keeps the getter `string|null` and the setter chainable.
+     *
+     * The template is explicit, not the implicit `($fragment is null ? ...)` form Laravel 13.18.0+
+     * declares natively: with both the stub and the reflected source declaring that implicit
+     * conditional, the setter branch is lost (call returns `string|null`) on Psalm 7, while an
+     * explicitly templated stub resolves on every Laravel version. The setter branch is `$this`
+     * (as in Laravel 13.18.0+), which resolves to the receiver with its `<TKey, TValue>`.
+     *
+     * Known limitation: a possibly-empty unpack (`fragment(...$args)`) binds `TFragment` from the
+     * element type and misses the getter branch; Laravel 13.18+'s native type does the same.
+     * Pinned by PaginatorFragmentUnpackKnownLimitation.phpt.
+     *
+     * @template TFragment of string|null
+     *
+     * @param  TFragment  $fragment
+     * @return (TFragment is null ? string|null : $this)
+     */
+    public function fragment($fragment = null) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
@@ -92,7 +117,7 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
@@ -106,7 +131,7 @@ class Paginator extends AbstractPaginator implements \Illuminate\Contracts\Suppo
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>
@@ -120,14 +145,16 @@ class LengthAwarePaginator extends AbstractPaginator implements \Illuminate\Cont
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @mixin \Illuminate\Support\Collection<TKey, TValue>
  */
 abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\Htmlable, \Stringable
 {
     /**
-     * @return array<TValue>
+     * CursorPaginator::setItems() reindexes with values(), and setCollection() may install other keys, so keys are not just TKey.
+     *
+     * @return array<TKey|int, TValue>
      */
     public function items(): array {}
 
@@ -140,6 +167,8 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * Known limitation: see AbstractPaginator::setCollection().
+     *
      * @template TSetKey of array-key
      * @template TSetValue
      *
@@ -164,7 +193,15 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      */
     public function through(callable $callback) {}
 
-    // `fragment()` intentionally not stubbed; see AbstractPaginator::fragment() above.
+    /**
+     * Get / set the URL fragment to be appended to URLs. See `AbstractPaginator::fragment()`.
+     *
+     * @template TFragment of string|null
+     *
+     * @param  TFragment  $fragment
+     * @return (TFragment is null ? string|null : $this)
+     */
+    public function fragment($fragment = null) {}
 
     /**
      * @return \ArrayIterator<TKey, TValue>
@@ -188,7 +225,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
 
 /**
  * @template TKey of array-key
- * @template TValue
+ * @template-covariant TValue
  *
  * @implements \ArrayAccess<TKey, TValue>
  * @implements \IteratorAggregate<TKey, TValue>

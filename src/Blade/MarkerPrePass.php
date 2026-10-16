@@ -146,6 +146,12 @@ final class MarkerPrePass
             // compileClosingTags() matches `<\/\s*x[-\:][\w\-\:\.]*\s*>`: a marker before the
             // `>` of a wrapped closing tag (Prettier's HTML output) leaves it uncompiled.
             '/<\/\s*(?:x[-:]|livewire:)[\w\-:.]*\s*>/',
+            // Other precompilers owning a tag prefix (`<flux:...>`, `<native:...>`) match just as
+            // strictly (#1910). Kept separate so a failure here (a pathological pseudo tag in a JS
+            // literal) cannot drop the skips above, and an unquoted `<` ends the match, so a
+            // `<demo:tag` in a `<script>` cannot run past the next real tag over unrelated lines.
+            '/<\s*(?!x[-:]|livewire:)[a-z][\w-]*:[\w\-:.]*+(?=[\s\/>])(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*+\))|"[^"]*"|\'[^\']*\'|[^<>"\'])*+\/?>/s',
+            '/<\/\s*(?!x[-:]|livewire:)[a-z][\w-]*:[\w\-:.]*\s*>/',
         ];
 
         $skip = [];

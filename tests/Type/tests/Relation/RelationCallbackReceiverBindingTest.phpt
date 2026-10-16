@@ -113,6 +113,21 @@ final class TraitOverrideBuilder extends Builder
     }
 }
 
+/**
+ * The mapping carries more than a class name (an object shape): only the model matters, so it still projects.
+ *
+ * @extends Builder<Customer&object{tag: string}>
+ */
+final class ShapedModelBuilder extends Builder {}
+
+function test_model_with_an_object_shape_still_projects(ShapedModelBuilder $builder): void
+{
+    $builder->whereHas('vehicles', function ($q): void {
+        /** @psalm-check-type-exact $q = App\Builders\VehicleBuilder<Vehicle> */
+        $q->whereElectric();
+    });
+}
+
 /** @param DecoyChildBuilder<Supplier, Customer> $builder */
 function test_forwarded_template_is_followed_by_defining_class(DecoyChildBuilder $builder): void
 {
