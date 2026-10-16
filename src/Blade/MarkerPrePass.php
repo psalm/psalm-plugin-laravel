@@ -137,15 +137,18 @@ final class MarkerPrePass
             // `{{ ... }}` and `@class(...)`/`@style(...)` are consumed whole, mirroring that
             // compiler's attribute alternatives: their bodies may hold a `>` (`->`, `=>`). The
             // possessive `*+` is load-bearing: those alternatives overlap `[^>"']`, so a
-            // backtracking loop on a never-closed tag exhausts pcre.backtrack_limit. Livewire's
-            // `<livewire:...>` tag compiler is just as strict. The name lookahead mirrors the
-            // compiler too: without it `a < x-1)` in a `<script>` opens a "tag" that runs to a later
-            // `>`. The inner `*+` keeps unbalanced `@class(` parens from exhausting the JIT stack,
-            // which fails the whole preg_match_all and drops every component-tag skip.
-            '/<\s*(?:x[-:]|livewire:)[\w\-:.]*+(?=[\s\/>])(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*+\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
+            // backtracking loop on a never-closed tag exhausts pcre.backtrack_limit. Precompilers
+            // that own a tag prefix (`<livewire:...>`, `<flux:...>`, `<native:...>`) are just as
+            // strict, so any lowercase `prefix:` name is treated as one (#1910); a multi-line
+            // XML-namespaced HTML tag (`<v:roundrect`) only loses per-line markers. The name
+            // lookahead mirrors the compiler too: without it `a < x-1)` in a `<script>` opens a
+            // "tag" that runs to a later `>`. The inner `*+` keeps unbalanced `@class(` parens
+            // from exhausting the JIT stack, which fails the whole preg_match_all and drops every
+            // component-tag skip.
+            '/<\s*(?:x-|[a-z][\w-]*:)[\w\-:.]*+(?=[\s\/>])(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*+\))|"[^"]*"|\'[^\']*\'|[^>"\'])*+\/?>/s',
             // compileClosingTags() matches `<\/\s*x[-\:][\w\-\:\.]*\s*>`: a marker before the
             // `>` of a wrapped closing tag (Prettier's HTML output) leaves it uncompiled.
-            '/<\/\s*(?:x[-:]|livewire:)[\w\-:.]*\s*>/',
+            '/<\/\s*(?:x-|[a-z][\w-]*:)[\w\-:.]*\s*>/',
         ];
 
         $skip = [];
