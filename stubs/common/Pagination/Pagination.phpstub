@@ -80,6 +80,10 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * explicitly templated stub resolves on every Laravel version. The setter branch is `$this`
      * (as in Laravel 13.18.0+), which resolves to the receiver with its `<TKey, TValue>`.
      *
+     * Known limitation: a possibly-empty unpack (`fragment(...$args)`) binds `TFragment` from the
+     * element type and misses the getter branch; Laravel 13.18+'s native type does the same.
+     * Pinned by PaginatorFragmentUnpackKnownLimitation.phpt.
+     *
      * @template TFragment of string|null
      *
      * @param  TFragment  $fragment
