@@ -16,11 +16,9 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\ClassMethod;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
-use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -52,12 +50,9 @@ use Psalm\Type\Union;
  * {@see RelationMethodParser} parses the AST body to detect a relation factory call
  * (`$this->hasOne(X::class)`, `$this->belongsTo(X::class)`, ...) and returns the
  * properly templated concrete relation type (e.g. `HasOne<Invoice, WorkOrder>`,
- * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
- * related model is statically declared via a docblock generic
- * (`@phpstan-return MorphTo<User|Post, $this>` — read by
- * {@see RelationMethodParser::declaredMorphToRelatedModelType} from the method's storage; the
- * `$this->morphTo()` call such a method returns is narrowed by {@see getEnclosingMorphToReturnType()});
- * without that the handler defers because the related class is determined at runtime.
+ * `BelongsToMany<Tag, Post>`, not `Relation<...>`). A `morphTo` gets no call-site answer, because
+ * its related class is runtime data: Psalm applies a declared `MorphTo<X, …>` return itself. The
+ * `$this->morphTo()` such a method returns is narrowed by {@see getEnclosingMorphToReturnType()}.
  * `HasOneThrough` and `HasManyThrough` require both factory class-string args (related and intermediate)
  * to resolve statically. The declaring-model generic comes from the receiver
  * (`$bindingClass`), not a factory arg, so it is always available; if either factory
@@ -208,7 +203,7 @@ final class ModelRelationReturnTypeHandler
             if ($parsed === null) {
                 $result = null;
             } else {
-                $relatedModelType = self::resolveRelatedModelType($parsed, $codebase, $declaringClass, $methodName);
+                $relatedModelType = self::resolveRelatedModelType($parsed);
 
                 $result = $relatedModelType instanceof \Psalm\Type\Union
                     ? self::buildRelationType(
@@ -259,8 +254,8 @@ final class ModelRelationReturnTypeHandler
      * Psalm analyzes as a virtual `$this->morphTo()` node that no return statement holds.
      * The declaring slot is the receiver's own type (template arguments, `&static` included).
      *
-     * Caveat, accepted unsoundness: X is the user's docblock, unverified, as on the external-call path
-     * ({@see resolveRelatedModelType()}). A declaration naming the wrong models is believed.
+     * Caveat, accepted unsoundness: X is the user's docblock, unverified. A declaration naming the
+     * wrong models is believed.
      */
     public static function getEnclosingMorphToReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -344,57 +339,21 @@ final class ModelRelationReturnTypeHandler
     }
 
     /**
-     * Resolve the related-model Union for the parsed relation. Most factories return a
-     * single Model FQCN via `relatedModel`; polymorphic `morphTo` returns null there
-     * but may declare its target via `@return MorphTo<User|Post, $this>`, which
-     * {@see RelationMethodParser::declaredMorphToRelatedModelType} reads from the declaring
-     * method's storage. Returns null when neither path produces a usable type.
+     * Related-model Union for the parsed relation, from the factory's class-string arg. Null for
+     * polymorphic `morphTo` (the target is runtime data), so the call declines and Psalm applies the
+     * declared return, `MorphTo<X, …>` included, with its own template/static/self expansion.
      *
      * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
-    private static function resolveRelatedModelType(
-        array $parsed,
-        Codebase $codebase,
-        string $declaringClass,
-        string $methodName,
-    ): ?Union {
+    private static function resolveRelatedModelType(array $parsed): ?Union
+    {
         if ($parsed['relatedModel'] !== null) {
             return new Union([new TNamedObject($parsed['relatedModel'])]);
         }
 
-        // morphTo: the factory's first arg is not a class-string, so the parser yields
-        // null. Fall back to the generic of the declared return for users who annotated
-        // their morphTo with the candidate models.
-        if ($parsed['relationClass'] === MorphTo::class) {
-            return RelationMethodParser::declaredMorphToRelatedModelType(
-                $codebase,
-                self::declaredReturnType($codebase, $declaringClass, $methodName),
-            );
-        }
-
         return null;
-    }
-
-    /**
-     * Declared return of the method as stored, docblock merged. A trait-hosted method is declared
-     * on the trait, not on the composing model.
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function declaredReturnType(Codebase $codebase, string $className, string $methodName): ?Union
-    {
-        try {
-            $declaringId = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($className . '::' . $methodName));
-            if (!$declaringId instanceof MethodIdentifier) {
-                return null;
-            }
-
-            return $codebase->methods->getStorage($declaringId)->return_type;
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return null;
-        }
     }
 
     /**

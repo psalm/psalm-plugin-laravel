@@ -914,9 +914,10 @@ final class RelationMethodParser
      * (`Box<Target>`), `static`, `self` and templates decline: a provider result skips Psalm's type
      * expansion, so they would leak unbound.
      *
-     * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
-     * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
-     * nullable or union return and a MorphTo subclass.
+     * Serves {@see ModelRelationReturnTypeHandler::getEnclosingMorphToReturnType()} only; an external
+     * call to the method is left to Psalm. Only slot 1 is read: slot 2 can still hold an unresolved
+     * `self` (trait methods resolve it when composed) or `static`, so the caller binds the declaring
+     * model itself. Declines a nullable or union return and a MorphTo subclass.
      *
      * @psalm-mutation-free
      */
