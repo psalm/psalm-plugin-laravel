@@ -159,7 +159,37 @@ final class CompilerEnvironmentTest extends TestCase
         [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
 
         $this->assertFalse($trusted);
-        $this->assertSame(["directive 'mine' (callable bound to " . MarkerDirective::class . ')'], $reasons);
+        $this->assertSame(
+            [['input' => "directive 'mine' (callable bound to " . MarkerDirective::class . ')', 'file' => (new \ReflectionClass(MarkerDirective::class))->getFileName()]],
+            $reasons,
+        );
+    }
+
+    /** The bootstrapper tells vendor inputs from project inputs by file; an internal function has none. */
+    #[Test]
+    public function an_internal_function_reason_carries_no_declaring_file(): void
+    {
+        $compiler = $this->compiler();
+        $compiler->directive('mine', 'strtoupper');
+
+        [, , $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertSame([['input' => "directive 'mine' (internal function or eval()'d code)", 'file' => null]], $reasons);
+    }
+
+    /** A subclass is untrusted on its own, so it must be named too, or the input count would hide it. */
+    #[Test]
+    public function a_compiler_subclass_is_named_with_its_declaring_file(): void
+    {
+        $compiler = new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@needle');
+
+        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
+
+        $this->assertFalse($trusted);
+        $this->assertSame(
+            [['input' => 'compiler class ' . ThrowingBladeCompiler::class . ' (a BladeCompiler subclass)', 'file' => (new \ReflectionClass(ThrowingBladeCompiler::class))->getFileName()]],
+            $reasons,
+        );
     }
 
     /**

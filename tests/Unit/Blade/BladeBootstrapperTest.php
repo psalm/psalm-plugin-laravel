@@ -772,10 +772,12 @@ final class BladeBootstrapperTest extends TestCase
         $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
         $registrar = new RecordingShadowRegistrar();
 
-        $this->bootstrapper($app, $registrar)->boot();
+        $bootstrapper = $this->bootstrapper($app, $registrar);
+        $bootstrapper->boot();
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('blade.compiler', $this->progress->warningText());
+        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabledReason());
         $this->assertSame(0, $registrar->markCalls);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertDirectoryDoesNotExist($this->shadowDir);
@@ -1061,11 +1063,13 @@ final class BladeBootstrapperTest extends TestCase
     {
         $registrar = new RecordingShadowRegistrar();
 
-        $this->bootstrapper($this->app(), $registrar)->boot();
+        $bootstrapper = $this->bootstrapper($this->app(), $registrar);
+        $bootstrapper->boot();
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
+        $this->assertNull($bootstrapper->disabledReason(), 'an empty view tree is not a disable: failOnInternalError must not fire');
     }
 
     #[Test]
@@ -1318,5 +1322,76 @@ final class BladeBootstrapperTest extends TestCase
         }
 
         $this->assertStringContainsString('To restore caching', $debug);
+    }
+
+    /** Declares a directive handler in `$dir`; included from an instance method, it is bound to this test case and so untrusted. */
+    private function untrustedDirectiveDeclaredIn(string $dir): \Closure
+    {
+        \mkdir($dir, 0o777, true);
+        $file = $dir . '/directive.php';
+        \file_put_contents($file, "<?php\nreturn function (\$expression) { return '<?php echo \"MARK\"; ?>'; };\n");
+
+        $handler = include $file;
+        $this->assertInstanceOf(\Closure::class, $handler);
+
+        return $handler;
+    }
+
+    /**
+     * #1930: a vendor package's callback is not the user's to fix, so it never warns, and --debug
+     * leaves out the advice. The cache is still skipped: only the diagnostic changes.
+     */
+    #[Test]
+    public function an_untrusted_input_declared_under_vendor_is_listed_in_debug_without_a_warning(): void
+    {
+        $fakeVendor = $this->root . '/fake-vendor';
+        $this->writeTemplate('profile.blade.php', "<p>@vendored</p>\n");
+        $boot = function (RecordingShadowRegistrar $registrar) use ($fakeVendor): void {
+            $app = $this->app();
+            /** @var BladeCompiler $compiler */
+            $compiler = $app->make('blade.compiler');
+            $compiler->directive('vendored', $this->untrustedDirectiveDeclaredIn($fakeVendor . '/acme/directives'));
+            (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, vendorDirOverride: $fakeVendor))->boot();
+        };
+
+        $first = new RecordingShadowRegistrar();
+        $boot($first);
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString('Blade shadow cache skipped for this run', $debug);
+        $this->assertStringContainsString("  - directive 'vendored' (closure bound to", $debug);
+        $this->assertStringContainsString('acme/directives/directive.php', $debug);
+        $this->assertStringNotContainsString('static fn', $debug);
+
+        \file_put_contents($first->analyzedShadows[0], "<?php // stale\n");
+        $second = new RecordingShadowRegistrar();
+        $boot($second);
+
+        $this->assertNotSame("<?php // stale\n", (string) \file_get_contents($second->analyzedShadows[0]), 'a vendor-only untrusted environment still recompiles');
+    }
+
+    #[Test]
+    public function an_untrusted_project_input_keeps_the_warning_and_the_advice_names_only_project_inputs(): void
+    {
+        $fakeVendor = $this->root . '/fake-vendor';
+        $this->writeTemplate('profile.blade.php', "<p>@vendored @local</p>\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+        $compiler->directive('vendored', $this->untrustedDirectiveDeclaredIn($fakeVendor . '/acme/directives'));
+        $compiler->directive('local', $this->untrustedDirectiveDeclaredIn($this->root . '/app/Providers'));
+        (new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, vendorDirOverride: $fakeVendor))->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $this->assertStringContainsString('2 compiler inputs cannot be fingerprinted', $this->progress->warningText());
+
+        $debug = \implode('', $this->progress->debugMessages);
+        $advice = \strpos($debug, 'To restore caching');
+        $this->assertNotFalse($advice, $debug);
+        $this->assertStringContainsString("directive 'local'", \substr($debug, 0, $advice));
+        $this->assertStringNotContainsString("directive 'vendored'", \substr($debug, 0, $advice), 'the advice must not cover vendor inputs');
+        $this->assertStringContainsString("directive 'vendored'", \substr($debug, $advice));
     }
 }

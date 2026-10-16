@@ -1,0 +1,62 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
+
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Symfony\Component\Process\Process;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
+
+/**
+ * #1930: Blade is opt-in, so a run that cannot start it has lost something the user asked for.
+ * `--no-progress` installs `VoidProgress`, which drops every warning, so the disable message goes
+ * to STDERR directly; only a real subprocess can observe that write.
+ */
+#[CoversClass(BladeBootstrapper::class)]
+#[Group('subprocess')]
+final class BladeDisabledVisibilityTest extends TestCase
+{
+    use CopiesFixtureDirectories;
+
+    private const FIXTURE = __DIR__ . '/Fixtures/BladeDisabled';
+
+    private const MESSAGE = "Blade template analysis is disabled for this run, because the 'blade.compiler' service is not bound";
+
+    /** @return array{0: int, 1: string} exit code, stderr */
+    private function analyze(string $config): array
+    {
+        $process = new Process(
+            [\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', $config, '--no-cache', '--threads=1', '--no-progress'],
+            self::FIXTURE,
+        );
+        $process->setTimeout(300);
+        $process->run();
+        // The booted app creates its local disk root; keep the fixture tree clean.
+        $this->removeDirectory(self::FIXTURE . '/storage');
+
+        return [(int) $process->getExitCode(), $process->getErrorOutput()];
+    }
+
+    #[Test]
+    public function the_disable_message_reaches_stderr_under_no_progress(): void
+    {
+        [$exitCode, $stderr] = $this->analyze('psalm.xml');
+
+        $this->assertStringContainsString(self::MESSAGE, $stderr);
+        $this->assertSame(0, $exitCode, $stderr);
+    }
+
+    #[Test]
+    public function fail_on_internal_error_turns_the_disable_into_a_failed_run(): void
+    {
+        [$exitCode, $stderr] = $this->analyze('psalm-fail.xml');
+
+        $this->assertNotSame(0, $exitCode, $stderr);
+        $this->assertStringContainsString(self::MESSAGE, $stderr);
+    }
+}
