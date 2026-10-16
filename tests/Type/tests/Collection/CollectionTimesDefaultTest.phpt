@@ -40,6 +40,66 @@ final class CollectionTimesDefaultTest
         /** @psalm-check-type-exact $_lazyUntyped = LazyCollection<int, int> */
     }
 
+    public function lazyBoolCallbackKeepsStubResult(): void
+    {
+        $_lazyBool = LazyCollection::times(3, static fn (int $i): bool => $i > 1);
+        /** @psalm-check-type-exact $_lazyBool = LazyCollection<int, bool> */
+    }
+
+    public function namedArgs(): void
+    {
+        $_numberOnly = Collection::times(number: 3);
+        /** @psalm-check-type-exact $_numberOnly = Collection<int, int> */
+
+        $_namedNull = Collection::times(number: 3, callback: null);
+        /** @psalm-check-type-exact $_namedNull = Collection<int, int> */
+
+        $_reversed = Collection::times(callback: null, number: 3);
+        /** @psalm-check-type-exact $_reversed = Collection<int, int> */
+
+        $_lazyNamedNull = LazyCollection::times(callback: null, number: 3);
+        /** @psalm-check-type-exact $_lazyNamedNull = LazyCollection<int, int> */
+
+        $_namedCallback = Collection::times(number: 3, callback: static fn (int $i): string => (string) $i);
+        /** @psalm-check-type-exact $_namedCallback = Collection<int, numeric-string> */
+
+        $_reversedCallback = Collection::times(callback: static fn (int $i): string => (string) $i, number: 3);
+        /** @psalm-check-type-exact $_reversedCallback = Collection<int, numeric-string> */
+    }
+
+    /** The unpacked list may carry a callback the handler cannot see. */
+    public function unpackedArgsDecline(): void
+    {
+        $_packed = Collection::times(...[3, static fn (int $i): string => (string) $i]);
+        /** @psalm-check-type-exact $_packed = Collection<int, numeric-string> */
+
+        $_lazyPacked = LazyCollection::times(...[3, static fn (int $i): string => (string) $i]);
+        /** @psalm-check-type-exact $_lazyPacked = LazyCollection<int, numeric-string> */
+    }
+
+    /**
+     * A template-bounded receiver (class-string or instance) must keep its template: the call is
+     * not a plain `Collection::times()`.
+     *
+     * @template T of Collection<int, int>
+     * @param class-string<T> $class
+     * @return T
+     */
+    public function classStringFactory(string $class): Collection
+    {
+        return $class::times(3);
+    }
+
+    /**
+     * @template T of Collection<int, int>
+     * @param T $items
+     * @return T
+     */
+    public function templateInstance(Collection $items): Collection
+    {
+        return $items->times(3);
+    }
+
     public function eloquentCollectionDeclines(): void
     {
         $_eloquent = EloquentCollection::times(3);
