@@ -11,6 +11,12 @@ class Owner extends Model
 {
     protected $table = 'owners';
 
+    /** @return HasMany<CustomFilter, $this> */
+    public function customFilters(): HasMany
+    {
+        return $this->hasMany(CustomFilter::class, 'owner_id');
+    }
+
     /** @return HasMany<UserFilter, $this> */
     public function filters(): HasMany
     {

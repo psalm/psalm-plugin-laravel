@@ -7,7 +7,11 @@ namespace DynamicWhereFixture\Builders;
 use DynamicWhereFixture\Models\CustomFilter;
 use Illuminate\Database\Eloquent\Builder;
 
-/** @extends Builder<CustomFilter> */
+/**
+ * @extends Builder<CustomFilter>
+ *
+ * @method string whereKind(int $kind) A `@method` pseudo-method (as a local macro would be modelled).
+ */
 final class CustomFilterBuilder extends Builder
 {
     /**

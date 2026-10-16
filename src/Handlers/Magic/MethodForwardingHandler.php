@@ -708,10 +708,17 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        // Narrow only a single-atomic receiver: `HasMany<A,P>|HasMany<B,P>` would otherwise be
+        // validated (and re-typed) from whichever alternative comes first.
+        $stmt = $event->getStmt();
+        $receiverType = $stmt instanceof MethodCall ? $event->getSource()->getNodeTypeProvider()->getType($stmt->var) : null;
+
+        if ($receiverType instanceof Union && !$receiverType->isSingle()) {
+            return null;
+        }
+
         // TRelatedModel is always the first template parameter on Relation subclasses. Every
         // model alternative of a union must accept the suffix.
-        $stmt = $event->getStmt();
-
         $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
 
         $columnType = DynamicWhereResolver::resolveColumnTypeForModels(

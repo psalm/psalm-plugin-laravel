@@ -8,6 +8,7 @@ use DynamicWhereFixture\Builders\CustomFilterBuilder;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 
+/** @mixin CustomFilterBuilder */
 #[UseEloquentBuilder(CustomFilterBuilder::class)]
 class CustomFilter extends Model
 {

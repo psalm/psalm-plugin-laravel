@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DynamicWhereFixture;
 
 use DynamicWhereFixture\Models\Owner;
+use DynamicWhereFixture\Models\StringIdFilter;
 use DynamicWhereFixture\Models\UserFilter;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -34,4 +35,24 @@ function unreachable_column(): int
 function union_where_one_alternative_lacks_the_column(HasMany $relation): HasMany
 {
     return $relation->whereUserId(1);
+}
+
+/**
+ * A receiver union is not narrowed to its first alternative.
+ *
+ * @param HasMany<UserFilter, Owner>|HasMany<Owner, Owner> $relation
+ * @return HasMany<UserFilter, Owner>|HasMany<Owner, Owner>
+ */
+function receiver_union_where_one_alternative_lacks_the_column(HasMany $relation): HasMany
+{
+    return $relation->whereUserId(1);
+}
+
+/**
+ * @param HasMany<UserFilter|StringIdFilter, Owner> $relation
+ * @return HasMany<UserFilter|StringIdFilter, Owner>
+ */
+function union_rejects_an_argument_no_alternative_accepts(HasMany $relation): HasMany
+{
+    return $relation->whereUserId(new \stdClass());
 }

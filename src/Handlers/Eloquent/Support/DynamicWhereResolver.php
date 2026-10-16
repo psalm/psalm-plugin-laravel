@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
@@ -17,6 +16,7 @@ use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
@@ -212,7 +212,7 @@ final class DynamicWhereResolver
      */
     public static function methodMatchesColumns(Codebase $codebase, string $modelClass, string $methodNameLower): bool
     {
-        if (!self::isDynamicWhereMethod($methodNameLower) || self::isBuilderMacro($codebase, $methodNameLower)) {
+        if (!self::isDynamicWhereMethod($methodNameLower) || self::isBuilderMethodOwned($codebase, $modelClass, $methodNameLower, false)) {
             return false;
         }
 
@@ -243,7 +243,7 @@ final class DynamicWhereResolver
     /**
      * {@see resolveColumnType} for a relation's related-model union (`HasMany<A|B, P>`). Every
      * alternative must be a model that accepts the suffix, otherwise one branch would query a
-     * missing column. The argument type is handed off only when every alternative agrees.
+     * missing column. The argument type is typed only when every alternative is, as their union.
      *
      * @return false|Union|null Same contract as {@see resolveColumnType}
      */
@@ -252,39 +252,48 @@ final class DynamicWhereResolver
         Union $relatedModels,
         string $originalMethodName,
     ): false|Union|null {
-        $typeIds = [];
+        $combined = null;
+        $untyped = false;
 
         foreach ($relatedModels->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return false;
             }
 
-            $columnType = self::resolveColumnType($codebase, $atomic->value, $originalMethodName);
+            $columnType = self::resolveColumnType($codebase, $atomic->value, $originalMethodName, true);
 
             if ($columnType === false) {
                 return false;
             }
 
-            $typeIds[$columnType instanceof Union ? $columnType->getId() : ''] = true;
-            $agreed = $columnType;
+            $untyped = $untyped || !$columnType instanceof \Psalm\Type\Union;
+            $combined = $columnType instanceof Union
+                ? ($combined instanceof Union ? Type::combineUnionTypes($combined, $columnType) : $columnType)
+                : $combined;
         }
 
-        if ($typeIds === []) {
-            return false;
-        }
-
-        // `$agreed` is the last alternative's verdict: it stands only when all alternatives share one typed id.
-        return \count($typeIds) === 1 && !isset($typeIds['']) ? $agreed : null;
+        return $untyped ? null : ($combined ?? false);
     }
 
     /**
-     * Whether a Macroable builder owns a macro or pseudo-method of this name: `Eloquent\Builder::__call`
-     * (and `Relation::__call`) dispatch those before any dynamic where. Runtime macros come from
-     * {@see MacroRegistry} (available before the codebase is populated); `@method` pseudo-methods from storage.
+     * Whether a macro or `@method` pseudo-method owned by a layer that Laravel consults BEFORE its
+     * forwarding to `Query\Builder` claims this name: `Eloquent\Builder::__call` dispatches its macros
+     * and the model's custom builder (the plugin models local macros as that builder's pseudo-methods),
+     * and `Relation::__call` its own macros first, but only on relation receivers. `Query\Builder` macros
+     * never change the Eloquent wrapper's return value, so they do not claim it. Runtime macros come
+     * from {@see MacroRegistry} (available before population); pseudo-methods from storage.
+     *
+     * @param class-string<Model> $modelClass
      */
-    private static function isBuilderMacro(Codebase $codebase, string $methodNameLower): bool
+    private static function isBuilderMethodOwned(Codebase $codebase, string $modelClass, string $methodNameLower, bool $viaRelation): bool
     {
-        foreach ([EloquentBuilder::class, QueryBuilder::class, Relation::class] as $owner) {
+        $owners = [EloquentBuilder::class, ModelMethodHandler::getBuilderClassForModel($modelClass)];
+
+        if ($viaRelation) {
+            $owners[] = Relation::class;
+        }
+
+        foreach ($owners as $owner) {
             if (MacroRegistry::get($owner, $methodNameLower) instanceof \Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition) {
                 return true;
             }
@@ -337,10 +346,10 @@ final class DynamicWhereResolver
         Codebase $codebase,
         string $modelClass,
         string $originalMethodName,
+        bool $viaRelation = false,
     ): false|Union|null {
-        // Eloquent\Builder::__call dispatches macros before scopes and query forwarding, so a
-        // macro of this name is never a dynamic where. Not cached: it is a cheap lookup.
-        if (self::isBuilderMacro($codebase, \strtolower($originalMethodName))) {
+        // Not cached: a cheap lookup, and the layers consulted depend on the receiver.
+        if (self::isBuilderMethodOwned($codebase, $modelClass, \strtolower($originalMethodName), $viaRelation)) {
             return false;
         }
 

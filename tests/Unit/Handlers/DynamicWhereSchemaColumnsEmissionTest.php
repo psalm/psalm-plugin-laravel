@@ -54,8 +54,9 @@ final class DynamicWhereSchemaColumnsEmissionTest extends TestCase
 
         $this->assertCount(3, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'UndefinedMagicMethod') || \str_starts_with($m, 'InvalidScalarArgument')), $joined);
         // Unknown column, unreachable column, and a related-model union where one alternative lacks the
-        // column: none is claimed, so each returned chain stays mixed.
-        $this->assertCount(3, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'MixedReturnStatement')), $joined);
+        // column, or a receiver union with one such alternative: none is claimed, so each returned chain stays mixed.
+        $this->assertCount(4, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'MixedReturnStatement')), $joined);
+        $this->assertStringContainsString('InvalidArgument: Argument 1 of Illuminate\Database\Eloquent\Relations\HasMany::whereuserid', $joined);
         $this->assertStringContainsString('InvalidScalarArgument: Argument 1 of DynamicWhereFixture\Models\UserFilter::whereuserid', $joined);
         $this->assertStringContainsString('UndefinedMagicMethod: Magic method DynamicWhereFixture\Models\UserFilter::wherenosuchcolumn', $joined);
         $this->assertStringContainsString('UndefinedMagicMethod: Magic method DynamicWhereFixture\Models\UserFilter::whereline1', $joined);
