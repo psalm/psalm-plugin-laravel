@@ -30,6 +30,8 @@ final class ShowPost extends Component
         return $this->secret === $this->hidden;
     }
 
+    public function rename(int $id): void {}
+
     protected function helper(): int
     {
         return 1;

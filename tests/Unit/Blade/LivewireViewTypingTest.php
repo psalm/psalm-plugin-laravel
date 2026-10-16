@@ -11,6 +11,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ComponentViewRegistry;
 use Psalm\LaravelPlugin\Blade\ComponentViewSeedHandler;
+use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
+use Symfony\Component\Process\Process;
 
 /**
  * #1935: a Livewire component's view gets `$this` and the component's public properties. Every
@@ -18,6 +20,7 @@ use Psalm\LaravelPlugin\Blade\ComponentViewSeedHandler;
  */
 #[CoversClass(ComponentViewRegistry::class)]
 #[CoversClass(ComponentViewSeedHandler::class)]
+#[CoversClass(ShadowIssueRelocator::class)]
 #[Group('subprocess')]
 final class LivewireViewTypingTest extends TestCase
 {
@@ -58,6 +61,12 @@ final class LivewireViewTypingTest extends TestCase
             '$this: App\Livewire\Compacted',
             '$title: string',
         ]];
+        // Nothing binds the declaring class's template here, so its property is not guessed.
+        yield 'a property of a generic declaring class' => ['generic.blade.php', [
+            '$item: mixed',
+            '$page: int',
+            '$this: App\Livewire\GenericPost',
+        ]];
         yield 'two Livewire classes' => ['twin.blade.php', ['$this: mixed', '$tone: mixed']];
         yield 'a Livewire class and a Blade component' => ['shared.blade.php', ['$this: mixed', '$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$this: mixed', '$title: mixed']];
@@ -78,31 +87,80 @@ final class LivewireViewTypingTest extends TestCase
         $this->assertSame($expected, $this->tracesIn('livewire/' . $template));
     }
 
+    /**
+     * Unbound, `$this` stays the prelude's `mixed`; a template that types it itself keeps every
+     * finding on it, magic or not.
+     */
     #[Test]
     public function a_plain_view_keeps_this_mixed(): void
     {
         $this->assertSame(['$probe: mixed'], $this->tracesIn('views/plain.blade.php'));
+        $this->assertSame(
+            ['UndefinedThisPropertyFetch @3: Instance property App\Livewire\ShowPost::$total is not defined'],
+            $this->reportedIn($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS), 'views/plain.blade.php'),
+        );
     }
 
     /**
      * Livewire binds the view's closure to the component with the component's own scope, so a
-     * protected method is reachable; an undefined method and a typo on a typed property are not.
+     * protected method is reachable, and a declared method's signature is checked. `__get()` and
+     * `__call()` answer any other `$this->name`, so only another receiver's magic member reports.
      */
     #[Test]
     public function reports_against_the_component_class(): void
     {
+        $this->assertSame([
+            'UndefinedMethod @2: Method App\Models\Post::typo does not exist',
+            "InvalidScalarArgument @7: Argument 1 of App\\Livewire\\ShowPost::rename expects int, but 'x' provided",
+            'UndefinedMagicPropertyFetch @9: Magic instance property App\Livewire\ShowPost::$total is not defined',
+            'UndefinedMagicMethod @9: Magic method App\Livewire\ShowPost::nope does not exist',
+        ], $this->reportedIn($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS), 'livewire/show-post.blade.php'));
+    }
+
+    /**
+     * Without `__get()`/`__call()` on the class, nothing answers an undefined `$this` member.
+     */
+    #[Test]
+    public function a_class_without_magic_keeps_reporting_this_members(): void
+    {
+        $copy = \sys_get_temp_dir() . '/psalm-livewire-views-' . \getmypid();
+        self::deleteTree($copy);
+        self::copyTree(self::FIXTURE, $copy);
+
+        try {
+            $base = $copy . '/livewire/Component.php';
+            $source = (string) \file_get_contents($base);
+            \file_put_contents($base, \substr($source, 0, (int) \strpos($source, '    public function __get(')) . "}\n");
+
+            $process = new Process([\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', ...self::ARGUMENTS], $copy);
+            $process->setTimeout(300);
+            $process->run();
+            $issues = $this->decodeIssues(['output' => $process->getOutput(), 'errorOutput' => $process->getErrorOutput(), 'shadows' => '']);
+
+            $reported = $this->reportedIn($issues, 'livewire/show-post.blade.php');
+            $this->assertContains('UndefinedMethod @3: Method App\Livewire\ShowPost::nope does not exist', $reported);
+            $this->assertContains('UndefinedThisPropertyFetch @6: Instance property App\Livewire\ShowPost::$total is not defined', $reported);
+        } finally {
+            self::deleteTree($copy);
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $issues
+     *
+     * @return list<string>
+     */
+    private function reportedIn(array $issues, string $template): array
+    {
         $reported = [];
 
-        foreach ($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS) as $issue) {
-            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], 'livewire/show-post.blade.php')) {
+        foreach ($issues as $issue) {
+            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], $template)) {
                 $reported[] = $issue['type'] . ' @' . $issue['line_from'] . ': ' . $issue['message'];
             }
         }
 
-        $this->assertSame([
-            'UndefinedMethod @2: Method App\Models\Post::typo does not exist',
-            'UndefinedMethod @3: Method App\Livewire\ShowPost::nope does not exist',
-        ], $reported);
+        return $reported;
     }
 
     /**
@@ -124,5 +182,31 @@ final class LivewireViewTypingTest extends TestCase
         \sort($traces);
 
         return $traces;
+    }
+
+    private static function copyTree(string $from, string $to): void
+    {
+        \mkdir($to, 0o777, true);
+
+        foreach (\array_diff(\scandir($from) ?: [], ['.', '..', '.cache']) as $entry) {
+            \is_dir($from . '/' . $entry)
+                ? self::copyTree($from . '/' . $entry, $to . '/' . $entry)
+                : \copy($from . '/' . $entry, $to . '/' . $entry);
+        }
+    }
+
+    private static function deleteTree(string $directory): void
+    {
+        if (!\is_dir($directory)) {
+            return;
+        }
+
+        foreach (\array_diff(\scandir($directory) ?: [], ['.', '..']) as $entry) {
+            \is_dir($directory . '/' . $entry) && !\is_link($directory . '/' . $entry)
+                ? self::deleteTree($directory . '/' . $entry)
+                : \unlink($directory . '/' . $entry);
+        }
+
+        \rmdir($directory);
     }
 }

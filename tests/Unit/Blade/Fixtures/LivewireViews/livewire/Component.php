@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Livewire;
 
 /**
- * Stand-in for `livewire/livewire`'s base class: only what the seed reads. The real class also
- * declares `__call()`, which silences an undefined `$this->method()`; left out here so the fixture
- * can prove `$this` resolves against the component.
+ * Stand-in for `livewire/livewire`'s base class: only what the seed reads, plus the magic Livewire 3
+ * and 4 declare (computed properties through `__get()`, macros through `__call()`).
  */
 abstract class Component
 {
@@ -16,8 +15,13 @@ abstract class Component
     /** Livewire hands the view only the properties a subclass declares. */
     public bool $owned = false;
 
-    /** Computed properties and other runtime reads. */
     public function __get(string $property): mixed
+    {
+        return null;
+    }
+
+    /** @param array<array-key, mixed> $params */
+    public function __call(string $method, array $params): mixed
     {
         return null;
     }

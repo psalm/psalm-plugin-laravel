@@ -33,6 +33,8 @@ use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
+use Psalm\Issue\UndefinedMagicMethod;
+use Psalm\Issue\UndefinedMagicPropertyFetch;
 use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
@@ -179,6 +181,17 @@ final class ShadowIssueRelocator
         // dropped — the relocator has only the message and location, never scope info, so the two
         // cannot be told apart there either.
         if ($issue instanceof InvalidScope && $issue->message === 'Use of $this in non-class context') {
+            return false;
+        }
+
+        // Livewire answers `$this->computed` (`#[Computed]`, `getXProperty()`, a Filament `$this->form`)
+        // through `__get()` and macros through `__call()`, but Psalm 7 seals magic by default
+        // (`sealAllProperties`/`sealAllMethods`), so the `$this` a Livewire view is seeded with (#1935)
+        // would report every such read. Sealing is a fact of the class's storage, shared by every
+        // receiver, so nothing on the shadow side can unseal one `$this`. Dropped only on a literal
+        // `$this` receiver in a view bound to a class declaring that magic; before the seed these were
+        // `Mixed*` on a `mixed` `$this`, so a genuine typo there stays silent, as it was.
+        if (self::isLivewireMagicOnThis($issue)) {
             return false;
         }
 
@@ -904,6 +917,40 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursInWithRawTextRewrites($receiver[0] . $call, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * An undefined-member issue on a literal `$this->name` that the bound Livewire class's `__get()` /
+     * `__call()` would answer. A fetch selects the whole `$this->name`, a magic call only its name.
+     */
+    private static function isLivewireMagicOnThis(CodeIssue $issue): bool
+    {
+        $magic = match (true) {
+            $issue instanceof UndefinedThisPropertyFetch, $issue instanceof UndefinedMagicPropertyFetch => '__get',
+            $issue instanceof UndefinedMagicMethod => '__call',
+            default => null,
+        };
+
+        if (
+            $magic === null
+            || !ComponentViewRegistry::boundClassDeclares($issue->code_location->file_path, $magic)
+            || \preg_match('/::\$?(\w++) (?:is not defined|does not exist)\z/', $issue->message, $member) !== 1
+        ) {
+            return false;
+        }
+
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        $selected = \substr($selection->snippet, $selection->start, $selection->end - $selection->start);
+        $name = \preg_quote($member[1], '/');
+
+        return \preg_match('/\A\$this\s*+->\s*+' . $name . '\z/i', $selected) === 1
+            || (\preg_match('/\A' . $name . '\z/i', $selected) === 1
+                && \preg_match('/\$this\s*+->\s*+\z/', \substr($selection->snippet, 0, $selection->start)) === 1);
     }
 
     /**

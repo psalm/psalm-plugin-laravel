@@ -94,6 +94,9 @@ final class ComponentViewRegistry
     /** @var array<string, string> shadow path => the Livewire component its view is bound to */
     private static array $bound = [];
 
+    /** @var array<string, array<string, true>> shadow path => `__get`/`__call`, when that component declares it */
+    private static array $boundMagic = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -123,10 +126,20 @@ final class ComponentViewRegistry
         return self::$bound[$shadowPath] ?? null;
     }
 
+    /**
+     * Whether the Livewire component a view is bound to declares `$magic` (`__get` or `__call`), itself
+     * or through an ancestor.
+     */
+    public static function boundClassDeclares(string $shadowPath, string $magic): bool
+    {
+        return isset(self::$boundMagic[$shadowPath][$magic]);
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
         self::$bound = [];
+        self::$boundMagic = [];
         // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
         // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
@@ -260,11 +273,15 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            $vars = self::seedVariables($codebase, $storage, $livewire ? [] : $renderKeys, $templatePath, $parser);
+            $vars = self::seedVariables($codebase, $storage, $renderKeys, $templatePath, $parser);
 
             if ($livewire && $vars !== null) {
                 $vars['this'] = new Union([new TNamedObject($storage->name)]);
                 self::$bound[$shadowPath] = $storage->name;
+                self::$boundMagic[$shadowPath] = \array_fill_keys(
+                    \array_keys(\array_intersect_key($storage->declaring_method_ids, ['__get' => true, '__call' => true])),
+                    true,
+                );
             }
 
             $vars = ($vars ?? []) + (self::$seeds[$shadowPath] ?? []);
@@ -282,6 +299,7 @@ final class ComponentViewRegistry
         self::$renderedByName = [];
         self::$seeds = [];
         self::$bound = [];
+        self::$boundMagic = [];
         self::$declaredFunctions = [];
     }
 

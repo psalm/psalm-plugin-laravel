@@ -3,3 +3,7 @@
 {{ $this->nope() }}
 {{ $this->helper() }}
 {{ $this->post->title() }}
+{{ $this->total }}
+@php $this->rename('x'); @endphp
+@php $other = new \App\Livewire\ShowPost(); @endphp
+{{ $other->total }} {{ $other->nope() }}
