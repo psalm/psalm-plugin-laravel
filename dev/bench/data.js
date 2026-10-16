@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792187209118,
+  "lastUpdate": 1792189985341,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14695,6 +14695,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b1b8fd6d7d20733937fe9248792b778d93fbf7fa",
+          "message": "Keep the `Route` type on `domain()` setter chains on Laravel < 13.18 (#1938)\n\n* fix(stubs): keep Route on domain() setter chains on Laravel < 13.18 #1929\n\n* test(stubs): pin Route::domain() known limitations #1929\n\n* test(types): expect array<int, string> from paginator items() after fragment() #1939\n\nPaginator items() returns array<TKey, TValue> since #1915, which merged after #1928 added these assertions.",
+          "timestamp": "2026-10-17T00:28:59+02:00",
+          "tree_id": "c7b63654c853d7b2a5df8704991973964d09b51c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b1b8fd6d7d20733937fe9248792b778d93fbf7fa"
+        },
+        "date": 1792189983597,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.79,
+            "range": "± 0.64",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1512,
             "unit": "MB"
           }
         ]
