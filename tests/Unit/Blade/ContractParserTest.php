@@ -59,6 +59,39 @@ final class ContractParserTest extends TestCase
         $this->assertSame(['subject'], $this->undeclared($source));
     }
 
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function scopedBindings(): iterable
+    {
+        yield 'an arrow parameter named like a declaration leaves it a contract' => [
+            "<?php /** @var string \$title */ ?>\n{{ \$title }}\n@php \$format = static fn (string \$title): string => strtoupper(\$title); @endphp\n{{ \$titel }}\n",
+            ['titel'],
+        ];
+        yield 'a declaration the template normalises in place stays a contract' => [
+            "<?php /** @var string \$title */ ?>\n@php \$title = \$title ?? 'Untitled'; @endphp\n{{ \$titel }}\n",
+            ['titel'],
+        ];
+        yield 'a name only an arrow parameter binds is undeclared outside the arrow' => [
+            "<?php /** @var list<int> \$ids */ ?>\n{{ implode(',', array_map(fn (int \$n) => \$n, \$ids)) }} {{ \$n }}\n",
+            ['n'],
+        ];
+        yield 'a by-reference out-argument binds the name its @var types' => [
+            "<?php parse_str('a=1', \$parts); /** @var array<string, string> \$parts */ ?>\n{{ \$parts['a'] }} {{ \$title }}\n",
+            [],
+        ];
+        yield 'a loop alias hint alone is no contract' => [
+            "@foreach (\$items as \$item)\n<?php /** @var \\App\\Item \$item */ ?>\n{{ \$item }}\n@endforeach\n{{ \$other }}\n",
+            [],
+        ];
+    }
+
+    /** @param list<string> $expected */
+    #[Test]
+    #[DataProvider('scopedBindings')]
+    public function only_a_binding_in_the_templates_own_scope_turns_a_declaration_into_a_local(string $source, array $expected): void
+    {
+        $this->assertSame($expected, $this->undeclared($source));
+    }
+
     #[Test]
     public function extracts_a_var_comment_declaration(): void
     {
