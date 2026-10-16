@@ -86,12 +86,19 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        // Need the callback arg, bound by name or position; the 0/1-arg when() proxy branch and
-        // unpacked args defer to the stub.
+        // Need the callback arg, bound by name or position; the 0/1-arg when() proxy branch defers
+        // to the stub. An unpack at or before the callback's position makes the binding ambiguous,
+        // a trailing one does not.
         $args = $event->getCallArgs();
         $callbackArg = ArgUtil::boundTo($args, 'callback', $position);
-        if (!$callbackArg instanceof Arg || \array_filter($args, static fn(Arg $arg): bool => $arg->unpack) !== []) {
+        if (!$callbackArg instanceof Arg) {
             return null;
+        }
+
+        foreach ($args as $offset => $arg) {
+            if ($arg->unpack && $offset <= $position) {
+                return null;
+            }
         }
 
         $source = $event->getSource();

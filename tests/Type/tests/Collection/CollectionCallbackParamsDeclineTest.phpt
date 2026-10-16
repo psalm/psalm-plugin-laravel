@@ -19,6 +19,19 @@ function decline_sink(mixed $_value): bool
     return true;
 }
 
+/**
+ * @template T
+ * @extends Collection<int, list<T>>
+ */
+final class DeclineGroups extends Collection {}
+
+/** @param DeclineGroups<Customer> $g */
+function test_nested_template_in_extended_params_declines(DeclineGroups $g): void
+{
+    // The chunk's value type is `list<T>`: not resolvable exactly, so the stub callable stands.
+    $g->chunkWhile(fn ($v, $k, $chunk) => decline_sink($chunk));
+}
+
 /** @param Collection<int, Customer>|Collection<int, Vehicle> $u */
 function test_union_receiver_declines(Collection $u): void
 {
@@ -69,6 +82,7 @@ function test_unpacked_args_decline(Collection $c): void
     $c->tap(...$args);
 }
 --EXPECTF--
+InvalidArgument on line %d: Argument 1 of DeclineGroups::chunkWhile expects callable[impure](list<App\Models\Customer>, int, DeclineGroups<int, list<App\Models\Customer>>):bool, but Closure[impure](list<App\Models\Customer>, int, static<int, list<App\Models\Customer>>):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):mixed, but Closure[impure](static):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):mixed, but Closure[impure](App\Models\Customer):bool provided
 InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>):mixed, but Closure[impure](Illuminate\Support\Collection<int, App\Models\Customer>, mixed):bool provided

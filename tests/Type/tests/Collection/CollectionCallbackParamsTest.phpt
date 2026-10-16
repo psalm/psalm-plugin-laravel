@@ -143,6 +143,9 @@ function test_collection_empty_family(Collection $c): void
     $named = $c->whenEmpty(default: fn () => null, callback: fn () => 'yes');
     /** @psalm-check-type-exact $named = 'yes'|Collection<int, Customer>&static */
     callback_params_sink($named);
+    $trailingUnpack = $c->when(true, fn () => 'yes', ...[null]);
+    /** @psalm-check-type-exact $trailingUnpack = 'yes'|Collection<int, Customer>&static */
+    callback_params_sink($trailingUnpack);
     $namedWhen = $c->when(true, default: fn () => 7, callback: fn () => 'yes');
     /** @psalm-check-type-exact $namedWhen = 'yes'|Collection<int, Customer>&static */
     callback_params_sink($namedWhen);

@@ -28,6 +28,8 @@ use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -262,8 +264,6 @@ final class CollectionCallbackParamsHandler implements
 
     /**
      * `Collection<TKey, TValue>` in the receiver's terms, or null when they cannot be read exactly.
-     *
-     * @psalm-mutation-free
      */
     private static function chunkType(Codebase $codebase, TNamedObject $receiver): ?Union
     {
@@ -285,8 +285,6 @@ final class CollectionCallbackParamsHandler implements
      * What `Collection`'s `$template` is for this receiver: the receiver's own type param, or the
      * concrete type a subclass binds it to. `template_extended_params` states each ancestor's
      * template in its direct child's terms, so a forwarded template is followed up to the receiver.
-     *
-     * @psalm-mutation-free
      */
     private static function collectionTemplate(ClassLikeStorage $storage, TNamedObject $receiver, string $template): ?Union
     {
@@ -307,7 +305,7 @@ final class CollectionCallbackParamsHandler implements
 
             $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
             if (!$forwarded instanceof TTemplateParam) {
-                return $value->hasTemplate() ? null : $value;
+                return self::containsTemplate($value) ? null : $value;
             }
 
             $class = $forwarded->defining_class;
@@ -315,5 +313,24 @@ final class CollectionCallbackParamsHandler implements
         }
 
         return null;
+    }
+
+    /**
+     * Whether a template param appears anywhere in the type (`list<T>` too): `Union::hasTemplate()`
+     * only looks at the top level, and an unresolved nested template would leak into the closure.
+     */
+    private static function containsTemplate(Union $type): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                return $type instanceof TTemplateParam ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return !$visitor->traverse($type);
     }
 }
