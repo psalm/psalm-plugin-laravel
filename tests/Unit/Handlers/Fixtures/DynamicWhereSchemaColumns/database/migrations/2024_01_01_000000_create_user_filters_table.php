@@ -17,6 +17,7 @@ return new class extends Migration {
             $table->string('filter_type');
             $table->string('line_1');
             $table->unsignedBigInteger('owner_id');
+            $table->unsignedBigInteger('tag_id');
         });
     }
 

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace DynamicWhereFixture;
 
+use DynamicWhereFixture\Models\Owner;
 use DynamicWhereFixture\Models\UserFilter;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** A schema-only column is typed from the schema (`user_id` is an unsigned int). */
 function typed_param_from_schema(): int
@@ -21,4 +23,15 @@ function unknown_column(): int
 function unreachable_column(): int
 {
     return UserFilter::whereLine1('x')->count();
+}
+
+/**
+ * `Owner` has no `user_id` column, so the relation must not be claimed from `UserFilter` alone.
+ *
+ * @param HasMany<UserFilter|Owner, Owner> $relation
+ * @return HasMany<UserFilter|Owner, Owner>
+ */
+function union_where_one_alternative_lacks_the_column(HasMany $relation): HasMany
+{
+    return $relation->whereUserId(1);
 }

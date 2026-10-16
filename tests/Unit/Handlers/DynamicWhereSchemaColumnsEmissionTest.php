@@ -29,8 +29,13 @@ final class DynamicWhereSchemaColumnsEmissionTest extends TestCase
         'MixedAssignment',
         'InvalidScalarArgument',
         'InvalidArgument',
+        'InvalidReturnType',
+        'InvalidReturnStatement',
         'TooManyArguments',
     ];
+
+    /** @var array<string, list<string>>|null */
+    private static ?array $findings = null;
 
     #[Test]
     public function it_resolves_schema_only_columns_through_every_call_form(): void
@@ -48,6 +53,9 @@ final class DynamicWhereSchemaColumnsEmissionTest extends TestCase
         $joined = \implode("\n", $messages);
 
         $this->assertCount(3, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'UndefinedMagicMethod') || \str_starts_with($m, 'InvalidScalarArgument')), $joined);
+        // Unknown column, unreachable column, and a related-model union where one alternative lacks the
+        // column: none is claimed, so each returned chain stays mixed.
+        $this->assertCount(3, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'MixedReturnStatement')), $joined);
         $this->assertStringContainsString('InvalidScalarArgument: Argument 1 of DynamicWhereFixture\Models\UserFilter::whereuserid', $joined);
         $this->assertStringContainsString('UndefinedMagicMethod: Magic method DynamicWhereFixture\Models\UserFilter::wherenosuchcolumn', $joined);
         $this->assertStringContainsString('UndefinedMagicMethod: Magic method DynamicWhereFixture\Models\UserFilter::whereline1', $joined);
@@ -58,6 +66,10 @@ final class DynamicWhereSchemaColumnsEmissionTest extends TestCase
      */
     private function runPsalm(): array
     {
+        if (self::$findings !== null) {
+            return self::$findings;
+        }
+
         $fixtureDir = __DIR__ . '/Fixtures/DynamicWhereSchemaColumns';
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
 
@@ -86,6 +98,6 @@ final class DynamicWhereSchemaColumnsEmissionTest extends TestCase
             }
         }
 
-        return $findings;
+        return self::$findings = $findings;
     }
 }

@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
@@ -15,8 +18,11 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -206,7 +212,7 @@ final class DynamicWhereResolver
      */
     public static function methodMatchesColumns(Codebase $codebase, string $modelClass, string $methodNameLower): bool
     {
-        if (!self::isDynamicWhereMethod($methodNameLower)) {
+        if (!self::isDynamicWhereMethod($methodNameLower) || self::isBuilderMacro($codebase, $methodNameLower)) {
             return false;
         }
 
@@ -216,7 +222,9 @@ final class DynamicWhereResolver
             $candidates[] = \strtolower(\str_replace('_', '', $columnName));
         }
 
-        return $candidates !== [] && self::partitionExists(\substr($methodNameLower, 5), $candidates);
+        // Underscores are stripped on both sides, so `whereuser_id` (Laravel queries `user_id`) matches too.
+        return $candidates !== []
+            && self::partitionExists(\str_replace('_', '', \substr($methodNameLower, 5)), $candidates);
     }
 
     /**
@@ -230,6 +238,69 @@ final class DynamicWhereResolver
     public static function isRegistryPending(string $modelClass): bool
     {
         return !ModelMetadataRegistry::for($modelClass) instanceof ModelMetadata;
+    }
+
+    /**
+     * {@see resolveColumnType} for a relation's related-model union (`HasMany<A|B, P>`). Every
+     * alternative must be a model that accepts the suffix, otherwise one branch would query a
+     * missing column. The argument type is handed off only when every alternative agrees.
+     *
+     * @return false|Union|null Same contract as {@see resolveColumnType}
+     */
+    public static function resolveColumnTypeForModels(
+        Codebase $codebase,
+        Union $relatedModels,
+        string $originalMethodName,
+    ): false|Union|null {
+        $typeIds = [];
+
+        foreach ($relatedModels->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
+                return false;
+            }
+
+            $columnType = self::resolveColumnType($codebase, $atomic->value, $originalMethodName);
+
+            if ($columnType === false) {
+                return false;
+            }
+
+            $typeIds[$columnType instanceof Union ? $columnType->getId() : ''] = true;
+            $agreed = $columnType;
+        }
+
+        if ($typeIds === []) {
+            return false;
+        }
+
+        // `$agreed` is the last alternative's verdict: it stands only when all alternatives share one typed id.
+        return \count($typeIds) === 1 && !isset($typeIds['']) ? $agreed : null;
+    }
+
+    /**
+     * Whether a Macroable builder owns a macro or pseudo-method of this name: `Eloquent\Builder::__call`
+     * (and `Relation::__call`) dispatch those before any dynamic where. Runtime macros come from
+     * {@see MacroRegistry} (available before the codebase is populated); `@method` pseudo-methods from storage.
+     */
+    private static function isBuilderMacro(Codebase $codebase, string $methodNameLower): bool
+    {
+        foreach ([EloquentBuilder::class, QueryBuilder::class, Relation::class] as $owner) {
+            if (MacroRegistry::get($owner, $methodNameLower) instanceof \Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition) {
+                return true;
+            }
+
+            try {
+                $storage = $codebase->classlike_storage_provider->get(\strtolower($owner));
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            if (isset($storage->pseudo_methods[$methodNameLower]) || isset($storage->declaring_pseudo_method_ids[$methodNameLower])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -267,6 +338,12 @@ final class DynamicWhereResolver
         string $modelClass,
         string $originalMethodName,
     ): false|Union|null {
+        // Eloquent\Builder::__call dispatches macros before scopes and query forwarding, so a
+        // macro of this name is never a dynamic where. Not cached: it is a cheap lookup.
+        if (self::isBuilderMacro($codebase, \strtolower($originalMethodName))) {
+            return false;
+        }
+
         $key = $modelClass . ':' . $originalMethodName;
 
         if (\array_key_exists($key, self::$columnTypeCache)) {

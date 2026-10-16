@@ -708,18 +708,17 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // TRelatedModel is always the first template parameter on Relation subclasses.
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0], $codebase);
-
-        if ($modelClass === null) {
-            return null;
-        }
-
+        // TRelatedModel is always the first template parameter on Relation subclasses. Every
+        // model alternative of a union must accept the suffix.
         $stmt = $event->getStmt();
 
         $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
 
-        $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+        $columnType = DynamicWhereResolver::resolveColumnTypeForModels(
+            $codebase,
+            $templateParams[0],
+            $originalMethodName,
+        );
 
         if ($columnType === false) {
             return null;

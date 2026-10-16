@@ -630,8 +630,12 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // (so we can't reconstruct the original camel-cased suffix here). The return-
         // type and params providers still run the strict camel-cased validation via
         // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        //
+        // A real method declared on the concrete model (own, trait, or parent) is dispatched by PHP
+        // before __callStatic/__call, so it is never a dynamic where.
         if (
             DynamicWhereResolver::isEnabled()
+            && !$codebase->methodExists(new MethodIdentifier($modelClass, $methodName))
             && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
         ) {
             return self::$unresolvedCache[$key] = true;
