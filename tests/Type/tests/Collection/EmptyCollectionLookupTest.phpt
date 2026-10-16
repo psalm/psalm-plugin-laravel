@@ -42,6 +42,13 @@ function bare_empty_receivers(string $key): bool
     );
 }
 
+function named_arguments(string $key, string $default): bool
+{
+    // Psalm numbers `Argument N` by call-site position, so these compare against the wrong parameter.
+    return collect()->get(default: $default, key: $key) === $default
+        && collect()->search(strict: false, value: 1) !== false;
+}
+
 function empty_eloquent_collection(string $key): bool
 {
     $customers = new EloquentCollection();

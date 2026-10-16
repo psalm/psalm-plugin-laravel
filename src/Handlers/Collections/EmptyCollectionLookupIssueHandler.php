@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Internal\Type\TemplateInferredTypeReplacer;
 use Psalm\Internal\Type\TemplateResult;
 use Psalm\Issue\ArgumentIssue;
@@ -30,9 +31,12 @@ use Psalm\Type\Union;
  * No stub can express "any key when TKey is never" without also accepting wrong keys on populated
  * collections (decisions.md, "Lookups on an empty collection"), so the issue is dropped at emission.
  *
- * The issue is dropped only when the expected type quoted in its message is exactly the declaring
- * method's declared parameter with every class template replaced by `never`. A populated atomic of
- * the same receiver union quotes its own substituted type and keeps reporting. Every gate misses
+ * The issue is dropped only when the expected type quoted in its message is exactly a declared parameter
+ * of the declaring method with every class template replaced by `never` (every parameter is tried, because
+ * named arguments shift Psalm's positional numbering), AND the provided type fits that parameter with each
+ * template replaced by its own upper bound (`array_key_exists(new stdClass)` throws even on an empty
+ * collection). A populated atomic of the same receiver union quotes its own substituted type and keeps
+ * reporting. Every gate misses
  * toward `null` (issue retained).
  *
  * Stateless, so no `reset()` registration.
@@ -107,37 +111,25 @@ final class EmptyCollectionLookupIssueHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        // "Argument 1 of Illuminate\Support\Collection::get expects never, but string provided"
-        // (Psalm 7 rc2 builds all four classes' messages from `$param_type->getId()` this way).
-        if (\preg_match('/^Argument (\d+) of \S+ expects (.+?), but /s', $issue->message, $matches) !== 1) {
+        // "Argument 1 of Illuminate\Support\Collection::get expects never, but string provided". Psalm 7 rc2
+        // builds all four classes' messages from `getId()` this way; the provided type may carry a
+        // `parent type ` / `possibly different type ` / `possibly undefined ` prefix. Anything else (e.g. the
+        // "with additional array shape fields" tail) does not match and keeps the issue.
+        if (\preg_match(
+            '/^Argument \d+ of \S+ expects (.+?), but (?:parent type |possibly different type |possibly undefined )?(.+) provided$/s',
+            $issue->message,
+            $matches,
+        ) !== 1) {
             return null;
         }
 
-        $expected = self::declaredParamWithEmptyReceiver(
-            $event->getCodebase(),
-            $class,
-            $method,
-            (int) $matches[1] - 1,
-        );
+        $codebase = $event->getCodebase();
 
-        return $expected === $matches[2] ? false : null;
-    }
-
-    /**
-     * The declared type of parameter `$offset` with every class template of the declaring class
-     * replaced by `never`, as Psalm quotes it. Null when it cannot be proven: unreadable storage, a
-     * lookup declared outside Laravel's collections, or a parameter that names no class template
-     * (an issue about it says nothing about an empty receiver).
-     */
-    private static function declaredParamWithEmptyReceiver(
-        Codebase $codebase,
-        string $class,
-        string $method,
-        int $offset,
-    ): ?string {
         try {
             $storage = self::declaringStorage($codebase, $class, $method);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            $provided = Type::parseString($matches[2]);
+        } catch (\Throwable) {
+            // Unreadable storage or a provided type Psalm's parser cannot read back proves nothing.
             return null;
         }
 
@@ -145,22 +137,62 @@ final class EmptyCollectionLookupIssueHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        $declared = self::declaredParam($storage, $method, $offset);
+        return self::isEmptyReceiverMismatch($codebase, $storage, $method, $matches[1], $provided) ? false : null;
+    }
 
-        if (!$declared instanceof Union || !$declared->hasTemplate()) {
-            return null;
-        }
-
+    /**
+     * True when some parameter of the declaring method, with every class template replaced by `never`,
+     * is exactly the expected type the issue quotes (the receiver is empty), and the provided type is
+     * valid for that parameter's own bounds. Psalm numbers `Argument N` by call-site position, so a named
+     * call (`get(default: 'x', key: $k)`) can compare against another parameter: every parameter naming a
+     * class template is tried, and the provided type is checked against the same parameter it matched.
+     *
+     * Emptiness proves no entries exist, not that the argument is usable: `array_key_exists()` still
+     * throws a TypeError for `new \stdClass()`, so the provided type must also fit the declared parameter
+     * with each template replaced by its own upper bound (`TKey` -> `array-key`, `TValue` -> `mixed`,
+     * `TModel` -> `Model`).
+     */
+    private static function isEmptyReceiverMismatch(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        string $method,
+        string $expected,
+        Union $provided,
+    ): bool {
         $never = Type::getNever();
-        $bounds = [];
+        $neverBounds = [];
+        $upperBounds = [];
 
         foreach ($storage->template_types ?? [] as $name => $definingClasses) {
-            foreach (\array_keys($definingClasses) as $definingClass) {
-                $bounds[$name][$definingClass] = $never;
+            foreach ($definingClasses as $definingClass => $upperBound) {
+                $neverBounds[$name][$definingClass] = $never;
+                $upperBounds[$name][$definingClass] = $upperBound;
             }
         }
 
-        return TemplateInferredTypeReplacer::replace($declared, new TemplateResult([], $bounds), $codebase)->getId();
+        foreach (($storage->methods[$method] ?? null)?->params ?? [] as $param) {
+            $declared = $param->type;
+
+            if (!$declared instanceof Union || !$declared->hasTemplate()) {
+                continue;
+            }
+
+            $withNever = TemplateInferredTypeReplacer::replace($declared, new TemplateResult([], $neverBounds), $codebase);
+
+            // Unchanged: the parameter names no class template (only method templates), so an issue
+            // about it says nothing about an empty receiver.
+            if ($withNever->getId() === $declared->getId() || $withNever->getId() !== $expected) {
+                continue;
+            }
+
+            $valid = TemplateInferredTypeReplacer::replace($declared, new TemplateResult([], $upperBounds), $codebase);
+
+            if (UnionTypeComparator::isContainedBy($codebase, $provided, $valid)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -184,13 +216,5 @@ final class EmptyCollectionLookupIssueHandler implements BeforeAddIssueInterface
         $declaringClass = $declaring->fq_class_name;
 
         return isset(self::DECLARING_CLASSES[\strtolower($declaringClass)]) ? $provider->get($declaringClass) : null;
-    }
-
-    /**
-     * @psalm-mutation-free
-     */
-    private static function declaredParam(ClassLikeStorage $storage, string $method, int $offset): ?Union
-    {
-        return ($storage->methods[$method] ?? null)?->params[$offset]->type ?? null;
     }
 }
