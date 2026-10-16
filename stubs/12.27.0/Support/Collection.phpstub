@@ -9,9 +9,10 @@ use Illuminate\Support\Traits\Macroable;
 use Illuminate\Support\Traits\TransformsToResourceCollection;
 
 /**
- * Laravel 12.27.0 resolves a pure UnitEnum group key through `enum_value()` in `groupBy()`
- * (12.26.4 for `keyBy()`), where earlier releases map only a BackedEnum and throw for a pure enum.
- * Only these two methods are declared: the rest merges from `common`.
+ * Laravel 12.27.0 resolves a pure UnitEnum group key through `enum_value()` in `groupBy()`, where
+ * earlier releases map only a BackedEnum and throw for a pure enum. (`keyBy()` enum support starts
+ * earlier, in 12.26.4: `stubs/12.26.4/`.)
+ * Only this method is declared: the rest merges from `common`.
  * `TValue` stays invariant like the `common` stub (Laravel declares it covariant).
  *
  * @template TKey of array-key
@@ -41,14 +42,4 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * >
      */
     public function groupBy($groupBy, $preserveKeys = false) {}
-
-    /**
-     * Key an associative array by a field or using a callback.
-     *
-     * @template TNewKey of array-key|\UnitEnum
-     *
-     * @param  (callable(TValue, TKey): TNewKey)|array|string  $keyBy
-     * @return static<($keyBy is (array|string) ? array-key : (TNewKey is \UnitEnum ? array-key : TNewKey)), TValue>
-     */
-    public function keyBy($keyBy) {}
 }

@@ -397,8 +397,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Key an associative array by a field or using a callback.
      *
      * The 12.20 floor casts every object key with `(string)`, so any enum throws; Laravel 12.26.4
-     * resolves enums through enum_value() first. The enum-accepting contract is in `stubs/12.27.0/`
-     * (one dir for both methods, so 12.26.4-12.26.x keep a conservative false positive).
+     * resolves enums through enum_value() first. The enum-accepting contract is in `stubs/12.26.4/`.
      *
      * @template TNewKey of array-key
      *
