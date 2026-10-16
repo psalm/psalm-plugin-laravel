@@ -103,7 +103,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return (
      *     TCount is 1
      *     ? TValue|null
-     *     : static
+     *     : static<int, TValue>
      * )
      */
     public function pop($count = 1) {}
@@ -166,10 +166,28 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return (
      *     TCount is 1
      *     ? TValue|null
-     *     : static
+     *     : static<int, TValue>
      * )
      */
     public function shift($count = 1) {}
+
+    /**
+     * Shuffled items are renumbered (the runtime shuffles into a list).
+     *
+     * @return static<int, TValue>
+     */
+    public function shuffle() {}
+
+    /**
+     * Appends each item with `push()`, so the source keys are discarded and appended items get
+     * int keys.
+     *
+     * @template TConcatValue
+     *
+     * @param  iterable<array-key, TConcatValue>  $source
+     * @return static<TKey|int, TValue|TConcatValue>
+     */
+    public function concat($source) {}
 
     /**
      * Merge the collection with the given items.
