@@ -12,9 +12,11 @@ use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidCast;
+use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
+use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedIssue;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
@@ -110,8 +112,18 @@ final class ShadowIssueRelocator
         // is real rather than free: a closure written inside `@php` or a raw PHP block CAN carry
         // native types and a docblock, so an author's own missing closure type is silenced too.
         // Accepted because it is a signature warning on code that is never called from outside the
-        // template, against a family that is otherwise pure precompiler noise (#1498).
-        if ($issue instanceof MissingClosureParamType || $issue instanceof MissingClosureReturnType) {
+        // template, against a family that is otherwise pure precompiler noise (#1498). Livewire's
+        // `$__split` closure also draws `MissingPureAnnotation` on every tag (#1908), same trade-off.
+        if (
+            $issue instanceof MissingClosureParamType
+            || $issue instanceof MissingClosureReturnType
+            || ($issue instanceof MissingPureAnnotation && \str_starts_with($issue->message, '{closure} '))
+        ) {
+            return false;
+        }
+
+        // `@entangle('tab')` compiles to `'tab'->value()` (#1908), call text the template never holds.
+        if ($issue instanceof InvalidMethodCall && self::isGeneratedLiteralReceiverCall($issue, $target)) {
             return false;
         }
 
@@ -859,6 +871,39 @@ final class ShadowIssueRelocator
         return $target->attributesFromTag
             && self::selectedText($issue->code_location) === $check
             && !TemplateSnippetMatcher::occursInWithRawTextRewrites($check, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether an issue sits on a method call whose receiver is a string literal (`'tab'->value()`,
+     * what `@entangle('tab')` compiles to) and that call, receiver included, is absent from the
+     * template, so an author's own `{{ 'x'->value() }}` keeps the finding. Psalm positions the issue
+     * on the method name, so the receiver is read back off the shadow text right before it; a
+     * receiver on an earlier line is unreadable and keeps the finding.
+     *
+     * @psalm-external-mutation-free
+     */
+    private static function isGeneratedLiteralReceiverCall(InvalidMethodCall $issue, ShadowTarget $target): bool
+    {
+        if (\preg_match("/^Cannot call method on '[^']*' variable/", $issue->message) !== 1) {
+            return false;
+        }
+
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        $call = TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+
+        if (
+            $call === null
+            || \preg_match('/(?:\'(?:[^\'\\\\]|\\\\.)*+\'|"(?:[^"\\\\]|\\\\.)*+")\s*+\??->\s*+\z/', \substr($selection->snippet, 0, $selection->start), $receiver) !== 1
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursInWithRawTextRewrites($receiver[0] . $call, $target->templateSource, $target->markerPrefix());
     }
 
     /**
