@@ -9,6 +9,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Internal\Type\TemplateInferredTypeReplacer;
 use Psalm\Internal\Type\TemplateResult;
+use Psalm\Internal\TypeVisitor\TemplateTypeCollector;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\ArgumentTypeCoercion;
 use Psalm\Issue\InvalidArgument;
@@ -18,6 +19,7 @@ use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -35,7 +37,8 @@ use Psalm\Type\Union;
  * of the declaring method with every class template replaced by `never` (every parameter is tried, because
  * named arguments shift Psalm's positional numbering), AND the provided type fits that parameter with each
  * template replaced by its own upper bound (`array_key_exists(new stdClass)` throws even on an empty
- * collection). A populated atomic of the same receiver union quotes its own substituted type and keeps
+ * collection), AND no class template of that parameter hides in the quoted string behind another top-level
+ * atomic (`TValue|null` reads `null` for an empty and for a `Collection<int, null>` receiver alike). A populated atomic of the same receiver union quotes its own substituted type and keeps
  * reporting. Every gate misses
  * toward `null` (issue retained).
  *
@@ -187,9 +190,59 @@ final class EmptyCollectionLookupIssueHandler implements BeforeAddIssueInterface
                 continue;
             }
 
+            if (self::isAmbiguousWithPopulatedReceiver($codebase, $declared, $upperBounds)) {
+                continue;
+            }
+
             $valid = TemplateInferredTypeReplacer::replace($declared, new TemplateResult([], $upperBounds), $codebase);
 
             if (UnionTypeComparator::isContainedBy($codebase, $provided, $valid)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A class template that occurs ONLY as a top-level atomic of the parameter leaves no trace of `never` in
+     * the quoted string when another top-level atomic absorbs its instantiation: `TValue|null` quotes `null`
+     * for `TValue = never` and for `TValue = null` alike. When those other atomics can overlap the template's
+     * upper bound, the quoted type no longer proves the receiver is empty. A template that also occurs nested
+     * (`array<array-key, TKey>`, `callable(TValue): bool`) keeps `never` visible, so it proves emptiness.
+     *
+     * @param array<string, array<string, Union>> $upperBounds
+     */
+    private static function isAmbiguousWithPopulatedReceiver(Codebase $codebase, Union $declared, array $upperBounds): bool
+    {
+        foreach ($declared->getAtomicTypes() as $key => $atomic) {
+            if (!$atomic instanceof TTemplateParam || !isset($upperBounds[$atomic->param_name][$atomic->defining_class])) {
+                continue;
+            }
+
+            $others = $declared->getAtomicTypes();
+            unset($others[$key]);
+
+            if ($others === []) {
+                continue;
+            }
+
+            $rest = new Union(\array_values($others));
+            $collector = new TemplateTypeCollector();
+            $collector->traverse($rest);
+
+            foreach ($collector->getTemplateTypes() as $nested) {
+                if ($nested->param_name === $atomic->param_name && $nested->defining_class === $atomic->defining_class) {
+                    // Also nested somewhere: `never` stays visible.
+                    continue 2;
+                }
+            }
+
+            if (UnionTypeComparator::canExpressionTypesBeIdentical(
+                $codebase,
+                $rest,
+                $upperBounds[$atomic->param_name][$atomic->defining_class],
+            )) {
                 return true;
             }
         }

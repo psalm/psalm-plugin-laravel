@@ -74,6 +74,17 @@ function invalid_arguments_on_empty_receivers(bool $flag): bool
         && collect()->has($flag ? "it's" : new \stdClass());
 }
 
+/**
+ * `TValue|null` quotes `null` for TValue = never and for TValue = null alike, so the quoted type cannot
+ * prove this receiver is empty.
+ *
+ * @param Collection<int, null> $nulls
+ */
+function value_template_absorbed_by_null(Collection $nulls): bool
+{
+    return $nulls->containsStrict('name', 1);
+}
+
 /** @param KeptLookupBag<never, never> $bag */
 function user_override_keeps_issue(KeptLookupBag $bag): mixed
 {
@@ -92,4 +103,5 @@ InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::get exp
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but stdClass provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::contains expects callable[impure](never, never):bool|int|string, but stdClass provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but 'it's'|stdClass provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Support\Collection::containsStrict expects null, but 1 provided
 InvalidArgument on line %d: Argument 1 of KeptLookupBag::get expects never, but 'name' provided
