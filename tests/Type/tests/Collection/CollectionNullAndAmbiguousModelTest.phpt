@@ -153,4 +153,28 @@ function duplicates_null_named_and_nullable_callback(Collection $c, LazyCollecti
     $_l2 = $l->duplicates($callback);
     /** @psalm-check-type-exact $_l2 = LazyCollection<int, int|M>&static */
 }
+/**
+ * `class-string<A|B>::query()` is `Builder<A>|Builder<B>`: the column resolves on every receiver atomic.
+ *
+ * @param class-string<UnionColumnIntModel|UnionColumnOtherIntModel> $ints
+ * @param class-string<UnionColumnIntModel|UnionColumnTextModel> $mixed
+ */
+function class_string_union_query_pluck(string $ints, string $mixed): void
+{
+    $_i = $ints::query()->pluck('rank');
+    /** @psalm-check-type-exact $_i = Collection<int, int> */
+    $_m = $mixed::query()->pluck('rank');
+    /** @psalm-check-type-exact $_m = Collection<int, int|string> */
+}
+
+/**
+ * A receiver atomic that is not a model collection still declines the whole call.
+ *
+ * @param Collection<int, UnionColumnIntModel>|Collection<int, array{rank: float}> $c
+ */
+function mixed_receiver_atomics_decline(Collection $c): void
+{
+    $_c = $c->pluck('rank');
+    /** @psalm-check-type-exact $_c = Collection<array-key, mixed>&static */
+}
 --EXPECTF--

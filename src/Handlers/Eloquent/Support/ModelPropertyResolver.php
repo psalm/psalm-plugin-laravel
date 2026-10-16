@@ -274,10 +274,27 @@ final class ModelPropertyResolver
             $receiverType instanceof Union ? $receiverType->getAtomicTypes() : [],
             static fn(\Psalm\Type\Atomic $atomic): bool => !$atomic instanceof TNull,
         ));
-        if ($models === null
-            || (\count($receivers) > 1
-                && (\count($models) > 1
-                    || $models[0] !== self::resolveExactlyOneModelClass(null, $modelTemplateIndex, new Union($receivers), $codebase, ignoreNull: true)))) {
+        // Several receiver atomics (`Builder<A>|Builder<B>`): every one must resolve to models only, and the
+        // column is resolved on all of them, since each atomic's answer replaces Psalm's own union.
+        if (\count($receivers) > 1) {
+            $models = [];
+            foreach ($receivers as $receiver) {
+                $atomicModels = $receiver instanceof TGenericObject
+                    ? self::extractModelsFromUnion($receiver->type_params[$modelTemplateIndex] ?? null, $codebase, ignoreNull: true)
+                    : null;
+                $atomicType = new Union([$receiver]);
+                $atomicModel = self::extractModelFromLhsBuilderExtends($atomicType, $codebase)
+                    ?? self::extractModelFromLhsCollectionExtends($atomicType, $codebase);
+                $atomicModels ??= $atomicModel === null ? null : [$atomicModel];
+                if ($atomicModels === null) {
+                    return null;
+                }
+
+                $models = array_values(array_unique([...$models, ...$atomicModels]));
+            }
+        }
+
+        if ($models === null) {
             return null;
         }
 
