@@ -26,7 +26,9 @@ final class EnumKeysBelowItem
 
 /**
  * Before 12.27.0 groupBy() maps only BackedEnum (->value), so a pure UnitEnum key reaches
- * array_key_exists() and throws; keyBy() casts every object with `(string)`, so any enum throws.
+ * array_key_exists() and throws. keyBy() casts every object with `(string)`, so any enum throws
+ * up to 12.26.3; keyBy() enum support starts at 12.26.4, so 12.26.4 - 12.26.x keep this
+ * conservative rejection (the 12.27.0 stub dir carries both methods).
  *
  * @param Collection<int, EnumKeysBelowItem> $items
  */
@@ -36,6 +38,11 @@ function enum_keys_before_1227(Collection $items): void
     /** @psalm-check-type-exact $_backed = Collection<array-key, Collection<int, EnumKeysBelowItem>&static>&static */
 
     $items->groupBy(fn (EnumKeysBelowItem $item): EnumKeysBelowSuit => $item->suit);
+
+    $items->groupBy(function ($item) {
+        /** @psalm-check-type-exact $item = EnumKeysBelowItem */
+        return $item->status;
+    });
 
     $items->keyBy(fn (EnumKeysBelowItem $item): EnumKeysBelowStatus => $item->status);
 

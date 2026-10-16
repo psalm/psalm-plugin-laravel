@@ -6,6 +6,7 @@ require getcwd() . '/vendor/autoload.php';
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Enumerable;
 
 /**
  * Every 12.x sum() calls `$callback($item)` with one argument, so a callback that requires the
@@ -19,6 +20,17 @@ function sum_callback_receives_item_only_on_12(Collection $items): void
     /** @psalm-check-type-exact $_sum = int */
 
     $items->sum(fn (int $item, string $key): int => $item + \strlen($key));
+}
+
+/**
+ * @param Enumerable<string, int> $items
+ */
+function enumerable_sum_untyped_callback_on_12(Enumerable $items): void
+{
+    $items->sum(function ($item) {
+        /** @psalm-check-type-exact $item = int */
+        return $item;
+    });
 }
 ?>
 --EXPECTF--
