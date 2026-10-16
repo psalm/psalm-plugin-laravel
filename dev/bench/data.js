@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792073064656,
+  "lastUpdate": 1792139347570,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14165,6 +14165,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.83,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1506,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "126f4e487b6ab5b354881d1d35be8321a5f1b51e",
+          "message": "Widen `Collection` `prepend`/`unshift`/`add`/`splice`/`getOrPut` writes via this-out (#1891)\n\n* fix(collections): widen prepend/unshift/add/splice/getOrPut writes via this-out #1890\n\n* fix(collections): keep getOrPut key domain and model prepend arg count #1890\n\n* fix(collections): model prepend explicit-null key as empty string key #1890",
+          "timestamp": "2026-10-16T10:25:27+02:00",
+          "tree_id": "42be76b14b2acbb1110be923197e03cc5c95c3c2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/126f4e487b6ab5b354881d1d35be8321a5f1b51e"
+        },
+        "date": 1792139345512,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.87,
+            "range": "± 1.06",
             "unit": "s"
           },
           {
