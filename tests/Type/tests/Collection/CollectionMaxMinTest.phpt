@@ -32,7 +32,6 @@ final class CollectionMaxMinTest
         $_minFn = $items->min(static fn (int $i): string => (string) $i);
         /** @psalm-check-type-exact $_minFn = numeric-string|null */
 
-        /** @var mixed $_column */
         $_column = $items->max('column');
         /** @psalm-check-type-exact $_column = mixed */
     }

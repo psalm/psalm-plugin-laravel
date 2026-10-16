@@ -10,7 +10,7 @@ use Illuminate\Support\LazyCollection;
 /**
  * Laravel declares one default template as `TDefault|(\Closure(): TDefault)`, so passing a Closure
  * binds the template to the Closure itself and the result type contains `Closure(): T`.
- * `last()`, `pull()`, `value()` and `get()` use the same conditional split as `first()`:
+ * `last()`, `pull()`, `value()` and `get()` (`value()` is mixed either way, so it is not pinned here) use the same conditional split as `first()`:
  * a Closure default contributes what it returns (plus `TValue`, since the closure only runs when
  * nothing matches), any other default contributes itself.
  */
@@ -40,13 +40,6 @@ final class CollectionClosureDefaultTest
 
         $_closure = $items->pull('a', static fn (): string => 'none');
         /** @psalm-check-type-exact $_closure = 'none'|int */
-    }
-
-    /** @param Collection<int, array<string, int>> $items */
-    public function value(Collection $items): void
-    {
-        $_closure = $items->value('a', static fn (): string => 'none');
-        /** @psalm-check-type-exact $_closure = 'none'|mixed */
     }
 
     /**
