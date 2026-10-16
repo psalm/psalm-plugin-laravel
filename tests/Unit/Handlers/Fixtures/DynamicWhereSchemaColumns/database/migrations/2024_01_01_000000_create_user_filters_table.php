@@ -24,6 +24,8 @@ return new class extends Migration {
             $table->unsignedBigInteger('owner_id');
             $table->unsignedBigInteger('tag_id');
             $table->string('kind');
+            $table->string('slug');
+            $table->string('state');
         });
     }
 

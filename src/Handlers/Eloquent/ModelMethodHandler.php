@@ -662,10 +662,21 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      */
     private static function hasPublicMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
-        $declaringId = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelClass, $methodName));
+        $methodId = new MethodIdentifier($modelClass, $methodName);
+        $declaringId = $codebase->methods->getDeclaringMethodId($methodId);
 
-        return $declaringId instanceof MethodIdentifier
-            && $codebase->methods->getStorage($declaringId)->visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+        if (!$declaringId instanceof MethodIdentifier) {
+            return false;
+        }
+
+        // `use T { f as private; }` leaves the trait method's own visibility untouched; Psalm keeps the
+        // adaptation on the class the method appears in, so that view wins over the declaration.
+        $appearingId = $codebase->methods->getAppearingMethodId($methodId);
+        $adapted = $appearingId instanceof MethodIdentifier
+            ? $codebase->classlike_storage_provider->get($appearingId->fq_class_name)->trait_visibility_map[$methodName] ?? null
+            : null;
+
+        return ($adapted ?? $codebase->methods->getStorage($declaringId)->visibility) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
     }
 
     /**

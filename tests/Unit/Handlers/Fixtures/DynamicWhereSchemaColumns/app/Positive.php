@@ -10,6 +10,7 @@ use DynamicWhereFixture\Models\Owner;
 use DynamicWhereFixture\Models\PrivateMethodFilter;
 use DynamicWhereFixture\Models\RealMethodFilter;
 use DynamicWhereFixture\Models\StringIdFilter;
+use DynamicWhereFixture\Models\TraitAdaptedFilter;
 use DynamicWhereFixture\Models\UserFilter;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -114,4 +115,22 @@ function private_model_method_is_not_dispatched(PrivateMethodFilter $filter): in
 function union_with_different_column_types(HasMany $relation): HasMany
 {
     return $relation->whereUserId(1);
+}
+
+/** A Query\Builder macro's arguments are not column values: no schema param type is imposed. */
+function query_builder_macro_args_are_not_typed_from_the_column(Owner $owner, UserFilter $filter): int
+{
+    return $owner->filters()->whereSlug(['a'])->count() + $filter->whereSlug(['a'])->count();
+}
+
+/** `use T { f as private; }` makes the trait's public method non-public on the model: magic dispatch. */
+function trait_method_adapted_to_private_is_not_dispatched(TraitAdaptedFilter $filter): int
+{
+    return $filter->whereState('x')->count();
+}
+
+/** Laravel binds any int; an unsigned column must not demand `int<0, max>`. */
+function unsigned_column_accepts_a_plain_int(int $id): int
+{
+    return UserFilter::whereUserId($id)->count();
 }

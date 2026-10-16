@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Str;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
@@ -18,10 +19,13 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition;
 use Psalm\LaravelPlugin\Handlers\Magic\MacroRegistry;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
+use Psalm\Type\Atomic\TInt;
+use Psalm\Type\Atomic\TIntRange;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -294,22 +298,47 @@ final class DynamicWhereResolver
         }
 
         foreach ($owners as $owner) {
-            if (MacroRegistry::get($owner, $methodNameLower) instanceof \Psalm\LaravelPlugin\Handlers\Magic\MacroDefinition) {
-                return true;
-            }
-
-            try {
-                $storage = $codebase->classlike_storage_provider->get(\strtolower($owner));
-            } catch (\InvalidArgumentException) {
-                continue;
-            }
-
-            if (isset($storage->pseudo_methods[$methodNameLower]) || isset($storage->declaring_pseudo_method_ids[$methodNameLower])) {
+            if (self::declaresMacro($codebase, $owner, $methodNameLower)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Runtime macros come from {@see MacroRegistry}; `@method` pseudo-methods from class storage.
+     */
+    private static function declaresMacro(Codebase $codebase, string $owner, string $methodNameLower): bool
+    {
+        if (MacroRegistry::get($owner, $methodNameLower) instanceof MacroDefinition) {
+            return true;
+        }
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get(\strtolower($owner));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        return isset($storage->pseudo_methods[$methodNameLower]) || isset($storage->declaring_pseudo_method_ids[$methodNameLower]);
+    }
+
+    /**
+     * Schema-derived argument type: Laravel binds any int, so an unsigned/increments column's
+     * `int<0, max>` is widened to `int`. Nullability and every other atomic are kept.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function widenIntRanges(Union $type): Union
+    {
+        $atomics = [];
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof TIntRange ? new TInt() : $atomic;
+        }
+
+        return new Union($atomics);
     }
 
     /**
@@ -401,7 +430,8 @@ final class DynamicWhereResolver
                 return self::isRegistryPending($modelClass) ? false : self::$columnTypeCache[$key] = false;
             }
 
-            $matchedColumnTypes[] = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
+            $schemaType = ModelPropertyHandler::resolveColumnType($codebase, $modelClass, $columnName);
+            $matchedColumnTypes[] = $schemaType instanceof Union ? self::widenIntRanges($schemaType) : null;
         }
 
         // Multi-segment calls and schema columns without a resolvable type are valid but untyped.
@@ -419,6 +449,11 @@ final class DynamicWhereResolver
         // hand-off Laravel coerces strings/ints to these at the query layer, so narrowing
         // to the property type would mass-regress real codebases.
         if ($columnType->hasObjectType() || $columnType->hasArray()) {
+            return self::$columnTypeCache[$key] = null;
+        }
+
+        // A Query\Builder macro keeps the fluent return but receives the raw arguments, not a column value.
+        if (self::declaresMacro($codebase, QueryBuilder::class, \strtolower($originalMethodName))) {
             return self::$columnTypeCache[$key] = null;
         }
 

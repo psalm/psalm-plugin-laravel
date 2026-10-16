@@ -29,6 +29,8 @@ final class DynamicWhereSchemaColumnsEmissionTest extends TestCase
         'MixedAssignment',
         'InvalidScalarArgument',
         'InvalidArgument',
+        'ArgumentTypeCoercion',
+        'InaccessibleMethod',
         'InvalidReturnType',
         'InvalidReturnStatement',
         'TooManyArguments',
