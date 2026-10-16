@@ -66,11 +66,19 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function plans_mixed_for_a_read_variable_no_producer_could_type(): void
+    public function plans_no_type_for_a_read_variable_no_producer_could_type(): void
     {
         $plan = AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false));
 
-        $this->assertSame(['title' => 'mixed'], $plan);
+        $this->assertSame(['title' => null], $plan);
+    }
+
+    #[Test]
+    public function plans_no_type_for_a_read_variable_a_producer_typed_mixed(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getMixed()], true);
+
+        $this->assertSame(['title' => null], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
     }
 
     #[Test]
@@ -83,7 +91,7 @@ final class AnnotationWriterTest extends TestCase
             false,
         );
 
-        $this->assertSame(['body' => 'mixed'], AnnotationWriter::plan('home', $contract));
+        $this->assertSame(['body' => null], AnnotationWriter::plan('home', $contract));
     }
 
     #[Test]
@@ -142,8 +150,8 @@ final class AnnotationWriterTest extends TestCase
     public function refuses_to_write_when_the_run_never_analysed_a_statement(): void
     {
         // Psalm forks its analysis workers once the project is big enough, and a worker's statics
-        // never reach the parent that runs AfterAnalysis. Writing then would declare `mixed` for
-        // every variable of every template, silently, with exit code 0.
+        // never reach the parent that runs AfterAnalysis. Reporting then would call every variable
+        // of every template untyped, with exit code 0.
         $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
         $before = \md5_file($path);
 
@@ -164,6 +172,55 @@ final class AnnotationWriterTest extends TestCase
 
         $this->assertSame("<?php\n/**\n * @var string \$title\n */\n?>\n<h1>{{ \$title }}</h1>\n", \file_get_contents($path));
         $this->assertArrayNotHasKey('error', $this->publishedResult());
+    }
+
+    #[Test]
+    public function lists_instead_of_declaring_a_name_no_call_site_types(): void
+    {
+        // A `mixed` declaration adds nothing a reader can use and makes the name required at every
+        // call site; with no typed name left, the template gets no docblock at all.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        AnnotationCollector::markAnalyzed();
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $result = $this->publishedResult();
+        $this->assertSame([], $result['changed'] ?? null);
+        $this->assertSame([$path => ['title']], $result['unknown'] ?? null);
+    }
+
+    #[Test]
+    public function declares_the_typed_names_and_lists_the_rest(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>{{ \$body }}\n", ['title', 'body']);
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString(), 'body' => Type::getMixed()], true);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame("<?php\n/**\n * @var string \$title\n */\n?>\n<h1>{{ \$title }}</h1>{{ \$body }}\n", \file_get_contents($path));
+        $result = $this->publishedResult();
+        $this->assertSame([$path => ['title']], $result['changed'] ?? null);
+        $this->assertSame([$path => ['body']], $result['unknown'] ?? null);
+    }
+
+    #[Test]
+    public function lists_a_name_two_view_names_of_one_file_type_differently(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('vendor::page', 0, $path);
+        ContractRegistry::register('vendor::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+        AnnotationCollector::record('vendor::page', ['title' => Type::getInt()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $this->assertSame([$path => ['title']], $this->publishedResult()['unknown'] ?? null);
     }
 
     #[Test]
@@ -287,12 +344,13 @@ final class AnnotationWriterTest extends TestCase
         $process->mustRun();
     }
 
-    private function registerTemplate(string $contents): string
+    /** @param list<string> $reads */
+    private function registerTemplate(string $contents, array $reads = ['title']): string
     {
         $path = $this->template($contents);
 
         ViewReferenceRegistry::registerTemplate('page', 0, $path);
-        ContractRegistry::register('page', 0, new ViewDataContract([], false, ['title'], false));
+        ContractRegistry::register('page', 0, new ViewDataContract([], false, $reads, false));
 
         return $path;
     }
