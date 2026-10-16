@@ -47,3 +47,12 @@
 <x-shaped n="many" />
 <x-tpl :values="[1, 2]" />
 <x-shaped n="0" />
+<x-wrapper-a count="3" /><x-wrapper-b count="4" />
+@php /** @var mixed $num */ $num = 3; /** @var array-key $key */ $key = 1; /** @var scalar $sc */ $sc = 1; @endphp
+@if (is_numeric($num))
+<x-gauge :value="$num" />
+@endif
+<x-label :text="$key" />
+<x-gauge :value="$sc" />
+<x-fixed-count count="many" />
+<x-label :text="\App\Support\Markers::label()" />

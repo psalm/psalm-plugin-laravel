@@ -135,15 +135,24 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
         }
 
         $tail = $sum->right;
+        $isset = $tail instanceof Expr\Ternary && $tail->cond instanceof Expr\BinaryOp\BooleanAnd ? $tail->cond->left : null;
+        $instanceof = $tail instanceof Expr\Ternary && $tail->cond instanceof Expr\BinaryOp\BooleanAnd ? $tail->cond->right : null;
+        $all = $tail instanceof Expr\Ternary ? $tail->if : null;
 
         $compiled = $sum->left instanceof Expr\Array_
             && $tail instanceof Expr\Ternary
-            && $tail->cond instanceof Expr\BinaryOp\BooleanAnd
-            && $tail->cond->left instanceof Expr\Isset_
-            && $tail->cond->right instanceof Expr\Instanceof_
-            && self::isVariable($tail->cond->right->expr, 'attributes')
-            && $tail->if instanceof Expr\MethodCall
-            && self::isVariable($tail->if->var, 'attributes')
+            && $isset instanceof Expr\Isset_
+            && \count($isset->vars) === 1
+            && self::isVariable($isset->vars[0], 'attributes')
+            && $instanceof instanceof Expr\Instanceof_
+            && self::isVariable($instanceof->expr, 'attributes')
+            && $instanceof->class instanceof Name
+            && $instanceof->class->toString() === 'Illuminate\View\ComponentAttributeBag'
+            && $all instanceof Expr\MethodCall
+            && self::isVariable($all->var, 'attributes')
+            && $all->name instanceof Identifier
+            && $all->name->toLowerString() === 'all'
+            && $all->args === []
             && $tail->else instanceof Expr\Array_
             && $tail->else->items === [];
 
@@ -178,17 +187,22 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
         $codebase = $source->getCodebase();
         $class = ClassLineage::canonicalName($codebase, ClassLikeAnalyzer::getFQCLNFromNameObject($receiver, $source->getAliases()));
 
-        try {
-            $resolve = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($class, 'resolve'));
-        } catch (\InvalidArgumentException) {
-            return null;
+        // Inheriting `Component::resolve()` is what makes it a component. An overridden one, or an
+        // overridden `extractConstructorParameters()` it filters the data through, decides for itself
+        // what reaches the constructor.
+        foreach (['resolve', 'extractconstructorparameters'] as $method) {
+            try {
+                $declaring = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($class, $method));
+            } catch (\InvalidArgumentException) {
+                return null;
+            }
+
+            if (!$declaring instanceof MethodIdentifier || \strtolower($declaring->fq_class_name) !== 'illuminate\view\component') {
+                return null;
+            }
         }
 
-        // Inheriting `Component::resolve()` is what makes it a component; an overridden one decides
-        // for itself what reaches the constructor.
-        return $resolve instanceof MethodIdentifier && \strtolower($resolve->fq_class_name) === 'illuminate\view\component'
-            ? $class
-            : null;
+        return $class;
     }
 
     /**
@@ -312,9 +326,23 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
             $atomic instanceof Atomic\TInt => [new Atomic\TFloat(), new Atomic\TString(), new Atomic\TBool()],
             $atomic instanceof Atomic\TFloat => [new Atomic\TInt(), new Atomic\TString(), new Atomic\TBool()],
             $atomic instanceof Atomic\TBool => [new Atomic\TInt(), new Atomic\TFloat(), new Atomic\TString()],
-            $atomic instanceof Atomic\TNamedObject && $codebase->methodExists($atomic->value . '::__toString', is_used: false) => [new Atomic\TString()],
+            // `numeric`, `array-key`, `scalar`: any scalar a scalar parameter may receive.
+            $atomic instanceof Atomic\Scalar => [new Atomic\TInt(), new Atomic\TFloat(), new Atomic\TString(), new Atomic\TBool()],
+            $atomic instanceof Atomic\TNamedObject && self::isStringable($codebase, $atomic) => [new Atomic\TString()],
             default => [],
         };
+    }
+
+    /** The object or any member of its intersection (`Marker&\Stringable`) has `__toString()`. */
+    private static function isStringable(Codebase $codebase, Atomic\TNamedObject $atomic): bool
+    {
+        foreach ([$atomic, ...$atomic->extra_types] as $member) {
+            if ($member instanceof Atomic\TNamedObject && $codebase->methodExists($member->value . '::__toString', is_used: false)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** A class nothing defines is reported where it is written; comparing against it proves nothing. */
@@ -364,7 +392,8 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
     /**
      * Whether the compiled `+ $attributes->all()` provably adds nothing. It adds the enclosing
      * component's attributes wherever `$attributes` is set, which a component view always has, so
-     * a missing parameter is only judged in a template that is no component view.
+     * a missing parameter is only judged in a template that is no component view. A view some
+     * class's `render()` names counts even when the registry could not type it.
      */
     private static function noAttributesInScope(string $shadowPath, ShadowEntry $entry): bool
     {
@@ -372,6 +401,6 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
 
         return $templateSource !== null
             && !PreludeBuilder::isComponentView($templateSource)
-            && ComponentViewRegistry::seedFor($shadowPath) === null;
+            && !ComponentViewRegistry::isClassComponentView($shadowPath);
     }
 }
