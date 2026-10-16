@@ -2,6 +2,7 @@
 <?php declare(strict_types=1);
 
 use App\Models\Customer;
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
@@ -32,6 +33,22 @@ function to_array_mixed(Collection $items): void
 {
     $_array = $items->toArray();
     /** @psalm-check-type-exact $_array = array<int, mixed> */
+}
+
+/**
+ * A generic Arrayable item next to a scalar must keep the array arm: the object-gated conditional
+ * is needed because a bare `TValue is Arrayable` dropped it and reported `array<int, int>`.
+ *
+ * @param Collection<int, Collection<string, int>|int> $nested
+ * @param Collection<int, Arrayable<string, int>|int> $arrayables
+ */
+function to_array_generic_arrayable_with_scalar(Collection $nested, Collection $arrayables): void
+{
+    $_nested = $nested->toArray();
+    /** @psalm-check-type-exact $_nested = array<int, Collection<string, int>|array<array-key, mixed>|int> */
+
+    $_arrayables = $arrayables->toArray();
+    /** @psalm-check-type-exact $_arrayables = array<int, Arrayable<string, int>|array<array-key, mixed>|int> */
 }
 
 /** @param EloquentCollection<string, Customer> $customers */
