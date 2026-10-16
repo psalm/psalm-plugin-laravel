@@ -119,21 +119,37 @@ final class ModelPropertyResolver
      */
     public static function extractExactlyOneModelFromUnion(?Union $type, Codebase $codebase, bool $ignoreNull = false): ?string
     {
-        $modelClass = null;
+        $models = self::extractModelsFromUnion($type, $codebase, $ignoreNull);
+
+        return $models !== null && \count($models) === 1 ? $models[0] : null;
+    }
+
+    /**
+     * Every distinct model of a union made ONLY of models (`A|B`), or null when any atomic is not a
+     * model (a null atomic is skipped with $ignoreNull). Callers resolve a column on each model
+     * and union the results.
+     *
+     * @return non-empty-list<class-string<Model>>|null
+     * @psalm-mutation-free
+     */
+    public static function extractModelsFromUnion(?Union $type, Codebase $codebase, bool $ignoreNull = false): ?array
+    {
+        $models = [];
         foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
             if ($ignoreNull && $atomic instanceof TNull) {
                 continue;
             }
 
-            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)
-                || ($modelClass !== null && $modelClass !== $atomic->value)) {
+            if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return null;
             }
 
-            $modelClass = $atomic->value;
+            if (!\in_array($atomic->value, $models, true)) {
+                $models[] = $atomic->value;
+            }
         }
 
-        return $modelClass;
+        return $models === [] ? null : $models;
     }
 
     /**
@@ -204,7 +220,8 @@ final class ModelPropertyResolver
         }
 
         $modelSlot = $templateParams[$modelTemplateIndex] ?? null;
-        $modelClass = self::extractExactlyOneModelFromUnion($modelSlot, $codebase, ignoreNull: true);
+        $slotModels = self::extractModelsFromUnion($modelSlot, $codebase, ignoreNull: true);
+        $models = $slotModels;
         $receiverType = $lhsExpr instanceof \PhpParser\Node\Expr ? $nodeTypeProvider->getType($lhsExpr) : null;
 
         // When the call is reached via Psalm's @mixin chain (e.g. $relation->pluck()
@@ -212,7 +229,7 @@ final class ModelPropertyResolver
         // still contain the *unsubstituted* template (TTemplateParam) instead of the
         // concrete model. Fall back to inspecting the call's LHS expression, whose
         // type carries the concrete generic arguments.
-        if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
+        if ($models === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
             $lhsType = $receiverType;
             $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex, $codebase, ignoreNull: true);
 
@@ -246,6 +263,8 @@ final class ModelPropertyResolver
             if ($modelClass === null) {
                 $modelClass = self::extractModelFromLhsCollectionExtends($lhsType, $codebase);
             }
+
+            $models = $modelClass === null ? null : [$modelClass];
         }
 
         // The provider fires once per receiver atomic and its answer replaces Psalm's own union, so a
@@ -255,27 +274,34 @@ final class ModelPropertyResolver
             $receiverType instanceof Union ? $receiverType->getAtomicTypes() : [],
             static fn(\Psalm\Type\Atomic $atomic): bool => !$atomic instanceof TNull,
         ));
-        if ($modelClass === null
+        if ($models === null
             || (\count($receivers) > 1
-                && self::resolveExactlyOneModelClass(null, $modelTemplateIndex, new Union($receivers), $codebase, ignoreNull: true) !== $modelClass)) {
+                && (\count($models) > 1
+                    || $models[0] !== self::resolveExactlyOneModelClass(null, $modelTemplateIndex, new Union($receivers), $codebase, ignoreNull: true)))) {
             return null;
         }
 
-        $resolved = self::resolvePluckColumnTypes(
-            valueArg: $args[0],
-            keyArg: $args[1] ?? null,
-            modelClass: $modelClass,
-            nodeTypeProvider: $nodeTypeProvider,
-            codebase: $codebase,
-        );
-        if ($resolved === null) {
-            return null;
-        }
+        // One column resolution per model, unioned; a model whose column cannot be resolved declines.
+        $keyType = null;
+        $propertyType = null;
+        foreach ($models as $model) {
+            $resolved = self::resolvePluckColumnTypes(
+                valueArg: $args[0],
+                keyArg: $args[1] ?? null,
+                modelClass: $model,
+                nodeTypeProvider: $nodeTypeProvider,
+                codebase: $codebase,
+            );
+            if ($resolved === null) {
+                return null;
+            }
 
-        [$keyType, $propertyType] = $resolved;
+            $keyType = $keyType instanceof Union ? Type::combineUnionTypes($keyType, $resolved[0]) : $resolved[0];
+            $propertyType = $propertyType instanceof Union ? Type::combineUnionTypes($propertyType, $resolved[1]) : $resolved[1];
+        }
 
         // data_get() on a null element yields null, and the null-neutral model check dropped that atomic
-        if ($modelSlot?->isNullable() === true && $modelClass === self::extractExactlyOneModelFromUnion($modelSlot, $codebase, ignoreNull: true)) {
+        if ($slotModels !== null && $modelSlot?->isNullable() === true) {
             $propertyType = Type::combineUnionTypes($propertyType, Type::getNull());
         }
 

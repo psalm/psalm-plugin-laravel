@@ -10,7 +10,11 @@
 
 use App\Models\CollectionGroupingModel as M;
 use App\Models\Customer;
-use App\Models\Invoice;
+use App\Models\UnionColumnIntModel;
+use App\Models\UnionColumnOtherIntModel;
+use App\Models\UnionColumnOwnerModel;
+use App\Models\UnionColumnTextModel;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
@@ -91,15 +95,42 @@ function nullsafe_builder_chain_pluck(Customer $customer): ?Collection
 }
 
 /**
- * MorphTo<Customer|Supplier, Invoice>: the related slot is ambiguous, so the aggregate declines
- * instead of reading the column off the declaring Invoice (the next slot).
+ * MorphTo<A|B, Owner>: the aggregate unions A's and B's column and never reads Owner's (float) column.
+ * Mixed numeric shapes (int|string) are not narrowed by sum() and fall back to the stub.
  */
-function ambiguous_morph_to_declines(Invoice $invoice): void
+function morph_to_union_aggregates(UnionColumnOwnerModel $owner): void
 {
-    $_min = $invoice->billable()->min('total_amount');
-    /** @psalm-check-type-exact $_min = mixed */
-    $_sum = $invoice->billable()->sum('total_amount');
-    /** @psalm-check-type-exact $_sum = float|int|numeric-string */
+    $_sum = $owner->intTarget()->sum('rank');
+    /** @psalm-check-type-exact $_sum = int */
+    $_min = $owner->intTarget()->min('rank');
+    /** @psalm-check-type-exact $_min = int|null */
+    $_mixedMin = $owner->mixedTarget()->min('rank');
+    /** @psalm-check-type-exact $_mixedMin = int|string|null */
+    $_mixedSum = $owner->mixedTarget()->sum('rank');
+    /** @psalm-check-type-exact $_mixedSum = float|int|numeric-string */
+}
+
+/**
+ * A union made only of models resolves the column on each model; non-models still decline.
+ *
+ * @param Builder<UnionColumnIntModel|UnionColumnOtherIntModel> $ints
+ * @param Builder<UnionColumnIntModel|UnionColumnTextModel> $mixed
+ * @param Collection<int, UnionColumnIntModel|UnionColumnOtherIntModel> $c
+ * @param LazyCollection<int, UnionColumnIntModel|UnionColumnTextModel|null> $l
+ */
+function union_of_models_pluck(Builder $ints, Builder $mixed, Collection $c, LazyCollection $l): void
+{
+    $_b = $ints->pluck('rank');
+    /** @psalm-check-type-exact $_b = Collection<int, int> */
+    $_m = $mixed->pluck('rank');
+    /** @psalm-check-type-exact $_m = Collection<int, int|string> */
+    $_c = $c->pluck('rank');
+    /** @psalm-check-type-exact $_c = Collection<int, int> */
+    $_l = $l->pluck('rank');
+    /** @psalm-check-type-exact $_l = LazyCollection<int, int|string|null> */
+    // A column neither model declares: no value narrowing (the key axis still narrows to int)
+    $_u = $ints->pluck('unknown_column');
+    /** @psalm-check-type-exact $_u = Collection<int, mixed> */
 }
 
 /**

@@ -71,10 +71,10 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      * - {@see Collection} / {@see EloquentCollection} / {@see LazyCollection} — the in-memory
      *   path (`$model->rel->sum('col')`, `Model::cursor()->sum('col')`). All are registered so
      *   the receiver-class leg fires for each; the aggregated model is the collection's value
-     *   parameter, picked up by {@see self::resolveModelClass()} scanning all template params.
+     *   parameter, picked up by {@see self::resolveModelClasses()} scanning all template params.
      *
-     * An ambiguous first model-bearing slot (`A|B`, or a model mixed with non-models) declines, so a
-     * custom relation that reorders its templates with a union declaring model loses narrowing.
+     * The first model-bearing slot decides: a union of models (`MorphTo<A|B, Owner>`) aggregates the
+     * union of A's and B's column (never Owner's); a model mixed with non-models declines.
      *
      * Custom collection subclasses (newCollection() / #[CollectedBy]) are not narrowed on the
      * in-memory read — they resolve to `mixed`. The relation-level
@@ -128,14 +128,20 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $modelClass = self::resolveModelClass($event);
-        if ($modelClass === null) {
+        $models = self::resolveModelClasses($event);
+        if ($models === null) {
             return null;
         }
 
-        $columnType = ModelPropertyHandler::resolveColumnType($source->getCodebase(), $modelClass, $columnName);
-        if (!$columnType instanceof Union) {
-            return null;
+        // A union of models (`A|B`) aggregates the union of each model's column; an unresolvable one declines.
+        $columnType = null;
+        foreach ($models as $modelClass) {
+            $modelColumn = ModelPropertyHandler::resolveColumnType($source->getCodebase(), $modelClass, $columnName);
+            if (!$modelColumn instanceof Union) {
+                return null;
+            }
+
+            $columnType = $columnType instanceof Union ? Type::combineUnionTypes($columnType, $modelColumn) : $modelColumn;
         }
 
         return match ($method) {
@@ -161,17 +167,17 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      * `pluck()`. Falls back to the identical `template_extended_params[Builder::class]`
      * lookup {@see ModelPropertyResolver::extractModelFromLhsBuilderExtends()} (issue #1294).
      *
-     * @return class-string<Model>|null
+     * @return non-empty-list<class-string<Model>>|null
      */
-    private static function resolveModelClass(MethodReturnTypeProviderEvent $event): ?string
+    private static function resolveModelClasses(MethodReturnTypeProviderEvent $event): ?array
     {
         $codebase = $event->getSource()->getCodebase();
         $templateParams = $event->getTemplateTypeParameters();
         foreach ($templateParams ?? [] as $param) {
-            // The first model-bearing slot decides; ambiguous (`A|B`) or model|non-model declines
-            // rather than falling through to a later slot such as MorphTo's declaring model.
+            // The first model-bearing slot decides; a model mixed with non-models declines rather than
+            // falling through to a later slot such as MorphTo's declaring model.
             if (ModelPropertyResolver::extractModelFromUnion($param, $codebase) !== null) {
-                return ModelPropertyResolver::extractExactlyOneModelFromUnion($param, $codebase, ignoreNull: true);
+                return ModelPropertyResolver::extractModelsFromUnion($param, $codebase, ignoreNull: true);
             }
         }
 
@@ -192,11 +198,13 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
             }
 
             if (ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $codebase) !== null) {
-                return ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[0], $codebase, ignoreNull: true);
+                return ModelPropertyResolver::extractModelsFromUnion($atomic->type_params[0], $codebase, ignoreNull: true);
             }
         }
 
-        return ModelPropertyResolver::extractModelFromLhsBuilderExtends($lhsType, $codebase);
+        $model = ModelPropertyResolver::extractModelFromLhsBuilderExtends($lhsType, $codebase);
+
+        return $model === null ? null : [$model];
     }
 
     /**
