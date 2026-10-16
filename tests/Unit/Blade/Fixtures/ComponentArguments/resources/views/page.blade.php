@@ -37,3 +37,13 @@
 <x-alert :count="$maybe" />
 <x-tone tone="warning" />
 <x-tone tone="info" />
+@php $s = \str_repeat('a', \random_int(0, 3)); /** @var array<int, string> $arr */ $arr = []; @endphp
+<x-shaped size="{{ $s }}" />
+<x-shaped n="3" />
+<x-shaped level="2" />
+<x-shaped kind="App\View\Components\Plain" />
+<x-shaped :items="$arr" />
+<x-shaped label="{{ $s }}" />
+<x-shaped n="many" />
+<x-tpl :values="[1, 2]" />
+<x-shaped n="0" />

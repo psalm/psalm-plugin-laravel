@@ -13,7 +13,10 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\Comparator\TypeComparisonResult;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\Internal\TypeVisitor\TemplateTypeCollector;
 use Psalm\Issue\InvalidArgument;
 use Psalm\Issue\TooFewArguments;
 use Psalm\IssueBuffer;
@@ -258,7 +261,11 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
             ClassLineage::storage($codebase, $declaring)?->parent_class,
         );
 
-        if ($expected->hasMixed() || $expected->hasTemplate()
+        // A template at any depth (`list<T>`) is bound per call, which the tag does not show.
+        $templates = new TemplateTypeCollector();
+        $templates->traverse($expected);
+
+        if ($expected->hasMixed() || $templates->getTemplateTypes() !== []
             || !self::classesKnown($codebase, $expected) || !self::classesKnown($codebase, $passed)
         ) {
             return;
@@ -266,7 +273,14 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
 
         foreach ($passed->getAtomicTypes() as $atomic) {
             foreach ([$atomic, ...self::weakCoercions($codebase, $atomic)] as $candidate) {
-                if ($codebase->canTypeBeContainedByType(new Union([$candidate]), $expected)) {
+                // A coercion (`string` for a `'sm'|'md'` docblock) is Psalm's ArgumentTypeCoercion in
+                // PHP, not a certain mismatch.
+                $result = new TypeComparisonResult();
+
+                if (UnionTypeComparator::isContainedBy($codebase, new Union([$candidate]), $expected, union_comparison_result: $result)
+                    || $result->type_coerced === true
+                    || $result->type_coerced_from_mixed === true
+                ) {
                     return;
                 }
             }
@@ -292,7 +306,7 @@ final class ComponentArgumentHandler implements AfterStatementAnalysisInterface
     {
         return match (true) {
             $atomic instanceof Atomic\TLiteralString => \is_numeric($atomic->value)
-                ? [new Atomic\TInt(), new Atomic\TFloat(), new Atomic\TBool()]
+                ? [new Atomic\TLiteralInt((int) $atomic->value), new Atomic\TLiteralFloat((float) $atomic->value), new Atomic\TBool()]
                 : [new Atomic\TBool()],
             $atomic instanceof Atomic\TString => [new Atomic\TInt(), new Atomic\TFloat(), new Atomic\TBool()],
             $atomic instanceof Atomic\TInt => [new Atomic\TFloat(), new Atomic\TString(), new Atomic\TBool()],

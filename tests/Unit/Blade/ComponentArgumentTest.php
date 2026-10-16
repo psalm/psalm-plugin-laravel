@@ -49,6 +49,9 @@ final class ComponentArgumentTest extends TestCase
             "page.blade.php:29 InvalidArgument Argument \$count of {$alert} expects int, but 'many' provided",
             // A docblock narrower than the native type is checked as Psalm checks it in PHP.
             "page.blade.php:38 InvalidArgument Argument \$tone of App\View\Components\Tone::__construct expects 'error'|'info', but 'warning' provided",
+            // Lines 41-46 and 48 may fit (a narrower docblock, a nested template); this one cannot.
+            "page.blade.php:47 InvalidArgument Argument \$n of App\View\Components\Shaped::__construct expects int<1, 10>, but 'many' provided",
+            "page.blade.php:49 InvalidArgument Argument \$n of App\View\Components\Shaped::__construct expects int<1, 10>, but '0' provided",
             // A component view: the enclosing `$attributes` may supply `$count`, so only the type is checked.
             "wrapper.blade.php:3 InvalidArgument Argument \$count of {$alert} expects int, but 'many' provided",
         ], $this->argumentIssues());
