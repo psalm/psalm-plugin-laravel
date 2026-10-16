@@ -17,6 +17,8 @@ class Customer extends Model
     }
 }
 
+/** @extends EloquentCollection<int, Customer> */
+final class CustomerCollection extends EloquentCollection {}
 
 /**
  * HigherOrderCollectionProxy: $collection->each->method() pattern.
@@ -382,6 +384,18 @@ final class HigherOrderCollectionProxyTest
         $_result = $members->sortByDesc->getKey();
         /** @psalm-check-type-exact $_result = EloquentCollection<int, Customer> */
         $_result->values();
+    }
+
+    /**
+     * A non-generic subclass takes its proxy from the vendor trait annotation (Laravel 13.31+: 3 params,
+     * 12.20-13.30: 2 params, never resolved to the subclass's item type). Chaining a collection method after
+     * the proxy call must still resolve to an Enumerable instead of `mixed` on every supported version.
+     */
+    public function subclassReceiverFallsBackToEnumerable(CustomerCollection $users): void
+    {
+        $_result = $users->each->getKey();
+        $_count = $_result->count();
+        /** @psalm-check-type-exact $_count = int */
     }
 }
 

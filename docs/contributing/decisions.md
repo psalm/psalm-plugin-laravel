@@ -445,6 +445,17 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Boundaries:** `first`, `each`, `every`, `contains`, `partition`, `sortBy`, `keyBy`, `groupBy` do not qualify (early exit, or the result is not a kept subset). The receiver variable is not narrowed, and `Enumerable`-typed receivers and higher-order proxies are not covered.
 
+### `HigherOrderCollectionProxy` uses Laravel 13.31+'s `<TMethod, TValue, TCollection>` on every version (#1920)
+
+**Decision:** `stubs/common/Support/HigherOrderCollectionProxy.phpstub` declares `TMethod of string`, `TValue` (covariant) and `TCollection of Enumerable` (covariant); the `Collection`, `LazyCollection` and `Eloquent\Collection` stubs type `$map` as `HigherOrderCollectionProxy<'map', TValue, Collection<TKey, TValue>>`. The runtime proxy is identical on all supported Laravel versions (12.20-13.30 only lack the annotation), so the shape lives in `common`, and user code written against Laravel's 3-argument type checks on every cell. `HigherOrderCollectionProxyHandler` reads TValue at index 1 and takes the `Enumerable` fallback key from TCollection (index 2), `array-key` otherwise.
+
+**Rejected (probed dead ends, Psalm 7.0.0-rc2):**
+- **Laravel's verbatim `static` as the third argument.** In a class-stub `@property-read` it resolves to `Collection&static`, an unparameterized object: TKey/TValue are lost for `Collection<int, X>`, `LazyCollection` and `Eloquent\Collection`, so the `HigherOrderCollectionProxy<'map', X, Collection<int, X>>` parameter reports `MixedArgumentTypeCoercion`. Each stub spells its own class out instead.
+- **Laravel's bound `TCollection of Enumerable<array-key, TValue>`.** The stub `Enumerable` declares an invariant `TKey`, so `Collection<int, X>` violates the bound and a user `@param` with the 3-argument shape reports `InvalidTemplateParam`. `Enumerable<array-key, mixed>` fails the same way; only the bare `Enumerable` bound passes.
+- **Invariant `TCollection`.** `HigherOrderCollectionProxy<string, X, Enumerable<int, X>>` then rejects `$collection->map` (`InvalidArgument`); covariance accepts it. `TMethod` stays invariant (as in Laravel): a `'map'` proxy given to a `'filter'` parameter is reported.
+
+**Accepted limitation:** a non-generic subclass (`final class UserCollection extends Eloquent\Collection` with `@extends`) and a template-bound receiver (`@template C of Collection<int, X>`) still resolve their proxy from the vendor trait annotation or lose TValue; this is unchanged by the 3-argument shape. The handler keeps a `count >= 2` guard because that vendor annotation is still `<TKey, TValue>` on Laravel 12.20-13.30, where dropping the guard turns `$subclass->each->method()` into `mixed`.
+
 ## Variance
 
 ### Paginators are covariant in `TValue`; `Support\Collection` stays invariant

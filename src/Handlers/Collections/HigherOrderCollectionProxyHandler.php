@@ -54,10 +54,14 @@ use Psalm\Type\Union;
  * - first/last → TValue|null
  * - sole → TValue
  *
- * Template params (TKey, TValue) and the concrete collection class are extracted
+ * Collection template params (TKey, TValue) and the concrete collection class are extracted
  * from the COLLECTION expression (the receiver of the property fetch), not from the
  * proxy itself, because Psalm doesn't fully resolve trait `@property-read` template
- * params during substitution.
+ * params during substitution. The proxy's own params, `HigherOrderCollectionProxy<TMethod,
+ * TValue, TCollection>` (Laravel 13.31+ shape, which the stubs declare for every version), are
+ * read only by the `Enumerable<TKey, TValue>` fallback: TValue at index 1, the key from the
+ * TCollection at index 2 (`array-key` when that is not a generic Enumerable, or when the proxy
+ * comes from a Laravel 12.20-13.30 trait annotation that still declares only `<TKey, TValue>`).
  *
  * Property access on the proxy ($collection->map->name) is NOT yet supported —
  * Psalm's PropertyTypeProviderEvent doesn't expose template type parameters.
@@ -154,9 +158,7 @@ final class HigherOrderCollectionProxyHandler implements
             if ($proxyMethod === null) {
                 // Unknown proxy shape — fall back to Enumerable<TKey, TValue> to at least
                 // allow chaining of collection methods without InvalidMethodCall.
-                $event->setReturnTypeCandidate(new Union([
-                    new TGenericObject(Enumerable::class, [$typeParams[0], $typeParams[1]]),
-                ]));
+                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null));
                 return;
             }
 
@@ -165,9 +167,7 @@ final class HigherOrderCollectionProxyHandler implements
             $collectionInfo = self::extractCollectionInfoFromExpr($expr, $source);
             if ($collectionInfo === null) {
                 // Couldn't find the collection — fall back to Enumerable.
-                $event->setReturnTypeCandidate(new Union([
-                    new TGenericObject(Enumerable::class, [$typeParams[0], $typeParams[1]]),
-                ]));
+                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null));
                 return;
             }
 
@@ -459,6 +459,40 @@ final class HigherOrderCollectionProxyHandler implements
         }
 
         return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+    }
+
+    /**
+     * `Enumerable<TKey, TValue>` rebuilt from the proxy's own type params, for receivers that
+     * {@see extractCollectionInfoFromType()} cannot read (a non-generic subclass, whose proxy
+     * comes from the vendor trait annotation).
+     *
+     * @param Union|null $tCollection absent when the vendor annotation is the pre-13.31 `<TKey, TValue>`
+     * @psalm-mutation-free
+     */
+    private static function enumerableFallback(Union $tValue, ?Union $tCollection): Union
+    {
+        return new Union([
+            new TGenericObject(Enumerable::class, [self::enumerableKey($tCollection), $tValue]),
+        ]);
+    }
+
+    /**
+     * The key type of a generic `Enumerable` (the proxy's TCollection), or `array-key` for anything else
+     * (no TCollection, an unresolved template, a non-generic subclass, a union).
+     *
+     * @psalm-mutation-free
+     */
+    private static function enumerableKey(?Union $tCollection): Union
+    {
+        if ($tCollection?->isSingle() === true) {
+            $atomic = $tCollection->getSingleAtomic();
+
+            if ($atomic instanceof TGenericObject && \count($atomic->type_params) >= 2) {
+                return $atomic->type_params[0];
+            }
+        }
+
+        return Type::getArrayKey();
     }
 
     /**
