@@ -20,7 +20,7 @@ use Illuminate\Contracts\Support\CanBeEscapedWhenCastToString;
 abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illuminate\Contracts\Support\Htmlable, \Stringable
 {
     /**
-     * @return array<TValue>
+     * @return array<TKey, TValue>
      */
     public function items(): array {}
 
@@ -130,7 +130,7 @@ class LengthAwarePaginator extends AbstractPaginator implements \Illuminate\Cont
 abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\Htmlable, \Stringable
 {
     /**
-     * @return array<TValue>
+     * @return array<TKey, TValue>
      */
     public function items(): array {}
 

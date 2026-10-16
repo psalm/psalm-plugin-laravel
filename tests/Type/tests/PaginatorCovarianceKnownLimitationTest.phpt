@@ -43,6 +43,6 @@ function caller_still_sees_narrow_type(LengthAwarePaginator $paginator): void
     widen_via_set_collection($paginator);
 
     $_items = $paginator->items();
-    /** @psalm-check-type-exact $_items = array<array-key, MechanicSpecialization> */
+    /** @psalm-check-type-exact $_items = array<int, MechanicSpecialization> */
 }
 --EXPECTF--
