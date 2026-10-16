@@ -439,6 +439,20 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function sum($callback = null) {}
 
     /**
+     * Pad collection to the specified length with a value.
+     *
+     * array_pad() keeps string keys and renumbers int keys, so the key type is `TKey|int`
+     * (Laravel's docblock declares `int`).
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
+
+    /**
      * Determine if an item exists in the collection by key.
      *
      * Accepts an array of keys or variadic key arguments via func_get_args().

@@ -55,6 +55,17 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
     public function sum($callback = null);
 
     /**
+     * Same widening as the `Collection` stub (see the note there).
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value);
+
+    /**
      * Same conditional as the `EnumeratesValues` trait stub (see the note there).
      *
      * @template TMaxResult
