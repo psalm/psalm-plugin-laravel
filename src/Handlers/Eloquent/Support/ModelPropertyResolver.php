@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\LazyCollection;
 use Psalm\Codebase;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 // UnionTypeComparator is in Psalm\Internal\* but is the established convention for
@@ -55,6 +56,19 @@ final class ModelPropertyResolver
         }
 
         return null;
+    }
+
+    /**
+     * True for a userland subclass of LazyCollection. The collection handlers read the model from
+     * fixed template slots and build a LazyCollection result, which a subclass that renames or
+     * reorders its own templates (or adds behavior) does not honor, so they answer for exactly
+     * LazyCollection and decline subclasses.
+     *
+     * @psalm-mutation-free
+     */
+    public static function isLazyCollectionSubclass(string $calledClass, Codebase $codebase): bool
+    {
+        return $calledClass !== LazyCollection::class && ClassLineage::isA($codebase, $calledClass, LazyCollection::class);
     }
 
     /**
@@ -180,7 +194,8 @@ final class ModelPropertyResolver
             return null;
         }
 
-        $modelClass = self::extractModelFromUnion($templateParams[$modelTemplateIndex] ?? null, $codebase);
+        $modelClass = self::extractExactlyOneModelFromUnion($templateParams[$modelTemplateIndex] ?? null, $codebase);
+        $receiverType = $lhsExpr instanceof \PhpParser\Node\Expr ? $nodeTypeProvider->getType($lhsExpr) : null;
 
         // When the call is reached via Psalm's @mixin chain (e.g. $relation->pluck()
         // forwards to Builder<TRelatedModel>), the event's template parameters can
@@ -188,7 +203,7 @@ final class ModelPropertyResolver
         // concrete model. Fall back to inspecting the call's LHS expression, whose
         // type carries the concrete generic arguments.
         if ($modelClass === null && $lhsExpr instanceof \PhpParser\Node\Expr) {
-            $lhsType = $nodeTypeProvider->getType($lhsExpr);
+            $lhsType = $receiverType;
             $modelClass = self::extractModelFromLhsType($lhsType, $modelTemplateIndex, $codebase);
 
             // Custom Builder subclasses declared as `/** @extends Builder<Task> */
@@ -223,7 +238,11 @@ final class ModelPropertyResolver
             }
         }
 
-        if ($modelClass === null) {
+        // The provider fires once per receiver atomic and its answer replaces Psalm's own union, so a
+        // `Collection<int, Model>|Collection<int, array>` receiver would lose the array branch's type.
+        if ($modelClass === null
+            || ($receiverType instanceof Union && !$receiverType->isSingle()
+                && self::resolveExactlyOneModelClass(null, $modelTemplateIndex, $receiverType, $codebase) !== $modelClass)) {
             return null;
         }
 

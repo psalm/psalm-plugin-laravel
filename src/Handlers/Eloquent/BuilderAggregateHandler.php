@@ -120,6 +120,11 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
 
         $columnName = $argType->getSingleStringLiteral()->value;
 
+        $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        if (ModelPropertyResolver::isLazyCollectionSubclass($class, $source->getCodebase())) {
+            return null;
+        }
+
         $modelClass = self::resolveModelClass($event);
         if ($modelClass === null) {
             return null;
@@ -160,7 +165,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
         $codebase = $event->getSource()->getCodebase();
         $templateParams = $event->getTemplateTypeParameters();
         foreach ($templateParams ?? [] as $param) {
-            $modelClass = ModelPropertyResolver::extractModelFromUnion($param, $codebase);
+            $modelClass = ModelPropertyResolver::extractExactlyOneModelFromUnion($param, $codebase);
             if ($modelClass !== null) {
                 return $modelClass;
             }
@@ -182,7 +187,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
-            $model = ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $codebase);
+            $model = ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[0] ?? null, $codebase);
             if ($model !== null) {
                 return $model;
             }

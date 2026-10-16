@@ -48,6 +48,12 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
+        $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        $codebase = $event->getSource()->getCodebase();
+        if (ModelPropertyResolver::isLazyCollectionSubclass($class, $codebase)) {
+            return null;
+        }
+
         $stmt = $event->getStmt();
         $lhsExpr = $stmt instanceof \PhpParser\Node\Expr\MethodCall ? $stmt->var : null;
 
@@ -59,11 +65,9 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             templateParams: $event->getTemplateTypeParameters(),
             modelTemplateIndex: 1,
             nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
-            codebase: $event->getSource()->getCodebase(),
+            codebase: $codebase,
             lhsExpr: $lhsExpr,
-            collectionClass: ($event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName()) === LazyCollection::class
-                ? LazyCollection::class
-                : Collection::class,
+            collectionClass: $class === LazyCollection::class ? LazyCollection::class : Collection::class,
         );
     }
 }

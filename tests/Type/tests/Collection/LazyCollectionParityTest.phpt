@@ -3,7 +3,7 @@
 
 /**
  * LazyCollection must type every method the same as Collection does (Collection<int, M> vs
- * LazyCollection<int, M>, only the class name differs). Each function runs one call on
+ * LazyCollection<int, M>, only the class name differs; groupBy() groups stay eager Collections). Each function runs one call on
  * Collection ($c), LazyCollection ($l) and Enumerable ($e).
  *
  * Laravel's LazyCollection overrides ~36 methods with `{@inheritDoc}`, and Psalm does not carry
@@ -87,19 +87,36 @@ function parity_pad_cross_join_map_to_dictionary(Collection $c, LazyCollection $
  */
 function parity_duplicates(Collection $c, LazyCollection $l, Enumerable $e): void
 {
+    // duplicates() returns the values projected through the callback, keyed by the original keys
     $_c = $c->duplicates(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_c = Collection<int, M>&static */
+    /** @psalm-check-type-exact $_c = Collection<int, int>&static */
     $_l = $l->duplicates(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_l = LazyCollection<int, M>&static */
+    /** @psalm-check-type-exact $_l = LazyCollection<int, int>&static */
     $_e = $e->duplicates(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_e = Enumerable<int, M>&static */
+    /** @psalm-check-type-exact $_e = Enumerable<int, int>&static */
 
     $_c2 = $c->duplicatesStrict(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_c2 = Collection<int, M>&static */
+    /** @psalm-check-type-exact $_c2 = Collection<int, int>&static */
     $_l2 = $l->duplicatesStrict(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_l2 = LazyCollection<int, M>&static */
+    /** @psalm-check-type-exact $_l2 = LazyCollection<int, int>&static */
     $_e2 = $e->duplicatesStrict(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_e2 = Enumerable<int, M>&static */
+    /** @psalm-check-type-exact $_e2 = Enumerable<int, int>&static */
+
+    // No callback: the items themselves
+    $_c3 = $c->duplicates();
+    /** @psalm-check-type-exact $_c3 = Collection<int, M>&static */
+    $_l3 = $l->duplicates();
+    /** @psalm-check-type-exact $_l3 = LazyCollection<int, M>&static */
+    $_e3 = $e->duplicates();
+    /** @psalm-check-type-exact $_e3 = Enumerable<int, M>&static */
+
+    // A string selector goes through data_get(): unknown value type
+    $_c4 = $c->duplicates('foreign_id');
+    /** @psalm-check-type-exact $_c4 = Collection<int, mixed>&static */
+    $_l4 = $l->duplicates('foreign_id');
+    /** @psalm-check-type-exact $_l4 = LazyCollection<int, mixed>&static */
+    $_e4 = $e->duplicatesStrict('foreign_id');
+    /** @psalm-check-type-exact $_e4 = Enumerable<int, mixed>&static */
 }
 
 /**
@@ -111,8 +128,9 @@ function parity_group_by_key_by(Collection $c, LazyCollection $l, Enumerable $e)
 {
     $_c = $c->groupBy('foreign_id');
     /** @psalm-check-type-exact $_c = Collection<int, Collection<int, M>&static>&static */
+    // LazyCollection::groupBy() is passthru() over collect()->groupBy(): the groups are eager Collections
     $_l = $l->groupBy('foreign_id');
-    /** @psalm-check-type-exact $_l = LazyCollection<int, LazyCollection<int, M>&static>&static */
+    /** @psalm-check-type-exact $_l = LazyCollection<int, Collection<int, M>>&static */
     // CollectionGroupByKeyByHandler does not serve Enumerable receivers (separate task)
     $_e = $e->groupBy('foreign_id');
     /** @psalm-check-type-exact $_e = Enumerable<array-key, Enumerable<int, M>&static>&static */
@@ -120,7 +138,7 @@ function parity_group_by_key_by(Collection $c, LazyCollection $l, Enumerable $e)
     $_c2 = $c->groupBy(static fn (M $m): int => $m->foreign_id);
     /** @psalm-check-type-exact $_c2 = Collection<int, Collection<int, M>&static>&static */
     $_l2 = $l->groupBy(static fn (M $m): int => $m->foreign_id);
-    /** @psalm-check-type-exact $_l2 = LazyCollection<int, LazyCollection<int, M>&static>&static */
+    /** @psalm-check-type-exact $_l2 = LazyCollection<int, Collection<int, M>>&static */
     $_e2 = $e->groupBy(static fn (M $m): int => $m->foreign_id);
     /** @psalm-check-type-exact $_e2 = Enumerable<int, Enumerable<int, M>&static>&static */
 
@@ -151,7 +169,7 @@ function parity_group_by_key_by_decline(Collection $c, LazyCollection $l, string
     $_c = $c->groupBy($column);
     /** @psalm-check-type-exact $_c = Collection<array-key, Collection<int, M>&static>&static */
     $_l = $l->groupBy($column);
-    /** @psalm-check-type-exact $_l = LazyCollection<array-key, LazyCollection<int, M>&static>&static */
+    /** @psalm-check-type-exact $_l = LazyCollection<array-key, Collection<int, M>>&static */
 
     $_c2 = $c->keyBy($column);
     /** @psalm-check-type-exact $_c2 = Collection<array-key, M>&static */
@@ -279,5 +297,52 @@ function parity_cursor_vs_get(): void
     /** @psalm-check-type-exact $_cursor = LazyCollection<int, int> */
     $_get = M::query()->get()->pluck('foreign_id');
     /** @psalm-check-type-exact $_get = Collection<int, int> */
+}
+/**
+ * Every value atomic must be the same proven model; a model mixed with a plain array declines.
+ *
+ * @param LazyCollection<int, M|array{foreign_id: float}> $l
+ * @param Collection<int, M|array{foreign_id: float}> $c
+ * @param LazyCollection<int, M>|LazyCollection<int, array{foreign_id: float}> $lu
+ * @param Collection<int, M>|Collection<int, array{foreign_id: float}> $cu
+ */
+function model_and_non_model_values_decline(LazyCollection $l, Collection $c, $lu, $cu): void
+{
+    $_lp = $l->pluck('foreign_id');
+    /** @psalm-check-type-exact $_lp = LazyCollection<array-key, mixed>&static */
+    $_cp = $c->pluck('foreign_id');
+    /** @psalm-check-type-exact $_cp = Collection<array-key, mixed>&static */
+    $_ls = $l->sum('foreign_id');
+    /** @psalm-check-type-exact $_ls = float|int */
+    $_cs = $c->sum('foreign_id');
+    /** @psalm-check-type-exact $_cs = float|int */
+    $_lm = $l->max('foreign_id');
+    /** @psalm-check-type-exact $_lm = mixed */
+    $_cm = $c->max('foreign_id');
+    /** @psalm-check-type-exact $_cm = mixed */
+
+    // Outer union receiver: the float branch must survive
+    $_lup = $lu->pluck('foreign_id');
+    /** @psalm-check-type-exact $_lup = LazyCollection<array-key, mixed>&static */
+    $_cup = $cu->pluck('foreign_id');
+    /** @psalm-check-type-exact $_cup = Collection<array-key, mixed>&static */
+}
+
+/**
+ * LazyCollection::keyBy() yields the resolved key straight from a generator, so a bool column keeps
+ * bool keys (Collection coerces them to int through its array).
+ *
+ * @param Collection<int, M> $c
+ * @param LazyCollection<int, M> $l
+ */
+function lazy_key_by_bool_column_declines(Collection $c, LazyCollection $l): void
+{
+    $_c = $c->keyBy('active');
+    /** @psalm-check-type-exact $_c = Collection<int, M>&static */
+    $_l = $l->keyBy('active');
+    /** @psalm-check-type-exact $_l = LazyCollection<array-key, M>&static */
+    // groupBy() goes through collect(), which coerces bool group keys to int
+    $_lg = $l->groupBy('active');
+    /** @psalm-check-type-exact $_lg = LazyCollection<int, Collection<int, M>>&static */
 }
 --EXPECTF--
