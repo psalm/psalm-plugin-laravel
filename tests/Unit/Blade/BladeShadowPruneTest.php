@@ -32,6 +32,7 @@ final class BladeShadowPruneTest extends TestCase
         'app/View/Components/Chip.php',
         'app/View/Components/MixedLeakCard.php',
         'app/Providers/LivewireStubProvider.php',
+        'app/Providers/PrefixedTagStubProvider.php',
         // bootstrap/app.php require_once's both of these unconditionally (#1505's
         // RouteHelperStubProvider); the scratch copy's boot fatals without them, whether or not any
         // copied template actually uses the @routes/@bogusroute directives they register.

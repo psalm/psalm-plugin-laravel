@@ -20,11 +20,13 @@ use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidDocblock;
+use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidNullableReturnType;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\InvalidStringClass;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
+use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedArgument;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\MixedMethodCall;
@@ -590,6 +592,67 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new MissingClosureReturnType('Closure does not have a return type', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** #1908: Livewire's compiled `$__split` closure. */
+    #[Test]
+    public function a_missing_closure_purity_annotation_is_dropped_unconditionally(): void
+    {
+        $issue = new MissingPureAnnotation('{closure} must be marked @psalm-pure to aid security analysis, run with --alter --issues=MissingPureAnnotation to fix this', $this->shadowLocation(9));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function a_missing_purity_annotation_on_a_named_function_keeps_reporting(): void
+    {
+        $issue = new MissingPureAnnotation('helper must be marked @psalm-pure to aid security analysis, run with --alter --issues=MissingPureAnnotation to fix this', $this->shadowLocation(9));
+
+        $this->assertInstanceOf(MissingPureAnnotation::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** #1908: Livewire's `@entangle('tab')` compiles to `'tab'->value()` and `'tab'->hasModifier('live')`. */
+    #[Test]
+    #[DataProvider('compiledEntangleCalls')]
+    public function a_compiled_method_call_on_a_string_literal_is_dropped(string $anchor, int $width): void
+    {
+        $shadow = "window.Livewire.find('<?php echo e(\$__livewire->getId()); ?>').entangle('<?php echo e('tab'->value()); ?>')<?php echo e('tab'->hasModifier('live') ? '.live' : ''); ?>";
+        $issue = new InvalidMethodCall("Cannot call method on 'tab' variable ", self::selectionLocation($anchor, $width, $shadow));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), templateSource: "<div x-data=\"{ open: @entangle('tab') }\"></div>\n"));
+    }
+
+    /** @return iterable<string, array{string, int}> */
+    public static function compiledEntangleCalls(): iterable
+    {
+        yield 'value()' => ["'tab'->value", 5];
+        yield 'hasModifier()' => ["'tab'->hasModifier", 11];
+    }
+
+    #[Test]
+    public function an_authored_method_call_on_a_string_literal_keeps_reporting(): void
+    {
+        $issue = new InvalidMethodCall("Cannot call method on 'x' variable ", self::selectionLocation("'x'->value", 5, "<?php echo e('x'->value()); ?>"));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: "<div>\n  {{ 'x'->value() }}\n</div>\n");
+
+        $this->assertInstanceOf(InvalidMethodCall::class, $relocated);
+    }
+
+    #[Test]
+    public function a_method_call_on_a_string_literal_at_an_unreadable_location_keeps_reporting(): void
+    {
+        $issue = new InvalidMethodCall("Cannot call method on 'tab' variable ", $this->shadowLocation(9));
+
+        $this->assertInstanceOf(InvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    #[Test]
+    public function a_method_call_on_a_non_literal_receiver_keeps_reporting(): void
+    {
+        $issue = new InvalidMethodCall('Cannot call method on int variable $count', $this->shadowLocation(9));
+
+        $this->assertInstanceOf(InvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
     }
 
     #[Test]

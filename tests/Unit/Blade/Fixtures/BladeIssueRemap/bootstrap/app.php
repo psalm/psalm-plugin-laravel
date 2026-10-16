@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use BladeIssueRemapFixture\Providers\LivewireStubProvider;
+use BladeIssueRemapFixture\Providers\PrefixedTagStubProvider;
 use BladeIssueRemapFixture\Providers\RouteHelperStubProvider;
 use Illuminate\Foundation\Application;
 
@@ -10,6 +11,7 @@ use Illuminate\Foundation\Application;
 // only ever read by Psalm's own file scanner, never by PHP), but a real service provider's boot()
 // runs as real PHP during the app boot below, so PHP's autoloader must be able to find the class.
 require_once __DIR__ . '/../app/Providers/LivewireStubProvider.php';
+require_once __DIR__ . '/../app/Providers/PrefixedTagStubProvider.php';
 require_once __DIR__ . '/../app/Providers/RouteHelperStubProvider.php';
 // `<x-chip>` resolves to this class by Laravel's naming convention (`App\View\Components\Chip`), and
 // ComponentTagCompiler only treats a tag as a class component when the class is already loadable.
@@ -27,5 +29,5 @@ require_once __DIR__ . '/../packages/route-helper/src/RouteGenerator.php';
 // Filament, ...): their boot() registers Blade directives/precompilers, exactly like the packages
 // ApplicationProvider::doGetApp() already runs boot() for.
 return Application::configure(basePath: \dirname(__DIR__))
-    ->withProviders([LivewireStubProvider::class, RouteHelperStubProvider::class])
+    ->withProviders([LivewireStubProvider::class, PrefixedTagStubProvider::class, RouteHelperStubProvider::class])
     ->create();
