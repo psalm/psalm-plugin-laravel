@@ -446,6 +446,12 @@ Both are Psalm-side defects. The stub does not work around them: a per-shape wor
 
 **Rejected:** a conditional `toArray()` return that maps `Arrayable` items to `array<array-key, mixed>`. On the `EnumeratesValues` trait the template is not remapped through `@extends`, so a subclass `toArray(): array` override reports `InvalidReturnType`. On the class stubs, Psalm's conditional evaluation drops the `Arrayable` arm for concrete `Arrayable` classes and for generic `Arrayable`-plus-scalar unions, which is unsound. A narrower `Eloquent\Collection` return (`array<TKey, array<array-key, mixed>>`) breaks custom serializer overrides that only satisfy `Arrayable<TKey, TValue>`.
 
+### `setCollection()` keeps `@return $this`; a chained call keeps the old paginator templates (probed dead end)
+
+**Rejected:** `@return static<TSetKey, TSetValue>` on `setCollection()`. It is applied positionally to subclasses that reshape the template list (`Page<T> extends AbstractPaginator<int, T>` types its items as `int`; extra templates such as `TMeta` are dropped), and a userland `@return $this` override reports `ImplementedReturnTypeMismatch`.
+
+**Accepted limitation:** `$p->setCollection($c)->items()` keeps the receiver's old keys and values, while `$p->setCollection($c); $p->items()` rebinds through `@psalm-this-out`. Pinned by `PaginatorSetCollectionChainKnownLimitationTest`.
+
 ## Variance
 
 ### Paginators are covariant in `TValue`; `Support\Collection` stays invariant

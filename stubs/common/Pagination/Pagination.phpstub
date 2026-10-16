@@ -43,6 +43,10 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * Known limitation: only the assigned form (`$p->setCollection($c); $p->items()`) rebinds the
+     * templates through `@psalm-this-out`; a chained `$p->setCollection($c)->items()` keeps the old
+     * ones, since `@return static<TSetKey, TSetValue>` breaks subclasses that reshape the template list.
+     *
      * @template TSetKey of array-key
      * @template TSetValue
      *
@@ -145,6 +149,8 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
     public function getCollection(): \Illuminate\Support\Collection {}
 
     /**
+     * Known limitation: see AbstractPaginator::setCollection().
+     *
      * @template TSetKey of array-key
      * @template TSetValue
      *
