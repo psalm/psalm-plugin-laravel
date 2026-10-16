@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792144948149,
+  "lastUpdate": 1792145796242,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14275,6 +14275,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1510,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f93b3e88e649cb62869acaacfb7a2e076fbd5c1e",
+          "message": "fix(blade): treat first-class callable view accessors as escaping the view #1903 (#1905)",
+          "timestamp": "2026-10-16T12:13:24+02:00",
+          "tree_id": "b249f78f98f8d9a451816bbbdc9c49ad1b857d81",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f93b3e88e649cb62869acaacfb7a2e076fbd5c1e"
+        },
+        "date": 1792145794981,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.54,
+            "range": "± 0.71",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1512,
             "unit": "MB"
           }
         ]
