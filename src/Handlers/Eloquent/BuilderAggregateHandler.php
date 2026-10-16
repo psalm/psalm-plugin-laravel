@@ -165,9 +165,10 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
         $codebase = $event->getSource()->getCodebase();
         $templateParams = $event->getTemplateTypeParameters();
         foreach ($templateParams ?? [] as $param) {
-            $modelClass = ModelPropertyResolver::extractExactlyOneModelFromUnion($param, $codebase);
-            if ($modelClass !== null) {
-                return $modelClass;
+            // The first model-bearing slot decides; ambiguous (`A|B`) or model|non-model declines
+            // rather than falling through to a later slot such as MorphTo's declaring model.
+            if (ModelPropertyResolver::extractModelFromUnion($param, $codebase) !== null) {
+                return ModelPropertyResolver::extractExactlyOneModelFromUnion($param, $codebase, ignoreNull: true);
             }
         }
 
@@ -187,9 +188,8 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
-            $model = ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[0] ?? null, $codebase);
-            if ($model !== null) {
-                return $model;
+            if (ModelPropertyResolver::extractModelFromUnion($atomic->type_params[0] ?? null, $codebase) !== null) {
+                return ModelPropertyResolver::extractExactlyOneModelFromUnion($atomic->type_params[0], $codebase, ignoreNull: true);
             }
         }
 

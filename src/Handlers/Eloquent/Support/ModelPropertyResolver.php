@@ -25,6 +25,7 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TIterable;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
@@ -109,13 +110,20 @@ final class ModelPropertyResolver
      * Public: also shared with {@see \Psalm\LaravelPlugin\Handlers\Support\ArrPluckHandler}
      * via {@see self::extractModelFromIterableValueType()}.
      *
+     * With $ignoreNull, a `null` atomic is neutral (`Model|null` resolves to Model): aggregates and
+     * pluck over a nullable element keep their column type, any other non-model atomic still declines.
+     *
      * @return class-string<Model>|null
      * @psalm-mutation-free
      */
-    public static function extractExactlyOneModelFromUnion(?Union $type, Codebase $codebase): ?string
+    public static function extractExactlyOneModelFromUnion(?Union $type, Codebase $codebase, bool $ignoreNull = false): ?string
     {
         $modelClass = null;
         foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
+            if ($ignoreNull && $atomic instanceof TNull) {
+                continue;
+            }
+
             if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)
                 || ($modelClass !== null && $modelClass !== $atomic->value)) {
                 return null;
@@ -194,7 +202,7 @@ final class ModelPropertyResolver
             return null;
         }
 
-        $modelClass = self::extractExactlyOneModelFromUnion($templateParams[$modelTemplateIndex] ?? null, $codebase);
+        $modelClass = self::extractExactlyOneModelFromUnion($templateParams[$modelTemplateIndex] ?? null, $codebase, ignoreNull: true);
         $receiverType = $lhsExpr instanceof \PhpParser\Node\Expr ? $nodeTypeProvider->getType($lhsExpr) : null;
 
         // When the call is reached via Psalm's @mixin chain (e.g. $relation->pluck()
@@ -240,9 +248,14 @@ final class ModelPropertyResolver
 
         // The provider fires once per receiver atomic and its answer replaces Psalm's own union, so a
         // `Collection<int, Model>|Collection<int, array>` receiver would lose the array branch's type.
+        // A nullsafe short-circuit adds a `null` receiver atomic that never reaches pluck(): ignore it.
+        $receivers = array_values(array_filter(
+            $receiverType instanceof Union ? $receiverType->getAtomicTypes() : [],
+            static fn(\Psalm\Type\Atomic $atomic): bool => !$atomic instanceof TNull,
+        ));
         if ($modelClass === null
-            || ($receiverType instanceof Union && !$receiverType->isSingle()
-                && self::resolveExactlyOneModelClass(null, $modelTemplateIndex, $receiverType, $codebase) !== $modelClass)) {
+            || (\count($receivers) > 1
+                && self::resolveExactlyOneModelClass(null, $modelTemplateIndex, new Union($receivers), $codebase) !== $modelClass)) {
             return null;
         }
 
