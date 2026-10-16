@@ -944,13 +944,15 @@ final class ShadowIssueRelocator
      * Whether $text, cut out of the shadow, is absent from the template, so the compiler wrote it.
      * Absent raw, with Blade comments stripped, and with Blade's raw-text rewrites mirrored: each
      * way an author's own text can differ from the template only turns a drop into a keep. Null
-     * (unreadable) is no evidence and keeps the issue.
+     * (unreadable) is no evidence and keeps the issue. So is text holding a PHP tag: Blade put it
+     * there inside the author's own text, a directive in a string argument (`'x'->value('@csrf')`)
+     * or a closure whose first line ends at `@endphp`.
      *
      * @psalm-pure
      */
     private static function isCompiledText(?string $text, ShadowTarget $target): bool
     {
-        if ($text === null || \trim($text) === '') {
+        if ($text === null || \trim($text) === '' || \preg_match('/<\?(?:php|=)|\?>/i', $text) === 1) {
             return false;
         }
 

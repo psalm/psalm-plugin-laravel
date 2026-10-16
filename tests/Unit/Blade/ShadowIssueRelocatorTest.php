@@ -1016,6 +1016,21 @@ final class ShadowIssueRelocatorTest extends TestCase
             new InvalidMethodCall("Cannot call method on 'x' variable ", self::selectionLocation("'x'->value", 5, "<?php echo e('x'->value('@foo')); ?>")),
             "<div>\n{{ 'x'->value('@@foo') }}\n</div>\n",
         ];
+        // Blade compiles a directive inside the author's string argument, so the call is absent
+        // from the template; the injected PHP tags give it away.
+        yield 'method call on a literal with a directive in its argument' => [
+            new InvalidMethodCall("Cannot call method on 'x' variable ", self::selectionLocation("'x'->value", 5, "<?php echo e('x'->value('<?php echo csrf_field(); ?>')); ?>")),
+            "<div>\n{{ 'x'->value('@csrf') }}\n</div>\n",
+        ];
+        // Psalm's single-line closure location runs into the compiled `@endphp`.
+        yield 'closure crossing an @endphp boundary' => [
+            new MissingPureAnnotation(self::CLOSURE_PURITY, self::selectionLocation('function (): void { ?>', 22, '<?php $render = function (): void { ?>')),
+            "@php \$render = function (): void { @endphp\n<span>Hello</span>\n@php }; @endphp\n",
+        ];
+        yield 'redundant condition on a compiled call, not the operand wording' => [
+            new RedundantCondition('Type string for config(...) is always string', self::selectionLocation(self::INERTIA_CONFIG, \strlen(self::INERTIA_CONFIG), '} elseif (' . self::INERTIA_CONFIG . ') { ?>'), 'string'),
+            "<body>\n  @inertia\n</body>\n",
+        ];
         // A receiver the author supplies is the author's bug, compiled call or not.
         yield 'author array reaching @error' => [
             new InvalidMethodCall('Cannot call method on array<never, never> variable $errors', self::selectionLocation('$errors->getBag', 6, "<?php \$__errorArgs = ['email']; \$__bag = \$errors->getBag(\$__errorArgs[1] ?? 'default'); ?>")),
