@@ -248,6 +248,18 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
+### Bare collection parameters accept any instantiation (`BareCollectionParamHandler`)
+
+**Decision:** After population, `BareCollectionParamHandler` rewrites each bare collection inside a parameter type (`Collection`, `?Collection`, `Collection|array`, `array<int, Collection>`, `Eloquent\Collection`, `LazyCollection`, `Enumerable`, templated subclasses) into the generic Psalm would expand it to, with every argument marked omitted (`Union::$had_template`). It covers every method (incl. pseudo methods), function, closure and stubbed function, vendor docblocks included. Property and return types, callable/closure parameter types and explicit instantiations (`Collection<string, Dog>`) are untouched, as are non-collection generics.
+
+**Why:** Psalm expands a bare class with bounded templates to `Collection<array-key, mixed>` when it checks an argument, and skips the invariant comparison only for slots that were `mixed` (`had_template`). The `array-key` slot (and Eloquent's `Model` slot) is compared invariantly, so `function f(Collection $c)` rejected `Collection<int, Dog>` (#1885). Psalm keeps this on purpose ([vimeo/psalm#5172](https://github.com/vimeo/psalm/issues/5172), [#5191](https://github.com/vimeo/psalm/issues/5191)), so the plugin extends the omitted-argument treatment to every bound. The callee body still sees the bounds (`Collection<array-key, mixed>`).
+
+**Rejected alternatives:** (a) an upstream change: deliberate per vimeo/psalm#5172; (b) synthetic method-level templates: the callee body would see template types instead of the bounds, and a template must be injected per function; (c) per-method stub overrides (the former `BelongsToMany::sync*()` `TSyncKey`/`TSyncValue` overrides): they do not scale to every bare collection parameter in userland and vendor code, and were removed once this covered them.
+
+**Accepted hole:** a callee may write a key or value outside the caller's instantiation (`$c->put('x', $dog)` on a `Collection<int, Dog>`), the same hole Psalm already accepts for the omitted `mixed` value.
+
+**See:** [#1885](https://github.com/psalm/psalm-plugin-laravel/issues/1885), `TypeExpander::expandNamedObject()`, `GenericTypeComparator` (`had_template`).
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only

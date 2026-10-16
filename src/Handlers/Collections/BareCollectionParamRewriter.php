@@ -1,0 +1,138 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Handlers\Collections;
+
+use Illuminate\Support\Enumerable;
+use Psalm\Codebase;
+use Psalm\Storage\FunctionLikeStorage;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TIterable;
+use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TObjectWithProperties;
+use Psalm\Type\MutableTypeVisitor;
+use Psalm\Type\TypeNode;
+use Psalm\Type\Union;
+
+/**
+ * Rewrites the bare collections inside the parameter types of a function-like storage.
+ *
+ * @see BareCollectionParamHandler
+ *
+ * @internal
+ */
+final class BareCollectionParamRewriter extends MutableTypeVisitor
+{
+    /**
+     * Per class: what a bare use of it stands for, or null when Psalm leaves it bare.
+     *
+     * @var array<lowercase-string, non-empty-list<Union>|null>
+     */
+    private array $omittedArguments = [];
+
+    /** @psalm-mutation-free */
+    public function __construct(private readonly Codebase $codebase) {}
+
+    public function rewrite(FunctionLikeStorage $storage): void
+    {
+        foreach ($storage->params as $param) {
+            if (!$param->type instanceof Union) {
+                continue;
+            }
+
+            $type = $param->type;
+            $this->traverse($type);
+
+            // Psalm tells a native-only parameter from a docblock one by the identity of the two types,
+            // and only infers a closure literal's parameter from the expected callable for the former
+            // (`->chunk(10, function (Collection $c) {...})`), so keep them one object.
+            if ($param->signature_type === $param->type) {
+                $param->signature_type = $type;
+            }
+
+            $param->type = $type;
+        }
+    }
+
+    #[\Override]
+    protected function enterNode(TypeNode &$type): ?int
+    {
+        if ($type instanceof TNamedObject && $type::class === TNamedObject::class) {
+            $arguments = $this->omittedArguments($type);
+
+            if ($arguments !== null) {
+                $type = new TGenericObject($type->value, $arguments);
+            }
+
+            return self::DONT_TRAVERSE_CHILDREN;
+        }
+
+        // Callable and closure parameters are left alone: rewriting them changes no verdict.
+        // Everything else below is a place TypeExpander recurses into for an argument type.
+        return $type instanceof Union
+            || $type instanceof TArray
+            || $type instanceof TGenericObject
+            || $type instanceof TIterable
+            || $type instanceof TKeyedArray
+            || $type instanceof TObjectWithProperties
+            ? null
+            : self::DONT_TRAVERSE_CHILDREN;
+    }
+
+    /**
+     * The arguments Psalm expands a bare use of the class to, each marked omitted; null when Psalm leaves
+     * the class bare (not a collection, no templates, or only `mixed` bounds).
+     *
+     * @return non-empty-list<Union>|null
+     */
+    private function omittedArguments(TNamedObject $type): ?array
+    {
+        if ($type->extra_types !== [] || !$this->codebase->classOrInterfaceExists($type->value)) {
+            return null;
+        }
+
+        $storage = $this->codebase->classlike_storage_provider->get($type->value);
+        $key = \strtolower($storage->name);
+
+        if (\array_key_exists($key, $this->omittedArguments)) {
+            return $this->omittedArguments[$key];
+        }
+
+        $arguments = null;
+
+        if ($storage->template_types !== null
+            && $storage->template_types !== []
+            && \array_any($storage->template_types, static fn(array $bounds): bool => !self::bound($bounds)->hasMixed())
+            && $this->isEnumerable($storage->name)
+        ) {
+            $arguments = \array_values(\array_map(
+                static fn(array $bounds): Union => self::bound($bounds)->setProperties(['had_template' => true]),
+                $storage->template_types,
+            ));
+        }
+
+        return $this->omittedArguments[$key] = $arguments;
+    }
+
+    /**
+     * @param non-empty-array<string, Union> $bounds a template's bound, keyed by its defining class
+     * @psalm-pure
+     */
+    private static function bound(array $bounds): Union
+    {
+        return \reset($bounds);
+    }
+
+    /**
+     * @psalm-capabilities read-props
+     */
+    private function isEnumerable(string $class): bool
+    {
+        return \strcasecmp($class, Enumerable::class) === 0
+            || $this->codebase->classImplements($class, Enumerable::class)
+            || $this->codebase->interfaceExtends($class, Enumerable::class);
+    }
+}
