@@ -379,12 +379,6 @@ final class ShadowIssueRelocator
             if (self::isGeneratedValueSave($issue, $target)) {
                 return false;
             }
-
-            // An always-true or always-false condition on a compiled `$__` variable: the Inertia
-            // gate below, for the operand wording these classes share (IfConditionalAnalyzer).
-            if (\str_starts_with($issue->message, 'Operand of type ') && self::isCompiledVariable($issue, $target)) {
-                return false;
-            }
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
@@ -395,16 +389,28 @@ final class ShadowIssueRelocator
         // discriminator as the arity gate: the text Psalm points at is absent from the template.
         // Livewire tags compile to `$__split = function ($name, $params = []) {...}`, whose first
         // line is Psalm's single-line location for the closure. `@entangle('tab')` compiles to
-        // `'tab'->value()`; the `->` keeps a `value()` helper call elsewhere in the template from
-        // masking it. Filament's `@endcapture` compiles to `new HtmlString(ob_get_clean())`.
+        // `'tab'->value()`; the `->` keeps a `value()` call elsewhere in the template from masking
+        // it, and only a string literal receiver counts: `@entangle($count)` with an int, or an
+        // author's `$errors = []` reaching `@error`'s `$errors->getBag()`, is the author's bug.
+        // Filament's `@endcapture` compiles to `new HtmlString(ob_get_clean())`, and `@inertia`
+        // to an `elseif (config(...))` operand Psalm can prove always falsy.
         if (
             (
                 $issue instanceof MissingPureAnnotation
                 && \str_starts_with($issue->message, '{closure} must be marked ')
                 && self::isCompiledText(self::selectedText($issue->code_location), $target)
             )
-            || ($issue instanceof InvalidMethodCall && self::isCompiledText(self::methodCallExpression($issue->code_location), $target))
-            || ($issue instanceof PossiblyFalseArgument && self::isCompiledCallArgument($issue->code_location, $target))
+            || (
+                $issue instanceof InvalidMethodCall
+                && \preg_match("/^Cannot call method on '(?:[^'\\\\]|\\\\.)*' variable \\z/", $issue->message) === 1
+                && self::isCompiledText(self::methodCallExpression($issue->code_location), $target)
+            )
+            || ($issue instanceof PossiblyFalseArgument && self::isCompiledCall($issue->code_location, $target))
+            || (
+                ($issue instanceof TypeDoesNotContainType || $issue instanceof RedundantCondition)
+                && \str_starts_with($issue->message, 'Operand of type ')
+                && self::isCompiledCall($issue->code_location, $target)
+            )
         ) {
             return false;
         }
@@ -988,16 +994,15 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * Whether an argument issue selects an argument that is a whole call, and that call is
-     * absent from the template.
+     * Whether an issue selects exactly a whole call, and that call is absent from the template.
      *
      * @psalm-external-mutation-free
      */
-    private static function isCompiledCallArgument(CodeLocation $location, ShadowTarget $target): bool
+    private static function isCompiledCall(CodeLocation $location, ShadowTarget $target): bool
     {
-        $argument = self::selectedText($location);
+        $call = self::selectedText($location);
 
-        return $argument !== null && self::callExpression($location) === $argument && self::isCompiledText($argument, $target);
+        return $call !== null && self::callExpression($location) === $call && self::isCompiledText($call, $target);
     }
 
     /**

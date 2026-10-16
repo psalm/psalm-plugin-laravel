@@ -362,9 +362,15 @@ final class BladeIssueRemapTest extends TestCase
 
         $this->assertSame([], $this->linesFor($issues, 'MissingPureAnnotation', 'resources/views/livewire-fp.blade.php'), $json);
 
-        foreach (['MissingPureAnnotation', 'InvalidMethodCall', 'PossiblyUndefinedGlobalVariable', 'RiskyTruthyFalsyComparison', 'PossiblyFalseArgument'] as $type) {
-            $this->assertSame([], $this->linesFor($issues, $type, 'resources/views/compiled-residuals.blade.php'), $json);
-        }
+        // Nothing at all: each directive line reported before #1908, under several classes.
+        $this->assertSame(
+            [],
+            \array_values(\array_filter(
+                $issues,
+                static fn(array $issue): bool => \str_ends_with($issue['file_path'], 'resources/views/compiled-residuals.blade.php'),
+            )),
+            $json,
+        );
 
         // Guard against a vacuous pass: each directive compiled the shape whose issue is dropped.
         $shadow = $this->shadowSourceFor('resources/views/compiled-residuals.blade.php');

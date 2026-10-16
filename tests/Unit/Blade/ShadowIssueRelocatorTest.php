@@ -81,6 +81,9 @@ final class ShadowIssueRelocatorTest extends TestCase
     /** The closure Livewire's `@livewire`/`<livewire:...>` compiles (RenderComponent::livewire()). */
     private const SPLIT_CLOSURE = 'function ($name, $params = []) {';
 
+    /** The `elseif` operand of Inertia's compiled `@inertia` (Directive::compile()). */
+    private const INERTIA_CONFIG = "config('inertia.use_script_element_for_initial_page')";
+
     private const CLOSURE_PURITY = '{closure} must be marked @psalm-pure to aid security analysis, run with --alter --issues=MissingPureAnnotation to fix this';
 
     /** `CompilesComponents::newComponentHash()` output: xxh128, 32 lowercase hex characters. */
@@ -932,9 +935,14 @@ final class ShadowIssueRelocatorTest extends TestCase
             new RiskyTruthyFalsyComparison('Operand of type Inertia\Ssr\Response|mixed|null contains type mixed, which can be falsy and truthy.', self::inertiaLocation(), null),
             "<head>\n  @inertiaHead\n</head>\n",
         ];
-        yield '@inertia always falsy response' => [
-            new TypeDoesNotContainType('Operand of type null is always falsy', self::inertiaLocation(), 'null falsy'),
-            "<head>\n  @inertiaHead\n</head>\n",
+        yield '@inertia always falsy config() operand' => [
+            new TypeDoesNotContainType('Operand of type null is always falsy', self::selectionLocation(self::INERTIA_CONFIG, \strlen(self::INERTIA_CONFIG), '} elseif (' . self::INERTIA_CONFIG . ') { ?>'), 'null falsy'),
+            "<body>\n  @inertia\n</body>\n",
+        ];
+        // `Status::value()` contains `value()` but not `->value()`.
+        yield '@entangle literal ->value() beside a static value() call' => [
+            new InvalidMethodCall("Cannot call method on 'tab' variable ", self::selectionLocation("'tab'->value", 5, "<?php echo e('tab'->value()); ?>")),
+            "<div x-data=\"{ tab: @entangle('tab') }\">\n{{ Status::value() }}</div>\n",
         ];
         yield '@endcapture ob_get_clean() argument' => [
             new PossiblyFalseArgument(
@@ -991,9 +999,31 @@ final class ShadowIssueRelocatorTest extends TestCase
             new PossiblyUndefinedGlobalVariable('Possibly undefined global variable $value, first seen on line 9', self::selectionLocation('if ($value', 6, '<?php if ($value) { echo $value; } ?>'), '$value'),
             self::TEMPLATE_SOURCE,
         ];
-        yield '$__ variable written in the template, operand shape' => [
-            new TypeDoesNotContainType('Operand of type null is always falsy', self::selectionLocation('if ($__authorFlag', 13, '<?php if ($__authorFlag): ?>'), 'null falsy'),
-            "<div>\n@if (\$__authorFlag) set @endif\n</div>\n",
+        yield 'operand call written in the template' => [
+            new TypeDoesNotContainType('Operand of type null is always falsy', self::selectionLocation("if (config('x')", 11, "<?php if (config('x')): ?>"), 'null falsy'),
+            "<div>\n@if (config('x')) on @endif\n</div>\n",
+        ];
+        yield 'operand that is not a call' => [
+            new TypeDoesNotContainType('Operand of type null is always falsy', self::inertiaLocation(), 'null falsy'),
+            "<head>\n  @inertiaHead\n</head>\n",
+        ];
+        yield 'method call on a literal, spaced around ->' => [
+            new InvalidMethodCall("Cannot call method on 'x' variable ", self::selectionLocation("'x' -> value", 5, "<?php echo e('x' -> value()); ?>")),
+            "<div>\n{{ 'x' -> value() }}\n</div>\n",
+        ];
+        // Blade unescapes `@@foo` inside the author's echo, so the shadow call is absent raw.
+        yield 'method call on a literal with an escaped @@ argument' => [
+            new InvalidMethodCall("Cannot call method on 'x' variable ", self::selectionLocation("'x'->value", 5, "<?php echo e('x'->value('@foo')); ?>")),
+            "<div>\n{{ 'x'->value('@@foo') }}\n</div>\n",
+        ];
+        // A receiver the author supplies is the author's bug, compiled call or not.
+        yield 'author array reaching @error' => [
+            new InvalidMethodCall('Cannot call method on array<never, never> variable $errors', self::selectionLocation('$errors->getBag', 6, "<?php \$__errorArgs = ['email']; \$__bag = \$errors->getBag(\$__errorArgs[1] ?? 'default'); ?>")),
+            "@php \$errors = []; @endphp\n@error('email') x @enderror\n",
+        ];
+        yield 'author int passed to @entangle' => [
+            new InvalidMethodCall('Cannot call method on int variable $count', self::selectionLocation('$count->value', 5, '<?php echo e($count->value()); ?>')),
+            "<div x-data=\"{ n: @entangle(\$count) }\">\n</div>\n",
         ];
         // `@foreach` copies the author's subject into `$__currentLoopData`: a null subject is the
         // author's bug, located on a compiled variable.
