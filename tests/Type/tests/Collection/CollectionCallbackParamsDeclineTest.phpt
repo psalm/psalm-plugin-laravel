@@ -32,6 +32,28 @@ function test_nested_template_in_extended_params_declines(DeclineGroups $g): voi
     $g->chunkWhile(fn ($v, $k, $chunk) => decline_sink($chunk));
 }
 
+/**
+ * @template T of array<array-key, scalar>
+ * @extends Collection<key-of<T>, value-of<T>>
+ */
+final class DeclineKeyOf extends Collection {}
+
+/**
+ * @template T of object
+ * @extends Collection<int, class-string<T>>
+ */
+final class DeclineNames extends Collection {}
+
+/**
+ * @param DeclineKeyOf<array{a: string}> $k
+ * @param DeclineNames<Customer> $n
+ */
+function test_template_derived_chunk_types_decline(DeclineKeyOf $k, DeclineNames $n): void
+{
+    $k->chunkWhile(fn ($v, $key, $chunk) => decline_sink($chunk));
+    $n->chunkWhile(fn ($v, $key, $chunk) => decline_sink($chunk));
+}
+
 /** @param Collection<int, Customer>|Collection<int, Vehicle> $u */
 function test_union_receiver_declines(Collection $u): void
 {
@@ -83,6 +105,8 @@ function test_unpacked_args_decline(Collection $c): void
 }
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of DeclineGroups::chunkWhile expects callable[impure](list<App\Models\Customer>, int, DeclineGroups<int, list<App\Models\Customer>>):bool, but Closure[impure](list<App\Models\Customer>, int, static<int, list<App\Models\Customer>>):bool provided
+InvalidArgument on line %d: Argument 1 of DeclineKeyOf::chunkWhile expects callable[impure](value-of<array{a: string}>, key-of<array{a: string}>, DeclineKeyOf<key-of<array{a: string}>, value-of<array{a: string}>>):bool, but Closure[impure](value-of<array{a: string}>, key-of<array{a: string}>, static<key-of<array{a: string}>, value-of<array{a: string}>>):bool provided
+InvalidArgument on line %d: Argument 1 of DeclineNames::chunkWhile expects callable[impure](class-string<T:DeclineNames as object>, int, DeclineNames<int, class-string<T:DeclineNames as object>>):bool, but Closure[impure](class-string<T:DeclineNames as object>, int, static<int, class-string<T:DeclineNames as object>>):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):mixed, but Closure[impure](static):bool provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<array-key, mixed>):mixed, but Closure[impure](App\Models\Customer):bool provided
 InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>):mixed, but Closure[impure](Illuminate\Support\Collection<int, App\Models\Customer>, mixed):bool provided

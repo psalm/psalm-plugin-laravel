@@ -24,10 +24,17 @@ use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TCallable;
+use Psalm\Type\Atomic\TConditional;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TTemplateIndexedAccess;
+use Psalm\Type\Atomic\TTemplateKeyOf;
 use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\Atomic\TTemplateParamClass;
+use Psalm\Type\Atomic\TTemplatePropertiesOf;
+use Psalm\Type\Atomic\TTemplateValueOf;
 use Psalm\Type\TypeNode;
 use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
@@ -230,16 +237,26 @@ final class CollectionCallbackParamsHandler implements
             return null;
         }
 
+        // The `$value` slot a param-less stub callable gets: a closure's own declared type wins
+        // (as written, optional when defaulted); an untyped defaulted param declines, because
+        // Psalm would flag a defensive check of the default against the literal `true`/`false`.
+        $valueParam = $literal->params[1] ?? null;
+        if ($valueParam?->default !== null && !isset($declared[1])) {
+            return null;
+        }
+
+        $value = $declared[1] ?? ($param->name === 'default' ? Type::getFalse() : Type::getTrue());
+        $valueOptional = $valueParam?->default !== null;
+
         $atomics = [];
         $replaced = false;
         foreach ($type->getAtomicTypes() as $atomic) {
             if ($atomic instanceof TCallable) {
                 $callableParams = $atomic->params ?? [];
                 if ($callableParams === [] && $offset === 0) {
-                    $value = $param->name === 'default' ? Type::getFalse() : Type::getTrue();
                     $callableParams = [
                         new FunctionLikeParameter('instance', false, is_optional: false),
-                        new FunctionLikeParameter('value', false, $value, $value, is_optional: false),
+                        new FunctionLikeParameter('value', false, $value, $value, is_optional: $valueOptional),
                     ];
                 }
 
@@ -316,8 +333,10 @@ final class CollectionCallbackParamsHandler implements
     }
 
     /**
-     * Whether a template param appears anywhere in the type (`list<T>` too): `Union::hasTemplate()`
-     * only looks at the top level, and an unresolved nested template would leak into the closure.
+     * Whether a template or a template-derived type (`class-string<T>`, `key-of<T>`,
+     * `value-of<T>`, `T['k']`, a conditional) appears anywhere in the type (`list<T>` too):
+     * `Union::hasTemplate()` only looks at the top level, and an unresolved template would leak
+     * into the closure.
      */
     private static function containsTemplate(Union $type): bool
     {
@@ -326,7 +345,15 @@ final class CollectionCallbackParamsHandler implements
             #[\Override]
             protected function enterNode(TypeNode $type): ?int
             {
-                return $type instanceof TTemplateParam ? self::STOP_TRAVERSAL : null;
+                return $type instanceof TTemplateParam
+                    || $type instanceof TTemplateParamClass
+                    || $type instanceof TTemplateKeyOf
+                    || $type instanceof TTemplateValueOf
+                    || $type instanceof TTemplateIndexedAccess
+                    || $type instanceof TTemplatePropertiesOf
+                    || $type instanceof TConditional
+                    ? self::STOP_TRAVERSAL
+                    : null;
             }
         };
 

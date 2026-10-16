@@ -143,11 +143,27 @@ function test_collection_empty_family(Collection $c): void
     $named = $c->whenEmpty(default: fn () => null, callback: fn () => 'yes');
     /** @psalm-check-type-exact $named = 'yes'|Collection<int, Customer>&static */
     callback_params_sink($named);
+    $withDefault = $c->whenEmpty(fn () => null, fn () => 'fallback');
+    /** @psalm-check-type-exact $withDefault = 'fallback'|Collection<int, Customer>&static */
+    callback_params_sink($withDefault);
+    $whenDefault = $c->when(true, fn () => null, fn () => 'fallback');
+    /** @psalm-check-type-exact $whenDefault = 'fallback'|Collection<int, Customer>&static */
+    callback_params_sink($whenDefault);
+    $sibling = $c->whenEmpty(fn (): Collection => collect(['key' => 'text']));
+    $first = $sibling->first();
+    /** @psalm-check-type-exact $first = 'text'|Customer|null */
+    callback_params_sink($first);
+    $c->whenEmpty(function ($x, ?bool $condition = null): void {
+        callback_params_sink($condition);
+    });
+    $c->whenEmpty(function ($x, bool $condition): void {
+        callback_params_sink($condition);
+    });
     $trailingUnpack = $c->when(true, fn () => 'yes', ...[null]);
     /** @psalm-check-type-exact $trailingUnpack = 'yes'|Collection<int, Customer>&static */
     callback_params_sink($trailingUnpack);
     $namedWhen = $c->when(true, default: fn () => 7, callback: fn () => 'yes');
-    /** @psalm-check-type-exact $namedWhen = 'yes'|Collection<int, Customer>&static */
+    /** @psalm-check-type-exact $namedWhen = 'yes'|7|Collection<int, Customer>&static */
     callback_params_sink($namedWhen);
 }
 
