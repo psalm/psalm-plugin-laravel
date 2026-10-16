@@ -49,6 +49,9 @@ final class PreludeBuilder
         'attributes' => true, 'slot' => true, 'component' => true,
     ];
 
+    /** A whole PHP variable name, without `$`: `\w` alone stops at the first non-ASCII byte. */
+    public const VARIABLE_NAME = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
+
     /** The line typing a name nothing declares; {@see fallbackNames()} reads it back. */
     private const FALLBACK_LINE = '/** @var mixed $%s */';
 
@@ -261,7 +264,7 @@ final class PreludeBuilder
     public static function fallbackNames(string $shadow): array
     {
         $end = \strpos($shadow, "\n?>\n");
-        $line = \str_replace('%s', '(\w+)', \preg_quote(self::FALLBACK_LINE, '#'));
+        $line = \str_replace('%s', '(' . self::VARIABLE_NAME . ')', \preg_quote(self::FALLBACK_LINE, '#'));
 
         return $end !== false && \preg_match_all("#^{$line}\$#m", \substr($shadow, 0, $end), $matches) > 0
             ? $matches[1]

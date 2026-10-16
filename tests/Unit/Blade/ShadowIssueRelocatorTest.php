@@ -1768,6 +1768,12 @@ final class ShadowIssueRelocatorTest extends TestCase
             'String cannot be used as a class',
             self::selectionLocation('new $cls()', 10, '<?php echo e(new $cls()); ?>'),
         ), 'cls'];
+        yield 'InvalidStringClass on a non-ASCII name' => [self::newCafe(), 'café'];
+        yield 'UndefinedMagicMethod on a non-ASCII receiver' => [new UndefinedMagicMethod(
+            'Magic method Base::geturl does not exist',
+            self::selectionLocation('getUrl', 6, '<?php echo e($café->getUrl()); ?>'),
+            'Base::geturl',
+        ), 'café'];
     }
 
     /** Declared, local, and look-alike subjects keep reporting. */
@@ -1813,6 +1819,7 @@ final class ShadowIssueRelocatorTest extends TestCase
             self::selectionLocation('getUrl', 6, '<?php echo e(find($book)->getUrl()); ?>'),
             'Base::geturl',
         ), ['book' => true]];
+        yield 'class name whose ASCII prefix is undeclared' => [self::newCafe(), ['caf' => true]];
         // Arity is not about the argument's type: a missing argument is a real bug whatever it holds.
         yield 'TooFewArguments on an undeclared argument' => [new TooFewArguments(
             'Too few arguments for format - expecting 2 but saw 1',
@@ -1831,6 +1838,11 @@ final class ShadowIssueRelocatorTest extends TestCase
         ], 'call to echo');
 
         $this->assertNotFalse($this->relocate($issue, $this->entry([9 => 3]), undeclaredNames: ['html' => true]));
+    }
+
+    private static function newCafe(): InvalidStringClass
+    {
+        return new InvalidStringClass('String cannot be used as a class', self::selectionLocation('new $café()', \strlen('new $café()'), '<?php echo e(new $café()); ?>'));
     }
 
     private static function riskyOnEndpoint(): RiskyTruthyFalsyComparison

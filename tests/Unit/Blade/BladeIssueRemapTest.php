@@ -1995,6 +1995,11 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame([2, 16], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-declared.blade.php'), $json);
         $this->assertSame([7], $this->linesFor($issues, 'UndefinedMagicMethod', 'mixed-leak-declared.blade.php'), $json);
         $this->assertSame([2, 6], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'mixed-leak-local.blade.php'), $json);
+        // A docblock naming a callable parameter (`$value`) still declares `$box`.
+        $this->assertSame([20], $this->linesFor($issues, 'UndefinedMethod', 'mixed-leak-declared.blade.php'), $json);
+        // A compound assignment and a by-reference output argument bind the name too.
+        $this->assertSame([9], $this->linesFor($issues, 'InvalidStringClass', 'mixed-leak-local.blade.php'), $json);
+        $this->assertSame([11], $this->linesFor($issues, 'PossiblyInvalidArgument', 'mixed-leak-local.blade.php'), $json);
         // Typed by the class component's properties, though its prelude still writes `@var mixed`.
         $this->assertSame([2], $this->linesFor($issues, 'UndefinedMagicMethod', 'components/mixed-leak-card.blade.php'), $json);
         $this->assertSame([4], $this->linesFor($issues, 'RiskyTruthyFalsyComparison', 'components/mixed-leak-card.blade.php'), $json);

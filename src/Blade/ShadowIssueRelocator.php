@@ -1018,10 +1018,10 @@ final class ShadowIssueRelocator
             $names = self::readNames($selected);
         } elseif ($subject === 'receiver') {
             // Not after `->`, `::`, `$` or `\`: `$a->$b->m()` and `A::$b->m()` have a fetch receiver.
-            if (\preg_match('/(?<![\w$>:\\\\])\$(\w+)\s*\??->\s*\z/', \substr($selection->snippet, 0, $selection->start), $receiver) === 1) {
+            if (\preg_match('/(?<![\w$>:\\\\])\$(' . PreludeBuilder::VARIABLE_NAME . ')\s*\??->\s*\z/', \substr($selection->snippet, 0, $selection->start), $receiver) === 1) {
                 $names = [$receiver[1]];
             }
-        } elseif (\preg_match('/\A(?:new\h+)?\$(\w+)/', $selected, $class) === 1) {
+        } elseif (\preg_match('/\A(?:new\h+)?\$(' . PreludeBuilder::VARIABLE_NAME . ')/', $selected, $class) === 1) {
             $names = [$class[1]];
         }
 

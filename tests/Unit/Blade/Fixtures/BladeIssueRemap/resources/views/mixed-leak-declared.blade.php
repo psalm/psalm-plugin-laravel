@@ -16,3 +16,5 @@ x
 @if($multi['k'] ?? false)
 x
 @endif
+@php /** @var \ArrayObject<int, \Closure(string $value): string> $box */ @endphp
+{{ $box->typo() }}

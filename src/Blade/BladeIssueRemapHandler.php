@@ -294,13 +294,23 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return [];
         }
 
-        // Spans lines to the first `$`, for a multi-line type; over-matching only keeps findings.
-        \preg_match_all('/@(?:psalm-|phpstan-)?var\s[^$]*?\$(\w+)/', (string) \strstr($shadow, "\n?>\n"), $declared);
+        // Every name in a docblock carrying a `@var` tag: its type can name callable parameters
+        // before the variable, and over-matching only keeps findings.
+        $declared = [];
+        \preg_match_all('#/\*\*.*?\*/#s', (string) \strstr($shadow, "\n?>\n"), $docblocks);
+
+        foreach ($docblocks[0] as $docblock) {
+            if (\preg_match('/@(?:psalm-|phpstan-)?var\b/', $docblock) === 1
+                && \preg_match_all('/\$(' . PreludeBuilder::VARIABLE_NAME . ')/', $docblock, $names) > 0
+            ) {
+                $declared += \array_fill_keys($names[1], true);
+            }
+        }
 
         return \array_diff_key(
             \array_fill_keys($fallback, true),
             $locals,
-            \array_fill_keys($declared[1], true),
+            $declared,
             ComponentViewRegistry::seedFor($shadowPath) ?? [],
         );
     }
