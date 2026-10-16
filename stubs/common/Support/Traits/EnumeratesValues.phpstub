@@ -70,4 +70,18 @@ trait EnumeratesValues
      * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMinResult|null))
      */
     public function min($callback = null) {}
+
+    /**
+     * Laravel returns `static<TFlatMapKey, TFlatMapValue>`, but a list-shaped callback result binds
+     * the key to a literal (`0`, `int<0, max>`), which an invariant `Collection<int, V>` target
+     * rejects. An int key is therefore widened to `int`; string keys survive. Larastan's
+     * array-shape conditional does not bind its key template in Psalm.
+     *
+     * @template TFlatMapKey of array-key
+     * @template TFlatMapValue
+     *
+     * @param  callable(TValue, TKey): (\Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>|array<TFlatMapKey, TFlatMapValue>)  $callback
+     * @return static<(TFlatMapKey is int ? int : TFlatMapKey), TFlatMapValue>
+     */
+    public function flatMap(callable $callback) {}
 }

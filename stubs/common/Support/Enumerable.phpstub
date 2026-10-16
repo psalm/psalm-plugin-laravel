@@ -69,4 +69,15 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMinResult|null))
      */
     public function min($callback = null);
+
+    /**
+     * Same widening as the `EnumeratesValues` trait stub (see the note there).
+     *
+     * @template TFlatMapKey of array-key
+     * @template TFlatMapValue
+     *
+     * @param  callable(TValue, TKey): (\Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>|array<TFlatMapKey, TFlatMapValue>)  $callback
+     * @return static<(TFlatMapKey is int ? int : TFlatMapKey), TFlatMapValue>
+     */
+    public function flatMap(callable $callback);
 }
