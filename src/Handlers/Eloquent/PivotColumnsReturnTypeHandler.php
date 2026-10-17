@@ -102,6 +102,8 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
                 $table,
                 self::singleClass($params[1]),
                 self::singleClass($params[0]),
+                false,
+                self::callsUsing($stmt->var),
             ))->properties(
                 $method === 'withpivot' ? self::pivotColumns($stmt, $source->getNodeTypeProvider()) : [],
                 $method === 'withtimestamps' ? [self::timestampArguments($stmt, $source->getNodeTypeProvider())] : [],
@@ -121,6 +123,25 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
         $params[2] = new Union([$refined]);
 
         return new Union([$atomic->setTypeParams($params)]);
+    }
+
+    /**
+     * Whether a `using()` call sits in the chain: it hydrates the pivot through `fromRawAttributes()` even when it names
+     * `Pivot` itself, which the slot's class alone cannot tell.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function callsUsing(\PhpParser\Node\Expr $expr): bool
+    {
+        while ($expr instanceof MethodCall) {
+            if ($expr->name instanceof Identifier && \strtolower($expr->name->name) === 'using') {
+                return true;
+            }
+
+            $expr = $expr->var;
+        }
+
+        return false;
     }
 
     /**
@@ -149,8 +170,9 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
         $columns = [];
         if ($first->hasArray()) {
             $array = $first->isSingle() ? $first->getSingleAtomic() : null;
-            foreach ($array instanceof TKeyedArray ? $array->properties : [] as $item) {
-                $columns[] = self::literalColumn($item);
+            // array_merge() lets a later string key replace an earlier one, so keyed entries claim nothing.
+            foreach ($array instanceof TKeyedArray ? $array->properties : [] as $key => $item) {
+                $columns[] = \is_int($key) ? self::literalColumn($item) : null;
             }
         } elseif ($first->isString()) {
             foreach ($values as $value) {

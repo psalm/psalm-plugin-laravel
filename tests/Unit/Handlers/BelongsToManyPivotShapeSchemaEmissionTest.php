@@ -54,6 +54,10 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}ManualDatesPivot&object{created_at:mixed, updated_at:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}NoTimestampsPivot&object{created_at:mixed, updated_at:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{notes:null|string}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}AddedAtPivot&object{added_at:mixed, level:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Dock, {R}Pivot&object{added_at:{C}|null, updated_at:{C}|null}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Dock, {R}Pivot&object{added_at:null|string, updated_at:null|string}, \'pivot\'>',
     ];
 
     /** @var array<string, list<string>>|null */

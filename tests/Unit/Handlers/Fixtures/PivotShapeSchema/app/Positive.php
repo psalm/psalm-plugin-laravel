@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PivotShapeFixture;
 
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use PivotShapeFixture\Models\Dock;
 use PivotShapeFixture\Models\Order;
 use PivotShapeFixture\Models\Rack;
 use PivotShapeFixture\Models\Squad;
@@ -188,6 +189,34 @@ function overridden_get_dates_leaves_dates_untyped(Team $team): void
 function overridden_has_timestamp_attributes_leaves_dates_untyped(Team $team): void
 {
     $relation = $team->noTimestamps();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function keyed_array_entries_claim_no_column(Team $team): void
+{
+    $relation = $team->keyedArrays();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function non_stock_dates_leave_columns_untyped(Team $team): void
+{
+    $relation = $team->nonStockDates();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function explicit_using_of_pivot_hydrates_raw(Dock $dock): void
+{
+    $relation = $dock->explicitUsing();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function plain_renamed_created_at_is_not_a_date(Dock $dock): void
+{
+    $relation = $dock->plain();
     /** @psalm-trace $relation */
     echo \get_debug_type($relation);
 }

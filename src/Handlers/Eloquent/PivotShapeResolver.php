@@ -68,6 +68,7 @@ final readonly class PivotShapeResolver
      * @param string $pivotClass the TPivotModel class: `Pivot` / `MorphPivot` or a custom pivot
      * @param ?PivotTable $table
      * @param bool $branchDates the columns / timestamps differ between return branches, so no date column is typed
+     * @param bool $using `using()` was called, even with `Pivot` itself: the pivot then hydrates through `fromRawAttributes()`
      * @psalm-capabilities read-props
      */
     public function __construct(
@@ -77,6 +78,7 @@ final readonly class PivotShapeResolver
         private ?string $parentClass,
         private ?string $relatedClass,
         private bool $branchDates = false,
+        private bool $using = false,
     ) {}
 
     /**
@@ -193,7 +195,7 @@ final readonly class PivotShapeResolver
      */
     private function timestampSwitch(?array $parent): ?string
     {
-        return $this->isCustomPivot() ? ($parent[0] ?? null) : Model::CREATED_AT;
+        return $this->using || $this->isCustomPivot() ? ($parent[0] ?? null) : Model::CREATED_AT;
     }
 
     /**
@@ -230,6 +232,11 @@ final readonly class PivotShapeResolver
             if ($type instanceof Union) {
                 return $type;
             }
+
+            // A class that converts dates its own way makes a column's raw schema type unreliable.
+            if (!$this->hasStockDates()) {
+                return Type::getMixed();
+            }
         }
 
         // With unprovable parent columns the date list is unknown, so is the type of any column once timestamps may be on.
@@ -264,9 +271,17 @@ final readonly class PivotShapeResolver
             /** @var class-string<Model> $pivotClass a Pivot is a Model */
             $pivotClass = $this->pivotClass;
 
-            $type = ModelPropertyHandler::resolveColumnType($this->codebase, $pivotClass, $column);
-            if ($type instanceof Union) {
-                return $type;
+            if (!$this->hasStockDates()) {
+                // Only what the class declares itself (`@property`, a cast) is proven; its table schema is not.
+                $declared = $this->codebase->classlike_storage_provider->get($pivotClass)->pseudo_property_get_types['$' . $column] ?? null;
+                if ($declared instanceof Union) {
+                    return $declared;
+                }
+            } else {
+                $type = ModelPropertyHandler::resolveColumnType($this->codebase, $pivotClass, $column);
+                if ($type instanceof Union) {
+                    return $type;
+                }
             }
 
             $metadata = ModelMetadataRegistry::for($pivotClass);

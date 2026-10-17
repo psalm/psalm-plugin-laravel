@@ -942,7 +942,8 @@ final class RelationMethodParser
         if ($first instanceof PhpParser\Node\Expr\Array_) {
             $values = [];
             foreach ($first->items as $item) {
-                $values[] = $item instanceof PhpParser\Node\ArrayItem && !$item->unpack ? $item->value : null;
+                // array_merge() lets a later string key replace an earlier one, so keyed entries claim nothing.
+                $values[] = $item instanceof PhpParser\Node\ArrayItem && !$item->unpack && !$item->key instanceof PhpParser\Node\Expr ? $item->value : null;
             }
         } elseif (!$first instanceof PhpParser\Node\Scalar) {
             return [];

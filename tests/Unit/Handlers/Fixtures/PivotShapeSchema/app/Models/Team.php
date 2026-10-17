@@ -167,4 +167,16 @@ final class Team extends Model
     {
         return $this->belongsToMany(User::class, 'team_user')->using(NoTimestampsPivot::class)->withTimestamps();
     }
+
+    /** A later string key replaces an earlier one in array_merge(): keyed entries claim no column. */
+    public function keyedArrays(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->withPivot(['k' => 'role'], 'level')->withPivot(['k' => 'level', 'notes']);
+    }
+
+    /** The class converts `added_at` itself: nothing but its own declarations is proven. */
+    public function nonStockDates(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->using(AddedAtPivot::class)->withPivot('added_at', 'level');
+    }
 }

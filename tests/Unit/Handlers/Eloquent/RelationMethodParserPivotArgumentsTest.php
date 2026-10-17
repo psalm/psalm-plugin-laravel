@@ -31,7 +31,7 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
         yield 'variadic' => ["withPivot('a', 'b')", ['a', 'b']];
         yield 'array form' => ["withPivot(['a', 'b'])", ['a', 'b']];
         yield 'array form reads only the first argument' => ["withPivot(['a'], 'b')", ['a']];
-        yield 'keyed array takes the values' => ["withPivot(['x' => 'a', 'y' => 'b'])", ['a', 'b']];
+        yield 'keyed array claims nothing' => ["withPivot(['x' => 'a', 'y' => 'b'])", []];
         yield 'non-literal arguments are skipped' => ["withPivot('a', \$b, 'c' . 'd', 1)", ['a']];
         yield 'non-literal array items are skipped' => ["withPivot(['a', \$b, ...\$rest])", ['a']];
         yield 'unpacked argument is skipped' => ["withPivot('a', ...\$rest)", ['a']];
@@ -42,6 +42,7 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
         yield 'call first argument may be an array' => ["withPivot(\$this->columns(), 'role')", []];
         yield 'unpacked first argument is unknown' => ["withPivot(...\$rest)", []];
         yield 'empty string is no column' => ["withPivot('')", []];
+        yield 'keyed entries claim nothing' => ["withPivot(['k' => 'a', 'b'])", ['b']];
         yield 'nested array is skipped' => ["withPivot('a', ['b'])", ['a']];
     }
 
