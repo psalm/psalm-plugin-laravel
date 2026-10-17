@@ -47,7 +47,7 @@ class Team extends Model
 function merges(BelongsToMany $relation): void
 {
     $_merged = $relation->withPivot('a')->withPivot(['b'])->withPivot('a', 'c');
-    /** @psalm-check-type-exact $_merged = BelongsToMany<User, Team, Pivot&object{a: mixed, b: mixed, c: mixed}, 'pivot'> */
+    /** @psalm-trace $_merged */
 
     // Forwarded builder calls and `$this` returns keep the refined slot.
     $_chained = $relation->withPivot('role')->where('active', true)->withTimestamps()->orderByPivot('role');
@@ -57,11 +57,13 @@ function merges(BelongsToMany $relation): void
 /** @param BelongsToMany<User, Team, Pivot, 'pivot'> $relation */
 function skips_dynamic_and_dotted(BelongsToMany $relation, string $column): void
 {
-    $_skipped = $relation->withPivot($column, 'team_user.x', 'ok');
-    /** @psalm-check-type-exact $_skipped = BelongsToMany<User, Team, Pivot&object{ok: mixed}, 'pivot'> */
+    $_skipped = $relation->withPivot('ok', $column, 'team_user.x');
+    /** @psalm-trace $_skipped */
+    // Laravel reads only an array first argument.
     $_array_only = $relation->withPivot(['a'], 'b');
-    /** @psalm-check-type-exact $_array_only = BelongsToMany<User, Team, Pivot&object{a: mixed}, 'pivot'> */
-    $_none = $relation->withPivot($column);
+    /** @psalm-trace $_array_only */
+    // A dynamic first argument may be that array: nothing else is known.
+    $_none = $relation->withPivot($column, 'ok');
     /** @psalm-trace $_none */
 }
 
@@ -76,11 +78,15 @@ function custom_pivot_declines(BelongsToMany $relation): void
 function morph_keeps_class(MorphToMany $relation): void
 {
     $_morph = $relation->withPivot('role');
-    /** @psalm-check-type-exact $_morph = MorphToMany<User, Team, MorphPivot&object{role: mixed}, 'pivot'> */
+    /** @psalm-trace $_morph */
 }
 ?>
 --EXPECTF--
 Trace on line %d: $relation: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team&static, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
+Trace on line %d: $_merged: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed, b:mixed, c:mixed}, 'pivot'>
 Trace on line %d: $_chained: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{role:mixed}, 'pivot'>&static
+Trace on line %d: $_skipped: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{ok:mixed}, 'pivot'>
+Trace on line %d: $_array_only: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed}, 'pivot'>
 Trace on line %d: $_none: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $_custom: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Membership, 'pivot'>&static
+Trace on line %d: $_morph: Illuminate\Database\Eloquent\Relations\MorphToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\MorphPivot&object{role:mixed}, 'pivot'>

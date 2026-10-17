@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
@@ -39,8 +40,9 @@ final class PivotColumnResolver
 
     /**
      * Literal column names, read as Laravel does: the first argument when it is an array, else every
-     * argument. Dynamic names and unpacks add nothing; dotted names are skipped because Laravel's
-     * `pivot_<column>` alias then names no attribute.
+     * argument. Nothing when the first argument is neither a literal string nor a literal array: it may
+     * be an array at runtime, and then it alone counts. Other dynamic names and unpacks add nothing;
+     * dotted names are skipped because Laravel's `pivot_<column>` alias then names no attribute.
      *
      * @param array<array-key, Node> $args
      * @return list<string>
@@ -49,8 +51,12 @@ final class PivotColumnResolver
     public static function columnsFromArgs(array $args): array
     {
         $first = $args[0] ?? null;
+        if (!$first instanceof Arg || $first->unpack || !($first->value instanceof String_ || $first->value instanceof Expr\Array_)) {
+            return [];
+        }
+
         $values = [];
-        if ($first instanceof Arg && !$first->unpack && $first->value instanceof Expr\Array_) {
+        if ($first->value instanceof Expr\Array_) {
             foreach ($first->value->items as $item) {
                 if ($item instanceof Expr\ArrayItem && !$item->unpack) {
                     $values[] = $item->value;
@@ -209,7 +215,7 @@ final class PivotColumnResolver
     {
         try {
             $declaring = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($modelClass . '::joiningTableSegment'));
-        } catch (\InvalidArgumentException) {
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
         }
 
