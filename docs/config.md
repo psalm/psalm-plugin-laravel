@@ -307,7 +307,7 @@ Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` fa
 
 Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
 
-Inside templates, the literal data array of `@include`, `@includeIf` and `@extends` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
+Inside templates, the literal data array of `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@extends` and `@extendsFirst` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
 
 
 ### `reportUnusedViewData`
