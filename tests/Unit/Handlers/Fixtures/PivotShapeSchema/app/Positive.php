@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PivotShapeFixture;
 
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use PivotShapeFixture\Models\Order;
+use PivotShapeFixture\Models\Rack;
 use PivotShapeFixture\Models\Squad;
 use PivotShapeFixture\Models\Team;
 
@@ -102,6 +104,62 @@ function overridden_related_segment_is_mixed(Team $team): void
 function overridden_joining_table_segment_is_mixed(Squad $squad): void
 {
     $relation = $squad->overriddenSegment();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function branches_keep_the_common_columns(Team $team): void
+{
+    $relation = $team->branched(true);
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function using_resets_the_shape(Team $team): void
+{
+    $relation = $team->usingResets();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function unproven_custom_casts_are_mixed(Team $team): void
+{
+    $relation = $team->partialCasts();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function custom_pivot_timestamps_are_dates(Team $team): void
+{
+    $relation = $team->customTimestamps();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function template_in_declared_shape_is_not_reused(Team $team): void
+{
+    $relation = $team->templatedFallback();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function variable_first_argument_claims_no_trailing_column(Team $team): void
+{
+    $relation = $team->variableFirstArgument(['level']);
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function overridden_joining_table_is_mixed(Rack $rack): void
+{
+    $relation = $rack->users();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function two_template_docblock_gets_schema_columns(Order $order): void
+{
+    $relation = $order->items();
     /** @psalm-trace $relation */
     echo \get_debug_type($relation);
 }

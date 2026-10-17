@@ -14,13 +14,23 @@ use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\Type;
+use Psalm\Type\Atomic\TConditional;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TObjectWithProperties;
+use Psalm\Type\Atomic\TTemplateIndexedAccess;
+use Psalm\Type\Atomic\TTemplateKeyOf;
+use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\Atomic\TTemplateParamClass;
+use Psalm\Type\Atomic\TTemplatePropertiesOf;
+use Psalm\Type\Atomic\TTemplateValueOf;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -31,15 +41,18 @@ use Psalm\Type\Union;
  *
  * Column type, first hit wins:
  * 1. a custom pivot class describes its own columns (`@property`, then casts, then its schema);
- * 2. a timestamp column the base pivot date-casts: `Pivot::fromRawAttributes()` turns timestamps on when the
- *    PARENT model's created-at column is among the selected ones, and `getDates()` then names the parent's
- *    created-at / updated-at columns, NOT the `withTimestamps($createdAt, $updatedAt)` arguments. So a renamed
- *    column is plain, and the updated-at column casts only together with the created-at one;
+ * 2. a timestamp column the pivot date-casts: `getDates()` names the PARENT model's created-at / updated-at columns, not
+ *    the `withTimestamps($createdAt, $updatedAt)` arguments, and applies once the pivot's timestamps are on. The
+ *    default pivot (`Pivot::fromAttributes()`) turns them on when its own `created_at` is selected (it checks before
+ *    the parent is attached); a `using()` class (`fromRawAttributes()`) when the parent's created-at column is. So
+ *    a renamed parent column is plain on the default pivot, and a Carbon on a custom one;
  * 3. the column in the relation table's schema (the migration table, or the table of a model passed as the
  *    table argument);
  * 4. the caller's fallback, then `mixed`.
- * Every lookup that cannot be proven (an unscanned class, an overridden `joiningTableSegment()`,
- * `getCreatedAtColumn()` or `getUpdatedAtColumn()`, a dynamic table) falls through to the next step.
+ * A lookup that cannot be proven (an unscanned class, an overridden `joiningTable()` / `joiningTableSegment()`,
+ * a dynamic table) falls through to the next step; one that would wrongly claim a type (a custom pivot class
+ * whose casts are not fully known, parent timestamp columns that cannot be read while timestamps may be on)
+ * makes the column `mixed`.
  * Laravel 12.20 and 13 agree on all of this except `withTimestamps(false)`: 13 disables the column, 12.20
  * passes `false` as its name; both add no column here.
  *
@@ -64,8 +77,8 @@ final readonly class PivotShapeResolver
 
     /**
      * The properties a call adds to the pivot shape. `$known` are the columns the shape already holds: they
-     * decide which columns the base pivot date-casts, and the updated-at one is typed again when this call
-     * brings the created-at column that turns the casts on.
+     * decide whether the pivot's timestamps are on, and a known date column is typed again when this call
+     * brings the column that turns them on.
      *
      * @param list<string> $columns `withPivot()` columns
      * @param list<PivotTimestamps> $timestamps `withTimestamps()` arguments
@@ -86,12 +99,17 @@ final readonly class PivotShapeResolver
             }
         }
 
-        $selected = [...\array_keys($known), ...$columns];
-        $retype = $parent !== null && $parent[1] !== null && \in_array($parent[0], $columns, true) && isset($known[$parent[1]]) ? [$parent[1]] : [];
+        // Timestamps are on once the column named by `$switch` is selected; the date columns are the parent's.
+        $switch = $this->timestampSwitch($parent);
+        $retype = [];
+        if ($switch !== null && \in_array($switch, $columns, true)) {
+            $retype = \array_values(\array_filter(\array_keys($known), static fn(int|string $column): bool => \in_array($column, $parent ?? [], true)));
+        }
 
+        $selected = [...\array_keys($known), ...$columns];
         $properties = [];
-        foreach (\array_unique([...$columns, ...$retype]) as $column) {
-            $properties[$column] = $this->columnType($column, $selected, $parent, $fallback[$column] ?? null);
+        foreach (\array_unique([...$columns, ...\array_map(\strval(...), $retype)]) as $column) {
+            $properties[$column] = $this->columnType($column, $selected, $parent, $switch, $fallback[$column] ?? null);
         }
 
         return $properties;
@@ -162,19 +180,43 @@ final readonly class PivotShapeResolver
     }
 
     /**
+     * `Pivot::fromAttributes()` (the default pivot) switches timestamps on from the pivot's OWN `created_at`, as it
+     * checks before the parent is attached; `fromRawAttributes()` (`using()`) checks after, against the parent's
+     * created-at column. Null when that cannot be proven.
+     *
+     * @param ?array{?string, ?string} $parent
+     * @psalm-capabilities read-props
+     */
+    private function timestampSwitch(?array $parent): ?string
+    {
+        return $this->isCustomPivot() ? ($parent[0] ?? null) : Model::CREATED_AT;
+    }
+
+    /** @psalm-capabilities read-props */
+    private function isCustomPivot(): bool
+    {
+        return !\in_array(\strtolower($this->pivotClass), [\strtolower(Pivot::class), \strtolower(MorphPivot::class)], true);
+    }
+
+    /**
      * @param list<array-key> $selected
      * @param ?array{?string, ?string} $parent
      */
-    private function columnType(string $column, array $selected, ?array $parent, ?Union $fallback): Union
+    private function columnType(string $column, array $selected, ?array $parent, ?string $switch, ?Union $fallback): Union
     {
-        $custom = !\in_array(\strtolower($this->pivotClass), [\strtolower(Pivot::class), \strtolower(MorphPivot::class)], true);
-
-        if ($custom) {
+        if ($this->isCustomPivot()) {
             $type = $this->customPivotColumn($column);
             if ($type instanceof Union) {
                 return $type;
             }
-        } elseif ($parent !== null && $parent[0] !== null && \in_array($parent[0], $selected, true) && ($column === $parent[0] || $column === $parent[1])) {
+        }
+
+        // With unprovable parent columns the date list is unknown, so is the type of any column once timestamps may be on.
+        if ($parent === null && ($switch === null || \in_array($switch, $selected, true))) {
+            return Type::getMixed();
+        }
+
+        if ($parent !== null && $switch !== null && \in_array($switch, $selected, true) && ($column === $parent[0] || $column === $parent[1])) {
             return CastResolver::resolve($this->codebase, 'datetime', true);
         }
 
@@ -183,19 +225,62 @@ final readonly class PivotShapeResolver
             return ColumnTypeMapper::mapType($schema);
         }
 
-        return $fallback instanceof Union && !$fallback->hasTemplate() ? $fallback : Type::getMixed();
+        return $fallback instanceof Union && !self::isTemplateDerived($fallback) ? $fallback : Type::getMixed();
     }
 
+    /**
+     * The type a custom pivot class gives a column (`@property`, a cast, its own schema), `mixed` when its casts
+     * cannot be proven (a pivot built from constructor state is not fully inspected), null when it says nothing.
+     */
     private function customPivotColumn(string $column): ?Union
     {
         try {
             /** @var class-string<Model> $pivotClass a Pivot is a Model */
             $pivotClass = $this->pivotClass;
 
-            return ModelPropertyHandler::resolveColumnType($this->codebase, $pivotClass, $column);
+            $type = ModelPropertyHandler::resolveColumnType($this->codebase, $pivotClass, $column);
+            if ($type instanceof Union) {
+                return $type;
+            }
+
+            $metadata = ModelMetadataRegistry::for($pivotClass);
+            if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
+                return Type::getMixed();
+            }
+
+            $cast = $metadata->casts()[$column] ?? null;
+
+            return $cast?->psalmType;
         } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return null;
+            return Type::getMixed();
         }
+    }
+
+    /**
+     * Whether a template (or anything derived from one: `list<T>`, `class-string<T>`, `key-of<T>`, a shape value,
+     * a conditional) sits anywhere in the type; `Union::hasTemplate()` only looks at the top level.
+     */
+    private static function isTemplateDerived(Union $type): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                $derived = $type instanceof TTemplateParam
+                    || $type instanceof TTemplateParamClass
+                    || $type instanceof TTemplateKeyOf
+                    || $type instanceof TTemplateValueOf
+                    || $type instanceof TTemplateIndexedAccess
+                    || $type instanceof TTemplatePropertiesOf
+                    || $type instanceof TConditional;
+
+                return $derived ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return !$visitor->traverse($type);
     }
 
     private function schemaColumn(string $column): ?ColumnInfo
@@ -247,6 +332,7 @@ final readonly class PivotShapeResolver
 
         if ($table['kind'] !== 'default' || $this->parentClass === null || $this->relatedClass === null
             || !$this->usesStockMethod($this->parentClass, 'joiningtablesegment', HasRelationships::class)
+            || !$this->usesStockMethod($this->parentClass, 'joiningtable', HasRelationships::class)
             || !$this->usesStockMethod($this->relatedClass, 'joiningtablesegment', HasRelationships::class)
         ) {
             return null;

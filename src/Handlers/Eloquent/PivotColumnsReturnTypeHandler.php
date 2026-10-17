@@ -8,9 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\Concerns\InteractsWithPivotTable;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Identifier;
+use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
@@ -50,7 +53,7 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
     {
         $method = $event->getMethodNameLowercase();
         $stmt = $event->getStmt();
-        if (($method !== 'withpivot' && $method !== 'withtimestamps') || !$stmt instanceof MethodCall) {
+        if (($method !== 'withpivot' && $method !== 'withtimestamps') || !$stmt instanceof MethodCall || $stmt->isFirstClassCallable()) {
             return null;
         }
 
@@ -66,7 +69,7 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
         }
 
         $atomic = $receiver->getSingleAtomic();
-        if (!$atomic instanceof TGenericObject || $atomic->extra_types !== []) {
+        if (!$atomic instanceof TGenericObject || $atomic->extra_types !== [] || \strtolower($atomic->value) !== $called) {
             return null;
         }
 
@@ -100,8 +103,8 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
                 self::singleClass($params[1]),
                 self::singleClass($params[0]),
             ))->properties(
-                $method === 'withpivot' ? RelationMethodParser::withPivotColumns($stmt) : [],
-                $method === 'withtimestamps' ? [RelationMethodParser::withTimestampsArgs($stmt)] : [],
+                $method === 'withpivot' ? self::pivotColumns($stmt, $source->getNodeTypeProvider()) : [],
+                $method === 'withtimestamps' ? [self::timestampArguments($stmt, $source->getNodeTypeProvider())] : [],
                 $known,
             );
         } catch (\Throwable $throwable) {
@@ -118,6 +121,93 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
         $params[2] = new Union([$refined]);
 
         return new Union([$atomic->setTypeParams($params)]);
+    }
+
+    /**
+     * The columns `withPivot()` selects, from the argument TYPES (a `$column = 'role'` variable or a literal array in
+     * a variable counts). Laravel reads the first argument when it is an array and ignores the rest, so a first
+     * argument that may be an array (or is unknown) claims no trailing column.
+     *
+     * @return list<non-empty-string>
+     */
+    private static function pivotColumns(MethodCall $call, NodeTypeProvider $types): array
+    {
+        $values = [];
+        foreach ($call->getArgs() as $position => $arg) {
+            if ($arg->unpack || ($arg->name instanceof Identifier && ($position !== 0 || $arg->name->name !== 'columns'))) {
+                return [];
+            }
+
+            $values[] = $arg->value;
+        }
+
+        $first = isset($values[0]) ? $types->getType($values[0]) : null;
+        if (!$first instanceof Union) {
+            return [];
+        }
+
+        $columns = [];
+        if ($first->hasArray()) {
+            $array = $first->isSingle() ? $first->getSingleAtomic() : null;
+            foreach ($array instanceof TKeyedArray ? $array->properties : [] as $item) {
+                $columns[] = self::literalColumn($item);
+            }
+        } elseif ($first->isString()) {
+            foreach ($values as $value) {
+                $columns[] = self::literalColumn($types->getType($value));
+            }
+        }
+
+        return \array_values(\array_filter($columns, static fn(?string $column): bool => $column !== null));
+    }
+
+    /**
+     * The `withTimestamps()` arguments as {@see RelationMethodParser::withTimestampsArgs()} shapes them, from
+     * the argument types (`Customer::CREATED_AT` is a literal).
+     *
+     * @return array{created: string|false|null, updated: string|false|null}
+     */
+    private static function timestampArguments(MethodCall $call, NodeTypeProvider $types): array
+    {
+        $result = ['created' => null, 'updated' => null];
+        foreach ($call->getArgs() as $position => $arg) {
+            if ($arg->unpack) {
+                return ['created' => false, 'updated' => false];
+            }
+
+            $slot = $arg->name instanceof Identifier
+                ? ['createdAt' => 'created', 'updatedAt' => 'updated'][$arg->name->name] ?? null
+                : match ($position) {
+                    0 => 'created',
+                    1 => 'updated',
+                    default => null,
+                };
+            if ($slot === null) {
+                continue;
+            }
+
+            $type = $types->getType($arg->value);
+            $result[$slot] = $type instanceof Union && $type->isNull() ? null : (self::literalColumn($type) ?? false);
+        }
+
+        return $result;
+    }
+
+    /**
+     * The value of a single non-empty string literal type, else null.
+     *
+     * @return ?non-empty-string
+     * @psalm-mutation-free
+     */
+    private static function literalColumn(?Union $type): ?string
+    {
+        if (!$type instanceof Union || $type->possibly_undefined || !$type->isSingleStringLiteral()) {
+            return null;
+        }
+
+        $value = $type->getSingleStringLiteral()->value;
+
+        return $value === '' ? null : $value;
     }
 
     /**

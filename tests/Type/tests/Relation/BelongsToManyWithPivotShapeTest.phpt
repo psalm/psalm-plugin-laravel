@@ -4,6 +4,7 @@
 namespace Tests\Psalm\LaravelPlugin\Sandbox\PivotShape;
 
 use App\Models\Part;
+use App\Models\SpecializationPivot;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
@@ -14,9 +15,9 @@ use Illuminate\Support\Carbon;
 /**
  * #1944: `withPivot()` / `withTimestamps()` refine the pivot slot of the relation inside a relation method
  * body. The type-test harness runs no migrations, so a column without a custom pivot class is `mixed`;
- * the schema-typed columns are pinned by BelongsToManyPivotShapeSchemaEmissionTest. Timestamps follow the
- * base pivot's casts: the PARENT model's created-at / updated-at columns are date-cast, and only when the
- * created-at one is selected.
+ * the schema-typed columns are pinned by BelongsToManyPivotShapeSchemaEmissionTest. The PARENT model's
+ * created-at / updated-at columns are date-cast once the pivot's timestamps are on: for the default pivot
+ * that is its own `created_at` being selected, for a `using()` class the parent's created-at column.
  *
  * @property int $quantity
  */
@@ -68,7 +69,7 @@ class Owner extends Model
 
     public function timestampsRenamedCreatedAt(): void
     {
-        // Timestamps stay off when the parent's created-at column is not selected: nothing is date-cast.
+        // Timestamps stay off when the pivot's own `created_at` is not selected: nothing is date-cast.
         $r = $this->belongsToMany(Part::class)->withTimestamps('added_at');
         /** @psalm-trace $r */
         echo \get_debug_type($r);
@@ -119,9 +120,49 @@ class Owner extends Model
         echo \get_debug_type($r);
     }
 
-    public function customPivotClassDoesNotCastTimestamps(): void
+    public function customPivotClassCastsTimestampsAsDates(): void
     {
+        // A registered custom class hydrates through fromRawAttributes(): the parent's created-at switches the casts on.
+        $r = $this->belongsToMany(Part::class)->using(SpecializationPivot::class)->withTimestamps();
+        /** @psalm-trace $r */
+        echo \get_debug_type($r);
+    }
+
+    public function unregisteredCustomPivotClassIsUnproven(): void
+    {
+        // The registry holds no metadata for this inline class, so its casts are not proven absent.
         $r = $this->belongsToMany(Part::class)->using(Membership::class)->withTimestamps();
+        /** @psalm-trace $r */
+        echo \get_debug_type($r);
+    }
+
+    public function literalTypedArguments(string $dynamic): void
+    {
+        // Argument TYPES count, not syntax: a variable holding a literal selects that column.
+        $column = 'role';
+        $r = $this->belongsToMany(Part::class)->withPivot($column);
+        /** @psalm-trace $r */
+        echo \get_debug_type($r);
+
+        $columns = ['quantity', 'unit_price'];
+        $fromArray = $this->belongsToMany(Part::class)->withPivot($columns, 'ignored');
+        /** @psalm-trace $fromArray */
+        echo \get_debug_type($fromArray);
+
+        $named = $this->belongsToMany(Part::class)->withPivot(columns: 'role');
+        /** @psalm-trace $named */
+        echo \get_debug_type($named);
+
+        $constant = $this->belongsToMany(Part::class)->withTimestamps(Owner::CREATED_AT, Owner::UPDATED_AT);
+        /** @psalm-trace $constant */
+        echo \get_debug_type($constant);
+    }
+
+    /** @param list<string> $columns */
+    public function arrayFirstArgumentClaimsNoTrailingColumn(array $columns): void
+    {
+        // Laravel reads only the array when the first argument is one, and this one may be.
+        $r = $this->belongsToMany(Part::class)->withPivot($columns, 'role');
         /** @psalm-trace $r */
         echo \get_debug_type($r);
     }
@@ -171,8 +212,10 @@ class Owner extends Model
     }
 }
 
-// The parent's own timestamp column names decide what the pivot date-casts (the untyped constants are
-// reported by Psalm; typed class constants need PHP 8.3).
+// The parent's own timestamp column names are what a date-cast column is named, but the default pivot switches
+// timestamps on from its own `created_at` (fromAttributes() checks before the parent is attached), so a renamed
+// parent column stays plain there; a `using()` class (fromRawAttributes()) checks against the parent's. The
+// untyped constants are reported by Psalm (typed class constants need PHP 8.3).
 class RenamedTimestamps extends Model
 {
     public const CREATED_AT = 'added';
@@ -184,6 +227,10 @@ class RenamedTimestamps extends Model
         $r = $this->belongsToMany(Part::class)->withTimestamps();
         /** @psalm-trace $r */
         echo \get_debug_type($r);
+
+        $custom = $this->belongsToMany(Part::class)->using(SpecializationPivot::class)->withTimestamps();
+        /** @psalm-trace $custom */
+        echo \get_debug_type($custom);
     }
 }
 
@@ -287,6 +334,28 @@ function mixin_proxy_declines(RelationProxy $proxy): void
     echo \get_debug_type($r);
 }
 
+/**
+ * A generic proxy forwards to the relation through `@mixin`: the dispatched class is the relation, the receiver
+ * is not, and its third template must stay as it is.
+ *
+ * @template TA of Part
+ * @template TB of Owner
+ * @template TP of Pivot
+ * @template TX of string
+ * @mixin BelongsToMany<TA, TB, TP, TX>
+ */
+final class GenericRelationProxy
+{
+}
+
+/** @param GenericRelationProxy<Part, Owner, Pivot, 'pivot'> $proxy */
+function generic_mixin_proxy_declines(GenericRelationProxy $proxy): void
+{
+    $r = $proxy->withTimestamps();
+    /** @psalm-trace $r */
+    echo \get_debug_type($r);
+}
+
 /** @param BelongsToMany<Part, Owner, Pivot, 'pivot'>&\Countable $relation */
 function intersection_receiver_declines(BelongsToMany $relation): void
 {
@@ -309,14 +378,21 @@ Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\M
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{updated_at:mixed}, 'pivot'>
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{updated_at:Illuminate\Support\Carbon|null, created_at:Illuminate\Support\Carbon|null}, 'pivot'>
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Membership&object{quantity:int, note:mixed}, 'pivot'>&static
+Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, App\Models\SpecializationPivot&object{created_at:Illuminate\Support\Carbon|null, updated_at:Illuminate\Support\Carbon|null}, 'pivot'>&static
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Membership&object{created_at:mixed, updated_at:mixed}, 'pivot'>&static
+Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{role:mixed}, 'pivot'>
+Trace on line %d: $fromArray: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'>
+Trace on line %d: $named: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{role:mixed}, 'pivot'>
+Trace on line %d: $constant: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{created_at:Illuminate\Support\Carbon|null, updated_at:Illuminate\Support\Carbon|null}, 'pivot'>
+Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Membership, 'pivot'>&static
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed}, 'membership'>&static
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\MorphToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\MorphPivot&object{a:mixed, created_at:Illuminate\Support\Carbon|null, updated_at:Illuminate\Support\Carbon|null}, 'pivot'>
 Trace on line %d: $inverse: Illuminate\Database\Eloquent\Relations\MorphToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner&static, Illuminate\Database\Eloquent\Relations\MorphPivot&object{a:mixed}, 'pivot'>
 MissingClassConstType on line %d: Class constant "Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\RenamedTimestamps::CREATED_AT" should have a declared type.
 MissingClassConstType on line %d: Class constant "Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\RenamedTimestamps::UPDATED_AT" should have a declared type.
-Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\RenamedTimestamps&static, Illuminate\Database\Eloquent\Relations\Pivot&object{added:Illuminate\Support\Carbon|null, updated_at:mixed}, 'pivot'>
+Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\RenamedTimestamps&static, Illuminate\Database\Eloquent\Relations\Pivot&object{added:mixed, updated_at:mixed}, 'pivot'>
+Trace on line %d: $custom: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\RenamedTimestamps&static, App\Models\SpecializationPivot&object{added:Illuminate\Support\Carbon|null, updated_at:mixed}, 'pivot'>&static
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\OverriddenTimestampColumn&static, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed}, 'pivot'>&static
 Trace on line %d: $r: Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\CustomRelation
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static|Illuminate\Database\Eloquent\Relations\MorphToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner, Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>&static
@@ -325,4 +401,5 @@ Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\M
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner, Illuminate\Database\Eloquent\Relations\Pivot&object{role:string, a:mixed}, 'pivot'>
 Trace on line %d: $r: Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\TypedRelation<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner>
 Trace on line %d: $r: Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\RelationProxy
+Trace on line %d: $r: Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\GenericRelationProxy<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
 Trace on line %d: $r: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, Tests\Psalm\LaravelPlugin\Sandbox\PivotShape\Owner, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&Countable&static

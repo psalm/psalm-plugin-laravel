@@ -42,6 +42,14 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
         'Trace: $relation: {R}MorphToMany<{M}Tag, {M}Team, {R}MorphPivot&object{weight:int, created_at:{C}|null, updated_at:{C}|null}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}Perch, {M}Team, {R}Pivot&object{seat:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Squad, {R}Pivot&object{seat:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{level:int<0, max>}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}RoleAssignment, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}PartialPivot&object{role:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}RoleAssignment&object{created_at:{C}|null, updated_at:{C}|null}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{nested:mixed, label:string}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Rack, {R}Pivot&object{role:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}Item, {M}Order, {R}Pivot&object{quantity:int, unit_price:float}, \'pivot\'>',
     ];
 
     /** @var array<string, list<string>>|null */

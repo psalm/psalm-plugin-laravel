@@ -86,4 +86,53 @@ final class Team extends Model
     {
         return $this->morphToMany(Tag::class, 'taggable')->withPivot('weight')->withTimestamps();
     }
+
+    /** Only the columns every branch selects (from the same table) survive. */
+    public function branched(bool $flag): BelongsToMany
+    {
+        if ($flag) {
+            return $this->belongsToMany(User::class)->withPivot('role', 'level');
+        }
+
+        return $this->belongsToMany(User::class)->withPivot('level', 'notes');
+    }
+
+    /** using() resets the shape: the custom class describes its own columns. */
+    public function usingResets(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->withPivot('role')->using(RoleAssignment::class);
+    }
+
+    /** A custom pivot with unproven casts leaves the column unclaimed. */
+    public function partialCasts(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->using(PartialPivot::class)->withPivot('role');
+    }
+
+    /** `using()` hydrates through fromRawAttributes(): the parent's created-at column switches the casts on. */
+    public function customTimestamps(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->using(RoleAssignment::class)->withTimestamps();
+    }
+
+    /**
+     * A template inside the declared shape is not a type to reuse.
+     *
+     * @template T of object
+     * @return BelongsToMany<User, self, Pivot&object{nested: list<T>, label: string}, 'pivot'>
+     */
+    public function templatedFallback(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->withPivot('nested', 'label');
+    }
+
+    /**
+     * A variable may hold the array Laravel reads instead of the trailing columns.
+     *
+     * @param list<string> $columns
+     */
+    public function variableFirstArgument(array $columns): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->withPivot($columns, 'role');
+    }
 }

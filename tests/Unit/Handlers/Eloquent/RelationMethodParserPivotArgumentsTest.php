@@ -35,7 +35,12 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
         yield 'non-literal arguments are skipped' => ["withPivot('a', \$b, 'c' . 'd', 1)", ['a']];
         yield 'non-literal array items are skipped' => ["withPivot(['a', \$b, ...\$rest])", ['a']];
         yield 'unpacked argument is skipped' => ["withPivot('a', ...\$rest)", ['a']];
-        yield 'named argument is skipped' => ["withPivot(columns: 'a')", []];
+        yield 'named columns argument' => ["withPivot(columns: 'a')", ['a']];
+        yield 'named columns array' => ["withPivot(columns: ['a', 'b'])", ['a', 'b']];
+        yield 'other named argument is skipped' => ["withPivot(other: 'a')", []];
+        yield 'variable first argument may be the array Laravel reads' => ['withPivot($columns, \'role\')', []];
+        yield 'call first argument may be an array' => ["withPivot(\$this->columns(), 'role')", []];
+        yield 'unpacked first argument is unknown' => ["withPivot(...\$rest)", []];
         yield 'empty string is no column' => ["withPivot('')", []];
         yield 'nested array is skipped' => ["withPivot('a', ['b'])", ['a']];
     }

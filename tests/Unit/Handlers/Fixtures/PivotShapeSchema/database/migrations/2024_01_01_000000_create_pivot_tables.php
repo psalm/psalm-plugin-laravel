@@ -23,6 +23,30 @@ return new class extends Migration {
             $table->id();
         });
 
+        Schema::create('racks', function (Blueprint $table): void {
+            $table->id();
+        });
+
+        Schema::create('items', function (Blueprint $table): void {
+            $table->id();
+        });
+
+        Schema::create('orders', function (Blueprint $table): void {
+            $table->id();
+        });
+
+        Schema::create('item_order', function (Blueprint $table): void {
+            $table->unsignedBigInteger('item_id');
+            $table->unsignedBigInteger('order_id');
+            $table->integer('quantity');
+            $table->decimal('unit_price', 8, 2);
+        });
+
+        // The table a default derivation (`rack_user`) would name, see Rack::users(): Laravel reads `rack_slots`.
+        Schema::create('rack_user', function (Blueprint $table): void {
+            $table->string('role');
+        });
+
         Schema::create('squads', function (Blueprint $table): void {
             $table->id();
         });
@@ -66,6 +90,11 @@ return new class extends Migration {
     public function down(): void
     {
         Schema::dropIfExists('squad_user');
+        Schema::dropIfExists('rack_user');
+        Schema::dropIfExists('item_order');
+        Schema::dropIfExists('orders');
+        Schema::dropIfExists('items');
+        Schema::dropIfExists('racks');
         Schema::dropIfExists('perch_team');
         Schema::dropIfExists('memberships');
         Schema::dropIfExists('taggables');

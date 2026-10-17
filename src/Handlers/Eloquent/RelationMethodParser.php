@@ -261,11 +261,10 @@ final class RelationMethodParser
             }
 
             $parsed = self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass);
-            if ($parsed === null || ($result !== null && $parsed !== $result)) {
+            $result = $parsed === null ? null : ($result === null ? $parsed : self::mergeBranches($result, $parsed));
+            if ($result === null) {
                 return null;
             }
-
-            $result = $parsed;
         }
 
         if ($result === null) {
@@ -275,6 +274,38 @@ final class RelationMethodParser
         $result['nullable'] = $nullable;
 
         return $result;
+    }
+
+    /**
+     * Two returns of one method build the same relation when everything but the pivot columns agrees. The
+     * columns are optional enrichment: only those every branch selects from the same table survive.
+     *
+     * @param ParsedRelation $a
+     * @param ParsedRelation $b
+     * @return ?ParsedRelation
+     * @psalm-pure
+     */
+    private static function mergeBranches(array $a, array $b): ?array
+    {
+        $pivotKeys = ['pivotTable' => true, 'pivotColumns' => true, 'pivotTimestamps' => true];
+        if (\array_diff_key($a, $pivotKeys) !== \array_diff_key($b, $pivotKeys)) {
+            return null;
+        }
+
+        if ($a['pivotTable'] !== $b['pivotTable']) {
+            $a['pivotTable'] = null;
+            $a['pivotColumns'] = [];
+            $a['pivotTimestamps'] = [];
+
+            return $a;
+        }
+
+        $a['pivotColumns'] = \array_values(\array_intersect($a['pivotColumns'], $b['pivotColumns']));
+        if ($a['pivotTimestamps'] !== $b['pivotTimestamps']) {
+            $a['pivotTimestamps'] = [];
+        }
+
+        return $a;
     }
 
     /**
@@ -395,9 +426,9 @@ final class RelationMethodParser
 
         if ($pivotAware) {
             // The delegated relation's own columns come first; this chain runs after them.
-            $outer = self::pivotColumnLists(\array_reverse(\array_column($chain, 1)));
-            $parsed['pivotColumns'] = [...$parsed['pivotColumns'], ...$outer['pivotColumns']];
-            $parsed['pivotTimestamps'] = [...$parsed['pivotTimestamps'], ...$outer['pivotTimestamps']];
+            $outer = self::pivotColumnLists(\array_reverse(\array_column($chain, 1)), $parsed['pivotColumns'], $parsed['pivotTimestamps']);
+            $parsed['pivotColumns'] = $outer['pivotColumns'];
+            $parsed['pivotTimestamps'] = $outer['pivotTimestamps'];
         }
 
         return $parsed;
@@ -761,7 +792,9 @@ final class RelationMethodParser
             $pivotModel ??= self::firstClassStringArg($expr, $declaringClass, $parentClass);
         } elseif ($lowerName === 'as') {
             $accessor ??= self::firstStringLiteralArg($expr);
-        } elseif ($lowerName === 'withpivot' || $lowerName === 'withtimestamps') {
+        }
+
+        if ($lowerName === 'withpivot' || $lowerName === 'withtimestamps' || $lowerName === 'using') {
             $pivotCalls[] = $expr;
         }
 
@@ -883,18 +916,30 @@ final class RelationMethodParser
     public static function withPivotColumns(PhpParser\Node\Expr\MethodCall $call): array
     {
         $values = [];
-        foreach ($call->args as $arg) {
-            if ($arg instanceof PhpParser\Node\Arg && !$arg->unpack && !$arg->name instanceof PhpParser\Node\Identifier) {
+        foreach ($call->args as $position => $arg) {
+            if (!$arg instanceof PhpParser\Node\Arg) {
+                return [];
+            }
+
+            if ($arg->unpack && $position === 0) {
+                return [];
+            }
+
+            if ($arg->name instanceof PhpParser\Node\Identifier ? $arg->name->name === 'columns' : !$arg->unpack) {
                 $values[] = $arg->value;
             }
         }
 
+        // Laravel reads only the first argument when it is an array, so a first argument that may be one
+        // (a variable, a call, ...) leaves every trailing column unclaimed.
         $first = $values[0] ?? null;
         if ($first instanceof PhpParser\Node\Expr\Array_) {
             $values = [];
             foreach ($first->items as $item) {
                 $values[] = $item instanceof PhpParser\Node\ArrayItem && !$item->unpack ? $item->value : null;
             }
+        } elseif (!$first instanceof PhpParser\Node\Scalar) {
+            return [];
         }
 
         $columns = [];
@@ -946,23 +991,27 @@ final class RelationMethodParser
     }
 
     /**
-     * Reduces the calls of a chain (call order) to the `withPivot()` columns and `withTimestamps()` arguments.
+     * Reduces the calls of a chain (call order) to the `withPivot()` columns and `withTimestamps()` arguments. A
+     * `using()` call resets them: the custom pivot class describes its own columns, as in the stub's
+     * `static<..., TNewPivotModel, ...>` return.
      *
      * @param list<PhpParser\Node\Expr\MethodCall> $calls
+     * @param list<string> $columns columns the chain starts with (a delegated relation's own)
+     * @param list<PivotTimestamps> $timestamps
      * @return array{pivotColumns: list<string>, pivotTimestamps: list<PivotTimestamps>}
      * @psalm-capabilities read-props
      */
-    private static function pivotColumnLists(array $calls): array
+    private static function pivotColumnLists(array $calls, array $columns = [], array $timestamps = []): array
     {
-        $columns = [];
-        $timestamps = [];
-
         foreach ($calls as $call) {
             $name = $call->name instanceof PhpParser\Node\Identifier ? \strtolower($call->name->name) : '';
             if ($name === 'withpivot') {
                 $columns = [...$columns, ...self::withPivotColumns($call)];
             } elseif ($name === 'withtimestamps') {
                 $timestamps[] = self::withTimestampsArgs($call);
+            } elseif ($name === 'using') {
+                $columns = [];
+                $timestamps = [];
             }
         }
 
