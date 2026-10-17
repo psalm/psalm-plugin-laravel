@@ -28,6 +28,12 @@ function relation_method_carries_with_pivot_columns(WorkOrder $order, Mechanic $
 
     $_branch_columns = $order->branchColumnParts();
     /** @psalm-trace $_branch_columns */
+
+    $_branch_table_property = $order->branchTableParts;
+    /** @psalm-trace $_branch_table_property */
+
+    $_branch_columns_property = $order->branchColumnParts;
+    /** @psalm-trace $_branch_columns_property */
 }
 ?>
 --EXPECTF--
@@ -37,3 +43,5 @@ Trace on line %d: $_priced: Illuminate\Database\Eloquent\Relations\BelongsToMany
 Trace on line %d: $_certified: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, App\Models\SpecializationPivot, 'pivot'>
 Trace on line %d: $_branch_table: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
 Trace on line %d: $_branch_columns: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+Trace on line %d: $_branch_table_property: App\Collections\PartCollection<int, App\Models\Part>
+Trace on line %d: $_branch_columns_property: App\Collections\PartCollection<int, App\Models\Part>
