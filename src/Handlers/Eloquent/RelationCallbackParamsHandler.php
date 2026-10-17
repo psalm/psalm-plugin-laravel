@@ -453,7 +453,9 @@ final class RelationCallbackParamsHandler implements
         [$model, $declaring] = $target;
 
         if ($relations instanceof String_ && $callback instanceof Expr) {
-            $relation = self::resolveRelation($codebase, $model, $relations->value, true)[1] ?? null;
+            $relation = self::pathBuildersAreLaravels($codebase, $model, $relations->value)
+                ? self::resolveRelation($codebase, $model, $relations->value, true)[1] ?? null
+                : null;
             if (!$relation instanceof TGenericObject) {
                 return null;
             }
@@ -468,10 +470,10 @@ final class RelationCallbackParamsHandler implements
         }
 
         $counts = [];
-        self::countPaths($relations, '', $counts);
+        $plain = self::countPaths($relations, '', $counts);
         $properties = self::walkEagerLoad($source, $model, $relations, '', $method !== 'loadmissing', $counts, $resolved);
-        // A spread or computed key anywhere may hide a repeated path: no closure of the call is typed.
-        if ($properties === null) {
+        // A spread or computed key at any depth may hide a repeated path: no closure of the call is typed.
+        if ($properties === null || !$plain) {
             $resolved = [];
         }
 
@@ -579,18 +581,23 @@ final class RelationCallbackParamsHandler implements
      * Laravel composes the constraints of a repeated path, so none of its closures receives the bare Relation.
      *
      * @param array<string, int> $counts
+     * @return bool false when a spread or computed key occurs at any depth
      * @psalm-capabilities read-props|write-this-props|write-refs
      */
-    private static function countPaths(Array_ $array, string $prefix, array &$counts): void
+    private static function countPaths(Array_ $array, string $prefix, array &$counts): bool
     {
+        $plain = true;
+
         foreach ($array->items as $item) {
-            if (!$item instanceof ArrayItem) {
+            if (!$item instanceof ArrayItem || $item->unpack || $item->byRef || ($item->key instanceof Expr && !$item->key instanceof String_ && !$item->key instanceof Int_)) {
+                $plain = false;
+
                 continue;
             }
 
             if ($item->key instanceof String_) {
                 $path = $prefix . RelationPath::withoutColumns($item->key->value);
-            } elseif ((!$item->key instanceof \PhpParser\Node\Expr || $item->key instanceof Int_) && $item->value instanceof String_) {
+            } elseif ($item->value instanceof String_) {
                 $path = $prefix . RelationPath::withoutColumns($item->value->value);
             } else {
                 continue;
@@ -599,9 +606,11 @@ final class RelationCallbackParamsHandler implements
             $counts[$path] = ($counts[$path] ?? 0) + 1;
 
             if ($item->key instanceof String_ && $item->value instanceof Array_) {
-                self::countPaths($item->value, $path . '.', $counts);
+                $plain = self::countPaths($item->value, $path . '.', $counts) && $plain;
             }
         }
+
+        return $plain;
     }
 
     /**

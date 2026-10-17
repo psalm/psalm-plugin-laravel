@@ -399,8 +399,27 @@ function test_collection_override_declines(OverridingCollection $customers): voi
         takes_mixed($q);
     }]);
 }
+
+function test_string_callback_through_overridden_related_builder_declines(): void
+{
+    ParentOfWrapped::query()->with('wrapped.parts', function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    });
+}
+
+/** `loadMissing()` does not walk nested arrays, but a computed key inside a deeper one still declines the whole call. */
+function test_load_missing_dynamic_nested_key_declines(Customer $customer, string $key): void
+{
+    $customer->loadMissing(['vehicles.workOrders' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }, 'vehicles' => ['customer' => [$key => 'x']]]);
+}
 ?>
---EXPECTF--MissingClosureParamType on line %d: Parameter $q has no provided type
+--EXPECTF--MMissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
