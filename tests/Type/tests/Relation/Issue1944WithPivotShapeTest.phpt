@@ -68,6 +68,11 @@ function skips_dynamic_and_dotted(BelongsToMany $relation, string $column): void
     // An unpacked item may overwrite a key, so the whole array is dropped.
     $_unpacked = $relation->withPivot(['key' => 'gone', ...['key' => 'present']]);
     /** @psalm-trace $_unpacked */
+    // Laravel merges with array_merge(): a string key overwrites an earlier call's column.
+    $_string_keys = $relation->withPivot(['key' => 'role'])->withPivot(['key' => 'rank']);
+    /** @psalm-trace $_string_keys */
+    $_string_key_unpacked = $relation->withPivot(['key' => 'role'])->withPivot([...['key' => 'rank']]);
+    /** @psalm-trace $_string_key_unpacked */
 }
 
 /** @param BelongsToMany<User, Team, Membership, 'pivot'> $relation */
@@ -92,5 +97,7 @@ Trace on line %d: $_skipped: Illuminate\Database\Eloquent\Relations\BelongsToMan
 Trace on line %d: $_array_only: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed}, 'pivot'>
 Trace on line %d: $_none: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $_unpacked: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
+Trace on line %d: $_string_keys: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
+Trace on line %d: $_string_key_unpacked: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $_custom: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Membership, 'pivot'>&static
 Trace on line %d: $_morph: Illuminate\Database\Eloquent\Relations\MorphToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\MorphPivot&object{role:mixed}, 'pivot'>
