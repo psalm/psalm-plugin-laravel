@@ -14,7 +14,6 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Identifier;
-use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
@@ -59,8 +58,8 @@ final class PivotColumnResolver
         $values = [];
         if ($first->value instanceof Expr\Array_) {
             foreach ($first->value->items as $item) {
-                // Laravel merges with array_merge(): an unpacked item or a string key may overwrite a column.
-                if (!$item instanceof Expr\ArrayItem || $item->unpack || ($item->key instanceof \PhpParser\Node\Expr && !$item->key instanceof Int_)) {
+                // An unpacked item or an explicit key may overwrite a column, in the literal or in array_merge().
+                if (!$item instanceof Expr\ArrayItem || $item->unpack || $item->key instanceof Expr) {
                     return [];
                 }
 
