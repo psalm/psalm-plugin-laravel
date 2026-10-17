@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use PhpParser\Node\Arg;
-use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
@@ -217,15 +216,15 @@ final class ViewCallChain
      * The `$__env` Factory call a compiled include reduces to, or null for any other call:
      * `make($view, $data, $mergeData)` (`@include`, `@includeIf`, `@extends`, `@includeIsolated`),
      * `renderWhen`/`renderUnless($condition, $view, $data, $mergeData)`, and
-     * `first($views, $data, $mergeData)`.
+     * `first($views, $data, $mergeData)` (`@includeFirst`, `@extendsFirst`).
      *
      * Only a literal data array is read: without one, Blade puts the including scope in the `$data`
      * slot. The exception is `@includeIsolated('view')`, whose lone-name `make('view')` passes no
      * data at all.
      *
-     * `@includeFirst` is checked against its last candidate, the one the author expects to exist;
-     * an earlier one is an optional override. That guess is safe here, where only passed keys are
-     * type-checked, which is why `first()` is not a binder at a PHP call site.
+     * `first()` is checked against the first candidate that exists, which is the one
+     * `Factory::first()` renders. Existence is read from disk at analysis time, so its key set is
+     * never treated as closed: only the passed keys are type-checked.
      */
     public static function fromInclude(Expr\MethodCall $call, StatementsSource $source): ?self
     {
@@ -243,17 +242,19 @@ final class ViewCallChain
         [$name, $at] = match ($methodName) {
             'make' => [self::viewArg($args), 0],
             'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')?->value, 1],
-            'first' => [self::lastCandidate(ArgUtil::byNameOrPosition($args, 0, 'views')), 0],
+            'first' => [self::firstExistingCandidate(ArgUtil::byNameOrPosition($args, 0, 'views')), 0],
             default => [null, 0],
         };
 
         $dataArg = ArgUtil::byNameOrPosition($args, $at + 1, 'data');
+        $literalData = $dataArg instanceof Arg && $dataArg->value instanceof Expr\Array_;
+        $isolatedWithoutData = !$dataArg instanceof Arg && $methodName === 'make' && \count($args) === 1;
 
-        if ($dataArg instanceof Arg ? !$dataArg->value instanceof Expr\Array_ : $methodName !== 'make' || \count($args) !== 1) {
+        if (!$literalData && !$isolatedWithoutData) {
             return null;
         }
 
-        $complete = !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
+        $complete = $methodName !== 'first' && !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
 
         return self::build($name, $dataArg, $source, [], true, $complete);
     }
@@ -267,17 +268,30 @@ final class ViewCallChain
     }
 
     /**
-     * The last element of a literal candidate list. A keyed one declines: a duplicate key keeps its
-     * first position, so the element written last need not be the array's last.
-     *
-     * @psalm-mutation-free
+     * The first candidate of a literal list that exists on disk, walking past the ones provably
+     * absent. Declines on a candidate before it whose existence cannot be told (not a string
+     * literal, namespaced), and on a keyed one: a duplicate key keeps its first position, so the
+     * written order need not be the order `Arr::first()` walks.
      */
-    private static function lastCandidate(?Arg $views): ?Expr
+    private static function firstExistingCandidate(?Arg $views): ?String_
     {
-        $items = $views instanceof Arg && $views->value instanceof Expr\Array_ ? $views->value->items : [];
-        $last = $items === [] ? null : $items[\array_key_last($items)];
+        if (!$views instanceof Arg || !$views->value instanceof Expr\Array_) {
+            return null;
+        }
 
-        return $last instanceof ArrayItem && !$last->key instanceof Expr && !$last->unpack && !$last->byRef ? $last->value : null;
+        foreach ($views->value->items as $item) {
+            if ($item === null || $item->key instanceof Expr || !$item->value instanceof String_) {
+                return null;
+            }
+
+            $exists = MissingViewHandler::viewExists($item->value->value);
+
+            if ($exists !== false) {
+                return $exists === true ? $item->value : null;
+            }
+        }
+
+        return null;
     }
 
     /**

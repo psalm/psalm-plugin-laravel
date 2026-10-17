@@ -286,7 +286,7 @@ Some names are never contracts, because no call site passes them: a name the tem
 With `validateViewData`, an include directive with a literal data array is checked like a `view()` call site, on the directive's line:
 
 * `@include`, `@includeIf`, `@extends('layout', [...])`, `@includeWhen($condition, 'view', [...])` and `@includeUnless($condition, 'view', [...])` type-check the keys their array passes. A key the array omits is never reported: the included template also inherits the including template's scope, so the key can still arrive.
-* `@includeFirst(['override', 'view'], [...])` and `@extendsFirst` do the same against their last candidate only, the one expected to exist; an earlier candidate is an optional override. A last candidate that is not a string literal turns the check off.
+* `@includeFirst(['override', 'view'], [...])` and `@extendsFirst` do the same against the first candidate that exists on disk, which is the one Laravel renders. The check is off when a candidate before it is not a string literal, is namespaced or has a key, and when no candidate is found. A missing key is never reported for these, even without the including scope.
 * `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables. `@includeIsolated('view')` passes no data at all, so every required variable is missing. The directive first ships in Laravel 12.47; earlier versions leave it uncompiled, so nothing is checked there.
 * `@each` and `@component` are not checked, nor is data passed in a variable (`@include('view', $data)`) or a view name that is not a string literal.
 

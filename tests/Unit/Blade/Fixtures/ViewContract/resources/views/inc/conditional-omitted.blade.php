@@ -2,3 +2,4 @@
 @includeWhen(true, 'inc.card', ['title' => $heading])
 @includeUnless(false, 'inc.card', ['title' => $heading])
 @includeFirst(['inc.card'], ['title' => $heading])
+{!! $__env->first(['inc.card'], ['title' => $heading])->render() !!}
