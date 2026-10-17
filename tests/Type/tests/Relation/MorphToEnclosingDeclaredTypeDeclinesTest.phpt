@@ -28,6 +28,11 @@ class Video extends Model
 {
 }
 
+/** @template TValue of int|string */
+class GenericPost extends Model
+{
+}
+
 /**
  * @template TRelatedModel of Model
  * @template-covariant TDeclaringModel of Model
@@ -227,6 +232,15 @@ class Comment extends Model
         return $this->morphTo();
     }
 
+    /**
+     * @template TValue of int|string
+     * @return MorphTo<GenericPost<TValue>, self>
+     */
+    public function genericRelated(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
     /** @return MorphTo<HasTitle, self> */
     public function nonModelRelated(): MorphTo
     {
@@ -275,6 +289,8 @@ MoreSpecificReturnType on line %d: The declared return type 'Illuminate\Database
 LessSpecificReturnStatement on line %d: The type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>' is more general than the declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<T:fn-tests\psalm\laravelplugin\sandbox\morphtoenclosingdeclines\comment::templated as Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Post, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::templated
 InvalidReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model&(T:fn-tests\psalm\laravelplugin\sandbox\morphtoenclosingdeclines\comment::templateintersection as Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle), Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::templateIntersection is incorrect, got 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>'
 InvalidReturnStatement on line %d: The inferred type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>' does not match the declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model&(T:fn-tests\psalm\laravelplugin\sandbox\morphtoenclosingdeclines\comment::templateintersection as Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle), Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::templateIntersection
+MoreSpecificReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\GenericPost<TValue:fn-tests\psalm\laravelplugin\sandbox\morphtoenclosingdeclines\comment::genericrelated as int|string>, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::genericRelated is more specific than the inferred return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>'
+LessSpecificReturnStatement on line %d: The type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>' is more general than the declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\GenericPost<TValue:fn-tests\psalm\laravelplugin\sandbox\morphtoenclosingdeclines\comment::genericrelated as int|string>, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::genericRelated
 InvalidReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::nonModelRelated is incorrect, got 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>'
 InvalidTemplateParam on line %d: Extended template param TRelatedModel of Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment> expects type Illuminate\Database\Eloquent\Model, type Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle given
 InvalidReturnStatement on line %d: The inferred type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>' does not match the declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::nonModelRelated

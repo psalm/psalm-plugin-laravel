@@ -937,8 +937,9 @@ final class RelationMethodParser
 
     /**
      * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
-     * every alternative of X is a named class, or an intersection of named classes (`Model&Contract`),
-     * at least one of which is a Model subclass, with no `static` part and no template part.
+     * every alternative of X is exactly a plain named class, or an intersection of plain named
+     * classes (`Model&Contract`), at least one of which is a Model subclass. Generic objects and
+     * every other atomic shape are declined so nested template expressions cannot be hidden.
      *
      * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
      * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
@@ -963,13 +964,13 @@ final class RelationMethodParser
 
         $related = $relation->type_params[0];
         foreach ($related->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TNamedObject) {
+            if ($atomic::class !== TNamedObject::class || $atomic->value === 'static') {
                 return null;
             }
 
             $isModel = false;
             foreach ([$atomic, ...$atomic->extra_types] as $part) {
-                if (!$part instanceof TNamedObject || $part->is_static) {
+                if ($part::class !== TNamedObject::class || $part->is_static || $part->value === 'static') {
                     return null;
                 }
 
