@@ -51,7 +51,7 @@ final class PivotColumnResolver
     public static function columnsFromArgs(array $args): array
     {
         $first = $args[0] ?? null;
-        if (!$first instanceof Arg || $first->unpack || !($first->value instanceof String_ || $first->value instanceof Expr\Array_)) {
+        if (!$first instanceof Arg || $first->unpack || !$first->value instanceof String_ && !$first->value instanceof Expr\Array_) {
             return [];
         }
 
