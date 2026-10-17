@@ -234,6 +234,27 @@ function test_variable_sibling_keeps_stub_element_type(): void
         $q->where('status', 'open');
     }, 'customer' => $customer]);
 }
+
+/** A trait body is analyzed once per consuming class: each pass restates its own `$this` model. */
+trait SharedEagerLoads
+{
+    public function loadSharedVehicles(): void
+    {
+        $this->load(['vehicles' => function ($q): void {
+            $q->where('year', 2020);
+        }]);
+    }
+}
+
+final class FirstEagerCustomer extends Customer
+{
+    use SharedEagerLoads;
+}
+
+final class SecondEagerCustomer extends Customer
+{
+    use SharedEagerLoads;
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of takesInt expects int, but Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer> provided

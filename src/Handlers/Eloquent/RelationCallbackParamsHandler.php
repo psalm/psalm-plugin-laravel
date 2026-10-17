@@ -91,7 +91,8 @@ use Psalm\Type\Union;
  * Declines: the lists above (a MorphTo anywhere on the path included), a template-typed or intersection receiver,
  * `with('a', fn)` on a model, a model whose builder or custom collection overrides the delegated `with()`/`load()`,
  * a closure on a `:columns` key, on a repeated flattened path or in a nested `loadMissing()` array, and a computed
- * key or spread (the closure is typed, the declared-type check is not). A declined pass revokes earlier inference.
+ * key or spread anywhere in the literal, or a related model on the path whose builder overrides `with()`. A declined
+ * pass revokes earlier inference.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1945
@@ -173,26 +174,18 @@ final class RelationCallbackParamsHandler implements
     private static array $registered = [];
 
     /**
-     * Inference this handler wrote into closure storage: closure id => the written type's id. Only these params are
-     * ever revoked, so a type the user declared is never touched.
+     * Closure params this handler typed. The param object itself is the key, so storage Psalm replaced on a file
+     * reload is not ours, and only our own write is ever revoked.
      *
-     * @var array<string, string>
+     * @psalm-var \WeakMap<FunctionLikeParameter, true>|null
      */
-    private static array $written = [];
-
-    /**
-     * Closures two passes resolved to different Relations (a loop or branch re-analysis): never typed again.
-     *
-     * @var array<string, true>
-     */
-    private static array $conflicted = [];
+    private static ?\WeakMap $written = null;
 
     public static function reset(): void
     {
         self::$calls = null;
         self::$registered = [];
-        self::$written = [];
-        self::$conflicted = [];
+        self::$written = null;
     }
 
     #[\Override]
@@ -395,13 +388,17 @@ final class RelationCallbackParamsHandler implements
         }
 
         $relations = ArgUtil::boundTo($args, 'relations', 0)?->value;
+        $callback = ArgUtil::boundTo($args, 'callback', 1)?->value;
         $resolved = [];
         $result = self::eagerLoadParams($event, $args, $source, $resolved);
 
-        if ($relations instanceof Array_) {
-            foreach (self::closureLiterals($relations) as $closure) {
-                self::inferClosureParam($source, $closure, $resolved[\spl_object_id($closure)] ?? null);
-            }
+        $closures = $relations instanceof Array_ ? self::closureLiterals($relations) : [];
+        if ($relations instanceof String_ && $event->getMethodNameLowercase() === 'with' && ($callback instanceof Closure || $callback instanceof ArrowFunction)) {
+            $closures[] = $callback;
+        }
+
+        foreach ($closures as $closure) {
+            self::inferClosureParam($source, $closure, $resolved[\spl_object_id($closure)] ?? null);
         }
 
         return $result;
@@ -455,17 +452,29 @@ final class RelationCallbackParamsHandler implements
 
         [$model, $declaring] = $target;
 
-        if ($relations instanceof String_) {
+        if ($relations instanceof String_ && $callback instanceof Expr) {
             $relation = self::resolveRelation($codebase, $model, $relations->value, true)[1] ?? null;
+            if (!$relation instanceof TGenericObject) {
+                return null;
+            }
 
-            return $relation instanceof TGenericObject
-                ? self::withParamType($codebase, $declaring, 'callback', new Union([new TClosure(self::queryParams([new Union([$relation])]), Type::getMixed())]))
-                : null;
+            $resolved[\spl_object_id($callback)] = new Union([$relation]);
+
+            return self::withParamType($codebase, $declaring, 'callback', new Union([new TClosure(self::queryParams([new Union([$relation])]), Type::getMixed())]));
+        }
+
+        if (!$relations instanceof Array_) {
+            return null;
         }
 
         $counts = [];
         self::countPaths($relations, '', $counts);
         $properties = self::walkEagerLoad($source, $model, $relations, '', $method !== 'loadmissing', $counts, $resolved);
+        // A spread or computed key anywhere may hide a repeated path: no closure of the call is typed.
+        if ($properties === null) {
+            $resolved = [];
+        }
+
         $shape = $properties === null ? null : self::eagerShape($properties, self::declaredElement($codebase, $declaring));
 
         return $shape instanceof Union ? self::withParamType($codebase, $declaring, 'relations', $shape) : null;
@@ -600,13 +609,13 @@ final class RelationCallbackParamsHandler implements
      * param shape that mirrors them: closure-valued literal keys that resolved to a Relation.
      *
      * Declines a closure (it stays out of `$resolved` and the shape) on a `:columns` key, a repeated path, a nested
-     * array where `$allowNested` is false, or a path that does not resolve to a Relation.
+     * array where `$allowNested` is false, a path through an overriding builder, or a path that does not resolve to a Relation.
      *
      * @param class-string<Model> $model
      * @param array<string, int> $counts
      * @param array<int, Union> $resolved
      * @return array<string, Union>|null null when an entry is not a plain literal (a spread, a computed key): the
-     *         shape would reject what the literal really holds, so the params answer declines. Closures are still typed.
+     *         shape would reject what the literal really holds, or hide a repeated path: the call types no closure.
      */
     private static function walkEagerLoad(StatementsAnalyzer $source, string $model, Array_ $array, string $prefix, bool $allowNested, array $counts, array &$resolved): ?array
     {
@@ -629,7 +638,7 @@ final class RelationCallbackParamsHandler implements
                         $properties[$key] = $shape;
                     }
                 } elseif ($value instanceof Closure || $value instanceof ArrowFunction) {
-                    $relation = !\str_contains($key, ':') && ($counts[$path] ?? 0) === 1 && ($allowNested || $prefix === '')
+                    $relation = !\str_contains($key, ':') && ($counts[$path] ?? 0) === 1 && ($allowNested || $prefix === '') && self::pathBuildersAreLaravels($source->getCodebase(), $model, $path)
                         ? self::resolveRelation($source->getCodebase(), $model, $path, true)[1] ?? null
                         : null;
 
@@ -723,10 +732,9 @@ final class RelationCallbackParamsHandler implements
      * answer expects (probed, decisions.md). So the same write happens here: type and `type_inferred` on the
      * closure's storage, before the closure is analyzed.
      *
-     * The storage outlives a pass (Psalm re-analyzes loops and branches), so every pass states the closure's Relation
-     * again: `$type` null (declined) or different from what an earlier pass wrote revokes that write, and a closure
-     * resolved differently is never typed again. Only a write of this handler is revoked, and a declared or docblock
-     * type is never overwritten.
+     * The storage outlives a pass (Psalm re-analyzes loops and branches, and a trait body once per consuming class),
+     * so every pass restates the closure's Relation: it writes the pass's type, or revokes this handler's earlier
+     * write when the pass declines. A type the handler did not write is never touched.
      */
     private static function inferClosureParam(StatementsAnalyzer $source, Closure|ArrowFunction $closure, ?Union $type): void
     {
@@ -742,24 +750,49 @@ final class RelationCallbackParamsHandler implements
             return;
         }
 
-        $written = self::$written[$closureId] ?? null;
-
-        if ($type instanceof Union && ($written !== null && $written !== $type->getId() || isset(self::$conflicted[$closureId]))) {
-            self::$conflicted[$closureId] = true;
-            $type = null;
+        if (!self::$written instanceof \WeakMap) {
+            /** @psalm-var \WeakMap<FunctionLikeParameter, true> $fresh */
+            $fresh = new \WeakMap();
+            self::$written = $fresh;
         }
 
-        if ($written !== null && (!$type instanceof \Psalm\Type\Union || $written !== $type->getId()) && $param->type_inferred) {
-            $param->type = null;
-            $param->type_inferred = false;
-            unset(self::$written[$closureId]);
-        }
+        $written = self::$written;
+        $ours = isset($written[$param]);
 
-        if ($type instanceof Union && !$param->type instanceof Union) {
+        if ($type instanceof Union && ($ours || !$param->type instanceof Union)) {
             $param->type = $type;
             $param->type_inferred = true;
-            self::$written[$closureId] = $type->getId();
+            $written[$param] = true;
+        } elseif ($ours) {
+            $param->type = null;
+            $param->type_inferred = false;
+            unset($written[$param]);
         }
+    }
+
+    /**
+     * Whether every related model a dot path passes through runs its nested constraints through Laravel's own builder
+     * `with()`: Laravel hands a nested constraint to the related model's builder, so a userland override there keeps
+     * its own contract.
+     *
+     * @param class-string<Model> $model
+     */
+    private static function pathBuildersAreLaravels(Codebase $codebase, string $model, string $path): bool
+    {
+        $segments = \explode('.', $path);
+        \array_pop($segments);
+        $prefix = '';
+
+        foreach ($segments as $segment) {
+            $prefix .= ($prefix === '' ? '' : '.') . $segment;
+            $related = self::resolveRelation($codebase, $model, $prefix, false)[0] ?? null;
+
+            if ($related === null || !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($related), 'with') instanceof MethodIdentifier) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

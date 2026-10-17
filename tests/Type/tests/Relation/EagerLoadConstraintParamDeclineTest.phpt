@@ -187,7 +187,7 @@ final class OverridingModel extends Model
 /** @param OverridingBuilder<Customer> $builder */
 function test_userland_overrides_decline(OverridingBuilder $builder, OverridingModel $model): void
 {
-    $builder->with(['parts' => function ($q): void {
+    $builder->with(['vehicles' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
@@ -198,18 +198,21 @@ function test_userland_overrides_decline(OverridingBuilder $builder, OverridingM
 }
 
 /**
- * A spread or computed key elsewhere in the literal does not stop typing of its literal closure entries, but the
- * params answer declines: the declared `BelongsTo` is not reported (the shape would otherwise reject the literal's
- * unknown part), and the compatible `HasMany` raises no coercion either.
+ * A spread or computed key anywhere in the literal may hide a repeated path (or a union the shape would reject), so
+ * no closure of the call is typed and no declared type is checked.
  *
  * @param array<string, string> $extra
  */
 function test_partially_dynamic_literal(array $extra, string $key): void
 {
     Customer::query()->with(['vehicles' => function ($q): void {
-        /** @psalm-check-type-exact $q = HasMany<Vehicle, Customer> */
+        /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }, ...$extra]);
+    Customer::query()->with(['vehicles' => ['customer' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }], ...$extra]);
     Customer::query()->with([$key => 'x', 'vehicles' => function (BelongsTo $q): void {
         takes_mixed($q);
     }]);
@@ -326,8 +329,85 @@ function test_columns_on_closure_key_declines(): void
         takes_mixed($q);
     });
 }
+
+/** The string+callback form restates its Relation on every pass too: a widened receiver revokes the first pass. */
+function test_loop_widening_revokes_string_callback_inference(bool $flag): void
+{
+    $builder = WorkOrder::query();
+
+    while ($flag) {
+        $builder->with('parts', function ($q): void {
+            if ($q instanceof HasMany) {
+                takes_mixed($q);
+            }
+        });
+
+        $builder = Supplier::query();
+    }
+}
+
+/** A nested constraint runs through the related model's builder: its `with()` override keeps its own contract. */
+final class ParentOfWrapped extends Model
+{
+    /** @return HasMany<WrappedModel, $this> */
+    public function wrapped(): HasMany
+    {
+        return $this->hasMany(WrappedModel::class);
+    }
+}
+
+function test_nested_constraint_on_overridden_related_builder_declines(): void
+{
+    ParentOfWrapped::query()->with(['wrapped.parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    ParentOfWrapped::query()->with(['wrapped' => ['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]]);
+}
+
+/**
+ * A collection that overrides the delegated `load()` keeps its own contract.
+ *
+ * @template TKey of array-key
+ * @template TModel of Model
+ * @extends Collection<TKey, TModel>
+ */
+final class OverridingCollection extends Collection
+{
+    /** @inheritDoc */
+    #[\Override]
+    public function load($relations)
+    {
+        parent::load($relations);
+
+        return $this;
+    }
+}
+
+/** @param OverridingCollection<int, Customer> $customers */
+function test_collection_override_declines(OverridingCollection $customers): void
+{
+    $customers->load(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $customers->loadMissing(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
 ?>
---EXPECTF--
+--EXPECTF--MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
