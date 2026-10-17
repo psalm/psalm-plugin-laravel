@@ -255,11 +255,12 @@ final class RelationMethodParser
             }
 
             $parsed = self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass);
-            if ($parsed === null || ($result !== null && $parsed !== $result)) {
+            if ($parsed === null || ($result !== null && self::withoutPivotShape($parsed) !== self::withoutPivotShape($result))) {
                 return null;
             }
 
-            $result = $parsed;
+            // Returns that differ only in their pivot columns still build the same relation, without a shape.
+            $result = $result === null || $parsed === $result ? $parsed : self::withoutPivotShape($result);
         }
 
         if ($result === null) {
@@ -269,6 +270,19 @@ final class RelationMethodParser
         $result['nullable'] = $nullable;
 
         return $result;
+    }
+
+    /**
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @psalm-pure
+     */
+    private static function withoutPivotShape(array $parsed): array
+    {
+        $parsed['pivotColumns'] = [];
+        $parsed['pivotTable'] = null;
+
+        return $parsed;
     }
 
     /**
@@ -329,7 +343,10 @@ final class RelationMethodParser
                 // Outermost first: prepend so the innermost call's columns lead.
                 $parsed['pivotColumns'] = [...PivotColumnResolver::columnsFromArgs($expr->args), ...$parsed['pivotColumns']];
             } elseif (isset(PivotColumnResolver::FACTORY_TABLE_POSITION[$name])) {
-                $parsed['pivotTable'] = PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass);
+                if ($parsed['pivotColumns'] !== []) {
+                    $parsed['pivotTable'] = PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass);
+                }
+
                 break;
             }
 

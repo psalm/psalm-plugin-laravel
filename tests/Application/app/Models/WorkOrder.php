@@ -77,6 +77,26 @@ final class WorkOrder extends Model
         return $this->belongsToMany(Part::class)->withPivot('quantity');
     }
 
+    /** Returns differing only in the pivot table still resolve the relation (#1944). */
+    public function branchTableParts(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(Part::class, 'part_work_order');
+        }
+
+        return $this->belongsToMany(Part::class, 'archived_part_work_order');
+    }
+
+    /** Returns differing only in `withPivot()` columns keep the relation but no pivot shape (#1944). */
+    public function branchColumnParts(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(Part::class)->withPivot('quantity');
+        }
+
+        return $this->belongsToMany(Part::class)->withPivot('unit_price');
+    }
+
     /** Delegated `withPivot()` (#1944): the outer columns follow parts()'s own. */
     public function discountedParts(): BelongsToMany
     {

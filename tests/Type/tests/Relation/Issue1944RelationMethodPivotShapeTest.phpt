@@ -6,24 +6,34 @@ use App\Models\WorkOrder;
 
 /**
  * Callers of a registered relation method see its `withPivot()` columns in TPivotModel (#1944),
- * unless the method declares its own pivot shape.
+ * unless the method declares its own pivot shape. Traces, not check-type: Psalm compares object
+ * shapes inside an intersection by name only, so check-type cannot pin the keys.
  */
-function relation_method_carries_with_pivot_columns(WorkOrder $order): void
+function relation_method_carries_with_pivot_columns(WorkOrder $order, Mechanic $mechanic): void
 {
     $_parts = $order->parts();
-    /** @psalm-check-type-exact $_parts = \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\Part, WorkOrder, \Illuminate\Database\Eloquent\Relations\Pivot&object{quantity: mixed, unit_price: mixed}, 'pivot'> */
+    /** @psalm-trace $_parts */
 
     $_discounted = $order->discountedParts();
-    /** @psalm-check-type-exact $_discounted = \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\Part, WorkOrder, \Illuminate\Database\Eloquent\Relations\Pivot&object{quantity: mixed, unit_price: mixed, discount: mixed}, 'pivot'> */
+    /** @psalm-trace $_discounted */
 
     $_priced = $order->pricedParts();
-    /** @psalm-check-type-exact $_priced = \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\Part, WorkOrder, \Illuminate\Database\Eloquent\Relations\Pivot&object{quantity: int}, 'pivot'> */
-}
+    /** @psalm-trace $_priced */
 
-function custom_pivot_keeps_its_class(Mechanic $mechanic): void
-{
     $_certified = $mechanic->certifiedSpecializations();
-    /** @psalm-check-type-exact $_certified = \Illuminate\Database\Eloquent\Relations\BelongsToMany<\App\Models\MechanicSpecialization, Mechanic, \App\Models\SpecializationPivot, 'pivot'> */
+    /** @psalm-trace $_certified */
+
+    $_branch_table = $order->branchTableParts();
+    /** @psalm-trace $_branch_table */
+
+    $_branch_columns = $order->branchColumnParts();
+    /** @psalm-trace $_branch_columns */
 }
 ?>
 --EXPECTF--
+Trace on line %d: $_parts: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'>
+Trace on line %d: $_discounted: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed, discount:mixed}, 'pivot'>
+Trace on line %d: $_priced: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:int}, 'pivot'>
+Trace on line %d: $_certified: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, App\Models\SpecializationPivot, 'pivot'>
+Trace on line %d: $_branch_table: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+Trace on line %d: $_branch_columns: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>

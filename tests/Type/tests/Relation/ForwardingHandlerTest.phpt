@@ -63,14 +63,14 @@ function test_scopes_preserves_relation_type(): void {
 // Different Relation subclass: BelongsToMany (verifies template params work beyond HasOne)
 function test_belongsToMany_where_preserves_relation_type(): void {
     $r = (new WorkOrder())->parts();
-    $_ = $r->where('active', true);
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot&object{quantity: mixed, unit_price: mixed}, 'pivot'> */
+    $_where = $r->where('active', true);
+    /** @psalm-trace $_where */
 }
 
 function test_belongsToMany_orderBy_preserves_relation_type(): void {
     $r = (new WorkOrder())->parts();
-    $_ = $r->orderBy('name');
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot&object{quantity: mixed, unit_price: mixed}, 'pivot'> */
+    $_order = $r->orderBy('name');
+    /** @psalm-trace $_order */
 }
 
 // Non-fluent: first() resolved via Relation stub (workaround for Psalm mixin template bug)
@@ -117,3 +117,5 @@ function test_limit_validates_arguments(): void {
 }
 ?>
 --EXPECTF--
+Trace on line %d: $_where: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'>
+Trace on line %d: $_order: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'>
