@@ -52,7 +52,9 @@ use Psalm\Type\Union;
  *                    the previous segment's related model
  *   - array (list):  with(['posts', 'comments'])
  *   - array (keyed): with(['posts' => fn ($q) => ...]) — the key is the relation
- *   - select syntax: with('posts:id,title')           — the `:columns` part is stripped
+ *   - select syntax: with('posts:id,title')           — the `:columns` part is stripped, except on a
+ *                    relation paired with a Closure (`with(['posts:id' => fn ...])`,
+ *                    `Builder::with('posts:id', fn ...)`): Laravel looks that name up verbatim
  *
  * **Hook choice — AfterExpressionAnalysis, not AfterMethodCallAnalysis.** The
  * issue's headline examples are static calls (`User::with(...)`, `User::has(...)`).
@@ -227,7 +229,8 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         }
 
         $args = $expr->getArgs();
-        if ($args === []) {
+        $relationArg = self::relationArg($args);
+        if (!$relationArg instanceof Arg) {
             return null;
         }
 
@@ -241,20 +244,98 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
 
         $allowsAlias = isset(self::AGGREGATE_METHODS[$methodNameLc]);
 
-        foreach (self::extractRelationNames($source, $args[0]) as $relationName) {
+        $callbackArg = $methodNameLc === 'with' && $expr instanceof MethodCall
+            && self::isBuilderReceiver($expr, $source, $codebase)
+            ? self::callbackArg($args)
+            : null;
+
+        foreach (self::extractRelationNames($source, $relationArg, $callbackArg) as [$relationName, $parsesColumns]) {
             self::validateRelationPath(
                 $codebase,
                 $modelFqcn,
                 $relationName,
-                new CodeLocation($source, $args[0]->value),
+                new CodeLocation($source, $relationArg->value),
                 $source->getSuppressedIssues(),
                 allowsAlias: $allowsAlias,
                 allowsPaths: true,
-                allowsColumns: true,
+                allowsColumns: $parsesColumns,
             );
         }
 
         return null;
+    }
+
+    /**
+     * `Eloquent\Builder::with()` (also reached through a Relation, which forwards to its builder)
+     * is the only target of the `with($relations, Closure $callback)` pairing; the receiver must
+     * be a Builder or Relation in every atomic, never a Model (`Model::with()` is list-only).
+     */
+    private static function isBuilderReceiver(MethodCall $expr, StatementsSource $source, Codebase $codebase): bool
+    {
+        $type = $source->getNodeTypeProvider()->getType($expr->var);
+        foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
+            if (
+                !$atomic instanceof TNamedObject
+                || !ClassLineage::isA($codebase, $atomic->value, EloquentBuilder::class) && !ClassLineage::isA($codebase, $atomic->value, Relation::class)
+            ) {
+                return false;
+            }
+        }
+
+        return $type instanceof Union;
+    }
+
+    /**
+     * The relation-name argument: the first positional one, else the named `$relations` (with/load*) or
+     * `$relation` (has/whereHas/whereRelation family), which keeps a reordered named call checked.
+     *
+     * @param array<array-key, Arg> $args
+     * @psalm-capabilities read-props
+     */
+    private static function relationArg(array $args): ?Arg
+    {
+        foreach ($args as $index => $arg) {
+            $name = $arg->name?->name;
+            if ($name === null ? $index === 0 : ($name === 'relations' || $name === 'relation')) {
+                return $arg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The `$callback` argument of `with($relations, $callback)`: positional index 1 or named `callback`.
+     *
+     * @param array<array-key, Arg> $args
+     * @psalm-capabilities read-props
+     */
+    private static function callbackArg(array $args): ?Arg
+    {
+        foreach ($args as $index => $arg) {
+            if ($arg->name instanceof Identifier ? $arg->name->name === 'callback' : $index === 1) {
+                return $arg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * True only when every atomic is a Closure (Psalm's `TClosure` extends `TNamedObject` and is
+     * named `Closure`); unions such as `Closure|array` or `?Closure` are not proven.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isProvenClosure(?Union $type): bool
+    {
+        foreach ($type?->getAtomicTypes() ?? [] as $atomic) {
+            if (!$atomic instanceof TNamedObject || \strtolower($atomic->value) !== 'closure') {
+                return false;
+            }
+        }
+
+        return $type instanceof Union;
     }
 
     /**
@@ -413,9 +494,13 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * `['posts', 'comments']` list form). Anything dynamic yields nothing and the
      * call is left unvalidated.
      *
-     * @return list<string>
+     * Each name carries whether Laravel parses a `:columns` suffix on it. It does not for a string
+     * key whose value is a Closure (looked up verbatim), nor for a literal paired with a proven
+     * Closure `$callbackArg` (`Builder::with('posts:id', fn ...)`); every other form is parsed.
+     *
+     * @return list<array{string, bool}> [name, parsesColumns]
      */
-    private static function extractRelationNames(StatementsSource $source, Arg $arg): array
+    private static function extractRelationNames(StatementsSource $source, Arg $arg, ?Arg $callbackArg = null): array
     {
         $argType = $source->getNodeTypeProvider()->getType($arg->value);
         if (!$argType instanceof Union) {
@@ -423,7 +508,9 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         }
 
         if ($argType->isSingleStringLiteral()) {
-            return [$argType->getSingleStringLiteral()->value];
+            $paired = $callbackArg instanceof Arg && self::isProvenClosure($source->getNodeTypeProvider()->getType($callbackArg->value));
+
+            return [[$argType->getSingleStringLiteral()->value, !$paired]];
         }
 
         $names = [];
@@ -436,12 +523,12 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             foreach ($atomic->properties as $key => $valueType) {
                 // Keyed form `['posts' => fn ($q) => ...]`: the string key is the relation.
                 if (\is_string($key)) {
-                    $names[] = $key;
+                    $names[] = [$key, !self::isProvenClosure($valueType)];
                 }
 
                 // List form `['posts', 'comments']`: the string-literal value is the relation.
                 if ($valueType->isSingleStringLiteral()) {
-                    $names[] = $valueType->getSingleStringLiteral()->value;
+                    $names[] = [$valueType->getSingleStringLiteral()->value, true];
                 }
             }
         }
@@ -495,9 +582,13 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
 
             if (!RelationResolver::relationMethodExists($codebase, $current, $name)) {
                 $context = $property === null ? '' : " from {$modelFqcn}::\${$property}";
+                // A verbatim (closure-paired) name containing ':' is the unparsed `:columns` mistake.
+                $hint = !$allowsColumns && $property === null && \str_contains($name, ':')
+                    ? ": Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure."
+                    : '.';
                 IssueBuffer::accepts(
                     new UndefinedModelRelation(
-                        "Relation '{$name}'{$context} is not defined on {$current}.",
+                        "Relation '{$name}'{$context} is not defined on {$current}{$hint}",
                         $location,
                     ),
                     $suppressedIssues,
