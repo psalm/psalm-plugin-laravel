@@ -20,6 +20,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationPath;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
@@ -473,13 +474,13 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         bool $allowsColumns,
         ?string $property = null,
     ): void {
-        $segments = $allowsPaths ? \explode('.', $relationName) : [$relationName];
+        // Segments lose their `:col1,col2` select syntax (with()/load() eager-load columns) when allowed.
+        $segments = RelationPath::segments($relationName, $allowsPaths, $allowsColumns);
         $lastIndex = \count($segments) - 1;
         $current = $modelFqcn;
 
         foreach ($segments as $index => $segment) {
-            // Strip the `:col1,col2` select syntax (with()/load() eager-load columns).
-            $name = \trim($allowsColumns ? \explode(':', $segment, 2)[0] : $segment);
+            $name = \trim($segment);
 
             // Strip the ` as <alias>` aggregate clause (loadCount/loadSum/...): the
             // alias names the sub-select column, not part of the relation name. A real

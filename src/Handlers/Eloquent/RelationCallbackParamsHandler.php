@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -20,6 +21,7 @@ use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
@@ -27,6 +29,7 @@ use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationPath;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
@@ -37,9 +40,11 @@ use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
@@ -80,7 +85,17 @@ use Psalm\Type\Union;
  *  - signature: a userland override of the method on the dispatched class, a trait other than Laravel's, or, for
  *    static and Relation receivers, on the model's own builder.
  *
+ * Eager-load constraints (#1945, {@see getEagerLoadParams()}): a closure value of a literal `with()`/`withOnly()`/`load()`/
+ * `loadMissing()` relations array is typed as the Relation its dot-path key resolves to. Receivers are a Builder (custom
+ * ones included), a static `Model::with()`, a model instance and an Eloquent Collection, each exactly one known model.
+ * Declines: the lists above (a MorphTo anywhere on the path included), a template-typed or intersection receiver,
+ * `with('a', fn)` on a model, a model whose builder or custom collection overrides the delegated `with()`/`load()`,
+ * a closure on a `:columns` key, on a repeated flattened path or in a nested `loadMissing()` array, and a computed
+ * key or spread anywhere in the literal, or a related model on the path whose builder overrides `with()`. A declined
+ * pass revokes earlier inference.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/1945
  */
 final class RelationCallbackParamsHandler implements
     AfterCodebasePopulatedInterface,
@@ -129,6 +144,20 @@ final class RelationCallbackParamsHandler implements
     ];
 
     /**
+     * Eager-load methods whose relations argument may carry constraint closures => the host families that declare
+     * them. `with()` is a real static method on Model (so a static call dispatches on the model class) and an
+     * instance method on Builder.
+     *
+     * @var array<lowercase-string, non-empty-list<class-string>>
+     */
+    private const EAGER_LOAD = [
+        'with' => [Builder::class, Model::class],
+        'withonly' => [Builder::class],
+        'load' => [Model::class, EloquentCollection::class],
+        'loadmissing' => [Model::class, EloquentCollection::class],
+    ];
+
+    /**
      * Calls awaiting their params lookup, keyed by the call's first Arg. Both ends are weak: the call owns its Arg,
      * so a strong value would keep the key alive and the entry would outlive its AST.
      *
@@ -144,10 +173,19 @@ final class RelationCallbackParamsHandler implements
      */
     private static array $registered = [];
 
+    /**
+     * Closure params this handler typed. The param object itself is the key, so storage Psalm replaced on a file
+     * reload is not ours, and only our own write is ever revoked.
+     *
+     * @psalm-var \WeakMap<FunctionLikeParameter, true>|null
+     */
+    private static ?\WeakMap $written = null;
+
     public static function reset(): void
     {
         self::$calls = null;
         self::$registered = [];
+        self::$written = null;
     }
 
     #[\Override]
@@ -155,16 +193,28 @@ final class RelationCallbackParamsHandler implements
     {
         $codebase = $event->getCodebase();
         $builderLower = \strtolower(Builder::class);
+        $modelLower = \strtolower(Model::class);
+        $collectionLower = \strtolower(EloquentCollection::class);
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             $key = \strtolower($storage->name);
 
-            if (isset(self::$registered[$key]) || ($key !== $builderLower && !isset($storage->parent_classes[$builderLower]))) {
+            if (isset(self::$registered[$key])) {
                 continue;
             }
 
-            self::$registered[$key] = true;
-            $codebase->methods->params_provider->registerClosure($storage->name, self::getMethodParams(...));
+            $provider = match (true) {
+                $key === $builderLower || isset($storage->parent_classes[$builderLower]) => self::getMethodParams(...),
+                isset($storage->parent_classes[$modelLower]),
+                $key === $collectionLower,
+                isset($storage->parent_classes[$collectionLower]) => self::getEagerLoadParams(...),
+                default => null,
+            };
+
+            if ($provider !== null) {
+                self::$registered[$key] = true;
+                $codebase->methods->params_provider->registerClosure($storage->name, $provider);
+            }
         }
     }
 
@@ -179,7 +229,7 @@ final class RelationCallbackParamsHandler implements
 
         $args = $expr->isFirstClassCallable() ? [] : $expr->getArgs();
 
-        if ($args !== [] && $expr->name instanceof Identifier && isset(self::SLOTS[$expr->name->toLowerString()])) {
+        if ($args !== [] && $expr->name instanceof Identifier && (isset(self::SLOTS[$expr->name->toLowerString()]) || isset(self::EAGER_LOAD[$expr->name->toLowerString()]))) {
             if (!self::$calls instanceof \WeakMap) {
                 /** @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall|StaticCall>> $fresh */
                 $fresh = new \WeakMap();
@@ -196,6 +246,11 @@ final class RelationCallbackParamsHandler implements
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array
     {
         $method = $event->getMethodNameLowercase();
+
+        if (isset(self::EAGER_LOAD[$method])) {
+            return self::getEagerLoadParams($event);
+        }
+
         $slot = self::SLOTS[$method] ?? null;
 
         if ($slot === null) {
@@ -242,13 +297,9 @@ final class RelationCallbackParamsHandler implements
         [$model, $forwards] = $receiver;
         $codebase = $source->getCodebase();
 
-        // Only Laravel's own signature is rewritten: a userland override (a builder that wraps the callback, or
-        // one whose params Psalm inherits from the parent) keeps its own contract. A static or relation-forwarded
-        // call dispatches through the base Builder but runs on the model's own builder, so that class is checked too.
-        $declaring = self::laravelDeclaring($codebase, $dispatched, $method);
-        if (!$declaring instanceof MethodIdentifier
-            || ($forwards && !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), $method) instanceof MethodIdentifier)
-        ) {
+        // Only Laravel's own signature is rewritten, see builderDeclaring().
+        $declaring = self::builderDeclaring($codebase, $dispatched, $method, $model, $forwards);
+        if (!$declaring instanceof MethodIdentifier) {
             return null;
         }
 
@@ -266,19 +317,491 @@ final class RelationCallbackParamsHandler implements
             return null;
         }
 
+        return self::withParamType($codebase, $declaring, $paramName, new Union([new TClosure(self::queryParams($slots), Type::getMixed())]));
+    }
+
+    /**
+     * The Builder-family method Laravel's own signature stands behind, or null when a userland override (a builder
+     * that wraps the callback, or one whose params Psalm inherits from the parent) keeps its own contract. A static
+     * or relation-forwarded call dispatches through the base Builder but runs on the model's own builder, so that
+     * class is checked too.
+     *
+     * @param class-string<Model> $model
+     */
+    private static function builderDeclaring(Codebase $codebase, string $dispatched, string $method, string $model, bool $forwards): ?MethodIdentifier
+    {
+        $declaring = self::laravelDeclaring($codebase, $dispatched, $method);
+
+        return $declaring instanceof MethodIdentifier
+            && (!$forwards || self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), $method) instanceof MethodIdentifier)
+            ? $declaring
+            : null;
+    }
+
+    /**
+     * The declaring method's params with one param's type replaced.
+     *
+     * @return list<FunctionLikeParameter>|null
+     * @psalm-capabilities read-props
+     */
+    private static function withParamType(Codebase $codebase, MethodIdentifier $declaring, string $paramName, Union $type): ?array
+    {
         try {
             $params = $codebase->methods->getStorage($declaring)->params;
         } catch (\UnexpectedValueException|\InvalidArgumentException) {
             return null;
         }
 
-        $callback = new Union([new TClosure(self::queryParams($slots), Type::getMixed())]);
         $result = [];
         foreach ($params as $param) {
-            $result[] = $param->name === $paramName ? $param->setType($callback) : $param;
+            $result[] = $param->name === $paramName ? $param->setType($type) : $param;
         }
 
         return $result;
+    }
+
+    /**
+     * Eager-load calls (`with()`, `withOnly()`, `load()`, `loadMissing()`): a closure value of a literal relations
+     * array gets the Relation its key resolves to as its first param. Laravel runs the constraint as
+     * `$constraints($relation)` on the LAST segment of the key's dot path and flattens nested arrays into that path
+     * (`prepareNestedWithRelationships()`). A `:columns` suffix only selects columns on an array-valued key or a
+     * plain name; on a closure-valued key it stays in the relation name, so those closures decline.
+     *
+     * An untyped param is written into the closure's storage (see {@see inferClosureParam()}); the params answer
+     * mirrors the literal so a declared type that is not that Relation is reported like a direct closure argument.
+     * `with('relation', fn)` types the second argument as a plain slot. Declines (null) as the class docblock lists,
+     * and every pass over a closure that declines or resolves differently revokes the earlier inference.
+     *
+     * @return list<FunctionLikeParameter>|null
+     */
+    public static function getEagerLoadParams(MethodParamsProviderEvent $event): ?array
+    {
+        $args = $event->getCallArgs();
+        $source = $event->getStatementsSource();
+
+        if ($args === null || $args === [] || !$source instanceof StatementsAnalyzer) {
+            return null;
+        }
+
+        if (!isset(self::EAGER_LOAD[$event->getMethodNameLowercase()])) {
+            return null;
+        }
+
+        $relations = ArgUtil::boundTo($args, 'relations', 0)?->value;
+        $callback = ArgUtil::boundTo($args, 'callback', 1)?->value;
+        $resolved = [];
+        $result = self::eagerLoadParams($event, $args, $source, $resolved);
+
+        $closures = $relations instanceof Array_ ? self::closureLiterals($relations) : [];
+        if ($relations instanceof String_ && $event->getMethodNameLowercase() === 'with' && ($callback instanceof Closure || $callback instanceof ArrowFunction)) {
+            $closures[] = $callback;
+        }
+
+        foreach ($closures as $closure) {
+            self::inferClosureParam($source, $closure, $resolved[\spl_object_id($closure)] ?? null);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param non-empty-list<Arg> $args
+     * @param array<int, Union> $resolved closure node id => the Relation its param takes
+     * @return list<FunctionLikeParameter>|null
+     */
+    private static function eagerLoadParams(MethodParamsProviderEvent $event, array $args, StatementsAnalyzer $source, array &$resolved): ?array
+    {
+        $method = $event->getMethodNameLowercase();
+        $hosts = self::EAGER_LOAD[$method];
+
+        foreach ($args as $arg) {
+            if ($arg->unpack) {
+                return null;
+            }
+        }
+
+        $relations = ArgUtil::boundTo($args, 'relations', 0)?->value;
+        $callback = $method === 'with' ? ArgUtil::boundTo($args, 'callback', 1)?->value : null;
+        $callbackForm = $relations instanceof String_
+            && !\str_contains($relations->value, ':')
+            && ($callback instanceof Closure || $callback instanceof ArrowFunction)
+            && !($callback->params[0]->variadic ?? false);
+        $call = (self::$calls[$args[0]] ?? null)?->get();
+
+        if ($call === null || !$relations instanceof Array_ && !$callbackForm) {
+            return null;
+        }
+
+        $dispatched = $event->getFqClasslikeName();
+        $codebase = $source->getCodebase();
+        $host = null;
+        foreach ($hosts as $candidate) {
+            if (ClassLineage::isA($codebase, $dispatched, $candidate)) {
+                $host = $candidate;
+                break;
+            }
+        }
+
+        // `Model::with('a', fn)` is `func_get_args()`: the closure sits under a numeric key and is never applied.
+        $target = $host === null || ($callbackForm && $host !== Builder::class)
+            ? null
+            : self::eagerTarget($source, $call, $dispatched, $method, $host);
+        if ($target === null) {
+            return null;
+        }
+
+        [$model, $declaring] = $target;
+
+        if ($relations instanceof String_ && $callback instanceof Expr) {
+            $relation = self::pathBuildersAreLaravels($codebase, $model, $relations->value)
+                ? self::resolveRelation($codebase, $model, $relations->value, true)[1] ?? null
+                : null;
+            if (!$relation instanceof TGenericObject) {
+                return null;
+            }
+
+            $resolved[\spl_object_id($callback)] = new Union([$relation]);
+
+            return self::withParamType($codebase, $declaring, 'callback', new Union([new TClosure(self::queryParams([new Union([$relation])]), Type::getMixed())]));
+        }
+
+        if (!$relations instanceof Array_) {
+            return null;
+        }
+
+        $counts = [];
+        $plain = self::countPaths($relations, '', $counts);
+        $properties = self::walkEagerLoad($source, $model, $relations, '', $method !== 'loadmissing', $counts, $resolved);
+        // A spread or computed key at any depth may hide a repeated path: no closure of the call is typed.
+        if ($properties === null || !$plain) {
+            $resolved = [];
+        }
+
+        $shape = $properties === null ? null : self::eagerShape($properties, self::declaredElement($codebase, $declaring));
+
+        return $shape instanceof Union ? self::withParamType($codebase, $declaring, 'relations', $shape) : null;
+    }
+
+    /**
+     * The model the eager-load call runs on and Laravel's own declaration of the method (a userland override keeps
+     * its own contract and declines).
+     *
+     * @param class-string $host the family that declares the method: Builder, Model or Eloquent Collection
+     * @return array{class-string<Model>, MethodIdentifier}|null
+     */
+    private static function eagerTarget(StatementsAnalyzer $source, MethodCall|NullsafeMethodCall|StaticCall $call, string $dispatched, string $method, string $host): ?array
+    {
+        $codebase = $source->getCodebase();
+
+        // Every entry point ends in the model's builder `with()`: that delegate must be Laravel's too.
+        if ($host === Builder::class) {
+            $atomic = $call instanceof StaticCall ? null : self::receiverAtomic($source, $call);
+            $receiver = $atomic instanceof TNamedObject && $atomic->extra_types !== [] ? null : self::receiverModel($source, $call, $dispatched);
+            if ($receiver === null) {
+                return null;
+            }
+
+            [$model, $forwards] = $receiver;
+            $declaring = self::builderDeclaring($codebase, $dispatched, $method, $model, $forwards);
+            $delegate = $method === 'withonly' ? self::builderDeclaring($codebase, $dispatched, 'with', $model, $forwards) : $declaring;
+
+            return $declaring instanceof MethodIdentifier && $delegate instanceof MethodIdentifier ? [$model, $declaring] : null;
+        }
+
+        $model = self::declaredReceiverModel($source, $call, $dispatched, $method, $host);
+        $declaring = $model === null ? null : self::declaredBy($codebase, $dispatched, $method, $host);
+        $collection = $host === Model::class ? CustomCollectionHandler::getCollectionClassForModel($model ?? '') ?? EloquentCollection::class : $dispatched;
+
+        return $model !== null
+            && $declaring instanceof MethodIdentifier
+            && self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), 'with') instanceof MethodIdentifier
+            && ($method !== 'loadmissing' || self::collectionIsLaravels($codebase, $collection))
+            ? [$model, $declaring]
+            : null;
+    }
+
+    /**
+     * Whether the collection class runs Laravel's own `loadMissing()` and the `load()` it delegates to.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function collectionIsLaravels(Codebase $codebase, string $class): bool
+    {
+        return self::declaredBy($codebase, $class, 'loadmissing', EloquentCollection::class) instanceof MethodIdentifier
+            && self::declaredBy($codebase, $class, 'load', EloquentCollection::class) instanceof MethodIdentifier;
+    }
+
+    /**
+     * The model of a Model or Eloquent Collection receiver that is exactly the dispatched class: a static
+     * `Model::with()`, an instance `load()`/`loadMissing()`, or a Collection's `TModel`. Unions, intersections, template
+     * types, `static`/`self` class names and a Collection without a known model name none.
+     *
+     * @param class-string $host
+     * @return class-string<Model>|null
+     */
+    private static function declaredReceiverModel(StatementsAnalyzer $source, MethodCall|NullsafeMethodCall|StaticCall $call, string $dispatched, string $method, string $host): ?string
+    {
+        $codebase = $source->getCodebase();
+
+        if ($call instanceof StaticCall) {
+            $class = $call->class instanceof Name ? ClassLikeAnalyzer::getFQCLNFromNameObject($call->class, $source->getAliases()) : null;
+
+            return $method === 'with' && $class !== null && \strcasecmp($class, $dispatched) === 0 && ClassLineage::isA($codebase, $class, Model::class)
+                ? $class
+                : null;
+        }
+
+        $atomic = $method === 'with' ? null : self::receiverAtomic($source, $call);
+        if (!$atomic instanceof TNamedObject || $atomic->extra_types !== [] || \strcasecmp($atomic->value, $dispatched) !== 0) {
+            return null;
+        }
+
+        return $host === Model::class
+            ? (ClassLineage::isA($codebase, $atomic->value, Model::class) ? $atomic->value : null)
+            : self::projectedModel($codebase, $atomic, EloquentCollection::class, 'TModel');
+    }
+
+    /**
+     * Whether `$class::$method` is declared by `$declaringClass` itself: a userland override, or a trait that
+     * supplies one, makes another class the declaring one.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function declaredBy(Codebase $codebase, string $class, string $method, string $declaringClass): ?MethodIdentifier
+    {
+        $declaring = $codebase->getDeclaringMethodId($class . '::' . $method);
+        $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
+
+        return $declaring instanceof MethodIdentifier && \strcasecmp($declaring->fq_class_name, $declaringClass) === 0 ? $declaring : null;
+    }
+
+    /**
+     * Counts how often each flattened path occurs, as `prepareNestedWithRelationships()` builds them: an
+     * array-valued key (a prefix, `:columns` stripped), any other string key, and a plain numeric-keyed name.
+     * Laravel composes the constraints of a repeated path, so none of its closures receives the bare Relation.
+     *
+     * @param array<string, int> $counts
+     * @return bool false when a spread or computed key occurs at any depth
+     * @psalm-capabilities read-props|write-this-props|write-refs
+     */
+    private static function countPaths(Array_ $array, string $prefix, array &$counts): bool
+    {
+        $plain = true;
+
+        foreach ($array->items as $item) {
+            if (!$item instanceof ArrayItem || $item->unpack || $item->byRef || ($item->key instanceof Expr && !$item->key instanceof String_ && !$item->key instanceof Int_)) {
+                $plain = false;
+
+                continue;
+            }
+
+            if ($item->key instanceof String_) {
+                $path = $prefix . RelationPath::withoutColumns($item->key->value);
+            } elseif ($item->value instanceof String_) {
+                $path = $prefix . RelationPath::withoutColumns($item->value->value);
+            } else {
+                continue;
+            }
+
+            $counts[$path] = ($counts[$path] ?? 0) + 1;
+
+            if ($item->key instanceof String_ && $item->value instanceof Array_) {
+                $plain = self::countPaths($item->value, $path . '.', $counts) && $plain;
+            }
+        }
+
+        return $plain;
+    }
+
+    /**
+     * Resolves the closures of an eager-load array literal as Laravel flattens it into `$resolved`, and collects the
+     * param shape that mirrors them: closure-valued literal keys that resolved to a Relation.
+     *
+     * Declines a closure (it stays out of `$resolved` and the shape) on a `:columns` key, a repeated path, a nested
+     * array where `$allowNested` is false, a path through an overriding builder, or a path that does not resolve to a Relation.
+     *
+     * @param class-string<Model> $model
+     * @param array<string, int> $counts
+     * @param array<int, Union> $resolved
+     * @return array<string, Union>|null null when an entry is not a plain literal (a spread, a computed key): the
+     *         shape would reject what the literal really holds, or hide a repeated path: the call types no closure.
+     */
+    private static function walkEagerLoad(StatementsAnalyzer $source, string $model, Array_ $array, string $prefix, bool $allowNested, array $counts, array &$resolved): ?array
+    {
+        $properties = [];
+        $clean = true;
+
+        foreach ($array->items as $item) {
+            if (!$item instanceof ArrayItem || $item->unpack || $item->byRef) {
+                $clean = false;
+            } elseif ($item->key instanceof String_) {
+                $key = $item->key->value;
+                $path = $prefix . RelationPath::withoutColumns($key);
+                $value = $item->value;
+
+                if ($value instanceof Array_) {
+                    $nested = $allowNested || $prefix === '' ? self::walkEagerLoad($source, $model, $value, $path . '.', $allowNested, $counts, $resolved) : [];
+                    $shape = $nested === null ? null : self::eagerShape($nested, Type::getMixed());
+                    $clean = $clean && $nested !== null;
+                    if ($shape instanceof Union) {
+                        $properties[$key] = $shape;
+                    }
+                } elseif ($value instanceof Closure || $value instanceof ArrowFunction) {
+                    $relation = !\str_contains($key, ':') && ($counts[$path] ?? 0) === 1 && ($allowNested || $prefix === '') && self::pathBuildersAreLaravels($source->getCodebase(), $model, $path)
+                        ? self::resolveRelation($source->getCodebase(), $model, $path, true)[1] ?? null
+                        : null;
+
+                    if ($relation instanceof TGenericObject) {
+                        $relationType = new Union([$relation]);
+                        $resolved[\spl_object_id($value)] = $relationType;
+                        $properties[$key] = new Union([new TClosure(self::queryParams([$relationType]), Type::getMixed())]);
+                    }
+                }
+            } elseif ($item->key instanceof Expr && !$item->key instanceof Int_) {
+                $clean = false;
+            }
+        }
+
+        return $clean ? $properties : null;
+    }
+
+    /**
+     * The element type the declared `$relations` param gives an array entry (mixed when it is not an array type):
+     * entries the literal does not mirror keep exactly that.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function declaredElement(Codebase $codebase, MethodIdentifier $declaring): Union
+    {
+        try {
+            $params = $codebase->methods->getStorage($declaring)->params;
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
+            return Type::getMixed();
+        }
+
+        foreach ($params as $param) {
+            foreach ($param->name === 'relations' && $param->type instanceof Union ? $param->type->getAtomicTypes() : [] as $atomic) {
+                if ($atomic instanceof TArray) {
+                    return $atomic->type_params[1];
+                }
+            }
+        }
+
+        return Type::getMixed();
+    }
+
+    /**
+     * `array{key?: Closure(Relation): mixed, ...<array-key, $element>}`: the mirrored entries optional (a
+     * spread-free literal always has them). Null: nothing resolved, so there is nothing to check beyond the stub.
+     *
+     * @param array<string, Union> $properties
+     * @psalm-capabilities read-props
+     */
+    private static function eagerShape(array $properties, Union $element): ?Union
+    {
+        if ($properties === []) {
+            return null;
+        }
+
+        return new Union([TKeyedArray::make(
+            \array_map(static fn(Union $property): Union => $property->setPossiblyUndefined(true), $properties),
+            null,
+            [Type::getArrayKey(), $element],
+        )]);
+    }
+
+    /**
+     * The closure literals anywhere in a relations array, nested arrays included.
+     *
+     * @return list<Closure|ArrowFunction>
+     * @psalm-capabilities read-props
+     */
+    private static function closureLiterals(Array_ $array): array
+    {
+        $closures = [];
+
+        foreach ($array->items as $item) {
+            if (!$item instanceof ArrayItem) {
+                continue;
+            }
+
+            if ($item->value instanceof Closure || $item->value instanceof ArrowFunction) {
+                $closures[] = $item->value;
+            } elseif ($item->value instanceof Array_) {
+                \array_push($closures, ...self::closureLiterals($item->value));
+            }
+        }
+
+        return $closures;
+    }
+
+    /**
+     * Psalm infers an untyped closure param from the expected type only for a closure that is itself the argument
+     * (`ArgumentsAnalyzer::handleClosureArg()`); inside an array literal it stays mixed whatever shape the params
+     * answer expects (probed, decisions.md). So the same write happens here: type and `type_inferred` on the
+     * closure's storage, before the closure is analyzed.
+     *
+     * The storage outlives a pass (Psalm re-analyzes loops and branches, and a trait body once per consuming class),
+     * so every pass restates the closure's Relation: it writes the pass's type, or revokes this handler's earlier
+     * write when the pass declines. A type the handler did not write is never touched.
+     */
+    private static function inferClosureParam(StatementsAnalyzer $source, Closure|ArrowFunction $closure, ?Union $type): void
+    {
+        $closureId = \strtolower($source->getFilePath()) . ':' . $closure->getLine() . ':' . (int) $closure->getAttribute('startFilePos') . ':-:closure';
+
+        try {
+            $param = $source->getCodebase()->getClosureStorage($source->getFilePath(), $closureId)->params[0] ?? null;
+        } catch (\UnexpectedValueException) {
+            return;
+        }
+
+        if (!$param instanceof FunctionLikeParameter || $param->is_variadic) {
+            return;
+        }
+
+        if (!self::$written instanceof \WeakMap) {
+            /** @psalm-var \WeakMap<FunctionLikeParameter, true> $fresh */
+            $fresh = new \WeakMap();
+            self::$written = $fresh;
+        }
+
+        $written = self::$written;
+        $ours = isset($written[$param]);
+
+        if ($type instanceof Union && ($ours || !$param->type instanceof Union)) {
+            $param->type = $type;
+            $param->type_inferred = true;
+            $written[$param] = true;
+        } elseif ($ours) {
+            $param->type = null;
+            $param->type_inferred = false;
+            unset($written[$param]);
+        }
+    }
+
+    /**
+     * Whether every related model a dot path passes through runs its nested constraints through Laravel's own builder
+     * `with()`: Laravel hands a nested constraint to the related model's builder, so a userland override there keeps
+     * its own contract.
+     *
+     * @param class-string<Model> $model
+     */
+    private static function pathBuildersAreLaravels(Codebase $codebase, string $model, string $path): bool
+    {
+        $segments = \explode('.', $path);
+        \array_pop($segments);
+        $prefix = '';
+
+        foreach ($segments as $segment) {
+            $prefix .= ($prefix === '' ? '' : '.') . $segment;
+            $related = self::resolveRelation($codebase, $model, $prefix, false)[0] ?? null;
+
+            if ($related === null || !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($related), 'with') instanceof MethodIdentifier) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -329,13 +852,8 @@ final class RelationCallbackParamsHandler implements
                 : null;
         }
 
-        $receiver = $source->getNodeTypeProvider()->getType($call->var);
-        $atomics = $receiver instanceof Union
-            ? \array_values(\array_filter($receiver->getAtomicTypes(), static fn($atomic): bool => !$atomic instanceof TNull))
-            : [];
-        $atomic = $atomics[0] ?? null;
-
-        if (\count($atomics) !== 1 || !$atomic instanceof TNamedObject) {
+        $atomic = self::receiverAtomic($source, $call);
+        if (!$atomic instanceof TNamedObject) {
             return null;
         }
 
@@ -349,6 +867,17 @@ final class RelationCallbackParamsHandler implements
             : self::projectedModel($codebase, $atomic, Builder::class, 'TModel');
 
         return $model === null ? null : [$model, $forwards];
+    }
+
+    /** The receiver's one non-null atomic when it is a named object; unions of classes are not narrowed. */
+    private static function receiverAtomic(StatementsAnalyzer $source, MethodCall|NullsafeMethodCall $call): ?TNamedObject
+    {
+        $receiver = $source->getNodeTypeProvider()->getType($call->var);
+        $atomics = $receiver instanceof Union
+            ? \array_values(\array_filter($receiver->getAtomicTypes(), static fn($atomic): bool => !$atomic instanceof TNull))
+            : [];
+
+        return \count($atomics) === 1 && $atomics[0] instanceof TNamedObject ? $atomics[0] : null;
     }
 
     /**
@@ -393,7 +922,7 @@ final class RelationCallbackParamsHandler implements
      */
     private static function resolveRelation(Codebase $codebase, string $model, string $name, bool $eager): ?array
     {
-        $segments = \explode('.', $name);
+        $segments = RelationPath::segments($name, true, false);
         $last = \array_key_last($segments);
         $relation = null;
 

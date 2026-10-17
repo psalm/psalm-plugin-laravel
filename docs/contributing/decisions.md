@@ -248,6 +248,24 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
+### Eager-load constraint closures: a params answer to check, a closure-storage write to infer (#1945)
+
+**Decision:** `RelationCallbackParamsHandler` types the first param of a constraint closure written as a literal array value (`with(['posts' => fn ($q) => ...])`, same for `withOnly()`, `Model::with()`, `load()`, `loadMissing()` on a model or an Eloquent Collection) as the Relation its key resolves to. Two mechanisms, each doing what the other cannot:
+- **Untyped param: write the closure's `FunctionLikeStorage`** (`type` plus `type_inferred`, only when no type is declared), the same write `ArgumentsAnalyzer::handleClosureArg()` does for a direct closure argument. It happens inside the params provider, not in `beforeExpressionAnalysis`: the receiver's type (needed to name the model) is only known once the receiver expression has been analyzed, and the provider runs after that and still before the args are analyzed. Closure storage outlives a pass and Psalm re-analyzes loops and branches (a loop can widen the receiver to a union on pass 2) and a trait body once per consuming class, so every pass restates the closure's Relation: it writes that pass's type, or revokes this handler's earlier write when the pass declines. Ownership is the param object itself (a `WeakMap`), so a declared type, or storage replaced on a file reload, is never touched.
+- **Typed param: the params answer mirrors the literal** (`array{posts?: Closure(HasMany<..>): mixed, ...<array-key, $element>}`, nested arrays recursively), so a declared type that is not the Relation is reported like a direct closure argument, and a compatible one is accepted (the stub's `callable(Relation)` reported a coercion for `fn (HasMany $q)`). `$element` is read from the declared `$relations` param (`mixed` for a stub with none), so entries the literal does not mirror, such as a closure held in a variable, keep the original contract. A spread or computed key anywhere in the literal declines the whole call (no closure typed, no shape): it may hide a repeated path, and the provided type then carries a generic fallback (`...<string, string>`) that Psalm checks against the mirrored closure property (a probed false positive even for a compatible closure).
+
+**Declines beyond the receiver rules (each probed against Laravel's runtime):**
+- A closure-valued key with a `:columns` suffix (`['posts:id' => fn]`, `with('posts:id', fn)`): the suffix stays in the relation name and Laravel throws `RelationNotFoundException`. Only an array-valued key (`['posts:id' => ['comments' => fn]]`) or a plain name has the suffix parsed as a column selection.
+- A flattened path that occurs more than once in the literal (`['a' => ['b' => fn], 'a.b' => fn]`): Laravel composes the constraints, so a closure may receive the previous constraint's return value instead of the Relation.
+- A closure inside a nested array of `loadMissing()`: Laravel 13 flattens it through `Builder::with()` first, Laravel 12.20's `Collection::loadMissing()` ignores nested arrays. Version-gating was judged out of scope; declining is correct on both.
+- A model whose builder overrides `with()`, a custom collection overriding `load()`/`loadMissing()`, or a builder whose inherited `withOnly()` delegates to an overridden `with()`: every entry point ends in the builder's `with()`, so the delegate is checked, not only the outer declaration. The same holds for every related model a dot path or nested array passes through (Laravel hands the nested constraint to that model's builder). An intersection receiver on the Builder branch declines as well.
+
+**Probed dead end:** a keyed-array params answer cannot infer untyped closure params inside an array literal. Psalm 7 leaves such params `mixed` for `array{posts?: Closure(Rel): mixed}`, `array<string, Closure(Rel): mixed>` and nested shapes alike (it contextually types only a closure that is itself the argument), while still reporting a typed closure that mismatches the shape. Hence the storage write.
+
+**Shared path logic:** only the segmentation (`Support\RelationPath`) is shared with `UndefinedModelRelationHandler`. The walks differ (existence check that tolerates gaps vs an exact Relation type that declines on a `MorphTo`), so those guards stay at their consumer. `with('relation', fn)` on a Builder uses the plain slot mechanism; `Model::with('a', fn)` is `func_get_args()` at runtime (the closure lands under a numeric key and is never applied), so it declines.
+
+**See:** [#1945](https://github.com/psalm/psalm-plugin-laravel/issues/1945), `tests/Type/tests/Relation/EagerLoadConstraintParam*Test.phpt`.
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
