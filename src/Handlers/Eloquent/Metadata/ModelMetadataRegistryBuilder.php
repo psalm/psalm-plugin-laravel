@@ -1406,7 +1406,7 @@ final class ModelMetadataRegistryBuilder
     }
 
     /** @psalm-mutation-free */
-    private static function buildColumnInfo(SchemaColumn $column): ColumnInfo
+    public static function buildColumnInfo(SchemaColumn $column): ColumnInfo
     {
         /** @var non-empty-string $name */
         $name = $column->name;

@@ -494,6 +494,14 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Rejected:** refining the slot while keeping it invariant. Every existing plain `Pivot` declaration on a `withPivot()` body then fails with `InvalidReturnStatement` / `InvalidArgument`.
 
+### `withPivot()` columns refine TPivotModel in a handler (#1944)
+
+**Decision:** `BelongsToManyWithPivotHandler` answers `withPivot()` with the receiver whose TPivotModel gains `object{<column>: <type>}`; each type comes from the pivot table's migration, else `mixed`. `created_at` / `updated_at` stay `mixed`: selecting them makes the pivot cast them to Carbon.
+
+**Rejected:**
+- A stub-only refinement. The columns are call arguments and their types live in a migration; no docblock form maps a literal argument list to object-shape keys.
+- Leaving the inferred `Pivot` and relying on Psalm accepting a declared shape. Psalm 7 rc2 compares two object shapes inside an intersection by name only (`ObjectComparator::isIntersectionShallowlyContainedBy`), so any `Pivot&object{...}` passes any declared one, but plain `Pivot` never does. The handler still types columns honestly so nothing breaks once Psalm compares the properties.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens
