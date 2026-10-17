@@ -159,6 +159,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/FactoryModelBindingHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAggregatePropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelObjectShapePropertyFetchHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
@@ -212,6 +213,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelAggregateLoadHandler::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
         Handlers\Eloquent\ModelFactoryMethodTypeProvider::reset();
+        Handlers\Eloquent\ModelObjectShapePropertyFetchHandler::reset();
         Handlers\Eloquent\ModelPropertyAccessorHandler::reset();
         Handlers\Eloquent\ModelPropertyHandler::reset();
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
@@ -405,6 +407,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderNativeStaticReturnTypeHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/ModelObjectShapePropertyFetchHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
         // even when migrations are disabled (the @property branch still applies).
@@ -429,6 +432,8 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Resolves `Model&object{p: T}` property fetches (vimeo/psalm#12110 workaround, #1944).
+        $registration->registerHooksFromClass(Handlers\Eloquent\ModelObjectShapePropertyFetchHandler::class);
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);

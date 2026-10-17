@@ -211,6 +211,22 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **Rejected (draft PR #1579):** strip only when the written offset collides with a fixed parameter. It keeps the genuine finding but reopens the reported #1395 false positive, which sits at the variadic's own offset.
 
+### `Model&object{p: T}` property fetches are resolved by `ModelObjectShapePropertyFetchHandler` (vimeo/psalm#12110, #1944)
+
+**Decision:** A property fetch on a Model intersected with an object shape (`Pivot&object{role: string}`, `Related&object{pivot: P}`) is resolved from the shape by a Before/After-expression handler that rewrites the receiver type only while that one fetch is analysed.
+
+**Why:** In `AtomicPropertyFetchAnalyzer` the intersection fallback is the `elseif` of `if ($class_storage->namedMixins)` and skips final classes. The Model stub carries `@mixin Builder`, so the shape is never consulted and the fetch reports `UndefinedMagicPropertyFetch`; vanilla Psalm accepts the same code on a plain class. This is vimeo/psalm#12110 (fix: vimeo/psalm#12111). BelongsToMany results are `TRelatedModel&object{pivot: TPivotModel}`, so without it `$related->pivot->role` cannot resolve.
+
+**How:** Before(fetch) remembers the property name per receiver node; After(receiver) rewrites the type exactly where `InstancePropertyFetchAnalyzer` reads it (the scoped variable, else the node type) to `object{...shape}&Model`; After(fetch) restores the original. An After-statement hook restores anything a fetch left behind. Only a Model atomic whose class does not itself declare the property is rewritten, other atomics (`null`) are kept so `PossiblyNullPropertyFetch` still fires, and Union flags (taint `parent_nodes`) are preserved.
+
+**Probed dead ends (Psalm 7.0.0-rc2):**
+- A `PropertyTypeProvider` / `PropertyExistenceProvider` cannot do it: the event carries the class name, never the receiver type, so the shape is out of reach.
+- Writing the shape first in a stub (`object{p: T}&TRelatedModel`) makes the fetch resolve, but method calls on the value then fail with `MixedMethodCall`. That is why the rewrite is temporary and per fetch.
+
+**Removal condition:** delete the handler (and its `Plugin` registration and `reset()`) once the minimum supported Psalm contains the vimeo/psalm#12110 fix.
+
+**Accepted limitation:** the `PossiblyNullPropertyFetch` message prints the rewritten receiver (`null|object{extra:int}&Mechanic`). Psalm records no data-flow edge for a shape property, with or without the handler (`ObjectShapePropertyFetchTaintKnownLimitation`).
+
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 
 **Decision:** The `\Closure(self<TModel>): mixed` arm on `Builder::where`, `firstWhere`, `whereNot`, `orWhereNot` is intentionally non-`static`. Users subclassing `Builder` and writing `$this->where(static fn (self $q) => ...)` should type the closure parameter as base `\Illuminate\Database\Eloquent\Builder`, not `self`.
