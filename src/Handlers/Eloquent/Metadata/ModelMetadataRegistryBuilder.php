@@ -15,7 +15,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\RelationMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastsMethodParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
@@ -1399,28 +1398,10 @@ final class ModelMetadataRegistryBuilder
             }
 
             // Preserve original-case keys — Eloquent attribute access is case-sensitive.
-            $columns[$columnName] = self::buildColumnInfo($column);
+            $columns[$columnName] = ColumnInfo::fromSchemaColumn($column);
         }
 
         return new TableSchema($columns);
-    }
-
-    /** @psalm-mutation-free */
-    private static function buildColumnInfo(SchemaColumn $column): ColumnInfo
-    {
-        /** @var non-empty-string $name */
-        $name = $column->name;
-        /** @var non-empty-string $sqlType */
-        $sqlType = $column->type;
-
-        return new ColumnInfo(
-            name: $name,
-            sqlType: $sqlType,
-            nullable: $column->nullable,
-            hasDefault: $column->default instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault,
-            unsigned: $column->unsigned,
-            options: \array_values($column->options),
-        );
     }
 
     /**

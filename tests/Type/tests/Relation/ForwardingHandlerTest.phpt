@@ -64,13 +64,13 @@ function test_scopes_preserves_relation_type(): void {
 function test_belongsToMany_where_preserves_relation_type(): void {
     $r = (new WorkOrder())->parts();
     $_ = $r->where('active', true);
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> */
+    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'> */
 }
 
 function test_belongsToMany_orderBy_preserves_relation_type(): void {
     $r = (new WorkOrder())->parts();
     $_ = $r->orderBy('name');
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> */
+    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'> */
 }
 
 // Non-fluent: first() resolved via Relation stub (workaround for Psalm mixin template bug)

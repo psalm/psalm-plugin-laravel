@@ -432,6 +432,10 @@ final class Plugin implements PluginEntryPointInterface
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
+        // Refines the pivot slot of BelongsToMany/MorphToMany after withPivot()/withTimestamps() (#1944). withPivot() is
+        // declared on the InteractsWithPivotTable trait, so the handler registers for the trait as well as BelongsToMany.
+        require_once __DIR__ . '/Handlers/Eloquent/BelongsToManyPivotColumnsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BelongsToManyPivotColumnsHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Metadata;
 
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault;
+
 /**
  * Snapshot of a single database column inferred from migration schema.
  *
@@ -32,4 +35,27 @@ final readonly class ColumnInfo
         public bool $unsigned = false,
         public array $options = [],
     ) {}
+
+    /**
+     * The single SchemaColumn → ColumnInfo conversion, shared by the metadata builder and the
+     * pivot column resolver so both read a migration column identically.
+     *
+     * @psalm-mutation-free
+     */
+    public static function fromSchemaColumn(SchemaColumn $column): self
+    {
+        /** @var non-empty-string $name */
+        $name = $column->name;
+        /** @var non-empty-string $sqlType */
+        $sqlType = $column->type;
+
+        return new self(
+            name: $name,
+            sqlType: $sqlType,
+            nullable: $column->nullable,
+            hasDefault: $column->default instanceof SchemaColumnDefault,
+            unsigned: $column->unsigned,
+            options: \array_values($column->options),
+        );
+    }
 }

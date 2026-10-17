@@ -27,8 +27,8 @@ final class ColumnTypeMapper
      * Non-nullable base mapping for a schema column. The metadata builder reads this to obtain a
      * column's intrinsic Psalm type for {@see \Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes}
      * casts (whose read path is a passthrough of the raw DB type), letting the cast resolver decide
-     * how to apply nullability on the final union. The handler's read path wraps it with nullability
-     * via {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler}.
+     * how to apply nullability on the final union. Schema-only reads wrap it with nullability
+     * via {@see mapColumnType()}.
      */
     public static function mapBaseType(ColumnInfo $column): Union
     {
@@ -50,6 +50,22 @@ final class ColumnTypeMapper
             )]),
             default => Type::getMixed(),
         };
+    }
+
+    /**
+     * Read type of a schema column as an Eloquent attribute: {@see mapBaseType()} plus `null` when the
+     * column is nullable. Shared by the model-property read path and the pivot column resolver so a
+     * column reads identically on a model and on a `withPivot()` pivot.
+     */
+    public static function mapColumnType(ColumnInfo $column): Union
+    {
+        $type = self::mapBaseType($column);
+
+        if ($column->nullable) {
+            return Type::combineUnionTypes($type, Type::getNull());
+        }
+
+        return $type;
     }
 
     /**
