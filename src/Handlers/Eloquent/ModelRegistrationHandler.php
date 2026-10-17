@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\HasRelationships;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
@@ -69,6 +70,13 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
     {
         $codebase = $event->getCodebase();
         $modelFqcn = \strtolower(Model::class);
+
+        // Return-type providers fall back to the declaring trait of an inherited method, so this one
+        // registration reaches `$this->morphTo()` in every model, including those the loop below skips.
+        $codebase->methods->return_type_provider->registerClosure(
+            HasRelationships::class,
+            ModelRelationReturnTypeHandler::getEnclosingMorphToReturnType(...),
+        );
 
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             if (!isset($storage->parent_classes[$modelFqcn])) {
