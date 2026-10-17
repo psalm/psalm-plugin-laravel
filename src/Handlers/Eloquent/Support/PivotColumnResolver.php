@@ -104,7 +104,7 @@ final class PivotColumnResolver
             return \str_contains($table->value, '\\') ? false : $table->value;
         }
 
-        if ($table instanceof Expr && !($table instanceof Expr\ConstFetch && $table->name->toLowerString() === 'null')) {
+        if ($table instanceof Expr && (!$table instanceof Expr\ConstFetch || $table->name->toLowerString() !== 'null')) {
             return false;
         }
 
