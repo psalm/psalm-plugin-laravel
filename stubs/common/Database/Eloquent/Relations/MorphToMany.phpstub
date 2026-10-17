@@ -3,10 +3,14 @@
 namespace Illuminate\Database\Eloquent\Relations;
 
 /**
+ * TPivotModel is covariant: withPivot() / withTimestamps() refine it to `Pivot&object{...}` (#1944), and an
+ * existing `BelongsToMany<R, self, Pivot, 'pivot'>` declaration must still accept the refined type. It is an
+ * input only inside the callable parameters of chunk() / each(), which are covariant positions.
+ *
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
  * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
  * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
- * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\MorphPivot
+ * @template-covariant TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\MorphPivot
  * @template TAccessor of string = 'pivot'
  * @template-extends BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>

@@ -525,6 +525,17 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
 - Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
 
+### `BelongsToMany` / `MorphToMany` are covariant in `TPivotModel` (#1944)
+
+**Decision:** `@template-covariant TPivotModel` in all four class headers: `stubs/common/.../BelongsToMany.phpstub`, `stubs/13/...`, `stubs/13.5.0/...` and `stubs/common/.../MorphToMany.phpstub`.
+
+**Why:** `withPivot()` / `withTimestamps()` refine the pivot slot to `Pivot&object{...}`, while a relation method commonly declares `BelongsToMany<R, self, Pivot, 'pivot'>`. With an invariant slot the refined inferred type cannot satisfy that declaration. Covariance accepts it, and also a `Pivot&object{role: string}` or custom pivot class widened to `Pivot`.
+
+**Boundaries:**
+- Every header must carry it: the version-dir stubs re-declare the class and the newest loaded one wins, so changing only `common` has no effect on Laravel 13.x. `BelongsToManyPivotCovarianceTest.phpt` runs on every matrix cell, so each cell pins the header it loads.
+- `TPivotModel` is an input only in the callable parameters of `chunk()` / `each()` and friends, which are covariant positions.
+- Accepted hole: a helper typed `BelongsToMany<R, D, Pivot, 'pivot'>` receiving a refined relation can mutate the same object through `using()`, `as()`, `withPivot()` or `withTimestamps()` (each mutates `$this` at runtime and returns it), while the caller keeps its narrower static type. Laravel's own PHPDoc has the same hole.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens
