@@ -23,14 +23,16 @@ final class ShadowTarget
     /**
      * @param string $templateSource   the template's bytes, which a `Raw` location indexes into
      * @param string $templateName     the display name Psalm's reporters print for the template
-     * @param bool   $isComponentView  {@see PreludeBuilder::isComponentView()} on $templateSource;
-     *                                 computed once here rather than per issue in the relocator
+     * @param bool   $isComponentView  {@see PreludeBuilder::isComponentView()} on $templateSource, or
+     *                                 a view {@see ComponentViewRegistry} seeds; computed once here
+     *                                 rather than per issue in the relocator
      * @param string $markerPrefix     the prefix the shadow's marker comments actually carry, from
      *                                 {@see ShadowRegistry::markerPrefixFor()}. Passed in rather
      *                                 than derived from $templateSource: the prefix is a salted hash
      *                                 of the template, and $templateSource is read at relocation
      *                                 time, so a template edited since the compile would yield a
      *                                 prefix matching nothing in the shadow.
+     * @param bool   $attributesFromTag {@see PreludeBuilder::declaresTagAttributes()} on the shadow
      */
     public function __construct(
         public readonly ShadowEntry $entry,
@@ -38,6 +40,7 @@ final class ShadowTarget
         public readonly string $templateName,
         public readonly bool $isComponentView,
         private readonly string $markerPrefix,
+        public readonly bool $attributesFromTag = false,
     ) {}
 
     public function markerPrefix(): string

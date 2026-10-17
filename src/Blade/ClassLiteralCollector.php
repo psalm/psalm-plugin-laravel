@@ -31,14 +31,18 @@ final class ClassLiteralCollector
     private const CANDIDATE_PATTERN = '/^\\\\?[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(?:\\\\[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*)+$/';
 
     /**
+     * @param array<array-key, array{0: int, 1: string, 2: int}|string> $tokens {@see \token_get_all()}
+     *                                                                    output, shared with the
+     *                                                                    other per-shadow scans
+     *
      * @return list<string> deduped, `\`-stripped FQCN candidates found in the source's string
      *                      literals
      */
-    public function collectFromSource(string $php): array
+    public function collectFromTokens(array $tokens): array
     {
         $candidates = [];
 
-        foreach (\token_get_all($php) as $token) {
+        foreach ($tokens as $token) {
             if (!\is_array($token) || $token[0] !== \T_CONSTANT_ENCAPSED_STRING) {
                 continue;
             }

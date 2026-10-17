@@ -25,8 +25,7 @@ final class TemplateContract
     ) {}
 
     /**
-     * @return array<string, string> variable name (without $) => FQCN, the channel
-     *                                {@see ShadowCompiler::compile()} and {@see PreludeBuilder::build()} expect
+     * @return array<string, string> variable name (without $) => declared type string
      */
     public function contractVars(): array
     {

@@ -81,14 +81,24 @@ function class_uses_recursive($class) {}
  *
  * $value has no type declaration in Laravel source; htmlspecialchars() coerces it
  * to string at runtime (no declare(strict_types=1) in helpers.php), so any
- * \Stringable is accepted and correctly escaped, not just the listed scalars.
+ * \Stringable is accepted and correctly escaped, not just the listed scalars. The same
+ * coercion renders a bool as '1' / '', so bool is accepted too.
  *
- * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\BackedEnum|\Stringable|string|int|float|null  $value
+ * \Illuminate\Contracts\View\View is accepted although the contract extends only
+ * Renderable: view(), Component::render() and View::with() are all typed as the
+ * contract, but its only framework implementation (\Illuminate\View\View) is
+ * Htmlable, so e() takes the toHtml() branch at runtime (#1776).
+ *
+ * Specialized per call site: the escape strips only html/has_quotes, so without it every other
+ * kind reaching any `e()` call (a `{{ decrypt($x) }}` secret) would reach every `{{ }}` echo.
+ *
+ * @param  \Illuminate\Contracts\Support\DeferringDisplayableValue|\Illuminate\Contracts\Support\Htmlable|\Illuminate\Contracts\View\View|\BackedEnum|\Stringable|string|int|float|bool|null  $value
  * @param  bool  $doubleEncode
  * @return string
  *
  * @psalm-taint-escape html
  * @psalm-taint-escape has_quotes
+ * @psalm-taint-specialize
  * @psalm-flow ($value) -> return
  */
 function e($value, $doubleEncode = true) {}

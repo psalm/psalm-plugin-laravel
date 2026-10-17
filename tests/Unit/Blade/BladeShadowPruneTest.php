@@ -27,7 +27,10 @@ final class BladeShadowPruneTest extends TestCase
 
     private const COPIED_FILES = [
         'app/Greeter.php',
+        // bootstrap/app.php require_once's the `<x-chip>` class component (#1701) unconditionally too.
+        'app/View/Components/Chip.php',
         'app/Providers/LivewireStubProvider.php',
+        'app/Providers/PrefixedTagStubProvider.php',
         // bootstrap/app.php require_once's both of these unconditionally (#1505's
         // RouteHelperStubProvider); the scratch copy's boot fatals without them, whether or not any
         // copied template actually uses the @routes/@bogusroute directives they register.

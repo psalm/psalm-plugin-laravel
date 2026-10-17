@@ -11,7 +11,7 @@ use Psalm\LaravelPlugin\Cli\AnnotateCommand;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Output\NullOutput;
+use Symfony\Component\Console\Output\BufferedOutput;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -178,7 +178,7 @@ final class AnnotateCommandTest extends TestCase
             'dryRun' => true,
             'changed' => ['a.blade.php' => ['title']],
             'failures' => ['b.blade.php' => 'unreadable'],
-            'diff' => "+{{-- @var string \$title --}}\n",
+            'diff' => "+ * @var string \$title\n",
         ]));
     }
 
@@ -200,8 +200,29 @@ final class AnnotateCommandTest extends TestCase
                 'dryRun' => $dryRun,
                 'changed' => ['a.blade.php' => ['title']],
                 'failures' => [],
-                'diff' => "+{{-- @var string \$title --}}\n",
+                'diff' => "+ * @var string \$title\n",
             ]));
+        }
+    }
+
+    #[Test]
+    public function lists_the_names_no_call_site_types_instead_of_claiming_every_template_is_declared(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => [],
+                'failures' => [],
+                'diff' => '',
+                'unknown' => ['a.blade.php' => ['rows', 'title']],
+            ], $output));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('a.blade.php (rows, title)', $display);
+            $this->assertStringContainsString('type unknown', $display);
+            $this->assertStringNotContainsString('Every template already declares', $display);
         }
     }
 
@@ -211,14 +232,14 @@ final class AnnotateCommandTest extends TestCase
      *
      * @param array<string, mixed> $published
      */
-    private function reportExitCode(array $published): int
+    private function reportExitCode(array $published, ?BufferedOutput $output = null): int
     {
         $controlFile = $this->tempDir . \DIRECTORY_SEPARATOR . 'control.json';
         \file_put_contents($controlFile, (string) \json_encode($published));
 
         $command = new AnnotateCommand();
         $report = new \ReflectionMethod($command, 'report');
-        $io = new SymfonyStyle(new ArrayInput([]), new NullOutput());
+        $io = new SymfonyStyle(new ArrayInput([]), $output ?? new BufferedOutput());
 
         /** @var int */
         return $report->invoke($command, $io, $controlFile, 0);

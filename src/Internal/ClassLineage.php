@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TTemplateParam;
+use Psalm\Type\Union;
 
 /**
  * Class ancestry from Psalm's class storage, never PHP's autoloader.
@@ -85,6 +90,55 @@ final class ClassLineage
         $storageProvider = $codebase->classlike_storage_provider;
 
         return $storageProvider->has($class) ? $storageProvider->get($class) : null;
+    }
+
+    /**
+     * What a receiver atomic binds an ancestor's template to (`Builder::TModel`, `Enumerable::TKey`): the
+     * receiver's own type param when the ancestor is the receiver itself, a type the subclass extends it
+     * with (`@extends Collection<int, X>`), or the receiver's type param at the position of the template it
+     * forwards, matched by the defining class (a name match alone would read another slot).
+     *
+     * `template_extended_params` states each ancestor's template in its DIRECT child's terms, so a forwarded
+     * template (`TRelatedModel:HasOneOrMany`) is followed up the chain until the receiver's own template.
+     * Null when nothing is provable: unknown or unpopulated class, no such ancestor, a non-generic receiver
+     * whose own template is forwarded, or a chain that does not end.
+     *
+     * @param class-string $ancestor
+     * @psalm-capabilities read-props
+     */
+    public static function projectedTemplate(Codebase $codebase, TNamedObject $atomic, string $ancestor, string $template): ?Union
+    {
+        $typeParams = $atomic instanceof TGenericObject ? $atomic->type_params : [];
+
+        try {
+            $storage = $codebase->classlike_storage_provider->get($atomic->value);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
+
+        if (\strcasecmp($storage->name, $ancestor) === 0) {
+            $position = \array_search($template, \array_keys($storage->template_types ?? []), true);
+
+            return $position === false ? null : ($typeParams[$position] ?? null);
+        }
+
+        $value = $storage->template_extended_params[$ancestor][$template] ?? null;
+        for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
+            $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
+            if (!$forwarded instanceof TTemplateParam) {
+                return $value;
+            }
+
+            if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
+                $position = \array_search($forwarded->param_name, \array_keys($storage->template_types ?? []), true);
+
+                return $position === false ? null : ($typeParams[$position] ?? null);
+            }
+
+            $value = $storage->template_extended_params[$forwarded->defining_class][$forwarded->param_name] ?? null;
+        }
+
+        return null;
     }
 
     /**

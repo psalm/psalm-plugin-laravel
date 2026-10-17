@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\View\InvokableComponentVariable;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Union;
 
 /**
@@ -24,20 +29,28 @@ use Psalm\Type\Union;
  * and `ManagesComponents::renderComponent()` folds the same array into the returned View).
  *
  * Exposure rules are read off `vendor/laravel/framework/src/Illuminate/View/Component.php`:
- * `data()` is `extractPublicProperties() + extractPublicMethods()`, both filtered by the shared
- * `shouldIgnore()` — a `__`-prefixed name, or one of `ignoredMethods()`. Properties additionally
- * drop statics; methods do not.
+ * `data()` is `array_merge(extractPublicProperties(), extractPublicMethods())`, both filtered by
+ * the shared `shouldIgnore()` — a `__`-prefixed name, or one of `ignoredMethods()`. Properties
+ * additionally drop statics; methods do not. A method wins a name a property also has.
  *
- * `$except` and an overridden `ignoredMethods()` only ever REMOVE names, so ignoring them leaves
- * this set a superset of the real one — the safe direction, because a name in the set only ever
- * silences a report. An overridden `data()` can ADD names, which nothing static can enumerate, so
- * that one opens the set instead.
+ * `$except` and an overridden `ignoredMethods()` / `shouldIgnore()` only ever REMOVE names, so
+ * {@see self::forSource()} ignores them and stays a superset of the real set — the safe direction
+ * there, because a name in the set only ever silences a report. {@see self::guaranteedFor()}
+ * declares the names as present, so it declines on them instead. An overridden `data()` or
+ * extraction method can ADD names or change their values, which nothing static can enumerate, so
+ * both consumers treat it as unknowable.
  *
  * @internal
  */
 final class ComponentRenderData
 {
     private const COMPONENT = 'illuminate\view\component';
+
+    /** Userland overrides that can add names or change the values `data()` returns. */
+    private const OPENING_OVERRIDES = ['data', 'extractpublicproperties', 'extractpublicmethods', 'createvariablefrommethod'];
+
+    /** Userland overrides that can only remove names from what `data()` returns. */
+    private const NARROWING_OVERRIDES = ['ignoredmethods', 'shouldignore'];
 
     /**
      * `Component::ignoredMethods()`, lowercased. Applied to properties too: `shouldIgnore()` is
@@ -82,39 +95,110 @@ final class ComponentRenderData
             return null;
         }
 
-        $declaresData = $storage->declaring_method_ids['data'] ?? null;
+        $exposed = self::exposed($codebase, $storage, false);
 
-        if ($declaresData instanceof MethodIdentifier
-            && \strtolower($declaresData->fq_class_name) !== self::COMPONENT
+        return $exposed === null ? [[], false] : [$exposed, true];
+    }
+
+    /**
+     * The keys `Component::data()` hands the view of a class rendered as `<x-…>`, typed by what
+     * every render of the class guarantees: declared property types expanded against the class,
+     * and a method's runtime wrapper. A property with no declared type, or one declared by a
+     * generic class, is left out rather than guessed.
+     *
+     * @return array<string, Union>|null null when the key set is not knowable: a userland
+     *         `$except`, a narrowing or opening override, or an unresolvable declaring class
+     */
+    public static function guaranteedFor(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        if (!isset($storage->parent_classes[self::COMPONENT])
+            || self::overridesAny($storage, self::NARROWING_OVERRIDES)
+            || \strtolower($storage->declaring_property_ids['except'] ?? '') !== self::COMPONENT
         ) {
-            // A userland data() can add keys no static walk can enumerate.
-            return [[], false];
+            return null;
         }
 
-        $data = self::publicProperties($codebase, $storage);
+        $exposed = self::exposed($codebase, $storage, true);
+
+        if ($exposed === null) {
+            return null;
+        }
+
+        $guaranteed = [];
+
+        foreach ($exposed as $name => $type) {
+            // A method variable is already expanded with `static` collapsed, so this pass leaves it as is.
+            $expanded = TypeExpander::expandUnion(
+                $codebase,
+                $type,
+                $storage->name,
+                $storage->name,
+                $storage->parent_class,
+                final: $storage->final,
+            );
+
+            if (!$expanded->isMixed()) {
+                $guaranteed[$name] = $expanded;
+            }
+        }
+
+        return $guaranteed;
+    }
+
+    /**
+     * @param bool $typedOnly skip a property with no declared type or a generic declaring class
+     *
+     * @return array<string, Union>|null
+     */
+    private static function exposed(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
+    {
+        if (self::overridesAny($storage, self::OPENING_OVERRIDES)) {
+            return null;
+        }
+
+        $data = self::publicProperties($codebase, $storage, $typedOnly);
 
         if ($data === null) {
-            return [[], false];
+            return null;
         }
 
         $methods = self::publicMethods($codebase, $storage);
 
         if ($methods === null) {
-            return [[], false];
+            return null;
         }
 
-        // Properties win: Laravel's array_merge() puts the method array second, but a name cannot be
-        // both a property and a method, so the order only matters for the types carried here.
-        return [$data + $methods, true];
+        // array_merge() with the method array second: a method wins a name a property also has.
+        return $methods + $data;
     }
 
     /**
+     * @param list<lowercase-string> $methodNames
+     *
+     * @psalm-mutation-free
+     */
+    private static function overridesAny(ClassLikeStorage $storage, array $methodNames): bool
+    {
+        foreach ($methodNames as $methodName) {
+            $declaring = $storage->declaring_method_ids[$methodName] ?? null;
+
+            if ($declaring instanceof MethodIdentifier && \strtolower($declaring->fq_class_name) !== self::COMPONENT) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param bool $typedOnly skip a property with no declared type, or one a generic class declares
+     *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
      *
      * @psalm-mutation-free
      */
-    private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage): ?array
+    private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
         $properties = [];
 
@@ -138,6 +222,10 @@ final class ComponentRenderData
                 continue;
             }
 
+            if ($typedOnly && ($property->type === null || $declaring->template_types !== null)) {
+                continue;
+            }
+
             $properties[$name] = $property->type ?? Type::getMixed();
         }
 
@@ -145,13 +233,12 @@ final class ComponentRenderData
     }
 
     /**
-     * Every public method becomes an invokable variable of the same (cased) name. Its value is a
-     * closure Laravel builds at render time, so the type is `mixed`: a template that calls it is
-     * checked by nothing here, and a declaration for it would compare against the wrong thing.
+     * Every public method becomes a variable of the same (cased) name, built by
+     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` of the method's return
+     * type for a method with no parameters at all (optional ones count), a `Closure` of the method's
+     * signature otherwise.
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -174,10 +261,115 @@ final class ComponentRenderData
                 continue;
             }
 
-            $methods[$method->cased_name ?? $methodName] = Type::getMixed();
+            $methods[$method->cased_name ?? $methodName] = $method->params === []
+                ? self::invokableOf($codebase, $storage, $declaring, $method, $methodName)
+                : self::closureOf($codebase, $storage, $declaring, $method, $methodName);
         }
 
         return $methods;
+    }
+
+    /**
+     * `$name()` is `call_user_func()` of the method, so the wrapper carries its return type (`null`
+     * for `void`). Without a declared return type the variable is `mixed`, i.e. not checked, as for a
+     * generic method or declaring class: `InvokableComponentVariable<mixed>` would reject a
+     * template's correct `InvokableComponentVariable<TValue>` declaration.
+     */
+    private static function invokableOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure || !$method->return_type instanceof Union) {
+            return Type::getMixed();
+        }
+
+        $returnType = $expand($method->return_type);
+
+        return new Union([
+            new TGenericObject(InvokableComponentVariable::class, [$returnType->isVoid() ? Type::getNull() : $returnType]),
+        ]);
+    }
+
+    /**
+     * `Closure::fromCallable([$this, $name])` keeps the method's signature, so the variable is that
+     * signature with Psalm's own slots: an untyped parameter or return stays unknown, as it does for
+     * a first-class callable, and the method's own purity carries over.
+     *
+     * A generic method or declaring class is `mixed`, i.e. not checked: nothing binds its templates
+     * here, and a bare `Closure` would reject a template's correct `\Closure(...)` declaration.
+     */
+    private static function closureOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure) {
+            return Type::getMixed();
+        }
+
+        // TypeExpander skips a parameter's `@param-out` type (a gap in Psalm's own callable expansion),
+        // and an unexpanded `self` there becomes the by-ref variable's type in the template.
+        $params = [];
+
+        foreach ($method->params as $param) {
+            $outType = $param->out_type;
+
+            if ($outType instanceof Union) {
+                $param = clone $param;
+                $param->out_type = $expand($outType);
+            }
+
+            $params[] = $param;
+        }
+
+        return $expand(new Union([new TClosure($params, $method->return_type, $method->capabilities)]));
+    }
+
+    /**
+     * Resolves a method's types as the rendered component sees them, or null when nothing can: a
+     * generic method or declaring class (no template is bound here), or an unresolvable appearing class.
+     *
+     * @return (\Closure(Union): Union)|null
+     */
+    private static function expanderFor(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): ?\Closure {
+        if ($method->template_types !== null || $declaring->template_types !== null) {
+            return null;
+        }
+
+        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
+        // only `static` is the rendered component.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
+
+        if (!$appearing instanceof ClassLikeStorage) {
+            return null;
+        }
+
+        // `final: true` collapses `static` to the component: a subclass instance is still one, and
+        // `Component&static` means nothing to a template.
+        return static fn(Union $type): Union => TypeExpander::expandUnion(
+            $codebase,
+            $type,
+            $appearing->name,
+            $storage->name,
+            $appearing->parent_class,
+            final: true,
+        );
     }
 
     /**

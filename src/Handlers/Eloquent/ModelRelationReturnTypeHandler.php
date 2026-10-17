@@ -34,28 +34,20 @@ use Psalm\Type\Union;
  * type it infers from the method body. So `(new WorkOrder())->invoice()` with body
  * `return $this->hasOne(Invoice::class)` resolves to `mixed` (no declared return) or to
  * `HasOne<Model, Model>` (native `: HasOne`, template bounds), even though the factory call
- * itself infers `HasOne<Invoice, WorkOrder&static>` (Psalm 7.0.0-rc1 prints that type in
- * its `MissingReturnType` suggestion, then discards it). A docblock
+ * itself infers `HasOne<Invoice, WorkOrder&static>`. A docblock
  * `@return HasOne<Invoice, $this>` already resolves natively; this handler covers the
  * undocumented majority. It binds the receiver class itself, keeping the `&static` marker
  * when the call is made on `$this` inside a non-final model (#1614).
- *
- * The collapse reaches every handler registered on the Relation hierarchy: the called-on
- * type arrives at `getRelated()` etc. with `[Model, Model]` template params, so fixing
- * the model method's return is the only path that lets the stub `@return TRelatedModel`
- * resolve correctly.
  *
  * Strategy: at codebase population time, {@see ModelRegistrationHandler} registers this
  * closure per concrete Model class. For every method call dispatched on the model,
  * {@see RelationMethodParser} parses the AST body to detect a relation factory call
  * (`$this->hasOne(X::class)`, `$this->belongsTo(X::class)`, ...) and returns the
  * properly templated concrete relation type (e.g. `HasOne<Invoice, WorkOrder>`,
- * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
- * related model is statically declared via a docblock generic
- * (`@phpstan-return MorphTo<User|Post, $this>` — read by
- * {@see RelationMethodParser::extractDocblockRelatedModelType}; the `$this->morphTo()` call such a
- * method returns is narrowed by {@see getEnclosingMorphToReturnType()}); without that the
- * handler defers because the related class is determined at runtime. `HasOneThrough`
+ * `BelongsToMany<Tag, Post>`, not `Relation<...>`). External `MorphTo` calls defer to
+ * Psalm's declared generic type because their target is selected at runtime.
+ * The factory call returned by an annotated relation method is narrowed separately
+ * by {@see getEnclosingMorphToReturnType()}. `HasOneThrough`
  * and `HasManyThrough` require both factory class-string args (related and intermediate)
  * to resolve statically. The declaring-model generic comes from the receiver
  * (`$bindingClass`), not a factory arg, so it is always available; if either factory
@@ -206,7 +198,7 @@ final class ModelRelationReturnTypeHandler
             if ($parsed === null) {
                 $result = null;
             } else {
-                $relatedModelType = self::resolveRelatedModelType($parsed, $codebase, $declaringClass, $methodName);
+                $relatedModelType = self::resolveRelatedModelType($parsed);
 
                 $result = $relatedModelType instanceof \Psalm\Type\Union
                     ? self::buildRelationType(
@@ -342,29 +334,17 @@ final class ModelRelationReturnTypeHandler
     }
 
     /**
-     * Resolve the related-model Union for the parsed relation. Most factories return a
-     * single Model FQCN via `relatedModel`; polymorphic `morphTo` returns null there
-     * but may declare its target via `@psalm-return MorphTo<User|Post, $this>`, which
-     * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
-     * docblock. Returns null when neither path produces a usable type.
+     * Resolve the related-model Union for the parsed relation. Polymorphic `morphTo`
+     * returns null because its target is runtime-selected. Returns null when no statically
+     * known target exists.
      *
      * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @psalm-pure
      */
-    private static function resolveRelatedModelType(
-        array $parsed,
-        Codebase $codebase,
-        string $declaringClass,
-        string $methodName,
-    ): ?Union {
+    private static function resolveRelatedModelType(array $parsed): ?Union
+    {
         if ($parsed['relatedModel'] !== null) {
             return new Union([new TNamedObject($parsed['relatedModel'])]);
-        }
-
-        // morphTo: the factory's first arg is not a class-string, so the parser yields
-        // null. Fall back to the docblock generic for users who annotated their morphTo
-        // with the candidate model union.
-        if ($parsed['relationClass'] === MorphTo::class) {
-            return RelationMethodParser::extractDocblockRelatedModelType($codebase, $declaringClass, $methodName);
         }
 
         return null;

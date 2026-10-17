@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use Composer\InstalledVersions;
 use Illuminate\Foundation\Application;
+use Psalm\LaravelPlugin\Internal\PluginBuildId;
 
 /**
  * Tracks compiled shadow files on disk against a fingerprint of the Blade
@@ -24,10 +24,11 @@ final class ShadowManifest
      * pass, the prelude ({@see PreludeBuilder}), suppression injection, or the `$attributes`
      * restore-point re-assert ({@see AttributesRestoreReassert}). It also invalidates a changed
      * manifest-entry layout. The shadow's own compiled bytes are never fingerprinted (see class
-     * docblock), so this is the only lever that self-invalidates plugin-side derived facts such as
-     * the {@see ViewDataContract} cached in slot 5.
+     * docblock), so besides a change of installed plugin build ({@see PluginBuildId}), which misses
+     * the plugin's own checkout and path repositories, this is the only lever that self-invalidates
+     * plugin-side derived facts such as the {@see ViewDataContract} cached in slot 5.
      */
-    private const MARKER_PASS_VERSION = 0;
+    private const MARKER_PASS_VERSION = 8;
 
     /** {@see self::isFresh()}: the data-includes slot must have been collected for the entry to count as fresh. */
     public const SLOT_DATA_INCLUDES = 1;
@@ -501,10 +502,10 @@ final class ShadowManifest
 
     private function fingerprint(string $source): string
     {
-        // Everything but the source is fixed for the process, and the plugin version costs a
+        // Everything but the source is fixed for the process, and the plugin build id costs a
         // Composer lookup, so the suffix is built once rather than per template.
         $this->fingerprintSuffix ??= '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|'
-            . (InstalledVersions::getVersion('psalm/plugin-laravel') ?? 'unknown') . '|' . $this->environment;
+            . PluginBuildId::current() . '|' . $this->environment;
 
         return \hash('xxh128', $source . $this->fingerprintSuffix);
     }

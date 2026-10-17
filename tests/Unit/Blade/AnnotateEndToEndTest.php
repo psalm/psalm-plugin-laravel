@@ -37,7 +37,10 @@ final class AnnotateEndToEndTest extends TestCase
 
     private const TEMPLATES = [
         'home' => "<h1>{{ \$title }}</h1>\n<p>{{ \$post->slug }}</p>\n",
-        'declared' => "{{-- @var string \$title --}}\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
+        'declared' => "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
+        'headed' => "<?php\n\ndeclare(strict_types=1);\n\n/**\n * Header.\n */\n?>\n<h1>{{ \$title }}</h1>\n",
+        'strict' => "<?php declare(strict_types=1); ?>\n<h1>{{ \$title }}</h1>\n",
+        'note' => "<p>{{ \$note ?? '' }}</p>\n",
         'conflict' => "<p>{{ \$flag }}</p>\n",
         'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
@@ -71,31 +74,61 @@ final class AnnotateEndToEndTest extends TestCase
         $this->annotate();
 
         $this->assertSame(
-            "{{-- @var AnnotateFixture\\Post \$post --}}\n"
-            . "{{-- @var string \$title --}}\n"
-            . self::TEMPLATES['home'],
+            "<?php\n/**\n * @var \\AnnotateFixture\\Post \$post\n * @var string \$title\n */\n?>\n" . self::TEMPLATES['home'],
             $this->template('home'),
         );
     }
 
     #[Test]
-    public function falls_back_to_mixed_when_two_call_sites_disagree(): void
+    public function lists_rather_than_declares_a_name_two_call_sites_disagree_on(): void
     {
-        $this->annotate();
+        $result = $this->annotate();
 
-        $this->assertSame("{{-- @var mixed \$flag --}}\n" . self::TEMPLATES['conflict'], $this->template('conflict'));
+        $this->assertSame(self::TEMPLATES['conflict'], $this->template('conflict'));
+        $this->assertSame(['flag'], $this->unknownFor($result, 'conflict'));
     }
 
     #[Test]
-    public function appends_to_an_existing_contract_block_without_touching_it(): void
+    public function appends_to_an_existing_one_line_docblock_without_touching_its_declaration(): void
     {
         $this->annotate();
 
         $this->assertSame(
-            "{{-- @var string \$title --}}\n"
-            . "{{-- @var string \$extra --}}\n"
-            . "<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
+            "<?php /** @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
             $this->template('declared'),
+        );
+    }
+
+    #[Test]
+    public function appends_to_the_header_docblock_of_a_template_that_has_one(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n\ndeclare(strict_types=1);\n\n/**\n * Header.\n * @var string \$title\n */\n?>\n<h1>{{ \$title }}</h1>\n",
+            $this->template('headed'),
+        );
+    }
+
+    #[Test]
+    public function adds_a_block_after_the_declare_so_it_stays_the_first_statement(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php declare(strict_types=1); ?>\n<?php\n/**\n * @var string \$title\n */\n?>\n<h1>{{ \$title }}</h1>\n",
+            $this->template('strict'),
+        );
+    }
+
+    #[Test]
+    public function declares_a_key_a_closed_call_site_omits_as_nullable_with_an_equals_null_tail(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string|null \$note = null\n */\n?>\n" . self::TEMPLATES['note'],
+            $this->template('note'),
         );
     }
 
@@ -107,7 +140,7 @@ final class AnnotateEndToEndTest extends TestCase
         $this->annotate();
 
         $this->assertSame(
-            "{{-- @var list<string> \$items --}}\n" . self::TEMPLATES['loop'],
+            "<?php\n/**\n * @var list<string> \$items\n */\n?>\n" . self::TEMPLATES['loop'],
             $this->template('loop'),
         );
     }
@@ -116,13 +149,13 @@ final class AnnotateEndToEndTest extends TestCase
     public function never_declares_a_name_the_template_binds_for_itself(): void
     {
         // `@php($heading = ...)` and a closure parameter are template locals, not inputs: declaring
-        // either reports MissingViewVariable at every correct call site.
-        $this->annotate();
+        // either reports MissingViewVariable at every correct call site. The only call site is one the
+        // plugin cannot read, so `$rows` is listed, not declared `mixed`.
+        $result = $this->annotate(dryRun: true);
 
-        $this->assertSame(
-            "{{-- @var mixed \$rows --}}\n" . self::TEMPLATES['locals'],
-            $this->template('locals'),
-        );
+        $this->assertSame(self::TEMPLATES['locals'], $this->template('locals'));
+        $this->assertSame(['rows'], $this->unknownFor($result, 'locals'));
+        $this->assertStringNotContainsString('locals.blade.php', (string) ($result['diff'] ?? ''));
     }
 
     #[Test]
@@ -167,8 +200,8 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(5, $result['changed']);
-        $this->assertStringContainsString("+{{-- @var string \$title --}}", (string) ($result['diff'] ?? ''));
+        $this->assertCount(6, $result['changed']);
+        $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
     #[Test]
@@ -200,6 +233,24 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertIsArray($decoded, 'the annotate pass never reported back');
 
         return $decoded;
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     *
+     * @return mixed the names listed as type-unknown for one template
+     */
+    private function unknownFor(array $result, string $name): mixed
+    {
+        $this->assertIsArray($result['unknown'] ?? null);
+
+        foreach ($result['unknown'] as $path => $names) {
+            if (\str_ends_with((string) $path, "/{$name}.blade.php")) {
+                return $names;
+            }
+        }
+
+        return null;
     }
 
     private function runPsalm(?string $controlFile): void

@@ -44,7 +44,7 @@ final class LeadingModelBuilder extends Builder {}
 final class LabellingBuilder extends Builder
 {
     /**
-     * @param string $relation
+     * @param \Illuminate\Database\Eloquent\Relations\Relation<\Illuminate\Database\Eloquent\Model, \Illuminate\Database\Eloquent\Model, mixed>|string $relation
      * @param string $operator
      * @param int|\Illuminate\Contracts\Database\Query\Expression $count
      * @return $this
@@ -111,6 +111,21 @@ final class TraitOverrideBuilder extends Builder
     use QueriesRelationships, WrapsWhereHas {
         WrapsWhereHas::whereHas insteadof QueriesRelationships;
     }
+}
+
+/**
+ * The mapping carries more than a class name (an object shape): only the model matters, so it still projects.
+ *
+ * @extends Builder<Customer&object{tag: string}>
+ */
+final class ShapedModelBuilder extends Builder {}
+
+function test_model_with_an_object_shape_still_projects(ShapedModelBuilder $builder): void
+{
+    $builder->whereHas('vehicles', function ($q): void {
+        /** @psalm-check-type-exact $q = App\Builders\VehicleBuilder<Vehicle> */
+        $q->whereElectric();
+    });
 }
 
 /** @param DecoyChildBuilder<Supplier, Customer> $builder */

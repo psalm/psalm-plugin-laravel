@@ -21,8 +21,11 @@ final class MarkerPrePass
     (?<args>\((?>\/\*.*?\*\/|\/\/[^\r\n]*|#(?!\[)[^\r\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|[^()'"\/#]|\/(?![\/*])|#(?=\[)|(?&args))*\))
     REGEX;
 
-    /** Constructs Blade never compiles: their bodies reach the output as text, or not at all. */
-    private const INERT_PATTERN = '/@verbatim.*?@endverbatim|\{\{--.*?--\}\}/s';
+    /**
+     * Constructs Blade never compiles: their bodies reach the output as text, or not at all.
+     * `(?<!@)` mirrors BladeCompiler's own `@verbatim` regex: `@@verbatim` is escaped literal text.
+     */
+    private const INERT_PATTERN = '/(?<!@)@verbatim.*?@endverbatim|\{\{--.*?--\}\}/s';
 
     /**
      * $source with Blade comments and `@verbatim` bodies replaced by spaces of equal length
@@ -69,7 +72,9 @@ final class MarkerPrePass
         // on, and the token_get_all() check right below already tells live code from literal
         // text under whichever setting is active — matching broader here and narrowing there
         // keeps this in sync with the SAME tokenizer Blade itself compiles through.
-        $pattern = '/@verbatim.*?@endverbatim|@php.*?@endphp|\{\{--.*?--\}\}|<\?/s';
+        // `(?<!@)` on `@verbatim`/`@php` is BladeCompiler's own rule: `@@php` is escaped literal text,
+        // so it must not open a range that swallows live markers up to the next `@endphp`.
+        $pattern = '/(?<!@)@verbatim.*?@endverbatim|(?<!@)@php.*?@endphp|\{\{--.*?--\}\}|<\?/s';
         $ranges = [];
         $cursor = 0;
         while (\preg_match($pattern, $source, $match, \PREG_OFFSET_CAPTURE, $cursor) === 1) {
@@ -141,6 +146,12 @@ final class MarkerPrePass
             // compileClosingTags() matches `<\/\s*x[-\:][\w\-\:\.]*\s*>`: a marker before the
             // `>` of a wrapped closing tag (Prettier's HTML output) leaves it uncompiled.
             '/<\/\s*(?:x[-:]|livewire:)[\w\-:.]*\s*>/',
+            // Other precompilers owning a tag prefix (`<flux:...>`, `<native:...>`) match just as
+            // strictly (#1910). Kept separate so a failure here (a pathological pseudo tag in a JS
+            // literal) cannot drop the skips above, and an unquoted `<` ends the match, so a
+            // `<demo:tag` in a `<script>` cannot run past the next real tag over unrelated lines.
+            '/<\s*(?!x[-:]|livewire:)[a-z][\w-]*:[\w\-:.]*+(?=[\s\/>])(?:\{\{[^}]*\}\}|@(?:class|style)(\((?:(?>[^()]+)|(?-1))*+\))|"[^"]*"|\'[^\']*\'|[^<>"\'])*+\/?>/s',
+            '/<\/\s*(?!x[-:]|livewire:)[a-z][\w-]*:[\w\-:.]*\s*>/',
         ];
 
         $skip = [];

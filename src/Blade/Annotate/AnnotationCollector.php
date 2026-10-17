@@ -9,6 +9,7 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
+use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
@@ -59,8 +60,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     /**
      * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
      * the project is big enough, and a worker's statics never reach the parent that runs
-     * AfterAnalysis — where, seeing nothing collected, the writer would declare `mixed` for every
-     * variable of every template. False in the parent of a forked run is what discriminates it.
+     * AfterAnalysis — where, seeing nothing collected, the writer would report every variable of
+     * every template untyped. False in the parent of a forked run is what discriminates it.
      */
     private static bool $analyzed = false;
 
@@ -135,7 +136,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     /**
      * Literal view names of every rendering call nested in an expression the chain declined. Over-
-     * marking is the safe direction: the worst it costs is a `mixed` where a type was provable.
+     * marking is the safe direction: the worst it costs is a name left undeclared where a type was provable.
      *
      * @return list<string>
      */
@@ -213,7 +214,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     /**
      * The type to declare for one variable, or null when nothing was proven and the caller should
-     * fall back to `mixed`.
+     * leave it undeclared.
      */
     public static function typeFor(string $viewName, string $name): ?string
     {
@@ -236,18 +237,18 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         // Literal precision is dropped on purpose: two call sites passing 'draft' and 'published'
         // describe one `string` contract, and pinning either would be wrong for the other.
-        $id = $observed->getId(false);
+        $id = self::withAbsoluteClassNames($observed->getId(false));
 
-        // The id is about to be written between `{{--` and `--}}`. An id carrying the terminator
-        // (a literal array key can) would close the comment early and render the rest of the
-        // declaration into the page.
-        if (\str_contains($id, '--}}') || \preg_match('/[\r\n]/', $id) === 1) {
+        // The id is about to be written inside a docblock. An id carrying the terminator
+        // (a literal array key can) would close the docblock early and leave the rest of the
+        // declaration as PHP in the template.
+        if (\str_contains($id, '*/') || \preg_match('/[\r\n]/', $id) === 1) {
             return null;
         }
 
         // The template comment is read back by Psalm on the next run. A type whose id does not
         // survive that round trip is no annotation at all. Any throwable counts: the fallback is
-        // `mixed`, which is never wrong.
+        // no declaration, which is never wrong.
         try {
             Type::parseString($id);
         } catch (\Throwable) {
@@ -267,6 +268,34 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $supplied = self::$alwaysSupplied[$viewName] ?? null;
 
         return $supplied !== null && !isset($supplied[$name]);
+    }
+
+    /**
+     * `getId()` prints a class without its leading `\`, which a docblock in a template resolves through
+     * the template's own `use` imports (`App\Models\User` under `use Other\Models as App` means another
+     * class). The declaration is written absolute, so it means the class it was inferred from and keeps
+     * being type-checked at call sites.
+     */
+    private static function withAbsoluteClassNames(string $id): string
+    {
+        $names = \array_unique(\array_filter(
+            PreludeBuilder::classNamesIn($id) ?? [],
+            static fn(string $name): bool => !\str_starts_with($name, '\\'),
+        ));
+
+        if ($names === []) {
+            return $id;
+        }
+
+        \usort($names, static fn(string $a, string $b): int => \strlen($b) <=> \strlen($a));
+        $alternatives = \implode('|', \array_map(static fn(string $name): string => \preg_quote($name, '/'), $names));
+
+        // Quoted literals are skipped whole; a shape key (`name:`) or a `$parameter` is no class.
+        return (string) \preg_replace_callback(
+            "/'(?:[^'\\\\]|\\\\.)*'|\"(?:[^\"\\\\]|\\\\.)*\"|(?<![\\w\\\\\$-])(?:{$alternatives})(?![\\w\\\\])(?!\\s*\\??:(?!:))/",
+            static fn(array $match): string => $match[0][0] === "'" || $match[0][0] === '"' ? $match[0] : '\\' . $match[0],
+            $id,
+        );
     }
 
     /** True for a type carrying a template parameter or a conditional, at any depth. */

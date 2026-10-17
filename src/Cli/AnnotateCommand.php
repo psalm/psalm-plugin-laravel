@@ -14,7 +14,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Writes the `{{-- @var --}}` declarations a Blade template is missing, taking the types from the
+ * Writes the `@var` docblock declarations a Blade template is missing, taking the types from the
  * `view()` call sites that render it.
  *
  * Runs Psalm as a child process rather than doing its own parse: the call sites' types only exist
@@ -183,7 +183,7 @@ final class AnnotateCommand extends Command
         // The shape is this plugin's own, written back by AnnotateRequest::publish() in the child.
         // The is_array() guard below is the real check: a child that died mid-run leaves the
         // request JSON the command itself wrote, which carries no `changed` key.
-        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, error?: string}|null $result */
+        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, error?: string}|null $result */
         $result = \is_string($raw) ? \json_decode($raw, true) : null;
 
         $error = \is_array($result) ? $result['error'] ?? null : null;
@@ -224,6 +224,18 @@ final class AnnotateCommand extends Command
             }
         }
 
+        $unknown = $result['unknown'] ?? [];
+
+        if ($unknown !== []) {
+            $io->writeln('  Undeclared, type unknown (no call site types them; declare them by hand):');
+
+            foreach ($unknown as $path => $names) {
+                $io->writeln(\sprintf('  %s (%s)', $path, \implode(', ', $names)));
+            }
+
+            $io->newLine();
+        }
+
         // Ahead of both success branches, so a dry run fails too: its diff is then not what a write
         // would produce, and a caller gating on the exit code would ship the difference unnoticed.
         if ($failures !== []) {
@@ -240,7 +252,9 @@ final class AnnotateCommand extends Command
         }
 
         if ($changed === []) {
-            $io->success('Every template already declares the variables it reads.');
+            $io->success($unknown === []
+                ? 'Every template already declares the variables it reads.'
+                : \sprintf('Nothing to annotate: %d template(s) read only names no call site types.', \count($unknown)));
 
             return Command::SUCCESS;
         }

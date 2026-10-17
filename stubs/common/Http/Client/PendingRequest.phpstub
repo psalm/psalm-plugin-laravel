@@ -35,7 +35,7 @@ class PendingRequest
      *
      * @param  string  $method
      * @param  string  $url
-     * @param  array<string, mixed>  $options
+     * @param  array<array-key, mixed>  $options
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
@@ -56,7 +56,7 @@ class PendingRequest
      * Issue a GET request to the given URL.
      *
      * @param  string  $url
-     * @param  array<string, mixed>|string|null  $query
+     * @param  array<array-key, mixed>|string|null  $query
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
@@ -67,7 +67,7 @@ class PendingRequest
      * Issue a POST request to the given URL.
      *
      * @param  string  $url
-     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @param  array<array-key, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|object|null  $data
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
@@ -78,7 +78,7 @@ class PendingRequest
      * Issue a PUT request to the given URL.
      *
      * @param  string  $url
-     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @param  array<array-key, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|object|null  $data
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
@@ -89,7 +89,7 @@ class PendingRequest
      * Issue a PATCH request to the given URL.
      *
      * @param  string  $url
-     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @param  array<array-key, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|object|null  $data
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
@@ -100,7 +100,7 @@ class PendingRequest
      * Issue a DELETE request to the given URL.
      *
      * @param  string  $url
-     * @param  array<string, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<string, mixed>  $data
+     * @param  array<array-key, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|object|null  $data
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
@@ -111,7 +111,7 @@ class PendingRequest
      * Issue a HEAD request to the given URL.
      *
      * @param  string  $url
-     * @param  array<string, mixed>|string|null  $query
+     * @param  array<array-key, mixed>|string|null  $query
      * @return \Illuminate\Http\Client\Response
      *
      * @psalm-taint-sink ssrf $url
