@@ -163,3 +163,24 @@ function two_template_docblock_gets_schema_columns(Order $order): void
     /** @psalm-trace $relation */
     echo \get_debug_type($relation);
 }
+
+function branch_dependent_switch_leaves_dates_untyped(Team $team): void
+{
+    $relation = $team->branchedSwitch(true);
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function branch_dependent_timestamps_leave_dates_untyped(Team $team): void
+{
+    $relation = $team->branchedTimestamps(true);
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function overridden_get_dates_leaves_dates_untyped(Team $team): void
+{
+    $relation = $team->manualDates();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}

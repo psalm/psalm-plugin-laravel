@@ -299,7 +299,7 @@ final class ModelRelationReturnTypeHandler
             return $slot;
         }
 
-        $properties = (new PivotShapeResolver($codebase, $pivotClass, $parsed['pivotTable'], $bindingClass, $parsed['relatedModel']))->properties(
+        $properties = (new PivotShapeResolver($codebase, $pivotClass, $parsed['pivotTable'], $bindingClass, $parsed['relatedModel'], $parsed['pivotBranchDates']))->properties(
             $parsed['pivotColumns'],
             $parsed['pivotTimestamps'],
             [],

@@ -135,4 +135,30 @@ final class Team extends Model
     {
         return $this->belongsToMany(User::class)->withPivot($columns, 'role');
     }
+
+    /** The created-at switch is selected on one branch only: whether `updated_at` is a date depends on the branch. */
+    public function branchedSwitch(bool $flag): BelongsToMany
+    {
+        if ($flag) {
+            return $this->belongsToMany(User::class, 'team_user')->withPivot('updated_at', 'created_at', 'level');
+        }
+
+        return $this->belongsToMany(User::class, 'team_user')->withPivot('updated_at', 'level');
+    }
+
+    /** withTimestamps() on one branch only. */
+    public function branchedTimestamps(bool $flag): BelongsToMany
+    {
+        if ($flag) {
+            return $this->belongsToMany(User::class, 'team_user')->withPivot('updated_at')->withTimestamps();
+        }
+
+        return $this->belongsToMany(User::class, 'team_user')->withPivot('updated_at');
+    }
+
+    /** A custom pivot that overrides getDates() does not convert the dates. */
+    public function manualDates(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->using(ManualDatesPivot::class)->withTimestamps();
+    }
 }

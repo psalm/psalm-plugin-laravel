@@ -59,7 +59,7 @@ use Psalm\Type\Union;
  *
  * @psalm-type PivotTable = array{kind: 'literal'|'model'|'default'|'morph', value: string}
  * @psalm-type PivotTimestamps = array{created: string|false|null, updated: string|false|null}
- * @psalm-type ParsedRelation = array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotTable: ?PivotTable, pivotColumns: list<string>, pivotTimestamps: list<PivotTimestamps>, nullable: bool}
+ * @psalm-type ParsedRelation = array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotTable: ?PivotTable, pivotColumns: list<string>, pivotTimestamps: list<PivotTimestamps>, pivotBranchDates: bool, nullable: bool}
  *
  * @internal
  */
@@ -87,7 +87,7 @@ final class RelationMethodParser
      * table comes from (null when dynamic), the literal `withPivot()` columns, and the `withTimestamps()`
      * arguments, the delegated relation's own first. All empty on every other relation.
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotTable: ?array{kind: 'literal'|'model'|'default'|'morph', value: string}, pivotColumns: list<string>, pivotTimestamps: list<array{created: string|false|null, updated: string|false|null}>, nullable: bool}>
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotTable: ?array{kind: 'literal'|'model'|'default'|'morph', value: string}, pivotColumns: list<string>, pivotTimestamps: list<array{created: string|false|null, updated: string|false|null}>, pivotBranchDates: bool, nullable: bool}>
      */
     private static array $cache = [];
 
@@ -278,7 +278,9 @@ final class RelationMethodParser
 
     /**
      * Two returns of one method build the same relation when everything but the pivot columns agrees. The
-     * columns are optional enrichment: only those every branch selects from the same table survive.
+     * columns are optional enrichment: only those every branch selects from the same table survive. Whether a
+     * date column is cast depends on which columns and timestamps each branch selects, so when the branches
+     * differ there, `pivotBranchDates` tells the resolver to leave the date columns untyped.
      *
      * @param ParsedRelation $a
      * @param ParsedRelation $b
@@ -287,10 +289,13 @@ final class RelationMethodParser
      */
     private static function mergeBranches(array $a, array $b): ?array
     {
-        $pivotKeys = ['pivotTable' => true, 'pivotColumns' => true, 'pivotTimestamps' => true];
+        $pivotKeys = ['pivotTable' => true, 'pivotColumns' => true, 'pivotTimestamps' => true, 'pivotBranchDates' => true];
         if (\array_diff_key($a, $pivotKeys) !== \array_diff_key($b, $pivotKeys)) {
             return null;
         }
+
+        $same = $a['pivotTable'] === $b['pivotTable'] && $a['pivotColumns'] === $b['pivotColumns'] && $a['pivotTimestamps'] === $b['pivotTimestamps'];
+        $a['pivotBranchDates'] = $a['pivotBranchDates'] || $b['pivotBranchDates'] || !$same;
 
         if ($a['pivotTable'] !== $b['pivotTable']) {
             $a['pivotTable'] = null;
@@ -771,6 +776,7 @@ final class RelationMethodParser
             return [
                 ...self::pivotColumnLists(\array_reverse($pivotCalls)),
                 'pivotTable' => self::factoryPivotTable($expr, $lowerName, $declaringClass, $parentClass),
+                'pivotBranchDates' => false,
                 'relationClass' => $relationClass,
                 'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
                 // Through relations carry the intermediate model as the second class-string

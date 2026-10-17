@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
+use Illuminate\Database\Eloquent\Concerns\HasAttributes;
 use Illuminate\Database\Eloquent\Concerns\HasRelationships;
 use Illuminate\Database\Eloquent\Concerns\HasTimestamps;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\Str;
@@ -65,6 +67,7 @@ final readonly class PivotShapeResolver
     /**
      * @param string $pivotClass the TPivotModel class: `Pivot` / `MorphPivot` or a custom pivot
      * @param ?PivotTable $table
+     * @param bool $branchDates the columns / timestamps differ between return branches, so no date column is typed
      * @psalm-capabilities read-props
      */
     public function __construct(
@@ -73,6 +76,7 @@ final readonly class PivotShapeResolver
         private ?array $table,
         private ?string $parentClass,
         private ?string $relatedClass,
+        private bool $branchDates = false,
     ) {}
 
     /**
@@ -192,6 +196,22 @@ final readonly class PivotShapeResolver
         return $this->isCustomPivot() ? ($parent[0] ?? null) : Model::CREATED_AT;
     }
 
+    /**
+     * Whether the pivot class converts dates as stock Laravel does: `transformModelValue()` asks `getDates()`, which
+     * reads `usesTimestamps()` and the pivot's created-at / updated-at column names (`$timestamps` itself is reset
+     * by the hydration). A default pivot is stock by construction.
+     *
+     * @psalm-capabilities read-props
+     */
+    private function hasStockDates(): bool
+    {
+        return !$this->isCustomPivot()
+            || ($this->usesStockMethod($this->pivotClass, 'getdates', HasAttributes::class)
+                && $this->usesStockMethod($this->pivotClass, 'usestimestamps', HasTimestamps::class)
+                && $this->usesStockMethod($this->pivotClass, 'getcreatedatcolumn', AsPivot::class)
+                && $this->usesStockMethod($this->pivotClass, 'getupdatedatcolumn', AsPivot::class));
+    }
+
     /** @psalm-capabilities read-props */
     private function isCustomPivot(): bool
     {
@@ -216,7 +236,12 @@ final readonly class PivotShapeResolver
             return Type::getMixed();
         }
 
-        if ($parent !== null && $switch !== null && \in_array($switch, $selected, true) && ($column === $parent[0] || $column === $parent[1])) {
+        $isDate = $parent !== null && ($column === $parent[0] || $column === $parent[1]);
+        if ($isDate && ($this->branchDates || !$this->hasStockDates())) {
+            return Type::getMixed();
+        }
+
+        if ($isDate && $switch !== null && \in_array($switch, $selected, true)) {
             return CastResolver::resolve($this->codebase, 'datetime', true);
         }
 

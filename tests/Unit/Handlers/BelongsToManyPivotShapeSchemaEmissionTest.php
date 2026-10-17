@@ -50,6 +50,9 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Rack, {R}Pivot&object{role:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}Item, {M}Order, {R}Pivot&object{quantity:int, unit_price:float}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed, level:int<0, max>}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}ManualDatesPivot&object{created_at:mixed, updated_at:mixed}, \'pivot\'>',
     ];
 
     /** @var array<string, list<string>>|null */
