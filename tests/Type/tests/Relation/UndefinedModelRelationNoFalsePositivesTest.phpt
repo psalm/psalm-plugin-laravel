@@ -33,10 +33,9 @@ Customer::query()->whereDoesntHaveRelation('vehicles', 'active', 1);
 
 // morphTo intermediate: the target model is polymorphic, so deeper segments must NOT
 // be flagged (defer). Both DamageReport::reportable() (@phpstan-return) and
-// Part::orderedBy() (@return) annotate MorphTo<A|B, $this>; Psalm collapses the `$this`
-// generic to a bare MorphTo, so the related side cannot be pinned and the walk defers.
-// RelationResolver::singleModel() is the explicit backstop should a future Psalm keep
-// the multi-model union instead of collapsing it.
+// Part::orderedBy() (@return) declare multiple possible related models.
+// RelationResolver::singleModel() declines the union because the next segment
+// cannot be checked against exactly one known model.
 DamageReport::with('reportable.anythingDeeperIsNotChecked');
 Part::with('orderedBy.anythingDeeperIsNotChecked');
 
