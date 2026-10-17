@@ -99,11 +99,15 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 - at the call site of a registered model's relation method: `RelationMethodParser` captures the factory's table argument, the literal `withPivot()` columns and the `withTimestamps()` arguments (also through a delegated relation), and `ModelRelationReturnTypeHandler` builds slot 3 from them.
 `TPivotModel` is covariant for this (see the Variance entry), and `$pivot->role` / `$related->pivot->role` resolve through `ModelObjectShapePropertyFetchHandler` (vimeo/psalm#12110).
 
-**Column type, first hit wins:** a custom pivot class (`@property`, casts, its schema); a date-cast timestamp column; the relation table's schema; the type in the method's DECLARED `Pivot&object{...}` return (call site only, template-free types only; schema types win over it); `mixed`. Anything not provable (dynamic table, unscanned class, an overridden `joiningTableSegment()` / `getCreatedAtColumn()` / `getUpdatedAtColumn()`) falls through; a non-literal `withPivot()` argument adds no column, since an object shape is open and a partial one is sound.
+**Column type, first hit wins:** a custom pivot class (`@property`, casts, its schema); a date-cast timestamp column (below); the relation table's schema; the type in the method's DECLARED `Pivot&object{...}` return (call site only, template-free types only; schema types win over it); `mixed`. Anything not provable (dynamic table, unscanned class, an overridden `joiningTableSegment()` / `getCreatedAtColumn()` / `getUpdatedAtColumn()`) falls through; a non-literal `withPivot()` argument adds no column, since an object shape is open and a partial one is sound.
 
 **Tables:** a literal; a model passed as the table argument (its registered schema); the default `belongsToMany()` table, the two snake_cased basenames sorted and joined with `_` (no singularization); the default `morphToMany()` / `morphedByMany()` table, the morph name with its last `_` word pluralized. Laravel 12.20 and 13 derive them identically.
 
-**Timestamps:** `Pivot::fromRawAttributes()` turns timestamps on when the PARENT model's created-at column is among the selected pivot columns, and `getDates()` then names the parent's created-at / updated-at columns, NOT the `withTimestamps($createdAt, $updatedAt)` arguments. So the base pivot casts (`Carbon|null`) exactly the parent's created-at column once it is selected, and the updated-at one together with it; a renamed column is a plain schema column, and a custom pivot class never takes this path. Laravel 13 also accepts `false` to drop a column, 12.20 passes it on as a column name; neither adds a column here.
+**Timestamps:** `getDates()` names the PARENT model's created-at / updated-at columns, not the `withTimestamps($createdAt, $updatedAt)` arguments, and applies once the pivot's timestamps are on. Which column switches them on depends on how Laravel hydrates the pivot (`Model::newPivot()`, the same on 12.20 and 13): the default pivot goes through `Pivot::fromAttributes()`, which checks BEFORE the parent is attached, so its own `created_at` must be selected; a `using()` class goes through `fromRawAttributes()`, which rechecks after, against the parent's created-at column. So a renamed parent column is a plain schema column on the default pivot and a `Carbon|null` on a custom one. Laravel 13 also accepts `false` to drop a column, 12.20 passes it on as a column name; neither adds a column here.
+
+**Declines (the column becomes `mixed` rather than a guessed type):** a custom pivot class whose casts are incomplete in the registry (constructor-built casts) or that the registry does not know; parent timestamp columns that cannot be read while timestamps may be on. The default `belongsToMany()` table is derived only when the parent and related models keep the stock `joiningTableSegment()` and the parent the stock `joiningTable()`. A declared-shape fallback is reused only when it holds no template anywhere (`list<T>`, `class-string<T>`, `key-of<T>`, conditionals included).
+
+**Arguments:** Laravel reads only the first `withPivot()` argument when it is an array, so a first argument that may be an array claims no trailing column. In a relation body the arguments are read from their TYPES (a `$column = 'role'` variable, a literal array in a variable, `Owner::CREATED_AT`, `columns:` by name); the offline parser used at the call site reads syntax only. `using()` resets the shape on both paths: only calls after it contribute columns. When a method returns different `withPivot()` columns on different branches, the relation inference is kept and only the columns every branch selects from the same table survive.
 
 **Probed dead ends (Psalm 7.0.0-rc2):**
 - A stub-only `withPivot()`: the shape's keys are the call's string arguments, which a docblock cannot express.
@@ -113,7 +117,7 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Not done (next steps):** the `$model->relation` property type gaining `object{pivot: ...}`; `TAccessor` in the result shapes (`as('x')`); an implicit `using()` from `belongsToMany(X, PivotClass::class)`; the pivot key columns (`user_id`); `using()` after `withPivot()` keeps the class only (a custom pivot class describes its own columns); `withPivotValue()`.
 
-**Accepted limitation:** the cast of the updated-at column depends on the created-at column being among the columns the chain shows. A dynamic `withPivot($columns)` that selects it is invisible, and the column then reads as its schema type.
+**Accepted limitation:** whether timestamps are on depends on the switching column being among the columns the chain shows. A dynamic `withPivot($columns)` that selects it is invisible, and a date column then reads as its schema type.
 
 ## Config
 
@@ -236,19 +240,24 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 ### `Model&object{p: T}` property fetches are resolved by `ModelObjectShapePropertyFetchHandler` (vimeo/psalm#12110, #1944)
 
-**Decision:** A property fetch on a Model intersected with an object shape (`Pivot&object{role: string}`, `Related&object{pivot: P}`) is resolved from the shape by a Before/After-expression handler that rewrites the receiver type only while that one fetch is analysed.
+**Decision:** A property fetch on a Model intersected with an object shape (`Pivot&object{role: string}`, `Related&object{pivot: P}`) is analysed by Psalm on the unchanged receiver. A handler only drops the false undefined-property issue of that exact fetch and sets the fetch's type to the shape's property type.
 
 **Why:** In `AtomicPropertyFetchAnalyzer` the intersection fallback is the `elseif` of `if ($class_storage->namedMixins)` and skips final classes. The Model stub carries `@mixin Builder`, so the shape is never consulted and the fetch reports `UndefinedMagicPropertyFetch`; vanilla Psalm accepts the same code on a plain class. This is vimeo/psalm#12110 (fix: vimeo/psalm#12111). BelongsToMany results are `TRelatedModel&object{pivot: TPivotModel}`, so without it `$related->pivot->role` cannot resolve.
 
-**How:** Before(fetch) remembers the property name per receiver node; After(receiver) rewrites the type exactly where `InstancePropertyFetchAnalyzer` reads it (the scoped variable, else the node type) to `object{...shape}&Model`; After(fetch) restores the original. An After-statement hook restores anything a fetch left behind. Only a Model atomic whose class does not itself declare the property is rewritten, other atomics (`null`) are kept so `PossiblyNullPropertyFetch` still fires, and Union flags (taint `parent_nodes`) are preserved.
+**How:**
+- After(receiver) decides whether the fetch qualifies and records its `file:start:end` location; BeforeAddIssue returns `false` for `UndefinedMagicPropertyFetch` / `UndefinedPropertyFetch` at exactly a recorded location (issue class plus offsets, never the message). After(fetch) removes the location and sets the node type and the scoped `$var->prop` type to the shape's type, keeping the `parent_nodes` Psalm computed.
+- Qualifying: every atomic of the receiver is `null` or a Model whose intersection holds a shape declaring the property and which does not resolve the property itself (`propertyExists`: native, accessor and column providers). Any other mix (a non-model object, a template, `mixed`) is left to Psalm. The null of a nullable receiver is added as `InstancePropertyFetchAnalyzer` adds it, so `PossiblyNullPropertyFetch` and `?->` chains behave as without the handler.
+- Precedence mirrors vimeo/psalm#12111 so nothing flips once it lands: native or provider property, then the shape, then `@property` pseudo-properties and mixins.
+- Everything else Psalm does for the fetch stays: the `__get` call and its `ImpureMethodCall` inside a pure function, and the taint edges of a `@property` pseudo-property (`TaintedModelPseudoPropertyThroughObjectShape`, `ObjectShapePropertyFetchPurity`).
 
 **Probed dead ends (Psalm 7.0.0-rc2):**
 - A `PropertyTypeProvider` / `PropertyExistenceProvider` cannot do it: the event carries the class name, never the receiver type, so the shape is out of reach.
-- Writing the shape first in a stub (`object{p: T}&TRelatedModel`) makes the fetch resolve, but method calls on the value then fail with `MixedMethodCall`. That is why the rewrite is temporary and per fetch.
+- Writing the shape first in a stub (`object{p: T}&TRelatedModel`) makes the fetch resolve, but method calls on the value then fail with `MixedMethodCall`.
+- Rewriting the receiver to `object{...}&Model` while the fetch is analysed resolves the type but sends the fetch through Psalm's object-shape branch, which returns before `processTaints` and before the virtual `__get` call: taint edges through `@property` pseudo-properties and the purity diagnostic vanish.
 
 **Removal condition:** delete the handler (and its `Plugin` registration and `reset()`) once the minimum supported Psalm contains the vimeo/psalm#12110 fix.
 
-**Accepted limitation:** the `PossiblyNullPropertyFetch` message prints the rewritten receiver (`null|object{extra:int}&Mechanic`). Psalm records no data-flow edge for a shape property, with or without the handler (`ObjectShapePropertyFetchTaintKnownLimitation`).
+**Accepted limitation:** Psalm records no data-flow edge for a plain shape property, with or without the handler (`ObjectShapePropertyFetchTaintKnownLimitation`).
 
 ### Closure-parameter typing in `Eloquent\Builder` where-family stubs
 

@@ -9,9 +9,10 @@ use App\Models\Mechanic;
 
 /**
  * KNOWN LIMITATION (Psalm, not the plugin): Psalm 7 resolves a property fetch on an `object{p: T}` shape
- * without a data-flow edge, so taint written into the object does not reach `$obj->p`. A plain class behaves
- * the same, which is what the `Model&object{...}` rewrite of ModelObjectShapePropertyFetchHandler has to match:
- * the rewrite keeps the receiver's taint parent nodes, adds no flow, and restores the original type.
+ * without a data-flow edge, so taint written into the object does not reach `$obj->p`. A plain class and a
+ * Model intersected with a shape (both cast from an stdClass) behave the same. This pins only that shape-only
+ * limitation. It says nothing about the taint of a Model `@property` pseudo-property: the handler leaves
+ * Psalm's read of those intact, and TaintedModelPseudoPropertyThroughObjectShape covers it.
  * The `$_GET` echo is the control that proves the taint run is active.
  */
 class Plain

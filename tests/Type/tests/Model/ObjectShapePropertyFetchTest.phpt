@@ -121,9 +121,89 @@ function missing_shape_property(Mechanic $m): mixed
 {
     return $m->absent;
 }
+// The shape sets the result type; Psalm's own `@property` read still runs (taint and purity: see the sibling
+// ObjectShapePropertyFetchPurity and TaintedModelPseudoPropertyThroughObjectShape tests).
+/** @param Customer&object{id: int} $m */
+function shape_wins_over_pseudo_property(Customer $m): int
+{
+    $id = $m->id;
+    /** @psalm-check-type-exact $id = int */
+
+    return $id;
+}
+
+// Chained `?->`: the short-circuit null stays in the result and is not reported on the later link.
+/** @param (Mechanic&object{inner: Mechanic&object{extra: int}})|null $m */
+function nullsafe_chain(?Mechanic $m): ?int
+{
+    $extra = $m?->inner->extra;
+    /** @psalm-check-type-exact $extra = int|null */
+
+    return $extra;
+}
+
+/** @param (Mechanic&object{extra: int})|null $m */
+function isset_receiver(?Mechanic $m): int
+{
+    if (isset($m->extra)) {
+        return $m->extra;
+    }
+
+    return 0;
+}
+
+/** @param (Mechanic&object{extra: int})|null $m */
+function coalesce_receiver(?Mechanic $m): int
+{
+    return $m->extra ?? 0;
+}
+
+// A second read of the same fetch takes Psalm's scoped path and keeps the shape type; an assignment wins.
+/** @param Mechanic&object{extra: int} $m */
+function repeated_and_assigned_reads(Mechanic $m): int
+{
+    $first = $m->extra;
+    $second = $m->extra;
+    /** @psalm-check-type-exact $second = int */
+
+    $m->extra = 5;
+    $assigned = $m->extra;
+    /** @psalm-check-type-exact $assigned = 5 */
+
+    return $first + $second + $assigned;
+}
+
+// A union of qualifying Models combines the shape types.
+/** @param (Mechanic&object{extra: int})|(Customer&object{extra: string}) $m */
+function union_of_models(Mechanic|Customer $m): int|string
+{
+    $extra = $m->extra;
+    /** @psalm-check-type-exact $extra = int|string */
+
+    return $extra;
+}
+
+// Any atomic the shape does not cover: the handler declines and Psalm reports both as without it.
+/** @param (Mechanic&object{extra: int})|Plain $m */
+function union_with_non_model(Mechanic|Plain $m): mixed
+{
+    return $m->extra;
+}
+
+// Writes keep Psalm's diagnostics; only the false read is gone.
+/** @param Mechanic&object{extra: int} $m */
+function compound_assignment_and_unset(Mechanic $m): void
+{
+    $m->extra .= 'x';
+    unset($m->extra);
+}
 ?>
 --EXPECTF--
 MixedReturnStatement on line %d: Could not infer a return type
 UndefinedPropertyFetch on line %d: Instance property Tests\Psalm\LaravelPlugin\Sandbox\ObjectShapeFetch\MixinHost::$p is not defined
 PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $m of type %s
 UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Mechanic::$absent is not defined
+UndefinedMagicPropertyAssignment on line %d: Magic instance property App\Models\Mechanic::$extra is not defined
+UndefinedMagicPropertyFetch on line %d: Magic instance property App\Models\Mechanic::$extra is not defined
+UndefinedPropertyFetch on line %d: Instance property Tests\Psalm\LaravelPlugin\Sandbox\ObjectShapeFetch\Plain::$extra is not defined
+UndefinedMagicPropertyAssignment on line %d: Magic instance property App\Models\Mechanic::$extra is not defined
