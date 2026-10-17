@@ -53,6 +53,16 @@ final class ColumnTypeMapper
     }
 
     /**
+     * Read type of a schema column: the base mapping plus nullability.
+     */
+    public static function mapType(ColumnInfo $column): Union
+    {
+        $type = self::mapBaseType($column);
+
+        return $column->nullable ? Type::combineUnionTypes($type, Type::getNull()) : $type;
+    }
+
+    /**
      * Build a literal-string union from a column's options list. Shared by ENUM and SET
      * because both store their option set the same way in {@see ColumnInfo::$options}
      * and benefit from the same narrowing (with the SET caveat documented at the caller).

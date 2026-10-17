@@ -12,7 +12,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
-use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
@@ -204,7 +203,7 @@ final class ModelPropertyHandler
             return $casts[$columnName]->psalmType;
         }
 
-        return self::mapColumnType($column);
+        return ColumnTypeMapper::mapType($column);
     }
 
     /**
@@ -240,23 +239,6 @@ final class ModelPropertyHandler
         }
 
         return $metadata->schema()->has($propertyName);
-    }
-
-    /**
-     * Map a column to its Psalm read type, applying nullability. The non-nullable base mapping
-     * lives on {@see ColumnTypeMapper} so the cast warm-up (which bakes the CastsInboundAttributes
-     * passthrough type) and this schema read path agree on the column's intrinsic type — and so the
-     * builder reads the mapping from the Schema namespace rather than reaching back into this handler.
-     */
-    private static function mapColumnType(ColumnInfo $column): Union
-    {
-        $type = ColumnTypeMapper::mapBaseType($column);
-
-        if ($column->nullable) {
-            return Type::combineUnionTypes($type, Type::getNull());
-        }
-
-        return $type;
     }
 
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */
