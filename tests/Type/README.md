@@ -108,3 +108,9 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    that a shared batch drops); reserve `all` for a fixture that must not run at the same time as
    anything else in the suite, which should be rare. Picking `all` by habit serializes the whole
    suite behind those runs for no benefit.
+
+8. **`@psalm-check-type-exact` is a mutual-containment check, not a string comparison.** An object shape inside a
+   generic argument (`BelongsToMany<R, D, Pivot&object{level: int}, 'pivot'>`) matches `level: string`, `level: float`
+   or extra keys, and `mixed` matches any type, so such a test passes whatever the property types are. Pin shape
+   contents with `@psalm-trace $var` plus the exact `Trace on line %d: ...` line in `--EXPECTF--` (or fetch the
+   property and check that plain type), as `BelongsToManyWithPivotShapeTest.phpt` does.

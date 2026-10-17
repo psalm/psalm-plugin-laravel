@@ -77,7 +77,7 @@ final class ModelRelationReturnTypeHandler
      *
      * @var array<class-string, class-string<Pivot>>
      */
-    private const PIVOT_AWARE_RELATIONS = [
+    public const PIVOT_AWARE_RELATIONS = [
         BelongsToMany::class => Pivot::class,
         MorphToMany::class => MorphPivot::class,
     ];

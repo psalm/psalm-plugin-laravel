@@ -408,6 +408,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderNativeStaticReturnTypeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelObjectShapePropertyFetchHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/PivotColumnsReturnTypeHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
         // even when migrations are disabled (the @property branch still applies).
@@ -434,6 +435,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Resolves `Model&object{p: T}` property fetches (vimeo/psalm#12110 workaround, #1944).
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelObjectShapePropertyFetchHandler::class);
+        // withPivot() / withTimestamps() refine the pivot slot of BelongsToMany / MorphToMany (#1944).
+        $registration->registerHooksFromClass(Handlers\Eloquent\PivotColumnsReturnTypeHandler::class);
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
