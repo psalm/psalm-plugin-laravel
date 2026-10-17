@@ -60,7 +60,7 @@ final class PivotColumnResolver
         if ($first->value instanceof Expr\Array_) {
             foreach ($first->value->items as $item) {
                 // Laravel merges with array_merge(): an unpacked item or a string key may overwrite a column.
-                if (!$item instanceof Expr\ArrayItem || $item->unpack || ($item->key !== null && !$item->key instanceof Int_)) {
+                if (!$item instanceof Expr\ArrayItem || $item->unpack || ($item->key instanceof \PhpParser\Node\Expr && !$item->key instanceof Int_)) {
                     return [];
                 }
 
