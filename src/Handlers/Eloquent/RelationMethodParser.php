@@ -907,9 +907,10 @@ final class RelationMethodParser
 
     /**
      * TRelatedModel of a declared `MorphTo<X, …>` return type (method storage, docblock merged), when
-     * every alternative of X is exactly a plain named class, or an intersection of plain named
-     * classes (`Model&Contract`), at least one of which is a Model subclass. Generic objects and
-     * every other atomic shape are declined so nested template expressions cannot be hidden.
+     * every alternative of X is exactly a plain named class, or a flat intersection of plain named
+     * classes (`Model&Contract`), at least one of which is a Model subclass. Generic objects, `static`,
+     * `self` / `parent` (a trait keeps them unresolved) and nested intersections are declined: a provider
+     * result skips Psalm's type expansion, so they would leak into the call's type as written.
      *
      * Only slot 1 is read: slot 2 can still hold an unresolved `self` (trait methods resolve it when
      * composed) or `static`, so callers bind the declaring model from the call receiver. Declines a
@@ -934,13 +935,14 @@ final class RelationMethodParser
 
         $related = $relation->type_params[0];
         foreach ($related->getAtomicTypes() as $atomic) {
-            if ($atomic::class !== TNamedObject::class || $atomic->value === 'static') {
-                return null;
-            }
-
             $isModel = false;
-            foreach ([$atomic, ...$atomic->extra_types] as $part) {
-                if ($part::class !== TNamedObject::class || $part->is_static || $part->value === 'static') {
+            foreach ([$atomic, ...($atomic instanceof TNamedObject ? $atomic->extra_types : [])] as $part) {
+                if (
+                    $part::class !== TNamedObject::class
+                    || $part->is_static
+                    || \in_array(\strtolower($part->value), ['self', 'static', 'parent'], true)
+                    || ($part !== $atomic && $part->extra_types !== [])
+                ) {
                     return null;
                 }
 

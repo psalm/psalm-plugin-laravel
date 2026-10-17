@@ -247,6 +247,28 @@ class Comment extends Model
         return $this->morphTo();
     }
 }
+
+// In a trait, `self` inside the related slot is still the unresolved name `self`; narrowing with it
+// would leak the trait name into the type.
+trait SelfIntersectionRelations
+{
+    /** @return MorphTo<Model&HasTitle&self, self> */
+    public function flatSelf(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /** @return MorphTo<Model&(HasTitle&self), self> */
+    public function nestedSelf(): MorphTo
+    {
+        return $this->morphTo();
+    }
+}
+
+class SelfIntersectionOwner extends Model implements HasTitle
+{
+    use SelfIntersectionRelations;
+}
 ?>
 --EXPECTF--
 MoreSpecificReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Post, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::belongsToReturned is more specific than the inferred return type 'Illuminate\Database\Eloquent\Relations\BelongsTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Post, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>'
@@ -294,3 +316,5 @@ LessSpecificReturnStatement on line %d: The type 'Illuminate\Database\Eloquent\R
 InvalidReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::nonModelRelated is incorrect, got 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>'
 InvalidTemplateParam on line %d: Extended template param TRelatedModel of Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment> expects type Illuminate\Database\Eloquent\Model, type Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle given
 InvalidReturnStatement on line %d: The inferred type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment&static>' does not match the declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\Comment::nonModelRelated
+InvalidReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model&Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle&Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionOwner, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionOwner>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionRelations::flatSelf is incorrect, got 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionOwner&static>'
+InvalidReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model&Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\HasTitle&Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionOwner, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionOwner>' for Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionRelations::nestedSelf is incorrect, got 'Illuminate\Database\Eloquent\Relations\MorphTo<Illuminate\Database\Eloquent\Model, Tests\Psalm\LaravelPlugin\Sandbox\MorphToEnclosingDeclines\SelfIntersectionOwner&static>'
