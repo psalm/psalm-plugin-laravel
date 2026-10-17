@@ -5,6 +5,9 @@ use App\Models\Customer;
 use App\Models\DamageReport;
 use App\Models\Supplier;
 use App\Models\Vehicle;
+use App\Models\WrappedModel;
+use App\Builders\CallbackWrappingBuilder;
+use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -184,7 +187,7 @@ final class OverridingModel extends Model
 /** @param OverridingBuilder<Customer> $builder */
 function test_userland_overrides_decline(OverridingBuilder $builder, OverridingModel $model): void
 {
-    $builder->with(['vehicles' => function ($q): void {
+    $builder->with(['parts' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
@@ -214,8 +217,130 @@ function test_partially_dynamic_literal(array $extra, string $key): void
         takes_mixed($q);
     }, ...$extra]);
 }
+
+/**
+ * A loop widens the receiver to a union on a later pass: the inference written on the first pass is revoked, so
+ * the closure is not left with the first receiver's Relation (here `HasManyThrough`, which Vehicle's `HasMany`
+ * is not).
+ */
+function test_loop_widening_revokes_earlier_inference(bool $flag): void
+{
+    $builder = Customer::query();
+
+    while ($flag) {
+        $builder->with(['workOrders' => function ($q): void {
+            if ($q instanceof HasMany) {
+                takes_mixed($q);
+            }
+        }]);
+
+        $builder = Vehicle::query();
+    }
+}
+
+/**
+ * Every eager-load entry point ends in the builder's `with()`: a model whose builder overrides it, or a builder
+ * whose inherited `withOnly()` delegates to the override, keeps its own contract.
+ *
+ * @param Collection<int, WrappedModel> $models
+ * @param CallbackWrappingBuilder<WrappedModel> $builder
+ */
+function test_delegated_overrides_decline(WrappedModel $model, Collection $models, CallbackWrappingBuilder $builder): void
+{
+    WrappedModel::with(['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $model->load(['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $model->loadMissing(['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $models->load(['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $models->loadMissing(['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $builder->withOnly(['parts' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+/**
+ * An intersection dispatches through the base Builder, but its other component may override `with()`.
+ *
+ * @param Builder<Customer>&OverridingBuilder<Customer> $builder
+ */
+function test_builder_intersection_declines(Builder $builder): void
+{
+    $builder->with(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+/** Laravel composes constraints that flatten to one path, so none of them receives the bare Relation. */
+function test_colliding_flattened_paths_decline(): void
+{
+    Customer::query()->with([
+        'vehicles' => ['customer' => function ($q): void {
+            /** @psalm-check-type-exact $q = mixed */
+            takes_mixed($q);
+        }],
+        'vehicles.customer' => function ($q): void {
+            /** @psalm-check-type-exact $q = mixed */
+            takes_mixed($q);
+        },
+    ]);
+}
+
+/** `loadMissing()` does not flatten nested arrays on every supported Laravel version: such closures are not typed. */
+function test_load_missing_nested_arrays_decline(Customer $customer): void
+{
+    $customer->loadMissing(['vehicles' => ['workOrders' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]]);
+    $customer->loadMissing(['vehicles.workOrders' => function ($q): void {
+        /** @psalm-check-type-exact $q = HasMany<WorkOrder, Vehicle> */
+        takes_mixed($q);
+    }]);
+}
+
+/** A `:columns` suffix on a closure-valued key stays part of the relation name at runtime (RelationNotFoundException). */
+function test_columns_on_closure_key_declines(): void
+{
+    Customer::query()->with(['vehicles:id' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    Customer::query()->with('vehicles:id', function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    });
+}
 ?>
 --EXPECTF--
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type

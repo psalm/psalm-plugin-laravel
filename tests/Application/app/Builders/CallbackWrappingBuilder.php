@@ -33,4 +33,18 @@ final class CallbackWrappingBuilder extends Builder
             $count,
         );
     }
+
+    /**
+     * Eager-load entry points (`Model::with()`, `load()`, inherited `withOnly()`) end here, so the contract of a
+     * constraint closure is this builder's, not Laravel's.
+     *
+     * @param mixed $relations
+     * @param \Closure|string|null $callback
+     * @return $this
+     */
+    #[\Override]
+    public function with($relations, $callback = null)
+    {
+        return parent::with($relations, $callback);
+    }
 }

@@ -223,10 +223,21 @@ function test_typed_closure_beside_plain_entries(Customer $customer): void
         $q->where('status', 'open');
     }, 'customer']]);
 }
+
+/** A closure held in a variable keeps the stub's element type: the literal's own closures are still checked. */
+function test_variable_sibling_keeps_stub_element_type(): void
+{
+    $customer = function (BelongsTo $q): void {
+        $q->where('id', 1);
+    };
+    Vehicle::query()->with(['workOrders' => function (HasMany $q): void {
+        $q->where('status', 'open');
+    }, 'customer' => $customer]);
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of takesInt expects int, but Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer> provided
-InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::with expects array{vehicles?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, ...<array-key, array<array-key, mixed>|callable[impure](Illuminate\Database\Eloquent\Relations\Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed>):mixed|string>}, but array{vehicles: Closure[impure](Illuminate\Database\Eloquent\Relations\BelongsTo):void} provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::with expects array{vehicles?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, ...<array-key, mixed>}, but array{vehicles: Closure[impure](Illuminate\Database\Eloquent\Relations\BelongsTo):void} provided
 InvalidArgument on line %d: Argument 1 of App\Models\Customer::load expects array{vehicles?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, ...<array-key, array<array-key, mixed>|callable[impure](Illuminate\Database\Eloquent\Relations\Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed>):mixed|string>}, but array{vehicles: Closure[impure](Illuminate\Database\Eloquent\Relations\BelongsTo):void} provided
-InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::with expects array{vehicles?: array{workOrders?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\WorkOrder, App\Models\Vehicle>):mixed, ...<array-key, array<array-key, mixed>|callable[impure](Illuminate\Database\Eloquent\Relations\Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed>):mixed|string>}, ...<array-key, array<array-key, mixed>|callable[impure](Illuminate\Database\Eloquent\Relations\Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed>):mixed|string>}, but array{vehicles: array{workOrders: Closure[impure](Illuminate\Database\Eloquent\Relations\BelongsTo):void}} provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::with expects array{vehicles?: array{workOrders?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\WorkOrder, App\Models\Vehicle>):mixed, ...<array-key, mixed>}, ...<array-key, mixed>}, but array{vehicles: array{workOrders: Closure[impure](Illuminate\Database\Eloquent\Relations\BelongsTo):void}} provided
 InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::with expects Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, but Closure[impure](Illuminate\Database\Eloquent\Relations\BelongsTo):void provided
