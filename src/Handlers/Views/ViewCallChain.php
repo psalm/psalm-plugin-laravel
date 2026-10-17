@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use PhpParser\Node\Arg;
+use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
@@ -178,7 +179,7 @@ final class ViewCallChain
         // so anything supplied there that we cannot read leaves the key set open.
         $complete = !ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg;
 
-        return self::build($args, $source, $pending, true, $complete);
+        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, true, $complete);
     }
 
     /**
@@ -209,30 +210,95 @@ final class ViewCallChain
         // an intro/outro line to the notification body and never touches the template's data.
         $carriesData = $role !== ViewNameSignatures::ROLE_MAIL_MESSAGE;
 
-        return self::build($args, $source, $pending, $carriesData, $complete);
+        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete);
+    }
+
+    /**
+     * The `$__env` Factory call a compiled include reduces to, or null for any other call:
+     * `make($view, $data, $mergeData)` (`@include`, `@includeIf`, `@extends`, `@includeIsolated`),
+     * `renderWhen`/`renderUnless($condition, $view, $data, $mergeData)`, and
+     * `first($views, $data, $mergeData)`.
+     *
+     * Only a literal data array is read: without one, Blade puts the including scope in the `$data`
+     * slot. The exception is `@includeIsolated('view')`, whose lone-name `make('view')` passes no
+     * data at all.
+     *
+     * `@includeFirst` is checked against its last candidate, the one the author expects to exist;
+     * an earlier one is an optional override. That guess is safe here, where only passed keys are
+     * type-checked, which is why `first()` is not a binder at a PHP call site.
+     */
+    public static function fromInclude(Expr\MethodCall $call, StatementsSource $source): ?self
+    {
+        $args = self::args($call);
+
+        if ($args === null
+            || !$call->name instanceof Identifier
+            || self::roleOfReceiver($call->var, $source) !== ViewNameSignatures::ROLE_VIEW_FACTORY
+        ) {
+            return null;
+        }
+
+        $methodName = $call->name->toLowerString();
+
+        [$name, $at] = match ($methodName) {
+            'make' => [self::viewArg($args), 0],
+            'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')?->value, 1],
+            'first' => [self::lastCandidate(ArgUtil::byNameOrPosition($args, 0, 'views')), 0],
+            default => [null, 0],
+        };
+
+        $dataArg = ArgUtil::byNameOrPosition($args, $at + 1, 'data');
+
+        if ($dataArg instanceof Arg ? !$dataArg->value instanceof Expr\Array_ : $methodName !== 'make' || \count($args) !== 1) {
+            return null;
+        }
+
+        $complete = !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
+
+        return self::build($name, $dataArg, $source, [], true, $complete);
+    }
+
+    /**
+     * @param list<Arg> $args
+     */
+    private static function viewArg(array $args): ?Expr
+    {
+        return ArgUtil::byNameOrPosition($args, 0, 'view')?->value;
+    }
+
+    /**
+     * The last element of a literal candidate list. A keyed one declines: a duplicate key keeps its
+     * first position, so the element written last need not be the array's last.
+     *
+     * @psalm-mutation-free
+     */
+    private static function lastCandidate(?Arg $views): ?Expr
+    {
+        $items = $views instanceof Arg && $views->value instanceof Expr\Array_ ? $views->value->items : [];
+        $last = $items === [] ? null : $items[\array_key_last($items)];
+
+        return $last instanceof ArrayItem && !$last->key instanceof Expr && !$last->unpack && !$last->byRef ? $last->value : null;
     }
 
     /**
      * Every binder this class recognizes takes `($view, $data)` in that order. `Router::view()` is
      * the exception that puts the name at position 1, which is why it is not in the table above.
      *
-     * @param list<Arg>                                        $args
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
     private static function build(
-        array $args,
+        ?Expr $name,
+        ?Arg $dataArg,
         StatementsSource $source,
         array $pending,
         bool $carriesData,
         bool $complete,
     ): ?self {
-        $nameArg = ArgUtil::byNameOrPosition($args, 0, 'view');
-
-        if (!$nameArg instanceof Arg || !$nameArg->value instanceof String_) {
+        if (!$name instanceof String_) {
             return null;
         }
 
-        $viewName = $nameArg->value->value;
+        $viewName = $name->value;
 
         // A namespaced name resolves through package-registered roots the compile pass does not
         // own, so its contract is never in the registry and guessing would be wrong.
@@ -248,8 +314,6 @@ final class ViewCallChain
         if ($carriesData && !self::mergePending($pending, $source, $data, $complete)) {
             return null;
         }
-
-        $dataArg = ArgUtil::byNameOrPosition($args, 1, 'data');
 
         if ($dataArg instanceof Arg) {
             self::mergeArrayArg($dataArg, $source, $data, $complete);

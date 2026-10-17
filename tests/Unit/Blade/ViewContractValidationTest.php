@@ -681,6 +681,40 @@ final class ViewContractValidationTest extends TestCase
         }
     }
 
+    /**
+     * `@includeWhen`/`@includeUnless` compile to `renderWhen()`/`renderUnless()` and `@includeFirst`
+     * to `first()->render()`, all with the includer's scope as `$mergeData`. `@includeFirst` checks
+     * its last candidate, the one that has to exist (line 5 would pass against `inc.override`).
+     */
+    #[Test]
+    public function a_conditional_or_first_include_value_of_the_wrong_type_is_reported_on_its_line(): void
+    {
+        $reported = $this->templateContractIssues('conditional-wrong-type.blade.php');
+
+        $this->assertSame([2, 3, 4, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+            $this->assertStringContainsString("View 'inc.card' declares \$title as string, but int", (string) $issue['message']);
+        }
+    }
+
+    /** Each pins a different decline gate of the conditional and first include forms. */
+    #[Test]
+    public function every_conditional_or_first_include_decline_gate_stays_silent(): void
+    {
+        // The first candidate would report; the last one is `inc.override`, which declares int.
+        $this->assertSame([], $this->templateContractIssues('first-last-candidate.blade.php'));
+        // The last candidate is not a literal, so the literal `inc.card` before it is not a stand-in.
+        $this->assertSame([], $this->templateContractIssues('first-dynamic-candidate.blade.php'));
+        // Data in a variable: a sealed `array{title: int}` would report if it were read.
+        $this->assertSame([], $this->templateContractIssues('conditional-dynamic-data.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('conditional-dynamic-name.blade.php'));
+        // The includer's scope is `$mergeData`, so the omitted `count` may still arrive.
+        $this->assertSame([], $this->templateContractIssues('conditional-omitted.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('conditional-matching.blade.php'));
+    }
+
     /** `@includeIsolated` arrives in Laravel 12.47; below that Blade leaves the directive as text. */
     private function requireIncludeIsolated(): void
     {
