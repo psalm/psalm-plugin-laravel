@@ -206,7 +206,7 @@ final class ModelObjectShapePropertyFetchHandler implements
 
         foreach ($receiver->getAtomicTypes() as $key => $atomic) {
             $replacement = self::rewriteAtomic($codebase, $source, $context, $atomic, $property);
-            if ($replacement === null) {
+            if (!$replacement instanceof \Psalm\Type\Atomic\TObjectWithProperties) {
                 continue;
             }
 
