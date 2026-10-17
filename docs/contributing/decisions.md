@@ -412,9 +412,10 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - `getIndexes()`: `type: string` on every line, but SQLite always emits null; SQLite also `array_filter()`s the synthetic `primary` row on composite primary keys, so the result is `array<int, ...>`, not a list.
 - `getForeignKeys()`: bare `array` before 13.7 (typed list declared on every line; the shape is identical).
 - `blueprintResolver()`: Laravel 12.20-12.21 document `Closure(string, Closure, string)` but `createBlueprint()` passes `($connection, $table, $callback)` (fixed in 12.22).
-- `getColumn()` (`stubs/13.34.0/`, the method does not exist earlier): returns `[]` for an absent column, documented only as the full shape, so `=== []` is a `DocblockTypeContradiction`; declared `array{...}|array{}`.
+- `getColumn()` (`stubs/13.34.0/`, the method does not exist earlier): returns `[]` for an absent column, documented only as the full shape, so `=== []` is a `DocblockTypeContradiction`; declared as a bare `array` (the facade tag's type).
+- `getViews()`: `definition` is NULL for encrypted SQL Server views (`sys.sql_modules.definition`) and passes through `Processor::processViews()` uncast; declared `string|null`.
 
-**Known limitation:** each correction can go once laravel/framework fixes its docblock. `getColumn()`'s `|array{}` makes Psalm merge both arms into one array with optional keys, so reading `$column['name']` after a `=== []` check reports `PossiblyUndefinedArrayOffset` (accurate: Psalm does not narrow it away).
+**Known limitation:** each correction can go once laravel/framework fixes its docblock. `getColumn()` stays a bare `array` because Psalm merges `array{...}|array{}` into one shape with every key optional (`array{name?: string, ...}`), which turns a `!== []`-guarded `$column['name']` into a `PossiblyUndefinedArrayOffset` false positive; `array` reports the same offset check only as the generic `PossiblyUndefinedStringArrayOffset` every plain array gets under strict config (use `isset`), and accepts the `=== []` comparison.
 
 ## Laravel Docblock Gaps
 

@@ -81,6 +81,14 @@ class Builder
      */
 
     /**
+     * SQL Server selects `sys.sql_modules.definition`, which is NULL for encrypted views.
+     *
+     * @param  string|string[]|null  $schema
+     * @return list<array{name: string, schema: string|null, schema_qualified_name: string, definition: string|null}>
+     */
+    public function getViews($schema = null) {}
+
+    /**
      * Laravel < 13.7 repeats the `type` key (invalid docblock, call becomes `mixed`) and < 13.8 omits
      * `schema_qualified_name`; `type`/`category` are null for unmapped Postgres codes on every line.
      *

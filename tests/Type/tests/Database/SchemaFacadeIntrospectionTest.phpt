@@ -30,6 +30,18 @@ function schema_facade_introspection_resolves_through_builder(): void
     consume_string_list(Schema::getTableListing());
 }
 
+/** SQL Server's `sys.sql_modules.definition` is NULL for encrypted views; Laravel documents `string`. */
+function schema_facade_get_views_definition_may_be_null(): bool
+{
+    foreach (Schema::getViews() as $view) {
+        if ($view['definition'] === null) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /** Laravel 12.x and 13.0-13.7 omit `collation`; every line documents `generation.type` as non-null. */
 function schema_facade_get_columns_follows_the_processors(): void
 {
