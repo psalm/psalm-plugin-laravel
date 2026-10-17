@@ -91,7 +91,7 @@ final class Plugin implements PluginEntryPointInterface
             $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
 
             if ($pluginConfig->findMissingViews || $pluginConfig->bladeValidateViewData) {
-                $this->initMissingViewHandler($output, $viewFactory, $pluginConfig->findMissingViews);
+                $this->initMissingViewHandler(ApplicationProvider::getApp(), $output, $viewFactory, $pluginConfig->findMissingViews);
             }
 
             if ($pluginConfig->findUnconfiguredFilesystemDisks) {
@@ -916,19 +916,24 @@ final class Plugin implements PluginEntryPointInterface
      * to know which `@includeFirst` candidate exists; a finder it cannot read then just leaves that
      * unknown, so only the MissingView diagnostic warns.
      */
-    private function initMissingViewHandler(\Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory, bool $report): void
+    private function initMissingViewHandler(Application $app, \Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory, bool $report): void
     {
-        $app = ApplicationProvider::getApp();
         $finder = null;
         $problem = null;
 
-        // Prefer the dedicated view.finder binding; fall back to the pre-resolved
-        // Factory's finder (ApplicationProvider may bind 'view' without 'view.finder').
-        if ($app->bound('view.finder')) {
-            /** @var \Illuminate\View\FileViewFinder $finder */
-            $finder = $app->make('view.finder');
-        } elseif ($factory instanceof \Illuminate\View\Factory) {
+        // Prefer the pre-resolved Factory's finder, the one views render through: 'view.finder' is
+        // bound transiently, so a fresh one lacks the locations and extensions added on the factory.
+        if ($factory instanceof \Illuminate\View\Factory) {
             $finder = $factory->getFinder();
+        } elseif ($app->bound('view.finder')) {
+            try {
+                /** @var \Illuminate\View\FileViewFinder $finder */
+                $finder = $app->make('view.finder');
+            } catch (\Throwable $throwable) {
+                // Degrades this one lookup, not the whole plugin (same policy as resolveViewFactory()).
+                $output->debug("Laravel plugin: resolving the 'view.finder' binding threw: {$throwable->getMessage()}\n");
+                $problem = 'the view finder could not be resolved (run with --debug for the underlying cause).';
+            }
         } elseif ($app->bound('view')) {
             // 'view' is bound but resolveViewFactory() returned null: the binding
             // threw (swallowed to a --debug line rather than disabling the plugin)

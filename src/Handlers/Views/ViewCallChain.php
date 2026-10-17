@@ -269,9 +269,10 @@ final class ViewCallChain
 
     /**
      * The first candidate of a literal list that exists on disk, walking past the ones provably
-     * absent. Declines on a candidate before it whose existence cannot be told (not a string
-     * literal, namespaced), and on a keyed one: a duplicate key keeps its first position, so the
-     * written order need not be the order `Arr::first()` walks.
+     * absent, as `Arr::first()` does. The whole list must be plain string literals first: a key
+     * anywhere can overwrite an earlier element, and `FileViewFinder::find()` trims a name, so
+     * `' inc.card '` may render `inc.card` while this lookup misses it. A candidate of unknowable
+     * existence (namespaced) before the first one found declines too.
      */
     private static function firstExistingCandidate(?Arg $views): ?String_
     {
@@ -279,15 +280,25 @@ final class ViewCallChain
             return null;
         }
 
+        $candidates = [];
+
         foreach ($views->value->items as $item) {
-            if ($item === null || $item->key instanceof Expr || !$item->value instanceof String_) {
+            if ($item === null
+                || $item->key instanceof Expr
+                || !$item->value instanceof String_
+                || $item->value->value !== \trim($item->value->value)
+            ) {
                 return null;
             }
 
-            $exists = MissingViewHandler::viewExists($item->value->value);
+            $candidates[] = $item->value;
+        }
+
+        foreach ($candidates as $candidate) {
+            $exists = MissingViewHandler::viewExists($candidate->value);
 
             if ($exists !== false) {
-                return $exists === true ? $item->value : null;
+                return $exists === true ? $candidate : null;
             }
         }
 

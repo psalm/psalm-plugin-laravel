@@ -715,7 +715,8 @@ final class ViewContractValidationTest extends TestCase
     {
         // `inc.override` exists, so it renders, and it declares `$title` as int.
         $this->assertSame([], $this->templateContractIssues('first-existing-candidate.blade.php'));
-        // A dynamic, namespaced or keyed candidate before `inc.card` may be the one that renders.
+        // A dynamic, namespaced or keyed candidate before `inc.card` may be the one that renders; so
+        // may one Laravel trims, and a keyed one after it can overwrite it.
         $this->assertSame([], $this->templateContractIssues('first-unprovable-candidate.blade.php'));
         // Data in a variable: a sealed `array{title: int}` would report if it were read.
         $this->assertSame([], $this->templateContractIssues('conditional-dynamic-data.blade.php'));
