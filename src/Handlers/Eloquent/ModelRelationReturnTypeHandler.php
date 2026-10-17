@@ -201,6 +201,8 @@ final class ModelRelationReturnTypeHandler
                         $parsed['intermediateModel'],
                         $parsed['pivotModel'],
                         $parsed['accessor'],
+                        $parsed['pivotTable'],
+                        $parsed['pivotColumns'],
                         $bindingClass,
                         $bindingIsStatic,
                     )
@@ -261,7 +263,7 @@ final class ModelRelationReturnTypeHandler
      * returns null because its target is runtime-selected. Returns null when no statically
      * known target exists.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotTable: ?string, pivotColumns: ?list<string>, nullable: bool} $parsed
      * @psalm-pure
      */
     private static function resolveRelatedModelType(array $parsed): ?Union
@@ -293,8 +295,8 @@ final class ModelRelationReturnTypeHandler
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
+     * @param list<string>|null $pivotColumns
      *
-     * @psalm-pure
      */
     private static function buildRelationType(
         string $relationClass,
@@ -302,6 +304,8 @@ final class ModelRelationReturnTypeHandler
         ?string $intermediateModel,
         ?string $pivotModel,
         ?string $accessor,
+        ?string $pivotTable,
+        ?array $pivotColumns,
         string $bindingClass,
         bool $bindingIsStatic,
     ): ?Union {
@@ -343,7 +347,16 @@ final class ModelRelationReturnTypeHandler
         // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
         if ($pivotDefault !== null) {
-            $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
+            $pivotType = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
+            if ($pivotColumns !== null && $pivotModel === null) {
+                $pivotType = PivotColumnTypeResolver::refinePivot(
+                    $pivotType,
+                    $pivotTable,
+                    $pivotColumns,
+                );
+            }
+
+            $typeParams[] = $pivotType;
             $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
         }
 
