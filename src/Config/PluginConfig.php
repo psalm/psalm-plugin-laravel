@@ -28,6 +28,7 @@ final readonly class PluginConfig
         public bool $resolveConfigReturnTypes,
         public bool $reportImplicitQueryBuilderCalls,
         public bool $findMissingTranslations,
+        public TranslationKeys $findMissingTranslationsKeys,
         public bool $findMissingViews,
         public bool $findUnconfiguredFilesystemDisks,
         public bool $findUnregisteredRouteNames,
@@ -71,6 +72,21 @@ final readonly class PluginConfig
     public static function fromXml(?\SimpleXMLElement $config, ?PluginOverrides $overrides = null): self
     {
         $overrides ??= PluginOverrides::parse('');
+
+        $translationKeysValue = self::xmlStringAttr($config?->findMissingTranslations, 'keys', 'all');
+        $translationKeys = TranslationKeys::tryFrom($translationKeysValue);
+
+        if ($translationKeys === null) {
+            $valid = \implode(', ', \array_map(
+                static fn(TranslationKeys $case): string => "'{$case->value}'",
+                TranslationKeys::cases(),
+            ));
+
+            throw new \InvalidArgumentException(
+                "Invalid findMissingTranslations keys value '{$translationKeysValue}'. Valid values: {$valid}.",
+            );
+        }
+
         $columnFallbackValue = self::xmlStringAttr($config?->modelProperties, 'columnFallback', 'migrations');
         $columnFallback = ColumnFallback::tryFrom($columnFallbackValue);
 
@@ -114,6 +130,7 @@ final readonly class PluginConfig
             resolveConfigReturnTypes: $overrides->bool('resolveConfigReturnTypes') ?? $resolveConfigReturnTypes,
             reportImplicitQueryBuilderCalls: $overrides->bool('reportImplicitQueryBuilderCalls') ?? $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $overrides->bool('findMissingTranslations') ?? $findMissingTranslations,
+            findMissingTranslationsKeys: TranslationKeys::tryFrom($overrides->string('findMissingTranslations.keys') ?? '') ?? $translationKeys,
             findMissingViews: $overrides->bool('findMissingViews') ?? $findMissingViews,
             findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? $experimental,
             findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,

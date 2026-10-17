@@ -10,6 +10,10 @@ __('auth.nonexistent');
 // Missing translations via trans() — should emit MissingTranslation
 trans('messages.missing');
 
+// Default keys="all": sentence-style keys are reported too (contrast with keys="short")
+__('Online courses - more coming up!');
+__('Dashboard');
+
 // Existing translations — should return narrowed string type
 $failed = __('auth.failed');
 /** @psalm-check-type-exact $failed = non-empty-string */
@@ -43,3 +47,5 @@ __($key);
 MissingTranslation on line %d: Translation key 'nonexistent.key' not found in language files
 MissingTranslation on line %d: Translation key 'auth.nonexistent' not found in language files
 MissingTranslation on line %d: Translation key 'messages.missing' not found in language files
+MissingTranslation on line %d: Translation key 'Online courses - more coming up!' not found in language files
+MissingTranslation on line %d: Translation key 'Dashboard' not found in language files
