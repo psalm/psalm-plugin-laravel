@@ -486,6 +486,25 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
 - Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
 
+### BelongsToMany is covariant in `TPivotModel`; `withPivot()`/`withTimestamps()` refine the pivot slot (#1944)
+
+**Decision:** `TPivotModel` is `@template-covariant` in the `BelongsToMany` / `MorphToMany` stub headers (`common`, `13`, `13.5.0`). `BelongsToManyPivotColumnsHandler` (registered on `Concerns\InteractsWithPivotTable`, which declares `withPivot()`, plus `BelongsToMany` for `withTimestamps()`) refines the slot to `Pivot&object{col: T}` from literal column arguments. `ModelRelationReturnTypeHandler` emits the same refined slot from the parsed relation body (`RelationMethodParser` captures `withPivot()`/`withTimestamps()` columns and the pivot table).
+
+Column read types use this precedence: for a custom `using()` pivot class, its `@property` type, then its explicit cast (Laravel applies casts before the dates list), then the date-cast rule; for plain `Pivot`/`MorphPivot`, the date-cast rule comes first. After that, both use the pivot table's migration schema type (nullable-aware), then `mixed` when the table or column is unknown. For a plain `Pivot`/`MorphPivot`, Laravel builds the pivot through `Pivot::fromAttributes()`, which checks `hasTimestampAttributes()` before setting `pivotParent`, so its gate is a selected literal `created_at`. A custom `using()` pivot is built through `fromRawAttributes()`, so its gate is the parent's created-at column. Once the gate passes, the cast columns in either case are the parent's created/updated column names from `getDates()`. An unknown or unresolvable parent model (including a union or abstract model) never forces Carbon on `created_at`/`updated_at`.
+
+**Why:** Laravel's `withPivot()` returns `$this`, so a declared `BelongsToMany<User, self, Pivot&object{role: string}, 'pivot'>` could never match while `TPivotModel` was invariant. Refining without covariance would break every relation declared with plain `Pivot` (or the 2-param form) that calls `withPivot()`. Covariance is sound: `TPivotModel` appears only in return types, `@template-extends`, and callback parameters (`chunk*`/`each*` in the stub; Laravel's `wherePivot` closure docblock), never in a plain input position.
+
+**Boundaries:**
+- Psalm 7.0.0-rc2 compares `object{...}` in an intersection laxly (`ObjectComparator` maps every `TObjectWithProperties` to `object`), so declared vs inferred column types are not checked; only shape-vs-no-shape is.
+- A relation method whose declared return already carries a pivot shape keeps the declared type (the relation handler declines).
+- Non-literal, unpacked, or keyed arguments decline: the slot stays as the stub declares it.
+- `withPivot()->using(X)` replaces the slot and drops the shape in an in-body chain (order matters there); the parsed-relation path is order-independent.
+- Reading a column through the shape (`$p->role` on `Pivot&object{role: string}`, `$user->pivot` on `firstOrFail()`) still reports `UndefinedMagicPropertyFetch`: upstream Psalm bug vimeo/psalm#12110. Its fix, vimeo/psalm#12111, is merged into 6.x only; Psalm 7 (master) still needs the merge-up. In `AtomicPropertyFetchAnalyzer` the object-shape fallback is the `elseif` of the `@mixin` branch, and the `Model` stub carries `@mixin Builder<static>`. There is no sound plugin workaround: property provider events expose only the class and property name, never the receiver intersection. Pinned by `PivotShapePropertyFetchKnownLimitation.phpt`.
+- The `object{pivot: TPivotModel}` key in the stub ignores `TAccessor` (pre-existing): `->as('membership')` access is untyped.
+- Userland subclasses refine only when their `@extends BelongsToMany<...>` preserves the template order.
+- At model call sites the default joining table uses the receiver class's table; an inherited relation on a subclass therefore reads the subclass table. An in-body chain uses the declaring class.
+- An unknown or union parent model declines a defaulted `withTimestamps()` column instead of guessing.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens

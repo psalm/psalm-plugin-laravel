@@ -6,7 +6,8 @@ namespace Illuminate\Database\Eloquent\Relations;
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
  * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
  * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
- * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * @template-covariant TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * Covariant TPivotModel allows withPivot()/withTimestamps() to refine the slot to Pivot&object{...} (#1944), while plain Pivot declarations (including the 2-param form) accept it; TPivotModel occurs only in return/callback-param positions.
  * @template TAccessor of string = 'pivot'
  * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>>
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>

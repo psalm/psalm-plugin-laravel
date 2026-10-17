@@ -12,7 +12,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\Plugin\EventHandler\Event\PropertyExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\PropertyVisibilityProviderEvent;
-use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
@@ -134,20 +133,73 @@ final class ModelPropertyHandler
         string $fqClasslikeName,
         string $columnName,
     ): ?Union {
-        // Defensive vs. `getPropertyType`: the caller's FQCN can come from mixin
-        // template inference and may not be in the storage provider.
+        $propertyType = self::declaredPropertyType($codebase, $fqClasslikeName, $columnName);
+        if ($propertyType instanceof Union) {
+            return $propertyType;
+        }
+
+        return self::columnTypeFromRegistry($fqClasslikeName, $columnName);
+    }
+
+    /**
+     * Explicit declarations only, in {@see resolveColumnType} order: user `@property`, then an explicit
+     * cast. Unlike {@see resolveColumnType} a cast counts even when the column is not in the model's
+     * own schema, and a plain schema type never does: for a `using()` pivot, whose columns live in the
+     * relation table, this lets callers weigh a declaration against rules (date casts) that outrank
+     * the schema but not an explicit declaration.
+     *
+     * @param class-string<Model> $fqClasslikeName
+     */
+    public static function resolveExplicitColumnType(
+        \Psalm\Codebase $codebase,
+        string $fqClasslikeName,
+        string $columnName,
+    ): ?Union {
+        $propertyType = self::declaredPropertyType($codebase, $fqClasslikeName, $columnName);
+        if ($propertyType instanceof Union) {
+            return $propertyType;
+        }
+
+        $cast = self::castMetadata($fqClasslikeName)?->casts()[$columnName] ?? null;
+
+        return $cast?->psalmType;
+    }
+
+    /**
+     * User `@property` type. The caller's FQCN can come from mixin template inference and may not be
+     * in the storage provider, hence the defensive catch (vs. {@see getPropertyType}).
+     *
+     * @param class-string<Model> $fqClasslikeName
+     * @psalm-capabilities read-props
+     */
+    private static function declaredPropertyType(
+        \Psalm\Codebase $codebase,
+        string $fqClasslikeName,
+        string $columnName,
+    ): ?Union {
         try {
             $classStorage = $codebase->classlike_storage_provider->get($fqClasslikeName);
         } catch (\InvalidArgumentException) {
             return null;
         }
 
-        $propertyType = $classStorage->pseudo_property_get_types['$' . $columnName] ?? null;
-        if ($propertyType instanceof Union) {
-            return $propertyType;
+        return $classStorage->pseudo_property_get_types['$' . $columnName] ?? null;
+    }
+
+    /**
+     * Registry entry whose cast inventory is authoritative; null when not warmed up or incomplete
+     * (an incomplete inventory cannot prove that a column is uncast).
+     *
+     * @param class-string<Model> $fqClasslikeName
+     */
+    private static function castMetadata(string $fqClasslikeName): ?ModelMetadata
+    {
+        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
+            return null;
         }
 
-        return self::columnTypeFromRegistry($fqClasslikeName, $columnName);
+        return $metadata;
     }
 
     /**
@@ -183,13 +235,9 @@ final class ModelPropertyHandler
             return null;
         }
 
-        $metadata = ModelMetadataRegistry::for($fqClasslikeName);
-        if (!$metadata instanceof ModelMetadata) {
-            return null;
-        }
-
         // An incomplete cast inventory cannot prove that a schema column is uncast.
-        if (!$metadata->isComplete(ModelMetadata::SECTION_CASTS)) {
+        $metadata = self::castMetadata($fqClasslikeName);
+        if (!$metadata instanceof ModelMetadata) {
             return null;
         }
 
@@ -204,7 +252,7 @@ final class ModelPropertyHandler
             return $casts[$columnName]->psalmType;
         }
 
-        return self::mapColumnType($column);
+        return ColumnTypeMapper::mapColumnType($column);
     }
 
     /**
@@ -240,23 +288,6 @@ final class ModelPropertyHandler
         }
 
         return $metadata->schema()->has($propertyName);
-    }
-
-    /**
-     * Map a column to its Psalm read type, applying nullability. The non-nullable base mapping
-     * lives on {@see ColumnTypeMapper} so the cast warm-up (which bakes the CastsInboundAttributes
-     * passthrough type) and this schema read path agree on the column's intrinsic type — and so the
-     * builder reads the mapping from the Schema namespace rather than reaching back into this handler.
-     */
-    private static function mapColumnType(ColumnInfo $column): Union
-    {
-        $type = ColumnTypeMapper::mapBaseType($column);
-
-        if ($column->nullable) {
-            return Type::combineUnionTypes($type, Type::getNull());
-        }
-
-        return $type;
     }
 
     /** @var array<string, bool> Cache for hasNativeProperty() keyed by "class::property" */

@@ -309,6 +309,14 @@ Most taint handlers live under the Laravel feature directory whose API they cove
 - Contracts: plain slots get the related model's builder (its custom builder when it has one); `withWhere*()` slots get `Builder|Relation` (the closure also runs as the eager-load constraint); morph slots get `($q, $type)` over the literal types.
 - Declines: anything not provably one model's builder keeps the stub signature (union receivers, userland overrides, non-literal names or types, MorphTo on a dot path, a possible `static::class` leak, ...); the handler docblock lists them.
 
+`BelongsToManyPivotColumnsHandler` refines the pivot slot (3rd template param) of a many-to-many relation after `withPivot()`/`withTimestamps()` to `Pivot&object{col: T, ...}`, so a declared `Pivot&object{role: string}` return type matches (#1944):
+
+- Registration: a method return provider for the `InteractsWithPivotTable` trait (where `withPivot()` is declared, the only registration that fires for `MorphToMany` and userland subclasses) and `BelongsToMany` (`withTimestamps()`). It re-emits the receiver's own generic with the refined slot; `ModelRelationReturnTypeHandler` emits the same slot from the parsed method body for `$model->relation()` call sites.
+- Declines: non-literal, keyed, unpacked or named (`withPivot`) arguments, or a receiver that is not a single four-param generic with a single named pivot class. Column types come from `PivotColumnTypes` (date casts, custom pivot `@property`/casts, migration schema, then `mixed` only when unknown).
+- Receiver order: refines only `BelongsToMany`, `MorphToMany`, and direct subclasses whose `@extends BelongsToMany<...>` forwards their own four templates in order; other subclasses (grandchildren, bound or reordered templates, MorphToMany subclasses) decline.
+- Argument parsing: `withPivot()`/`withTimestamps()` use the shared `PivotColumnArgs` parser.
+- Known limitation: reading a column through the shape (`$user->pivot->role`) fails upstream in Psalm (vimeo/psalm#12110); the plugin has no sound hook for it.
+
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
 `JsonEncodeTaintHandler` is a second `Handlers/Taint/` stop-gap: core Psalm has no `json_encode()` branch in its `htmlspecialchars()` flag handling, so literal HEX flags (including the Blade `@json` directive's defaults) are treated as escapes here: `JSON_HEX_TAG` clears the html taint, `JSON_HEX_APOS` plus `JSON_HEX_QUOT` the quoted-text taint. Delete the handler once core covers the function.
 

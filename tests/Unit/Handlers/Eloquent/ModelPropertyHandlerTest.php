@@ -16,6 +16,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelRegistrationHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -194,17 +195,16 @@ final class ModelPropertyHandlerTest extends TestCase
     }
 
     /**
-     * Invoke the private SQL-type → Psalm-type mapper (which applies nullability) against a
-     * {@see ColumnInfo}, the value object the registry now hands the handler.
+     * Map a {@see ColumnInfo} through the shared SQL-type → Psalm-type mapper (applies nullability)
+     * that the handler's schema read path delegates to.
      *
      * @param list<string> $options
      */
     private function mapColumn(string $sqlType, bool $nullable = false, array $options = []): \Psalm\Type\Union
     {
-        $column = new ColumnInfo('status', $sqlType, $nullable, hasDefault: false, options: $options);
-        $method = new \ReflectionMethod(ModelPropertyHandler::class, 'mapColumnType');
-
-        return $method->invoke(null, $column);
+        return ColumnTypeMapper::mapColumnType(
+            new ColumnInfo('status', $sqlType, $nullable, hasDefault: false, options: $options),
+        );
     }
 
     private function makeCodebase(): Codebase
