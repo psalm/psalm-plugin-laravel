@@ -14,8 +14,8 @@ function consume_string_list(array $value): void { echo implode(",", $value); }
 
 /**
  * The facade's generated `@method static array ...` tags lose to the `@mixin Schema\Builder` real
- * methods, so Builder's documented `list<array{...}>` types apply. Only keys present in every
- * supported Laravel line are read; the full shapes differ between versions.
+ * methods, so Builder's types apply. Where Laravel's Builder docblock contradicts the driver processors
+ * (or is absent), stubs/common/Database/Schema/Builder.phpstub declares the runtime-true shape.
  */
 function schema_facade_introspection_resolves_through_builder(): void
 {
@@ -27,36 +27,91 @@ function schema_facade_introspection_resolves_through_builder(): void
         consume_string($view['name']);
     }
 
+    consume_string_list(Schema::getTableListing());
+}
+
+/** Laravel 12.x and 13.0-13.7 omit `collation`; every line documents `generation.type` as non-null. */
+function schema_facade_get_columns_follows_the_processors(): void
+{
     foreach (Schema::getColumns('users') as $column) {
         consume_string($column['name']);
-    }
 
-    foreach (Schema::getIndexes('users') as $index) {
+        $_collation = $column['collation'];
+        /** @psalm-check-type-exact $_collation = null|string */
+        echo $_collation;
+
+        $generation = $column['generation'];
+
+        if ($generation !== null) {
+            $_generationType = $generation['type'];
+            /** @psalm-check-type-exact $_generationType = null|string */
+            echo $_generationType;
+        }
+    }
+}
+
+/** Every line documents `type: string`, but SQLite always emits null; SQLite's result is not a list. */
+function schema_facade_get_indexes_follows_the_processors(): void
+{
+    $_indexes = Schema::getIndexes('users');
+    /** @psalm-check-type-exact $_indexes = array<int, array{columns: list<string>, name: string, primary: bool, type: null|string, unique: bool}> */
+
+    foreach ($_indexes as $index) {
         consume_string($index['name']);
         consume_string_list($index['columns']);
     }
+}
 
+/** Laravel 12.x and 13.0-13.6 document a bare `array`; SQLite emits a null constraint name. */
+function schema_facade_get_foreign_keys_is_typed_on_every_line(): void
+{
+    foreach (Schema::getForeignKeys('posts') as $foreignKey) {
+        consume_string_list($foreignKey['columns']);
+
+        $_name = $foreignKey['name'];
+        /** @psalm-check-type-exact $_name = null|string */
+        echo $_name;
+    }
+}
+
+/** Laravel < 13.7 repeats the `type` key and < 13.8 omits `schema_qualified_name`; Postgres emits null codes. */
+function schema_facade_get_types_follows_the_processors(): void
+{
     foreach (Schema::getTypes() as $type) {
         consume_string($type['name']);
         consume_string($type['schema_qualified_name']);
 
-        // Postgres custom categories map to null in PostgresProcessor::processTypes().
         $_category = $type['category'];
         /** @psalm-check-type-exact $_category = null|string */
         echo $_category;
-    }
 
-    consume_string_list(Schema::getTableListing());
+        $_kind = $type['type'];
+        /** @psalm-check-type-exact $_kind = null|string */
+        echo $_kind;
+    }
+}
+
+/** `Schema::connection()` returns the Builder itself, so the instance path shares the corrected types. */
+function schema_connection_instance_calls_share_the_corrected_types(): void
+{
+    foreach (Schema::connection(null)->getColumns('users') as $column) {
+        $generation = $column['generation'];
+
+        if ($generation !== null) {
+            $_generationType = $generation['type'];
+            /** @psalm-check-type-exact $_generationType = null|string */
+            echo $_generationType;
+        }
+    }
 }
 
 /**
- * Builder::blueprintResolver() documents a resolver taking `(string, Closure, string)` on Laravel 12.20-12.21,
- * which contradicts createBlueprint() (`$connection, $table, $callback`). The facade stub keeps the
- * facade tag's plain `\Closure`, so a valid resolver is accepted on every supported line.
+ * Laravel 12.20-12.21 document the resolver as `Closure(string, Closure, string): Blueprint|null`, which
+ * contradicts createBlueprint() (`$connection, $table, $callback`).
  */
 function schema_facade_blueprint_resolver_accepts_runtime_resolver(): void
 {
-    Schema::blueprintResolver(static fn (Connection $_connection, string $table): Blueprint => new Blueprint($_connection, $table));
+    Schema::blueprintResolver(static fn (Connection $connection, string $table): Blueprint => new Blueprint($connection, $table));
 }
 
 /** Methods Builder does not type more precisely keep their facade types. */

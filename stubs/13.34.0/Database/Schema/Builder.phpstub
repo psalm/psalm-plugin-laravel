@@ -1,0 +1,21 @@
+<?php
+
+namespace Illuminate\Database\Schema;
+
+/**
+ * Builder::getColumn() exists from Laravel 13.34. It returns `[]` for an absent column while its
+ * `@return` documents only the full column shape (`getColumns()` row shape, see the common stub),
+ * which would make `getColumn(...) === []` a DocblockTypeContradiction.
+ *
+ * The class header is copied verbatim because re-declaring the class resets Psalm's implements list
+ * (hard rule 2). Methods not restated here (and their taint sinks) survive from the common stub.
+ */
+class Builder
+{
+    /**
+     * @param  string  $table
+     * @param  string  $column
+     * @return array{name: string, type: string, type_name: string, collation: string|null, nullable: bool, default: mixed, auto_increment: bool, comment: string|null, generation: array{type: string|null, expression: string|null}|null}|array{}
+     */
+    public function getColumn($table, $column) {}
+}

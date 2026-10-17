@@ -400,18 +400,21 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 ### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
 
-**Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()`, `getColumnListing()` (and `getSchemas()`, `getIndexListing()`) resolve to the installed Laravel's own `list<array{...}>` types instead of the facade tag's bare `array`. No `FacadeStubPrecedenceHandler` change.
+**Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()`, `getColumnListing()` (and `getSchemas()`, `getIndexListing()`) resolve to Builder's `list<array{...}>` types (the installed Laravel's docblock, or the Builder stub's correction listed below) instead of the facade tag's bare `array`. No `FacadeStubPrecedenceHandler` change.
 
 **Why:** Hand-copied shapes are wrong on one Laravel line (the `getColumns`/`getTypes` shapes changed between 12.x and 13.x; `getForeignKeys` is `array` before 13.7). The rejected alternative, a handler whitelist dropping those pseudo-static entries, is unnecessary: Psalm 7 resolves a static call on a facade through the `@mixin` target's real method (`AtomicStaticCallAnalyzer` mixin step) before it consults `pseudo_static_methods`, so the mixin alone wins.
 
 **Scope of the behavior change:** the mixin applies to EVERY Builder method not declared as a real method on the facade stub, not only the `array` returns. Builder's parameter types and generic callback inference (`create()`/`table()` closures, `whenTableHasColumn()`, `withoutForeignKeyConstraints()` returning `TReturn`) now replace the facade tags', and Builder's stub taint sinks (`drop`, `create`, ...) now fire on facade calls.
 
-**Carve-outs (real static methods on the facade stub, keeping the facade tag's behavior)** because Laravel's Builder docblock is defective:
-- `getTypes()`: `@return` repeats the `type` key before 13.7 (Psalm rejects it, call becomes `mixed`), and `type`/`category` are `null` for unmapped Postgres codes. Stub shape lists the runtime keys.
-- `blueprintResolver()`: Laravel 12.20-12.21 document `\Closure(string, \Closure, string): Blueprint|null`, contradicting `createBlueprint()`, which passes `($connection, $table, $callback)`; fixed in 12.22. Common stub, because version dirs cannot express "below".
-- `getColumn()`: exists from Laravel 13.34 (`stubs/13.34.0/`); returns `[]` for an absent column while documenting only the full shape, so `=== []` becomes a `DocblockTypeContradiction`.
+**Builder-stub corrections (not facade carve-outs):** where Laravel's `Schema\Builder` docblock contradicts what the driver processors (`Query\Processors\*`) emit on a supported line, `stubs/common/Database/Schema/Builder.phpstub` declares the runtime-true shape. The facade picks it up through the mixin, and `Schema::connection()->...` instance calls share it (the Builder stub is the single source). Full audit matrix: processors are identical on 12.20-13.37 apart from Postgres `virtual` generation (12.70+).
+- `getTypes()`: `type` repeated (invalid docblock, `mixed`) before 13.7, no `schema_qualified_name` before 13.8, `type`/`category` non-null on every line but null for unmapped Postgres codes.
+- `getColumns()`: no `collation` before 13.8 (every driver emits it since 12.20); `generation.type` non-null on every line but null for unmapped MySQL/Postgres/SQLite codes.
+- `getIndexes()`: `type: string` on every line, but SQLite always emits null; SQLite also `array_filter()`s the synthetic `primary` row on composite primary keys, so the result is `array<int, ...>`, not a list.
+- `getForeignKeys()`: bare `array` before 13.7 (typed list declared on every line; the shape is identical).
+- `blueprintResolver()`: Laravel 12.20-12.21 document `Closure(string, Closure, string)` but `createBlueprint()` passes `($connection, $table, $callback)` (fixed in 12.22).
+- `getColumn()` (`stubs/13.34.0/`, the method does not exist earlier): returns `[]` for an absent column, documented only as the full shape, so `=== []` is a `DocblockTypeContradiction`; declared `array{...}|array{}`.
 
-**Known limitation:** each carve-out can go once laravel/framework fixes its docblock.
+**Known limitation:** each correction can go once laravel/framework fixes its docblock. `getColumn()`'s `|array{}` makes Psalm merge both arms into one array with optional keys, so reading `$column['name']` after a `=== []` check reports `PossiblyUndefinedArrayOffset` (accurate: Psalm does not narrow it away).
 
 ## Laravel Docblock Gaps
 

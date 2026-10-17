@@ -8,8 +8,7 @@ require getcwd() . '/vendor/autoload.php';
 use Illuminate\Support\Facades\Schema;
 
 // Schema\Builder::getColumn() (Laravel 13.34+) returns `[]` for an absent column but documents only the
-// full column shape, so resolving it through the facade's `@mixin` makes the `=== []` check a
-// DocblockTypeContradiction. The facade stub keeps the facade tag's `array`.
+// full column shape, so `=== []` is a DocblockTypeContradiction. stubs/13.34.0 adds `|array{}`.
 
 function schema_facade_get_column_may_be_empty(): bool
 {
