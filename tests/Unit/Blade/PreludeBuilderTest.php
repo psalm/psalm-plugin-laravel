@@ -466,6 +466,22 @@ final class PreludeBuilderTest extends TestCase
         $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build('<?php echo 1; ?>', '') . $body));
     }
 
+    /**
+     * #1909: only names left to the `@var mixed` fallback, never a typed prelude line (props, tag
+     * bookkeeping, session stacks) or a body docblock after the prelude.
+     */
+    #[Test]
+    public function fallback_names_are_the_prelude_mixed_lines_only(): void
+    {
+        $builder = new PreludeBuilder();
+        $compiled = $this->compiledTag('5194778a')
+            . "<?php echo e(\$a); echo e(\$p); if (isset(\$value)) { \$__sessionPrevious[] = \$value; } ?>\n";
+        $body = "<?php\n/** @var mixed \$b */\n?>\n";
+
+        $this->assertSame(['a', 'value'], PreludeBuilder::fallbackNames($builder->build($compiled, '<x-alert/>', ['p' => 'int']) . $compiled . $body));
+        $this->assertSame([], PreludeBuilder::fallbackNames('<?php echo $a; ?>'));
+    }
+
     /** What `CompilesComponents::compileClassComponentOpening()` and `compileEndComponentClass()` emit for `<x-alert>Hi</x-alert>`. */
     private function compiledTag(string $hash): string
     {

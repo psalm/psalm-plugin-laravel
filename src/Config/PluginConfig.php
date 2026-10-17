@@ -58,7 +58,7 @@ final readonly class PluginConfig
         public bool $bladeValidateViewData,
         /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
         public bool $bladeReportUnusedViewData,
-        /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
+        /** Opt back in to the `MixedIssue` family inside templates, and to the findings derived from an undeclared variable's `mixed`, suppressed by default (`<blade reportMixedIssues="true" />`). */
         public bool $bladeReportMixedIssues,
         public bool $experimental,
         public bool $failOnInternalError,

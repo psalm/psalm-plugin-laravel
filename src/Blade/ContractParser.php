@@ -693,6 +693,21 @@ final class ContractParser
     }
 
     /**
+     * Every name the compiled body binds for itself, bookkeeping included, plus the names it
+     * writes without binding (a compound assignment, an internal function's by-reference output);
+     * null when it does not parse or calls `extract()`, which a caller must read as "unknown", never
+     * as "binds nothing".
+     *
+     * @return array<string, true>|null
+     */
+    public function localNames(string $compiled): ?array
+    {
+        [, $locals, , $parsed, $written, $extracts] = $this->walkReads($compiled);
+
+        return $parsed && !$extracts ? $locals + $written : null;
+    }
+
+    /**
      * @param array<string, true> $names
      * @param array<string, true> $excluded
      *
@@ -724,8 +739,10 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool, 4: array<string, true>, 5: bool}
+     *         names read, the names the body binds for itself, whether it hides which names it
+     *         reads, whether it parsed, the names {@see self::localNames()} adds, and whether it
+     *         calls `extract()`
      */
     private function walkReads(string $compiled): array
     {
@@ -736,7 +753,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, false, [], false];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -748,6 +765,12 @@ final class ContractParser
 
             public bool $unknown = false;
 
+            /** `extract()` binds names no static walk can list, unlike `$$name`, which `@props` compiles to. */
+            public bool $extracts = false;
+
+            /** @var array<string, true> written but still read first, so no local for the read sets */
+            public array $written = [];
+
             #[\Override]
             public function enterNode(Node $node): null
             {
@@ -757,6 +780,19 @@ final class ContractParser
                     }
 
                     $this->bindLocals($node->var);
+                }
+
+                if ($node instanceof Node\Expr\AssignOp) {
+                    // `$a['k'] .= 'X'` writes `$a` just as `$a .= 'X'` does.
+                    $target = $node->var;
+
+                    while ($target instanceof Node\Expr\ArrayDimFetch) {
+                        $target = $target->var;
+                    }
+
+                    if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
+                        $this->written[$target->name] = true;
+                    }
                 }
 
                 if ($node instanceof Node\Stmt\Foreach_) {
@@ -793,6 +829,7 @@ final class ContractParser
 
                 if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
                     $this->enterCall(\strtolower($node->name->toString()), $node->args);
+                    $this->writeOutputs($node->name, $node->args);
                 }
 
                 return null;
@@ -832,6 +869,43 @@ final class ContractParser
             }
 
             /**
+             * A plain variable passed to a by-reference parameter of a loaded function
+             * (`preg_match()`'s `$matches`). A method's or an unloaded function's is not seen.
+             *
+             * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
+             */
+            private function writeOutputs(Node\Name $name, array $args): void
+            {
+                // An unqualified name in a namespace falls back to the global function, as in PHP.
+                $function = \function_exists($name->toString()) ? $name->toString() : $name->getLast();
+
+                if (!\function_exists($function)) {
+                    return;
+                }
+
+                $parameters = [];
+
+                foreach ((new \ReflectionFunction($function))->getParameters() as $parameter) {
+                    $parameters[$parameter->getName()] = $parameter;
+                }
+
+                $positional = \array_values($parameters);
+                $last = \end($positional);
+
+                foreach (\array_values($args) as $index => $arg) {
+                    $parameter = $arg instanceof Node\Arg && $arg->name instanceof Node\Identifier
+                        ? $parameters[$arg->name->toString()] ?? null
+                        : $positional[$index] ?? ($last !== false && $last->isVariadic() ? $last : null);
+
+                    if ($arg instanceof Node\Arg && $parameter?->isPassedByReference() === true
+                        && $arg->value instanceof Node\Expr\Variable && \is_string($arg->value->name)
+                    ) {
+                        $this->written[$arg->value->name] = true;
+                    }
+                }
+            }
+
+            /**
              * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
              *
              * @psalm-external-mutation-free
@@ -840,6 +914,7 @@ final class ContractParser
             {
                 if ($name === 'extract') {
                     $this->unknown = true;
+                    $this->extracts = true;
 
                     return;
                 }
@@ -869,6 +944,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, true, $visitor->written, $visitor->extracts];
     }
 }

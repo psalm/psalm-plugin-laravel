@@ -32,6 +32,7 @@ final class ComponentViewSeedHandler implements AfterCodebasePopulatedInterface,
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
         ComponentViewRegistry::build($event->getCodebase());
+        BladeIssueRemapHandler::forgetTargets();
     }
 
     #[\Override]

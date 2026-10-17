@@ -23,30 +23,39 @@ use Psalm\Issue\InvalidDocblock;
 use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidNullableReturnType;
 use Psalm\Issue\InvalidScope;
+use Psalm\Issue\InvalidStringClass;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedArgument;
 use Psalm\Issue\MixedAssignment;
+use Psalm\Issue\MixedMethodCall;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidCast;
+use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\ReferenceReusedFromConfusingScope;
+use Psalm\Issue\RiskyTruthyFalsyComparison;
+use Psalm\Issue\TaintedHtml;
+use Psalm\Issue\TooFewArguments;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
+use Psalm\Issue\UndefinedMagicMethod;
 use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
+use Psalm\Issue\UnhandledMatchCondition;
 use Psalm\Issue\UnusedForeachValue;
 use Psalm\Issue\UnusedVariable;
 use Psalm\LaravelPlugin\Blade\MarkerComment;
@@ -79,6 +88,16 @@ final class ShadowIssueRelocatorTest extends TestCase
     /** `CompilesComponents::newComponentHash()` output: xxh128, 32 lowercase hex characters. */
     private const COMPONENT_HASH = '5194778a3a7b899dcee5619d0610f5cf';
 
+    private const RISKY_MIXED = 'Operand of type false|mixed contains type mixed, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.';
+
+    private const RISKY_SNIPPET = "<?php if(\$endpoint['body_params'] ?? false): ?>";
+
+    private const MAGIC_SNIPPET = "<?php echo e(\$book->getUrl('/c')); ?>";
+
+    private const STRIP_SNIPPET = "<?php echo e(strip_tags(str_replace([\"\\n\"], ' ', \$status['content']))); ?>";
+
+    private const OFFSET_SNIPPET = "<?php echo e(\$acct['avatar']); ?>";
+
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -91,6 +110,7 @@ final class ShadowIssueRelocatorTest extends TestCase
         return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
     }
 
+    /** @param array<string, true> $undeclaredNames */
     private function relocate(
         CodeIssue $issue,
         ShadowEntry $entry,
@@ -98,8 +118,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         bool $isComponentView = false,
         string $templateSource = self::TEMPLATE_SOURCE,
         bool $attributesFromTag = false,
+        array $undeclaredNames = [],
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource), $attributesFromTag);
+        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource), $attributesFromTag, $undeclaredNames);
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
@@ -1708,5 +1729,201 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(NonStaticSelfCall::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /**
+     * #1909: array access on a possible `ArrayAccess` runs a virtual `offsetGet()` call that Psalm
+     * analyzes with `PossiblyInvalidMethodCall`/`MixedMethodCall` suppressed. The re-emit lost that
+     * suppression, whatever the variable's origin and whatever `reportMixedIssues` says.
+     */
+    #[Test]
+    #[DataProvider('virtualOffsetCallIssues')]
+    public function a_virtual_offset_call_issue_is_dropped(CodeIssue $issue, bool $reportMixed): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: $reportMixed));
+    }
+
+    /** @return iterable<string, array{CodeIssue, bool}> */
+    public static function virtualOffsetCallIssues(): iterable
+    {
+        $possibly = new PossiblyInvalidMethodCall(
+            'Cannot call method on possible array{id: mixed, ...<array-key, mixed>} variable $acct',
+            self::selectionLocation('$acct', 5, self::OFFSET_SNIPPET),
+        );
+
+        yield 'PossiblyInvalidMethodCall' => [$possibly, false];
+        yield 'PossiblyInvalidMethodCall, Mixed reporting on' => [$possibly, true];
+        yield 'MixedMethodCall, Mixed reporting on' => [new MixedMethodCall(
+            'Cannot determine the type of $acct when calling method offsetGet',
+            self::selectionLocation('$acct', 5, self::OFFSET_SNIPPET),
+        ), true];
+    }
+
+    /** A real call is positioned on its method name, which `(` follows, never `[`. */
+    #[Test]
+    public function a_real_possibly_invalid_method_call_keeps_reporting(): void
+    {
+        $issue = new PossiblyInvalidMethodCall(
+            'Cannot call method on possible array<array-key, mixed> variable $d',
+            self::selectionLocation('format', 6, "<?php echo e(\$d->format('x')['y']); ?>"),
+        );
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /**
+     * A static call's `MixedMethodCall` is positioned on the whole call (AtomicStaticCallAnalyzer.php),
+     * so an offset read on its result puts `[` after it too; only the instance path's message is
+     * the virtual call's.
+     */
+    #[Test]
+    public function a_static_mixed_method_call_followed_by_an_offset_keeps_reporting(): void
+    {
+        $issue = new MixedMethodCall(
+            'Cannot call method on an unknown class',
+            self::selectionLocation('$cls::make()', 12, "<?php echo e(\$cls::make()['k']); ?>"),
+        );
+
+        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+    }
+
+    /**
+     * #1909: the prelude types a variable no contract declares as `mixed`, and Psalm narrows or
+     * coerces that `mixed` into findings outside the Mixed family. With `reportMixedIssues` off
+     * they are dropped when the expression they are about reads only such variables.
+     */
+    #[Test]
+    #[DataProvider('undeclaredSubjectIssues')]
+    public function a_finding_about_an_undeclared_variable_is_dropped(CodeIssue $issue, string $name): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), undeclaredNames: [$name => true]));
+    }
+
+    /** @return iterable<string, array{CodeIssue, string}> */
+    public static function undeclaredSubjectIssues(): iterable
+    {
+        yield 'RiskyTruthyFalsyComparison operand' => [self::riskyOnEndpoint(), 'endpoint'];
+        yield 'RiskyTruthyFalsyComparison nullsafe operand' => [new RiskyTruthyFalsyComparison(
+            'Operand of type mixed|null contains type mixed, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.',
+            self::selectionLocation('$thing?->prop', 13, '<?php if($thing?->prop): ?>'),
+            null,
+        ), 'thing'];
+        yield 'UndefinedMagicMethod receiver' => [self::magicOnBook(), 'book'];
+        yield 'UndefinedMethod nullsafe receiver' => [new UndefinedMethod(
+            'Method Base::geturl does not exist',
+            self::selectionLocation('getUrl', 6, '<?php echo e($book?->getUrl()); ?>'),
+            'Base::geturl',
+        ), 'book'];
+        yield 'PossiblyInvalidMethodCall receiver' => [new PossiblyInvalidMethodCall(
+            'Cannot call method on possible array<array-key, mixed> variable $book',
+            self::selectionLocation('getUrl', 6, self::MAGIC_SNIPPET),
+        ), 'book'];
+        yield 'PossiblyInvalidArgument nested operand' => [self::stripTagsArgument(), 'status'];
+        yield 'PossiblyInvalidCast nested operand' => [new PossiblyInvalidCast(
+            'array<array-key, string> cannot be cast to string',
+            self::selectionLocation("str_replace([\"\\n\"], ' ', \$status['content'])", 44, self::STRIP_SNIPPET),
+        ), 'status'];
+        yield 'UnhandledMatchCondition subject' => [new UnhandledMatchCondition(
+            "This match expression is not exhaustive - consider values 'a'|mixed",
+            self::selectionLocation('$kind', 5, "<?php echo e(match(\$kind) { 'a' => 1 }); ?>"),
+        ), 'kind'];
+        yield 'InvalidStringClass new' => [new InvalidStringClass(
+            'String cannot be used as a class',
+            self::selectionLocation('new $cls()', 10, '<?php echo e(new $cls()); ?>'),
+        ), 'cls'];
+        yield 'InvalidStringClass on a non-ASCII name' => [self::newCafe(), 'café'];
+        yield 'UndefinedMagicMethod on a non-ASCII receiver' => [new UndefinedMagicMethod(
+            'Magic method Base::geturl does not exist',
+            self::selectionLocation('getUrl', 6, '<?php echo e($café->getUrl()); ?>'),
+            'Base::geturl',
+        ), 'café'];
+    }
+
+    /** Declared, local, and look-alike subjects keep reporting. */
+    #[Test]
+    #[DataProvider('authoredSubjectIssues')]
+    public function a_finding_not_only_about_undeclared_variables_keeps_reporting(CodeIssue $issue, array $undeclaredNames, bool $reportMixed = false): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: $reportMixed, undeclaredNames: $undeclaredNames);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{0: CodeIssue, 1: array<string, true>, 2?: bool}> */
+    public static function authoredSubjectIssues(): iterable
+    {
+        yield 'Mixed reporting on' => [self::riskyOnEndpoint(), ['endpoint' => true], true];
+        yield 'Risky on a declared variable' => [self::riskyOnEndpoint(), ['other' => true]];
+        yield 'magic method on a declared receiver' => [self::magicOnBook(), ['other' => true]];
+        yield 'argument on a declared variable' => [self::stripTagsArgument(), []];
+        yield 'argument on a declared variable, Mixed reporting on' => [self::stripTagsArgument(), ['status' => true], true];
+        yield 'Risky without mixed in the operand' => [new RiskyTruthyFalsyComparison(
+            "Operand of type ''|0 contains type ''|0, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.",
+            self::selectionLocation("\$endpoint['body_params'] ?? false", 33, self::RISKY_SNIPPET),
+            null,
+        ), ['endpoint' => true]];
+        yield 'match without mixed in the values' => [new UnhandledMatchCondition(
+            "This match expression is not exhaustive - consider values 'b'",
+            self::selectionLocation('$kind', 5, "<?php echo e(match(\$kind) { 'a' => 1 }); ?>"),
+        ), ['kind' => true]];
+        yield 'operand mixing a declared variable' => [new PossiblyInvalidArgument(
+            'Argument 3 of str_replace expects string, but possibly different type array provided',
+            self::selectionLocation('str_replace($decl, \' \', $status)', 32, '<?php echo e(str_replace($decl, \' \', $status)); ?>'),
+            'str_replace',
+        ), ['status' => true]];
+        yield 'receiver chain' => [new UndefinedMagicMethod(
+            'Magic method Base::geturl does not exist',
+            self::selectionLocation('getUrl', 6, '<?php echo e($book->author->getUrl()); ?>'),
+            'Base::geturl',
+        ), ['book' => true, 'author' => true]];
+        yield 'receiver from a call' => [new UndefinedMagicMethod(
+            'Magic method Base::geturl does not exist',
+            self::selectionLocation('getUrl', 6, '<?php echo e(find($book)->getUrl()); ?>'),
+            'Base::geturl',
+        ), ['book' => true]];
+        yield 'class name whose ASCII prefix is undeclared' => [self::newCafe(), ['caf' => true]];
+        // Arity is not about the argument's type: a missing argument is a real bug whatever it holds.
+        yield 'TooFewArguments on an undeclared argument' => [new TooFewArguments(
+            'Too few arguments for format - expecting 2 but saw 1',
+            self::selectionLocation('format($when)', 13, '<?php echo e(format($when)); ?>'),
+            'format',
+        ), ['when' => true]];
+    }
+
+    /** Taint findings are about where a value flows, never its type, so an undeclared source is real signal. */
+    #[Test]
+    public function a_taint_finding_on_an_undeclared_variable_is_not_dropped(): void
+    {
+        $location = self::selectionLocation('$html', 5, '<?php echo $html; ?>');
+        $issue = new TaintedHtml('Detected tainted HTML', $location, [
+            ['location' => $location, 'label' => 'call to echo', 'entry_path_type' => ''],
+        ], 'call to echo');
+
+        $this->assertNotFalse($this->relocate($issue, $this->entry([9 => 3]), undeclaredNames: ['html' => true]));
+    }
+
+    private static function newCafe(): InvalidStringClass
+    {
+        return new InvalidStringClass('String cannot be used as a class', self::selectionLocation('new $café()', \strlen('new $café()'), '<?php echo e(new $café()); ?>'));
+    }
+
+    private static function riskyOnEndpoint(): RiskyTruthyFalsyComparison
+    {
+        return new RiskyTruthyFalsyComparison(self::RISKY_MIXED, self::selectionLocation("\$endpoint['body_params'] ?? false", 33, self::RISKY_SNIPPET), null);
+    }
+
+    private static function magicOnBook(): UndefinedMagicMethod
+    {
+        return new UndefinedMagicMethod('Magic method Base::geturl does not exist', self::selectionLocation('getUrl', 6, self::MAGIC_SNIPPET), 'Base::geturl');
+    }
+
+    private static function stripTagsArgument(): PossiblyInvalidArgument
+    {
+        return new PossiblyInvalidArgument(
+            'Argument 1 of strip_tags expects string, but possibly different type array<array-key, string>|string provided',
+            self::selectionLocation("str_replace([\"\\n\"], ' ', \$status['content'])", 44, self::STRIP_SNIPPET),
+            'strip_tags',
+        );
     }
 }

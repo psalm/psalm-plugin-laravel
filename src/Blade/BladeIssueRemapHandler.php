@@ -58,6 +58,16 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         self::$reportMixedIssues = $reportMixedIssues;
     }
 
+    /**
+     * A target resolved before the component seeds exist (an issue Psalm reports while still
+     * scanning, such as `InvalidDocblock`) would keep a seeded name undeclared, so the seed build
+     * drops every cached target.
+     */
+    public static function forgetTargets(): void
+    {
+        self::$targets = [];
+    }
+
     public static function reset(): void
     {
         self::$remapping = false;
@@ -260,6 +270,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             return null;
         }
 
+        $shadow = (string) @\file_get_contents($shadowPath);
+
         return new ShadowTarget(
             $entry,
             $templateSource,
@@ -271,7 +283,45 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             // Falling back to the live bytes only when boot recorded nothing: no worse than having
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
-            PreludeBuilder::declaresTagAttributes((string) @\file_get_contents($shadowPath)),
+            PreludeBuilder::declaresTagAttributes($shadow),
+            self::$reportMixedIssues ? [] : self::undeclaredNames($shadow, $shadowPath),
+        );
+    }
+
+    /**
+     * #1909: the names only the prelude's `mixed` fallback types. A body docblock in any `@var`
+     * spelling, a name the template binds itself, or a component seed types the name later, so it
+     * is subtracted. A body that does not parse turns the gate off instead.
+     *
+     * @return array<string, true>
+     */
+    private static function undeclaredNames(string $shadow, string $shadowPath): array
+    {
+        $fallback = PreludeBuilder::fallbackNames($shadow);
+        $locals = $fallback === [] ? null : (new ContractParser())->localNames($shadow);
+
+        if ($locals === null) {
+            return [];
+        }
+
+        // Every name in a docblock carrying a `@var` tag: its type can name callable parameters
+        // before the variable, and over-matching only keeps findings.
+        $declared = [];
+        \preg_match_all('#/\*\*.*?\*/#s', (string) \strstr($shadow, "\n?>\n"), $docblocks);
+
+        foreach ($docblocks[0] as $docblock) {
+            if (\preg_match('/@(?:psalm-|phpstan-)?var\b/', $docblock) === 1
+                && \preg_match_all('/\$(' . PreludeBuilder::VARIABLE_NAME . ')/', $docblock, $names) > 0
+            ) {
+                $declared += \array_fill_keys($names[1], true);
+            }
+        }
+
+        return \array_diff_key(
+            \array_fill_keys($fallback, true),
+            $locals,
+            $declared,
+            ComponentViewRegistry::seedFor($shadowPath) ?? [],
         );
     }
 }
