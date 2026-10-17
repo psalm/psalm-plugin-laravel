@@ -57,8 +57,6 @@ use Psalm\Type\Union;
  *
  * Removal: drop once the minimum supported Psalm contains the vimeo/psalm#12110 fix (#12111 or its 7.x port).
  *
- * @psalm-type FetchEntry = array{property: string, start: int, end: int, shape: ?Union, nullable: bool, ignoreNullable: bool}
- *
  * @internal
  */
 final class ModelObjectShapePropertyFetchHandler implements
@@ -71,7 +69,7 @@ final class ModelObjectShapePropertyFetchHandler implements
      * the shape type. Holds no AST node as a value: a WeakMap value is a strong reference and the fetch holds
      * its receiver key.
      *
-     * @psalm-var \WeakMap<Expr, FetchEntry>|null
+     * @psalm-var \WeakMap<Expr, array{property: string, start: int, end: int, shape: ?Union, nullable: bool, ignoreNullable: bool}>|null
      */
     private static ?\WeakMap $fetches = null;
 
@@ -83,13 +81,13 @@ final class ModelObjectShapePropertyFetchHandler implements
     private static array $locations = [];
 
     /**
-     * @return \WeakMap<Expr, FetchEntry>
+     * @return \WeakMap<Expr, array{property: string, start: int, end: int, shape: ?Union, nullable: bool, ignoreNullable: bool}>
      *
      * @psalm-pure
      */
     private static function newFetchMap(): \WeakMap
     {
-        /** @psalm-var \WeakMap<Expr, FetchEntry> $map */
+        /** @psalm-var \WeakMap<Expr, array{property: string, start: int, end: int, shape: ?Union, nullable: bool, ignoreNullable: bool}> $map */
         $map = new \WeakMap();
 
         return $map;
@@ -190,7 +188,7 @@ final class ModelObjectShapePropertyFetchHandler implements
     }
 
     /**
-     * @param \WeakMap<Expr, FetchEntry> $fetches
+     * @param \WeakMap<Expr, array{property: string, start: int, end: int, shape: ?Union, nullable: bool, ignoreNullable: bool}> $fetches
      */
     private static function retypeFetch(
         AfterExpressionAnalysisEvent $event,

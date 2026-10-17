@@ -225,7 +225,7 @@ final readonly class PivotShapeResolver
             return ColumnTypeMapper::mapType($schema);
         }
 
-        return $fallback instanceof Union && !self::isTemplateDerived($fallback) ? $fallback : Type::getMixed();
+        return $fallback instanceof Union && !$this->isTemplateDerived($fallback) ? $fallback : Type::getMixed();
     }
 
     /**
@@ -260,7 +260,7 @@ final readonly class PivotShapeResolver
      * Whether a template (or anything derived from one: `list<T>`, `class-string<T>`, `key-of<T>`, a shape value,
      * a conditional) sits anywhere in the type; `Union::hasTemplate()` only looks at the top level.
      */
-    private static function isTemplateDerived(Union $type): bool
+    private function isTemplateDerived(Union $type): bool
     {
         $visitor = new class extends TypeVisitor {
             /** @psalm-pure */

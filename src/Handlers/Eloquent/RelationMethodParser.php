@@ -794,7 +794,7 @@ final class RelationMethodParser
             $accessor ??= self::firstStringLiteralArg($expr);
         }
 
-        if ($lowerName === 'withpivot' || $lowerName === 'withtimestamps' || $lowerName === 'using') {
+        if (in_array($lowerName, ['withpivot', 'withtimestamps', 'using'], true)) {
             $pivotCalls[] = $expr;
         }
 

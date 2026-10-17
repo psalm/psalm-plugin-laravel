@@ -6,6 +6,4 @@ namespace PivotShapeFixture\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-final class Item extends Model
-{
-}
+final class Item extends Model {}
