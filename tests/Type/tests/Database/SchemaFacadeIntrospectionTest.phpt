@@ -1,6 +1,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use Illuminate\Database\Connection;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 function consume_string(string $value): void { echo $value; }
@@ -36,9 +38,25 @@ function schema_facade_introspection_resolves_through_builder(): void
 
     foreach (Schema::getTypes() as $type) {
         consume_string($type['name']);
+        consume_string($type['schema_qualified_name']);
+
+        // Postgres custom categories map to null in PostgresProcessor::processTypes().
+        $_category = $type['category'];
+        /** @psalm-check-type-exact $_category = null|string */
+        echo $_category;
     }
 
     consume_string_list(Schema::getTableListing());
+}
+
+/**
+ * Builder::blueprintResolver() documents a resolver taking `(string, Closure, string)` on Laravel 12.20-12.21,
+ * which contradicts createBlueprint() (`$connection, $table, $callback`). The facade stub keeps the
+ * facade tag's plain `\Closure`, so a valid resolver is accepted on every supported line.
+ */
+function schema_facade_blueprint_resolver_accepts_runtime_resolver(): void
+{
+    Schema::blueprintResolver(static fn (Connection $_connection, string $table): Blueprint => new Blueprint($_connection, $table));
 }
 
 /** Methods Builder does not type more precisely keep their facade types. */

@@ -15,8 +15,11 @@ namespace Illuminate\Support\Facades;
  * Every other Schema\Builder method resolves through the `@mixin` below, not the facade's generated
  * `@method` tags: Psalm consults a mixin target's real method before the facade's pseudo-static
  * entries, so the introspection methods (getTables, getViews, getColumns, getIndexes,
- * getForeignKeys, getTableListing, ...) get Builder's documented `list<array{...}>` types instead of the
+ * getForeignKeys, getTableListing, getColumnListing, ...) get Builder's documented types instead of the
  * tags' bare `array`. Those shapes differ between Laravel versions, so none are copied into this stub.
+ *
+ * The methods declared below are carve-outs where Builder's own docblock is wrong or too narrow
+ * (see the comment on each); they keep the facade tag's behavior.
  *
  * @mixin \Illuminate\Database\Schema\Builder
  */
@@ -31,22 +34,22 @@ class Schema extends Facade
     public static function hasTable($table) {}
 
     /**
-     * Declared here, not left to the `@mixin`: Builder::getTypes() carries a duplicate `type` key in its
-     * `@return` shape before Laravel 13.7, which Psalm rejects, leaving the mixin-resolved call `mixed`.
-     * The shape below is the key set shared by every supported Laravel line.
+     * Builder::getTypes() has a duplicate `type` key in its `@return` before Laravel 13.7, which Psalm
+     * rejects, leaving a mixin-resolved call `mixed`. Shape: keys present at runtime on every supported
+     * line (PostgresProcessor::processTypes); `type` and `category` are null for unmapped Postgres codes.
      *
      * @param  string|string[]|null  $schema
-     * @return list<array{name: string, schema: string, type: string, category: string, implicit: bool, ...<string, mixed>}>
+     * @return list<array{name: string, schema: string, schema_qualified_name: string, type: string|null, category: string|null, implicit: bool}>
      */
     public static function getTypes($schema = null) {}
 
     /**
-     * Get the column listing for a given table.
+     * Builder documents the resolver as `\Closure(string, \Closure, string): Blueprint|null` on Laravel
+     * 12.20-12.21, but createBlueprint() calls it with `($connection, $table, $callback)`; valid resolvers
+     * would be rejected via the mixin. Keeps the facade tag's plain `\Closure`.
      *
-     * Mirrors Schema\Builder::getColumnListing(); the facade's generated `@method` tag only says `array`.
-     *
-     * @param  string  $table
-     * @return list<string>
+     * @param  \Closure  $resolver
+     * @return void
      */
-    public static function getColumnListing($table) {}
+    public static function blueprintResolver($resolver) {}
 }
