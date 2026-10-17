@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792189985341,
+  "lastUpdate": 1792231334568,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14730,6 +14730,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1512,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf788f990727bb98f188abc1e8cf0a7cb5549270",
+          "message": "Defer `MorphTo` docblock types to Psalm (#1941)\n\n* fix: defer MorphTo docblock types to Psalm\n\nFixes #1753 by removing raw PHPDoc reconstruction and relying on native declared relation types.\n\n* refactor: trim relation AST resolution context",
+          "timestamp": "2026-10-17T11:58:51+02:00",
+          "tree_id": "0446477493bf9b482d130a619ab3349c22a1d512",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bf788f990727bb98f188abc1e8cf0a7cb5549270"
+        },
+        "date": 1792231332878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.21,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1508,
             "unit": "MB"
           }
         ]
