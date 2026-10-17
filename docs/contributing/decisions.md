@@ -458,6 +458,15 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 **Rejected:** `@return static<TSetKey, TSetValue>` on `setCollection()`. It is applied positionally to subclasses that reshape the template list (`Page<T> extends AbstractPaginator<int, T>` types its items as `int`; extra templates such as `TMeta` are dropped), and a userland `@return $this` override reports `ImplementedReturnTypeMismatch`.
 
 **Accepted limitation:** `$p->setCollection($c)->items()` keeps the receiver's old keys and values, while `$p->setCollection($c); $p->items()` rebinds through `@psalm-this-out`. Pinned by `PaginatorSetCollectionChainKnownLimitationTest`.
+
+### Pivot object-shape reads need an upstream Psalm 7 fix (#1944)
+
+**Decision:** `WithPivotReturnTypeHandler` may refine `TPivotModel` with selected pivot columns, but property reads from `Pivot&object{...}` and Laravel's related-model pivot shape depend on Psalm resolving shape members on intersections. Upstream PR [vimeo/psalm#12111](https://github.com/vimeo/psalm/pull/12111) targets Psalm 6.x; Psalm 7 needs an equivalent engine change before the handler can provide readable custom pivot fields.
+
+**Why:** On Psalm 7.0.0-rc2 with Laravel 13.37.0, `AtomicPropertyFetchAnalyzer` checks named mixins in an `if` branch and shape intersections in its `elseif`; Laravel `Model` and `Pivot` have mixins, so an explicit shape member is not considered. A translated #12111 patch was validated using an isolated autoload overlay: the `role` field on `Pivot&object{role:string}`, direct and assigned related-model `pivot->role`, and final/nullable Model shapes resolved, while an unshaped union member and an unknown shape property still reported their current undefined-property issues.
+
+**Rejected:** A plugin property provider cannot see the receiver's intersection and would claim a property on unrelated instances. A before-expression handler cannot skip only the broken native property lookup: setting a node type does not stop Psalm's lookup, returning `false` skips analysis of the whole expression and its receiver, and seeding a context fact only works for rooted variable IDs while bypassing native read/write, visibility, and null checks. The stock-vendor behavior is pinned by `Issue1944ObjectShapePivotReadKnownLimitation.phpt` until Psalm 7 has the upstream fix.
+
 ### `HigherOrderCollectionProxy` uses Laravel 13.31+'s `<TMethod, TValue, TCollection>` on every version (#1920)
 
 **Decision:** `stubs/common/Support/HigherOrderCollectionProxy.phpstub` declares `TMethod of string`, `TValue` (covariant) and `TCollection of Enumerable` (covariant); the `Collection`, `LazyCollection` and `Eloquent\Collection` stubs type `$map` as `HigherOrderCollectionProxy<'map', TValue, Collection<TKey, TValue>>`. The runtime proxy is identical on all supported Laravel versions (12.20-13.30 only lack the annotation), so the shape lives in `common`, and user code written against Laravel's 3-argument type checks on every cell. `HigherOrderCollectionProxyHandler` reads TValue at index 1 and takes the `Enumerable` fallback key from TCollection (index 2), `array-key` otherwise.

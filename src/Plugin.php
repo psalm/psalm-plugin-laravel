@@ -161,6 +161,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/PivotColumnTypeResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationReturnTypeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
@@ -458,6 +459,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Magic\MacroHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelMethodHandler.php';
         Handlers\Eloquent\ModelMethodHandler::init();
+        require_once __DIR__ . '/Handlers/Eloquent/WithPivotReturnTypeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\WithPivotReturnTypeHandler::class);
         require_once __DIR__ . '/Handlers/Eloquent/ModelBuilderMixinHandler.php';
         Handlers\Magic\MethodForwardingHandler::init(new Handlers\Magic\ForwardingRule(
             sourceClass: \Illuminate\Database\Eloquent\Relations\Relation::class,
