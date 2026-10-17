@@ -486,6 +486,14 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
 - Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
 
+### `BelongsToMany` / `MorphToMany` are covariant in `TPivotModel` (#1944)
+
+**Decision:** All four `TPivotModel` declarations (`stubs/common/` `BelongsToMany` and `MorphToMany`, plus the `stubs/13/` and `stubs/13.5.0/` `BelongsToMany` re-declarations) are `@template-covariant`. A version dir re-declares the class header, so the flag must be on every copy or Psalm keeps the last-loaded (invariant) one.
+
+**Why:** a pivot refined with its `withPivot()` columns (`Pivot&object{role: string}`) must still satisfy every existing `BelongsToMany<..., Pivot, 'pivot'>` return and parameter. TPivotModel has no input position: callbacks receive it (covariant) and `$using` is a `class-string<TPivotModel>`.
+
+**Rejected:** refining the slot while keeping it invariant. Every existing plain `Pivot` declaration on a `withPivot()` body then fails with `InvalidReturnStatement` / `InvalidArgument`.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens
