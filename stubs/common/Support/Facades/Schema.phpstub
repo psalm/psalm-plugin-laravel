@@ -11,6 +11,14 @@ namespace Illuminate\Support\Facades;
  *
  * Runtime: Builder::hasTable string-concatenates the table prefix with `$table`, which
  * coerces any stringable object via __toString.
+ *
+ * Every other Schema\Builder method resolves through the `@mixin` below, not the facade's generated
+ * `@method` tags: Psalm consults a mixin target's real method before the facade's pseudo-static
+ * entries, so the introspection methods (getTables, getViews, getColumns, getIndexes,
+ * getForeignKeys, getTableListing, ...) get Builder's documented `list<array{...}>` types instead of the
+ * tags' bare `array`. Those shapes differ between Laravel versions, so none are copied into this stub.
+ *
+ * @mixin \Illuminate\Database\Schema\Builder
  */
 class Schema extends Facade
 {
@@ -21,6 +29,16 @@ class Schema extends Facade
      * @psalm-taint-sink sql $table
      */
     public static function hasTable($table) {}
+
+    /**
+     * Declared here, not left to the `@mixin`: Builder::getTypes() carries a duplicate `type` key in its
+     * `@return` shape before Laravel 13.7, which Psalm rejects, leaving the mixin-resolved call `mixed`.
+     * The shape below is the key set shared by every supported Laravel line.
+     *
+     * @param  string|string[]|null  $schema
+     * @return list<array{name: string, schema: string, type: string, category: string, implicit: bool, ...<string, mixed>}>
+     */
+    public static function getTypes($schema = null) {}
 
     /**
      * Get the column listing for a given table.

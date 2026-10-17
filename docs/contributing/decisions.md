@@ -398,6 +398,14 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
+
+**Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()` (and `getSchemas()`, `getColumn()`, `getIndexListing()`) then resolve to the installed Laravel's own `list<array{...}>` types instead of the facade tag's bare `array`. `getTypes()` is the exception: it is a real stub method with the version-stable key subset.
+
+**Why:** Hand-copied shapes are wrong on one Laravel line (Builder's `getColumns`/`getTypes` shapes changed between 12.x and 13.x; `getForeignKeys` is `array` before 13.7). The planned `FacadeStubPrecedenceHandler` whitelist that drops those pseudo-static entries was probed and rejected as unnecessary: Psalm 7 resolves a static call on a facade through the `@mixin` target's real method before consulting `pseudo_static_methods`, so the mixin alone wins. The same ordering routes every Builder method through Builder's stub (so `Schema::drop()`/`create()` now reach Builder's `@psalm-taint-sink sql`); the facade tags are generated from the same docblocks, so only the `array`-typed methods above differ.
+
+**Known limitation:** Builder's `getTypes()` `@return` repeats the `type` key before Laravel 13.7, which Psalm rejects as an invalid docblock (the call becomes `mixed`). Fixing it upstream in laravel/framework would let the stub method go.
+
 ## Laravel Docblock Gaps
 
 ### `Arr::toCssClasses()` accepts `null`; `toCssStyles()` is not widened
