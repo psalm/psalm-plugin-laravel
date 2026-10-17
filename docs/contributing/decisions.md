@@ -248,6 +248,18 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **See:** [#1624](https://github.com/psalm/psalm-plugin-laravel/issues/1624), `ArgumentsAnalyzer::handleClosureArg()` (untyped closure params inferred from the provided callable).
 
+### Eager-load constraint closures: a params answer to check, a closure-storage write to infer (#1945)
+
+**Decision:** `RelationCallbackParamsHandler` types the first param of a constraint closure written as a literal array value (`with(['posts' => fn ($q) => ...])`, same for `withOnly()`, `Model::with()`, `load()`, `loadMissing()` on a model or an Eloquent Collection) as the Relation its key resolves to. Two mechanisms, each doing what the other cannot:
+- **Untyped param: write the closure's `FunctionLikeStorage`** (`type` plus `type_inferred`, only when no type is declared), the same write `ArgumentsAnalyzer::handleClosureArg()` does for a direct closure argument. It happens inside the params provider, not in `beforeExpressionAnalysis`: the receiver's type (needed to name the model) is only known once the receiver expression has been analyzed, and the provider runs after that and still before the args are analyzed. The write is idempotent because Psalm re-analyzes loops and branches.
+- **Typed param: the params answer mirrors the literal** (`array{posts?: Closure(HasMany<..>): mixed, ...<array-key, array|callable|string>}`, nested arrays recursively), so a declared type that is not the Relation is reported like a direct closure argument, and a compatible one is accepted (the stub's `callable(Relation)` reported a coercion for `fn (HasMany $q)`). The answer declines when the literal has a spread or a computed key: the provided type then carries a generic fallback (`...<string, string>`) that Psalm checks against the mirrored closure property, a probed false positive even for a compatible closure.
+
+**Probed dead end:** a keyed-array params answer cannot infer untyped closure params inside an array literal. Psalm 7 leaves such params `mixed` for `array{posts?: Closure(Rel): mixed}`, `array<string, Closure(Rel): mixed>` and nested shapes alike (it contextually types only a closure that is itself the argument), while still reporting a typed closure that mismatches the shape. Hence the storage write.
+
+**Shared path logic:** only the segmentation (`Support\RelationPath`) is shared with `UndefinedModelRelationHandler`. The walks differ (existence check that tolerates gaps vs an exact Relation type that declines on a `MorphTo`), so those guards stay at their consumer. `with('relation', fn)` on a Builder uses the plain slot mechanism; `Model::with('a', fn)` is `func_get_args()` at runtime (the closure lands under a numeric key and is never applied), so it declines.
+
+**See:** [#1945](https://github.com/psalm/psalm-plugin-laravel/issues/1945), `tests/Type/tests/Relation/EagerLoadConstraintParam*Test.phpt`.
+
 ## Taint Analysis
 
 ### Taint annotations: high confidence only
