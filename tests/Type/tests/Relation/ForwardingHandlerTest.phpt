@@ -60,17 +60,18 @@ function test_scopes_preserves_relation_type(): void {
     /** @psalm-check-type-exact $_ = HasOne<Invoice, WorkOrder> */
 }
 
-// Different Relation subclass: BelongsToMany (verifies template params work beyond HasOne)
+// Different Relation subclass: BelongsToMany (verifies template params work beyond HasOne). parts() selects
+// `withPivot('quantity', 'unit_price')`; the type-test harness runs no migrations, so both columns are mixed.
 function test_belongsToMany_where_preserves_relation_type(): void {
     $r = (new WorkOrder())->parts();
     $_ = $r->where('active', true);
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> */
+    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot&object{quantity: mixed, unit_price: mixed}, 'pivot'> */
 }
 
 function test_belongsToMany_orderBy_preserves_relation_type(): void {
     $r = (new WorkOrder())->parts();
     $_ = $r->orderBy('name');
-    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot, 'pivot'> */
+    /** @psalm-check-type-exact $_ = BelongsToMany<Part, WorkOrder, Pivot&object{quantity: mixed, unit_price: mixed}, 'pivot'> */
 }
 
 // Non-fluent: first() resolved via Relation stub (workaround for Psalm mixin template bug)

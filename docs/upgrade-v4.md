@@ -106,6 +106,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 - Support for `Attribute<TGet, TSet>` accessor templates
 - `after()` closures, `Blueprint::rename()`, `addColumn()`, and more migration methods supported
 - Auto-discovery of migration directories registered via `loadMigrationsFrom()`
+- `withPivot()` / `withTimestamps()` refine the `BelongsToMany` / `MorphToMany` pivot to `Pivot&object{role: string}` (columns typed from your migrations), so a declared `Pivot&object{...}` return type and `$related->pivot->role` resolve; `TPivotModel` is covariant, so existing `BelongsToMany<R, self, Pivot, 'pivot'>` declarations still pass
 
 ## Upgrade steps
 

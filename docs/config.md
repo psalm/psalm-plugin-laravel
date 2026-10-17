@@ -52,7 +52,7 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 
 ### `columnFallback` values
 
-- `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
+- `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`). The same schema types the columns of a `withPivot()` pivot shape (`Pivot&object{role: string}`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
 For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=modelProperties.columnFallback=none` (see [Per-run overrides](#per-run-overrides)).

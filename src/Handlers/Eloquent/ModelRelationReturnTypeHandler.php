@@ -13,7 +13,9 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
@@ -58,6 +60,7 @@ use Psalm\Type\Union;
  * even when the stub declares a default via `@template T of … = Default` (see #883).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
+ * @psalm-import-type ParsedRelation from RelationMethodParser
  * @internal
  */
 final class ModelRelationReturnTypeHandler
@@ -199,7 +202,7 @@ final class ModelRelationReturnTypeHandler
                         $parsed['relationClass'],
                         $relatedModelType,
                         $parsed['intermediateModel'],
-                        $parsed['pivotModel'],
+                        self::pivotSlot($codebase, $parsed, $declaringClass, $bindingClass, $methodName),
                         $parsed['accessor'],
                         $bindingClass,
                         $bindingIsStatic,
@@ -261,7 +264,7 @@ final class ModelRelationReturnTypeHandler
      * returns null because its target is runtime-selected. Returns null when no statically
      * known target exists.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @param ParsedRelation $parsed
      * @psalm-pure
      */
     private static function resolveRelatedModelType(array $parsed): ?Union
@@ -271,6 +274,67 @@ final class ModelRelationReturnTypeHandler
         }
 
         return null;
+    }
+
+    /**
+     * The pivot slot (slot 3) of a BelongsToMany / MorphToMany: the `using()` class or the per-relation default,
+     * refined with the `withPivot()` / `withTimestamps()` columns the parser captured (#1944). Null for every
+     * other relation, which has no such slot. Column types: {@see PivotShapeResolver}; a column nothing else
+     * knows takes the type of the method's declared `Relation<R, D, Pivot&object{...}>` shape.
+     *
+     * @param ParsedRelation $parsed
+     */
+    private static function pivotSlot(Codebase $codebase, array $parsed, string $declaringClass, string $bindingClass, string $methodName): ?Union
+    {
+        /** @psalm-var class-string $relationClass */
+        $relationClass = $parsed['relationClass'];
+        $default = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
+        if ($default === null) {
+            return null;
+        }
+
+        $pivotClass = $parsed['pivotModel'] ?? $default;
+        $slot = new Union([new TNamedObject($pivotClass)]);
+        if ($parsed['pivotColumns'] === [] && $parsed['pivotTimestamps'] === []) {
+            return $slot;
+        }
+
+        $properties = (new PivotShapeResolver($codebase, $pivotClass, $parsed['pivotTable'], $bindingClass, $parsed['relatedModel']))->properties(
+            $parsed['pivotColumns'],
+            $parsed['pivotTimestamps'],
+            [],
+            self::declaredPivotShape($codebase, $declaringClass, $methodName, $parsed['relationClass']),
+        );
+        $refined = $properties === [] ? null : PivotShapeResolver::refine($slot, $properties);
+
+        return $refined instanceof TNamedObject ? new Union([$refined]) : $slot;
+    }
+
+    /**
+     * The object shape in slot 3 of the method's DECLARED `@return Relation<R, D, Pivot&object{...}>`, empty
+     * unless that return is a single generic of the relation class with at least three arguments.
+     *
+     * @return array<array-key, Union>
+     * @psalm-capabilities read-props
+     */
+    private static function declaredPivotShape(Codebase $codebase, string $declaringClass, string $methodName, string $relationClass): array
+    {
+        try {
+            $declared = $codebase->methods->getStorage(new MethodIdentifier($declaringClass, \strtolower($methodName)))->return_type;
+        } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
+            return [];
+        }
+
+        if (!$declared instanceof Union || !$declared->isSingle()) {
+            return [];
+        }
+
+        $atomic = $declared->getSingleAtomic();
+        if (!$atomic instanceof TGenericObject || \strcasecmp($atomic->value, $relationClass) !== 0 || \count($atomic->type_params) < 3) {
+            return [];
+        }
+
+        return PivotShapeResolver::shapeProperties($atomic->type_params[2]) ?? [];
     }
 
     /**
@@ -300,7 +364,7 @@ final class ModelRelationReturnTypeHandler
         string $relationClass,
         Union $relatedModel,
         ?string $intermediateModel,
-        ?string $pivotModel,
+        ?Union $pivotSlot,
         ?string $accessor,
         string $bindingClass,
         bool $bindingIsStatic,
@@ -341,9 +405,8 @@ final class ModelRelationReturnTypeHandler
         // the stub declares a `@template T of … = Default` expression. The pivot default
         // is per-relation (BelongsToMany => Pivot, MorphToMany => MorphPivot) to match
         // the corresponding stub default.
-        $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
-        if ($pivotDefault !== null) {
-            $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
+        if ($pivotSlot instanceof Union) {
+            $typeParams[] = $pivotSlot;
             $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
         }
 

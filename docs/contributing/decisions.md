@@ -92,6 +92,29 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
 
+### `withPivot()` / `withTimestamps()` refine the pivot slot to `Pivot&object{column: type}` (#1944)
+
+**Decision:** `BelongsToMany<R, D, Pivot, 'pivot'>` becomes `BelongsToMany<R, D, Pivot&object{role: string}, 'pivot'>` in two places, both fed by `PivotShapeResolver`:
+- inside a relation method body: `PivotColumnsReturnTypeHandler`, a method return provider on `withPivot` / `withTimestamps`, so a declared `Pivot&object{role: string}` return matches the inferred type;
+- at the call site of a registered model's relation method: `RelationMethodParser` captures the factory's table argument, the literal `withPivot()` columns and the `withTimestamps()` arguments (also through a delegated relation), and `ModelRelationReturnTypeHandler` builds slot 3 from them.
+`TPivotModel` is covariant for this (see the Variance entry), and `$pivot->role` / `$related->pivot->role` resolve through `ModelObjectShapePropertyFetchHandler` (vimeo/psalm#12110).
+
+**Column type, first hit wins:** a custom pivot class (`@property`, casts, its schema); a date-cast timestamp column; the relation table's schema; the type in the method's DECLARED `Pivot&object{...}` return (call site only, template-free types only; schema types win over it); `mixed`. Anything not provable (dynamic table, unscanned class, an overridden `joiningTableSegment()` / `getCreatedAtColumn()` / `getUpdatedAtColumn()`) falls through; a non-literal `withPivot()` argument adds no column, since an object shape is open and a partial one is sound.
+
+**Tables:** a literal; a model passed as the table argument (its registered schema); the default `belongsToMany()` table, the two snake_cased basenames sorted and joined with `_` (no singularization); the default `morphToMany()` / `morphedByMany()` table, the morph name with its last `_` word pluralized. Laravel 12.20 and 13 derive them identically.
+
+**Timestamps:** `Pivot::fromRawAttributes()` turns timestamps on when the PARENT model's created-at column is among the selected pivot columns, and `getDates()` then names the parent's created-at / updated-at columns, NOT the `withTimestamps($createdAt, $updatedAt)` arguments. So the base pivot casts (`Carbon|null`) exactly the parent's created-at column once it is selected, and the updated-at one together with it; a renamed column is a plain schema column, and a custom pivot class never takes this path. Laravel 13 also accepts `false` to drop a column, 12.20 passes it on as a column name; neither adds a column here.
+
+**Probed dead ends (Psalm 7.0.0-rc2):**
+- A stub-only `withPivot()`: the shape's keys are the call's string arguments, which a docblock cannot express.
+- A property provider for `$pivot->role`: it carries no receiver type.
+- A shape-first intersection (`object{p: T}&TRelatedModel`) in the stubs: property fetches resolve but method calls on the value report `MixedMethodCall`.
+- Covariance on `common` only: the version-dir headers re-declare the class and win.
+
+**Not done (next steps):** the `$model->relation` property type gaining `object{pivot: ...}`; `TAccessor` in the result shapes (`as('x')`); an implicit `using()` from `belongsToMany(X, PivotClass::class)`; the pivot key columns (`user_id`); `using()` after `withPivot()` keeps the class only (a custom pivot class describes its own columns); `withPivotValue()`.
+
+**Accepted limitation:** the cast of the updated-at column depends on the created-at column being among the columns the chain shows. A dynamic `withPivot($columns)` that selects it is invisible, and the column then reads as its schema type.
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally
