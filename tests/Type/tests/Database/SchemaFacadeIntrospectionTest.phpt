@@ -2,7 +2,9 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Database\Connection;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
 
 function consume_string(string $value): void { echo $value; }
@@ -124,6 +126,26 @@ function schema_connection_instance_calls_share_the_corrected_types(): void
 function schema_facade_blueprint_resolver_accepts_runtime_resolver(): void
 {
     Schema::blueprintResolver(static fn (Connection $connection, string $table): Blueprint => new Blueprint($connection, $table));
+}
+
+/**
+ * Builder documents `array<string>` for the column lists, but the facade's `@method` tags accept any
+ * array, and the runtime handles Expression (grammar wrap) and Stringable (strtolower coercion).
+ * The facade stub restates the tags so these calls stay clean.
+ */
+function schema_facade_column_lists_keep_the_facade_param_types(): void
+{
+    Schema::dropColumns('users', [new Expression('obsolete')]);
+
+    $_hasColumns = Schema::hasColumns('users', [Str::of('id')]);
+    /** @psalm-check-type-exact $_hasColumns = bool */
+    echo $_hasColumns;
+}
+
+/** The generic callback of Builder::withoutForeignKeyConstraints() is inferred through the mixin. */
+function schema_facade_without_foreign_key_constraints_infers_the_callback_return(): int
+{
+    return Schema::withoutForeignKeyConstraints(static fn (): int => 1);
 }
 
 /** Methods Builder does not type more precisely keep their facade types. */

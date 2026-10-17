@@ -19,6 +19,12 @@ namespace Illuminate\Support\Facades;
  * the driver processors, instead of the tags' bare `array`. `Schema::connection()->...` instance calls
  * share those types.
  *
+ * The mixin also brings Builder's PARAM types, which are narrower than the facade tags for the column
+ * lists (`array<string>` vs `array`). The methods declared below restate the facade tags verbatim so
+ * calls that were accepted before the mixin (an Expression or Stringable in the list, both handled at
+ * runtime) stay accepted. `defaultStringLength(non-negative-int)` is deliberately NOT restated: a
+ * negative length is rejected at runtime.
+ *
  * @mixin \Illuminate\Database\Schema\Builder
  */
 class Schema extends Facade
@@ -30,4 +36,18 @@ class Schema extends Facade
      * @psalm-taint-sink sql $table
      */
     public static function hasTable($table) {}
+
+    /**
+     * @param  string  $table
+     * @param  array  $columns
+     * @return bool
+     */
+    public static function hasColumns($table, $columns) {}
+
+    /**
+     * @param  string  $table
+     * @param  string|array  $columns
+     * @return void
+     */
+    public static function dropColumns($table, $columns) {}
 }
