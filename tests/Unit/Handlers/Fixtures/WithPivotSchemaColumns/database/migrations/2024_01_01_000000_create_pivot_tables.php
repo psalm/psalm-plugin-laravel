@@ -23,6 +23,11 @@ return new class extends Migration {
             $table->boolean('admin');
         });
 
+        // The conventional table of Crew <-> User, which Crew::joiningTable() overrides.
+        Schema::create('crew_user', function (Blueprint $table): void {
+            $table->integer('admin');
+        });
+
         // morphToMany(Tag::class, 'taggable') joins the plural of the morph name.
         Schema::create('taggables', function (Blueprint $table): void {
             $table->foreignId('tag_id');

@@ -343,10 +343,8 @@ final class RelationMethodParser
                 // Outermost first: prepend so the innermost call's columns lead.
                 $parsed['pivotColumns'] = [...PivotColumnResolver::columnsFromArgs($expr->args), ...$parsed['pivotColumns']];
             } elseif (isset(PivotColumnResolver::FACTORY_TABLE_POSITION[$name])) {
-                if ($parsed['pivotColumns'] !== []) {
-                    $parsed['pivotTable'] = PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass);
-                }
-
+                // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
+                $parsed['pivotTable'] = PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass);
                 break;
             }
 

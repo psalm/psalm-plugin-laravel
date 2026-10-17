@@ -54,6 +54,18 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
             . "Pivot&object{role:mixed}, 'pivot'>",
             $traces,
         );
+        // An overridden joiningTable() leaves the table unknown too.
+        $this->assertContains(
+            '$_crew: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Crew, ' . self::RELATIONS
+            . "Pivot&object{admin:mixed}, 'pivot'>",
+            $traces,
+        );
+        // Delegation: the outer columns are typed from the delegated relation's table.
+        $this->assertContains(
+            '$_admins: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
+            . "Pivot&object{admin:bool}, 'pivot'>",
+            $traces,
+        );
     }
 
     /**

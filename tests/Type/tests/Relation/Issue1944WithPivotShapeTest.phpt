@@ -65,6 +65,9 @@ function skips_dynamic_and_dotted(BelongsToMany $relation, string $column): void
     // A dynamic first argument may be that array: nothing else is known.
     $_none = $relation->withPivot($column, 'ok');
     /** @psalm-trace $_none */
+    // An unpacked item may overwrite a key, so the whole array is dropped.
+    $_unpacked = $relation->withPivot(['key' => 'gone', ...['key' => 'present']]);
+    /** @psalm-trace $_unpacked */
 }
 
 /** @param BelongsToMany<User, Team, Membership, 'pivot'> $relation */
@@ -88,5 +91,6 @@ Trace on line %d: $_chained: Illuminate\Database\Eloquent\Relations\BelongsToMan
 Trace on line %d: $_skipped: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{ok:mixed}, 'pivot'>
 Trace on line %d: $_array_only: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed}, 'pivot'>
 Trace on line %d: $_none: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
+Trace on line %d: $_unpacked: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $_custom: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Membership, 'pivot'>&static
 Trace on line %d: $_morph: Illuminate\Database\Eloquent\Relations\MorphToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\MorphPivot&object{role:mixed}, 'pivot'>

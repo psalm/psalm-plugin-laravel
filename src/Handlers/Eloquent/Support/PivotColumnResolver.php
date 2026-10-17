@@ -58,9 +58,12 @@ final class PivotColumnResolver
         $values = [];
         if ($first->value instanceof Expr\Array_) {
             foreach ($first->value->items as $item) {
-                if ($item instanceof Expr\ArrayItem && !$item->unpack) {
-                    $values[] = $item->value;
+                // An unpacked item may overwrite any key, so the literal items prove nothing.
+                if (!$item instanceof Expr\ArrayItem || $item->unpack) {
+                    return [];
                 }
+
+                $values[] = $item->value;
             }
         } else {
             foreach ($args as $arg) {
@@ -130,7 +133,9 @@ final class PivotColumnResolver
         // HasRelationships::joiningTable(): both models' joiningTableSegment(), sorted.
         if (
             $relatedClass === null || $declaringClass === null
-            || !self::hasDefaultSegment($codebase, $relatedClass) || !self::hasDefaultSegment($codebase, $declaringClass)
+            || !self::inheritsDefault($codebase, $declaringClass, 'joiningTable')
+            || !self::inheritsDefault($codebase, $relatedClass, 'joiningTableSegment')
+            || !self::inheritsDefault($codebase, $declaringClass, 'joiningTableSegment')
         ) {
             return null;
         }
@@ -211,10 +216,10 @@ final class PivotColumnResolver
     }
 
     /** @psalm-capabilities read-props */
-    private static function hasDefaultSegment(Codebase $codebase, string $modelClass): bool
+    private static function inheritsDefault(Codebase $codebase, string $modelClass, string $method): bool
     {
         try {
-            $declaring = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($modelClass . '::joiningTableSegment'));
+            $declaring = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($modelClass . '::' . $method));
         } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
         }

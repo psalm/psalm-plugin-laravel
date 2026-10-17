@@ -23,6 +23,17 @@ class Team extends Model
         return $relation;
     }
 
+    public function baseMemberships(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'memberships');
+    }
+
+    /** Delegation: the columns are typed from baseMemberships()'s table. */
+    public function adminMemberships(): BelongsToMany
+    {
+        return $this->baseMemberships()->withPivot('admin');
+    }
+
     public function tags(): MorphToMany
     {
         return $this->morphToMany(Tag::class, 'taggable')->withPivot('weight');
