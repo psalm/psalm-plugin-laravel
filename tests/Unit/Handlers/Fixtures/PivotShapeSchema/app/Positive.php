@@ -184,3 +184,10 @@ function overridden_get_dates_leaves_dates_untyped(Team $team): void
     /** @psalm-trace $relation */
     echo \get_debug_type($relation);
 }
+
+function overridden_has_timestamp_attributes_leaves_dates_untyped(Team $team): void
+{
+    $relation = $team->noTimestamps();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}

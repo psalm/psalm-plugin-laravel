@@ -198,7 +198,7 @@ final readonly class PivotShapeResolver
 
     /**
      * Whether the pivot class converts dates as stock Laravel does: `transformModelValue()` asks `getDates()`, which
-     * reads `usesTimestamps()` and the pivot's created-at / updated-at column names (`$timestamps` itself is reset
+     * reads `usesTimestamps()` and the pivot's created-at / updated-at column names, and the hydration sets `$timestamps` from `hasTimestampAttributes()` (`$timestamps` itself is reset
      * by the hydration). A default pivot is stock by construction.
      *
      * @psalm-capabilities read-props
@@ -208,6 +208,7 @@ final readonly class PivotShapeResolver
         return !$this->isCustomPivot()
             || ($this->usesStockMethod($this->pivotClass, 'getdates', HasAttributes::class)
                 && $this->usesStockMethod($this->pivotClass, 'usestimestamps', HasTimestamps::class)
+                && $this->usesStockMethod($this->pivotClass, 'hastimestampattributes', AsPivot::class)
                 && $this->usesStockMethod($this->pivotClass, 'getcreatedatcolumn', AsPivot::class)
                 && $this->usesStockMethod($this->pivotClass, 'getupdatedatcolumn', AsPivot::class));
     }

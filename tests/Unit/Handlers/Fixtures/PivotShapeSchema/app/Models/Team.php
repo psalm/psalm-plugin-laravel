@@ -161,4 +161,10 @@ final class Team extends Model
     {
         return $this->belongsToMany(User::class, 'team_user')->using(ManualDatesPivot::class)->withTimestamps();
     }
+
+    /** A custom pivot overriding hasTimestampAttributes() never switches its timestamps on. */
+    public function noTimestamps(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->using(NoTimestampsPivot::class)->withTimestamps();
+    }
 }
