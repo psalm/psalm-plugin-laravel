@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792231334568,
+  "lastUpdate": 1792354731155,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14765,6 +14765,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1508,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ab97109099b98e69e6493924d38e5cafe86a4eb5",
+          "message": "feat(rules): check UnknownModelAttribute on builder and relation creation calls (#1953)\n\nResolve the filled model from the receiver's projected TModel / TRelatedModel\nfor Builder (and custom builders), HasOneOrMany and BelongsToMany creation\nmethods, with per-receiver allowlists (update() bypasses fill()). Ambiguous\nreceivers (unresolved templates, Model, unions, intersections), userland\noverrides of the creation methods or their hooks, and spread/keyed record\nlists decline.\n\nEvery path, including the existing Model ones, now also declines for a model\nwhose hierarchy redeclares fill(), forceFill(), newInstance(), isFillable()\nor fillableFromArray(): such a model can accept keys that are no column.\n\nRefs #1679",
+          "timestamp": "2026-10-18T22:15:08+02:00",
+          "tree_id": "6c47470e50099963a32cc49c50aa1613765eb17d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ab97109099b98e69e6493924d38e5cafe86a4eb5"
+        },
+        "date": 1792354729909,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.07,
+            "range": "± 1.78",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1514,
             "unit": "MB"
           }
         ]
