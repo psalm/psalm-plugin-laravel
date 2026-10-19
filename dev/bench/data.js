@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792354731155,
+  "lastUpdate": 1792390656209,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14800,6 +14800,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1514,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "65394aab3e16f394566b990b8119f75776fdd0e7",
+          "message": "Type `Schema` facade introspection methods from `Schema\\Builder` (#1956)\n\n* feat(facades): type Schema introspection methods from Schema\\Builder\n\nAdd @mixin Schema\\Builder to the Schema facade stub so Builder's documented list<array{...}> returns replace the facade @method tags' bare array. getTypes stays a stub method (Builder's docblock has a duplicate key before Laravel 13.7). Facade drop/create now reach Builder's SQL taint sinks.\n\n* fix(facades): keep Schema facade carve-outs where Builder docblocks are wrong\n\nRestore facade behavior for blueprintResolver (Laravel 12.20-12.21 resolver docblock) and getColumn (13.34+, returns [] for absent columns), make getTypes category/type nullable and add schema_qualified_name, drop the redundant getColumnListing stub method, and correct the decisions entry.\n\n* fix(facades): correct Schema Builder introspection types from the driver processors\n\nDeclare runtime-true shapes on the Builder stub where Laravel's docblock contradicts the processors (getTypes, getColumns, getIndexes, getForeignKeys, blueprintResolver; getColumn in stubs/13.34.0). The Schema facade and Schema::connection() share them via the mixin; the facade-level carve-outs are removed.\n\n* fix(facades): type Schema getViews definition as nullable and getColumn as a plain array\n\nSQL Server returns a NULL view definition for encrypted views. getColumn's array{...}|array{} union is merged by Psalm into an all-optional shape that false-positives on guarded access, so the 13.34.0 stub declares the facade tag's bare array.\n\n* fix(facades): restate Schema facade tags where the Builder mixin narrows params or erases the instance getColumn type\n\nhasColumns/dropColumns keep the facade's array param types (Stringable/Expression lists), and getColumn's array carve-out moves from the Builder stub to the facade stub so the Builder instance keeps Laravel's docblock.\n\n* docs(facades): clarify Schema facade defaultStringLength and listing return types",
+          "timestamp": "2026-10-19T08:14:49+02:00",
+          "tree_id": "6b4597a3d0c7077580a49408225ba75a23260764",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/65394aab3e16f394566b990b8119f75776fdd0e7"
+        },
+        "date": 1792390654285,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.7,
+            "range": "± 0.01",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1513,
             "unit": "MB"
           }
         ]
