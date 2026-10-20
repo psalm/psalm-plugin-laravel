@@ -34,11 +34,14 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * TValue is a Model, because the constructor/setCollection() never upgrade the wrapped
      * collection class — only Eloquent\Builder's own pagination methods do.
      *
-     * `Model::__toString()` exists (CanBeEscapedWhenCastToString), so a plain `string` TValue
-     * makes `TValue is Model` undecidable and both branches merge into a union. Pre-existing
-     * house behaviour: Eloquent\Collection::map() has the identical trade-off.
+     * `Model::__toString()` exists (CanBeEscapedWhenCastToString), so Psalm cannot rule out a
+     * plain `string` TValue being a Model: `TValue is Model` is undecidable, both branches are
+     * evaluated, and the true branch narrows TValue to `Model`, yielding a spurious
+     * `Eloquent\Collection<TKey, Model>` next to the real `Support\Collection<TKey, string>`.
+     * The outer `TValue is object` arm decides that case first (a string is not an object, whereas
+     * a leading `TValue is string` would also match a Model, which is stringable).
      *
-     * @psalm-return (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>)
+     * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
      */
     public function getCollection(): \Illuminate\Support\Collection {}
 
@@ -160,9 +163,10 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
 
     /**
      * See AbstractPaginator::getCollection() above for the full conditional-return rationale
-     * (provenance gap on manual construction; string-vs-Model undecidability).
+     * (provenance gap on manual construction; string-vs-Model undecidability, which the outer
+     * `TValue is object` arm resolves).
      *
-     * @psalm-return (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>)
+     * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
      */
     public function getCollection(): \Illuminate\Support\Collection {}
 
