@@ -196,7 +196,7 @@ MixedMethodCall on line %d: Cannot determine the type of $q when calling method 
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $t has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
-ArgumentTypeCoercion on line %d: Argument 2 of App\Builders\VehicleBuilder::whereHas expects Closure[impure](Illuminate\Database\Eloquent\Builder<TModel:App\Builders\WorkOrderBuilder as Illuminate\Database\Eloquent\Model>):mixed|null, but parent type Closure[impure](App\Builders\WorkOrderBuilder):App\Builders\WorkOrderBuilder<Illuminate\Database\Eloquent\Model> provided
+ArgumentTypeCoercion on line %d: Argument 2 of App\Builders\VehicleBuilder::whereHas expects Closure[impure](Illuminate\Database\Eloquent\Builder<TModel:App\Builders\WorkOrderBuilder as Illuminate\Database\Eloquent\Model>):mixed|null, but parent type Closure[write-props|read-globals|write-globals|io|time](App\Builders\WorkOrderBuilder):App\Builders\WorkOrderBuilder<Illuminate\Database\Eloquent\Model> provided
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method whereElectric
 MissingClosureParamType on line %d: Parameter $q has no provided type
