@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792390656209,
+  "lastUpdate": 1792525566022,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14835,6 +14835,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1513,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a91abdce0f179dea8b118161f507f260f50ec9a",
+          "message": "chore(deps): allow psalm/psalm-plugin-api ^0.4.0 (#1957)\n\nvimeo/psalm master requires plugin-api 0.4.1, so the declared\ndev-master alternative was unresolvable. None of the 0.4.0 BC\nchanges touch APIs the plugin uses.",
+          "timestamp": "2026-10-20T21:41:29+02:00",
+          "tree_id": "546db12461a684e969c1a887da0673f491dd69d5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0a91abdce0f179dea8b118161f507f260f50ec9a"
+        },
+        "date": 1792525563978,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.06,
+            "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1289,
             "unit": "MB"
           }
         ]
