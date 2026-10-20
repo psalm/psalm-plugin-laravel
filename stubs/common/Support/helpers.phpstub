@@ -52,16 +52,21 @@ class NullObject {
  * matches a bare `Stringable` / `Model` arm. Laravel returns `false` for a
  * model, `count() === 0` for a `Countable` and a blank check on the string form
  * for a `Stringable`. A userland object is otherwise never `empty()`, but PHP
- * casts an empty `SimpleXMLElement`, a zero `GMP` and a zero `BcMath\Number` to
- * `false`, so Laravel's final `empty($value)` can be true for those and they
- * share the `bool` arm with `Countable` / `Stringable`.
+ * casts an empty `SimpleXMLElement` to `false`, so Laravel's final `empty($value)`
+ * can be true for it and it shares the `bool` arm with `Countable` / `Stringable`.
+ *
+ * Only classes that exist on every supported PHP and Psalm setup may be named in
+ * these conditionals: a class Psalm does not know (`BcMath\Number` before PHP 8.4,
+ * `GMP` without ext-gmp) makes the whole object arm misresolve, so even a plain
+ * model input stops matching it. Accepted gap: a zero `GMP` / `BcMath\Number`
+ * also casts to `false`, but is typed like any other object here.
  *
  * @param  mixed  $value
  * @psalm-assert-if-false !null $value
  * @psalm-return ($value is object
  *  ? ($value is \Illuminate\Database\Eloquent\Model
  *      ? false
- *      : ($value is (\Countable|\Stringable|\SimpleXMLElement|\GMP|\BcMath\Number) ? bool : false)
+ *      : ($value is (\Countable|\Stringable|\SimpleXMLElement) ? bool : false)
  *    )
  *  : ($value is array<never, never>
  *      ? true
@@ -156,7 +161,7 @@ function e($value, $doubleEncode = true) {}
  * @psalm-return ($value is object
  *  ? ($value is \Illuminate\Database\Eloquent\Model
  *      ? true
- *      : ($value is (\Countable|\Stringable|\SimpleXMLElement|\GMP|\BcMath\Number) ? bool : true)
+ *      : ($value is (\Countable|\Stringable|\SimpleXMLElement) ? bool : true)
  *    )
  *  : ($value is array<never, never>
  *      ? false
@@ -257,8 +262,9 @@ function tap($value, $callback = null) {}
  * model) also matches the `''` / `'0'` literal arms on rc6, which made
  * `throw_unless($model)` resolve to `never`. An object is truthy, so `throw_if`
  * never returns for it and `throw_unless` passes it through, except an empty
- * `SimpleXMLElement`, a zero `GMP` and a zero `BcMath\Number`, which PHP casts
- * to `false`: for those `throw_if` may return.
+ * `SimpleXMLElement`, which PHP casts to `false`: for it `throw_if` may return.
+ * A zero `GMP` / `BcMath\Number` is an accepted gap (see {@see blank()}): the
+ * call resolves to `never`.
  *
  * Certainly-truthy scalars (`true`, `non-empty-array`, `non-falsy-string`,
  * `positive-int`, `negative-int`) make `throw_if` `never`: a plain partial-match
@@ -272,7 +278,7 @@ function tap($value, $callback = null) {}
  * @param  TException|class-string<TException>|string  $exception
  * @param  mixed  ...$parameters
  * @return (TCondition is object
- *  ? (TCondition is (\SimpleXMLElement|\GMP|\BcMath\Number) ? TCondition : never)
+ *  ? (TCondition is \SimpleXMLElement ? TCondition : never)
  *  : (TCondition is (true|non-empty-array|non-falsy-string|positive-int|negative-int)
  *      ? never
  *      : (TCondition is false|0|0.0|''|'0'|null|array<never, never> ? TCondition : never)
@@ -323,7 +329,7 @@ function trait_uses_recursive($trait) {}
  * @psalm-return ($value is object
  *  ? ($value is \Illuminate\Database\Eloquent\Model
  *      ? TCallbackReturn
- *      : ($value is (\Countable|\Stringable|\SimpleXMLElement|\GMP|\BcMath\Number) ? (TCallbackReturn|TDefaultReturn|TDefault) : TCallbackReturn)
+ *      : ($value is (\Countable|\Stringable|\SimpleXMLElement) ? (TCallbackReturn|TDefaultReturn|TDefault) : TCallbackReturn)
  *    )
  *  : ($value is (''|array<never, never>|null)
  *      ? (TDefault is callable ? TDefaultReturn : TDefault)

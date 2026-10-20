@@ -42,37 +42,26 @@ function probe(Customer $model, ?Customer $maybe, \Stringable $str, \Countable $
     /** @psalm-check-type-exact $_transformMaybe = 'd'|0|1 */;
 }
 
-// Casting these to bool can give false (empty SimpleXMLElement, zero GMP, zero BcMath\Number), so they
-// are not "any other object": blank() / filled() / transform() decide at runtime (bool). A final userland
-// object is always truthy.
+// An empty SimpleXMLElement casts to false, so it is not "any other object": blank() / filled() /
+// transform() decide at runtime (bool). A final userland object is always truthy.
 final class PlainObject
 {
 }
 
-function probe_falsy_objects(\SimpleXMLElement $xml, \GMP $gmp, \BcMath\Number $num, PlainObject $plain): void
+function probe_falsy_objects(\SimpleXMLElement $xml, PlainObject $plain): void
 {
     $_blankXml = blank($xml);
     /** @psalm-check-type-exact $_blankXml = bool */;
-    $_blankGmp = blank($gmp);
-    /** @psalm-check-type-exact $_blankGmp = bool */;
-    $_blankNum = blank($num);
-    /** @psalm-check-type-exact $_blankNum = bool */;
     $_blankPlain = blank($plain);
     /** @psalm-check-type-exact $_blankPlain = false */;
 
     $_filledXml = filled($xml);
     /** @psalm-check-type-exact $_filledXml = bool */;
-    $_filledGmp = filled($gmp);
-    /** @psalm-check-type-exact $_filledGmp = bool */;
-    $_filledNum = filled($num);
-    /** @psalm-check-type-exact $_filledNum = bool */;
     $_filledPlain = filled($plain);
     /** @psalm-check-type-exact $_filledPlain = true */;
 
     $_transformXml = transform($xml, fn (\SimpleXMLElement $_x): int => 1, 'd');
     /** @psalm-check-type-exact $_transformXml = 'd'|1|mixed */;
-    $_transformGmp = transform($gmp, fn (\GMP $_g): int => 1, 'd');
-    /** @psalm-check-type-exact $_transformGmp = 'd'|1|mixed */;
     $_transformPlain = transform($plain, fn (PlainObject $_p): int => 1, 'd');
     /** @psalm-check-type-exact $_transformPlain = 1 */;
 }

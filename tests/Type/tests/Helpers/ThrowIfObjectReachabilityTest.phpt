@@ -64,9 +64,9 @@ function throw_if_string(string $value): void
     after_i();
 }
 
-// Not every object is truthy: casting an empty SimpleXMLElement, a zero GMP or a zero BcMath\Number to
-// bool gives false, so throw_if() may return and throw_unless() may throw: the code after both stays
-// reachable.
+// Not every object is truthy: casting an empty SimpleXMLElement to bool gives false, so throw_if() may
+// return and throw_unless() may throw: the code after both stays reachable. (A zero GMP or
+// BcMath\Number also casts to false, but those classes may be absent, so the stub cannot name them.)
 function throw_if_simplexml(\SimpleXMLElement $value): void
 {
     throw_if($value);
@@ -77,25 +77,6 @@ function throw_unless_simplexml(\SimpleXMLElement $value): void
 {
     throw_unless($value);
     after_k();
-}
-
-/**
- * Psalm treats every GMP / BcMath\Number as non-empty, so the `empty` assertion of throw_if() still
- * reports TypeDoesNotContainType; only the reachability of the code after the call is under test.
- *
- * @psalm-suppress TypeDoesNotContainType
- */
-function throw_if_gmp(\GMP $value): void
-{
-    throw_if($value);
-    after_l();
-}
-
-/** @psalm-suppress TypeDoesNotContainType */
-function throw_if_bcmath(\BcMath\Number $value): void
-{
-    throw_if($value);
-    after_m();
 }
 
 // A condition that is certainly truthy always throws in throw_if(): the call is `never`, so a `never`
@@ -169,5 +150,3 @@ UndefinedFunction on line %d: Function after_h does not exist, consider enabling
 UndefinedFunction on line %d: Function after_i does not exist, consider enabling the allFunctionsGlobal config option if scanning legacy codebases
 UndefinedFunction on line %d: Function after_j does not exist, consider enabling the allFunctionsGlobal config option if scanning legacy codebases
 UndefinedFunction on line %d: Function after_k does not exist, consider enabling the allFunctionsGlobal config option if scanning legacy codebases
-UndefinedFunction on line %d: Function after_l does not exist, consider enabling the allFunctionsGlobal config option if scanning legacy codebases
-UndefinedFunction on line %d: Function after_m does not exist, consider enabling the allFunctionsGlobal config option if scanning legacy codebases
