@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792532465264,
+  "lastUpdate": 1792540449342,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14905,6 +14905,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1289,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77a28c3905b0fc0e1f3778433106ec5d08830f40",
+          "message": "Adopt Psalm 7.0.0-rc6 (#1964)\n\n* chore(deps): require vimeo/psalm 7.0.0-rc6\n\nUpdated phpt expectations pin rc6 output (closure capability wording, decimal-int-string, collapsed taint duplicates), and psalm/psalm-plugin-api 0.4.1 is what rc6 itself requires.\n\n* docs: reword misspelling example for typos\n\n* refactor: add purity annotations rc6 infers\n\nPsalm 7.0.0-rc6 self-analysis reports missing purity on these methods; CompilerEnvironment::describeCompilerClass and MigrationCache::hashFileContents move to @psalm-capabilities where a legacy tag no longer holds.\n\n* test: update type expectations for rc6 closure purity and key inference\n\nrc6 prints inferred closure capabilities instead of [impure], infers decimal-int-string for (string) casts of ints, and drops the redundant mixed from an Issue1884 key type.\n\n* test: split Issue1647 relation clone expectation by Laravel 13.38\n\nRelation::clone() is declared static since Laravel 13.38, so cloning a relation keeps its class there while earlier versions still decline.\n\n* test: drop duplicate taint reports collapsed by Psalm rc6\n\nrc2 reported each of these findings twice for a single sink; rc6 reports one.\n\n* test: pin helper conditional regressions of Psalm rc6 as a known limitation\n\nMove the blank([]), filled([]), throw_if() and transform([]) cases that rc6 resolves differently into SupportHelpersKnownLimitation.phpt, with the rc6 behavior spelled out.\n\n* test: pin rc6 paginator getCollection() union for string values\n\nrc6 narrows TValue inside the Model branch of the conditional return, so a string TValue yields a spurious Eloquent\\Collection<int, Model> next to the real Support\\Collection.\n\n* test: pin missing parent::dispatch() taint report on rc6 as a known limitation\n\nrc6 marks the arguments of in-class self::/parent:: calls, which makes DispatchableHandler drop the constructor sink inherited from a parent class.\n\n* test: expect Model|Collection for factories with an unbound TCount on rc6\n\nPsalm ignores the TCount default, so rc6 evaluates both conditional branches; document it in FactoryUnboundCountKnownLimitation.phpt.\n\n* docs: record why an unbound factory TCount stays a union\n\nCorrect the Factory stub and FactoryCountTypeProvider docblocks that claimed an unbound TCount evaluates to the single model, and add the probed dead ends to decisions.md.\n\n* docs: link Psalm upstream issue for unbound factory TCount",
+          "timestamp": "2026-10-21T01:50:36+02:00",
+          "tree_id": "85aca2b8d173953e836d2d9f01cb2f2fa2734a4d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/77a28c3905b0fc0e1f3778433106ec5d08830f40"
+        },
+        "date": 1792540447512,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.89,
+            "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1301,
             "unit": "MB"
           }
         ]
