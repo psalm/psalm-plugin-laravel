@@ -23,4 +23,18 @@ final class Dock extends Model
     {
         return $this->belongsToMany(User::class, 'team_user')->withTimestamps();
     }
+
+    /**
+     * The chain is hidden behind a variable, so an explicit using(Pivot::class) cannot be ruled out: the default pivot
+     * casts `updated_at` (its own created_at is selected), a using() pivot does not (the parent's is `added_at`).
+     */
+    public function held(): BelongsToMany
+    {
+        $relation = $this->belongsToMany(User::class, 'team_user')->using(Pivot::class);
+
+        $result = $relation->withPivot('created_at', 'updated_at');
+        /** @psalm-trace $result */
+
+        return $result;
+    }
 }

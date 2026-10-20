@@ -77,8 +77,19 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
             self::EXPECTED_TRACES,
         );
 
+        $r = 'Illuminate\\Database\\Eloquent\\Relations\\';
+        $m = 'PivotShapeFixture\\Models\\';
+        $c = 'Illuminate\\Support\\Carbon';
+
         $this->assertSame($expected, $findings['app/Positive.php'] ?? [], 'Positive.php must report exactly the expected relation types and nothing else.');
-        $this->assertSame([], $findings['app/Models/Team.php'] ?? []);
+        // In-body traces: the relation held in a variable hides an explicit using(Pivot::class), so the date columns
+        // the two hydration rules disagree on are mixed (Dock), and the ones they agree on keep Carbon (Team).
+        $this->assertSame([
+            'Trace: $result: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Dock, ' . $r . "Pivot&object{created_at:mixed, updated_at:mixed}, 'pivot'>&static",
+        ], $findings['app/Models/Dock.php'] ?? []);
+        $this->assertSame([
+            'Trace: $result: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . 'Pivot&object{created_at:' . $c . '|null, updated_at:' . $c . "|null}, 'pivot'>&static",
+        ], $findings['app/Models/Team.php'] ?? []);
         $this->assertSame([], $findings['app/Models/Squad.php'] ?? []);
     }
 

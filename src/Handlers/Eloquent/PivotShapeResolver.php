@@ -68,6 +68,7 @@ final readonly class PivotShapeResolver
      * @param string $pivotClass the TPivotModel class: `Pivot` / `MorphPivot` or a custom pivot
      * @param ?PivotTable $table
      * @param bool $branchDates the columns / timestamps differ between return branches, so no date column is typed
+     * @param bool $usingUnknown the receiver chain is not visible (a variable), so an explicit `using()` cannot be ruled out
      * @param bool $using `using()` was called, even with `Pivot` itself: the pivot then hydrates through `fromRawAttributes()`
      * @psalm-capabilities read-props
      */
@@ -79,6 +80,7 @@ final readonly class PivotShapeResolver
         private ?string $relatedClass,
         private bool $branchDates = false,
         private bool $using = false,
+        private bool $usingUnknown = false,
     ) {}
 
     /**
@@ -108,7 +110,8 @@ final readonly class PivotShapeResolver
         // Timestamps are on once the column named by `$switch` is selected; the date columns are the parent's.
         $switch = $this->timestampSwitch($parent);
         $retype = [];
-        if ($switch !== null && \in_array($switch, $columns, true)) {
+        $either = $this->usingUnknown && !$this->isCustomPivot() && $parent !== null && $parent[0] !== null && \in_array($parent[0], $columns, true);
+        if ($either || ($switch !== null && \in_array($switch, $columns, true))) {
             $retype = \array_values(\array_filter(\array_keys($known), static fn(int|string $column): bool => \in_array($column, $parent ?? [], true)));
         }
 
@@ -246,6 +249,14 @@ final readonly class PivotShapeResolver
 
         $isDate = $parent !== null && ($column === $parent[0] || $column === $parent[1]);
         if ($isDate && ($this->branchDates || !$this->hasStockDates())) {
+            return Type::getMixed();
+        }
+
+        // The default pivot and an explicit `using()` switch the casts on from different columns: where they
+        // disagree the hidden chain decides, so the type is unknown.
+        if ($isDate && $this->usingUnknown && !$this->isCustomPivot()
+            && \in_array(Model::CREATED_AT, $selected, true) !== ($parent[0] !== null && \in_array($parent[0], $selected, true))
+        ) {
             return Type::getMixed();
         }
 

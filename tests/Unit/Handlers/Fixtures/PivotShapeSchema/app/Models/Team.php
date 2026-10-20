@@ -179,4 +179,15 @@ final class Team extends Model
     {
         return $this->belongsToMany(User::class, 'team_user')->using(AddedAtPivot::class)->withPivot('added_at', 'level');
     }
+
+    /** A stock parent: both hydration rules agree on `created_at` / `updated_at`, so the hidden chain does not matter. */
+    public function heldStock(): BelongsToMany
+    {
+        $relation = $this->belongsToMany(User::class, 'team_user')->using(Pivot::class);
+
+        $result = $relation->withTimestamps();
+        /** @psalm-trace $result */
+
+        return $result;
+    }
 }

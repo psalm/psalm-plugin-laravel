@@ -94,6 +94,8 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
             return null;
         }
 
+        $using = self::callsUsing($stmt->var);
+
         // Psalm invokes a provider without a safety net: an escaping exception aborts the whole run.
         try {
             $properties = (new PivotShapeResolver(
@@ -103,7 +105,8 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
                 self::singleClass($params[1]),
                 self::singleClass($params[0]),
                 false,
-                self::callsUsing($stmt->var),
+                $using,
+                $factory === null && !$using,
             ))->properties(
                 $method === 'withpivot' ? self::pivotColumns($stmt, $source->getNodeTypeProvider()) : [],
                 $method === 'withtimestamps' ? [self::timestampArguments($stmt, $source->getNodeTypeProvider())] : [],
