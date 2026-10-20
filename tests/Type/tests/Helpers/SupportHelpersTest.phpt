@@ -64,12 +64,6 @@ function empty_string_is_blank(): bool
     return blank('');
 }
 
-/** @return true */
-function empty_array_is_blank(): bool
-{
-    return blank([]);
-}
-
 function string_of_spaces_is_blank(): bool
 {
     return blank('  ');
@@ -141,12 +135,6 @@ function null_is_not_filled(): bool
 function empty_string_is_not_filled(): bool
 {
     return filled('');
-}
-
-/** @return false */
-function empty_array_is_not_filled(): bool
-{
-    return filled([]);
 }
 
 function non_empty_string_is_unknown_filled_or_not(): bool
@@ -426,41 +414,6 @@ function tap_accepts_callable(): \DateTime
     return tap(new \DateTime, fn (\DateTime $now) => null);
 }
 
-/** @return false */
-function throw_if_with_bool_arg(bool $var): bool
-{
-    throw_if($var);
-    return $var;
-}
-
-/** @return ''|'0' **/
-function throw_if_with_string_arg(string $var): string
-{
-    throw_if($var);
-    return $var;
-}
-
-/** @return list<never> **/
-function throw_if_with_array_arg(array $var): array
-{
-    throw_if($var);
-    return $var;
-}
-
-/** @return 0 **/
-function throw_if_with_int_arg(int $var): int
-{
-    throw_if($var);
-    return $var;
-}
-
-/** @return 0.0 **/
-function throw_if_with_float_arg(float $var): float
-{
-    throw_if($var);
-    return $var;
-}
-
 /** @return true */
 function throw_unless_with_bool_arg(bool $var): bool
 {
@@ -515,10 +468,6 @@ function test_trait_uses_recursive(): array {
 //function it_uses_callback_return_type_if_value_is_not_blank(): float {
 //    return transform(42, fn ($value) => $value * 1.1, fn () => null);
 //}
-
-function it_uses_default_return_type_if_value_is_blank_and_default_is_callable(): int {
-    return transform([], fn () => 'any', fn () => 42);
-}
 
 function it_uses_default_return_type_if_value_is_blank_and_default_is_not_callable(): int {
     return transform(null, fn () => 'any', 42);
