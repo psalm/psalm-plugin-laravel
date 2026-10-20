@@ -159,7 +159,7 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
                 $first = $expr->getArgs()[0] ?? null;
                 $type = $first === null ? null : $types->getType($first->value);
                 $array = $type instanceof Union && $type->isSingle() ? $type->getSingleAtomic() : null;
-                if ($array instanceof TKeyedArray && \array_filter(\array_keys($array->properties), \is_string(...)) !== []) {
+                if ($array instanceof TKeyedArray && ($array->fallback_params !== null || \array_filter(\array_keys($array->properties), \is_string(...)) !== [])) {
                     return true;
                 }
             }
@@ -196,8 +196,9 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
         $columns = [];
         if ($first->hasArray()) {
             $array = $first->isSingle() ? $first->getSingleAtomic() : null;
-            // array_merge() lets a later string key replace an earlier one, so keyed entries claim nothing.
-            foreach ($array instanceof TKeyedArray ? $array->properties : [] as $key => $item) {
+            // array_merge() lets a later string key replace an earlier one, so keyed entries claim nothing; an unsealed
+            // array (`[0 => 'role', $key => 'notes']`) may have had an entry overwritten, so it claims nothing at all.
+            foreach ($array instanceof TKeyedArray && $array->fallback_params === null ? $array->properties : [] as $key => $item) {
                 $columns[] = \is_int($key) ? self::literalColumn($item) : null;
             }
         } elseif ($first->isString()) {

@@ -61,6 +61,7 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{level:int<0, max>, notes:null|string}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot, \'pivot\'>',
     ];
 
     /** @var array<string, list<string>>|null */
@@ -95,6 +96,8 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
             // A string-keyed withPivot() entry may select created_at: updated_at is unknown, alone or split across calls.
             'Trace: $relation: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . "Pivot&object{updated_at:mixed}, 'pivot'>",
             'Trace: $split: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . "Pivot&object{updated_at:mixed}, 'pivot'>&static",
+            // The keyed call may switch the casts on, so a date column the shape already held is retyped too.
+            'Trace: $relation: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . "Pivot&object{updated_at:mixed}, 'pivot'>",
         ], $findings['app/Models/Team.php'] ?? []);
         $this->assertSame([], $findings['app/Models/Squad.php'] ?? []);
     }

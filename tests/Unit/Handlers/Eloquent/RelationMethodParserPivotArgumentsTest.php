@@ -43,6 +43,8 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
         yield 'unpacked first argument is unknown' => ["withPivot(...\$rest)", []];
         yield 'empty string is no column' => ["withPivot('')", []];
         yield 'explicit integer keys are list entries' => ["withPivot([0 => 'a', 'b'])", ['a', 'b']];
+        yield 'non-literal key claims nothing' => ["withPivot([0 => 'a', \$key => 'b'])", []];
+        yield 'constant key claims nothing' => ["withPivot([0 => 'a', self::K => 'b'])", []];
         yield 'keyed entries claim nothing' => ["withPivot(['k' => 'a', 'b'])", ['b']];
         yield 'nested array is skipped' => ["withPivot('a', ['b'])", ['a']];
     }
@@ -65,6 +67,7 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
         yield 'list array' => ["withPivot(['a', 'b'])", false];
         yield 'integer keys' => ["withPivot([0 => 'a', 1 => 'b'])", false];
         yield 'string key' => ["withPivot(['k' => 'created_at', 'b'])", true];
+        yield 'non-literal key' => ["withPivot([0 => 'a', \$key => 'b'])", true];
         yield 'spread' => ['withPivot([...$rest, \'b\'])', true];
         yield 'variadic strings' => ["withPivot('a', 'b')", false];
     }

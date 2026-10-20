@@ -111,7 +111,8 @@ final readonly class PivotShapeResolver
         $switch = $this->timestampSwitch($parent);
         $retype = [];
         $either = $this->usingUnknown && !$this->isCustomPivot() && $parent !== null && $parent[0] !== null && \in_array($parent[0], $columns, true);
-        if ($either || ($switch !== null && \in_array($switch, $columns, true))) {
+        // A call that may select the switching column unseen retypes the date columns the shape already holds.
+        if ($this->branchDates || $either || ($switch !== null && \in_array($switch, $columns, true))) {
             $retype = \array_values(\array_filter(\array_keys($known), static fn(int|string $column): bool => \in_array($column, $parent ?? [], true)));
         }
 

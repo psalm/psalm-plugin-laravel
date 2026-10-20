@@ -246,3 +246,15 @@ function keyed_switch_in_body(Team $team): void
 {
     $team->keyedSwitchInBody();
 }
+
+function dynamic_key_claims_nothing(Team $team): void
+{
+    $relation = $team->dynamicKey('k');
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function later_keyed_call_retypes_the_shape(Team $team): void
+{
+    $team->laterKeyedCall();
+}

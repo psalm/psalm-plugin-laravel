@@ -219,4 +219,18 @@ final class Team extends Model
         /** @psalm-trace $split */
         echo \get_debug_type($split);
     }
+
+    /** A non-literal key may overwrite an int-keyed entry before array_merge() sees it: nothing is claimed. */
+    public function dynamicKey(string $key): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->withPivot([0 => 'level', $key => 'notes'], 'role');
+    }
+
+    public function laterKeyedCall(): void
+    {
+        // The earlier shape already holds `updated_at`; the keyed call may select created_at and switch the casts on.
+        $relation = $this->belongsToMany(User::class, 'team_user')->withPivot('updated_at')->withPivot(['k' => 'created_at']);
+        /** @psalm-trace $relation */
+        echo \get_debug_type($relation);
+    }
 }

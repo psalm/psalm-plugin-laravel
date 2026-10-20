@@ -941,6 +941,10 @@ final class RelationMethodParser
         // (a variable, a call, ...) leaves every trailing column unclaimed.
         $first = $values[0] ?? null;
         if ($first instanceof PhpParser\Node\Expr\Array_) {
+            if (self::arrayKeysUnsafe($first)) {
+                return [];
+            }
+
             $values = [];
             foreach ($first->items as $item) {
                 // array_merge() lets a later string key replace an earlier one, so keyed entries claim nothing.
@@ -986,6 +990,25 @@ final class RelationMethodParser
 
         foreach ($first->value->items as $item) {
             if ($item instanceof PhpParser\Node\ArrayItem && ($item->unpack || !self::isListKey($item->key))) {
+                return true;
+            }
+        }
+
+        return self::arrayKeysUnsafe($first->value);
+    }
+
+    /**
+     * Whether an entry's key is neither absent nor an int / string literal: its value is unknown, so it can overwrite an
+     * int-keyed entry before array_merge() sees the array, and no entry of that array can be claimed.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function arrayKeysUnsafe(PhpParser\Node\Expr\Array_ $array): bool
+    {
+        foreach ($array->items as $item) {
+            if ($item instanceof PhpParser\Node\ArrayItem && $item->key instanceof PhpParser\Node\Expr
+                && !$item->key instanceof PhpParser\Node\Scalar\Int_ && !$item->key instanceof PhpParser\Node\Scalar\String_
+            ) {
                 return true;
             }
         }
