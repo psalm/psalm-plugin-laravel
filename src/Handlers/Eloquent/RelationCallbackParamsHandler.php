@@ -523,7 +523,7 @@ final class RelationCallbackParamsHandler implements
     /**
      * Whether the collection class runs Laravel's own `loadMissing()` and the `load()` it delegates to.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function collectionIsLaravels(Codebase $codebase, string $class): bool
     {
@@ -565,7 +565,7 @@ final class RelationCallbackParamsHandler implements
      * Whether `$class::$method` is declared by `$declaringClass` itself: a userland override, or a trait that
      * supplies one, makes another class the declaring one.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function declaredBy(Codebase $codebase, string $class, string $method, string $declaringClass): ?MethodIdentifier
     {
@@ -695,7 +695,7 @@ final class RelationCallbackParamsHandler implements
      * spread-free literal always has them). Null: nothing resolved, so there is nothing to check beyond the stub.
      *
      * @param array<string, Union> $properties
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function eagerShape(array $properties, Union $element): ?Union
     {
@@ -869,7 +869,11 @@ final class RelationCallbackParamsHandler implements
         return $model === null ? null : [$model, $forwards];
     }
 
-    /** The receiver's one non-null atomic when it is a named object; unions of classes are not narrowed. */
+    /**
+     * The receiver's one non-null atomic when it is a named object; unions of classes are not narrowed.
+     *
+     * @psalm-capabilities read-props
+     */
     private static function receiverAtomic(StatementsAnalyzer $source, MethodCall|NullsafeMethodCall $call): ?TNamedObject
     {
         $receiver = $source->getNodeTypeProvider()->getType($call->var);
