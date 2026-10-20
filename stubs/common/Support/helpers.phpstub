@@ -28,6 +28,8 @@ class NullObject {
 
 // append_config: nothing to stub
 
+// @todo-by https://github.com/vimeo/psalm/issues/12445 restore the original arm order (array<never, never> no longer takes both branches)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Determine if the given value is "blank".
  *
@@ -130,6 +132,8 @@ function e($value, $doubleEncode = true) {}
 
 // env: nothing to stub
 
+// @todo-by https://github.com/vimeo/psalm/issues/12445 restore the original arm order (array<never, never> no longer takes both branches)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Determine if a value is "filled".
  *
@@ -251,6 +255,8 @@ function str($string = null) {}
  */
 function tap($value, $callback = null) {}
 
+// @todo-by https://github.com/vimeo/psalm/issues/12444 restore `TCondition is empty` (resolves to the else branch on rc6)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Throw the given exception if the given condition is true.
  *
@@ -289,6 +295,8 @@ function tap($value, $callback = null) {}
  */
 function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {}
 
+// @todo-by https://github.com/vimeo/psalm/issues/12444 restore `TCondition is empty` (resolves to the else branch on rc6)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Throw the given exception unless the given condition is true.
  *
@@ -312,6 +320,8 @@ function throw_unless($condition, $exception = 'RuntimeException', ...$parameter
  */
 function trait_uses_recursive($trait) {}
 
+// @todo-by https://github.com/vimeo/psalm/issues/12445 restore the original arm order (array<never, never> no longer takes both branches)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Transform the given value if it is present.
  *
