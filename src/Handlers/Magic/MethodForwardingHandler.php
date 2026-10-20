@@ -619,6 +619,8 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * returns null (Path 2 __call dispatch doesn't always populate template params).
      *
      * @return non-empty-list<Union>|null
+     *
+     * @psalm-capabilities read-props
      */
     private static function extractTemplateParamsFromCaller(
         StatementsAnalyzer $source,
