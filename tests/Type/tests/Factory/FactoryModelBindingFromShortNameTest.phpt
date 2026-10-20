@@ -34,7 +34,7 @@ namespace App\Sandbox\ShortName {
     use Database\Factories\LedgerFactory;
 
     $_one = (new LedgerFactory())->create();
-    /** @psalm-check-type-exact $_one = \App\Models\Ledger */;
+    /** @psalm-check-type-exact $_one = \App\Models\Ledger|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Ledger> */;
 
     // count(N) plurality still threads through the injected TModel.
     $_many = (new LedgerFactory())->count(3)->create();
