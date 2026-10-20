@@ -26,7 +26,7 @@ namespace App\Sandbox\Unresolvable {
     use Database\Factories\PhantomFactory;
 
     $_one = (new PhantomFactory())->create();
-    /** @psalm-check-type-exact $_one = \Illuminate\Database\Eloquent\Model */;
+    /** @psalm-check-type-exact $_one = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
 }
 ?>
 --EXPECTF--

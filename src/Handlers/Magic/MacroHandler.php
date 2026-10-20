@@ -304,6 +304,9 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
         }
     }
 
+    /**
+     * @psalm-capabilities read-props
+     */
     private static function buildMethodStorage(MacroDefinition $def, bool $isStatic): MethodStorage
     {
         $methodStorage = new MethodStorage();

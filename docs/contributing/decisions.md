@@ -301,6 +301,22 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Exception:** Sinks for high-severity, targeted operations remain valid — e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
 
+### Mail: only sender and recipient addresses are header sinks (#1958)
+
+**Decision:** `Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()` and `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()` mark `$address` as a `header` sink. The display name (`$name`) and `subject()` are not sinks.
+
+**Why:**
+- Display names are safe: `Symfony\Component\Mime\Address::__construct()` strips `\r`/`\n` from the name on every symfony/mime version Laravel allows (>=7.2).
+- Subjects are safe when Symfony serializes the MIME message (SMTP, sendmail, SES raw): `UnstructuredHeader` RFC 2047-encodes tokens containing CR/LF, so a line break becomes folded whitespace. API transports (Resend, Postmark API, Mailgun API) pass the raw subject as a structured field and build the header provider-side, outside this proof.
+- Addresses are not safe on part of the supported range (`^12.20 || ^13.3`): a quoted local part (`"x\r\nBcc: a@evil.com"@example.com`) or domain literal (`victim@[\r\nX-Evil: 1]`) passes egulias validation and is written verbatim, injecting header lines; a `bcc` also reaches the SMTP envelope.
+- Two independent guards close the address hole: Laravel's `Message::ensureAddressIsSafe()` (12.60.0+, 13.10.0+) and symfony/mime 6.4.40 / 7.4.12 / 8.0.12+ (CVE-2026-45067). Either one suffices; 12.20–12.59 and 13.3–13.9 on unpatched symfony/mime are vulnerable, so the address sinks are true positives there.
+
+**Rejected alternatives:**
+- Drop the address sinks too: misses CVE-2026-45067 on supported versions.
+- Gate the address sinks by Laravel version directory: needs three override dirs (`12.60.0`, `13`, `13.10.0`), because a `12.60.0` dir also loads on the vulnerable 13.3–13.9. It would still be blind to the installed symfony/mime version, which can close the hole independently.
+
+**Known gaps (not covered):** Header-name injection via `metadata($key)`, and address sinks on `Illuminate\Mail\Message`, `Mailables\Address`, `Envelope` and `PendingMail`.
+
 ### Call-site sink exemptions are applied at issue emission, not in the taint graph
 
 **Decision:** When one call site has to be exempted from a stub's taint sink, implement `BeforeAddIssueInterface`, re-check the call site from the emitted issue, and return `false`. Do not mutate the taint graph through `RemoveTaintsInterface`.
@@ -416,6 +432,29 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
+
+**Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()`, `getColumnListing()` (and `getSchemas()`, `getIndexListing()`) resolve to Builder's types (the installed Laravel's docblock, or the Builder stub's correction listed below) instead of the facade tag's bare `array`: `list<array{...}>` rows for `getTables()`, `getViews()`, `getColumns()`, `getForeignKeys()`, `getSchemas()`; `array<int, array{...}>` for `getIndexes()`; `list<string>` for `getTableListing()`, `getColumnListing()`, `getIndexListing()`. No `FacadeStubPrecedenceHandler` change.
+
+**Why:** Hand-copied shapes are wrong on one Laravel line (the `getColumns`/`getTypes` shapes changed between 12.x and 13.x; `getForeignKeys` is `array` before 13.7). The rejected alternative, a handler whitelist dropping those pseudo-static entries, is unnecessary: Psalm 7 resolves a static call on a facade through the `@mixin` target's real method (`AtomicStaticCallAnalyzer` mixin step) before it consults `pseudo_static_methods`, so the mixin alone wins.
+
+**Scope of the behavior change:** the mixin applies to EVERY Builder method not declared as a real method on the facade stub, not only the `array` returns. Builder's parameter types and generic callback inference (`create()`/`table()` closures, `whenTableHasColumn()`, `withoutForeignKeyConstraints()` returning `TReturn`) now replace the facade tags', and Builder's stub taint sinks (`drop`, `create`, ...) now fire on facade calls.
+
+**Builder-stub corrections (not facade carve-outs):** where Laravel's `Schema\Builder` docblock contradicts what the driver processors (`Query\Processors\*`) emit on a supported line, `stubs/common/Database/Schema/Builder.phpstub` declares the runtime-true shape. The facade picks it up through the mixin, and `Schema::connection()->...` instance calls share it (the Builder stub is the single source). Full audit matrix: processors are identical on 12.20-13.37 apart from Postgres `virtual` generation (12.70+).
+- `getTypes()`: `type` repeated (invalid docblock, `mixed`) before 13.7, no `schema_qualified_name` before 13.8, `type`/`category` non-null on every line but null for unmapped Postgres codes.
+- `getColumns()`: no `collation` before 13.8 (every driver emits it since 12.20); `generation.type` non-null on every line but null for unmapped MySQL/Postgres/SQLite codes.
+- `getIndexes()`: `type: string` on every line, but SQLite always emits null; SQLite also `array_filter()`s the synthetic `primary` row on composite primary keys, so the result is `array<int, ...>`, not a list.
+- `getForeignKeys()`: bare `array` before 13.7 (typed list declared on every line; the shape is identical).
+- `blueprintResolver()`: Laravel 12.20-12.21 document `Closure(string, Closure, string)` but `createBlueprint()` passes `($connection, $table, $callback)` (fixed in 12.22).
+- `getViews()`: `definition` is NULL for encrypted SQL Server views (`sys.sql_modules.definition`) and passes through `Processor::processViews()` uncast; declared `string|null`.
+
+**Facade-side restatements (real static methods on the facade stub, restating the facade's own `@method` tag so a facade call is exactly what it was before the mixin).** Only the facade: the Builder instance keeps Laravel's docblocks, so `$schema->...` and `Schema::connection()->...` are unchanged.
+- `hasColumns()`, `dropColumns()` (common stub): Builder documents `array<string>` for the column list, the tags accept any array, and the runtime accepts `Stringable` (`strtolower()` coercion) and `Expression` (grammar `wrap()`).
+- `getColumn()` (`stubs/13.34.0/`, the method does not exist earlier): returns a full row or `[]` but documents only the full shape (`=== []` is a `DocblockTypeContradiction`); restated as the tag's bare `array`.
+- Found by scripting `UnionTypeComparator::isContainedBy()` over every facade `@method` param against the Builder param the mixin resolves (12.20 and 13.37; arity/optionality/by-ref/variadic were identical). Not restated on purpose: `defaultStringLength(non-negative-int)` (the method does not validate, but a negative length fails later in the DDL for a string column) and `blueprintResolver(Closure(Connection, string, ?Closure): Blueprint)` (native `Closure` rejects the 12.20 tag's `null`; the resolver is invoked as `($connection, $table, $callback)`).
+
+**Known limitation:** each correction can go once laravel/framework fixes its docblock. The facade's `getColumn()` stays a bare `array` because Psalm merges `array{...}|array{}` into one shape with every key optional (`array{name?: string, ...}`), which turns a `!== []`-guarded `$column['name']` into a `PossiblyUndefinedArrayOffset` false positive; `array` reports the same offset check only as the generic `PossiblyUndefinedStringArrayOffset` every plain array gets under strict config (use `isset`), and accepts the `=== []` comparison.
+
 ## Laravel Docblock Gaps
 
 ### `Arr::toCssClasses()` accepts `null`; `toCssStyles()` is not widened
@@ -486,6 +525,20 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - **Invariant `TCollection`.** `HigherOrderCollectionProxy<string, X, Enumerable<int, X>>` then rejects `$collection->map` (`InvalidArgument`); covariance accepts it. `TMethod` stays invariant (as in Laravel): a `'map'` proxy given to a `'filter'` parameter is reported.
 
 **Accepted limitation:** a non-generic subclass (`final class UserCollection extends Eloquent\Collection` with `@extends`) and a template-bound receiver (`@template C of Collection<int, X>`) still resolve their proxy from the vendor trait annotation or lose TValue; this is unchanged by the 3-argument shape. The handler keeps a `count >= 2` guard because that vendor annotation is still `<TKey, TValue>` on Laravel 12.20-13.30, where dropping the guard turns `$subclass->each->method()` into `mixed`.
+
+## Factories
+
+### An unbound `TCount` keeps `create()`/`make()` at `Model|Collection<int, Model>` (probed dead ends, Psalm 7.0.0-rc6)
+
+**Decision:** a factory declared `@extends Factory<User>` (no second template argument) answers `User|Collection<int, User>` for `create()`, `make()`, `createQuietly()` and `lazy()`. Writing `@extends Factory<User, null>` gives the single model. Pinned by `FactoryUnboundCountKnownLimitation`.
+
+**Why:** Psalm ignores `@template TCount of int|null = null` on a non-purity template, so an omitted argument leaves `TCount` at its `int|null` bound. Psalm 7.0.0-rc5 and earlier picked the single branch of the stub's conditional return for that bound; rc6 evaluates both. The missing piece is template-default support upstream, so the plugin does not paper over it.
+
+**Rejected:**
+- **Binding an omitted `TCount` to `null` class-wide.** Unsound: a count reaches a factory without `count()` (`new UserFactory(3)`, `User::factory(3)`, `UserFactory::times(3)`), and every one of them would type `make()` as a single model where Laravel returns a `Collection`.
+- **Proving "no count" at the call site.** A handler that answers the single model only when the receiver expression is a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`foreachSequence`/`when`/`unless` is sound, but is ~100 lines of workaround for a missing template default, and a factory held in a variable or property still gets the union.
+
+**Revisit:** when Psalm honours template defaults on class templates, restore the single-model answer with `@template TCount of int|null = null` alone.
 
 ## Variance
 

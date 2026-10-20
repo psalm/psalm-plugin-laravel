@@ -760,6 +760,8 @@ final class InlineValidateRulesCollector implements
      * or extends `Illuminate\Http\Request` (covers FormRequest subclasses
      * too — they carry their own `rules()` method but may additionally
      * have an inline `$this->validate([...])` call).
+     *
+     * @psalm-capabilities read-props
      */
     private static function callerIsRequest(MethodCall $expr, StatementsSource $source, Codebase $codebase): bool
     {
