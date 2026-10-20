@@ -286,7 +286,7 @@ final class ConfigKeyResolver
      * generalized return type; untyped closures contribute `mixed` without
      * dropping union siblings (`string | Closure(): void` → `string | mixed`).
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     public static function generalizeDefault(Union $defaultType): Union
     {
@@ -339,7 +339,7 @@ final class ConfigKeyResolver
      * any array whose key or value reflects to `never` — in practice the empty
      * array, whose `never` params make a poor mutable Collection.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private function wrapReflectedArrayInCollection(Union $reflected): ?Union
     {

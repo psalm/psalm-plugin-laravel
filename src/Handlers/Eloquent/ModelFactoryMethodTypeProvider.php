@@ -235,7 +235,9 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
         return [true, self::factoryClassFromClassString($property->type ?? $property->suggested_type)];
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function factoryClassFromObjectType(?Union $type): ?string
     {
         if (!$type instanceof \Psalm\Type\Union || \count($type->getAtomicTypes()) !== 1) {
@@ -247,7 +249,9 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
         return $atomic instanceof TNamedObject ? $atomic->value : null;
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function factoryClassFromClassString(?Union $type): ?string
     {
         if (!$type instanceof \Psalm\Type\Union || \count($type->getAtomicTypes()) !== 1) {

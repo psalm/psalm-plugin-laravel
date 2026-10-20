@@ -16,16 +16,20 @@ use Illuminate\Support\Traits\Macroable;
  * `count === null` → single `TModel`; any other value → `Collection<int, TModel>`,
  * including `count(0)` (empty collection) and `count(1)` (one-item collection).
  *
- * The conditional set `null|0|1` is intentional: Psalm requires the broader
- * shape so an unbound `TCount` on a user subclass like `class UserFactory
- * extends Factory<User>` (one template arg only) evaluates to the single
- * branch when no `count()`/`times()` was called. The `FactoryCountTypeProvider`
+ * The conditional set `null|0|1` is the set of counts that select the single
+ * branch as far as the stub can express it. The `FactoryCountTypeProvider`
  * handler reroutes literal `0` and `1` to a plural sentinel so the runtime
  * semantics still hold for explicit `count(0)` / `count(1)` calls.
  *
- * `TCount` defaults to `null` so user-defined factories declared as
- * `class UserFactory extends Factory<User>` keep working — the missing arg
- * resolves to the default.
+ * KNOWN LIMITATION: Psalm ignores `= null` on non-purity templates, so a user
+ * factory written as `class UserFactory extends Factory<User>` (one template
+ * arg) keeps `TCount` at its `int|null` bound. Since Psalm 7.0.0-rc6 the
+ * conditional then evaluates both branches (`User|Collection<int, User>`);
+ * `@extends Factory<User, null>` restores the single model. The default cannot
+ * be bound to `null` plugin-side because a count also arrives through
+ * `new UserFactory(3)` and `User::factory(3)`. See
+ * `FactoryUnboundCountKnownLimitation.phpt` and "Factories" in
+ * docs/contributing/decisions.md.
  *
  * Methods that return `static` (state, for, has, etc.) propagate `TCount`
  * automatically because Psalm preserves template parameters across `static`

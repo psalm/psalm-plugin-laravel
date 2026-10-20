@@ -68,7 +68,8 @@ final class ConfigRepositoryMethodHandler implements MethodReturnTypeProviderInt
      * signature changes are picked up automatically.
      *
      * @inheritDoc
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     #[\Override]
     public static function getMethodParams(MethodParamsProviderEvent $event): ?array

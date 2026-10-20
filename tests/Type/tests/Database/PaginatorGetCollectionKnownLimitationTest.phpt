@@ -47,15 +47,16 @@ function set_collection_with_plain_collection_of_models_holds_plain_support_coll
 /**
  * KNOWN LIMITATION — Model::__toString() exists (CanBeEscapedWhenCastToString), so
  * `TValue is Model` is undecidable for a plain `string` TValue and Psalm evaluates BOTH
- * conditional branches, yielding their union. Pre-existing house behaviour: Eloquent\Collection
- * ::map() has the identical trade-off for the same reason.
+ * conditional branches. Since Psalm 7.0.0-rc6 it also narrows TValue to `Model` inside the true
+ * branch, so the result is the union of the real `Support\Collection<int, string>` and a spurious
+ * `Eloquent\Collection<int, Model>`. Eloquent\Collection::map() has the identical trade-off.
  *
  * @param LengthAwarePaginator<int, string> $paginator
  */
 function string_value_paginator_get_collection_is_union(LengthAwarePaginator $paginator): void
 {
     $_collection = $paginator->getCollection();
-    /** @psalm-check-type-exact $_collection = Illuminate\Support\Collection<int, string>|Illuminate\Database\Eloquent\Collection<int, string> */
+    /** @psalm-check-type-exact $_collection = Illuminate\Support\Collection<int, string>|Illuminate\Database\Eloquent\Collection<int, Illuminate\Database\Eloquent\Model> */
 }
 ?>
 --EXPECTF--

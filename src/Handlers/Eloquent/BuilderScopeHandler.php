@@ -505,7 +505,7 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * fallback rather than surfacing the scope's own builder atom. Query\Builder is intentionally
      * NOT matched: a scope returns the Eloquent builder, never the underlying query builder.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isEntirelyEloquentBuilder(Codebase $codebase, Union $type): bool
     {
@@ -873,7 +873,8 @@ final class BuilderScopeHandler implements MethodReturnTypeProviderInterface, Me
      * (Builder<A>|Builder<A>) collapse while distinct ones (Builder<A>|Builder<B>) compare unequal.
      *
      * @param list<Union> $params
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function templateParamsId(array $params): string
     {

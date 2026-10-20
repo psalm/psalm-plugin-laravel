@@ -221,6 +221,8 @@ final class ModelRelationReturnTypeHandler
      * Psalm dispatches this provider once per receiver atomic but the receiver Union is shared,
      * so a mixed receiver (`T|Class&static`) can't tell which alternative is being resolved.
      * Only a single-atomic receiver is narrowed; anything else keeps the plain class.
+     *
+     * @psalm-capabilities read-props
      */
     private static function isStaticReceiver(
         StatementsAnalyzer $source,

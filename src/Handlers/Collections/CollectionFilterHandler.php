@@ -295,7 +295,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Build the narrowed return type with the same Collection subclass and is_static.
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function buildNarrowedReturn(
         MethodReturnTypeProviderEvent $event,
@@ -641,7 +642,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * since whereNotNull() only guarantees items are !== null.
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function removeNullType(Union $type): ?Union
     {
@@ -672,7 +674,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * - Narrows `string` → `non-falsy-string`, `array` → `non-empty-array`
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function removeFalsyTypes(Union $type): ?Union
     {
