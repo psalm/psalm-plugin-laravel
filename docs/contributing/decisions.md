@@ -520,7 +520,7 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - **Binding an omitted `TCount` to `null` class-wide.** Unsound: a count reaches a factory without `count()` (`new UserFactory(3)`, `User::factory(3)`, `UserFactory::times(3)`), and every one of them would type `make()` as a single model where Laravel returns a `Collection`.
 - **Proving "no count" at the call site.** A handler that answers the single model only when the receiver expression is a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`foreachSequence`/`when`/`unless` is sound, but is ~100 lines of workaround for a missing template default, and a factory held in a variable or property still gets the union.
 
-**Revisit:** when Psalm honours template defaults on class templates, restore the single-model answer with `@template TCount of int|null = null` alone.
+**Revisit:** when Psalm honours template defaults on class templates, restore the single-model answer with `@template TCount of int|null = null` alone. Upstream: https://github.com/vimeo/psalm/issues/12446 (template default ignored for an omitted `@extends` argument).
 
 ## Variance
 

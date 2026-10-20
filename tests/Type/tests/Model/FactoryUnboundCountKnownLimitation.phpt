@@ -39,7 +39,9 @@ final class SprocketFactory extends Factory
  * Writing the second template argument (`@extends Factory<Sprocket, null>`) restores the single model.
  * Binding `TCount` to `null` plugin-side was rejected as unsound: a count also reaches a factory through
  * `new SprocketFactory(3)`, `Sprocket::factory(3)` and `SprocketFactory::times(3)`, all of which must stay
- * plural; see "Factory TCount default" in docs/contributing/decisions.md.
+ * plural; see "Factories" in docs/contributing/decisions.md.
+ *
+ * @todo-by https://github.com/vimeo/psalm/issues/12446 expect the single model again (default of an omitted `@extends` argument honored)
  */
 $_new = (new SprocketFactory())->create();
 /** @psalm-check-type-exact $_new = \App\Sandbox\UnboundCount\Sprocket|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\UnboundCount\Sprocket> */;
