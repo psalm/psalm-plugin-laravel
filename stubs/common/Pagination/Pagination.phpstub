@@ -24,6 +24,7 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      */
     public function items(): array {}
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12440 drop the `TValue is object` wrapper from the getCollection() conditional
     /**
      * paginate()/simplePaginate()/cursorPaginate() on an Eloquent\Builder always hold an
      * Eloquent\Collection at runtime; DB::table(...) rows (stdClass) and manually-constructed
@@ -161,6 +162,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      */
     public function items(): array {}
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12440 drop the `TValue is object` wrapper from the getCollection() conditional
     /**
      * See AbstractPaginator::getCollection() above for the full conditional-return rationale
      * (provenance gap on manual construction; string-vs-Model undecidability, which the outer
