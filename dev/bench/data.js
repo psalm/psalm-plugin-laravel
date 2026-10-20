@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792525566022,
+  "lastUpdate": 1792532465264,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14865,6 +14865,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 41.06,
             "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1289,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6fb45e0115120584f4c0a8ec00f79c6165d1b96",
+          "message": "fix(taint): stop treating mail display names and subjects as header sinks (#1960)\n\nSymfony's Address strips CR/LF from display names and the subject header is\nRFC 2047-encoded, so neither can inject a header. Remove the `header` sinks\non `$name` and `$subject` for Mailable and MailMessage. Keep the `$address`\nsinks: a CRLF-bearing quoted local part or domain literal still injects\nheaders on Laravel < 12.60 / < 13.10 with unpatched symfony/mime\n(CVE-2026-45067). Document the decision and the rejected alternatives.\n\nRefs #1958",
+          "timestamp": "2026-10-20T23:38:38+02:00",
+          "tree_id": "fa309b7f3b5b345855d60e008045ede00b29ceeb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d6fb45e0115120584f4c0a8ec00f79c6165d1b96"
+        },
+        "date": 1792532463871,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.18,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
