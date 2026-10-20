@@ -93,7 +93,9 @@ final class PathHandler implements FunctionReturnTypeProviderInterface, MethodRe
 
     /**
      * @param list<\PhpParser\Node\Arg> $call_args
-     * @param \Closure(list<string>=): mixed $closure
+     * @param \Closure[_](list<string>=): mixed $closure
+     *
+     * @psalm-capabilities read-props
      */
     private static function resolveReturnType(array $call_args, \Closure $closure): Union
     {

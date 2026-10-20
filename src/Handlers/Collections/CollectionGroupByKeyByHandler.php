@@ -95,7 +95,9 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         ], is_static: true)]);
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function returnsMixed(Union $arg): bool
     {
         $mixed = false;
@@ -116,7 +118,9 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         return \in_array(\strtolower($class), ['illuminate\support\collection', 'illuminate\database\eloquent\collection'], true);
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function isExactBaseCollection(?Union $lhs): bool
     {
         if (!$lhs instanceof Union) {

@@ -105,7 +105,11 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
                 && !$functions->functionExists($source, $functionId));
     }
 
-    /** Bits set in every possible literal value of the flags argument; 0 when any value is unknown. */
+    /**
+     * Bits set in every possible literal value of the flags argument; 0 when any value is unknown.
+     *
+     * @psalm-capabilities read-props
+     */
     private static function provenFlagBits(StatementsAnalyzer $source, Arg $flagsArg): int
     {
         $type = $source->node_data->getType($flagsArg->value);
