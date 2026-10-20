@@ -280,7 +280,8 @@ final class RelationMethodParser
      * Two returns of one method build the same relation when everything but the pivot columns agrees. The
      * columns are optional enrichment: only those every branch selects from the same table survive. Whether a
      * date column is cast depends on which columns and timestamps each branch selects, so when the branches
-     * differ there, `pivotBranchDates` tells the resolver to leave the date columns untyped.
+     * differ there, `pivotBranchDates` tells the resolver to leave the date columns untyped. The flag also marks a
+     * `withPivot()` array with entries that may select a column unseen.
      *
      * @param ParsedRelation $a
      * @param ParsedRelation $b
@@ -431,9 +432,10 @@ final class RelationMethodParser
 
         if ($pivotAware) {
             // The delegated relation's own columns come first; this chain runs after them.
-            $outer = self::pivotColumnLists(\array_reverse(\array_column($chain, 1)), $parsed['pivotColumns'], $parsed['pivotTimestamps']);
+            $outer = self::pivotColumnLists(\array_reverse(\array_column($chain, 1)), $parsed['pivotColumns'], $parsed['pivotTimestamps'], $parsed['pivotBranchDates']);
             $parsed['pivotColumns'] = $outer['pivotColumns'];
             $parsed['pivotTimestamps'] = $outer['pivotTimestamps'];
+            $parsed['pivotBranchDates'] = $outer['pivotBranchDates'];
         }
 
         return $parsed;
@@ -776,7 +778,6 @@ final class RelationMethodParser
             return [
                 ...self::pivotColumnLists(\array_reverse($pivotCalls)),
                 'pivotTable' => self::factoryPivotTable($expr, $lowerName, $declaringClass, $parentClass),
-                'pivotBranchDates' => false,
                 'relationClass' => $relationClass,
                 'relatedModel' => self::extractClassStringArg($expr, $lowerName, 0, 'related', $declaringClass, $parentClass),
                 // Through relations carry the intermediate model as the second class-string
@@ -943,7 +944,7 @@ final class RelationMethodParser
             $values = [];
             foreach ($first->items as $item) {
                 // array_merge() lets a later string key replace an earlier one, so keyed entries claim nothing.
-                $values[] = $item instanceof PhpParser\Node\ArrayItem && !$item->unpack && !$item->key instanceof PhpParser\Node\Expr ? $item->value : null;
+                $values[] = $item instanceof PhpParser\Node\ArrayItem && !$item->unpack && self::isListKey($item->key) ? $item->value : null;
             }
         } elseif (!$first instanceof PhpParser\Node\Scalar) {
             return [];
@@ -957,6 +958,39 @@ final class RelationMethodParser
         }
 
         return $columns;
+    }
+
+    /**
+     * Whether an array entry's key is absent or an integer literal: array_merge() renumbers those, so the value is
+     * appended. Any other key may replace an earlier entry of the same key.
+     *
+     * @psalm-pure
+     */
+    private static function isListKey(?PhpParser\Node\Expr $key): bool
+    {
+        return !$key instanceof PhpParser\Node\Expr || $key instanceof PhpParser\Node\Scalar\Int_;
+    }
+
+    /**
+     * Whether a `withPivot()` array holds entries whose column {@see withPivotColumns()} cannot claim (string-keyed or
+     * spread): they may still select a column, such as `created_at`, which switches the pivot's timestamp casts on.
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function withPivotHidesColumns(PhpParser\Node\Expr\MethodCall $call): bool
+    {
+        $first = $call->args[0] ?? null;
+        if (!$first instanceof PhpParser\Node\Arg || !$first->value instanceof PhpParser\Node\Expr\Array_) {
+            return false;
+        }
+
+        foreach ($first->value->items as $item) {
+            if ($item instanceof PhpParser\Node\ArrayItem && ($item->unpack || !self::isListKey($item->key))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1005,15 +1039,17 @@ final class RelationMethodParser
      * @param list<PhpParser\Node\Expr\MethodCall> $calls
      * @param list<string> $columns columns the chain starts with (a delegated relation's own)
      * @param list<PivotTimestamps> $timestamps
-     * @return array{pivotColumns: list<string>, pivotTimestamps: list<PivotTimestamps>}
+     * @param bool $hidden a withPivot() array already hid a column (see {@see withPivotHidesColumns()})
+     * @return array{pivotColumns: list<string>, pivotTimestamps: list<PivotTimestamps>, pivotBranchDates: bool}
      * @psalm-capabilities read-props
      */
-    private static function pivotColumnLists(array $calls, array $columns = [], array $timestamps = []): array
+    private static function pivotColumnLists(array $calls, array $columns = [], array $timestamps = [], bool $hidden = false): array
     {
         foreach ($calls as $call) {
             $name = $call->name instanceof PhpParser\Node\Identifier ? \strtolower($call->name->name) : '';
             if ($name === 'withpivot') {
                 $columns = [...$columns, ...self::withPivotColumns($call)];
+                $hidden = $hidden || self::withPivotHidesColumns($call);
             } elseif ($name === 'withtimestamps') {
                 $timestamps[] = self::withTimestampsArgs($call);
             } elseif ($name === 'using') {
@@ -1022,7 +1058,7 @@ final class RelationMethodParser
             }
         }
 
-        return ['pivotColumns' => $columns, 'pivotTimestamps' => $timestamps];
+        return ['pivotColumns' => $columns, 'pivotTimestamps' => $timestamps, 'pivotBranchDates' => $hidden];
     }
 
     /**

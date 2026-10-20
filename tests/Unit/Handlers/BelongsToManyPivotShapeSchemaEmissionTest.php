@@ -58,6 +58,9 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {M}AddedAtPivot&object{added_at:mixed, level:mixed}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Dock, {R}Pivot&object{added_at:{C}|null, updated_at:{C}|null}, \'pivot\'>',
         'Trace: $relation: {R}BelongsToMany<{M}User, {M}Dock, {R}Pivot&object{added_at:null|string, updated_at:null|string}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{updated_at:mixed}, \'pivot\'>',
+        'Trace: $relation: {R}BelongsToMany<{M}User, {M}Team, {R}Pivot&object{level:int<0, max>, notes:null|string}, \'pivot\'>',
     ];
 
     /** @var array<string, list<string>>|null */
@@ -89,6 +92,9 @@ final class BelongsToManyPivotShapeSchemaEmissionTest extends TestCase
         ], $findings['app/Models/Dock.php'] ?? []);
         $this->assertSame([
             'Trace: $result: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . 'Pivot&object{created_at:' . $c . '|null, updated_at:' . $c . "|null}, 'pivot'>&static",
+            // A string-keyed withPivot() entry may select created_at: updated_at is unknown, alone or split across calls.
+            'Trace: $relation: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . "Pivot&object{updated_at:mixed}, 'pivot'>",
+            'Trace: $split: ' . $r . 'BelongsToMany<' . $m . 'User, ' . $m . 'Team, ' . $r . "Pivot&object{updated_at:mixed}, 'pivot'>&static",
         ], $findings['app/Models/Team.php'] ?? []);
         $this->assertSame([], $findings['app/Models/Squad.php'] ?? []);
     }

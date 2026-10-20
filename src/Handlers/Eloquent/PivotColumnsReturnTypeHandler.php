@@ -104,7 +104,7 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
                 $table,
                 self::singleClass($params[1]),
                 self::singleClass($params[0]),
-                false,
+                self::chainHidesColumns($stmt, $source->getNodeTypeProvider()),
                 $using,
                 $factory === null && !$using,
             ))->properties(
@@ -139,6 +139,29 @@ final class PivotColumnsReturnTypeHandler implements MethodReturnTypeProviderInt
         while ($expr instanceof MethodCall) {
             if ($expr->name instanceof Identifier && \strtolower($expr->name->name) === 'using') {
                 return true;
+            }
+
+            $expr = $expr->var;
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether `withPivot()` calls in the visible chain (this one included) pass an array with a string key. Those entries
+     * may select a column unseen (`['k' => 'created_at']`), which switches the pivot's timestamp casts on.
+     */
+    private static function chainHidesColumns(MethodCall $call, NodeTypeProvider $types): bool
+    {
+        $expr = $call;
+        while ($expr instanceof MethodCall) {
+            if ($expr->name instanceof Identifier && \strtolower($expr->name->name) === 'withpivot' && !$expr->isFirstClassCallable()) {
+                $first = $expr->getArgs()[0] ?? null;
+                $type = $first === null ? null : $types->getType($first->value);
+                $array = $type instanceof Union && $type->isSingle() ? $type->getSingleAtomic() : null;
+                if ($array instanceof TKeyedArray && \array_filter(\array_keys($array->properties), \is_string(...)) !== []) {
+                    return true;
+                }
             }
 
             $expr = $expr->var;

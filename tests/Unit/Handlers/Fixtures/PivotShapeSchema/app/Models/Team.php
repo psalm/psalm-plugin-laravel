@@ -190,4 +190,33 @@ final class Team extends Model
 
         return $result;
     }
+
+    /** A string-keyed entry may select `created_at`, which switches the date casts on: `updated_at` is then unknown. */
+    public function keyedSwitch(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->withPivot(['k' => 'created_at', 'updated_at']);
+    }
+
+    /** The same split across calls. */
+    public function keyedSwitchSplit(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->withPivot(['k' => 'created_at'])->withPivot('updated_at');
+    }
+
+    /** Explicit integer keys are list entries: both columns are claimed. */
+    public function integerKeys(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_user')->withPivot([0 => 'level', 'notes']);
+    }
+
+    public function keyedSwitchInBody(): void
+    {
+        $relation = $this->belongsToMany(User::class, 'team_user')->withPivot(['k' => 'created_at', 'updated_at']);
+        /** @psalm-trace $relation */
+        echo \get_debug_type($relation);
+
+        $split = $this->belongsToMany(User::class, 'team_user')->withPivot(['k' => 'created_at'])->withPivot('updated_at');
+        /** @psalm-trace $split */
+        echo \get_debug_type($split);
+    }
 }

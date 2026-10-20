@@ -42,6 +42,7 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
         yield 'call first argument may be an array' => ["withPivot(\$this->columns(), 'role')", []];
         yield 'unpacked first argument is unknown' => ["withPivot(...\$rest)", []];
         yield 'empty string is no column' => ["withPivot('')", []];
+        yield 'explicit integer keys are list entries' => ["withPivot([0 => 'a', 'b'])", ['a', 'b']];
         yield 'keyed entries claim nothing' => ["withPivot(['k' => 'a', 'b'])", ['b']];
         yield 'nested array is skipped' => ["withPivot('a', ['b'])", ['a']];
     }
@@ -54,6 +55,25 @@ final class RelationMethodParserPivotArgumentsTest extends TestCase
     public function it_reads_the_literal_with_pivot_columns(string $call, array $expected): void
     {
         $this->assertSame($expected, RelationMethodParser::withPivotColumns($this->call($call)));
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function withPivotHiddenCalls(): iterable
+    {
+        yield 'list array' => ["withPivot(['a', 'b'])", false];
+        yield 'integer keys' => ["withPivot([0 => 'a', 1 => 'b'])", false];
+        yield 'string key' => ["withPivot(['k' => 'created_at', 'b'])", true];
+        yield 'spread' => ['withPivot([...$rest, \'b\'])', true];
+        yield 'variadic strings' => ["withPivot('a', 'b')", false];
+    }
+
+    #[Test]
+    #[DataProvider('withPivotHiddenCalls')]
+    public function it_tells_whether_a_with_pivot_array_hides_columns(string $call, bool $expected): void
+    {
+        $this->assertSame($expected, RelationMethodParser::withPivotHidesColumns($this->call($call)));
     }
 
     /**

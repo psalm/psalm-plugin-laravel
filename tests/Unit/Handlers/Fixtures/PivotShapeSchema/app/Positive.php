@@ -220,3 +220,29 @@ function plain_renamed_created_at_is_not_a_date(Dock $dock): void
     /** @psalm-trace $relation */
     echo \get_debug_type($relation);
 }
+
+function keyed_entry_may_switch_the_casts_on(Team $team): void
+{
+    $relation = $team->keyedSwitch();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function keyed_entry_split_across_calls(Team $team): void
+{
+    $relation = $team->keyedSwitchSplit();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function integer_keys_are_list_entries(Team $team): void
+{
+    $relation = $team->integerKeys();
+    /** @psalm-trace $relation */
+    echo \get_debug_type($relation);
+}
+
+function keyed_switch_in_body(Team $team): void
+{
+    $team->keyedSwitchInBody();
+}
