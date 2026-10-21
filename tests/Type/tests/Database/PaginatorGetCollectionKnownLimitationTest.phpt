@@ -45,18 +45,18 @@ function set_collection_with_plain_collection_of_models_holds_plain_support_coll
 }
 
 /**
- * KNOWN LIMITATION — Model::__toString() exists (CanBeEscapedWhenCastToString), so
- * `TValue is Model` is undecidable for a plain `string` TValue and Psalm evaluates BOTH
- * conditional branches. Since Psalm 7.0.0-rc6 it also narrows TValue to `Model` inside the true
- * branch, so the result is the union of the real `Support\Collection<int, string>` and a spurious
- * `Eloquent\Collection<int, Model>`. Eloquent\Collection::map() has the identical trade-off.
+ * Not a limitation any more: `Model::__toString()` exists (CanBeEscapedWhenCastToString), so Psalm
+ * cannot rule out a plain `string` TValue being a Model and evaluates BOTH branches of a bare
+ * `TValue is Model` conditional. Psalm 7.0.0-rc6 narrows TValue inside the Model branch, which would
+ * leak a spurious `Eloquent\Collection<int, Model>` into the result; the stub's outer
+ * `TValue is object` arm decides the string case up front, so it resolves to the plain collection.
  *
  * @param LengthAwarePaginator<int, string> $paginator
  */
-function string_value_paginator_get_collection_is_union(LengthAwarePaginator $paginator): void
+function string_value_paginator_get_collection_is_plain_support_collection(LengthAwarePaginator $paginator): void
 {
     $_collection = $paginator->getCollection();
-    /** @psalm-check-type-exact $_collection = Illuminate\Support\Collection<int, string>|Illuminate\Database\Eloquent\Collection<int, Illuminate\Database\Eloquent\Model> */
+    /** @psalm-check-type-exact $_collection = Illuminate\Support\Collection<int, string> */
 }
 ?>
 --EXPECTF--
