@@ -28,6 +28,8 @@ class NullObject {
 
 // append_config: nothing to stub
 
+// @todo-by https://github.com/vimeo/psalm/issues/12445 restore the original arm order (array<never, never> no longer takes both branches)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Determine if the given value is "blank".
  *
@@ -42,15 +44,40 @@ class NullObject {
  * through to `bool`. See
  * https://github.com/psalm/psalm-plugin-laravel/issues/751.
  *
+ * `array<never, never>` is checked first: since Psalm 7.0.0-rc6 an empty-array
+ * candidate is treated as possibly matching `non-empty-array`, so testing that
+ * clause first would make `blank([])` resolve to both branches (`bool`).
+ *
+ * The `object` arm comes first and gates the object-specific arms: a
+ * `Stringable` object also matches the `''` literal arm, which made
+ * `blank($stringable)` infer `true`, while a plain string in turn partially
+ * matches a bare `Stringable` / `Model` arm. Laravel returns `false` for a
+ * model, `count() === 0` for a `Countable` and a blank check on the string form
+ * for a `Stringable`. A userland object is otherwise never `empty()`, but PHP
+ * casts an empty `SimpleXMLElement` to `false`, so Laravel's final `empty($value)`
+ * can be true for it and it shares the `bool` arm with `Countable` / `Stringable`.
+ *
+ * Only classes that exist on every supported PHP and Psalm setup may be named in
+ * these conditionals: a class Psalm does not know (`BcMath\Number` before PHP 8.4,
+ * `GMP` without ext-gmp) makes the whole object arm misresolve, so even a plain
+ * model input stops matching it. Accepted gap: a zero `GMP` / `BcMath\Number`
+ * also casts to `false`, but is typed like any other object here.
+ *
  * @param  mixed  $value
  * @psalm-assert-if-false !null $value
- * @psalm-return ($value is (bool|numeric|non-empty-array)
- *  ? false
- *  : ($value is null
+ * @psalm-return ($value is object
+ *  ? ($value is \Illuminate\Database\Eloquent\Model
+ *      ? false
+ *      : ($value is (\Countable|\Stringable|\SimpleXMLElement) ? bool : false)
+ *    )
+ *  : ($value is array<never, never>
  *      ? true
- *      : ($value is ''
- *          ? true
- *          : ($value is array<never, never> ? true : bool)
+ *      : ($value is (bool|numeric|non-empty-array)
+ *          ? false
+ *          : ($value is null
+ *              ? true
+ *              : ($value is '' ? true : bool)
+ *          )
  *      )
  *    )
  * )
@@ -91,6 +118,8 @@ function e($value, $doubleEncode = true) {}
 
 // env: nothing to stub
 
+// @todo-by https://github.com/vimeo/psalm/issues/12445 restore the original arm order (array<never, never> no longer takes both branches)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Determine if a value is "filled".
  *
@@ -115,15 +144,23 @@ function e($value, $doubleEncode = true) {}
  * v4.8.4). The tighter `?string` to `non-empty-string` narrowing can be
  * reintroduced if Psalm grows input-type-guarded docblock assertions.
  *
+ * Object arms come first for the reason given in {@see blank()}.
+ *
  * @param  mixed  $value
  * @psalm-assert-if-true !null $value
- * @psalm-return ($value is (bool|numeric|non-empty-array)
- *  ? true
- *  : ($value is null
+ * @psalm-return ($value is object
+ *  ? ($value is \Illuminate\Database\Eloquent\Model
+ *      ? true
+ *      : ($value is (\Countable|\Stringable|\SimpleXMLElement) ? bool : true)
+ *    )
+ *  : ($value is array<never, never>
  *      ? false
- *      : ($value is ''
- *          ? false
- *          : ($value is array<never, never> ? false : bool)
+ *      : ($value is (bool|numeric|non-empty-array)
+ *          ? true
+ *          : ($value is null
+ *              ? false
+ *              : ($value is '' ? false : bool)
+ *          )
  *      )
  *    )
  * )
@@ -204,8 +241,27 @@ function str($string = null) {}
  */
 function tap($value, $callback = null) {}
 
+// @todo-by https://github.com/vimeo/psalm/issues/12444 restore `TCondition is empty` (resolves to the else branch on rc6)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Throw the given exception if the given condition is true.
+ *
+ * The falsy set is spelled out instead of `empty`: since Psalm 7.0.0-rc6 a
+ * conditional on `empty` matches no input, so every call resolved to `never`
+ * and the code after it was reported as unevaluated.
+ *
+ * Objects are split off first because a `Stringable` object (every Eloquent
+ * model) also matches the `''` / `'0'` literal arms on rc6, which made
+ * `throw_unless($model)` resolve to `never`. An object is truthy, so `throw_if`
+ * never returns for it and `throw_unless` passes it through, except an empty
+ * `SimpleXMLElement`, which PHP casts to `false`: for it `throw_if` may return.
+ * A zero `GMP` / `BcMath\Number` is an accepted gap (see {@see blank()}): the
+ * call resolves to `never`.
+ *
+ * Certainly-truthy scalars (`true`, `non-empty-array`, `non-falsy-string`,
+ * `positive-int`, `negative-int`) make `throw_if` `never`: a plain partial-match
+ * conditional would instead keep the `TCondition` branch and report
+ * `InvalidReturnType` for a `never` function.
  *
  * @template TCondition
  * @template TException of \Throwable
@@ -213,12 +269,20 @@ function tap($value, $callback = null) {}
  * @param  TCondition  $condition
  * @param  TException|class-string<TException>|string  $exception
  * @param  mixed  ...$parameters
- * @return (TCondition is empty ? TCondition : never)
+ * @return (TCondition is object
+ *  ? (TCondition is \SimpleXMLElement ? TCondition : never)
+ *  : (TCondition is (true|non-empty-array|non-falsy-string|positive-int|negative-int)
+ *      ? never
+ *      : (TCondition is false|0|0.0|''|'0'|null|array<never, never> ? TCondition : never)
+ *    )
+ *  )
  * @psalm-assert empty $condition
  * @psalm-mutation-free
  */
 function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {}
 
+// @todo-by https://github.com/vimeo/psalm/issues/12444 restore `TCondition is empty` (resolves to the else branch on rc6)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Throw the given exception unless the given condition is true.
  *
@@ -228,7 +292,7 @@ function throw_if($condition, $exception = 'RuntimeException', ...$parameters) {
  * @param  TCondition  $condition
  * @param  TException|class-string<TException>|string  $exception
  * @param  mixed  ...$parameters
- * @return (TCondition is empty ? never : TCondition)
+ * @return (TCondition is object ? TCondition : (TCondition is false|0|0.0|''|'0'|null|array<never, never> ? never : TCondition))
  * @psalm-assert !empty $condition
  * @psalm-mutation-free
  */
@@ -242,8 +306,12 @@ function throw_unless($condition, $exception = 'RuntimeException', ...$parameter
  */
 function trait_uses_recursive($trait) {}
 
+// @todo-by https://github.com/vimeo/psalm/issues/12445 restore the original arm order (array<never, never> no longer takes both branches)
+// @todo-by https://github.com/vimeo/psalm/issues/12428 drop the object-first gate (an object with __toString() no longer matches string/literal subjects)
 /**
  * Transform the given value if it is present.
+ *
+ * Object arms come first for the reason given in {@see blank()}.
  *
  * @template TValue
  * @template TCallbackReturn
@@ -254,11 +322,17 @@ function trait_uses_recursive($trait) {}
  * @param  callable(TValue): TCallbackReturn  $callback
  * @param  TDefault|callable(TValue): TDefaultReturn  $default
  * @return mixed|null
- * @psalm-return ($value is (bool|numeric|non-empty-array)
- *  ? TCallbackReturn
+ * @psalm-return ($value is object
+ *  ? ($value is \Illuminate\Database\Eloquent\Model
+ *      ? TCallbackReturn
+ *      : ($value is (\Countable|\Stringable|\SimpleXMLElement) ? (TCallbackReturn|TDefaultReturn|TDefault) : TCallbackReturn)
+ *    )
  *  : ($value is (''|array<never, never>|null)
  *      ? (TDefault is callable ? TDefaultReturn : TDefault)
- *      : (TCallbackReturn|TDefaultReturn|TDefault)
+ *      : ($value is (bool|numeric|non-empty-array)
+ *          ? TCallbackReturn
+ *          : (TCallbackReturn|TDefaultReturn|TDefault)
+ *      )
  *    )
  *  )
  */
