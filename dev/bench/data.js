@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792540449342,
+  "lastUpdate": 1792542787711,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14940,6 +14940,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1301,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e2739eab5a8a1bd10b1717a3690d0f9997e61410",
+          "message": "fix(factories): keep count arguments of new XFactory() and Model::factory() sound (#1968)\n\nType the Factory constructor $count as int|null so new XFactory(3) is accepted when TCount is unbound, and bind Model::factory($count) to int|null instead of null so factory(3) and factory(0) no longer type make() as a single model.",
+          "timestamp": "2026-10-21T02:27:29+02:00",
+          "tree_id": "b6e68f1c1045a8f5fa315fa0889d14df5a4b4364",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e2739eab5a8a1bd10b1717a3690d0f9997e61410"
+        },
+        "date": 1792542786579,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 43.77,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1289,
             "unit": "MB"
           }
         ]
