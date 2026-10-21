@@ -54,6 +54,13 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
     ];
 
     /**
+     * Node attribute Psalm 7.0.0-rc6 sets (Psalm\Internal\Analyzer\InheritedMethodTaints::BODY_CLASS_ATTRIBUTE)
+     * on the arguments of a call made from inside a class. A literal rather than the constant: that class is
+     * @internal and absent in 7.0.0-rc2, and reading/writing an unknown attribute is harmless.
+     */
+    private const BODY_CLASS_ATTRIBUTE = 'inheritedMethodBodyClass';
+
+    /**
      * Cache: "{fqcn}#{methodName}" → bool (is this method from a Dispatchable trait?).
      * The declaring_method_ids are set during scanning and are stable for the worker's lifetime.
      *
@@ -146,14 +153,34 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
         // Delegate full argument validation (count + types) to Psalm's standard
         // argument checker. This emits TooFewArguments, TooManyArguments,
         // InvalidArgument, etc. — exactly the same errors as new ClassName(...).
-        CallAnalyzer::checkMethodArgs(
-            $constructorId,
-            $constructorArgs,
-            new TemplateResult([], []),
-            $event->getContext(),
-            new CodeLocation($source, $expr),
-            $source,
-        );
+        // Psalm 7.0.0-rc6 marks the arguments of a `self::`/`parent::`/`Child::` call made from inside a class
+        // with the class whose body of the *called* method (here dispatch()) it analyzes, and
+        // checkMethodArgs() reads that mark to pick the parameter nodes of the *checked* method. Re-checking
+        // the same argument expressions against __construct() with the mark still set sends their taint to
+        // the constructor body analyzed for the calling class instead of the constructor's own parameter,
+        // dropping a sink the constructor inherits from a parent class. Clear it for this check only.
+        $bodyClassMarks = [];
+        foreach ($constructorArgs as $index => $arg) {
+            /** @var string|null $mark */
+            $mark = $arg->value->getAttribute(self::BODY_CLASS_ATTRIBUTE);
+            $bodyClassMarks[$index] = $mark;
+            $arg->value->setAttribute(self::BODY_CLASS_ATTRIBUTE, null);
+        }
+
+        try {
+            CallAnalyzer::checkMethodArgs(
+                $constructorId,
+                $constructorArgs,
+                new TemplateResult([], []),
+                $event->getContext(),
+                new CodeLocation($source, $expr),
+                $source,
+            );
+        } finally {
+            foreach ($constructorArgs as $index => $arg) {
+                $arg->value->setAttribute(self::BODY_CLASS_ATTRIBUTE, $bodyClassMarks[$index]);
+            }
+        }
 
         return null;
     }
