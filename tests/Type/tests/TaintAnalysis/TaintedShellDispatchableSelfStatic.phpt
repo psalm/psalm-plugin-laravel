@@ -44,7 +44,24 @@ final class StaticConditionalEvent
         static::dispatchIf(true, 'echo clean-static');
     }
 }
+
+class BaseParentJob
+{
+    use BusDispatchable;
+
+    /** @psalm-taint-sink shell $command */
+    public function __construct(mixed $command) {}
+}
+
+final class ChildParentJob extends BaseParentJob
+{
+    public static function requeue(Request $request): void
+    {
+        parent::dispatch($request->input('parent-command'));
+    }
+}
 ?>
 --EXPECTF--
+TaintedShell on line %d: Detected tainted shell code
 TaintedShell on line %d: Detected tainted shell code
 TaintedShell on line %d: Detected tainted shell code
