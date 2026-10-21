@@ -1,0 +1,123 @@
+# Keeps `@todo-by <GitHub issue or PR URL> <what to remove>` markers honest (convention: AGENTS.md, "Upstream first").
+#
+# Pull requests and pushes run `--offline` (format only), so a PR never fails because an upstream issue closed.
+# The daily run asks the GitHub API and, when an upstream issue has closed, keeps ONE tracking issue up to date.
+
+name: "@todo-by markers"
+
+on:
+  pull_request:
+  push:
+    branches: [4.x]
+  workflow_dispatch:
+  schedule:
+    # Daily at 06:30 UTC
+    - cron: "30 6 * * *"
+
+# Cancel superseded PR runs; never cancel a scheduled or manual run mid-way through creating the tracking issue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: Marker format
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Check @todo-by marker format
+        run: php bin/ci/check-todo-by.php --offline
+
+  upstream:
+    name: Upstream issue state
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.repository == 'psalm/psalm-plugin-laravel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write # Create or update the tracking issue and its label.
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_TITLE: "Upstream fixes released: @todo-by markers to clean up"
+      ISSUE_LABEL: todo-by
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Check upstream state of @todo-by markers
+        id: check
+        run: |
+          # Exit 1 = a marker is malformed or its upstream issue closed; exit 2 = the API could not answer.
+          # Both fail the job, but only exit 1 has something to file. The status goes through an output and
+          # the last step fails the job once the issue is written, so `set +e` keeps this step alive.
+          set +e
+          php bin/ci/check-todo-by.php | tee todo-by-report.txt
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Create or update the tracking issue
+        if: steps.check.outputs.status == '1'
+        run: |
+          {
+            echo "Upstream issues referenced by \`@todo-by\` markers have closed, or a marker is malformed."
+            echo "Remove each workaround (or fix the marker), then close this issue. The daily run opens a new issue if findings remain."
+            echo
+            echo '```text'
+            grep -v '^::' todo-by-report.txt
+            echo '```'
+            echo
+            echo "Found by [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). This issue is maintained by \`.github/workflows/todo-by.yml\`; it is rewritten on every run that finds markers."
+          } > todo-by-body.md
+
+          gh label create "$ISSUE_LABEL" --force --color 5319e7 --description "Workaround whose upstream issue has closed"
+
+          existing="$(gh issue list --state open --label "$ISSUE_LABEL" --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --title "$ISSUE_TITLE" --body-file todo-by-body.md
+          else
+            gh issue create --title "$ISSUE_TITLE" --label "$ISSUE_LABEL" --body-file todo-by-body.md
+          fi
+        shell: bash
+
+      - name: Fail on findings or API errors
+        if: steps.check.outputs.status != '0'
+        env:
+          STATUS: ${{ steps.check.outputs.status }}
+        run: |
+          echo "check-todo-by exited with $STATUS" >&2
+          exit 1
+        shell: bash
