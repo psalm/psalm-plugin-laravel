@@ -49,7 +49,11 @@ abstract class Factory
     }
 
     /**
-     * @param  TCount  $count
+     * Typed `int|null` rather than `TCount`: a subclass written as
+     * `@extends Factory<User>` leaves `TCount` unbound, and Psalm then rejects
+     * every `new UserFactory(3)` against the unresolved template.
+     *
+     * @param  int|null  $count
      */
     public function __construct(
         $count = null,
