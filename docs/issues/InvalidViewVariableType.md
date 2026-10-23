@@ -35,7 +35,7 @@ response()->view('greeting', ['name' => 123]);  // InvalidViewVariableType
 view('greeting', ['name' => 'Ada']);
 ```
 
-In a template, the keys a literal data array passes to `@include`, `@includeIf`, `@includeIsolated` or `@extends` are checked the same way. See [Included templates](../blade.md#included-templates).
+In a template, the keys a literal data array passes to `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst` and `@extendsFirst` (against the first candidate that exists), `@includeIsolated` or `@extends` are checked the same way. See [Included templates](../blade.md#included-templates).
 
 ## How to fix
 
